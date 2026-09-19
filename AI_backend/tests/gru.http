@@ -1,0 +1,187 @@
+@baseUrl = http://127.0.0.1:8000
+
+### GET /health - kiểm tra API, GRU và RCA provider
+GET {{baseUrl}}/health
+Accept: application/json
+X-Request-ID: test-health-001
+
+### POST /api/v1/predict - 12 timestep x 8 feature
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-predict-001
+
+{
+  "service_id": "payment-service",
+  "sequence": [
+    {"cpu": 52, "ram": 55, "disk": 48, "request_rate": 420,  "latency": 180,  "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 55, "ram": 56, "disk": 48, "request_rate": 470,  "latency": 210,  "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 58, "ram": 58, "disk": 49, "request_rate": 530,  "latency": 250,  "http_5xx_rate": 0.7, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 62, "ram": 60, "disk": 49, "request_rate": 600,  "latency": 310,  "http_5xx_rate": 1.0, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 67, "ram": 62, "disk": 50, "request_rate": 680,  "latency": 390,  "http_5xx_rate": 1.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 72, "ram": 65, "disk": 50, "request_rate": 770,  "latency": 480,  "http_5xx_rate": 2.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 77, "ram": 68, "disk": 51, "request_rate": 860,  "latency": 590,  "http_5xx_rate": 2.9, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 82, "ram": 71, "disk": 51, "request_rate": 950,  "latency": 710,  "http_5xx_rate": 3.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 87, "ram": 74, "disk": 52, "request_rate": 1050, "latency": 830,  "http_5xx_rate": 4.9, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 91, "ram": 77, "disk": 52, "request_rate": 1150, "latency": 940,  "http_5xx_rate": 6.1, "pod_restart_count": 1, "replica_count": 2},
+    {"cpu": 94, "ram": 80, "disk": 53, "request_rate": 1250, "latency": 1050, "http_5xx_rate": 7.4, "pod_restart_count": 1, "replica_count": 2},
+    {"cpu": 97, "ram": 83, "disk": 53, "request_rate": 1360, "latency": 1180, "http_5xx_rate": 9.0, "pod_restart_count": 1, "replica_count": 2}
+  ]
+}
+
+### POST /api/v1/predict - lỗi do không đủ 12 timestep
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-predict-invalid-001
+
+{
+  "service_id": "payment-service",
+  "sequence": [
+    {"cpu": 50, "ram": 50, "disk": 50, "request_rate": 200, "latency": 100, "http_5xx_rate": 0, "pod_restart_count": 0, "replica_count": 2}
+  ]
+}
+
+### GRU mẫu A - hệ thống bình thường
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-gru-healthy-001
+
+{
+  "service_id": "catalog-service",
+  "sequence": [
+    {"cpu": 31, "ram": 43, "disk": 38, "request_rate": 180, "latency": 105, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 33, "ram": 44, "disk": 38, "request_rate": 190, "latency": 110, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 32, "ram": 44, "disk": 38, "request_rate": 185, "latency": 108, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 34, "ram": 45, "disk": 38, "request_rate": 200, "latency": 115, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 35, "ram": 45, "disk": 39, "request_rate": 210, "latency": 118, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 33, "ram": 46, "disk": 39, "request_rate": 205, "latency": 112, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 36, "ram": 46, "disk": 39, "request_rate": 220, "latency": 120, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 34, "ram": 46, "disk": 39, "request_rate": 215, "latency": 116, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 35, "ram": 47, "disk": 39, "request_rate": 225, "latency": 121, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 37, "ram": 47, "disk": 40, "request_rate": 230, "latency": 125, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 36, "ram": 47, "disk": 40, "request_rate": 228, "latency": 122, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 38, "ram": 48, "disk": 40, "request_rate": 240, "latency": 128, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 3}
+  ]
+}
+
+### GRU mẫu B - xu hướng CPU_OVERLOAD
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-gru-cpu-001
+
+{
+  "service_id": "report-service",
+  "sequence": [
+    {"cpu": 58, "ram": 48, "disk": 42, "request_rate": 280, "latency": 150, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 62, "ram": 49, "disk": 42, "request_rate": 290, "latency": 155, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 66, "ram": 49, "disk": 42, "request_rate": 300, "latency": 160, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 70, "ram": 50, "disk": 42, "request_rate": 310, "latency": 168, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 74, "ram": 50, "disk": 43, "request_rate": 320, "latency": 175, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 78, "ram": 51, "disk": 43, "request_rate": 330, "latency": 185, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 82, "ram": 51, "disk": 43, "request_rate": 340, "latency": 195, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 86, "ram": 52, "disk": 43, "request_rate": 350, "latency": 210, "http_5xx_rate": 0.6, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 89, "ram": 52, "disk": 44, "request_rate": 360, "latency": 225, "http_5xx_rate": 0.7, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 92, "ram": 53, "disk": 44, "request_rate": 370, "latency": 240, "http_5xx_rate": 0.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 95, "ram": 53, "disk": 44, "request_rate": 380, "latency": 260, "http_5xx_rate": 0.9, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 98, "ram": 54, "disk": 44, "request_rate": 390, "latency": 280, "http_5xx_rate": 1.0, "pod_restart_count": 0, "replica_count": 2}
+  ]
+}
+
+### GRU mẫu C - xu hướng OOM
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-gru-oom-001
+
+{
+  "service_id": "inventory-service",
+  "sequence": [
+    {"cpu": 38, "ram": 58, "disk": 45, "request_rate": 260, "latency": 140, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 39, "ram": 62, "disk": 45, "request_rate": 265, "latency": 145, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 40, "ram": 66, "disk": 45, "request_rate": 270, "latency": 150, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 40, "ram": 70, "disk": 45, "request_rate": 275, "latency": 158, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 41, "ram": 74, "disk": 46, "request_rate": 280, "latency": 165, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 42, "ram": 78, "disk": 46, "request_rate": 285, "latency": 175, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 42, "ram": 82, "disk": 46, "request_rate": 290, "latency": 190, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 43, "ram": 86, "disk": 46, "request_rate": 295, "latency": 210, "http_5xx_rate": 0.6, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 44, "ram": 89, "disk": 47, "request_rate": 300, "latency": 240, "http_5xx_rate": 0.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 45, "ram": 93, "disk": 47, "request_rate": 305, "latency": 280, "http_5xx_rate": 1.0, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 46, "ram": 96, "disk": 47, "request_rate": 310, "latency": 340, "http_5xx_rate": 1.4, "pod_restart_count": 1, "replica_count": 2},
+    {"cpu": 47, "ram": 99, "disk": 47, "request_rate": 315, "latency": 420, "http_5xx_rate": 2.0, "pod_restart_count": 2, "replica_count": 2}
+  ]
+}
+
+### GRU mẫu D - xu hướng DISK_FULL
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-gru-disk-001
+
+{
+  "service_id": "logging-service",
+  "sequence": [
+    {"cpu": 35, "ram": 48, "disk": 62, "request_rate": 220, "latency": 130, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 36, "ram": 48, "disk": 66, "request_rate": 225, "latency": 132, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 35, "ram": 49, "disk": 70, "request_rate": 230, "latency": 135, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 37, "ram": 49, "disk": 74, "request_rate": 235, "latency": 138, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 36, "ram": 50, "disk": 78, "request_rate": 240, "latency": 142, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 38, "ram": 50, "disk": 82, "request_rate": 245, "latency": 148, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 37, "ram": 51, "disk": 85, "request_rate": 250, "latency": 155, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 39, "ram": 51, "disk": 88, "request_rate": 255, "latency": 165, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 38, "ram": 52, "disk": 91, "request_rate": 260, "latency": 180, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 40, "ram": 52, "disk": 94, "request_rate": 265, "latency": 210, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 39, "ram": 53, "disk": 97, "request_rate": 270, "latency": 260, "http_5xx_rate": 0.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 41, "ram": 53, "disk": 99, "request_rate": 275, "latency": 340, "http_5xx_rate": 1.2, "pod_restart_count": 0, "replica_count": 2}
+  ]
+}
+
+### GRU mẫu E - HIGH_LATENCY kết hợp HTTP_5XX_SPIKE
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-gru-latency-5xx-001
+
+{
+  "service_id": "order-service",
+  "sequence": [
+    {"cpu": 42, "ram": 52, "disk": 48, "request_rate": 350, "latency": 180,  "http_5xx_rate": 0.4,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 43, "ram": 53, "disk": 48, "request_rate": 360, "latency": 230,  "http_5xx_rate": 0.7,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 44, "ram": 53, "disk": 48, "request_rate": 370, "latency": 300,  "http_5xx_rate": 1.1,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 45, "ram": 54, "disk": 49, "request_rate": 380, "latency": 390,  "http_5xx_rate": 1.8,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 46, "ram": 54, "disk": 49, "request_rate": 390, "latency": 500,  "http_5xx_rate": 2.6,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 47, "ram": 55, "disk": 49, "request_rate": 400, "latency": 620,  "http_5xx_rate": 3.7,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 48, "ram": 55, "disk": 49, "request_rate": 410, "latency": 760,  "http_5xx_rate": 5.0,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 49, "ram": 56, "disk": 50, "request_rate": 420, "latency": 900,  "http_5xx_rate": 6.5,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 50, "ram": 56, "disk": 50, "request_rate": 430, "latency": 1080, "http_5xx_rate": 8.0,  "pod_restart_count": 0, "replica_count": 3},
+    {"cpu": 51, "ram": 57, "disk": 50, "request_rate": 440, "latency": 1280, "http_5xx_rate": 10.0, "pod_restart_count": 1, "replica_count": 3},
+    {"cpu": 52, "ram": 57, "disk": 50, "request_rate": 450, "latency": 1500, "http_5xx_rate": 12.0, "pod_restart_count": 1, "replica_count": 3},
+    {"cpu": 53, "ram": 58, "disk": 51, "request_rate": 460, "latency": 1750, "http_5xx_rate": 15.0, "pod_restart_count": 1, "replica_count": 3}
+  ]
+}
+
+### GRU mẫu F - TRAFFIC_OVERLOAD khi replica ít
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-gru-traffic-001
+
+{
+  "service_id": "gateway-service",
+  "sequence": [
+    {"cpu": 42, "ram": 48, "disk": 40, "request_rate": 420,  "latency": 160, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 44, "ram": 49, "disk": 40, "request_rate": 500,  "latency": 175, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 46, "ram": 49, "disk": 40, "request_rate": 590,  "latency": 190, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 48, "ram": 50, "disk": 40, "request_rate": 680,  "latency": 210, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 50, "ram": 50, "disk": 41, "request_rate": 780,  "latency": 240, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 52, "ram": 51, "disk": 41, "request_rate": 880,  "latency": 280, "http_5xx_rate": 0.7, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 54, "ram": 51, "disk": 41, "request_rate": 980,  "latency": 330, "http_5xx_rate": 0.9, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 56, "ram": 52, "disk": 41, "request_rate": 1090, "latency": 390, "http_5xx_rate": 1.2, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 58, "ram": 52, "disk": 42, "request_rate": 1200, "latency": 470, "http_5xx_rate": 1.6, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 60, "ram": 53, "disk": 42, "request_rate": 1320, "latency": 560, "http_5xx_rate": 2.1, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 62, "ram": 53, "disk": 42, "request_rate": 1450, "latency": 660, "http_5xx_rate": 2.8, "pod_restart_count": 0, "replica_count": 1},
+    {"cpu": 64, "ram": 54, "disk": 42, "request_rate": 1580, "latency": 780, "http_5xx_rate": 3.6, "pod_restart_count": 0, "replica_count": 1}
+  ]
+}

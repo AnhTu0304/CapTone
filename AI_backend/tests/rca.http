@@ -1,0 +1,278 @@
+@baseUrl = http://127.0.0.1:8000
+
+### POST /api/v1/rca - RCA tối thiểu, không chạy GRU
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-rca-minimal-001
+
+{
+  "service_id": "payment-service",
+  "pod_id": "payment-service-7c9d8f6b5-x2abc",
+  "metrics": {
+    "cpu": 35,
+    "ram": 50,
+    "disk": 65,
+    "request_rate": 500,
+    "latency": 2500,
+    "http_5xx_rate": 15,
+    "pod_restart_count": 2,
+    "replica_count": 3
+  },
+  "logs": [
+    "ERROR Readiness probe failed while serving requests"
+  ],
+  "kubernetes": {
+    "pod_status": "Running",
+    "container_status": "Running",
+    "restart_count": 2,
+    "events": ["Readiness probe failed"],
+    "desired_replicas": 3,
+    "available_replicas": 3,
+    "readiness_probe": "Failed",
+    "liveness_probe": "Passed"
+  }
+}
+
+### POST /api/v1/rca - dữ liệu đầy đủ, prediction có đủ 6 risk và history
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-rca-full-001
+
+{
+  "service_id": "payment-service",
+  "pod_id": "payment-service-7c9d8f6b5-x2abc",
+  "metrics": {
+    "cpu": 92,
+    "ram": 75,
+    "disk": 60,
+    "request_rate": 1050,
+    "latency": 1800,
+    "http_5xx_rate": 12,
+    "pod_restart_count": 3,
+    "replica_count": 2
+  },
+  "logs": [
+    "WARNING Readiness probe failed",
+    "ERROR HTTP 500 returned by payment handler"
+  ],
+  "rule_engine": [
+    "HIGH_LATENCY detected",
+    "HTTP 5xx rate is high"
+  ],
+  "kubernetes": {
+    "pod_status": "Running",
+    "container_status": "Running",
+    "restart_count": 3,
+    "events": ["Readiness probe failed"],
+    "desired_replicas": 3,
+    "available_replicas": 2,
+    "readiness_probe": "Failed",
+    "liveness_probe": "Passed",
+    "deployment": {
+      "desired_replicas": 3,
+      "available_replicas": 2,
+      "version": "payment-v2.3.1",
+      "previous_version": "payment-v2.3.0",
+      "deployed_at": "2026-08-31T09:00:00+07:00"
+    }
+  },
+  "kubernetes_events": [
+    "Available replicas are lower than desired replicas"
+  ],
+  "health_check": {
+    "status": "degraded",
+    "checks": ["readiness failed", "liveness passed"]
+  },
+  "deployment": {
+    "current_version": "payment-v2.3.1",
+    "previous_version": "payment-v2.3.0",
+    "deployed_at": "2026-08-31T09:00:00+07:00",
+    "status": "degraded",
+    "events": []
+  },
+  "security": {
+    "source_ip": "203.0.113.10",
+    "request_rate": 250,
+    "failed_auth_count": 45,
+    "request_anomaly": true,
+    "auth_anomaly": true,
+    "http_401_rate": 8,
+    "http_403_rate": 4
+  },
+  "security_policy": {
+    "request_threshold": 100,
+    "failed_auth_threshold": 10,
+    "failed_auth_window_seconds": 60
+  },
+  "prediction": {
+    "service_id": "payment-service",
+    "threshold": 0.79,
+    "thresholds": {
+      "CPU_OVERLOAD": 0.75,
+      "OOM": 0.5875,
+      "DISK_FULL": 0.8475,
+      "HIGH_LATENCY": 0.5275,
+      "HTTP_5XX_SPIKE": 0.7375,
+      "TRAFFIC_OVERLOAD": 0.87
+    },
+    "detected_risks": [
+      {"risk_type": "CPU_OVERLOAD", "confidence": 0.92},
+      {"risk_type": "HIGH_LATENCY", "confidence": 0.94},
+      {"risk_type": "HTTP_5XX_SPIKE", "confidence": 0.84},
+      {"risk_type": "TRAFFIC_OVERLOAD", "confidence": 0.88}
+    ],
+    "risk_outputs": {
+      "CPU_OVERLOAD": {"confidence": 0.92},
+      "OOM": {"confidence": 0.18},
+      "DISK_FULL": {"confidence": 0.09},
+      "HIGH_LATENCY": {"confidence": 0.94},
+      "HTTP_5XX_SPIKE": {"confidence": 0.84},
+      "TRAFFIC_OVERLOAD": {"confidence": 0.88}
+    }
+  },
+  "previous_action": "SCALE_REPLICAS",
+  "previous_action_result": "FAILED",
+  "previous_action_result_source": "POST_ACTION_VERIFICATION",
+  "previous_rca_root_cause": "TRAFFIC_OVERLOAD",
+  "historical_incidents": [
+    {
+      "incident_id": "INC-105",
+      "service_id": "payment-service",
+      "predicted_root_cause": "TRAFFIC_OVERLOAD",
+      "confirmed_root_cause": "UNHEALTHY_POD",
+      "confirmation_source": "DEVOPS",
+      "recommended_action": "SCALE_REPLICAS",
+      "executed_action": "SCALE_REPLICAS",
+      "action_result": "FAILED",
+      "action_result_source": "POST_ACTION_VERIFICATION",
+      "evidence": ["Readiness probe failed", "HTTP 5xx rate increased"],
+      "operator_feedback": "Scaling did not fix the unhealthy pod"
+    },
+    {
+      "incident_id": "INC-106",
+      "service_id": "payment-service",
+      "root_cause": "UNHEALTHY_POD",
+      "confirmed_root_cause": "UNHEALTHY_POD",
+      "confirmation_source": "VERIFIED_EVIDENCE",
+      "recommended_action": "RESTART_POD",
+      "executed_action": "RESTART_POD",
+      "action_result": "SUCCESS",
+      "action_result_source": "POST_ACTION_VERIFICATION",
+      "evidence": ["Readiness probe failed", "Pod became healthy after restart"]
+    }
+  ]
+}
+
+### POST /api/v1/rca - tự chạy GRU khi có metric_sequence
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-rca-auto-gru-001
+
+{
+  "service_id": "checkout-service",
+  "metrics": {
+    "cpu": 97,
+    "ram": 83,
+    "disk": 53,
+    "request_rate": 1360,
+    "latency": 1180,
+    "http_5xx_rate": 9.0,
+    "pod_restart_count": 1,
+    "replica_count": 2
+  },
+  "metric_sequence": [
+    {"cpu": 52, "ram": 55, "disk": 48, "request_rate": 420,  "latency": 180,  "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 55, "ram": 56, "disk": 48, "request_rate": 470,  "latency": 210,  "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 58, "ram": 58, "disk": 49, "request_rate": 530,  "latency": 250,  "http_5xx_rate": 0.7, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 62, "ram": 60, "disk": 49, "request_rate": 600,  "latency": 310,  "http_5xx_rate": 1.0, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 67, "ram": 62, "disk": 50, "request_rate": 680,  "latency": 390,  "http_5xx_rate": 1.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 72, "ram": 65, "disk": 50, "request_rate": 770,  "latency": 480,  "http_5xx_rate": 2.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 77, "ram": 68, "disk": 51, "request_rate": 860,  "latency": 590,  "http_5xx_rate": 2.9, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 82, "ram": 71, "disk": 51, "request_rate": 950,  "latency": 710,  "http_5xx_rate": 3.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 87, "ram": 74, "disk": 52, "request_rate": 1050, "latency": 830,  "http_5xx_rate": 4.9, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 91, "ram": 77, "disk": 52, "request_rate": 1150, "latency": 940,  "http_5xx_rate": 6.1, "pod_restart_count": 1, "replica_count": 2},
+    {"cpu": 94, "ram": 80, "disk": 53, "request_rate": 1250, "latency": 1050, "http_5xx_rate": 7.4, "pod_restart_count": 1, "replica_count": 2},
+    {"cpu": 97, "ram": 83, "disk": 53, "request_rate": 1360, "latency": 1180, "http_5xx_rate": 9.0, "pod_restart_count": 1, "replica_count": 2}
+  ],
+  "logs": ["ERROR latency and HTTP 5xx increased under load"],
+  "kubernetes": {
+    "pod_status": "Running",
+    "restart_count": 1,
+    "desired_replicas": 3,
+    "available_replicas": 2
+  }
+}
+
+### RCA E2E mẫu A - OOMKilled
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-rca-e2e-oom-001
+
+{
+  "service_id": "inventory-service",
+  "pod_id": "inventory-service-6bd8c7f9-z8xyz",
+  "metrics": {"cpu": 47, "ram": 99, "disk": 47, "request_rate": 315, "latency": 420, "http_5xx_rate": 2.0, "pod_restart_count": 2, "replica_count": 2},
+  "metric_sequence": [
+    {"cpu": 38, "ram": 58, "disk": 45, "request_rate": 260, "latency": 140, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 39, "ram": 62, "disk": 45, "request_rate": 265, "latency": 145, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 40, "ram": 66, "disk": 45, "request_rate": 270, "latency": 150, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 40, "ram": 70, "disk": 45, "request_rate": 275, "latency": 158, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 41, "ram": 74, "disk": 46, "request_rate": 280, "latency": 165, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 42, "ram": 78, "disk": 46, "request_rate": 285, "latency": 175, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 42, "ram": 82, "disk": 46, "request_rate": 290, "latency": 190, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 43, "ram": 86, "disk": 46, "request_rate": 295, "latency": 210, "http_5xx_rate": 0.6, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 44, "ram": 89, "disk": 47, "request_rate": 300, "latency": 240, "http_5xx_rate": 0.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 45, "ram": 93, "disk": 47, "request_rate": 305, "latency": 280, "http_5xx_rate": 1.0, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 46, "ram": 96, "disk": 47, "request_rate": 310, "latency": 340, "http_5xx_rate": 1.4, "pod_restart_count": 1, "replica_count": 2},
+    {"cpu": 47, "ram": 99, "disk": 47, "request_rate": 315, "latency": 420, "http_5xx_rate": 2.0, "pod_restart_count": 2, "replica_count": 2}
+  ],
+  "logs": ["ERROR Container terminated after out of memory condition"],
+  "kubernetes": {
+    "pod_status": "Running",
+    "container_status": "OOMKilled",
+    "restart_count": 2,
+    "events": ["Container was OOMKilled"],
+    "desired_replicas": 2,
+    "available_replicas": 2
+  }
+}
+
+### RCA E2E mẫu B - Disk gần đầy
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: test-rca-e2e-disk-001
+
+{
+  "service_id": "logging-service",
+  "pod_id": "logging-service-5cf78d6c4-a1def",
+  "metrics": {"cpu": 41, "ram": 53, "disk": 99, "request_rate": 275, "latency": 340, "http_5xx_rate": 1.2, "pod_restart_count": 0, "replica_count": 2},
+  "metric_sequence": [
+    {"cpu": 35, "ram": 48, "disk": 62, "request_rate": 220, "latency": 130, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 36, "ram": 48, "disk": 66, "request_rate": 225, "latency": 132, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 35, "ram": 49, "disk": 70, "request_rate": 230, "latency": 135, "http_5xx_rate": 0.1, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 37, "ram": 49, "disk": 74, "request_rate": 235, "latency": 138, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 36, "ram": 50, "disk": 78, "request_rate": 240, "latency": 142, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 38, "ram": 50, "disk": 82, "request_rate": 245, "latency": 148, "http_5xx_rate": 0.2, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 37, "ram": 51, "disk": 85, "request_rate": 250, "latency": 155, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 39, "ram": 51, "disk": 88, "request_rate": 255, "latency": 165, "http_5xx_rate": 0.3, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 38, "ram": 52, "disk": 91, "request_rate": 260, "latency": 180, "http_5xx_rate": 0.4, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 40, "ram": 52, "disk": 94, "request_rate": 265, "latency": 210, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 39, "ram": 53, "disk": 97, "request_rate": 270, "latency": 260, "http_5xx_rate": 0.8, "pod_restart_count": 0, "replica_count": 2},
+    {"cpu": 41, "ram": 53, "disk": 99, "request_rate": 275, "latency": 340, "http_5xx_rate": 1.2, "pod_restart_count": 0, "replica_count": 2}
+  ],
+  "logs": ["ERROR no space left on device while writing application log"],
+  "rule_engine": ["Disk usage is above 95%"],
+  "kubernetes": {
+    "pod_status": "Running",
+    "container_status": "Running",
+    "restart_count": 0,
+    "events": ["Ephemeral storage usage is critical"],
+    "desired_replicas": 2,
+    "available_replicas": 2
+  }
+}
