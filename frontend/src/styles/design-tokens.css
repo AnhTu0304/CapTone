@@ -1,0 +1,110 @@
+:root {
+  /* Greptile Color Palette */
+  --color-canvas: #EEEEEE;
+  --color-surface: #FFFFFF;
+  --color-primary: #3D3B4F;            /* Primary Navy */
+  --color-accent: #28E99F;             /* Vibrant Mint */
+  --color-accent-decorative: #ECFFA3;  /* Pale Yellow-Green */
+  --color-link: #555368;               /* Muted purple-gray */
+  --color-ink: #000000;                /* Pure black */
+  --color-body: #3D3B4F;               /* Navy body */
+  --color-muted: #FFCFFE;              /* Muted accent */
+  --color-hairline: #D6D6D6;           /* 1px hairline border */
+  --color-neutral-1: #2A2A2A;          /* Charcoal */
+  --color-on-primary: #FFFFFF;
+
+  /* Surface & Backgrounds */
+  --bg-canvas: #EEEEEE;
+  --bg-surface: #FFFFFF;
+  --bg-primary: #EEEEEE;               /* Canvas default background */
+  --bg-secondary: #FFFFFF;             /* White card surface */
+  --bg-subtle: #E7E7E7;
+  --bg-hover: rgba(61, 59, 79, 0.05);
+  --bg-overlay: rgba(61, 59, 79, 0.6);
+  --bg-navy: #3D3B4F;
+
+  /* Accent Mint Scale (Greptile Alignment) */
+  --emerald-50: rgba(40, 233, 159, 0.12);
+  --emerald-100: rgba(40, 233, 159, 0.2);
+  --emerald-200: #28E99F;
+  --emerald-300: #28E99F;
+  --emerald-400: #28E99F;
+  --emerald-500: #28E99F;
+  --emerald-600: #059669;
+  --emerald-700: #3D3B4F;
+  --emerald-800: #2A2A2A;
+
+  /* Typography Colors */
+  --text-primary: #000000;             /* Pure black for titles */
+  --text-secondary: #3D3B4F;           /* Navy for body text */
+  --text-muted: #555368;               /* Subdued purple-gray */
+  --text-subtle: #555368;              /* Captions, metadata */
+  --text-on-emerald: #000000;
+  --text-on-navy: #FFFFFF;
+
+  /* Semantic State Colors */
+  --warning-bg: #FFFBEB;
+  --warning-border: #D6D6D6;
+  --warning-text: #92400E;
+  --warning-icon: #D97706;
+
+  --error-bg: #FEF2F2;
+  --error-border: #D6D6D6;
+  --error-text: #991B1B;
+  --error-icon: #DC2626;
+
+  --info-bg: #F0F9FF;
+  --info-border: #D6D6D6;
+  --info-text: #075985;
+  --info-icon: #0284C7;
+
+  --success-bg: rgba(40, 233, 159, 0.12);
+  --success-border: #28E99F;
+  --success-text: #059669;
+  --success-icon: #28E99F;
+
+  /* Borders & Dividers (Greptile Hairline 1px & Technical Dashed Guides) */
+  --border-subtle: #D6D6D6;
+  --border-default: #D6D6D6;
+  --border-strong: #3D3B4F;
+  --border-emerald: #28E99F;
+  --border-hairline: 1px solid #D6D6D6;
+  --border-dashed: 1px dashed rgba(61, 59, 79, 0.16);
+  --border-dashed-subtle: 1px dashed rgba(61, 59, 79, 0.12);
+
+  /* Shadows (Greptile uses Color-Blocking - zero blur shadows) */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Radius (Greptile 0px Sharp Geometry) */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-full: 0px;
+
+  /* Spacing Scale (Greptile 4px Base) */
+  --space-1: 4px;                      /* xxs */
+  --space-2: 8px;                      /* xs */
+  --space-3: 12px;                     /* sm */
+  --space-4: 16px;                     /* md */
+  --space-5: 20px;
+  --space-6: 24px;                     /* lg */
+  --space-8: 32px;                     /* xl */
+  --space-10: 40px;                    /* xxl */
+  --space-12: 48px;                    /* xxxl */
+  --space-16: 64px;                    /* section */
+  --space-20: 80px;                    /* band */
+
+  /* Typography Tokens */
+  --font-display: 'Anybody', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+
+  /* Max Widths */
+  --content-max-width: 1400px;         /* Standard 1400px desktop container */
+  --docs-content-width: 896px;
+}

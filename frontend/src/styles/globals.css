@@ -1,0 +1,243 @@
+@import './design-tokens.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  overflow-x: hidden;
+  font-family: var(--font-body);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Typography Base - Anybody for headings, DM Sans for body */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+p {
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: var(--font-display);
+  border-radius: 0px;
+}
+
+input, select, textarea {
+  font-family: var(--font-body);
+  border-radius: 0px;
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+/* ==========================================================================
+   GREPTILE BLUEPRINT GRID & SECTION GUIDELINES
+   ========================================================================== */
+
+/* The root canvas background with blueprint graph paper in gutters */
+.blueprint-canvas-root {
+  position: relative;
+  background-color: var(--color-canvas);
+  background-image: 
+    linear-gradient(to right, rgba(61, 59, 79, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(61, 59, 79, 0.045) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center top;
+  min-height: 100vh;
+}
+
+/* Blueprint Gutter Overlays for screens > 1400px */
+.blueprint-gutter-left {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(50% - (var(--content-max-width) / 2));
+  background-color: var(--color-canvas);
+  background-image: 
+    linear-gradient(to right, rgba(61, 59, 79, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(61, 59, 79, 0.045) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: right top;
+  border-right: 1px dashed rgba(61, 59, 79, 0.18);
+  pointer-events: none;
+  z-index: 20;
+}
+
+.blueprint-gutter-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: calc(50% - (var(--content-max-width) / 2));
+  background-color: var(--color-canvas);
+  background-image: 
+    linear-gradient(to right, rgba(61, 59, 79, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(61, 59, 79, 0.045) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: left top;
+  border-left: 1px dashed rgba(61, 59, 79, 0.18);
+  pointer-events: none;
+  z-index: 20;
+}
+
+@media (max-width: 1400px) {
+  .blueprint-gutter-left,
+  .blueprint-gutter-right {
+    display: none !important;
+  }
+}
+
+/* Containers (Greptile max 1400px with technical dashed border guide) */
+.container-custom {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+  position: relative;
+  border-left: 1px dashed rgba(61, 59, 79, 0.18);
+  border-right: 1px dashed rgba(61, 59, 79, 0.18);
+}
+
+/* Section Containers Automatic Corner Crosshairs (+) at intersection points */
+section > .container-custom::before {
+  content: "+";
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  color: var(--color-accent); /* #28E99F */
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  z-index: 15;
+}
+
+section > .container-custom::after {
+  content: "+";
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+  color: var(--color-accent); /* #28E99F */
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  z-index: 15;
+}
+
+.no-crosshair::before,
+.no-crosshair::after {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .container-custom {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+}
+
+/* Utilities */
+.section-py {
+  padding-top: var(--space-20);
+  padding-bottom: var(--space-20);
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.16);
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .section-py {
+    padding-top: var(--space-12);
+    padding-bottom: var(--space-12);
+  }
+}
+
+.text-emerald {
+  color: var(--color-accent);
+}
+
+.text-navy {
+  color: var(--color-primary);
+}
+
+.bg-canvas {
+  background-color: var(--color-canvas);
+}
+
+.bg-surface {
+  background-color: var(--color-surface);
+}
+
+.border-hairline {
+  border: 1px solid var(--color-hairline);
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0px;
+  border: 1px solid var(--color-hairline);
+}
