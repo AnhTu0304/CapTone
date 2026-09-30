@@ -1,0 +1,245 @@
+/* =========================================================================
+   SELFHEAL DASHBOARD DESIGN TOKENS
+   White-First Calm Operations Interface for SME Kubernetes Infrastructure
+   ========================================================================= */
+
+:root {
+  /* Surfaces & Backgrounds */
+  --dash-bg-canvas: #F8FAFC;
+  --dash-bg-surface: #FFFFFF;
+  --dash-bg-subtle: #F1F5F9;
+  --dash-bg-hover: #F8FAFC;
+  --dash-bg-active: #F0FDF4;
+
+  /* Brand & Primary Actions (Soft Emerald) */
+  --dash-primary: #059669;
+  --dash-primary-hover: #047857;
+  --dash-primary-light: #ECFDF5;
+  --dash-primary-border: #A7F3D0;
+
+  /* Secondary & Mint Accents */
+  --dash-secondary: #D1FAE5;
+  --dash-mint-50: #F0FDF4;
+  --dash-mint-100: #DCFCE7;
+  --dash-mint-200: #BBF7D0;
+  --dash-mint-600: #16A34A;
+
+  /* Typography (Dark Navy & Slate) */
+  --dash-text-primary: #0F172A;
+  --dash-text-secondary: #475569;
+  --dash-text-muted: #94A3B8;
+  --dash-text-inverse: #FFFFFF;
+
+  /* Borders & Dividers */
+  --dash-border: #E2E8F0;
+  --dash-border-subtle: #E6ECE8;
+  --dash-border-focus: #059669;
+
+  /* Status Colors */
+  --dash-success: #10B981;
+  --dash-success-bg: #ECFDF5;
+  --dash-success-border: #A7F3D0;
+  --dash-success-text: #065F46;
+
+  --dash-warning: #F59E0B;
+  --dash-warning-bg: #FFFBEB;
+  --dash-warning-border: #FDE68A;
+  --dash-warning-text: #92400E;
+
+  --dash-critical: #EF4444;
+  --dash-critical-bg: #FEF2F2;
+  --dash-critical-border: #FECACA;
+  --dash-critical-text: #991B1B;
+
+  --dash-info: #0284C7;
+  --dash-info-bg: #F0F9FF;
+  --dash-info-border: #BAE6FD;
+  --dash-info-text: #075985;
+
+  /* Shadows (Restrained & Calm) */
+  --dash-shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --dash-shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
+  --dash-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --dash-shadow-dropdown: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+
+  /* Radii (Smooth curved rounded corners) */
+  --dash-radius-xs: 4px;
+  --dash-radius-sm: 6px;
+  --dash-radius-md: 10px;
+  --dash-radius-lg: 14px;
+  --dash-radius-xl: 18px;
+  --dash-radius-2xl: 22px;
+  --dash-radius-full: 9999px;
+
+  /* Transitions */
+  --dash-transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Dashboard Global Helper Styles */
+.dash-card {
+  background-color: var(--dash-bg-surface);
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius-lg);
+  box-shadow: var(--dash-shadow-xs);
+  transition: var(--dash-transition);
+}
+
+.dash-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: var(--dash-shadow-sm);
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Polished glossy green header for all dashboard tables */
+.dash-table thead tr,
+.dash-card table thead tr,
+.dash-table-container table thead tr {
+  background: linear-gradient(180deg, #F0FDF4 0%, #E6FBF0 100%) !important;
+  border-bottom: 1.5px solid #A7F3D0 !important;
+}
+
+.dash-table th,
+.dash-card table th,
+.dash-table-container table th {
+  background: transparent !important;
+  color: #065F46 !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1.5px solid #A7F3D0 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(5, 150, 105, 0.04);
+}
+
+.dash-table td,
+.dash-card table td,
+.dash-table-container table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid #F1F5F9;
+  color: var(--dash-text-primary);
+  font-size: 0.875rem;
+  transition: background-color 0.15s ease;
+}
+
+.dash-table tr:last-child td,
+.dash-card table tr:last-child td,
+.dash-table-container table tr:last-child td {
+  border-bottom: none;
+}
+
+.dash-table tr:hover td,
+.dash-card table tr:hover td,
+.dash-table-container table tr:hover td {
+  background-color: #F8FCF9;
+}
+
+/* Toast Animations */
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Responsive & Mobile Drawer Rules */
+@media (max-width: 1024px) {
+  .dashboard-desktop-sidebar {
+    display: none !important;
+  }
+  
+  .dashboard-mobile-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--dash-border);
+    border-radius: var(--dash-radius-md);
+    padding: 6px 8px;
+    cursor: pointer;
+    color: var(--dash-text-primary);
+  }
+
+  .dashboard-mobile-toggle:hover {
+    background-color: var(--dash-bg-subtle);
+  }
+
+  .dashboard-top-header {
+    padding: 0 16px !important;
+  }
+
+  .dashboard-root-layout main {
+    padding: 16px !important;
+  }
+}
+
+.dash-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--dash-radius-lg);
+}
+
+/* Soft Glossy Modal & Table Accent Utilities */
+.dash-modal-header-glossy {
+  background: linear-gradient(135deg, #065F46 0%, #047857 55%, #059669 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 8px rgba(6, 95, 70, 0.2);
+  color: #FFFFFF;
+}
+
+/* Admin Shell Responsive Rules & Animations */
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-desktop-sidebar {
+    display: none !important;
+  }
+
+  .admin-desktop-toggle {
+    display: none !important;
+  }
+
+  .admin-mobile-toggle {
+    display: inline-flex !important;
+  }
+
+  .admin-env-badge {
+    display: none !important;
+  }
+
+  .admin-profile-meta {
+    display: none !important;
+  }
+
+  .admin-top-header {
+    padding: 0 14px !important;
+  }
+
+  .admin-root-layout main {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+  .admin-env-badge {
+    display: none !important;
+  }
+}
+
+
