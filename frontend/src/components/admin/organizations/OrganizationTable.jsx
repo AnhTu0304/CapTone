@@ -196,7 +196,7 @@ export const OrganizationTable = ({
                 {/* Pods Quota */}
                 <td>
                   <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {org.podsCount.toLocaleString('vi-VN')} / {org.podsLimit.toLocaleString('vi-VN')} Pods
+                    {(org.podsCount ?? 0).toLocaleString('vi-VN')} / {(org.podsLimit ?? 0).toLocaleString('vi-VN')} Pods
                   </span>
                 </td>
 

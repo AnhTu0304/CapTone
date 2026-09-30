@@ -72,19 +72,27 @@ export const ADMIN_NAV_GROUPS = [
       {
         id: 'clusters',
         label: 'Cụm Kubernetes',
-        path: '/admin/clusters',
+        path: '/admin/infrastructure/clusters',
         icon: Layers,
+      },
+      {
+        id: 'agents',
+        label: 'Tác Tử eBPF',
+        path: '/admin/infrastructure/agents',
+        icon: Activity,
+        badge: '100%',
+        badgeColor: '#10B981',
       },
       {
         id: 'nodes',
         label: 'Hạ Tầng Máy Chủ (Nodes)',
-        path: '/admin/nodes',
+        path: '/admin/infrastructure/nodes',
         icon: Server,
       },
       {
         id: 'workloads',
         label: 'Khối Công Việc (Workloads)',
-        path: '/admin/workloads',
+        path: '/admin/infrastructure/workloads',
         icon: Box,
       },
     ],
@@ -147,6 +155,18 @@ export const AdminSidebar = ({
 
     if (normTarget === '/admin') {
       return normCurrent === '/admin' || normCurrent === '/admin/overview';
+    }
+    if (normTarget === '/admin/infrastructure/clusters') {
+      return normCurrent === '/admin/infrastructure/clusters' || normCurrent === '/admin/clusters';
+    }
+    if (normTarget === '/admin/infrastructure/agents') {
+      return normCurrent === '/admin/infrastructure/agents' || normCurrent === '/admin/agents';
+    }
+    if (normTarget === '/admin/infrastructure/nodes') {
+      return normCurrent === '/admin/infrastructure/nodes' || normCurrent === '/admin/nodes';
+    }
+    if (normTarget === '/admin/infrastructure/workloads') {
+      return normCurrent === '/admin/infrastructure/workloads' || normCurrent === '/admin/workloads';
     }
     return normCurrent === normTarget || normCurrent.startsWith(`${normTarget}/`);
   };

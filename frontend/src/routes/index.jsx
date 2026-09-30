@@ -17,6 +17,8 @@ import AuthLayout from '../layouts/AuthLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import OverviewPage from '../pages/Admin/Overview';
 import { OrganizationsListPage, OrganizationDetailsPage } from '../pages/Admin/Organizations';
+import { AdminInfrastructurePage } from '../pages/Admin/Infrastructure';
+import { IncidentsListPage, IncidentDetailPage } from '../pages/Admin/Incidents';
 import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
@@ -24,6 +26,11 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   ADMIN: '/admin',
   ADMIN_ORGANIZATIONS: '/admin/organizations',
+  ADMIN_INCIDENTS: '/admin/incidents',
+  ADMIN_INFRASTRUCTURE_CLUSTERS: '/admin/infrastructure/clusters',
+  ADMIN_INFRASTRUCTURE_AGENTS: '/admin/infrastructure/agents',
+  ADMIN_INFRASTRUCTURE_NODES: '/admin/infrastructure/nodes',
+  ADMIN_INFRASTRUCTURE_WORKLOADS: '/admin/infrastructure/workloads',
   GUIDE: '/guide',
   FEATURES: '/features',
   ABOUT: '/about',
@@ -70,6 +77,21 @@ export const RouteRenderer = ({
     } else if (path.startsWith('/admin/organizations/')) {
       const orgId = path.substring('/admin/organizations/'.length);
       adminContent = <OrganizationDetailsPage orgId={orgId} onNavigate={onNavigate} />;
+    } else if (path === '/admin/incidents') {
+      adminContent = <IncidentsListPage onNavigate={onNavigate} />;
+    } else if (path.startsWith('/admin/incidents/')) {
+      const incidentId = path.substring('/admin/incidents/'.length);
+      adminContent = <IncidentDetailPage incidentId={incidentId} onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/clusters' || path === '/admin/clusters') {
+      adminContent = <AdminInfrastructurePage currentSection="clusters" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/agents' || path === '/admin/agents') {
+      adminContent = <AdminInfrastructurePage currentSection="agents" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/nodes' || path === '/admin/nodes') {
+      adminContent = <AdminInfrastructurePage currentSection="nodes" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/workloads' || path === '/admin/workloads') {
+      adminContent = <AdminInfrastructurePage currentSection="workloads" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure') {
+      adminContent = <AdminInfrastructurePage currentSection="clusters" onNavigate={onNavigate} />;
     }
 
     return (

@@ -65,7 +65,7 @@ describe('Admin Application Shell Suite', () => {
       const handleNavigate = jest.fn();
       render(
         <AdminSidebar
-          currentPath="/admin/clusters"
+          currentPath="/admin/infrastructure/clusters"
           onNavigate={handleNavigate}
           isCollapsed={false}
         />
@@ -77,7 +77,7 @@ describe('Admin Application Shell Suite', () => {
 
       // Click calls onNavigate
       fireEvent.click(clustersBtn);
-      expect(handleNavigate).toHaveBeenCalledWith('/admin/clusters');
+      expect(handleNavigate).toHaveBeenCalledWith('/admin/infrastructure/clusters');
     });
 
     test('renders grouped navigation sections', () => {
