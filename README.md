@@ -1,7 +1,7 @@
 # CapTone — Nền Tảng Tự Phục Hồi Hạ Tầng Tự Động Hóa (Autonomous Self-Healing Infrastructure)
 
 > **Hệ thống AI-driven Proactive Incident Prevention & Self-Healing cho cụm Kubernetes (K8s) dành cho doanh nghiệp vừa và nhỏ (SME).**  
-> Tích hợp giao diện **Greptile Blueprint Design System**, đồ họa **3D Interactive Telemetry**, mô hình dự báo rủi ro sớm **PyTorch GRU (12 timesteps)** và chu trình tự chữa lành khép kín **MAPE-K Loop**.
+> Tích hợp giao diện **Greptile Blueprint Design System**, đồ họa **3D Interactive Telemetry**, mô hình dự báo rủi ro sớm **PyTorch GRU (12 timesteps)**, **Kubernetes Telemetry Agent** và chu trình tự chữa lành khép kín **MAPE-K Loop**.
 
 ---
 
@@ -11,13 +11,15 @@
    - [Frontend (Giao diện Kỹ thuật cao React 19)](#21-frontend-giao-diện-kỹ-thuật-cao-react-19)
    - [Main Backend (Node.js Express TypeScript MVC)](#22-main-backend-nodejs-express-typescript-mvc)
    - [AI Backend (FastAPI + GRU Multi-Label + Multi-Agent RCA)](#23-ai-backend-fastapi--gru-multi-label--multi-agent-rca)
-   - [Hạ Tầng Triển Khai K8s](#24-hạ-tầng-triển-khai-k8s)
+   - [SelfHeal Agent (Kubernetes Telemetry & Discovery Daemon)](#24-selfheal-agent-kubernetes-telemetry--discovery-daemon)
+   - [Hạ Tầng Triển Khai K8s](#25-hạ-tầng-triển-khai-k8s)
 3. [Cấu Trúc Thư Mục Toàn Dự Án](#3-cấu-trúc-thư-mục-toàn-dự-án)
 4. [Hướng Dẫn Khởi Chạy & Vận Hành](#4-hướng-dẫn-khởi-chạy--vận-hành)
    - [4.1. Khởi chạy Frontend](#41-khởi-chạy-frontend)
    - [4.2. Khởi chạy Main Backend](#42-khởi-chạy-main-backend)
    - [4.3. Khởi chạy AI Backend](#43-khởi-chạy-ai-backend)
-   - [4.4. Triển khai bằng Docker / Docker Compose](#44-triển-khai-bằng-docker--docker-compose)
+   - [4.4. Khởi chạy SelfHeal Agent](#44-khởi-chạy-selfheal-agent)
+   - [4.5. Đóng gói & Triển khai toàn bộ với Docker Compose](#45-đóng-gói--triển-khai-toàn-bộ-với-docker-compose)
 5. [Chu Trình Tự Phục Hồi (MAPE-K Loop)](#5-chu-trình-tự-phục-hồi-mape-k-loop)
 6. [Tài Liệu Kỹ Thuật Tham Chiếu Khác](#6-tài-liệu-kỹ-thuật-tham-chiếu-khác)
 
@@ -28,12 +30,12 @@
 Hệ thống **CapTone** hoạt động như một bộ não điều phối tự phục hồi toàn diện cho hạ tầng microservices:
 
 ```text
-[ Cụm Kubernetes / Workloads / Pods ]
+[ Cụm Kubernetes / Nodes / Pods / Services ]
                │
-               ▼ (Thu thập số liệu Metrics, Logs, K8s Events)
-[ Agent & Telemetry Pipeline ]
+               ▼ (Heartbeat, Discovery Nodes/Pods/Events, Metrics)
+[ SelfHeal Kubernetes Agent ]
                │
-               ▼
+               ▼ (HTTP / Bearer Token / Retries)
 [ Main Backend ] ──(12 timesteps x 8 features)──► [ AI Backend (FastAPI) ]
   (Express TS MVC)                                 ├── Mô hình PyTorch GRU (Dự báo rủi ro sớm)
   ├── Quản trị Incidents & Actions                 └── Multi-Agent RCA (Phân tích nguyên nhân gốc)
@@ -90,7 +92,16 @@ Hệ thống **CapTone** hoạt động như một bộ não điều phối tự
   - Đưa ra đúng 1 khuyến nghị hành động tối ưu kèm giải thích và độ tin cậy.
 - **Cổng mặc định**: `8000`.
 
-### 2.4. Hạ Tầng Triển Khai K8s
+### 2.4. SelfHeal Agent (Kubernetes Telemetry & Discovery Daemon)
+- **Công nghệ**: Python 3.11+, Official Kubernetes Python Client, HTTPX (Asynchronous), Pydantic Settings, Tenacity Retry.
+- **Nhiệm vụ chính**:
+  - **Khám phá cụm K8s (Read-Only Discovery)**: Liệt kê Nodes, Namespaces, Pods, Deployments, Services, Cluster Events một cách an toàn (không can thiệp phá hủy hạ tầng ở tầng v0.1).
+  - **Cơ chế Heartbeat bền bỉ**: Bắn nhịp tim định kỳ (Heartbeat pulse) về Backend chứa trạng thái kết nối K8s, phiên bản agent, thời gian báo cáo. Mất kết nối tạm thời từ backend **không làm crash agent**.
+  - **Bảo mật Secrets**: Tự động che giấu `SELFHEAL_AGENT_TOKEN` bằng `SecretStr` và bộ lọc Logging Mask Filter, ngăn rò rỉ token vào stdout/logs.
+  - **Hỗ trợ 2 chế độ**: `LOCAL` (sử dụng file kubeconfig cục bộ) và `IN_CLUSTER` (sử dụng ServiceAccount token nội bộ pod).
+  - **Đóng gói Docker tiêu chuẩn**: Multi-stage build (test stage tự chạy 6 unit test), chạy dưới người dùng non-root (`agentuser:10001`).
+
+### 2.5. Hạ Tầng Triển Khai K8s
 - Cung cấp sẵn các tệp manifest trong `k8s/`:
   - `namespace.yaml`: Thiết lập namespace cô lập `selfheal-platform`.
   - `postgres.yaml`: Triển khai StatefulSet/Deployment cho PostgreSQL kèm PersistentVolumeClaim.
@@ -130,7 +141,7 @@ CapTone/
 │   │   ├── utils/                # Tiện ích API chuẩn hóa
 │   │   ├── app.ts                # Khởi tạo Express
 │   │   └── server.ts             # Điểm bắt đầu khởi chạy HTTP Server
-│   ├── Dockerfile                # Đóng gói Node.js Express
+│   ├── Dockerfile                # Đóng gói Node.js Express multi-stage
 │   └── package.json
 │
 ├── AI_backend/                   # Bộ xử lý Trí Tuệ Nhân Tạo & RCA (Python FastAPI)
@@ -146,6 +157,21 @@ CapTone/
 │   ├── Dockerfile                # Đóng gói Python FastAPI
 │   └── requirements.txt          # Khai báo thư viện Python
 │
+├── selfheal-agent/               # [MỚI THÊM] Agent giám sát cụm K8s & Telemetry Daemon
+│   ├── app/
+│   │   ├── auth/                 # Xác thực X-Agent-ID và Bearer Token
+│   │   ├── config/               # Cấu hình Pydantic Settings với SecretStr
+│   │   ├── heartbeat/            # Vòng lặp phát nhịp tim định kỳ
+│   │   ├── kubernetes/           # Trình bao bọc K8s client (LOCAL/IN_CLUSTER, read-only discovery)
+│   │   ├── logging/              # Structured JSON/Text logger với filter che giấu token
+│   │   ├── transport/            # HTTP Client bất đồng bộ httpx kèm tenacity retry
+│   │   └── main.py               # Điểm khởi chạy Agent daemon & xử lý tín hiệu OS signal
+│   ├── tests/                    # 6 unit tests kiểm thử độ bền, bảo mật và kết nối K8s
+│   ├── .dockerignore             # Loại trừ file rác, cache, secrets khỏi container
+│   ├── Dockerfile                # Đóng gói Multi-stage Non-root container tiêu chuẩn
+│   ├── requirements.txt          # Khai báo thư viện Python của agent
+│   └── README.md
+│
 ├── k8s/                          # Kubernetes Manifests
 │   ├── namespace.yaml
 │   ├── postgres.yaml
@@ -153,7 +179,7 @@ CapTone/
 │
 ├── docs/                         # Tài liệu kiến trúc chuyên sâu
 │   └── DASHBOARD_ARCHITECTURE.md
-├── docker-compose.yml            # Điều phối chạy container
+├── docker-compose.yml            # [CẬP NHẬT] Điều phối toàn bộ 5 dịch vụ đồng bộ
 ├── DEPLOYMENT.md                 # Hướng dẫn chi tiết đóng gói và triển khai
 ├── PROJECT_STRUCTURE.md          # Đặc tả chi tiết từng tệp tin và thiết kế 3D
 └── README.md                     # Tài liệu tổng quan dự án (Tệp này)
@@ -171,7 +197,7 @@ Yêu cầu: **Node.js 18.x hoặc 20.x LTS**.
 # 1. Di chuyển vào thư mục frontend
 cd frontend
 
-# 2. Cài đặt các gói phụ thuộc (dùng flag --legacy-peer-deps để đồng bộ tối ưu React 19)
+# 2. Cài đặt các gói phụ thuộc
 npm install --legacy-peer-deps
 
 # 3. Chạy ứng dụng trong môi trường phát triển
@@ -232,21 +258,62 @@ Tài liệu OpenAPI tương tác: `http://localhost:8000/docs`
 
 ---
 
-### 4.4. Triển khai bằng Docker / Docker Compose
+### 4.4. Khởi chạy SelfHeal Agent
 
-Để triển khai nhanh giao diện Frontend đã được biên dịch tối ưu qua Nginx:
+Yêu cầu: **Python 3.11+**.
+
+```powershell
+# 1. Di chuyển vào thư mục selfheal-agent
+cd selfheal-agent
+
+# 2. Cài đặt các gói phụ thuộc
+pip install -r requirements.txt
+
+# 3. Cấu hình biến môi trường
+cp .env.example .env
+
+# 4. Khởi chạy Agent daemon
+python -m app.main
+```
+
+Kiểm thử đơn vị tự động cho Agent:
+```bash
+pytest tests/ -v
+```
+
+---
+
+### 4.5. Đóng gói & Triển khai toàn bộ với Docker Compose
+
+Tệp `docker-compose.yml` tại thư mục gốc đã được thiết lập chuẩn hóa để điều phối toàn bộ 5 dịch vụ trong một mạng nội bộ (`captone-network`):
+
+| Dịch vụ | Container Name | Cổng Expose | Vai Trò |
+|---|---|---|---|
+| `postgres` | `captone-postgres` | `5432:5432` | Cơ sở dữ liệu chính PostgreSQL 16 |
+| `main-backend` | `captone-main-backend` | `5000:5000` | Node.js Express REST API lõi |
+| `ai-backend` | `captone-ai-backend` | `8000:8000` | FastAPI GRU & Multi-Agent RCA |
+| `selfheal-frontend` | `selfheal_platform_web` | `3000:80` | Giao diện React 19 Nginx tối ưu |
+| `selfheal-agent` | `selfheal_k8s_agent` | Nội bộ | Daemon thu thập Heartbeat & K8s discovery |
+
+#### Các lệnh vận hành:
 
 ```bash
-# Khởi động container Frontend
+# 1. Xây dựng và khởi chạy toàn bộ 5 container trong chế độ nền:
 docker compose up -d --build
 
-# Kiểm tra trạng thái container
+# 2. Kiểm tra trạng thái hoạt động và healthcheck:
 docker compose ps
 
-# Xem nhật ký log của container
-docker compose logs -f selfheal-frontend
+# 3. Xem logs trực tiếp của toàn hệ thống (hoặc một dịch vụ cụ thể):
+docker compose logs -f
+docker compose logs -f selfheal-agent
+
+# 4. Chạy kiểm thử tự động của Agent bên trong Docker:
+docker build --target test -t selfheal-agent:test -f selfheal-agent/Dockerfile selfheal-agent
+
+# 5. Dừng hệ thống:
+docker compose down
 ```
-Truy cập qua trình duyệt: **`http://localhost:3000`**
 
 ---
 
@@ -254,7 +321,7 @@ Truy cập qua trình duyệt: **`http://localhost:3000`**
 
 Hệ thống hoạt động theo nguyên lý vòng lặp điều khiển tự thích ứng **MAPE-K**:
 
-1. **Monitor (Giám sát)**: Cụm Agents liên tục thu thập chuỗi dữ liệu 8 chỉ số theo các chu kỳ đo.
+1. **Monitor (Giám sát)**: Cụm SelfHeal Agents liên tục gửi heartbeat, trạng thái K8s cluster và thu thập chuỗi dữ liệu 8 chỉ số theo các chu kỳ đo.
 2. **Analyze (Phân tích)**:
    - Khi có đủ 12 timestep mới, AI Backend phân tích qua mô hình **GRU** để nhận diện dấu hiệu bất thường tiềm ẩn.
    - Khi phát hiện rủi ro vượt ngưỡng, **Multi-Agent RCA Engine** lập tức đối soát Logs, Kubernetes Events và lịch sử sự cố tương tự.
@@ -272,8 +339,10 @@ Hệ thống hoạt động theo nguyên lý vòng lặp điều khiển tự th
 ## 6. Tài Liệu Kỹ Thuật Tham Chiếu Khác
 
 Để tìm hiểu chi tiết hơn về từng khía cạnh kỹ thuật, vui lòng tham khảo các tài liệu chuyên đề:
+- [Cẩm nang Khởi chạy Docker Toàn diện (DOCKER_GUIDE.md)](DOCKER_GUIDE.md): Hướng dẫn từng bước chạy 1-click, xử lý xung đột cổng và kiểm thử.
 - [Kiến trúc & Cấu trúc Dự án Chi tiết (PROJECT_STRUCTURE.md)](PROJECT_STRUCTURE.md): Giải trình toàn diện từng file, từng module và cơ chế vẽ không gian 3D.
 - [Hướng dẫn Đóng gói & Triển khai Sản xuất (DEPLOYMENT.md)](DEPLOYMENT.md): Hướng dẫn thiết lập Production trên Docker & Kubernetes.
+- [Tài liệu Chi tiết SelfHeal Agent (selfheal-agent/README.md)](selfheal-agent/README.md): Cẩm nang cấu hình và API heartbeat của Agent.
 - [Kiến trúc Bảng điều khiển Giám sát (docs/DASHBOARD_ARCHITECTURE.md)](docs/DASHBOARD_ARCHITECTURE.md): Sơ đồ luồng trạng thái và chi tiết kết nối API.
 - [Đặc tả Hệ thống Thiết kế Greptile (www.greptile.com-DESIGN.md)](www.greptile.com-DESIGN.md): Bảng thông số Tokens, màu sắc, font chữ và quy chuẩn UI.
 

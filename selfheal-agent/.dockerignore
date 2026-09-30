@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Local configuration & secrets
+.env
+.env.local
+*.kubeconfig
+kubeconfig
+
+# Documentation & IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,6 +1,86 @@
-version: '3.8'
-
 services:
+  # ==========================================
+  # Database Service: PostgreSQL 16
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: captone-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-captone_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-captone_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - captone-network
+
+  # ==========================================
+  # Core Backend: Node.js Express TypeScript MVC
+  # ==========================================
+  main-backend:
+    build:
+      context: ./Main_backend
+      dockerfile: Dockerfile
+    container_name: captone-main-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      API_PREFIX: /api/v1
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-captone_db}
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_development_only}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - captone-network
+
+  # ==========================================
+  # AI Backend: FastAPI GRU & Multi-Agent RCA
+  # ==========================================
+  ai-backend:
+    build:
+      context: ./AI_backend
+      dockerfile: Dockerfile
+    container_name: captone-ai-backend
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - captone-network
+
+  # ==========================================
+  # Frontend: React 19 Greptile Blueprint UI
+  # ==========================================
   selfheal-frontend:
     build:
       context: ./frontend
@@ -17,3 +97,38 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - captone-network
+
+  # ==========================================
+  # Telemetry Agent: Kubernetes SelfHeal Daemon
+  # ==========================================
+  selfheal-agent:
+    build:
+      context: ./selfheal-agent
+      dockerfile: Dockerfile
+    container_name: selfheal_k8s_agent
+    restart: unless-stopped
+    depends_on:
+      - main-backend
+    environment:
+      SELFHEAL_BACKEND_URL: http://main-backend:5000
+      SELFHEAL_AGENT_ID: ${SELFHEAL_AGENT_ID:-agent-k8s-cluster-01}
+      SELFHEAL_AGENT_TOKEN: ${SELFHEAL_AGENT_TOKEN:-sh_sec_demo_token_change_me_in_production}
+      SELFHEAL_HEARTBEAT_INTERVAL: 10
+      SELFHEAL_KUBERNETES_MODE: ${SELFHEAL_KUBERNETES_MODE:-LOCAL}
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+    networks:
+      - captone-network
+
+# ==========================================
+# Volumes & Networks
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  captone-network:
+    driver: bridge
