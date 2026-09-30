@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Server,
   Layers,
@@ -21,33 +21,36 @@ import ClusterTable from '../../../components/admin/infrastructure/ClusterTable'
 import AgentTable from '../../../components/admin/infrastructure/AgentTable';
 import NodeTable from '../../../components/admin/infrastructure/NodeTable';
 import WorkloadTable from '../../../components/admin/infrastructure/WorkloadTable';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { AdminErrorState } from '../../../components/admin/common';
 
 export const AdminInfrastructurePage = ({ currentSection = 'clusters', onNavigate }) => {
   const [activeTab, setActiveTab] = useState(currentSection);
   const [kpis, setKpis] = useState(null);
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [secondaryFilter, setSecondaryFilter] = useState('ALL');
   const [toastMessage, setToastMessage] = useState(null);
 
-  const prevSectionRef = useRef(currentSection);
-
-  // Sync internal activeTab with currentSection prop when prop actually changes
   useEffect(() => {
-    if (currentSection !== prevSectionRef.current) {
-      prevSectionRef.current = currentSection;
-      setActiveTab(currentSection);
-    }
+    setActiveTab(currentSection);
   }, [currentSection]);
+
+  const debouncedSearch = useDebounce(search, 300);
 
   // Load KPI overview
   useEffect(() => {
     let isMounted = true;
-    getInfrastructureKPIs().then((data) => {
-      if (isMounted) setKpis(data);
-    });
+    getInfrastructureKPIs()
+      .then((data) => {
+        if (isMounted) setKpis(data);
+      })
+      .catch((err) => {
+        console.error('Lỗi khi nạp KPI hạ tầng:', err);
+      });
     return () => {
       isMounted = false;
     };
@@ -56,31 +59,32 @@ export const AdminInfrastructurePage = ({ currentSection = 'clusters', onNavigat
   // Fetch data depending on activeTab
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       if (activeTab === 'clusters') {
         const data = await getInfrastructureClusters({
-          search,
+          search: debouncedSearch,
           status: statusFilter,
           organization: secondaryFilter,
         });
         setItems(data);
       } else if (activeTab === 'agents') {
         const data = await getInfrastructureAgents({
-          search,
+          search: debouncedSearch,
           status: statusFilter,
           organization: secondaryFilter,
         });
         setItems(data);
       } else if (activeTab === 'nodes') {
         const data = await getInfrastructureNodes({
-          search,
+          search: debouncedSearch,
           status: statusFilter,
           cluster: secondaryFilter,
         });
         setItems(data);
       } else if (activeTab === 'workloads') {
         const data = await getInfrastructureWorkloads({
-          search,
+          search: debouncedSearch,
           status: statusFilter,
           type: secondaryFilter,
         });
@@ -88,10 +92,11 @@ export const AdminInfrastructurePage = ({ currentSection = 'clusters', onNavigat
       }
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu hạ tầng:', err);
+      setError('Không thể tải dữ liệu hạ tầng từ máy chủ. Vui lòng thử lại sau.');
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, search, statusFilter, secondaryFilter]);
+  }, [activeTab, debouncedSearch, statusFilter, secondaryFilter]);
 
   useEffect(() => {
     fetchData();
@@ -416,6 +421,16 @@ export const AdminInfrastructurePage = ({ currentSection = 'clusters', onNavigat
           setSecondaryFilter('ALL');
         }}
       />
+
+      {/* Error state if fetch failed */}
+      {error && (
+        <AdminErrorState
+          title="Không thể tải dữ liệu hạ tầng"
+          message={error}
+          onRetry={fetchData}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Main Table Views */}
       {activeTab === 'clusters' && (

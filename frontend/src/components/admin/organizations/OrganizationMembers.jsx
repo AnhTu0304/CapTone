@@ -68,7 +68,13 @@ export const OrganizationMembers = ({ members = [], isLoading = false }) => {
           Không có thành viên nào trong tổ chức này.
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="dash-table-container"
+          role="region"
+          aria-label="Bảng thành viên tổ chức"
+          tabIndex={0}
+          style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr

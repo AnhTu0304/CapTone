@@ -77,11 +77,13 @@ export const IncidentTimeline = ({ timeline = [], isLoading = false }) => {
 
       {/* Horizontal Steps Bar */}
       <div
+        className="dash-table-container"
         style={{
           padding: '20px',
           backgroundColor: '#F8FAFC',
           borderBottom: '1px solid var(--dash-border)',
           overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', minWidth: '760px', justifyContent: 'space-between', position: 'relative' }}>

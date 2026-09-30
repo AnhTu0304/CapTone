@@ -55,7 +55,13 @@ export const OrganizationAuditActivity = ({ auditLogs = [], isLoading = false })
           Chưa có nhật ký kiểm toán nào được ghi nhận cho tổ chức này.
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="dash-table-container"
+          role="region"
+          aria-label="Bảng nhật ký kiểm toán tổ chức"
+          tabIndex={0}
+          style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr

@@ -106,10 +106,14 @@ export const NodeTable = ({ nodes = [], isLoading = false, onScheduleMaintenance
   return (
     <div
       className="dash-table-container"
+      role="region"
+      aria-label="Bảng danh sách máy chủ Nodes"
+      tabIndex={0}
       style={{
         border: '1px solid var(--dash-border)',
         borderRadius: '14px',
-        overflow: 'hidden',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
         boxShadow: 'var(--dash-shadow-xs)',
         backgroundColor: '#FFFFFF',
       }}

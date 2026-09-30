@@ -26,6 +26,7 @@ import OrganizationClusters from '../../../components/admin/organizations/Organi
 import OrganizationAgents from '../../../components/admin/organizations/OrganizationAgents';
 import OrganizationIncidents from '../../../components/admin/organizations/OrganizationIncidents';
 import OrganizationAuditActivity from '../../../components/admin/organizations/OrganizationAuditActivity';
+import { AdminErrorState } from '../../../components/admin/common';
 
 export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'members' | 'environments' | 'clusters' | 'agents' | 'incidents' | 'audit'
@@ -38,10 +39,12 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState(null);
 
   const fetchTenantData = useCallback(async () => {
     setIsLoading(true);
     setNotFound(false);
+    setError(null);
     try {
       const org = await getOrganization(orgId);
       if (!org) {
@@ -68,6 +71,7 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
       setAuditLogs(aud);
     } catch (err) {
       console.error('Lỗi khi tải chi tiết tổ chức:', err);
+      setError('Không thể tải chi tiết dữ liệu tổ chức từ máy chủ. Vui lòng thử lại sau.');
     } finally {
       setIsLoading(false);
     }
@@ -124,6 +128,36 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
         >
           Quay lại danh sách tổ chức
         </button>
+      </div>
+    );
+  }
+
+  if (error && !organization) {
+    return (
+      <div style={{ padding: '20px 0' }}>
+        <AdminErrorState
+          title="Không thể tải chi tiết tổ chức"
+          message={error}
+          onRetry={fetchTenantData}
+          isRetrying={isLoading}
+        />
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          <button
+            type="button"
+            onClick={handleBack}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#059669',
+              fontWeight: 600,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+            }}
+          >
+            ← Quay lại danh sách tổ chức
+          </button>
+        </div>
       </div>
     );
   }

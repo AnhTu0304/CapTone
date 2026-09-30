@@ -112,7 +112,13 @@ export const OrganizationClusters = ({ clusters = [], isLoading = false }) => {
           Tổ chức chưa kết nối cụm Kubernetes nào.
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="dash-table-container"
+          role="region"
+          aria-label="Bảng cụm Kubernetes đã đăng ký"
+          tabIndex={0}
+          style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr

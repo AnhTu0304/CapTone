@@ -106,10 +106,14 @@ export const ClusterTable = ({ clusters = [], isLoading = false, onSyncCluster, 
   return (
     <div
       className="dash-table-container"
+      role="region"
+      aria-label="Bảng danh sách cụm Kubernetes"
+      tabIndex={0}
       style={{
         border: '1px solid var(--dash-border)',
         borderRadius: '14px',
-        overflow: 'hidden',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
         boxShadow: 'var(--dash-shadow-xs)',
         backgroundColor: '#FFFFFF',
       }}

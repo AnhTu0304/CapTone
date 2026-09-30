@@ -3,21 +3,30 @@ import { AlertCircle, RefreshCw, ShieldCheck, CheckCircle2, Clock, Zap } from 'l
 import { getIncidents, getIncidentKPIs } from '../../../services/adminIncidentsService';
 import IncidentTable from '../../../components/admin/incidents/IncidentTable';
 import IncidentFilters from '../../../components/admin/incidents/IncidentFilters';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { AdminErrorState } from '../../../components/admin/common';
 
 export const IncidentsListPage = ({ onNavigate }) => {
   const [incidents, setIncidents] = useState([]);
   const [kpis, setKpis] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [severityFilter, setSeverityFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
+  const debouncedSearch = useDebounce(search, 300);
+
   // Load KPIs
   useEffect(() => {
     let isMounted = true;
-    getIncidentKPIs().then((data) => {
-      if (isMounted) setKpis(data);
-    });
+    getIncidentKPIs()
+      .then((data) => {
+        if (isMounted) setKpis(data);
+      })
+      .catch((err) => {
+        console.error('Lỗi khi nạp KPI sự cố:', err);
+      });
     return () => {
       isMounted = false;
     };
@@ -26,19 +35,21 @@ export const IncidentsListPage = ({ onNavigate }) => {
   // Fetch incidents list
   const fetchIncidentsData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const data = await getIncidents({
-        search,
+        search: debouncedSearch,
         severity: severityFilter,
         status: statusFilter,
       });
       setIncidents(data);
     } catch (err) {
       console.error('Lỗi khi tải danh sách sự cố:', err);
+      setError('Không thể tải danh sách sự cố từ máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.');
     } finally {
       setIsLoading(false);
     }
-  }, [search, severityFilter, statusFilter]);
+  }, [debouncedSearch, severityFilter, statusFilter]);
 
   useEffect(() => {
     fetchIncidentsData();
@@ -194,6 +205,16 @@ export const IncidentsListPage = ({ onNavigate }) => {
           setStatusFilter('ALL');
         }}
       />
+
+      {/* Error State if fetch failed */}
+      {error && (
+        <AdminErrorState
+          title="Không thể tải danh sách sự cố"
+          message={error}
+          onRetry={fetchIncidentsData}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Incidents Table */}
       <IncidentTable

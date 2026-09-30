@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Zap,
+  Sliders,
   Layers,
   Server,
   Box,
@@ -16,6 +17,10 @@ import {
   ChevronRight,
   Shield,
   Building2,
+  BrainCircuit,
+  Cpu,
+  GitFork,
+  BarChart2,
 } from 'lucide-react';
 
 export const ADMIN_NAV_GROUPS = [
@@ -58,10 +63,16 @@ export const ADMIN_NAV_GROUPS = [
         icon: AlertTriangle,
       },
       {
+        id: 'self-healing-actions',
+        label: 'Hành Động Tự Phục Hồi',
+        path: '/admin/self-healing/actions',
+        icon: Zap,
+      },
+      {
         id: 'policies',
         label: 'Chính Sách Tự Lành',
-        path: '/admin/policies',
-        icon: Zap,
+        path: '/admin/self-healing/policies',
+        icon: Sliders,
       },
     ],
   },
@@ -94,6 +105,42 @@ export const ADMIN_NAV_GROUPS = [
         label: 'Khối Công Việc (Workloads)',
         path: '/admin/infrastructure/workloads',
         icon: Box,
+      },
+    ],
+  },
+  {
+    id: 'ai-engine',
+    title: 'TRÍ TUỆ NHÂN TẠO & RCA',
+    items: [
+      {
+        id: 'ai-overview',
+        label: 'Tổng Quan Động Cơ AI',
+        path: '/admin/ai/overview',
+        icon: BrainCircuit,
+      },
+      {
+        id: 'ai-models',
+        label: 'Kho Mô Hình Học Máy',
+        path: '/admin/ai/models',
+        icon: Cpu,
+      },
+      {
+        id: 'ai-predictions',
+        label: 'Dự Báo Dị Thường',
+        path: '/admin/ai/predictions',
+        icon: Activity,
+      },
+      {
+        id: 'ai-rca',
+        label: 'Đồ Thị Nhân Quả RCA',
+        path: '/admin/ai/rca',
+        icon: GitFork,
+      },
+      {
+        id: 'ai-performance',
+        label: 'Hiệu Năng & Kiểm Chuẩn',
+        path: '/admin/ai/performance',
+        icon: BarChart2,
       },
     ],
   },
@@ -167,6 +214,20 @@ export const AdminSidebar = ({
     }
     if (normTarget === '/admin/infrastructure/workloads') {
       return normCurrent === '/admin/infrastructure/workloads' || normCurrent === '/admin/workloads';
+    }
+    if (normTarget === '/admin/self-healing/policies' || normTarget === '/admin/policies') {
+      return normCurrent === '/admin/self-healing/policies' || normCurrent === '/admin/policies';
+    }
+    if (normTarget === '/admin/self-healing/actions') {
+      return (
+        normCurrent === '/admin/self-healing/actions' ||
+        normCurrent === '/admin/self-healing/action-types' ||
+        normCurrent === '/admin/self-healing/analytics' ||
+        normCurrent === '/admin/self-healing'
+      );
+    }
+    if (normTarget === '/admin/ai/overview') {
+      return normCurrent === '/admin/ai/overview' || normCurrent === '/admin/ai';
     }
     return normCurrent === normTarget || normCurrent.startsWith(`${normTarget}/`);
   };
@@ -308,6 +369,9 @@ export const AdminSidebar = ({
                   <button
                     type="button"
                     onClick={(e) => handleItemClick(e, item.path)}
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={item.label}
+                    title={isCollapsed ? item.label : undefined}
                     style={{
                       width: '100%',
                       height: '40px',

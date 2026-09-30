@@ -1,31 +1,38 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Building2, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { getOrganizations } from '../../../services/adminOrganizationsService';
 import OrganizationTable from '../../../components/admin/organizations/OrganizationTable';
 import OrganizationFilters from '../../../components/admin/organizations/OrganizationFilters';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { AdminErrorState } from '../../../components/admin/common';
 
 export const OrganizationsListPage = ({ onNavigate }) => {
   const [organizations, setOrganizations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [planFilter, setPlanFilter] = useState('ALL');
 
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
   const fetchOrganizationsData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const data = await getOrganizations({
         status: statusFilter,
         plan: planFilter,
-        query: searchQuery,
+        query: debouncedSearch,
       });
       setOrganizations(data);
     } catch (err) {
       console.error('Lỗi khi tải danh sách tổ chức:', err);
+      setError('Không thể tải danh sách tổ chức thuê bao. Vui lòng kiểm tra kết nối mạng và thử lại.');
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, planFilter, searchQuery]);
+  }, [statusFilter, planFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchOrganizationsData();
@@ -37,9 +44,18 @@ export const OrganizationsListPage = ({ onNavigate }) => {
     }
   };
 
-  const activeCount = organizations.filter((o) => o.status === 'ACTIVE').length;
-  const trialCount = organizations.filter((o) => o.status === 'TRIAL').length;
-  const suspendedCount = organizations.filter((o) => o.status === 'SUSPENDED').length;
+  const { activeCount, trialCount, suspendedCount } = useMemo(() => {
+    let active = 0;
+    let trial = 0;
+    let suspended = 0;
+    for (let i = 0; i < organizations.length; i++) {
+      const s = organizations[i].status;
+      if (s === 'ACTIVE') active++;
+      else if (s === 'TRIAL') trial++;
+      else if (s === 'SUSPENDED') suspended++;
+    }
+    return { activeCount: active, trialCount: trial, suspendedCount: suspended };
+  }, [organizations]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -202,6 +218,16 @@ export const OrganizationsListPage = ({ onNavigate }) => {
         onPlanChange={setPlanFilter}
         totalCount={organizations.length}
       />
+
+      {/* Error state if fetch failed */}
+      {error && (
+        <AdminErrorState
+          title="Không thể tải danh sách tổ chức"
+          message={error}
+          onRetry={fetchOrganizationsData}
+          isRetrying={isLoading}
+        />
+      )}
 
       {/* Organizations Table */}
       <OrganizationTable

@@ -164,7 +164,13 @@ export const OrganizationIncidents = ({ incidents = [], isLoading = false }) => 
           Không ghi nhận sự cố nào phát sinh trong tổ chức này.
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="dash-table-container"
+          role="region"
+          aria-label="Bảng lịch sử sự cố và cứu hộ"
+          tabIndex={0}
+          style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr

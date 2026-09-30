@@ -164,7 +164,13 @@ export const IncidentHealingActions = ({ actions = [], isLoading = false, onNavi
           Chưa có hành động phục hồi nào được đề xuất cho sự cố này.
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="dash-table-container"
+          role="region"
+          aria-label="Bảng hành động tự phục hồi"
+          tabIndex={0}
+          style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr
