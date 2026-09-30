@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, ShieldCheck, AlertTriangle, ArrowRight, Hash, Layers } from 'lucide-react';
+import { Zap, AlertTriangle, ArrowRight, Hash, Layers } from 'lucide-react';
 
 export const IncidentHealingActions = ({ actions = [], isLoading = false, onNavigateToApprovals }) => {
   if (isLoading) {

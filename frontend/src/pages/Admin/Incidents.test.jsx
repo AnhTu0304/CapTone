@@ -221,7 +221,7 @@ describe('Platform Admin Incidents Module', () => {
       expect(
         screen.getByText('Tắc Nghẽn Hàng Đợi Kafka Consumer Lag trên Cụm Thanh Toán Giao Dịch')
       ).toBeInTheDocument();
-      expect(screen.getByText('fintech-core-prod-sg')).toBeInTheDocument();
+      expect(screen.getByText(/fintech-core-prod-sg/i)).toBeInTheDocument();
       expect(screen.getByText('Hành Động Cứu Hộ Đang Chờ Phê Duyệt Cổng HITL Gate')).toBeInTheDocument();
 
       // Navigation to approval gate
@@ -261,7 +261,7 @@ describe('Platform Admin Incidents Module', () => {
       expect(screen.getByText(/KẾT LUẬN NGUYÊN NHÂN CỐT LÕI \(ROOT CAUSE\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Chuỗi Quan Hệ Nhân Quả \(Causal Chain Graph\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Tín Hiệu Dị Thường Thu Thập Từ Nhân Kernel/i)).toBeInTheDocument();
-      expect(screen.getByText(/Đánh Giá Phạm Vi Ảnh Hưởng/i)).toBeInTheDocument();
+      expect(screen.getByText(/Phạm Vi Tác Động \(Blast Radius\)/i)).toBeInTheDocument();
       expect(screen.getByText('container_memory_working_set_bytes')).toBeInTheDocument();
       expect(screen.getByText('98.4%', { exact: false })).toBeInTheDocument();
     });

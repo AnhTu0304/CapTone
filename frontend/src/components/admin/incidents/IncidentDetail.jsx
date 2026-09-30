@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Building2, Layers, AlertCircle, Clock, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Building2, Layers, AlertCircle, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
 import SeverityBadge from './SeverityBadge';
 import IncidentStatusBadge from './IncidentStatusBadge';
 
