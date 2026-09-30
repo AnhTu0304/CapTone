@@ -14,11 +14,16 @@ import DashboardPage from '../pages/Dashboard';
 import PublicLayout from '../layouts/PublicLayout';
 import DocsLayout from '../layouts/DocsLayout';
 import AuthLayout from '../layouts/AuthLayout';
+import AdminLayout from '../layouts/AdminLayout';
+import OverviewPage from '../pages/Admin/Overview';
+import { OrganizationsListPage, OrganizationDetailsPage } from '../pages/Admin/Organizations';
 import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
   HOME: '/',
   DASHBOARD: '/dashboard',
+  ADMIN: '/admin',
+  ADMIN_ORGANIZATIONS: '/admin/organizations',
   GUIDE: '/guide',
   FEATURES: '/features',
   ABOUT: '/about',
@@ -53,6 +58,25 @@ export const RouteRenderer = ({
   // Handle all dashboard routes
   if (path.startsWith('/dashboard')) {
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
+  }
+
+  // Handle all admin routes
+  if (path.startsWith('/admin')) {
+    let adminContent = null;
+    if (path === '/admin' || path === '/admin/overview') {
+      adminContent = <OverviewPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/organizations') {
+      adminContent = <OrganizationsListPage onNavigate={onNavigate} />;
+    } else if (path.startsWith('/admin/organizations/')) {
+      const orgId = path.substring('/admin/organizations/'.length);
+      adminContent = <OrganizationDetailsPage orgId={orgId} onNavigate={onNavigate} />;
+    }
+
+    return (
+      <AdminLayout currentPath={path} onNavigate={onNavigate}>
+        {adminContent}
+      </AdminLayout>
+    );
   }
 
   switch (path) {

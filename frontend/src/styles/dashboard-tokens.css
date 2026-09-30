@@ -196,3 +196,50 @@
   color: #FFFFFF;
 }
 
+/* Admin Shell Responsive Rules & Animations */
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-desktop-sidebar {
+    display: none !important;
+  }
+
+  .admin-desktop-toggle {
+    display: none !important;
+  }
+
+  .admin-mobile-toggle {
+    display: inline-flex !important;
+  }
+
+  .admin-env-badge {
+    display: none !important;
+  }
+
+  .admin-profile-meta {
+    display: none !important;
+  }
+
+  .admin-top-header {
+    padding: 0 14px !important;
+  }
+
+  .admin-root-layout main {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+  .admin-env-badge {
+    display: none !important;
+  }
+}
+
+
