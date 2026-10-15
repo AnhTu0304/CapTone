@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
-import { Menu, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Menu, ChevronDown, LayoutDashboard, LogOut, Shield } from 'lucide-react';
 import Logo from '../common/Logo';
 import MobileNavigation from './MobileNavigation';
 import useScrollHeader from '../../hooks/useScrollHeader';
+import { useAuth } from '../../context/AuthContext';
 
 export const Header = ({ currentPath = '/', onNavigate }) => {
   const isScrolled = useScrollHeader(25);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const userDropdownRef = useRef(null);
+
+  const { user, isAuthenticated, logout, getInitials, getPrimaryRole } = useAuth();
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const navLinks = [
     { label: 'HƯỚNG DẪN', path: '/guide', hasDropdown: false },
@@ -21,6 +36,17 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
       onNavigate(path);
     } else {
       window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+
+  const handleLogout = () => {
+    setUserDropdownOpen(false);
+    logout();
+    if (onNavigate) {
+      onNavigate('/login');
+    } else {
+      window.history.pushState({}, '', '/login');
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
@@ -144,29 +170,261 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
             </nav>
           </div>
 
-          {/* Right: Signature Greptile Chevron Button Pair */}
+          {/* Right: Actions (User Profile or Sign in / Sign up) */}
           <div className="desktop-actions" style={{ display: 'flex', alignItems: 'center' }}>
-            <div className="chevron-btn-group">
-              {/* Button 1: Đăng nhập (Navy #3D3B4F Chevron) */}
-              <a
-                href="/login"
-                onClick={(e) => handleLinkClick(e, '/login')}
-                className="chevron-btn chevron-login"
-                title="Đăng nhập tài khoản"
-              >
-                <span>Đăng nhập</span>
-              </a>
+            {isAuthenticated && user ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Button to Dashboard */}
+                <a
+                  href="/dashboard"
+                  onClick={(e) => handleLinkClick(e, '/dashboard')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 14px',
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#FFFFFF',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    borderRadius: '0px',
+                    border: '1px solid var(--color-primary)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#2D2B3B';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-primary)';
+                  }}
+                  title="Vào Bảng điều khiển"
+                >
+                  <LayoutDashboard size={14} color="var(--color-accent)" />
+                  <span>Bảng điều khiển</span>
+                </a>
 
-              {/* Button 2: Đăng ký (Mint #28E99F Chevron) */}
-              <a
-                href="/get-started"
-                onClick={(e) => handleLinkClick(e, '/get-started')}
-                className="chevron-btn chevron-signup"
-                title="Đăng ký tài khoản"
-              >
-                <span>Đăng ký</span>
-              </a>
-            </div>
+                {/* User Capsule & Dropdown */}
+                <div ref={userDropdownRef} style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '9px',
+                      padding: '4px 10px 4px 6px',
+                      backgroundColor: userDropdownOpen ? '#E5E7EB' : 'rgba(61, 59, 79, 0.06)',
+                      border: '1px dashed rgba(61, 59, 79, 0.3)',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title={user.email}
+                  >
+                    {/* Initials Avatar */}
+                    <div
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '0px',
+                        backgroundColor: 'var(--color-primary)',
+                        color: 'var(--color-accent)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-mono)',
+                        border: '1px solid rgba(40, 233, 159, 0.4)',
+                      }}
+                    >
+                      {getInitials(user.full_name || user.email)}
+                    </div>
+
+                    {/* Name & Role Pill */}
+                    <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column' }}>
+                      <span
+                        style={{
+                          fontSize: '0.8125rem',
+                          fontWeight: 700,
+                          color: 'var(--color-ink)',
+                          fontFamily: 'var(--font-display)',
+                          lineHeight: 1.2,
+                          maxWidth: '120px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {user.full_name || user.email?.split('@')[0]}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.625rem',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-mono)',
+                          letterSpacing: '0.04em',
+                          color: getPrimaryRole(user) === 'SUPER ADMIN' ? '#7C3AED' : getPrimaryRole(user) === 'ADMIN' ? '#0D9488' : '#6B7280',
+                        }}
+                      >
+                        {getPrimaryRole(user)}
+                      </span>
+                    </div>
+
+                    <ChevronDown
+                      size={14}
+                      color="#555368"
+                      style={{
+                        transform: userDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.15s ease',
+                      }}
+                    />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {userDropdownOpen && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        right: 0,
+                        width: '240px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid rgba(61, 59, 79, 0.18)',
+                        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+                        zIndex: 1100,
+                        padding: '8px 0',
+                      }}
+                    >
+                      {/* Identity Header */}
+                      <div style={{ padding: '8px 16px 12px', borderBottom: '1px dashed rgba(61, 59, 79, 0.15)' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-ink)' }}>
+                          {user.full_name || 'Người dùng'}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.75rem',
+                            color: '#6B7280',
+                            fontFamily: 'var(--font-mono)',
+                            marginTop: '2px',
+                            wordBreak: 'break-all',
+                          }}
+                        >
+                          {user.email}
+                        </div>
+                        <div style={{ marginTop: '8px', display: 'inline-flex' }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              backgroundColor: 'rgba(40, 233, 159, 0.15)',
+                              border: '1px solid rgba(40, 233, 159, 0.4)',
+                              color: '#065F46',
+                              fontSize: '0.6875rem',
+                              fontWeight: 700,
+                              fontFamily: 'var(--font-mono)',
+                            }}
+                          >
+                            <Shield size={11} />
+                            {getPrimaryRole(user)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Links */}
+                      <div style={{ padding: '6px 0' }}>
+                        <a
+                          href="/dashboard"
+                          onClick={(e) => {
+                            setUserDropdownOpen(false);
+                            handleLinkClick(e, '/dashboard');
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '9px 16px',
+                            color: 'var(--color-ink)',
+                            fontSize: '0.8125rem',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            transition: 'background-color 0.12s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#F3F4F6';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <LayoutDashboard size={15} color="var(--color-primary)" />
+                          <span>Vào Bảng điều khiển</span>
+                        </a>
+                      </div>
+
+                      <div style={{ borderTop: '1px dashed rgba(61, 59, 79, 0.15)', margin: '4px 0' }} />
+
+                      {/* Logout Action */}
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '9px 16px',
+                          color: '#DC2626',
+                          fontSize: '0.8125rem',
+                          fontWeight: 600,
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background-color 0.12s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FEF2F2';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <LogOut size={15} color="#DC2626" />
+                        <span>Đăng xuất</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="chevron-btn-group">
+                {/* Button 1: Đăng nhập (Navy #3D3B4F Chevron) */}
+                <a
+                  href="/login"
+                  onClick={(e) => handleLinkClick(e, '/login')}
+                  className="chevron-btn chevron-login"
+                  title="Đăng nhập tài khoản"
+                >
+                  <span>Đăng nhập</span>
+                </a>
+
+                {/* Button 2: Đăng ký (Mint #28E99F Chevron) */}
+                <a
+                  href="/register"
+                  onClick={(e) => handleLinkClick(e, '/register')}
+                  className="chevron-btn chevron-signup"
+                  title="Đăng ký tài khoản"
+                >
+                  <span>Đăng ký</span>
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Mobile Hamburger Button */}

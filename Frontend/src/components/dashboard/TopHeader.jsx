@@ -1,21 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   Building2,
   Server,
   RefreshCw,
   Bell,
-  User,
   ChevronDown,
   Check,
-  Radio,
   Clock,
   Shield,
-  ExternalLink,
   Menu,
+  LogOut,
 } from 'lucide-react';
 
 export const TopHeader = () => {
+  const { user, logout, getInitials, getPrimaryRole } = useAuth();
   const {
     currentOrg,
     setCurrentOrg,
@@ -561,19 +561,20 @@ export const TopHeader = () => {
                 height: '26px',
                 borderRadius: '50%',
                 backgroundColor: 'var(--dash-primary)',
-                color: '#FFFFFF',
+                color: '#28E99F',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '0.75rem',
                 fontWeight: 700,
+                fontFamily: 'var(--font-mono)',
               }}
             >
-              JD
+              {getInitials(user?.full_name || user?.email || 'User')}
             </div>
             <div style={{ textAlign: 'left', display: 'none', md: 'block' }}>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-primary)', lineHeight: 1.2 }}>
-                John Doe
+                {user?.full_name || user?.email?.split('@')[0] || 'Tài khoản'}
               </div>
             </div>
             <ChevronDown size={12} color="var(--dash-text-muted)" />
@@ -586,7 +587,7 @@ export const TopHeader = () => {
                 top: '100%',
                 right: 0,
                 marginTop: '8px',
-                width: '200px',
+                width: '220px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 borderRadius: 'var(--dash-radius-md)',
@@ -596,8 +597,29 @@ export const TopHeader = () => {
               }}
             >
               <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--dash-border)' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>John Doe</div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>owner@acme.corp</div>
+                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
+                  {user?.full_name || 'Người dùng'}
+                </div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', wordBreak: 'break-all' }}>
+                  {user?.email || 'user@example.com'}
+                </div>
+                <div style={{ marginTop: '6px' }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      fontSize: '0.625rem',
+                      fontWeight: 700,
+                      fontFamily: 'var(--font-mono)',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(40, 233, 159, 0.15)',
+                      color: '#065F46',
+                      border: '1px solid rgba(40, 233, 159, 0.3)',
+                    }}
+                  >
+                    {getPrimaryRole(user)}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={() => {
@@ -621,7 +643,13 @@ export const TopHeader = () => {
               <button
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  if (onNavigate) onNavigate('/');
+                  logout();
+                  if (onNavigate) {
+                    onNavigate('/login');
+                  } else {
+                    window.history.pushState({}, '', '/login');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }
                 }}
                 style={{
                   width: '100%',
@@ -633,9 +661,13 @@ export const TopHeader = () => {
                   textAlign: 'left',
                   cursor: 'pointer',
                   borderRadius: 'var(--dash-radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
               >
-                Đăng xuất
+                <LogOut size={13} color="var(--dash-critical)" />
+                <span>Đăng xuất</span>
               </button>
             </div>
           )}

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { ArrowRight, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export const RegisterPage = ({ onNavigate }) => {
+  const { register } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -67,15 +69,32 @@ export const RegisterPage = ({ onNavigate }) => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setErrors({});
+    try {
+      await register({
+        email: email.trim(),
+        password,
+        full_name: fullName.trim(),
+      });
       setSubmitted(true);
-    }, 800);
+      setTimeout(() => {
+        if (onNavigate) {
+          onNavigate('/onboarding/organization');
+        } else {
+          window.history.pushState({}, '', '/onboarding/organization');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+      }, 1200);
+    } catch (err) {
+      setErrors({ submit: err.message || 'Đăng ký tài khoản không thành công. Vui lòng thử lại.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignUp = () => {
@@ -83,6 +102,14 @@ export const RegisterPage = ({ onNavigate }) => {
     setTimeout(() => {
       setLoading(false);
       setSubmitted(true);
+      setTimeout(() => {
+        if (onNavigate) {
+          onNavigate('/onboarding/organization');
+        } else {
+          window.history.pushState({}, '', '/onboarding/organization');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+      }, 1000);
     }, 600);
   };
 
@@ -158,7 +185,7 @@ export const RegisterPage = ({ onNavigate }) => {
         <div
           style={{
             padding: '24px 20px',
-            borderRadius: '0px',
+            borderRadius: '4px',
             backgroundColor: 'rgba(40, 233, 159, 0.12)',
             border: '1px solid var(--color-accent)',
             color: 'var(--color-primary)',
@@ -183,10 +210,10 @@ export const RegisterPage = ({ onNavigate }) => {
             <Check size={22} color="#000000" strokeWidth={2.5} />
           </div>
           <strong style={{ display: 'block', marginBottom: '6px', fontSize: '1rem', color: '#065F46' }}>
-            Account Created Successfully!
+            Đăng ký tài khoản thành công!
           </strong>
           <p style={{ margin: '0 0 18px 0', color: '#047857' }}>
-            Welcome to SelfHeal! Let's set up your Organization and connect your first Kubernetes cluster.
+            Chào mừng bạn đến với hệ thống CapTone! Đang chuyển hướng vào quy trình thiết lập ban đầu (Onboarding)...
           </p>
           <button
             type="button"
@@ -208,12 +235,27 @@ export const RegisterPage = ({ onNavigate }) => {
               gap: '8px',
             }}
           >
-            <span>Proceed to Workspace Onboarding</span>
+            <span>Tiếp tục thiết lập Onboarding</span>
             <ArrowRight size={16} />
           </button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {errors.submit && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '4px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FCA5A5',
+                color: '#B91C1C',
+                fontSize: '0.875rem',
+                lineHeight: 1.4,
+              }}
+            >
+              {errors.submit}
+            </div>
+          )}
           {/* Full Name */}
           <div>
             <label
