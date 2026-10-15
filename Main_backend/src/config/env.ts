@@ -31,4 +31,15 @@ export const config = {
     secret: process.env.JWT_SECRET || 'your_super_secret_jwt_key_here',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
+
+  // Email / SMTP Config
+  email: {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.EMAIL_FROM || '"AI Self-Heal Support" <noreply@selfheal.io>',
+    clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+  },
 };

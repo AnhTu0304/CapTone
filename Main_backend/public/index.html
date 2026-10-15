@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K8s Self-Healing - Realtime Telemetry & RCA Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .log-container {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    .badge-error { background-color: #fee2e2; color: #991b1b; }
+    .badge-warn { background-color: #fef3c7; color: #92400e; }
+    .badge-info { background-color: #e0f2fe; color: #075985; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  <!-- Top Navigation -->
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur px-6 py-4 sticky top-0 z-50 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
+      <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
+        AI Self-Healing Kubernetes · Realtime Telemetry Monitor
+      </h1>
+      <span class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">Service: order-service</span>
+    </div>
+    <div class="flex items-center space-x-3">
+      <button id="btnStartSim" onclick="startSimulation()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <span>Chạy Live Simulator</span>
+      </button>
+      <button id="btnEvaluate" onclick="evaluateNow()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow">
+        Đánh Giá Ngay (Evaluate)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto p-6 space-y-6">
+
+    <!-- Status Cards Row -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400">Agent WebSocket Status</div>
+        <div id="agentStatus" class="mt-2 text-lg font-bold text-emerald-400 flex items-center space-x-2">
+          <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block"></span>
+          <span>ONLINE (Connected)</span>
+        </div>
+        <div class="text-xs text-slate-500 mt-1">k8s-agent-prod-01</div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400">Rule Engine Verdict</div>
+        <div id="ruleStatus" class="mt-2 text-lg font-bold text-emerald-400">
+          HEALTHY
+        </div>
+        <div id="ruleAnomalies" class="text-xs text-slate-400 mt-1">No anomalies detected</div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400">GRU 15-Min Forecast</div>
+        <div id="gruStatus" class="mt-2 text-lg font-bold text-blue-400">
+          NORMAL
+        </div>
+        <div id="gruConfidence" class="text-xs text-slate-400 mt-1">Confidence: 0.0%</div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400">RCA Diagnostic State</div>
+        <div id="rcaState" class="mt-2 text-lg font-bold text-slate-400">
+          IDLE
+        </div>
+        <div id="rcaAction" class="text-xs text-slate-400 mt-1">Proposal: None</div>
+      </div>
+    </div>
+
+    <!-- Active Diagnosis & Recommendation Card (Shown when incident occurs) -->
+    <div id="diagnosisCard" class="hidden bg-gradient-to-r from-red-950/40 via-purple-950/30 to-slate-900 border border-red-500/40 rounded-xl p-5 shadow-lg">
+      <div class="flex items-start justify-between">
+        <div>
+          <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+            🚨 INCIDENT DETECTED & DIAGNOSED
+          </span>
+          <h2 id="diagTitle" class="text-xl font-bold text-white mt-2">Container memory exhausted</h2>
+          <p id="diagExplanation" class="text-sm text-slate-300 mt-1">The affected container exhausted memory and should be replaced.</p>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-slate-400">Confidence Score</div>
+          <div id="diagConfidence" class="text-2xl font-black text-amber-400">79.0%</div>
+        </div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-slate-700/60 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-2">
+          <span class="text-xs text-slate-400">Đề xuất hành động:</span>
+          <span id="diagActionBadge" class="px-3 py-1 bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono font-bold rounded-lg text-sm">
+            💡 REPLACE_POD
+          </span>
+        </div>
+        <div class="text-xs text-slate-400 font-mono">
+          Incident ID: <span id="diagIncidentId" class="text-slate-300">...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center justify-between">
+          <span>Tải CPU & RAM Realtime (%)</span>
+          <span class="text-xs text-slate-500">Service Aggregated (Max)</span>
+        </h3>
+        <div class="h-60">
+          <canvas id="chartCpuRam"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center justify-between">
+          <span>Lưu lượng Request (req/s) & Latency (ms)</span>
+          <span class="text-xs text-slate-500">Service Aggregated</span>
+        </h3>
+        <div class="h-60">
+          <canvas id="chartTraffic"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Feeds Row: Logs & K8s Events -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Live Logs Console -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 flex flex-col h-72">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-slate-300">Live Application Logs (RCA Context)</h3>
+          <span id="logCount" class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">0 logs</span>
+        </div>
+        <div id="logConsole" class="log-container flex-1 bg-slate-950 rounded-lg p-3 overflow-y-auto text-xs space-y-1.5 border border-slate-800">
+          <div class="text-slate-600 italic">Chưa có logs mới...</div>
+        </div>
+      </div>
+
+      <!-- K8s Events Feed -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 flex flex-col h-72">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-slate-300">Kubernetes Events & Pod Status</h3>
+          <span id="eventCount" class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">0 events</span>
+        </div>
+        <div id="eventConsole" class="log-container flex-1 bg-slate-950 rounded-lg p-3 overflow-y-auto text-xs space-y-1.5 border border-slate-800">
+          <div class="text-slate-600 italic">Chưa có K8s events cảnh báo...</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const SERVICE_ID = 'order-service';
+    const chartLabels = [];
+    const cpuData = [];
+    const ramData = [];
+    const reqData = [];
+    const latData = [];
+
+    // Init Chart 1: CPU & RAM
+    const ctxCpuRam = document.getElementById('chartCpuRam').getContext('2d');
+    const chartCpuRam = new Chart(ctxCpuRam, {
+      type: 'line',
+      data: {
+        labels: chartLabels,
+        datasets: [
+          { label: 'CPU (%)', data: cpuData, borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', tension: 0.3, fill: true },
+          { label: 'RAM (%)', data: ramData, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', tension: 0.3, fill: true }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { min: 0, max: 100, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+        },
+        plugins: { legend: { labels: { color: '#cbd5e1' } } }
+      }
+    });
+
+    // Init Chart 2: Traffic & Latency
+    const ctxTraffic = document.getElementById('chartTraffic').getContext('2d');
+    const chartTraffic = new Chart(ctxTraffic, {
+      type: 'line',
+      data: {
+        labels: chartLabels,
+        datasets: [
+          { label: 'Request Rate (req/s)', data: reqData, borderColor: '#10b981', tension: 0.3, yAxisID: 'y' },
+          { label: 'Latency (ms)', data: latData, borderColor: '#f59e0b', tension: 0.3, yAxisID: 'y1' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { type: 'linear', position: 'left', grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+          y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#94a3b8' } },
+          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+        },
+        plugins: { legend: { labels: { color: '#cbd5e1' } } }
+      }
+    });
+
+    async function evaluateNow() {
+      try {
+        const res = await fetch(`/api/v1/telemetry/services/${SERVICE_ID}/evaluate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bucket_seconds: 5, window_minutes: 15, auto_trigger_rca: true })
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          updateUI(json.data);
+        }
+      } catch (e) {
+        console.warn('Evaluation poll error:', e);
+      }
+    }
+
+    async function fetchContext() {
+      try {
+        const res = await fetch(`/api/v1/telemetry/services/${SERVICE_ID}/rca-context?window_minutes=15&log_limit=20`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          renderLogs(json.data.logs);
+          renderEvents(json.data.kubernetes_events);
+        }
+      } catch (e) {
+        console.warn('Fetch context error:', e);
+      }
+    }
+
+    function updateUI(data) {
+      const { rule_evaluation, gru_prediction, rca_triggered, rca_diagnosis, latest_metrics } = data;
+
+      // Update Charts
+      const nowStr = new Date().toLocaleTimeString();
+      chartLabels.push(nowStr);
+      cpuData.push(latest_metrics.cpu);
+      ramData.push(latest_metrics.ram);
+      reqData.push(latest_metrics.request_rate);
+      latData.push(latest_metrics.latency);
+
+      if (chartLabels.length > 15) {
+        chartLabels.shift();
+        cpuData.shift();
+        ramData.shift();
+        reqData.shift();
+        latData.shift();
+      }
+      chartCpuRam.update();
+      chartTraffic.update();
+
+      // Rule Engine Verdict
+      const ruleStatus = document.getElementById('ruleStatus');
+      const ruleAnomalies = document.getElementById('ruleAnomalies');
+      if (rule_evaluation.is_anomalous) {
+        ruleStatus.textContent = `ALERT (${rule_evaluation.severity})`;
+        ruleStatus.className = 'mt-2 text-lg font-bold text-red-400';
+        ruleAnomalies.textContent = rule_evaluation.anomalies.join(', ');
+      } else {
+        ruleStatus.textContent = 'HEALTHY';
+        ruleStatus.className = 'mt-2 text-lg font-bold text-emerald-400';
+        ruleAnomalies.textContent = 'All signals within thresholds';
+      }
+
+      // GRU Forecast
+      const gruStatus = document.getElementById('gruStatus');
+      const gruConfidence = document.getElementById('gruConfidence');
+      if (gru_prediction) {
+        gruStatus.textContent = gru_prediction.primary_risk;
+        gruStatus.className = gru_prediction.primary_risk === 'NORMAL' ? 'mt-2 text-lg font-bold text-emerald-400' : 'mt-2 text-lg font-bold text-amber-400';
+        gruConfidence.textContent = `Confidence: ${(gru_prediction.confidence_score * 100).toFixed(1)}%`;
+      }
+
+      // RCA Diagnostic Card
+      const diagCard = document.getElementById('diagnosisCard');
+      const rcaState = document.getElementById('rcaState');
+      const rcaAction = document.getElementById('rcaAction');
+
+      if (rca_triggered && rca_diagnosis) {
+        rcaState.textContent = 'DIAGNOSED';
+        rcaState.className = 'mt-2 text-lg font-bold text-red-400';
+        rcaAction.textContent = `Action: ${rca_diagnosis.recommendation.action}`;
+
+        diagCard.classList.remove('hidden');
+        document.getElementById('diagTitle').textContent = rca_diagnosis.root_cause.cause;
+        document.getElementById('diagExplanation').textContent = rca_diagnosis.explanation || rca_diagnosis.recommendation.reason;
+        document.getElementById('diagConfidence').textContent = `${(rca_diagnosis.root_cause.confidence * 100).toFixed(1)}%`;
+        document.getElementById('diagActionBadge').textContent = `💡 ${rca_diagnosis.recommendation.action}`;
+        document.getElementById('diagIncidentId').textContent = rca_diagnosis.incident_id;
+      } else {
+        rcaState.textContent = 'MONITORING';
+        rcaState.className = 'mt-2 text-lg font-bold text-slate-400';
+        rcaAction.textContent = 'Proposal: None';
+        diagCard.classList.add('hidden');
+      }
+    }
+
+    function renderLogs(logs) {
+      const container = document.getElementById('logConsole');
+      document.getElementById('logCount').textContent = `${logs.length} logs`;
+      if (logs.length === 0) {
+        container.innerHTML = '<div class="text-slate-600 italic">Chưa có logs mới...</div>';
+        return;
+      }
+      container.innerHTML = logs.map(l => {
+        let badgeClass = 'text-slate-400';
+        if (l.includes('[ERROR]')) badgeClass = 'text-red-400 font-bold';
+        else if (l.includes('[WARN]')) badgeClass = 'text-amber-400 font-semibold';
+        else if (l.includes('[INFO]')) badgeClass = 'text-blue-300';
+        return `<div class="${badgeClass} font-mono">${escapeHtml(l)}</div>`;
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function renderEvents(events) {
+      const container = document.getElementById('eventConsole');
+      document.getElementById('eventCount').textContent = `${events.length} events`;
+      if (events.length === 0) {
+        container.innerHTML = '<div class="text-slate-600 italic">Chưa có K8s events cảnh báo...</div>';
+        return;
+      }
+      container.innerHTML = events.map(e => {
+        const isWarn = e.includes('[Warning]') || e.includes('OOMKilled') || e.includes('BackOff');
+        const color = isWarn ? 'text-amber-300 bg-amber-950/30 p-1.5 rounded border border-amber-900/50' : 'text-slate-300';
+        return `<div class="${color} font-mono">${escapeHtml(e)}</div>`;
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Auto poll every 3 seconds
+    setInterval(async () => {
+      await evaluateNow();
+      await fetchContext();
+    }, 3000);
+
+    // Initial load
+    evaluateNow();
+    fetchContext();
+
+    function startSimulation() {
+      alert("Đang kích hoạt simulator trong terminal!\nBạn có thể mở một terminal khác và gõ: npm run test:realtime để xem streaming dữ liệu.");
+    }
+  </script>
+</body>
+</html>

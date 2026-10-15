@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "rimraf dist && tsc",
-    "start": "node dist/server.js"
+    "test:ws": "tsx test/agent-ws-simulator.ts",
+    "test:telemetry": "tsx test/telemetry-aggregator.test.ts",
+    "test:realtime": "tsx test/realtime-simulator.ts",
+    "migrate:users": "tsx src/scripts/migrate.ts"
   },
   "keywords": [
     "nodejs",
@@ -17,6 +20,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/nodemailer": "^8.0.2",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -24,7 +28,9 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "nodemailer": "^10.1.1",
     "pg": "^8.23.0",
+    "ws": "^8.22.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -35,6 +41,7 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

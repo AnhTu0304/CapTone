@@ -7,7 +7,7 @@ from app.schemas.logs import LogAnalysisResult
 
 class LogAnalysisAgent:
     PATTERNS = [
-        (re.compile(r"oomkilled|out of memory|cannot allocate memory", re.I), "out_of_memory", "memory_exhaustion"),
+        (re.compile(r"oomkilled|out of memory|outofmemory|\boom\b|cannot allocate memory", re.I), "out_of_memory", "memory_exhaustion"),
         (re.compile(r"no space left|disk full", re.I), "disk_full", "storage_exhaustion"),
         (re.compile(r"connection refused|connection reset|dependency.*(fail|timeout)", re.I), "dependency_connection_failure", "dependency_failure"),
         (re.compile(r"readiness probe failed", re.I), "readiness_probe_failed", "unstable_pod"),

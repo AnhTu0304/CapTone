@@ -1,0 +1,135 @@
+import nodemailer, { Transporter } from 'nodemailer';
+import { config } from '../config/env';
+
+/**
+ * Service xử lý việc gửi email thông báo và xác thực tài khoản
+ */
+export class EmailService {
+  private static transporter: Transporter | null = null;
+
+  /**
+   * Khởi tạo hoặc lấy Transporter hiện tại của nodemailer
+   */
+  private static getTransporter(): Transporter | null {
+    if (!config.email.user || !config.email.pass) {
+      return null;
+    }
+
+    if (!this.transporter) {
+      this.transporter = nodemailer.createTransport({
+        host: config.email.host,
+        port: config.email.port,
+        secure: config.email.secure,
+        auth: {
+          user: config.email.user,
+          pass: config.email.pass,
+        },
+      });
+    }
+
+    return this.transporter;
+  }
+
+  /**
+   * Gửi email xác thực tài khoản kèm token kích hoạt
+   */
+  public static async sendVerificationEmail(toEmail: string, token: string, fullName: string): Promise<boolean> {
+    const backendVerifyUrl = `http://localhost:${config.port}${config.apiPrefix}/auth/verify-email?token=${token}`;
+    const frontendVerifyUrl = `${config.email.clientUrl}/verify-email?token=${token}`;
+
+    const transporter = this.getTransporter();
+
+    // Nếu chưa cấu hình SMTP trong .env -> In link ra terminal cho môi trường phát triển
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log('✉️  [EMAIL SERVICE - DEV MODE] CHƯA CẤU HÌNH TÀI KHOẢN SMTP');
+      console.log(`➡️  Người nhận: ${fullName} <${toEmail}>`);
+      console.log(`🔑  Token kích hoạt: ${token}`);
+      console.log(`🔗  Link kích hoạt (Backend): ${backendVerifyUrl}`);
+      console.log(`🌐  Link kích hoạt (Frontend): ${frontendVerifyUrl}`);
+      console.log('💡  (Để gửi email thật qua Gmail, hãy điền SMTP_USER và SMTP_PASS trong file .env)');
+      console.log('============================================================\n');
+      return true;
+    }
+
+    // HTML Template email chuyên nghiệp, tương thích tốt với Gmail/Outlook
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Xác thực tài khoản AI Self-Heal</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+        .header p { margin: 8px 0 0; font-size: 14px; color: #94a3b8; }
+        .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
+        .greeting { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #0f172a; }
+        .button-wrapper { text-align: center; margin: 32px 0; }
+        .btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25); }
+        .btn:hover { background-color: #1d4ed8; }
+        .token-box { background-color: #f1f5f9; border-left: 4px solid #2563eb; padding: 12px 16px; border-radius: 4px; font-family: monospace; font-size: 13px; word-break: break-all; margin: 20px 0; }
+        .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>AI Self-Heal Platform</h1>
+          <p>Hệ thống Giám sát & Tự khắc phục sự cố hệ thống</p>
+        </div>
+        <div class="content">
+          <div class="greeting">Xin chào ${fullName},</div>
+          <p>Bạn vừa yêu cầu mã xác thực địa chỉ email trên nền tảng <strong>AI Self-Heal</strong>. Vui lòng sử dụng mã xác thực bên dưới để hoàn tất:</p>
+          
+          <div style="text-align: center; margin: 28px 0;">
+            <p style="margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #475569;">MÃ XÁC THỰC EMAIL CỦA BẠN:</p>
+            <div style="display: inline-block; background: #eff6ff; border: 2px dashed #2563eb; color: #1d4ed8; font-size: 34px; font-weight: 800; letter-spacing: 8px; padding: 12px 28px; border-radius: 8px; font-family: monospace;">
+              ${token}
+            </div>
+            <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">(Mã có hiệu lực trong vòng 24 giờ)</p>
+          </div>
+
+          <div class="button-wrapper">
+            <a href="${backendVerifyUrl}" class="btn" target="_blank">Hoặc Nhấn Vào Đây Để Kích Hoạt Ngay</a>
+          </div>
+
+          <p style="font-size: 13px; color: #64748b;">
+            Nếu nút phía trên không bấm được, bạn có thể copy link sau và dán trực tiếp vào trình duyệt:
+          </p>
+          <div class="token-box">
+            <a href="${backendVerifyUrl}" style="color: #2563eb; text-decoration: none;">${backendVerifyUrl}</a>
+          </div>
+
+          <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">
+            Nếu bạn không tạo tài khoản trên AI Self-Heal, vui lòng bỏ qua email này. Tài khoản sẽ tự động hết hạn mà không gây ảnh hưởng gì.
+          </p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} AI Self-Heal Platform. Bảo mật và an toàn dữ liệu hàng đầu.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      await transporter.sendMail({
+        from: config.email.from,
+        to: toEmail,
+        subject: '🔒 [AI Self-Heal] Xác thực địa chỉ email kích hoạt tài khoản',
+        html: htmlContent,
+      });
+
+      console.log(`✅ [EMAIL] Đã gửi thành công email xác thực tới: ${toEmail}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL ERROR] Gửi email xác thực tới ${toEmail} thất bại:`, (error as Error).message);
+      // Không để lỗi gửi email làm crash API đăng ký, vẫn cho phép người dùng tiếp tục
+      return false;
+    }
+  }
+}
