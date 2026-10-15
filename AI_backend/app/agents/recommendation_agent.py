@@ -35,6 +35,9 @@ class RecommendationAgent:
         elif cause in {"traffic_overload", "cpu_saturation", "insufficient_replicas"}:
             action = "SCALE_REPLICAS"
             reason = "Additional replicas can distribute load and restore service capacity"
+        elif cause == "underutilized":
+            action = "SCALE_REPLICAS"
+            reason = "Workload metrics indicate sustained low utilization; scale down replicas to optimize resources"
         elif cause == "memory_exhaustion":
             action = "REPLACE_POD"
             reason = "The affected container exhausted memory and should be replaced after policy review"

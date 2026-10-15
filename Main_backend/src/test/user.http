@@ -1,0 +1,214 @@
+### ===================================================================
+### BIẾN MÔI TRƯỜNG DÙNG CHUNG (REST Client Variables)
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+
+### ===================================================================
+### BƯỚC 0: ĐĂNG NHẬP ĐỂ LẤY TOKEN & USER ID DÙNG CHO CÁC TEST USER
+### ===================================================================
+# @name userLogin
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "levansieu1708@gmail.com",
+  "password": "NewUpdatedPassword2026@"
+}
+
+### Biến lưu Token và User ID tự động từ kết quả đăng nhập
+@token = {{userLogin.response.body.data.token}}
+@userId = {{userLogin.response.body.data.id}}
+
+
+### ===================================================================
+### PHẦN 1: LẤY DANH SÁCH & TÌM KIẾM NGƯỜI DÙNG (GET /api/v1/users)
+### ===================================================================
+
+### 1.1. Lấy tất cả người dùng (Phân trang mặc định page=1, limit=10)
+# @name getAllUsersDefault
+GET {{baseUrl}}/users?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### 1.2. Phân trang tùy chỉnh (page=2, limit=5)
+# @name getAllUsersPage2
+GET {{baseUrl}}/users?page=2&limit=5
+Authorization: Bearer {{token}}
+
+### 1.3. Tìm kiếm người dùng bằng HỌ TÊN (name)
+# @name searchByName
+GET {{baseUrl}}/users?name=DevOps
+Authorization: Bearer {{token}}
+
+### 1.4. Tìm kiếm người dùng bằng EMAIL (email)
+# @name searchByEmail
+GET {{baseUrl}}/users?email=levansieu
+Authorization: Bearer {{token}}
+
+### 1.5. Tìm kiếm người dùng bằng ID (id)
+# @name searchById
+GET {{baseUrl}}/users?id={{userId}}
+Authorization: Bearer {{token}}
+
+### 1.6. Lọc người dùng theo TRẠNG THÁI (status: ACTIVE)
+# @name filterByStatusActive
+GET {{baseUrl}}/users?status=ACTIVE
+Authorization: Bearer {{token}}
+
+### 1.7. Lọc người dùng theo TRẠNG THÁI (status: PENDING)
+# @name filterByStatusPending
+GET {{baseUrl}}/users?status=PENDING
+Authorization: Bearer {{token}}
+
+### 1.8. Tìm kiếm tổng hợp (search: tìm đồng thời trên cả tên, email và ID)
+# @name searchAllInOne
+GET {{baseUrl}}/users?search=sieu
+Authorization: Bearer {{token}}
+
+### 1.9. Sắp xếp danh sách người dùng (sort_by: created_at, order: DESC)
+# @name sortUsersDesc
+GET {{baseUrl}}/users?sort_by=created_at&order=DESC
+Authorization: Bearer {{token}}
+
+### 1.10. Lấy danh sách THẤT BẠI: Không gửi Token (Kỳ vọng: 401 Unauthorized)
+# @name getAllUsersNoToken
+GET {{baseUrl}}/users
+
+
+### ===================================================================
+### PHẦN 2: XEM HỒ SƠ & CHI TIẾT NGƯỜI DÙNG
+### ===================================================================
+
+### 2.1. Xem Profile của tài khoản đang đăng nhập (GET /users/profile)
+# @name getUserProfile
+GET {{baseUrl}}/users/profile
+Authorization: Bearer {{token}}
+
+### 2.2. Xem CHI TIẾT người dùng theo ID (GET /users/:id)
+# @name getUserById
+GET {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+
+### 2.3. Xem chi tiết THẤT BẠI: Định dạng ID không phải UUID (Kỳ vọng: 400 Bad Request)
+# @name getUserInvalidIdFormat
+GET {{baseUrl}}/users/id-khong-dung-dinh-dang-uuid
+Authorization: Bearer {{token}}
+
+### 2.4. Xem chi tiết THẤT BẠI: ID không tồn tại trong hệ thống (Kỳ vọng: 404 Not Found)
+# @name getUserNotFound
+GET {{baseUrl}}/users/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+
+### ===================================================================
+### PHẦN 3: CẬP NHẬT THÔNG TIN NGƯỜI DÙNG
+### ===================================================================
+
+### 3.1. Cập nhật hồ sơ tài khoản hiện tại (PUT /users/profile)
+# @name updateProfileSuccess
+PUT {{baseUrl}}/users/profile
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "full_name": "Nguyen Senior DevOps Engineer",
+  "avatar_url": "https://avatars.githubusercontent.com/u/100001?v=4"
+}
+
+### 3.2. Cập nhật thông tin người dùng theo ID (PUT /users/:id)
+# @name updateUserByIdSuccess
+PUT {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "full_name": "Nguyen Cloud Architect Lead",
+  "avatar_url": "https://avatars.githubusercontent.com/u/100002?v=4"
+}
+
+### 3.3. Cập nhật THẤT BẠI: Họ và tên để khoảng trắng (Kỳ vọng: 400 Bad Request)
+# @name updateProfileBlankName
+PUT {{baseUrl}}/users/profile
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "full_name": "   "
+}
+
+### 3.4. Cập nhật THẤT BẠI: Không gửi trường nào trong body (Kỳ vọng: 400 Bad Request)
+# @name updateProfileNoFields
+PUT {{baseUrl}}/users/profile
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{}
+
+### 3.5. Cập nhật THẤT BẠI: Cập nhật với ID sai định dạng UUID (Kỳ vọng: 400 Bad Request)
+# @name updateUserWrongUuid
+PUT {{baseUrl}}/users/sai-uuid
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "full_name": "New Name"
+}
+
+
+### ===================================================================
+### PHẦN 4: ĐỔI MẬT KHẨU QUA USER ROUTE
+### ===================================================================
+
+### 4.1. Đổi mật khẩu THÀNH CÔNG (POST /users/change-password)
+# @name userChangePasswordSuccess
+POST {{baseUrl}}/users/change-password
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "old_password": "NewUpdatedPassword2026@",
+  "new_password": "AnotherFreshPassword2026@"
+}
+
+### 4.2. Đổi mật khẩu THẤT BẠI: Mật khẩu mới trùng mật khẩu cũ (Kỳ vọng: 400 Bad Request)
+# @name userChangePasswordSame
+POST {{baseUrl}}/users/change-password
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "old_password": "AnotherFreshPassword2026@",
+  "new_password": "AnotherFreshPassword2026@"
+}
+
+### 4.3. Đổi mật khẩu THẤT BẠI: Mật khẩu cũ không chính xác (Kỳ vọng: 400 Bad Request)
+# @name userChangePasswordWrongOld
+POST {{baseUrl}}/users/change-password
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "old_password": "WrongPassword999@",
+  "new_password": "BrandNewPassword2026@"
+}
+
+
+### ===================================================================
+### PHẦN 5: CÁC KỊCH BẢN XÁC THỰC EMAIL QUA USER ROUTE
+### ===================================================================
+
+### 5.1. Người dùng tự yêu cầu gửi lại email xác thực (POST /users/send-verification)
+# @name userSendVerificationEmail
+POST {{baseUrl}}/users/send-verification
+Authorization: Bearer {{token}}
+
+### 5.2. Xác thực email bằng chính Token đăng nhập của người dùng (POST /users/verify-email)
+# @name userVerifyEmailByToken
+POST {{baseUrl}}/users/verify-email
+Authorization: Bearer {{token}}
+
+### 5.3. Quản trị viên kích hoạt xác thực email cho người dùng theo ID (PATCH /users/:id/verify-email)
+# @name adminVerifyEmailById
+PATCH {{baseUrl}}/users/{{userId}}/verify-email
+Authorization: Bearer {{token}}

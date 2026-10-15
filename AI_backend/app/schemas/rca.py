@@ -167,12 +167,12 @@ class RCARequest(BaseModel):
             raise ValueError("risk_type and confidence must be supplied together")
         if self.prediction is not None:
             actual_risks = set(self.prediction.risk_outputs)
-            expected_risks = set(RISK_TYPES)
-            if actual_risks != expected_risks:
-                missing = sorted(expected_risks - actual_risks)
-                extra = sorted(actual_risks - expected_risks)
+            base_risks = {"CPU_OVERLOAD", "OOM", "DISK_FULL", "HIGH_LATENCY", "HTTP_5XX_SPIKE", "TRAFFIC_OVERLOAD"}
+            missing = sorted(base_risks - actual_risks)
+            extra = sorted(actual_risks - set(RISK_TYPES))
+            if missing or extra:
                 raise ValueError(
-                    "prediction.risk_outputs must contain exactly all 6 risks; "
+                    "prediction.risk_outputs must contain all required risks; "
                     f"missing={missing}, extra={extra}"
                 )
         if self.previous_action_result and self.previous_action_result_source is None:

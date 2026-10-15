@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, ArrowRight } from 'lucide-react';
+import { X, ArrowRight, LayoutDashboard, LogOut } from 'lucide-react';
 import Logo from '../common/Logo';
+import { useAuth } from '../../context/AuthContext';
 
 export const MobileNavigation = ({
   isOpen,
@@ -8,6 +9,8 @@ export const MobileNavigation = ({
   currentPath = '/',
   onNavigate,
 }) => {
+  const { user, isAuthenticated, logout, getInitials, getPrimaryRole } = useAuth();
+
   if (!isOpen) return null;
 
   const navLinks = [
@@ -102,52 +105,178 @@ export const MobileNavigation = ({
           gap: '12px',
         }}
       >
-        <a
-          href="/login"
-          onClick={(e) => {
-            e.preventDefault();
-            onClose();
-            onNavigate('/login');
-          }}
-          style={{
-            textAlign: 'center',
-            padding: '11px 16px',
-            color: 'var(--color-primary)',
-            fontFamily: 'var(--font-display)',
-            fontWeight: 600,
-            fontSize: '0.9375rem',
-            borderRadius: '0px',
-            border: '1px solid var(--border-default)',
-            backgroundColor: 'var(--bg-secondary)',
-          }}
-        >
-          Đăng nhập
-        </a>
-        <a
-          href="/get-started"
-          onClick={(e) => {
-            e.preventDefault();
-            onClose();
-            onNavigate('/get-started');
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '12px 16px',
-            backgroundColor: 'var(--color-accent)',
-            color: 'var(--color-ink)',
-            fontFamily: 'var(--font-display)',
-            fontWeight: 600,
-            fontSize: '0.9375rem',
-            borderRadius: '0px',
-            border: '1px solid var(--color-accent)',
-          }}
-        >
-          <span>Đăng ký</span>
-          <ArrowRight size={16} />
-        </a>
+        {isAuthenticated && user ? (
+          <>
+            {/* User Info Capsule */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px',
+                backgroundColor: 'rgba(61, 59, 79, 0.05)',
+                border: '1px dashed rgba(61, 59, 79, 0.2)',
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'var(--color-accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.875rem',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {getInitials(user.full_name || user.email)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: '0.875rem',
+                    color: 'var(--color-ink)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {user.full_name || 'Người dùng'}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  {user.email}
+                </div>
+              </div>
+              <span
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '0.625rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  backgroundColor: 'rgba(40, 233, 159, 0.2)',
+                  color: '#065F46',
+                }}
+              >
+                {getPrimaryRole(user)}
+              </span>
+            </div>
+
+            {/* Dashboard Button */}
+            <a
+              href="/dashboard"
+              onClick={(e) => {
+                e.preventDefault();
+                onClose();
+                onNavigate('/dashboard');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 16px',
+                backgroundColor: 'var(--color-primary)',
+                color: '#FFFFFF',
+                fontFamily: 'var(--font-display)',
+                fontWeight: 600,
+                fontSize: '0.9375rem',
+                textDecoration: 'none',
+              }}
+            >
+              <LayoutDashboard size={16} color="var(--color-accent)" />
+              <span>Vào Bảng điều khiển</span>
+            </a>
+
+            {/* Logout Button */}
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                logout();
+                onNavigate('/login');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '11px 16px',
+                backgroundColor: '#FEE2E2',
+                color: '#DC2626',
+                border: '1px solid #FECACA',
+                fontFamily: 'var(--font-display)',
+                fontWeight: 600,
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+              }}
+            >
+              <LogOut size={16} />
+              <span>Đăng xuất</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <a
+              href="/login"
+              onClick={(e) => {
+                e.preventDefault();
+                onClose();
+                onNavigate('/login');
+              }}
+              style={{
+                textAlign: 'center',
+                padding: '11px 16px',
+                color: 'var(--color-primary)',
+                fontFamily: 'var(--font-display)',
+                fontWeight: 600,
+                fontSize: '0.9375rem',
+                borderRadius: '0px',
+                border: '1px solid var(--border-default)',
+                backgroundColor: 'var(--bg-secondary)',
+              }}
+            >
+              Đăng nhập
+            </a>
+            <a
+              href="/register"
+              onClick={(e) => {
+                e.preventDefault();
+                onClose();
+                onNavigate('/register');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 16px',
+                backgroundColor: 'var(--color-accent)',
+                color: 'var(--color-ink)',
+                fontFamily: 'var(--font-display)',
+                fontWeight: 600,
+                fontSize: '0.9375rem',
+                borderRadius: '0px',
+                border: '1px solid var(--color-accent)',
+              }}
+            >
+              <span>Đăng ký</span>
+              <ArrowRight size={16} />
+            </a>
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,129 @@
+### ===================================================================
+### RULE ENGINE EVALUATION API TESTS (POST /api/v1/rule-engine/evaluate)
+### Pure Business Logic: Anomaly Detection, Rule Eval, RCA Trigger, Action Proposal
+### ===================================================================
+
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### -------------------------------------------------------------------
+### 1. Get Current Active Thresholds
+### -------------------------------------------------------------------
+GET {{baseUrl}}/rule-engine/thresholds
+Content-Type: {{contentType}}
+
+### -------------------------------------------------------------------
+### 2. TEST CASE 1: High CPU & Latency Saturation
+### Expected: is_anomalous: true, CPU_LATENCY_SATURATION, requires_rca: true, proposed_action: SCALE_REPLICAS
+### -------------------------------------------------------------------
+POST {{baseUrl}}/rule-engine/evaluate
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "metrics": {
+    "cpu": 88.5,
+    "ram": 65.0,
+    "disk": 45.0,
+    "latency": 320.0,
+    "request_rate": 450.0,
+    "http_5xx_rate": 0.5,
+    "pod_restart_count": 0,
+    "replica_count": 2
+  },
+  "pod_status": "Running",
+  "k8s_events": []
+}
+
+### -------------------------------------------------------------------
+### 3. TEST CASE 2: Memory Pressure & OOMKilled Event
+### Expected: severity: CRITICAL, MEMORY_PRESSURE, requires_rca: true, proposed_action: RESTART_POD
+### -------------------------------------------------------------------
+POST {{baseUrl}}/rule-engine/evaluate
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "metrics": {
+    "cpu": 50.0,
+    "ram": 94.2,
+    "disk": 35.0,
+    "latency": 80.0,
+    "request_rate": 200.0,
+    "http_5xx_rate": 1.0,
+    "pod_restart_count": 2,
+    "replica_count": 3
+  },
+  "pod_status": "OOMKilled",
+  "k8s_events": ["Container terminated with exit code 137 (OOMKilled)"]
+}
+
+### -------------------------------------------------------------------
+### 4. TEST CASE 3: HTTP 5xx Error Spike (Application/Deployment Issue)
+### Expected: HTTP_5XX_SPIKE, requires_rca: true, proposed_action: ROLLBACK_DEPLOYMENT
+### -------------------------------------------------------------------
+POST {{baseUrl}}/rule-engine/evaluate
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "metrics": {
+    "cpu": 55.0,
+    "ram": 60.0,
+    "disk": 40.0,
+    "latency": 150.0,
+    "request_rate": 300.0,
+    "http_5xx_rate": 8.5,
+    "pod_restart_count": 0,
+    "replica_count": 3
+  },
+  "pod_status": "Running",
+  "k8s_events": ["Deployment payment-service updated to v2.1.3"]
+}
+
+### -------------------------------------------------------------------
+### 5. TEST CASE 4: Proactive GRU Scale-Down Candidate Forecast
+### Expected: GRU model forecasted scale-down -> proposed_action: SCALE_DOWN_CANDIDATE
+### -------------------------------------------------------------------
+POST {{baseUrl}}/rule-engine/evaluate
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "metrics": {
+    "cpu": 15.0,
+    "ram": 30.0,
+    "disk": 20.0,
+    "latency": 20.0,
+    "request_rate": 60.0,
+    "http_5xx_rate": 0.0,
+    "pod_restart_count": 0,
+    "replica_count": 4
+  },
+  "pod_status": "Running",
+  "k8s_events": [],
+  "root_cause": "SCALE_DOWN_CANDIDATE"
+}
+
+### -------------------------------------------------------------------
+### 6. TEST CASE 5: Perfectly Healthy System (No Anomaly, No RCA)
+### Expected: is_anomalous: false, requires_rca: false, proposed_action: null
+### -------------------------------------------------------------------
+POST {{baseUrl}}/rule-engine/evaluate
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "metrics": {
+    "cpu": 35.0,
+    "ram": 45.0,
+    "disk": 30.0,
+    "latency": 35.0,
+    "request_rate": 180.0,
+    "http_5xx_rate": 0.0,
+    "pod_restart_count": 0,
+    "replica_count": 2
+  },
+  "pod_status": "Running",
+  "k8s_events": []
+}

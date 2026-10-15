@@ -1,1 +1,70 @@
-export {};
+import { PoolClient } from 'pg';
+
+export interface IRcaAnalysis {
+  id?: string;
+  incident_id: string;
+  root_cause_type: string;
+  root_cause_description: string;
+  confidence_score: number;
+  analysis_method: string;
+  analysis_result?: string;
+  analyzed_at?: Date;
+}
+
+export class RcaModel {
+  /**
+   * Create RCA Analysis record linked to incident
+   */
+  public static async createAnalysis(
+    client: PoolClient,
+    analysis: IRcaAnalysis
+  ): Promise<{ id: string }> {
+    const query = `
+      INSERT INTO rca_analyses (
+        incident_id,
+        root_cause_type,
+        root_cause_description,
+        confidence_score,
+        analysis_method,
+        analysis_result,
+        analyzed_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, NOW()
+      ) RETURNING id;
+    `;
+
+    const res = await client.query(query, [
+      analysis.incident_id,
+      analysis.root_cause_type,
+      analysis.root_cause_description,
+      analysis.confidence_score,
+      analysis.analysis_method || 'AI_DETERMINISTIC_RULES',
+      analysis.analysis_result || null,
+    ]);
+
+    return res.rows[0];
+  }
+
+  /**
+   * Create RCA Evidence records linked to analysis
+   */
+  public static async createEvidences(
+    client: PoolClient,
+    rcaAnalysisId: string,
+    serviceId: string,
+    evidences: string[]
+  ): Promise<void> {
+    for (const ev of evidences) {
+      await client.query(
+        `INSERT INTO rca_evidences (
+          rca_analysis_id,
+          source_type,
+          source_reference,
+          evidence_data,
+          importance_score
+        ) VALUES ($1, 'AI_TELEMETRY', $2, $3, 0.9000)`,
+        [rcaAnalysisId, serviceId, JSON.stringify({ summary: ev })]
+      );
+    }
+  }
+}

@@ -10,13 +10,16 @@ export const config = {
   isProduction: process.env.NODE_ENV === 'production',
   isDevelopment: process.env.NODE_ENV === 'development',
   
+  // AI Backend
+  aiBackendUrl: process.env.AI_BACKEND_URL || 'http://localhost:8001',
+
   // Database (PostgreSQL)
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432,
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'captone_db',
+    database: process.env.DB_NAME || 'aiselfheal',
     connectionString: process.env.DATABASE_URL,
     max: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 20,
     idleTimeoutMillis: 30000,
@@ -27,5 +30,16 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'your_super_secret_jwt_key_here',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  },
+
+  // Email / SMTP Config
+  email: {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.EMAIL_FROM || '"AI Self-Heal Support" <noreply@selfheal.io>',
+    clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
   },
 };

@@ -33,6 +33,7 @@ class RootCauseAnalysisAgent:
         "service_degradation": "Service performance degradation",
         "insufficient_replicas": "Insufficient available replicas",
         "scheduling_failure": "Kubernetes scheduling failure",
+        "underutilized": "Workload underutilized (scale down opportunity)",
         "unknown": "UNKNOWN",
     }
     RISK_CAUSES = {
@@ -42,6 +43,7 @@ class RootCauseAnalysisAgent:
         "HIGH_LATENCY": "service_degradation",
         "HTTP_5XX_SPIKE": "application_failure",
         "TRAFFIC_OVERLOAD": "traffic_overload",
+        "SCALE_DOWN_CANDIDATE": "underutilized",
     }
 
     def analyze(

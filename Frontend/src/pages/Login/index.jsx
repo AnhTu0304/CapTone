@@ -1,14 +1,38 @@
 import React, { useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export const LoginPage = ({ onNavigate }) => {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setError('');
+    setLoading(true);
+
+    try {
+      const user = await login({ email: email.trim(), password });
+      setLoggedInUser(user);
+      setSubmitted(true);
+      setTimeout(() => {
+        if (onNavigate) {
+          onNavigate('/dashboard');
+        } else {
+          window.history.pushState({}, '', '/dashboard');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+      }, 1000);
+    } catch (err) {
+      setError(err.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignIn = () => {
@@ -103,7 +127,7 @@ export const LoginPage = ({ onNavigate }) => {
         <div
           style={{
             padding: '24px 20px',
-            borderRadius: '0px',
+            borderRadius: '4px',
             backgroundColor: 'rgba(40, 233, 159, 0.12)',
             border: '1px solid var(--color-accent)',
             color: 'var(--color-primary)',
@@ -114,18 +138,18 @@ export const LoginPage = ({ onNavigate }) => {
           }}
         >
           <strong style={{ display: 'block', marginBottom: '6px', fontSize: '1rem', color: '#065F46' }}>
-            Authentication Successful!
+            Đăng nhập thành công!
           </strong>
           <p style={{ margin: '0 0 16px 0', color: '#047857' }}>
-            Your account is verified. Continue to complete your infrastructure workspace onboarding.
+            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào Bảng điều khiển hệ thống...
           </p>
           <button
             type="button"
             onClick={() => {
               if (onNavigate) {
-                onNavigate('/onboarding/organization');
+                onNavigate('/dashboard');
               } else {
-                window.history.pushState({}, '', '/onboarding/organization');
+                window.history.pushState({}, '', '/dashboard');
                 window.dispatchEvent(new PopStateEvent('popstate'));
               }
             }}
@@ -134,7 +158,7 @@ export const LoginPage = ({ onNavigate }) => {
               backgroundColor: 'var(--color-primary)',
               color: '#FFFFFF',
               border: '1px solid var(--border-strong)',
-              borderRadius: '0px',
+              borderRadius: '4px',
               fontFamily: 'var(--font-display)',
               fontSize: '0.875rem',
               fontWeight: 700,
@@ -144,12 +168,27 @@ export const LoginPage = ({ onNavigate }) => {
               gap: '6px',
             }}
           >
-            <span>Proceed to Workspace Onboarding</span>
+            <span>Vào Bảng Điều Khiển</span>
             <ArrowRight size={16} />
           </button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {error && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '4px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FCA5A5',
+                color: '#B91C1C',
+                fontSize: '0.875rem',
+                lineHeight: 1.4,
+              }}
+            >
+              {error}
+            </div>
+          )}
           {/* Field 1: Enter work email */}
           <div>
             <label
@@ -265,17 +304,18 @@ export const LoginPage = ({ onNavigate }) => {
           {/* Primary Action Button: Vibrant Mint "Login →" */}
           <button
             type="submit"
+            disabled={loading}
             style={{
               width: '100%',
               height: '44px',
-              backgroundColor: 'var(--color-accent)', // Mint #28E99F
+              backgroundColor: loading ? '#6EE7B7' : 'var(--color-accent)', // Mint #28E99F
               color: '#000000',
               fontWeight: 700,
               fontSize: '0.9375rem',
               fontFamily: 'var(--font-display)',
               borderRadius: '4px',
               border: 'none',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -284,16 +324,29 @@ export const LoginPage = ({ onNavigate }) => {
               marginTop: '4px',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#1FE092';
-              e.currentTarget.style.transform = 'translateY(-1px)';
+              if (!loading) {
+                e.currentTarget.style.backgroundColor = '#1FE092';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-accent)';
-              e.currentTarget.style.transform = 'translateY(0)';
+              if (!loading) {
+                e.currentTarget.style.backgroundColor = 'var(--color-accent)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
             }}
           >
-            <span>Login</span>
-            <ArrowRight size={17} strokeWidth={2.2} />
+            {loading ? (
+              <>
+                <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                <span>Đang xác thực...</span>
+              </>
+            ) : (
+              <>
+                <span>Đăng nhập</span>
+                <ArrowRight size={17} strokeWidth={2.2} />
+              </>
+            )}
           </button>
 
           {/* Subtle Horizontal Divider: "Or sign in with" */}

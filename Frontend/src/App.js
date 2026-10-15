@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import RouteRenderer from './routes';
 import { ToastProvider } from './context/ToastContext';
+import { AuthProvider } from './context/AuthContext';
 import { initPageFadeIn } from './lib/animations';
 import './styles/globals.css';
 import './styles/dashboard-tokens.css';
@@ -36,14 +37,16 @@ function App() {
 
   return (
     <ToastProvider>
-      <div ref={mainRef} className="selfheal-app">
-        <RouteRenderer
-          currentPath={currentPath}
-          onNavigate={handleNavigate}
-          activeDocId={activeDocId}
-          onSelectDoc={handleSelectDoc}
-        />
-      </div>
+      <AuthProvider>
+        <div ref={mainRef} className="selfheal-app">
+          <RouteRenderer
+            currentPath={currentPath}
+            onNavigate={handleNavigate}
+            activeDocId={activeDocId}
+            onSelectDoc={handleSelectDoc}
+          />
+        </div>
+      </AuthProvider>
     </ToastProvider>
   );
 }

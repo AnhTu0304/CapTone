@@ -20,6 +20,7 @@ RISK_NAMES = [
     "high_latency",
     "http_5xx_spike",
     "traffic_overload",
+    "scale_down_candidate",
 ]
 PUBLIC_RISKS = {
     "cpu_overload": "CPU_OVERLOAD",
@@ -28,6 +29,7 @@ PUBLIC_RISKS = {
     "high_latency": "HIGH_LATENCY",
     "http_5xx_spike": "HTTP_5XX_SPIKE",
     "traffic_overload": "TRAFFIC_OVERLOAD",
+    "scale_down_candidate": "SCALE_DOWN_CANDIDATE",
 }
 class PredictionService:
     def __init__(self, model_path: Path, threshold_override: float | None = None):
@@ -46,8 +48,9 @@ class PredictionService:
 
         self.feature_names = list(checkpoint["feature_names"])
         self.risk_names = list(checkpoint["risk_names"])
-        if self.risk_names != RISK_NAMES:
-            raise ValueError("Checkpoint labels do not match the supported API mapping")
+        for risk in self.risk_names:
+            if risk not in PUBLIC_RISKS:
+                raise ValueError(f"Checkpoint label '{risk}' does not match the supported API mapping")
         self.sequence_length = int(checkpoint["sequence_length"])
         self.mean = np.asarray(checkpoint["scaler_mean"], dtype=np.float32)
         self.std = np.asarray(checkpoint["scaler_std"], dtype=np.float32)

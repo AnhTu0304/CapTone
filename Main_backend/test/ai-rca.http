@@ -1,0 +1,81 @@
+### ===================================================================
+### AI ROOT CAUSE ANALYSIS (RCA) API TESTS (POST /api/v1/ai/rca)
+### Models: Deterministic / Hybrid RCA Engine
+### Database: aiselfheal (incidents, rca_analyses, rca_evidences, ai_recommendations)
+### ===================================================================
+
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### -------------------------------------------------------------------
+### TEST 1: Root Cause Analysis - High CPU Saturation
+### Expected: 201 Created, root_cause: CPU saturation, action: SCALE_REPLICAS
+### -------------------------------------------------------------------
+POST {{baseUrl}}/ai/rca
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "risk_type": "CPU_OVERLOAD",
+  "confidence": 0.95,
+  "metrics": {
+    "cpu": 95.0,
+    "ram": 70.0,
+    "disk": 50.0,
+    "latency": 720.0,
+    "request_rate": 1100.0,
+    "http_5xx_rate": 3.5,
+    "pod_restart_count": 1,
+    "replica_count": 2
+  },
+  "logs": [
+    "High CPU usage detected on container worker-1",
+    "Thread pool exhausted in HTTP handler"
+  ],
+  "kubernetes_events": [
+    "Deployment payment-service has insufficient replicas for incoming load"
+  ]
+}
+
+### -------------------------------------------------------------------
+### TEST 2: Root Cause Analysis - Out Of Memory (OOM)
+### Expected: 201 Created, root_cause: Memory leak / exhaustion
+### -------------------------------------------------------------------
+POST {{baseUrl}}/ai/rca
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "risk_type": "OOM",
+  "confidence": 0.92,
+  "metrics": {
+    "cpu": 65.0,
+    "ram": 98.5,
+    "disk": 40.0,
+    "latency": 500.0,
+    "request_rate": 450.0,
+    "http_5xx_rate": 8.0,
+    "pod_restart_count": 4,
+    "replica_count": 2
+  },
+  "logs": [
+    "java.lang.OutOfMemoryError: Java heap space",
+    "Killing process 1245 (java) due to OOM killer"
+  ],
+  "kubernetes_events": [
+    "Back-off restarting failed container",
+    "Pod payment-service-pod-xyz was terminated with exit code 137 (OOMKilled)"
+  ]
+}
+
+### -------------------------------------------------------------------
+### TEST 3: Validation Error - Missing metrics payload
+### Expected: 400 Bad Request
+### -------------------------------------------------------------------
+POST {{baseUrl}}/ai/rca
+Content-Type: {{contentType}}
+
+{
+  "service_id": "payment-service",
+  "risk_type": "CPU_OVERLOAD"
+}

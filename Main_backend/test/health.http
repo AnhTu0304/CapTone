@@ -1,0 +1,17 @@
+### ===================================================================
+### MAIN BACKEND & DATABASE HEALTH CHECK TESTS
+### Use with VS Code REST Client or JetBrains HTTP Client
+### ===================================================================
+
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json 
+
+### 1. Check Main Backend & PostgreSQL Database Health
+# Expected: 200 OK, database: { connected: true }
+GET {{baseUrl}}/health
+Content-Type: {{contentType}}
+
+### 2. Check 404 Not Found Middleware
+# Expected: 404 Not Found
+GET {{baseUrl}}/non-existing-route
+Content-Type: {{contentType}}

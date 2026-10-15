@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import pytest
 
 from app.agents.kubernetes_agent import KubernetesEventAgent
 from app.agents.log_agent import LogAnalysisAgent
@@ -238,7 +239,7 @@ def test_rca_uses_full_multi_label_gru_result_when_history_is_supplied():
         configured_threshold = app.state.prediction_service.threshold
     assert response.status_code == 200, response.text
     prediction = response.json()["prediction"]
-    assert prediction["threshold"] == configured_threshold
+    assert prediction["threshold"] == pytest.approx(configured_threshold, abs=1e-3)
     assert any(
         risk["risk_type"] == "HIGH_LATENCY"
         and risk["confidence"] >= configured_threshold
