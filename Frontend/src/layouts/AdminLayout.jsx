@@ -37,18 +37,21 @@ export const AdminLayout = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Keyboard shortcut [Ctrl+B / Cmd+B] to toggle sidebar
+  // Keyboard shortcuts: [Ctrl+B / Cmd+B] to toggle sidebar, [Escape] to close mobile drawer
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsCollapsed((prev) => !prev);
       }
+      if (e.key === 'Escape' && isMobileDrawerOpen) {
+        setIsMobileDrawerOpen(false);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isMobileDrawerOpen]);
 
   // Toggle handlers
   const handleToggleCollapse = () => {
@@ -79,6 +82,10 @@ export const AdminLayout = ({
         color: 'var(--dash-text-primary)',
       }}
     >
+      {/* Skip to Content for Accessibility */}
+      <a href="#admin-main-content" className="admin-skip-to-content">
+        Chuyển đến nội dung chính
+      </a>
       {/* 1. Desktop & Tablet Sidebar */}
       <div className="admin-desktop-sidebar" style={{ display: 'flex', height: '100%' }}>
         <AdminSidebar
@@ -193,14 +200,11 @@ export const AdminLayout = ({
           onToggleMobileDrawer={handleToggleMobileDrawer}
         />
 
-        {/* Scrollable Content Body */}
+        {/* Scrollable Content Body with Responsive Padding & A11y ID */}
         <main
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '28px 32px',
-            backgroundColor: 'var(--dash-bg-canvas)',
-          }}
+          id="admin-main-content"
+          tabIndex={-1}
+          className="admin-main-viewport"
         >
           {children || (
             /* Shell Placeholder (Ready for dashboard content in next steps) */

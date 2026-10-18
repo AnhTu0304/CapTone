@@ -17,6 +17,12 @@ import AuthLayout from '../layouts/AuthLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import OverviewPage from '../pages/Admin/Overview';
 import { OrganizationsListPage, OrganizationDetailsPage } from '../pages/Admin/Organizations';
+import { AdminInfrastructurePage } from '../pages/Admin/Infrastructure';
+import { IncidentsListPage, IncidentDetailPage } from '../pages/Admin/Incidents';
+import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
+import { AdminAIPage } from '../pages/Admin/AI';
+import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
+import { AdminNotFound } from '../components/admin/common';
 import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
@@ -24,6 +30,21 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   ADMIN: '/admin',
   ADMIN_ORGANIZATIONS: '/admin/organizations',
+  ADMIN_INCIDENTS: '/admin/incidents',
+  ADMIN_SELF_HEALING_ACTIONS: '/admin/self-healing/actions',
+  ADMIN_SELF_HEALING_ACTION_TYPES: '/admin/self-healing/action-types',
+  ADMIN_SELF_HEALING_POLICIES: '/admin/self-healing/policies',
+  ADMIN_SELF_HEALING_ANALYTICS: '/admin/self-healing/analytics',
+  ADMIN_INFRASTRUCTURE_CLUSTERS: '/admin/infrastructure/clusters',
+  ADMIN_INFRASTRUCTURE_AGENTS: '/admin/infrastructure/agents',
+  ADMIN_INFRASTRUCTURE_NODES: '/admin/infrastructure/nodes',
+  ADMIN_INFRASTRUCTURE_WORKLOADS: '/admin/infrastructure/workloads',
+  ADMIN_AI_OVERVIEW: '/admin/ai/overview',
+  ADMIN_AI_MODELS: '/admin/ai/models',
+  ADMIN_AI_PREDICTIONS: '/admin/ai/predictions',
+  ADMIN_AI_RCA: '/admin/ai/rca',
+  ADMIN_AI_PERFORMANCE: '/admin/ai/performance',
+  ADMIN_AUDIT_LOGS: '/admin/audit-logs',
   GUIDE: '/guide',
   FEATURES: '/features',
   ABOUT: '/about',
@@ -70,6 +91,43 @@ export const RouteRenderer = ({
     } else if (path.startsWith('/admin/organizations/')) {
       const orgId = path.substring('/admin/organizations/'.length);
       adminContent = <OrganizationDetailsPage orgId={orgId} onNavigate={onNavigate} />;
+    } else if (path === '/admin/incidents') {
+      adminContent = <IncidentsListPage onNavigate={onNavigate} />;
+    } else if (path.startsWith('/admin/incidents/')) {
+      const incidentId = path.substring('/admin/incidents/'.length);
+      adminContent = <IncidentDetailPage incidentId={incidentId} onNavigate={onNavigate} />;
+    } else if (path === '/admin/self-healing/actions' || path === '/admin/self-healing') {
+      adminContent = <AdminSelfHealingPage currentSection="actions" onNavigate={onNavigate} />;
+    } else if (path === '/admin/self-healing/action-types') {
+      adminContent = <AdminSelfHealingPage currentSection="action-types" onNavigate={onNavigate} />;
+    } else if (path === '/admin/self-healing/policies' || path === '/admin/policies') {
+      adminContent = <AdminSelfHealingPage currentSection="policies" onNavigate={onNavigate} />;
+    } else if (path === '/admin/self-healing/analytics') {
+      adminContent = <AdminSelfHealingPage currentSection="analytics" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/clusters' || path === '/admin/clusters') {
+      adminContent = <AdminInfrastructurePage currentSection="clusters" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/agents' || path === '/admin/agents') {
+      adminContent = <AdminInfrastructurePage currentSection="agents" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/nodes' || path === '/admin/nodes') {
+      adminContent = <AdminInfrastructurePage currentSection="nodes" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure/workloads' || path === '/admin/workloads') {
+      adminContent = <AdminInfrastructurePage currentSection="workloads" onNavigate={onNavigate} />;
+    } else if (path === '/admin/infrastructure') {
+      adminContent = <AdminInfrastructurePage currentSection="clusters" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/overview' || path === '/admin/ai') {
+      adminContent = <AdminAIPage currentSection="overview" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/models') {
+      adminContent = <AdminAIPage currentSection="models" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/predictions') {
+      adminContent = <AdminAIPage currentSection="predictions" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/rca') {
+      adminContent = <AdminAIPage currentSection="rca" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/performance') {
+      adminContent = <AdminAIPage currentSection="performance" onNavigate={onNavigate} />;
+    } else if (path === '/admin/audit-logs') {
+      adminContent = <AdminAuditLogsPage onNavigate={onNavigate} />;
+    } else {
+      adminContent = <AdminNotFound onNavigate={onNavigate} />;
     }
 
     return (

@@ -57,10 +57,14 @@ export const OrganizationTable = ({
   return (
     <div
       className="dash-table-container"
+      role="region"
+      aria-label="Bảng danh sách tổ chức doanh nghiệp"
+      tabIndex={0}
       style={{
         border: '1px solid var(--dash-border)',
         borderRadius: '14px',
-        overflow: 'hidden',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
         boxShadow: 'var(--dash-shadow-xs)',
         backgroundColor: '#FFFFFF',
       }}
@@ -196,7 +200,7 @@ export const OrganizationTable = ({
                 {/* Pods Quota */}
                 <td>
                   <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {org.podsCount.toLocaleString('vi-VN')} / {org.podsLimit.toLocaleString('vi-VN')} Pods
+                    {(org.podsCount ?? 0).toLocaleString('vi-VN')} / {(org.podsLimit ?? 0).toLocaleString('vi-VN')} Pods
                   </span>
                 </td>
 

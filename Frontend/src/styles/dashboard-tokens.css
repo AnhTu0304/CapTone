@@ -196,7 +196,62 @@
   color: #FFFFFF;
 }
 
-/* Admin Shell Responsive Rules & Animations */
+/* Accessibility & Focus Rings */
+:focus-visible {
+  outline: 2px solid #059669 !important;
+  outline-offset: 2px !important;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex="0"]:focus-visible {
+  outline: 2px solid #059669 !important;
+  outline-offset: 2px !important;
+}
+
+/* Skip link for screen readers and keyboard navigation */
+.admin-skip-to-content {
+  position: absolute;
+  top: -9999px;
+  left: 16px;
+  background: #065F46;
+  color: #FFFFFF;
+  padding: 8px 16px;
+  border-radius: 8px;
+  z-index: 99999;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 12px rgba(6, 95, 70, 0.3);
+  transition: top 0.2s ease;
+}
+.admin-skip-to-content:focus {
+  top: 16px;
+  outline: 2px solid #A7F3D0 !important;
+}
+
+/* Custom Table Scrollbar for clean SaaS feel */
+.dash-table-container::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.dash-table-container::-webkit-scrollbar-track {
+  background: #F8FAFC;
+  border-radius: 4px;
+}
+.dash-table-container::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.dash-table-container::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+
+/* Slide in animations */
 @keyframes slideInLeft {
   from {
     transform: translateX(-100%);
@@ -206,6 +261,55 @@
   }
 }
 
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Responsive Viewport Rules: Desktop, Laptop, Tablet, Mobile */
+.admin-main-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+  background-color: var(--dash-bg-canvas);
+  transition: padding 0.2s ease;
+}
+
+/* 1. Large Desktop (>= 1440px) */
+@media (min-width: 1440px) {
+  .admin-main-viewport {
+    padding: 32px 36px;
+  }
+}
+
+/* 2. Standard Laptop (1280px - 1439px) */
+@media (max-width: 1439px) and (min-width: 1025px) {
+  .admin-main-viewport {
+    padding: 24px 28px;
+  }
+}
+
+/* 3. Tablet (769px - 1024px) */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .admin-main-viewport {
+    padding: 20px !important;
+  }
+
+  .admin-env-badge {
+    display: none !important;
+  }
+
+  .dash-table td,
+  .dash-table th {
+    padding: 10px 12px;
+  }
+}
+
+/* 4. Mobile (<= 768px) */
 @media (max-width: 768px) {
   .admin-desktop-sidebar {
     display: none !important;
@@ -231,14 +335,19 @@
     padding: 0 14px !important;
   }
 
-  .admin-root-layout main {
-    padding: 16px !important;
+  .admin-main-viewport {
+    padding: 14px 16px !important;
   }
-}
 
-@media (max-width: 1024px) and (min-width: 769px) {
-  .admin-env-badge {
-    display: none !important;
+  .dash-card {
+    padding: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .dash-table td,
+  .dash-table th {
+    padding: 10px 12px !important;
+    font-size: 0.75rem !important;
   }
 }
 
