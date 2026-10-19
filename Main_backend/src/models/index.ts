@@ -12,3 +12,7 @@ export * from './company.model';
 export * from './user.model';
 export * from './auth.model';
 export * from './systemRole.model';
+export * from './organization.model';
+export * from './organizationProfile.model';
+export * from './organizationRole.model';
+export * from './organizationMember.model';

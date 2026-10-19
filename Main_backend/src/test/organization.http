@@ -1,0 +1,138 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử API Module 1: Quản Lý Tổ Chức (Organizations & Profiles)
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 0: ĐĂNG NHẬP LẤY TOKEN
+### ===================================================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tanquoc280325@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQwZTZmZDk5LTA4ZTAtNDg5ZS05M2M4LWQ5Y2ZhYTA0NDAzYyIsImVtYWlsIjoidGFucXVvYzI4MDMyNUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6WyJBRE1JTiIsIlNVUEVSX0FETUlOIl0sImlhdCI6MTc5MjQxMjI0NiwiZXhwIjoxNzkzMDE3MDQ2fQ.Y6GAdzr3vVj10gmE3XxDmgAxib5axjETeRX442HEJR4
+### ===================================================================
+### BƯỚC 1: TẠO TỔ CHỨC MỚI (KÈM PROFILE & TỰ ĐỘNG GÁN SME_OWNER)
+### ===================================================================
+# @name createOrg
+POST {{baseUrl}}/organizations
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Cloud Infrastructure",
+  "slug": "acme-cloud",
+  "type": "SaaS Enterprise",
+  "description": "Nền tảng hạ tầng đám mây và vi dịch vụ tự động hóa",
+  "email": "contact@acme.io",
+  "phone": "+84 901 234 567",
+  "website": "https://acme.io",
+  "address": "Tòa nhà Innovation Hub, Quận 1",
+  "city": "Hồ Chí Minh",
+  "country": "Việt Nam",
+  "timezone": "Asia/Ho_Chi_Minh"
+}
+
+###
+@orgId = {{createOrg.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 2: LẤY DANH SÁCH TỔ CHỨC (PHÂN TRANG & TÌM KIẾM)
+### ===================================================================
+### 2.1. Lấy danh sách tất cả tổ chức (Phân trang, không lọc từ khóa)
+# @name listAllOrgs
+GET {{baseUrl}}/organizations?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### 2.2. Lấy danh sách kèm tìm kiếm theo từ khóa (Ví dụ: "CapTone" hoặc "Acme")
+# @name searchOrgs
+GET {{baseUrl}}/organizations?page=1&limit=10&search=CapTone
+Authorization: Bearer {{token}}
+
+### 2.3. Lấy toàn bộ tổ chức đang hoạt động (Sắp xếp mới nhất lên đầu)
+# @name listActiveOrgs
+GET {{baseUrl}}/organizations?status=ACTIVE&sort_by=created_at&order=DESC
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 3: XEM CHI TIẾT TỔ CHỨC & HỒ SƠ
+### ===================================================================
+# @name getOrgDetail
+GET {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 4: CẬP NHẬT THÔNG TIN TỔ CHỨC VÀ HỒ SƠ MỞ RỘNG
+### ===================================================================
+# @name updateOrg
+PUT {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Cloud Infrastructure Global",
+  "description": "Nền tảng hạ tầng đám mây tự phục hồi chuẩn Kubernetes",
+  "phone": "+84 988 777 666",
+  "city": "Đà Nẵng",
+  "timezone": "Asia/Ho_Chi_Minh"
+}
+
+### ===================================================================
+### BƯỚC 5: KIỂM TRA LẠI SAU KHI CẬP NHẬT
+### ===================================================================
+GET {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### PHẦN B: MODULE 2 - QUẢN LÝ THÀNH VIÊN TỔ CHỨC (ORGANIZATION MEMBERS)
+### ===================================================================
+
+### BƯỚC 7: LẤY DANH SÁCH THÀNH VIÊN TRONG TỔ CHỨC
+# @name listMembers
+GET {{baseUrl}}/organizations/{{orgId}}/members?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### BƯỚC 8: MỜI THÀNH VIÊN MỚI VÀO TỔ CHỨC QUA EMAIL
+# @name inviteMember
+POST {{baseUrl}}/organizations/{{orgId}}/members/invite
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "email": "tungo34205@gmail.com",
+  "role_code": "DEVOPS"
+}
+
+###
+@memberUserId = {{inviteMember.response.body.data.user.id}}
+
+### BƯỚC 9: CẬP NHẬT VAI TRÒ HOẶC TRẠNG THÁI THÀNH VIÊN
+# @name updateMember
+PUT {{baseUrl}}/organizations/{{orgId}}/members/{{memberUserId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "role_code": "VIEWER",
+  "status": "ACTIVE"
+}
+
+### BƯỚC 10: XEM LẠI DANH SÁCH THÀNH VIÊN SAU KHI CẬP NHẬT
+GET {{baseUrl}}/organizations/{{orgId}}/members
+Authorization: Bearer {{token}}
+
+### BƯỚC 11: XÓA / LOẠI BỎ THÀNH VIÊN KHỎI TỔ CHỨC
+DELETE {{baseUrl}}/organizations/{{orgId}}/members/{{memberUserId}}
+Authorization: Bearer {{token}}
+
+### BƯỚC 12: XÁC MINH LẠI THÀNH VIÊN ĐÃ BỊ LOẠI BỎ
+GET {{baseUrl}}/organizations/{{orgId}}/members?status=REMOVED
+Authorization: Bearer {{token}}
+

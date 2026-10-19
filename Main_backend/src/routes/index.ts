@@ -6,6 +6,7 @@ import { telemetryRoutes } from './telemetry.routes';
 import { authRoutes } from './auth.routes';
 import { userRoutes } from './user.routes';
 import { systemRoleRoutes } from './systemRole.routes';
+import { organizationRoutes } from './organization.routes';
 
 const apiRouter = Router();
 
@@ -17,5 +18,6 @@ apiRouter.use('/auth', authRoutes);
 apiRouter.use('/users', userRoutes);
 apiRouter.use('/roles', systemRoleRoutes);
 apiRouter.use('/system-roles', systemRoleRoutes);
+apiRouter.use('/organizations', organizationRoutes);
 
 export default apiRouter;
