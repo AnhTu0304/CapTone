@@ -20,6 +20,7 @@ import NotificationsPage from './Notifications/NotificationsPage';
 import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
 import SettingsPage from './Settings/SettingsPage';
+import ProfilePage from './Profile/ProfilePage';
 
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
@@ -127,6 +128,9 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     }
     if (path === '/dashboard/settings') {
       return <SettingsPage />;
+    }
+    if (path === '/dashboard/profile' || path === '/profile') {
+      return <ProfilePage />;
     }
 
     // Fallback to overview

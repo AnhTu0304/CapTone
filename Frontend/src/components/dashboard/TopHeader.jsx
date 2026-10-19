@@ -12,6 +12,7 @@ import {
   Shield,
   Menu,
   LogOut,
+  User,
 } from 'lucide-react';
 
 export const TopHeader = () => {
@@ -621,6 +622,29 @@ export const TopHeader = () => {
                   </span>
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setIsProfileMenuOpen(false);
+                  if (onNavigate) onNavigate('/dashboard/profile');
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: 'none',
+                  background: 'none',
+                  color: 'var(--dash-text-secondary)',
+                  fontSize: '0.8125rem',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: 'var(--dash-radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <User size={13} color="var(--dash-primary)" />
+                <span>Hồ sơ cá nhân</span>
+              </button>
               <button
                 onClick={() => {
                   setIsProfileMenuOpen(false);
