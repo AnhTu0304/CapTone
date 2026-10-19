@@ -1,14 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
+import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
 import { IJwtPayload } from '../models/user.model';
 
 /**
  * Middleware kiểm tra và giải mã JWT Access Token
- * Nếu hợp lệ, gắn payload vào req.user để các controller tiếp theo sử dụng
+ * Nếu hợp lệ, xác thực trạng thái người dùng trong DB và gắn payload vào req.user
  */
-export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return next(new ApiError(401, 'Yêu cầu đăng nhập (Thiếu Authorization Header)'));
@@ -21,21 +22,11 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     return next(new ApiError(401, 'Yêu cầu đăng nhập (Thiếu hoặc sai định dạng Bearer Token)'));
   }
 
+  let decoded: IJwtPayload;
   try {
-    const decoded = jwt.verify(token, config.jwt.secret, {
+    decoded = jwt.verify(token, config.jwt.secret, {
       algorithms: ['HS256'],
     }) as IJwtPayload;
-
-    if (!decoded || typeof decoded !== 'object' || !decoded.id || !decoded.email) {
-      return next(new ApiError(401, 'Token thiếu thông tin xác thực bắt buộc (id, email)'));
-    }
-
-    if (decoded.status === 'SUSPENDED' || decoded.status === 'INACTIVE') {
-      return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
-    }
-
-    (req as any).user = decoded;
-    return next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
       return next(new ApiError(401, 'Token đã hết hạn'));
@@ -45,4 +36,49 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     }
     return next(new ApiError(401, 'Lỗi xác thực Token'));
   }
+
+  if (!decoded || typeof decoded !== 'object' || !decoded.id || !decoded.email) {
+    return next(new ApiError(401, 'Token thiếu thông tin xác thực bắt buộc (id, email)'));
+  }
+
+  // 1. Kiểm tra nhanh claim tĩnh trong token
+  if (decoded.status === 'SUSPENDED' || decoded.status === 'INACTIVE') {
+    return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
+  }
+
+  // 2. Kiểm tra động trạng thái mới nhất từ cơ sở dữ liệu (SEC-08)
+  try {
+    const userRes = await pool.query<{ id: string; status: string; deleted_at: Date | null }>(
+      'SELECT id, status, deleted_at FROM users WHERE id = $1 LIMIT 1',
+      [decoded.id]
+    );
+
+    if (userRes.rows.length === 0) {
+      return next(new ApiError(401, 'Người dùng không tồn tại hoặc đã bị xóa khỏi hệ thống'));
+    }
+
+    const dbUser = userRes.rows[0];
+
+    // Tài khoản đã bị xóa mềm
+    if (dbUser.deleted_at) {
+      return next(new ApiError(401, 'Tài khoản đã bị xóa khỏi hệ thống'));
+    }
+
+    // Tài khoản bị tạm khóa hoặc ngừng hoạt động
+    if (dbUser.status === 'SUSPENDED' || dbUser.status === 'INACTIVE') {
+      return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
+    }
+
+    // Đồng bộ trạng thái thực tế vào request
+    decoded.status = dbUser.status as any;
+  } catch (dbError) {
+    if (dbError instanceof ApiError) {
+      return next(dbError);
+    }
+    // Fail-closed: Không bỏ qua lỗi kết nối cơ sở dữ liệu
+    return next(new ApiError(500, 'Lỗi cơ sở dữ liệu khi xác thực trạng thái tài khoản'));
+  }
+
+  (req as any).user = decoded;
+  return next();
 };

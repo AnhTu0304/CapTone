@@ -10,7 +10,12 @@ export const errorHandler = (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next: NextFunction
 ) => {
-  const statusCode = err instanceof ApiError ? err.statusCode : 500;
+  const statusCode =
+    err instanceof ApiError
+      ? err.statusCode
+      : (typeof (err as any).statusCode === 'number'
+          ? (err as any).statusCode
+          : (typeof (err as any).status === 'number' ? (err as any).status : 500));
   const message = err.message || 'Internal Server Error';
   const errors = err instanceof ApiError ? err.errors : undefined;
 
