@@ -3,22 +3,41 @@ import path from 'path';
 import { pool } from '../config/database';
 
 async function runMigration() {
-  const sqlFilePath = path.resolve(__dirname, '../../../migrations/01_init_users_and_roles.sql');
-  console.log('🔄 Đang đọc file migration tại:', sqlFilePath);
+  const possibleDirs = [
+    path.resolve(__dirname, '../../migrations'),
+    path.resolve(__dirname, '../../../migrations'),
+  ];
+  const migrationsDir = possibleDirs.find((d) => fs.existsSync(d) && fs.readdirSync(d).some((f) => f.endsWith('.sql'))) || possibleDirs[0];
 
-  if (!fs.existsSync(sqlFilePath)) {
-    console.error('❌ Không tìm thấy file migration:', sqlFilePath);
+  console.log('🔄 Đang đọc thư mục migration tại:', migrationsDir);
+
+  if (!fs.existsSync(migrationsDir)) {
+    console.error('❌ Không tìm thấy thư mục migration:', migrationsDir);
     process.exit(1);
   }
 
-  const sqlContent = fs.readFileSync(sqlFilePath, 'utf-8');
+  const sqlFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  if (sqlFiles.length === 0) {
+    console.log('⚠️ Không tìm thấy file migration (.sql) nào trong thư mục.');
+    process.exit(0);
+  }
 
   try {
     const client = await pool.connect();
     console.log('✅ Đã kết nối cơ sở dữ liệu PostgreSQL.');
-    console.log('🚀 Đang thực thi migration bảng Users, Roles và Tokens...');
-    await client.query(sqlContent);
-    console.log('🎉 Migration hoàn tất thành công!');
+
+    for (const file of sqlFiles) {
+      console.log(`🚀 Đang thực thi migration: ${file}...`);
+      const sqlContent = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+      await client.query(sqlContent);
+      console.log(`✅ Hoàn tất migration: ${file}`);
+    }
+
+    console.log('🎉 Toàn bộ migration cơ sở dữ liệu đã hoàn tất thành công!');
     client.release();
     await pool.end();
     process.exit(0);

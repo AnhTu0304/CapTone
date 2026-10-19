@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
-import { IUser, IUserResponse, IUpdateUserDto, IChangePasswordDto, IUserQuery, IPaginatedResult } from '../models/user.model';
+import { IUser, IUserResponse, IUpdateUserDto, IChangePasswordDto, IUserQuery, IPaginatedResult, UserStatus } from '../models/user.model';
 import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
 
@@ -225,6 +225,48 @@ export class UserService {
         );
 
         return result.rows[0];
+    }
+
+    // 7. Cập nhật trạng thái tài khoản (PENDING, ACTIVE, INACTIVE, SUSPENDED)
+    public static async updateStatus(userId: string, status: UserStatus): Promise<IUserResponse> {
+        if (!userId || !UUID_REGEX.test(userId.trim())) {
+            throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
+        }
+        const validStatuses: UserStatus[] = ['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED'];
+        if (!validStatuses.includes(status)) {
+            throw new ApiError(400, `Trạng thái tài khoản không hợp lệ: ${status}`);
+        }
+
+        const result = await pool.query<IUserResponse>(
+            `UPDATE users 
+             SET status = $1,
+                 updated_at = NOW()
+             WHERE id = $2 AND deleted_at IS NULL
+             RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
+            [status, userId.trim()]
+        );
+
+        if (result.rows.length === 0) {
+            throw new ApiError(404, 'Không tìm thấy người dùng để cập nhật trạng thái');
+        }
+
+        return result.rows[0];
+    }
+
+    // 8. Xóa mềm tài khoản người dùng (soft delete)
+    public static async softDelete(userId: string): Promise<void> {
+        if (!userId || !UUID_REGEX.test(userId.trim())) {
+            throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
+        }
+
+        const result = await pool.query(
+            'UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL',
+            [userId.trim()]
+        );
+
+        if (result.rowCount === 0) {
+            throw new ApiError(404, 'Không tìm thấy người dùng để xóa');
+        }
     }
 }
 

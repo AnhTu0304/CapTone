@@ -60,7 +60,9 @@ CREATE TABLE IF NOT EXISTS system_roles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Khởi tạo sẵn 4 vai trò quản trị hệ thống chuẩn
+-- Khởi tạo sẵn 4 vai trò quản trị hệ thống chuẩn (xóa bỏ ràng buộc cũ nếu có)
+ALTER TABLE system_roles DROP CONSTRAINT IF EXISTS chk_system_roles_name;
+
 INSERT INTO system_roles (name, description) VALUES
     ('SUPER_ADMIN', 'Quản trị viên tối cao toàn hệ thống với mọi quyền hạn'),
     ('SYSTEM_ADMIN', 'Quản trị viên kỹ thuật, quản lý cụm, agent và chính sách'),
