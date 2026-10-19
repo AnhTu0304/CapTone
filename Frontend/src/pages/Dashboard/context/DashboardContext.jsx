@@ -3,14 +3,17 @@ import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/
 
 const DashboardContext = createContext(null);
 
-const normalizeNotification = (item) => ({
-  ...item,
-  desc: item.desc || item.message,
-  time: item.time || item.timestamp,
-  unread: item.unread !== undefined ? item.unread : !item.read,
-  read: item.read !== undefined ? item.read : !item.unread,
-  link: item.link || item.actionPath,
-});
+const normalizeNotification = (item) => {
+  const isRead = item.read !== undefined ? Boolean(item.read) : !Boolean(item.unread);
+  return {
+    ...item,
+    read: isRead,
+    unread: !isRead,
+    desc: item.desc || item.message,
+    time: item.time || item.timestamp,
+    link: item.link || item.actionPath,
+  };
+};
 
 export const DashboardProvider = ({ children, onNavigate }) => {
   // 1. Organization & Environment State
@@ -101,7 +104,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     });
   };
 
-  const unreadNotifsCount = notifications.filter((n) => n.unread || !n.read).length;
+  const unreadNotifsCount = notifications.filter((n) => !n.read).length;
   const pendingApprovalsCount = 1;
   const activeIncidentsCount = 0;
 

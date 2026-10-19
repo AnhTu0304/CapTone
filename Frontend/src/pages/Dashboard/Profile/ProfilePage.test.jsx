@@ -150,4 +150,23 @@ describe('ProfilePage Suite (/dashboard/profile)', () => {
     expect(screen.getAllByText(/Nguyễn Văn An/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Tên Không Được Lưu/i)).not.toBeInTheDocument();
   });
+
+  test('validates avatar file upload and rejects non-image or oversized files', () => {
+    renderWithProviders(<ProfilePage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Chỉnh Sửa Hồ Sơ/i }));
+
+    const fileInput = screen.getByLabelText(/Tải lên ảnh đại diện/i);
+
+    // 1. Non-image file test
+    const textFile = new File(['hello'], 'document.txt', { type: 'text/plain' });
+    fireEvent.change(fileInput, { target: { files: [textFile] } });
+    expect(screen.getByText(/Vui lòng chọn tệp hình ảnh hợp lệ/i)).toBeInTheDocument();
+
+    // 2. Oversized image test (>2MB)
+    const largeFile = new File([new ArrayBuffer(3 * 1024 * 1024)], 'large.jpg', { type: 'image/jpeg' });
+    fireEvent.change(fileInput, { target: { files: [largeFile] } });
+    expect(screen.getByText(/Kích thước tệp không được vượt quá 2MB/i)).toBeInTheDocument();
+  });
 });
+

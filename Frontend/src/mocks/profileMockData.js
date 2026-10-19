@@ -35,7 +35,17 @@ export const getStoredProfile = () => {
 export const saveStoredProfile = (profile) => {
   try {
     localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile));
+    return true;
   } catch (err) {
-    console.warn('Could not persist profile to localStorage:', err);
+    console.warn('Could not persist full profile to localStorage, attempting fallback without avatar:', err);
+    try {
+      // Fallback: strip avatar data URL if quota is exceeded so text data is preserved
+      const fallback = { ...profile, avatar: null };
+      localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(fallback));
+      return true;
+    } catch (fallbackErr) {
+      console.warn('LocalStorage quota exceeded entirely:', fallbackErr);
+      return false;
+    }
   }
 };

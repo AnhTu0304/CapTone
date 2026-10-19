@@ -86,6 +86,12 @@ export const useMockProfile = () => {
         return updated;
       });
     };
+    reader.onerror = () => {
+      setErrors((prev) => ({ ...prev, avatar: 'Không thể đọc tệp ảnh. Vui lòng thử lại.' }));
+    };
+    reader.onabort = () => {
+      setErrors((prev) => ({ ...prev, avatar: 'Quá trình tải ảnh bị hủy bỏ.' }));
+    };
     reader.readAsDataURL(file);
   }, []);
 
@@ -140,6 +146,13 @@ export const useMockProfile = () => {
       }
     } catch {
       // Ignore
+    }
+
+    // Broadcast profile update for real-time header sync
+    try {
+      window.dispatchEvent(new CustomEvent('selfheal_profile_updated', { detail: updatedProfile }));
+    } catch {
+      // Ignore in non-browser environments
     }
 
     setIsEditing(false);
