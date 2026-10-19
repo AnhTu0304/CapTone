@@ -12,9 +12,34 @@ const app: Application = express();
 
 // Security & Core Middlewares
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Strict CORS allowlist
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      const allowed = config.corsOrigins;
+      if (allowed.includes('*') || allowed.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow localhost variants in development
+      if (config.isDevelopment && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Chính sách CORS không cho phép truy cập từ nguồn gốc này'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Agent-Token'],
+  })
+);
+
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // HTTP Request Logger
 if (config.isDevelopment) {

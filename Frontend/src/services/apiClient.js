@@ -16,7 +16,12 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || '/api/v1';
  */
 export const getAuthToken = () => {
   try {
-    return sessionStorage.getItem('admin_access_token') || localStorage.getItem('admin_access_token') || null;
+    return (
+      sessionStorage.getItem('admin_access_token') ||
+      localStorage.getItem('admin_access_token') ||
+      localStorage.getItem('selfheal_auth_token') ||
+      null
+    );
   } catch (e) {
     return null;
   }

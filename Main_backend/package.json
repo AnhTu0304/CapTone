@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "rimraf dist && tsc",
+    "test:security": "tsx test/security.test.ts",
+    "test": "tsx test/security.test.ts",
     "test:ws": "tsx test/agent-ws-simulator.ts",
     "test:telemetry": "tsx test/telemetry-aggregator.test.ts",
     "test:realtime": "tsx test/realtime-simulator.ts",

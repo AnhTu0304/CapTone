@@ -3,3 +3,6 @@ export * from './rbac.middleware';
 export * from './validate.middleware';
 export * from './error.middleware';
 export * from './notFound.middleware';
+export * from './rateLimit.middleware';
+export * from './tenant.middleware';
+
