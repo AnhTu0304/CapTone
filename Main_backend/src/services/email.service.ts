@@ -132,4 +132,80 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Gửi email thông báo mời tham gia tổ chức
+   */
+  public static async sendInvitationEmail(
+    toEmail: string,
+    recipientName: string,
+    inviterName: string,
+    orgName: string,
+    roleName: string
+  ): Promise<boolean> {
+    const transporter = this.getTransporter();
+
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log('✉️  [EMAIL SERVICE - DEV MODE] LỜI MỜI THAM GIA TỔ CHỨC');
+      console.log(`➡️  Người nhận: ${recipientName} <${toEmail}>`);
+      console.log(`🏢  Tổ chức: ${orgName}`);
+      console.log(`👤  Người mời: ${inviterName}`);
+      console.log(`🛡️  Vai trò cấp: ${roleName}`);
+      console.log(`🌐  Đường dẫn: ${config.email.clientUrl}/dashboard`);
+      console.log('============================================================\n');
+      return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <title>Lời mời tham gia tổ chức - CapTone AI Self-Heal</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+        .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
+        .badge { display: inline-block; background-color: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+        .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>CapTone AI Self-Heal Platform</h1>
+          <p>Lời mời cộng tác quản trị hạ tầng</p>
+        </div>
+        <div class="content">
+          <p>Xin chào <strong>${recipientName}</strong>,</p>
+          <p><strong>${inviterName}</strong> vừa mời bạn tham gia quản trị hệ thống cho tổ chức <strong>${orgName}</strong> trên nền tảng CapTone.</p>
+          <p>Vai trò được chỉ định: <span class="badge">${roleName}</span></p>
+          <p>Vui lòng đăng nhập vào hệ thống để chấp nhận lời mời và bắt đầu quản lý cụm Kubernetes cùng đồng đội.</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} CapTone AI Self-Heal Platform.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      await transporter.sendMail({
+        from: config.email.from,
+        to: toEmail,
+        subject: `🏢 [CapTone] Lời mời tham gia tổ chức ${orgName}`,
+        html: htmlContent,
+      });
+      console.log(`✅ [EMAIL] Đã gửi thành công email lời mời tới: ${toEmail}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL ERROR] Gửi email lời mời tới ${toEmail} thất bại:`, (error as Error).message);
+      return false;
+    }
+  }
 }
+

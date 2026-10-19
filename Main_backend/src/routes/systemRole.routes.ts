@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { SystemRoleController } from '../controllers/systemRole.controller';
+import { OrganizationController } from '../controllers/organization.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { requireRoles } from '../middlewares/rbac.middleware';
 
@@ -7,6 +8,9 @@ const router = Router();
 
 // Yêu cầu xác thực tài khoản (Token) cho các API quản trị vai trò
 router.use(authenticateToken);
+
+// [GET] /api/v1/roles/organization -> Lấy danh mục vai trò cấp tổ chức (SME_OWNER, DEVOPS, VIEWER)
+router.get('/organization', OrganizationController.getRoles);
 
 // [GET] /api/v1/roles -> Lấy danh sách tất cả các vai trò quản trị hệ thống (ADMIN hoặc SUPER_ADMIN)
 router.get('/', requireRoles('ADMIN', 'SUPER_ADMIN'), SystemRoleController.getAllRoles);

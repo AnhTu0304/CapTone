@@ -1,0 +1,150 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử API Module 3: Middleware Bảo Mật Phân Quyền & Ngữ Cảnh Workspace
+### (Guard Middlewares, Multi-Tenant Security & User Context)
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 0.1: ĐĂNG NHẬP CHỦ SỞ HỮU (SME_OWNER / SUPER_ADMIN)
+### ===================================================================
+# @name loginOwner
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tanquoc280325@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@ownerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQwZTZmZDk5LTA4ZTAtNDg5ZS05M2M4LWQ5Y2ZhYTA0NDAzYyIsImVtYWlsIjoidGFucXVvYzI4MDMyNUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6WyJBRE1JTiIsIlNVUEVSX0FETUlOIl0sImlhdCI6MTc5MjQxMjI0NiwiZXhwIjoxNzkzMDE3MDQ2fQ.Y6GAdzr3vVj10gmE3XxDmgAxib5axjETeRX442HEJR4
+
+### ===================================================================
+### BƯỚC 0.2: ĐĂNG NHẬP TÀI KHOẢN KỸ SƯ THÔNG THƯỜNG (DEVOPS / VIEWER)
+### ===================================================================
+# @name loginDevOpsUser
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tanquocdz@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@userToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY0MzczNDc3LTdkNzgtNDM2MS04ZjQzLTcxNTgyZjQ1NzUzYSIsImVtYWlsIjoidGFucXVvY2R6QGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDExODY1LCJleHAiOjE3OTMwMTY2NjV9.7ElXEK-Hsz4XZ5qpyfzsgg2ZgmtPhe6s14mYltNa1do
+@devopsUserId = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY0MzczNDc3LTdkNzgtNDM2MS04ZjQzLTcxNTgyZjQ1NzUzYSIsImVtYWlsIjoidGFucXVvY2R6QGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDEyNjcyLCJleHAiOjE3OTMwMTc0NzJ9.wQezz5CbCtdofRnoOltdy6JUb7a5OAyU5PkF-13HTd8
+
+### ===================================================================
+### BƯỚC 1: XEM DANH MỤC VAI TRÒ TỔ CHỨC KHẢ DỤNG
+### ===================================================================
+# @name getRolesOrg
+GET {{baseUrl}}/roles/organization
+Authorization: Bearer {{userToken}}
+
+### ===================================================================
+### BƯỚC 2: TẠO TỔ CHỨC TEST MỚI BỞI CHỦ SỞ HỮU (SME_OWNER)
+### ===================================================================
+# @name createOrg
+POST {{baseUrl}}/organizations
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "CapTone Secure Workspace",
+  "slug": "secure-workspace1111111",
+  "description": "Tổ chức kiểm thử phân quyền chặt chẽ Module 3",
+  "city": "Hồ Chí Minh",
+  "timezone": "Asia/Ho_Chi_Minh"
+}
+
+###
+@orgId = {{createOrg.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 3: KIỂM THỬ BẢO VỆ TENANT (requireOrgMember)
+### Người dùng chưa tham gia tổ chức gọi xem chi tiết -> Kỳ vọng: 403 Forbidden
+### ===================================================================
+# @name nonMemberForbidden
+GET {{baseUrl}}/organizations/ac1a8c30-6a6d-472c-bc04-43ccdda0e69e
+Authorization: Bearer {{userToken}}
+
+###
+# Người dùng chưa tham gia xem danh sách thành viên -> Kỳ vọng: 403 Forbidden
+GET {{baseUrl}}/organizations/{{orgId}}/members
+Authorization: Bearer {{userToken}}
+
+### ===================================================================
+### BƯỚC 4: CHỦ SỞ HỮU MỜI KỸ SƯ VÀO TỔ CHỨC VỚI VAI TRÒ DEVOPS
+### ===================================================================
+# @name inviteDevOps
+POST {{baseUrl}}/organizations/{{orgId}}/members/invite
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "tungo34205@gmail.com",
+  "role_code": "DEVOPS"
+}
+
+### ===================================================================
+### BƯỚC 5: NGƯỜI DÙNG XEM DANH SÁCH LỜI MỜI ĐANG CHỜ CỦA MÌNH
+### ===================================================================
+# @name getMyInvitations
+GET {{baseUrl}}/users/me/invitations
+Authorization: Bearer {{userToken}}
+
+### ===================================================================
+### BƯỚC 6: NGƯỜI DÙNG CHẤP NHẬN LỜI MỜI THAM GIA TỔ CHỨC (ACCEPT)
+### ===================================================================
+# @name acceptInvite
+POST {{baseUrl}}/organizations/{{orgId}}/members/accept
+Authorization: Bearer {{userToken}}
+
+### ===================================================================
+### BƯỚC 7: KIỂM THỬ PHÂN QUYỀN VAI TRÒ NỘI BỘ (requireOrgRole)
+### Kỹ sư DEVOPS thử sửa tên tổ chức -> Kỳ vọng: 403 Forbidden (Chỉ SME_OWNER mới được)
+### ===================================================================
+# @name devopsForbiddenEditOrg
+PUT {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{userToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Tên Bị Sửa Trái Phép"
+}
+
+###
+# Kỹ sư DEVOPS thử mời người khác -> Kỳ vọng: 403 Forbidden (Chỉ SME_OWNER mới được)
+POST {{baseUrl}}/organizations/{{orgId}}/members/invite
+Authorization: Bearer {{userToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "someone.else@selfheal.io",
+  "role_code": "VIEWER"
+}
+
+### ===================================================================
+### BƯỚC 8: NGƯỜI DÙNG XEM DANH SÁCH CÁC TỔ CHỨC CỦA MÌNH (WORKSPACE CONTEXT)
+### Dùng cho Dropdown chuyển đổi Workspace trên giao diện
+### ===================================================================
+# @name getMyOrganizations
+GET {{baseUrl}}/users/me/organizations
+Authorization: Bearer {{userToken}}
+
+### ===================================================================
+### BƯỚC 9: KIỂM THỬ TỰ RỜI KHỎI TỔ CHỨC (requireOrgSelfOrOwner)
+### Thành viên tự gọi xóa chính mình khỏi tổ chức -> Kỳ vọng: 200 OK
+### ===================================================================
+# @name memberSelfLeave
+DELETE {{baseUrl}}/organizations/{{orgId}}/members/{{devopsUserId}}
+Authorization: Bearer {{userToken}}
+
+### ===================================================================
+### BƯỚC 10: DỌN DẸP TỔ CHỨC TEST (SOFT DELETE)
+### ===================================================================
+# @name cleanupOrg
+DELETE {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{ownerToken}}
