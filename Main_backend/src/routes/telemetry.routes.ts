@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { TelemetryController } from '../controllers/telemetry.controller';
+import { authenticateToken } from '../middlewares/auth.middleware';
 
 export const telemetryRoutes = Router();
+
+// Protect telemetry routes with JWT authentication
+telemetryRoutes.use(authenticateToken);
 
 // GET /api/v1/telemetry/services/:serviceId/metrics-sequence
 telemetryRoutes.get(
