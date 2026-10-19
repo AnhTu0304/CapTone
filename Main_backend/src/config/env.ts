@@ -26,10 +26,25 @@ export const config = {
     connectionTimeoutMillis: 2000,
   },
 
+  // CORS Config
+  corsOrigins: process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+    : [process.env.CLIENT_URL || 'http://localhost:3000', 'http://127.0.0.1:3000'],
+
   // JWT Config
   jwt: {
-    secret: process.env.JWT_SECRET || 'your_super_secret_jwt_key_here',
+    secret: (() => {
+      const secret = process.env.JWT_SECRET;
+      if (process.env.NODE_ENV === 'production') {
+        if (!secret || secret === 'your_super_secret_jwt_key_here' || secret.length < 32) {
+          throw new Error('FATAL SECURITY ERROR: JWT_SECRET must be set to a secure string of at least 32 characters in production');
+        }
+        return secret;
+      }
+      return secret || 'dev_only_jwt_secret_key_minimum_32_characters_long_12345';
+    })(),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    algorithm: 'HS256' as const,
   },
 
   // Email / SMTP Config
