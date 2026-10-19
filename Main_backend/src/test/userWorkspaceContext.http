@@ -1,0 +1,85 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử API Module 4: Ngữ Cảnh Người Dùng (User Context / Switch Workspace)
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 1: ĐĂNG NHẬP KỸ SƯ DEVOPS
+### ===================================================================
+# @name loginEngineer
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tungo34205@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@engineerToken = {{loginEngineer.response.body.data.token}}
+@engineerUserId = {{loginEngineer.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 2: ĐĂNG NHẬP CHỦ SỞ HỮU (SME_OWNER)
+### ===================================================================
+# @name loginOwner
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tanquoc280325@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@ownerToken = {{loginOwner.response.body.data.token}}
+
+### ===================================================================
+### BƯỚC 3: MODULE 4 - LẤY DANH SÁCH TỔ CHỨC / WORKSPACE USER ĐANG THAM GIA
+### Endpoint: GET /api/v1/users/me/organizations
+### Mục đích: Cho phép kỹ sư DevOps xem tất cả công ty mình tham gia để switch workspace
+### ===================================================================
+# @name getMyOrganizations
+GET {{baseUrl}}/users/me/organizations
+Authorization: Bearer {{engineerToken}}
+
+###
+@activeOrgId = {{getMyOrganizations.response.body.data[0].id}}
+
+### ===================================================================
+### BƯỚC 4: MODULE 4 - SWITCH WORKSPACE & LẤY NGỮ CẢNH HOẠT ĐỘNG
+### Endpoint: GET /api/v1/users/me/organizations/:orgId/context
+### Mục đích: Lấy toàn bộ thông tin công ty, profile, vai trò & bộ quyền thao tác
+### ===================================================================
+# @name getWorkspaceContext
+GET {{baseUrl}}/users/me/organizations/{{activeOrgId}}/context
+Authorization: Bearer {{engineerToken}}
+
+### ===================================================================
+### BƯỚC 5: MODULE 4 - XEM HỘP THƯ LỜI MỜI CỦA BẢN THÂN
+### Endpoint: GET /api/v1/users/me/invitations
+### Mục đích: Lấy danh sách các công ty đang mời user tham gia (Status: INVITED)
+### ===================================================================
+# @name getMyInvitations
+GET {{baseUrl}}/users/me/invitations
+Authorization: Bearer {{engineerToken}}
+
+###
+@pendingInviteId = {{getMyInvitations.response.body.data[0].id}}
+
+### ===================================================================
+### BƯỚC 6: MODULE 4 - CHẤP NHẬN LỜI MỜI TRỰC TIẾP TỪ HỘP THƯ
+### Endpoint: POST /api/v1/users/me/invitations/:inviteId/accept
+### ===================================================================
+# @name acceptInvite
+POST {{baseUrl}}/users/me/invitations/{{pendingInviteId}}/accept
+Authorization: Bearer {{engineerToken}}
+
+### ===================================================================
+### BƯỚC 7: MODULE 4 - TỪ CHỐI LỜI MỜI TRỰC TIẾP TỪ HỘP THƯ
+### Endpoint: POST /api/v1/users/me/invitations/:inviteId/decline
+### ===================================================================
+# @name declineInvite
+POST {{baseUrl}}/users/me/invitations/{{pendingInviteId}}/decline
+Authorization: Bearer {{engineerToken}}

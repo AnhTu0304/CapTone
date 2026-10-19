@@ -117,5 +117,50 @@ export class OrganizationController {
       next(error);
     }
   }
+
+  /**
+   * [GET] /api/v1/users/me/organizations/:orgId/context
+   * Lấy ngữ cảnh làm việc (Workspace Context) khi chuyển đổi vào một tổ chức
+   */
+  public static async getWorkspaceContext(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const orgId = req.params.orgId;
+      const result = await OrganizationService.getWorkspaceContext(user.id, orgId);
+      return ApiResponse.success(res, 'Lấy ngữ cảnh không gian làm việc thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/users/me/invitations/:inviteId/accept
+   * Chấp nhận lời mời tham gia tổ chức trực tiếp bằng inviteId
+   */
+  public static async acceptInvitationById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const inviteId = req.params.inviteId;
+      const result = await OrganizationService.acceptInvitationById(user.id, inviteId);
+      return ApiResponse.success(res, result.message, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/users/me/invitations/:inviteId/decline
+   * Từ chối lời mời tham gia tổ chức trực tiếp bằng inviteId
+   */
+  public static async declineInvitationById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const inviteId = req.params.inviteId;
+      const result = await OrganizationService.declineInvitationById(user.id, inviteId);
+      return ApiResponse.success(res, result.message, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 

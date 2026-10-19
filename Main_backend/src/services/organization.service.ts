@@ -318,4 +318,84 @@ export class OrganizationService {
     }
     return OrganizationModel.findPendingInvitationsByUserId(userId);
   }
+
+  /**
+   * 8. Lấy chi tiết ngữ cảnh Workspace Context khi User chuyển đổi vào một tổ chức
+   */
+  public static async getWorkspaceContext(userId: string, orgId: string) {
+    if (!userId) {
+      throw new ApiError(401, 'Yêu cầu đăng nhập trước khi truy cập ngữ cảnh tổ chức');
+    }
+
+    const context = await OrganizationModel.getUserWorkspaceContext(userId, orgId);
+    if (!context) {
+      throw new ApiError(403, 'Bạn không phải là thành viên đang hoạt động (ACTIVE) của tổ chức này');
+    }
+
+    const roleCode = context.membership.role_code;
+    const isOwner = roleCode === 'SME_OWNER';
+    const isDevOps = roleCode === 'DEVOPS';
+
+    return {
+      workspace: context.organization,
+      membership: context.membership,
+      permissions: {
+        is_owner: isOwner,
+        can_manage_organization: isOwner,
+        can_manage_members: isOwner,
+        can_manage_infrastructure: isOwner || isDevOps,
+        can_manage_environments: isOwner || isDevOps,
+        can_trigger_rca: isOwner || isDevOps,
+        can_view_metrics: true,
+        can_view_reports: true,
+      },
+    };
+  }
+
+  /**
+   * 9. Chấp nhận lời mời tham gia tổ chức trực tiếp bằng inviteId
+   */
+  public static async acceptInvitationById(userId: string, inviteId: string) {
+    if (!userId) {
+      throw new ApiError(401, 'Yêu cầu đăng nhập trước khi chấp nhận lời mời');
+    }
+
+    const invite = await OrganizationMemberModel.findPendingInviteById(inviteId, userId);
+    if (!invite) {
+      throw new ApiError(404, 'Không tìm thấy lời mời đang chờ nào tương ứng với tài khoản của bạn');
+    }
+
+    const updated = await OrganizationMemberModel.update(undefined, invite.id, {
+      status: 'ACTIVE',
+      joined_at: new Date(),
+    });
+
+    return {
+      message: `Chào mừng bạn gia nhập tổ chức ${invite.org_name}!`,
+      organization_id: invite.organization_id,
+      role_code: invite.role_code,
+      joined_at: updated.joined_at || new Date(),
+    };
+  }
+
+  /**
+   * 10. Từ chối lời mời tham gia tổ chức trực tiếp bằng inviteId
+   */
+  public static async declineInvitationById(userId: string, inviteId: string) {
+    if (!userId) {
+      throw new ApiError(401, 'Yêu cầu đăng nhập trước khi từ chối lời mời');
+    }
+
+    const invite = await OrganizationMemberModel.findPendingInviteById(inviteId, userId);
+    if (!invite) {
+      throw new ApiError(404, 'Không tìm thấy lời mời đang chờ nào tương ứng với tài khoản của bạn');
+    }
+
+    await OrganizationMemberModel.setStatus(undefined, invite.id, 'REMOVED');
+
+    return {
+      message: `Đã từ chối lời mời tham gia tổ chức ${invite.org_name} thành công`,
+      organization_id: invite.organization_id,
+    };
+  }
 }

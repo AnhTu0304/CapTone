@@ -314,6 +314,33 @@ export class OrganizationMemberModel {
   }
 
   /**
+   * Tìm lời mời theo ID bản ghi thành viên và ID của user
+   */
+  public static async findPendingInviteById(
+    inviteId: string,
+    userId: string,
+    client?: PoolClient
+  ): Promise<{ id: string; organization_id: string; org_name: string; role_code: string } | null> {
+    const db = client || pool;
+    const query = `
+      SELECT om.id, om.organization_id, o.name AS org_name, r.code AS role_code
+      FROM organization_members om
+      JOIN organizations o ON om.organization_id = o.id
+      JOIN roles r ON om.role_id = r.id
+      WHERE om.id = $1 
+        AND om.user_id = $2 
+        AND om.status = 'INVITED' 
+        AND o.deleted_at IS NULL
+      LIMIT 1;
+    `;
+    const res = await db.query<{ id: string; organization_id: string; org_name: string; role_code: string }>(query, [
+      inviteId,
+      userId,
+    ]);
+    return res.rows[0] || null;
+  }
+
+  /**
    * Đếm số lượng thành viên đang giữ vai trò cụ thể và còn ACTIVE
    */
   public static async countActiveRoleByOrg(

@@ -19,11 +19,24 @@ const router = Router();
 // Toàn bộ các route phía dưới đều yêu cầu đã đăng nhập (cần Token)
 router.use(authenticateToken);
 
+// ==========================================================================
+// MODULE 4: NGỮ CẢNH NGƯỜI DÙNG & WORKSPACE (USER CONTEXT / SWITCH WORKSPACE)
+// ==========================================================================
+
 // [GET] /api/v1/users/me/organizations -> Lấy danh sách các tổ chức mà người dùng đang tham gia
 router.get('/me/organizations', OrganizationController.getMyOrganizations);
 
+// [GET] /api/v1/users/me/organizations/:orgId/context -> Lấy ngữ cảnh làm việc khi switch workspace vào 1 tổ chức
+router.get('/me/organizations/:orgId/context', OrganizationController.getWorkspaceContext);
+
 // [GET] /api/v1/users/me/invitations -> Lấy danh sách các lời mời đang chờ chấp nhận
 router.get('/me/invitations', OrganizationController.getMyInvitations);
+
+// [POST] /api/v1/users/me/invitations/:inviteId/accept -> Chấp nhận lời mời trực tiếp bằng ID lời mời
+router.post('/me/invitations/:inviteId/accept', OrganizationController.acceptInvitationById);
+
+// [POST] /api/v1/users/me/invitations/:inviteId/decline -> Từ chối lời mời trực tiếp bằng ID lời mời
+router.post('/me/invitations/:inviteId/decline', OrganizationController.declineInvitationById);
 
 // [GET] /api/v1/users -> Lấy danh sách người dùng (chỉ ADMIN hoặc SUPER_ADMIN)
 router.get('/', requireRoles('ADMIN', 'SUPER_ADMIN'), validate(userQuerySchema), UserController.getAllUsers);

@@ -525,4 +525,84 @@ export class OrganizationModel {
       created_at: row.created_at,
     }));
   }
+
+  /**
+   * Lấy chi tiết ngữ cảnh làm việc (Workspace Context) khi User chuyển đổi vào một tổ chức
+   */
+  public static async getUserWorkspaceContext(
+    userId: string,
+    orgId: string,
+    client?: PoolClient
+  ): Promise<{
+    organization: IOrganizationDetail;
+    membership: {
+      status: string;
+      role_code: string;
+      role_name: string;
+      role_description?: string | null;
+      joined_at?: Date | null;
+    };
+  } | null> {
+    const db = client || pool;
+    const query = `
+      SELECT 
+        o.id, o.name, o.slug, o.type, o.description, o.status, o.created_by, o.created_at, o.updated_at,
+        op.id AS profile_id, op.email AS profile_email, op.phone AS profile_phone, op.website AS profile_website,
+        op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
+        cur_om.status AS member_status, cur_om.joined_at,
+        r.code AS role_code, r.name AS role_name, r.description AS role_description,
+        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count
+      FROM organizations o
+      JOIN organization_members cur_om ON o.id = cur_om.organization_id
+      JOIN roles r ON cur_om.role_id = r.id
+      LEFT JOIN organization_profiles op ON o.id = op.organization_id
+      WHERE o.id = $1 
+        AND cur_om.user_id = $2 
+        AND cur_om.status = 'ACTIVE' 
+        AND o.deleted_at IS NULL
+      LIMIT 1;
+    `;
+    const res = await db.query(query, [orgId, userId]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+
+    return {
+      organization: {
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        type: row.type,
+        description: row.description,
+        status: row.status,
+        created_by: row.created_by,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        role_in_org: row.role_code,
+        members_count: row.members_count || 0,
+        profile: row.profile_id
+          ? {
+              id: row.profile_id,
+              organization_id: row.id,
+              description: row.description,
+              email: row.profile_email,
+              phone: row.profile_phone,
+              website: row.profile_website,
+              address: row.profile_address,
+              city: row.profile_city,
+              country: row.profile_country,
+              timezone: row.profile_timezone,
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+            }
+          : null,
+      },
+      membership: {
+        status: row.member_status,
+        role_code: row.role_code,
+        role_name: row.role_name,
+        role_description: row.role_description,
+        joined_at: row.joined_at,
+      },
+    };
+  }
 }
