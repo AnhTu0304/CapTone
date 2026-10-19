@@ -28,6 +28,17 @@ export const requireTenantAccess = (getOrgId: (req: Request) => string | undefin
         return next();
       }
 
+      // Check if user has explicit tenant claim in token
+      const userOrg = (user as any).company_id || (user as any).organization_id;
+      if (userOrg) {
+        if (userOrg !== orgId) {
+          return next(
+            new ApiError(403, 'Từ chối truy cập: Bạn không thuộc tổ chức này')
+          );
+        }
+        return next();
+      }
+
       // Query database to ensure user belongs to this company / organization
       try {
         const memberRes = await pool.query(
@@ -45,9 +56,10 @@ export const requireTenantAccess = (getOrgId: (req: Request) => string | undefin
         (req as any).orgMember = memberRes.rows[0];
         return next();
       } catch (dbErr) {
-        // Fallback for environments where company_members table might not exist yet
-        console.warn('Tenant membership check skipped database query:', (dbErr as Error).message);
-        return next();
+        // Fail securely if DB membership cannot be confirmed for non-admin
+        return next(
+          new ApiError(403, 'Từ chối truy cập: Bạn không có quyền truy cập vào dữ liệu của tổ chức này')
+        );
       }
     } catch (error) {
       return next(error);
