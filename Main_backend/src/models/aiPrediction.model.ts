@@ -310,4 +310,38 @@ export class AiPredictionModel {
     const res = await pool.query(query);
     return res.rows;
   }
+
+  /**
+   * Find linked environment, cluster, workload for a prediction
+   */
+  public static async findContextById(
+    predictionId: string,
+    client?: PoolClient
+  ): Promise<{ environment_id: string; cluster_id?: string | null; workload_id?: string | null } | null> {
+    const db = client || pool;
+    try {
+      const res = await db.query(
+        'SELECT environment_id, cluster_id, workload_id FROM ai_predictions WHERE id = ',
+        [predictionId]
+      );
+      return res.rows[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get recent AI predictions
+   */
+  public static async getRecent(limit: number = 5, client?: PoolClient) {
+    const db = client || pool;
+    const res = await db.query(
+      `SELECT id, prediction_type, risk_score, confidence_score, status, predicted_at, expires_at
+       FROM ai_predictions
+       ORDER BY predicted_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.rows;
+  }
 }

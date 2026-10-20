@@ -32,3 +32,12 @@ export const testDbConnection = async (): Promise<boolean> => {
     return false;
   }
 };
+
+export const getDbHealth = async (): Promise<{ status: string; serverTime: string | null; error?: string }> => {
+  try {
+    const result = await pool.query('SELECT NOW() as now');
+    return { status: 'CONNECTED', serverTime: result.rows[0].now };
+  } catch (error) {
+    return { status: `ERROR: ${(error as Error).message}`, serverTime: null, error: (error as Error).message };
+  }
+};

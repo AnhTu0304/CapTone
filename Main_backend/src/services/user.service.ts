@@ -1,7 +1,15 @@
 import bcrypt from 'bcryptjs';
-import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
-import { IUser, IUserResponse, IUpdateUserDto, IChangePasswordDto, IUserQuery, IPaginatedResult, UserStatus } from '../models/user.model';
+import {
+    IUserResponse,
+    IUpdateUserDto,
+    IChangePasswordDto,
+    IUserQuery,
+    IPaginatedResult,
+    UserStatus,
+    UserModel,
+} from '../models/user.model';
+import { AuthModel } from '../models/auth.model';
 import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
 
@@ -14,29 +22,12 @@ export class UserService {
             throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
         }
 
-        const querySql = `
-          SELECT id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
-          FROM users 
-          WHERE id = $1 AND deleted_at IS NULL
-          LIMIT 1
-        `;
-
-        const result = await pool.query<IUserResponse>(querySql, [userId.trim()]);
-        if (result.rows.length === 0) {
+        const user = await UserModel.findById(userId.trim());
+        if (!user) {
             throw new ApiError(404, 'Không tìm thấy người dùng với ID này');
         }
 
-        const user = result.rows[0];
-        const rolesRes = await pool.query<{ name: string }>(
-            `SELECT sr.name 
-             FROM user_system_roles usr 
-             JOIN system_roles sr ON usr.system_role_id = sr.id 
-             WHERE usr.user_id = $1 
-             ORDER BY usr.assigned_at ASC`,
-            [userId.trim()]
-        );
-        user.system_roles = rolesRes.rows.map(r => r.name);
-
+        user.system_roles = await UserModel.getUserRoles(userId.trim());
         return user;
     }
 
@@ -81,29 +72,19 @@ export class UserService {
 
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-        // Đếm tổng số bản ghi khớp điều kiện
-        const countQuery = `SELECT COUNT(*) AS total FROM users ${whereClause}`;
-        const countResult = await pool.query(countQuery, params);
-        const total = parseInt(countResult.rows[0].total, 10);
+        // Đếm tổng số bản ghi khớp điều kiện qua Model
+        const total = await UserModel.count(whereClause, params);
 
         // Sắp xếp (mặc định created_at DESC)
         const validSortColumns = ['created_at', 'full_name', 'email', 'last_login_at'];
-        const sortBy = validSortColumns.includes(query.sort_by || '') ? query.sort_by : 'created_at';
+        const sortBy: string = query.sort_by && validSortColumns.includes(query.sort_by) ? query.sort_by : 'created_at';
         const order = query.order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-        // Lấy danh sách người dùng
-        const queryParams = [...params, limit, offset];
-        const usersQuery = `
-          SELECT id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
-          FROM users
-          ${whereClause}
-          ORDER BY ${sortBy} ${order}
-          LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-        `;
-        const usersResult = await pool.query<IUserResponse>(usersQuery, queryParams);
+        // Lấy danh sách người dùng qua Model
+        const items = await UserModel.findMany(whereClause, sortBy, order, params, limit, offset);
 
         return {
-            items: usersResult.rows,
+            items,
             pagination: {
                 total,
                 page,
@@ -125,28 +106,21 @@ export class UserService {
 
         const trimmedName = data.full_name !== undefined ? data.full_name.trim() : null;
 
-        const result = await pool.query<IUserResponse>(
-            `UPDATE users 
-       SET full_name = COALESCE($1, full_name),
-           avatar_url = COALESCE($2, avatar_url),
-           updated_at = NOW()
-       WHERE id = $3 AND deleted_at IS NULL
-       RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
-            [trimmedName, data.avatar_url, userId]
-        );
-        if (result.rows.length === 0) {
+        const updatedUser = await UserModel.updateProfile(userId, {
+            full_name: trimmedName,
+            avatar_url: data.avatar_url,
+        });
+
+        if (!updatedUser) {
             throw new ApiError(404, 'Không tìm thấy người dùng để cập nhật');
         }
-        return result.rows[0];
+        return updatedUser;
     }
 
     // Đổi mật khẩu trong phần Cài đặt tài khoản
     public static async changePassword(userId: string, data: IChangePasswordDto): Promise<void> {
-        const result = await pool.query<IUser>(
-            'SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL',
-            [userId]
-        );
-        if (result.rows.length === 0) {
+        const currentHash = await UserModel.getPasswordHash(userId);
+        if (!currentHash) {
             throw new ApiError(404, 'Người dùng không tồn tại');
         }
 
@@ -154,7 +128,7 @@ export class UserService {
             throw new ApiError(400, 'Mật khẩu mới không được trùng với mật khẩu cũ');
         }
 
-        const isMatch = await bcrypt.compare(data.old_password, result.rows[0].password_hash || '');
+        const isMatch = await bcrypt.compare(data.old_password, currentHash);
         if (!isMatch) {
             throw new ApiError(400, 'Mật khẩu cũ không chính xác');
         }
@@ -162,7 +136,7 @@ export class UserService {
         const salt = await bcrypt.genSalt(10);
         const newHash = await bcrypt.hash(data.new_password, salt);
 
-        await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
+        await UserModel.updatePassword(userId, newHash);
     }
 
     // 5. Gửi email xác thực cho người dùng hiện tại (dành cho User tự gửi từ profile)
@@ -171,16 +145,11 @@ export class UserService {
             throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ');
         }
 
-        const userResult = await pool.query<IUser>(
-            'SELECT id, email, full_name, email_verified_at, status FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-            [userId.trim()]
-        );
-
-        if (userResult.rows.length === 0) {
+        const user = await UserModel.findBasicById(userId.trim());
+        if (!user) {
             throw new ApiError(404, 'Không tìm thấy người dùng');
         }
 
-        const user = userResult.rows[0];
         if (user.email_verified_at) {
             throw new ApiError(400, 'Tài khoản này đã được xác thực email trước đó rồi');
         }
@@ -204,27 +173,15 @@ export class UserService {
             throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
         }
 
-        const result = await pool.query<IUserResponse>(
-            `UPDATE users 
-             SET email_verified_at = COALESCE(email_verified_at, NOW()),
-                 status = CASE WHEN status = 'PENDING' THEN 'ACTIVE' ELSE status END,
-                 updated_at = NOW()
-             WHERE id = $1 AND deleted_at IS NULL
-             RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
-            [targetUserId.trim()]
-        );
-
-        if (result.rows.length === 0) {
+        const updatedUser = await UserModel.verifyEmail(targetUserId.trim());
+        if (!updatedUser) {
             throw new ApiError(404, 'Không tìm thấy người dùng để kích hoạt xác thực email');
         }
 
-        // Cập nhật trạng thái các token xác thực đang chờ của người dùng này
-        await pool.query(
-            'UPDATE email_verification_tokens SET verified_at = NOW() WHERE user_id = $1 AND verified_at IS NULL',
-            [targetUserId.trim()]
-        );
+        // Cập nhật trạng thái các token xác thực đang chờ của người dùng này qua AuthModel
+        await AuthModel.markAllTokensVerifiedForUser(targetUserId.trim());
 
-        return result.rows[0];
+        return updatedUser;
     }
 
     // 7. Cập nhật trạng thái tài khoản (PENDING, ACTIVE, INACTIVE, SUSPENDED)
@@ -237,20 +194,12 @@ export class UserService {
             throw new ApiError(400, `Trạng thái tài khoản không hợp lệ: ${status}`);
         }
 
-        const result = await pool.query<IUserResponse>(
-            `UPDATE users 
-             SET status = $1,
-                 updated_at = NOW()
-             WHERE id = $2 AND deleted_at IS NULL
-             RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
-            [status, userId.trim()]
-        );
-
-        if (result.rows.length === 0) {
+        const updatedUser = await UserModel.updateStatus(userId.trim(), status);
+        if (!updatedUser) {
             throw new ApiError(404, 'Không tìm thấy người dùng để cập nhật trạng thái');
         }
 
-        return result.rows[0];
+        return updatedUser;
     }
 
     // 8. Xóa mềm tài khoản người dùng (soft delete)
@@ -259,14 +208,9 @@ export class UserService {
             throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
         }
 
-        const result = await pool.query(
-            'UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL',
-            [userId.trim()]
-        );
-
-        if (result.rowCount === 0) {
+        const affected = await UserModel.softDelete(userId.trim());
+        if (affected === 0) {
             throw new ApiError(404, 'Không tìm thấy người dùng để xóa');
         }
     }
 }
-

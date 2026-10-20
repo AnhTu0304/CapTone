@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
-import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
-import { IJwtPayload } from '../models/user.model';
+import { IJwtPayload, UserModel } from '../models/user.model';
 
 /**
  * Middleware kiểm tra và giải mã JWT Access Token
@@ -46,18 +45,13 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
   }
 
-  // 2. Kiểm tra động trạng thái mới nhất từ cơ sở dữ liệu (SEC-08)
+  // 2. Kiểm tra động trạng thái mới nhất từ cơ sở dữ liệu qua UserModel
   try {
-    const userRes = await pool.query<{ id: string; status: string; deleted_at: Date | null }>(
-      'SELECT id, status, deleted_at FROM users WHERE id = $1 LIMIT 1',
-      [decoded.id]
-    );
+    const dbUser = await UserModel.findAuthStatus(decoded.id);
 
-    if (userRes.rows.length === 0) {
+    if (!dbUser) {
       return next(new ApiError(401, 'Người dùng không tồn tại hoặc đã bị xóa khỏi hệ thống'));
     }
-
-    const dbUser = userRes.rows[0];
 
     // Tài khoản đã bị xóa mềm
     if (dbUser.deleted_at) {

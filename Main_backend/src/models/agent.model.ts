@@ -106,4 +106,16 @@ export class AgentModel {
       [agentId, status, version, metadata ? JSON.stringify(metadata) : null]
     );
   }
+
+  /**
+   * List all registered agents
+   */
+  public static async listAll() {
+    const result = await pool.query(
+      `SELECT id, name, agent_uid, cluster_id, status, last_seen_at
+       FROM agents
+       ORDER BY last_seen_at DESC`
+    );
+    return result.rows;
+  }
 }

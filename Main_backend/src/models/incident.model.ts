@@ -195,4 +195,19 @@ export class IncidentModel {
     const res = await pool.query(query, [status, id]);
     return res.rows[0] || null;
   }
+
+  /**
+   * Get recent incidents
+   */
+  public static async getRecent(limit: number = 10, client?: PoolClient) {
+    const db = client || pool;
+    const res = await db.query(
+      `SELECT id, title, severity, incident_type, description, status, detected_at, created_at
+       FROM incidents
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.rows;
+  }
 }

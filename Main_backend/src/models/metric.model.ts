@@ -171,4 +171,18 @@ export class MetricModel {
 
     return { points, latestTimeBucket };
   }
+
+  /**
+   * Get raw recent metrics for telemetry overview
+   */
+  public static async getRecentRaw(limit: number = 10) {
+    const res = await pool.query(
+      `SELECT id, service_id, pod_id, cpu, ram, disk, request_rate, latency, http_5xx_rate, pod_restart_count, replica_count, collected_at
+       FROM agent_metrics
+       ORDER BY collected_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.rows;
+  }
 }
