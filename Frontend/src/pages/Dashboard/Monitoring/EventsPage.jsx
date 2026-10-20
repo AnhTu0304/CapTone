@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { telemetryService } from '../../../services/telemetryService';
 import React, { useState, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import {
@@ -106,9 +108,42 @@ export const EventsPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
   const [selectedType, setSelectedType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveEvents, setLiveEvents] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    const pollEvents = async () => {
+      try {
+        const data = await telemetryService.getLiveSummary('sme-order-service');
+        if (!active || !data || !data.events || data.events.length === 0) return;
+
+        const mapped = data.events.map((e, idx) => ({
+          id: e.id || `live-ev-${idx}`,
+          type: e.event_type || 'Normal',
+          reason: e.reason || 'Event',
+          object: e.metadata?.pod_name ? `Pod/${e.metadata.pod_name}` : 'Pod/sme-order-service',
+          ns: 'default',
+          message: e.message || '',
+          age: e.last_seen_at ? new Date(e.last_seen_at).toLocaleTimeString('vi-VN') : 'Vừa xong',
+          count: e.count || 1,
+        }));
+        setLiveEvents(mapped);
+      } catch (err) {
+        console.warn('Events poll error:', err);
+      }
+    };
+
+    pollEvents();
+    const interval = setInterval(pollEvents, 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const filteredEvents = useMemo(() => {
-    return K8S_EVENTS.filter((ev) => {
+    const list = (liveEvents && liveEvents.length > 0) ? liveEvents : K8S_EVENTS;
+    return list.filter((ev) => {
       const matchType = selectedType === 'all' || ev.type === selectedType;
       const matchQuery =
         !searchQuery ||

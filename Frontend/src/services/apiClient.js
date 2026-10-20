@@ -8,7 +8,7 @@
  * 3. Hỗ trợ cơ chế `executeWithFallback`: gọi API thật khi có endpoint, tự động dự phòng mock fixture khi môi trường dev/chưa nối backend.
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api/v1';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
 
 /**
  * Lấy Bearer Token xác thực hiện hành (nếu có)
@@ -20,6 +20,7 @@ export const getAuthToken = () => {
       sessionStorage.getItem('admin_access_token') ||
       localStorage.getItem('admin_access_token') ||
       localStorage.getItem('selfheal_auth_token') ||
+      localStorage.getItem('token') ||
       null
     );
   } catch (e) {

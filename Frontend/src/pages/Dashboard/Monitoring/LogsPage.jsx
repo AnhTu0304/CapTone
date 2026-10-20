@@ -1,3 +1,4 @@
+import { telemetryService } from '../../../services/telemetryService';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import {
@@ -45,26 +46,41 @@ export const LogsPage = () => {
     }
   }, [logs, autoScroll]);
 
-  // Simulated live log ticker
+  // Real-time live log polling from Kubernetes Agent via Main Backend
   useEffect(() => {
     if (!isLive) return;
+    let active = true;
 
-    const interval = setInterval(() => {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + Math.floor(Math.random() * 900 + 100);
-      const newLog = {
-        id: Date.now(),
-        timestamp: timeStr,
-        level: Math.random() > 0.85 ? 'WARN' : 'INFO',
-        ns: 'production',
-        pod: 'api-gateway-55c8b-mk42p',
-        msg: `Telemetry heartbeat sync: latency ${Math.floor(Math.random() * 8 + 2)}ms & processed batch of 48 requests`,
-      };
+    const pollLogs = async () => {
+      try {
+        const data = await telemetryService.getLiveSummary('sme-order-service');
+        if (!active || !data || !data.logs || data.logs.length === 0) return;
 
-      setLogs((prev) => [...prev.slice(-40), newLog]);
-    }, 4000);
+        const liveLogs = data.logs.map((l, idx) => {
+          const time = l.occurred_at
+            ? new Date(l.occurred_at).toLocaleTimeString('vi-VN')
+            : new Date().toLocaleTimeString('vi-VN');
+          return {
+            id: l.id || `live-log-${idx}`,
+            timestamp: time,
+            level: (l.level || 'INFO').toUpperCase(),
+            ns: 'default',
+            pod: l.metadata?.pod_name || (l.service_id ? `${l.service_id}-k8s` : 'sme-order-service'),
+            msg: l.message || '',
+          };
+        });
+        setLogs(liveLogs.reverse());
+      } catch (err) {
+        console.warn('Realtime log poll error:', err);
+      }
+    };
 
-    return () => clearInterval(interval);
+    pollLogs();
+    const interval = setInterval(pollLogs, 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [isLive]);
 
   // Filter logs

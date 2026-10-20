@@ -62,6 +62,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'GIÁM SÁT',
       items: [
+        { name: 'Live Monitor (Realtime)', path: '/dashboard/monitoring/realtime', icon: Activity, badge: 'LIVE', badgeType: 'mint' },
         { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart },
         { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },
         { name: 'Sự kiện K8s', path: '/dashboard/monitoring/events', icon: Activity },
