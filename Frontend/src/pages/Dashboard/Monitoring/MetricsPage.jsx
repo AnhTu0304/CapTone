@@ -39,49 +39,53 @@ export const MetricsPage = () => {
   const [liveWorkloads, setLiveWorkloads] = useState([]);
   const [liveSummary, setLiveSummary] = useState(null);
 
-  // Poll live data every 3 seconds from Main Backend
+  // Live WebSocket subscription with REST initial load
   useEffect(() => {
-    let active = true;
-    const fetchRealtime = async () => {
-      try {
-        const data = await telemetryService.getLiveSummary('sme-order-service');
-        if (!active || !data) return;
-        setLiveSummary(data);
+    const handleSummaryData = (data) => {
+      if (!data) return;
+      setLiveSummary(data);
 
-        if (data.sequence && data.sequence.length > 0) {
-          const formattedPoints = data.sequence.map((pt, idx) => {
-            const timeObj = new Date(Date.now() - (data.sequence.length - 1 - idx) * 5000);
-            return {
-              time: timeObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              fullTime: timeObj.toLocaleTimeString('vi-VN'),
-              cpu: Math.round(pt.cpu),
-              ram: Math.round(pt.ram),
-            };
-          });
-          setLiveChartPoints(formattedPoints);
-        }
+      if (data.sequence && data.sequence.length > 0) {
+        const formattedPoints = data.sequence.map((pt, idx) => {
+          const timeObj = new Date(Date.now() - (data.sequence.length - 1 - idx) * 5000);
+          return {
+            time: timeObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            fullTime: timeObj.toLocaleTimeString('vi-VN'),
+            cpu: Math.round(pt.cpu),
+            ram: Math.round(pt.ram),
+          };
+        });
+        setLiveChartPoints(formattedPoints);
+      }
 
-        if (data.raw_metrics && data.raw_metrics.length > 0) {
-          const pods = data.raw_metrics.slice(0, 6).map((m, idx) => ({
-            pod: `${m.service_id}-${(m.pod_id || `pod-${idx}`).substring(0, 10)}`,
-            ns: 'default',
-            cpu: `${Math.round(m.cpu * 10)}m`,
-            mem: `${Math.round(m.ram)} MiB`,
-            restarts: m.pod_restart_count || 0,
-            status: 'Running',
-          }));
-          setLiveWorkloads(pods);
-        }
-      } catch (err) {
-        console.warn('Realtime poll error:', err);
+      if (data.raw_metrics && data.raw_metrics.length > 0) {
+        const pods = data.raw_metrics.slice(0, 6).map((m, idx) => ({
+          pod: `${m.service_id}-${(m.pod_id || `pod-${idx}`).substring(0, 10)}`,
+          ns: 'default',
+          cpu: `${Math.round(m.cpu * 10)}m`,
+          mem: `${Math.round(m.ram)} MiB`,
+          restarts: m.pod_restart_count || 0,
+          status: 'Running',
+        }));
+        setLiveWorkloads(pods);
       }
     };
 
-    fetchRealtime();
-    const timer = setInterval(fetchRealtime, 3000);
+    // 1. Initial REST fetch
+    telemetryService.getLiveSummary('sme-order-service').then(handleSummaryData);
+
+    // 2. Persistent WebSocket stream
+    const unsubscribe = telemetryService.subscribeWebSocket(
+      'sme-order-service',
+      (msg) => {
+        if (msg.type === 'initial_state' || msg.type === 'live_pulse' || msg.type === 'live_summary') {
+          handleSummaryData(msg.data);
+        }
+      }
+    );
+
     return () => {
-      active = false;
-      clearInterval(timer);
+      unsubscribe();
     };
   }, []);
 

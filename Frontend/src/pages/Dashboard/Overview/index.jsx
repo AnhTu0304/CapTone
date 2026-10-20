@@ -37,37 +37,65 @@ export const OverviewPage = () => {
 
   const [liveChartData, setLiveChartData] = useState([]);
   const [liveSummary, setLiveSummary] = useState(null);
+  const [isWsConnected, setIsWsConnected] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    const poll = async () => {
-      try {
-        const data = await telemetryService.getLiveSummary('sme-order-service');
-        if (!active || !data) return;
-        setLiveSummary(data);
-
-        if (data.sequence && data.sequence.length > 0) {
-          const points = data.sequence.map((pt, idx) => {
-            const timeObj = new Date(Date.now() - (data.sequence.length - 1 - idx) * 5000);
-            return {
-              time: timeObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              fullTime: timeObj.toLocaleTimeString('vi-VN'),
-              cpu: Math.round(pt.cpu),
-              ram: Math.round(pt.ram),
-            };
-          });
-          setLiveChartData(points);
-        }
-      } catch (e) {
-        console.warn('Overview poll error:', e);
-      }
+    const updateSequenceChart = (sequence) => {
+      if (!sequence || sequence.length === 0) return;
+      const points = sequence.map((pt, idx) => {
+        const timeObj = new Date(Date.now() - (sequence.length - 1 - idx) * 5000);
+        return {
+          time: timeObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          fullTime: timeObj.toLocaleTimeString('vi-VN'),
+          cpu: Math.round(pt.cpu),
+          ram: Math.round(pt.ram),
+        };
+      });
+      setLiveChartData(points);
     };
 
-    poll();
-    const interval = setInterval(poll, 3000);
+    // 1. Initial REST fetch for instant paint without waiting for socket
+    telemetryService.getLiveSummary('sme-order-service').then((data) => {
+      if (data) {
+        setLiveSummary(data);
+        updateSequenceChart(data.sequence);
+      }
+    });
+
+    // 2. Open Persistent WebSocket connection for 100% Realtime Push
+    const unsubscribe = telemetryService.subscribeWebSocket(
+      'sme-order-service',
+      (msg) => {
+        if (msg.type === 'initial_state' || msg.type === 'live_pulse' || msg.type === 'live_summary') {
+          const data = msg.data;
+          setLiveSummary(data);
+          updateSequenceChart(data.sequence);
+        } else if (msg.type === 'metrics') {
+          const m = msg.data;
+          setLiveSummary((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              latest_point: {
+                ...prev.latest_point,
+                cpu: m.cpu,
+                ram: m.ram,
+                disk: m.disk ?? prev.latest_point?.disk,
+                http_5xx_rate: m.http_5xx_rate,
+                replica_count: m.replica_count ?? prev.latest_point?.replica_count,
+                pod_restart_count: m.pod_restart_count ?? prev.latest_point?.pod_restart_count,
+              },
+            };
+          });
+        }
+      },
+      (connected) => {
+        setIsWsConnected(connected);
+      }
+    );
+
     return () => {
-      active = false;
-      clearInterval(interval);
+      unsubscribe();
     };
   }, []);
 
@@ -237,7 +265,10 @@ export const OverviewPage = () => {
           <div>
             <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>Kubernetes Agent Đang Hoạt Động (Production K8s SME Agent - ONLINE)</span>
-              <span style={{ fontSize: '0.6875rem', backgroundColor: '#0284c7', color: '#fff', padding: '2px 8px', borderRadius: '9999px' }}>Realtime WebSocket</span>
+              <span style={{ fontSize: '0.6875rem', backgroundColor: isWsConnected ? '#059669' : '#d97706', color: '#fff', padding: '2px 8px', borderRadius: '9999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#fff', display: 'inline-block' }} />
+                <span>{isWsConnected ? 'WebSocket Đang Kết Nối (Push 100%)' : 'Đang kết nối WebSocket...'}</span>
+              </span>
             </div>
             <p style={{ fontSize: '0.8125rem', color: '#94a3b8', margin: '2px 0 0 0' }}>
               Đang truyền luồng viễn trắc (CPU, RAM, Logs, K8s Events) trực tiếp từ Pods trong cụm Minikube về Backend.
@@ -245,7 +276,7 @@ export const OverviewPage = () => {
           </div>
         </div>
         <button
-          onClick={() => onNavigate ? onNavigate('/dashboard/monitoring/realtime') : (window.location.href = '/dashboard/monitoring/realtime')}
+          onClick={() => onNavigate ? onNavigate('/dashboard/monitoring/metrics') : (window.location.href = '/dashboard/monitoring/metrics')}
           style={{
             padding: '8px 16px',
             backgroundColor: '#3b82f6',
@@ -260,7 +291,7 @@ export const OverviewPage = () => {
             gap: '6px',
           }}
         >
-          <span>Mở Live Realtime Monitor</span>
+          <span>Xem Biến Thiên Metrics</span>
           <ArrowUpRight size={14} />
         </button>
       </div>

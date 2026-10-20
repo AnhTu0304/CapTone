@@ -105,4 +105,72 @@ export const telemetryService = {
       return null;
     }
   },
+
+  /**
+   * Subscribe to live WebSocket telemetry stream (100% Push Protocol)
+   * @param {string} serviceId
+   * @param {Function} onMessage - Callback receives parsed WebSocket JSON messages
+   * @param {Function} onStatusChange - Callback receives (isConnected: boolean)
+   * @returns {Function} cleanup / unsubscribe function
+   */
+  subscribeWebSocket(serviceId = 'sme-order-service', onMessage, onStatusChange) {
+    let ws = null;
+    let reconnectTimeout = null;
+    let isClosedExplicitly = false;
+
+    const connect = () => {
+      if (isClosedExplicitly) return;
+      try {
+        const isSecure = window.location.protocol === 'https:';
+        const protocol = isSecure ? 'wss:' : 'ws:';
+        // Connect to port 5000 if running locally on port 3000, else window.location.host
+        const host = window.location.hostname === 'localhost' ? 'localhost:5000' : window.location.host;
+        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}`;
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          console.log('🟢 [TelemetryWS] Connected to Live WebSocket Stream:', wsUrl);
+          if (onStatusChange) onStatusChange(true);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (onMessage) onMessage(payload);
+          } catch (e) {
+            console.warn('[TelemetryWS] Parse error:', e);
+          }
+        };
+
+        ws.onclose = () => {
+          if (onStatusChange) onStatusChange(false);
+          if (!isClosedExplicitly) {
+            console.log('🟡 [TelemetryWS] Connection closed. Reconnecting in 2.5s...');
+            reconnectTimeout = setTimeout(connect, 2500);
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.warn('[TelemetryWS] Socket error:', err);
+          ws?.close();
+        };
+      } catch (e) {
+        console.warn('[TelemetryWS] Init error:', e);
+        if (!isClosedExplicitly) {
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      isClosedExplicitly = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
+    };
+  },
 };

@@ -111,33 +111,51 @@ export const EventsPage = () => {
   const [liveEvents, setLiveEvents] = useState([]);
 
   useEffect(() => {
-    let active = true;
-    const pollEvents = async () => {
-      try {
-        const data = await telemetryService.getLiveSummary('sme-order-service');
-        if (!active || !data || !data.events || data.events.length === 0) return;
-
-        const mapped = data.events.map((e, idx) => ({
-          id: e.id || `live-ev-${idx}`,
-          type: e.event_type || 'Normal',
-          reason: e.reason || 'Event',
-          object: e.metadata?.pod_name ? `Pod/${e.metadata.pod_name}` : 'Pod/sme-order-service',
-          ns: 'default',
-          message: e.message || '',
-          age: e.last_seen_at ? new Date(e.last_seen_at).toLocaleTimeString('vi-VN') : 'Vừa xong',
-          count: e.count || 1,
-        }));
-        setLiveEvents(mapped);
-      } catch (err) {
-        console.warn('Events poll error:', err);
-      }
+    const handleEventsData = (eventsList) => {
+      if (!eventsList || eventsList.length === 0) return;
+      const mapped = eventsList.map((e, idx) => ({
+        id: e.id || `live-ev-${idx}`,
+        type: e.event_type || 'Normal',
+        reason: e.reason || 'Event',
+        object: e.metadata?.pod_name ? `Pod/${e.metadata.pod_name}` : 'Pod/sme-order-service',
+        ns: 'default',
+        message: e.message || '',
+        age: e.last_seen_at ? new Date(e.last_seen_at).toLocaleTimeString('vi-VN') : 'Vừa xong',
+        count: e.count || 1,
+      }));
+      setLiveEvents(mapped);
     };
 
-    pollEvents();
-    const interval = setInterval(pollEvents, 3000);
+    // 1. Initial REST fetch
+    telemetryService.getLiveSummary('sme-order-service').then((data) => {
+      if (data?.events) handleEventsData(data.events);
+    });
+
+    // 2. Persistent WebSocket stream
+    const unsubscribe = telemetryService.subscribeWebSocket(
+      'sme-order-service',
+      (msg) => {
+        if (msg.type === 'initial_state' || msg.type === 'live_pulse') {
+          handleEventsData(msg.data?.events);
+        } else if (msg.type === 'k8s_event') {
+          const e = msg.data;
+          const newEvt = {
+            id: e.id || `ws-ev-${Date.now()}`,
+            type: e.event?.type || e.event_type || 'Normal',
+            reason: e.event?.reason || e.reason || 'Event',
+            object: e.metadata?.pod_name ? `Pod/${e.metadata.pod_name}` : 'Pod/sme-order-service',
+            ns: 'default',
+            message: e.event?.message || e.message || '',
+            age: 'Vừa xong',
+            count: e.count || 1,
+          };
+          setLiveEvents((prev) => [newEvt, ...prev.slice(0, 40)]);
+        }
+      }
+    );
+
     return () => {
-      active = false;
-      clearInterval(interval);
+      unsubscribe();
     };
   }, []);
 

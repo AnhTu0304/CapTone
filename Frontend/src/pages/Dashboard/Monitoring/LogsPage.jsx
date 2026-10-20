@@ -46,40 +46,60 @@ export const LogsPage = () => {
     }
   }, [logs, autoScroll]);
 
-  // Real-time live log polling from Kubernetes Agent via Main Backend
+  // Real-time live log WebSocket stream from Kubernetes Agent via Main Backend
   useEffect(() => {
     if (!isLive) return;
-    let active = true;
 
-    const pollLogs = async () => {
-      try {
-        const data = await telemetryService.getLiveSummary('sme-order-service');
-        if (!active || !data || !data.logs || data.logs.length === 0) return;
+    const syncFullLogs = (logsList) => {
+      if (!logsList || logsList.length === 0) return;
+      const liveLogs = logsList.map((l, idx) => {
+        const time = l.occurred_at
+          ? new Date(l.occurred_at).toLocaleTimeString('vi-VN')
+          : new Date().toLocaleTimeString('vi-VN');
+        return {
+          id: l.id || `live-log-${idx}`,
+          timestamp: time,
+          level: (l.level || 'INFO').toUpperCase(),
+          ns: 'default',
+          pod: l.metadata?.pod_name || (l.service_id ? `${l.service_id}-k8s` : 'sme-order-service'),
+          msg: l.message || '',
+        };
+      });
+      setLogs(liveLogs.reverse());
+    };
 
-        const liveLogs = data.logs.map((l, idx) => {
+    // 1. Initial REST fetch
+    telemetryService.getLiveSummary('sme-order-service').then((data) => {
+      if (data?.logs) syncFullLogs(data.logs);
+    });
+
+    // 2. Persistent WebSocket stream
+    const unsubscribe = telemetryService.subscribeWebSocket(
+      'sme-order-service',
+      (msg) => {
+        if (msg.type === 'initial_state' || msg.type === 'live_pulse') {
+          syncFullLogs(msg.data?.logs);
+        } else if (msg.type === 'log') {
+          // Instant individual log push
+          const l = msg.data;
           const time = l.occurred_at
             ? new Date(l.occurred_at).toLocaleTimeString('vi-VN')
             : new Date().toLocaleTimeString('vi-VN');
-          return {
-            id: l.id || `live-log-${idx}`,
+          const newEntry = {
+            id: l.id || `ws-log-${Date.now()}`,
             timestamp: time,
             level: (l.level || 'INFO').toUpperCase(),
             ns: 'default',
             pod: l.metadata?.pod_name || (l.service_id ? `${l.service_id}-k8s` : 'sme-order-service'),
             msg: l.message || '',
           };
-        });
-        setLogs(liveLogs.reverse());
-      } catch (err) {
-        console.warn('Realtime log poll error:', err);
+          setLogs((prev) => [...prev.slice(-100), newEntry]);
+        }
       }
-    };
+    );
 
-    pollLogs();
-    const interval = setInterval(pollLogs, 3000);
     return () => {
-      active = false;
-      clearInterval(interval);
+      unsubscribe();
     };
   }, [isLive]);
 

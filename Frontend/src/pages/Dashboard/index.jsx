@@ -5,7 +5,6 @@ import AgentsPage from './Agents';
 import InfrastructurePage from './Infrastructure';
 import WorkloadsPage from './Workloads';
 import MetricsPage from './Monitoring/MetricsPage';
-import RealtimeMonitorPage from './Monitoring/RealtimeMonitorPage';
 import LogsPage from './Monitoring/LogsPage';
 import EventsPage from './Monitoring/EventsPage';
 import PredictionsPage from './AI/PredictionsPage';
@@ -81,9 +80,6 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     }
 
     // 4. Monitoring
-    if (path === '/dashboard/monitoring/realtime') {
-      return <RealtimeMonitorPage />;
-    }
     if (path === '/dashboard/monitoring/metrics') {
       return <MetricsPage />;
     }
