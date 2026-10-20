@@ -97,4 +97,78 @@ export class MetricModel {
     points.reverse();
     return points;
   }
+
+  /**
+   * Fetch a distinct non-overlapping batch of fresh time-bucket points strictly after a given timestamp
+   * (Tumbling batch of 12 completely new points)
+   */
+  public static async getFreshBatchByService(
+    serviceId: string,
+    bucketSeconds: number = 5,
+    afterTimestamp?: Date | null,
+    limit: number = 12
+  ): Promise<{ points: GRUMetricPoint[]; latestTimeBucket?: Date }> {
+    let query: string;
+    let params: any[];
+
+    if (afterTimestamp) {
+      query = `
+        SELECT 
+          to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
+          ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
+          ROUND(COALESCE(MAX(ram), 0)::numeric, 2)::float as ram,
+          ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
+          ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
+          ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
+          ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
+          COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
+          GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
+        FROM agent_metrics
+        WHERE service_id = $1 AND collected_at > $3
+        GROUP BY time_bucket
+        ORDER BY time_bucket ASC
+        LIMIT $4;
+      `;
+      params = [serviceId, bucketSeconds, afterTimestamp, limit];
+    } else {
+      query = `
+        WITH recent_buckets AS (
+          SELECT 
+            to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
+            ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
+            ROUND(COALESCE(MAX(ram), 0)::numeric, 2)::float as ram,
+            ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
+            ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
+            ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
+            ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
+            COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
+            GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
+          FROM agent_metrics
+          WHERE service_id = $1
+          GROUP BY time_bucket
+          ORDER BY time_bucket DESC
+          LIMIT $3
+        )
+        SELECT * FROM recent_buckets ORDER BY time_bucket ASC;
+      `;
+      params = [serviceId, bucketSeconds, limit];
+    }
+
+    const res = await pool.query(query, params);
+    const points: GRUMetricPoint[] = res.rows.map((row) => ({
+      cpu: Number(row.cpu),
+      ram: Number(row.ram),
+      disk: Number(row.disk),
+      request_rate: Number(row.request_rate),
+      latency: Number(row.latency),
+      http_5xx_rate: Number(row.http_5xx_rate),
+      pod_restart_count: Number(row.pod_restart_count),
+      replica_count: Number(row.replica_count),
+    }));
+
+    const latestTimeBucket =
+      res.rows.length > 0 ? new Date(res.rows[res.rows.length - 1].time_bucket) : undefined;
+
+    return { points, latestTimeBucket };
+  }
 }

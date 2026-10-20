@@ -136,6 +136,7 @@ export class TelemetryAggregatorService {
       windowMinutes?: number;
       forceRca?: boolean;
       autoTriggerRca?: boolean;
+      providedSequence?: GRUMetricPoint[];
     }
   ): Promise<ServiceEvaluationResult> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -143,12 +144,15 @@ export class TelemetryAggregatorService {
     const forceRca = options?.forceRca ?? false;
     const autoTriggerRca = options?.autoTriggerRca ?? true;
 
-    // 1. Fetch 12-timestep sequence
-    const sequence = await this.getServiceMetricsSequence(serviceId, {
-      bucketSeconds,
-      limit: 12,
-      fillPadding: true,
-    });
+    // 1. Fetch 12-timestep sequence (or use provided 12-point fresh tumbling batch)
+    const sequence =
+      options?.providedSequence && options.providedSequence.length >= 12
+        ? options.providedSequence
+        : await this.getServiceMetricsSequence(serviceId, {
+            bucketSeconds,
+            limit: 12,
+            fillPadding: true,
+          });
 
     if (sequence.length < 12) {
       throw ApiError.badRequest(
@@ -208,7 +212,6 @@ export class TelemetryAggregatorService {
 
     if (rcaTriggered && autoTriggerRca) {
       // Determine primary risk type for RCA:
-      // Real-time critical anomalies (e.g. MEMORY_PRESSURE / OOM) take precedence over statistical forecasts
       let riskType: any = undefined;
       let confidence = 0.90;
 
@@ -227,7 +230,11 @@ export class TelemetryAggregatorService {
       } else if (ruleEvaluation.anomalies.includes('TRAFFIC_SURGE')) {
         riskType = 'TRAFFIC_OVERLOAD';
         confidence = 0.85;
-      } else if (gruPrediction?.primary_risk && gruPrediction.primary_risk !== 'NONE') {
+      } else if (
+        gruPrediction?.primary_risk &&
+        gruPrediction.primary_risk !== 'NONE' &&
+        gruPrediction.primary_risk !== 'NORMAL'
+      ) {
         riskType = gruPrediction.primary_risk;
         confidence = gruPrediction.confidence_score;
       } else {
