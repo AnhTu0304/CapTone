@@ -35,6 +35,7 @@ RUN npm ci --omit=dev || npm install --omit=dev
 
 # Copy compiled code from builder
 COPY --from=builder /app/dist ./dist
+COPY public ./public
 
 # Create a non-root user for security
 USER node

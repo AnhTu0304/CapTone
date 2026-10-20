@@ -136,4 +136,178 @@ export class AiPredictionModel {
 
     await client.query(insertInputsSql, inputValues);
   }
+
+  /**
+   * List predictions with filtering and pagination
+   */
+  public static async findMany(params: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+    prediction_type?: string;
+  }): Promise<{ items: any[]; total: number }> {
+    const limit = params.limit ?? 20;
+    const offset = params.offset ?? 0;
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (params.status) {
+      conditions.push(`p.status = $${idx++}`);
+      values.push(params.status);
+    }
+    if (params.prediction_type) {
+      conditions.push(`p.prediction_type ILIKE $${idx++}`);
+      values.push(`%${params.prediction_type}%`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countSql = `SELECT count(*) FROM ai_predictions p ${whereClause};`;
+    const countRes = await pool.query(countSql, values);
+    const total = parseInt(countRes.rows[0].count, 10);
+
+    const query = `
+      SELECT 
+        p.id,
+        p.model_id,
+        m.name AS model_name,
+        m.version AS model_version,
+        p.environment_id,
+        e.name AS environment_name,
+        p.cluster_id,
+        c.name AS cluster_name,
+        p.workload_id,
+        w.name AS workload_name,
+        p.prediction_type,
+        p.risk_score,
+        p.confidence_score,
+        p.prediction_horizon_minutes,
+        p.status,
+        p.predicted_at,
+        p.expires_at,
+        p.created_at
+      FROM ai_predictions p
+      LEFT JOIN ai_models m ON m.id = p.model_id
+      LEFT JOIN environments e ON e.id = p.environment_id
+      LEFT JOIN clusters c ON c.id = p.cluster_id
+      LEFT JOIN workloads w ON w.id = p.workload_id
+      ${whereClause}
+      ORDER BY p.predicted_at DESC
+      LIMIT $${idx++} OFFSET $${idx++};
+    `;
+
+    values.push(limit, offset);
+    const res = await pool.query(query, values);
+
+    return { items: res.rows, total };
+  }
+
+  /**
+   * Find prediction by ID
+   */
+  public static async findById(id: string): Promise<any | null> {
+    const query = `
+      SELECT 
+        p.id,
+        p.model_id,
+        m.name AS model_name,
+        m.version AS model_version,
+        p.environment_id,
+        e.name AS environment_name,
+        p.cluster_id,
+        c.name AS cluster_name,
+        p.workload_id,
+        w.name AS workload_name,
+        p.prediction_type,
+        p.risk_score,
+        p.confidence_score,
+        p.prediction_horizon_minutes,
+        p.status,
+        p.predicted_at,
+        p.expires_at,
+        p.created_at
+      FROM ai_predictions p
+      LEFT JOIN ai_models m ON m.id = p.model_id
+      LEFT JOIN environments e ON e.id = p.environment_id
+      LEFT JOIN clusters c ON c.id = p.cluster_id
+      LEFT JOIN workloads w ON w.id = p.workload_id
+      WHERE p.id = $1
+      LIMIT 1;
+    `;
+    const res = await pool.query(query, [id]);
+    return res.rows[0] || null;
+  }
+
+  /**
+   * Get inputs sequence for a prediction
+   */
+  public static async findInputsByPredictionId(predictionId: string): Promise<any[]> {
+    const query = `
+      SELECT 
+        id,
+        prediction_id,
+        metric_name,
+        metric_value,
+        unit,
+        source,
+        collected_at
+      FROM prediction_inputs
+      WHERE prediction_id = $1
+      ORDER BY collected_at ASC, metric_name ASC;
+    `;
+    const res = await pool.query(query, [predictionId]);
+    return res.rows;
+  }
+
+  /**
+   * Aggregated statistics of predictions
+   */
+  public static async getPredictionStats(): Promise<{
+    total: number;
+    by_type: Record<string, number>;
+    avg_confidence: number;
+  }> {
+    const totalRes = await pool.query('SELECT count(*), AVG(confidence_score) as avg_conf FROM ai_predictions;');
+    const byTypeRes = await pool.query(`
+      SELECT prediction_type, count(*) as count 
+      FROM ai_predictions 
+      GROUP BY prediction_type 
+      ORDER BY count DESC;
+    `);
+
+    const byType: Record<string, number> = {};
+    for (const row of byTypeRes.rows) {
+      byType[row.prediction_type] = parseInt(row.count, 10);
+    }
+
+    return {
+      total: parseInt(totalRes.rows[0]?.count || '0', 10),
+      by_type: byType,
+      avg_confidence: parseFloat(totalRes.rows[0]?.avg_conf || '0'),
+    };
+  }
+
+  /**
+   * List all registered AI models
+   */
+  public static async findAllModels(): Promise<any[]> {
+    const query = `
+      SELECT 
+        id,
+        name,
+        version,
+        model_type,
+        framework,
+        status,
+        description,
+        training_dataset,
+        created_at,
+        updated_at
+      FROM ai_models
+      ORDER BY created_at DESC;
+    `;
+    const res = await pool.query(query);
+    return res.rows;
+  }
 }

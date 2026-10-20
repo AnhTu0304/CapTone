@@ -160,6 +160,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
         switch (msg.type) {
           case 'metrics': {
             const saved = await AgentService.storeMetrics(ws.agent, msg.data);
+            console.log(`📊 [REALTIME METRICS] [${ws.agent.name}] Service: ${msg.data.service_id} | Pod: ${msg.data.pod_id || "all"} | CPU: ${msg.data.cpu}% | RAM: ${msg.data.ram}MB | Req: ${msg.data.request_rate}/s | Latency: ${msg.data.latency}ms`);
             ws.send(
               JSON.stringify({
                 status: 'ack',
@@ -174,6 +175,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
           case 'log': {
             const saved = await AgentService.storeLog(ws.agent, msg.data);
+            console.log(`📝 [REALTIME LOG] [${ws.agent.name}] [${msg.data.level}] ${msg.data.message.slice(0, 110)}`);
             ws.send(
               JSON.stringify({
                 status: 'ack',
@@ -188,6 +190,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
           case 'k8s_event': {
             const saved = await AgentService.storeK8sEvent(ws.agent, msg.data);
+            console.log(`⚡ [REALTIME EVENT] [${ws.agent.name}] [${msg.data.event.type}] ${msg.data.event.reason}: ${msg.data.event.message.slice(0, 110)}`);
             ws.send(
               JSON.stringify({
                 status: 'ack',
@@ -255,3 +258,4 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
   console.log('📡 Agent WebSocket endpoint initialized at WS /api/v1/agent/connect');
   return wss;
 }
+

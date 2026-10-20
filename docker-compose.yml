@@ -101,28 +101,52 @@ services:
       - captone-network
 
   # ==========================================
-  # Telemetry Agent: Kubernetes SelfHeal Daemon
+  # Installer Service: FastAPI Agent Distribution
   # ==========================================
-  selfheal-agent:
+  installer-service:
     build:
-      context: ./selfheal-agent
+      context: ./Agent/installer_service
       dockerfile: Dockerfile
-    container_name: selfheal_k8s_agent
+    container_name: captone-installer-service
     restart: unless-stopped
-    depends_on:
-      - main-backend
     environment:
-      SELFHEAL_BACKEND_URL: http://main-backend:5000
-      SELFHEAL_AGENT_ID: ${SELFHEAL_AGENT_ID:-agent-k8s-cluster-01}
-      SELFHEAL_AGENT_TOKEN: ${SELFHEAL_AGENT_TOKEN:-sh_sec_demo_token_change_me_in_production}
-      SELFHEAL_HEARTBEAT_INTERVAL: 10
-      SELFHEAL_KUBERNETES_MODE: ${SELFHEAL_KUBERNETES_MODE:-LOCAL}
-      LOG_LEVEL: INFO
-      LOG_FORMAT: json
+      PORT: 8100
+      HOST: 0.0.0.0
+      APP_ENV: production
+      AGENT_VERSION: "1.0.0"
+      DOCKER_IMAGE: "ghcr.io/captone-ai/captone-agent:1.0.0"
+    ports:
+      - "8100:8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - captone-network
 
-# ==========================================
+  # ==========================================
+  # Reverse Proxy: Nginx Gateway (SSL & Routing)
+  # ==========================================
+  nginx-proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: captone-reverse-proxy
+    restart: unless-stopped
+    depends_on:
+      - main-backend
+      - installer-service
+      - selfheal-frontend
+      - ai-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - captone-network
+
+  # ==========================================
 # Volumes & Networks
 # ==========================================
 volumes:

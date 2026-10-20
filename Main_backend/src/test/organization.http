@@ -17,7 +17,7 @@ Content-Type: {{contentType}}
 }
 
 ###
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQwZTZmZDk5LTA4ZTAtNDg5ZS05M2M4LWQ5Y2ZhYTA0NDAzYyIsImVtYWlsIjoidGFucXVvYzI4MDMyNUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6WyJBRE1JTiIsIlNVUEVSX0FETUlOIl0sImlhdCI6MTc5MjQxMjI0NiwiZXhwIjoxNzkzMDE3MDQ2fQ.Y6GAdzr3vVj10gmE3XxDmgAxib5axjETeRX442HEJR4
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzM2E3NjcwLWI5ZDYtNDkwNS04ZWUxLWQ1NjEwZTQwMDkxYyIsImVtYWlsIjoicGhhbXRoYWlzQGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4NTExLCJleHAiOjE3OTMwODMzMTF9.nyWFthhxq1oiLjUGhvn3v1OqUH_QDxMOFNimskik5ho
 ### ===================================================================
 ### BƯỚC 1: TẠO TỔ CHỨC MỚI (KÈM PROFILE & TỰ ĐỘNG GÁN SME_OWNER)
 ### ===================================================================

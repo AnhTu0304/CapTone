@@ -25,7 +25,10 @@
       <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
         AI Self-Healing Kubernetes · Realtime Telemetry Monitor
       </h1>
-      <span class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">Service: order-service</span>
+      <select id="serviceSelect" onchange="changeService(this.value)" class="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded border border-slate-700 font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <option value="sme-order-service" selected>Service: sme-order-service (K8s Cluster)</option>
+        <option value="order-service">Service: order-service (Demo)</option>
+      </select>
     </div>
     <div class="flex items-center space-x-3">
       <button id="btnStartSim" onclick="startSimulation()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow flex items-center space-x-2">
@@ -156,7 +159,38 @@
   </main>
 
   <script>
-    const SERVICE_ID = 'order-service';
+    let SERVICE_ID = 'sme-order-service';
+    let authToken = localStorage.getItem('token') || '';
+
+    async function ensureAuth() {
+      if (authToken) return authToken;
+      try {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'phamthaisang1710@gmail.com', password: 'AdminPassword123@' })
+        });
+        const json = await res.json();
+        if (json.success && json.data && json.data.token) {
+          authToken = json.data.token;
+          localStorage.setItem('token', authToken);
+        }
+      } catch (e) {
+        console.warn('Auto login error:', e);
+      }
+      return authToken;
+    }
+
+    function changeService(val) {
+      SERVICE_ID = val;
+      chartLabels.length = 0;
+      cpuData.length = 0;
+      ramData.length = 0;
+      reqData.length = 0;
+      latData.length = 0;
+      evaluateNow();
+      fetchContext();
+    }
     const chartLabels = [];
     const cpuData = [];
     const ramData = [];
@@ -210,9 +244,10 @@
 
     async function evaluateNow() {
       try {
+        const token = await ensureAuth();
         const res = await fetch(`/api/v1/telemetry/services/${SERVICE_ID}/evaluate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ bucket_seconds: 5, window_minutes: 15, auto_trigger_rca: true })
         });
         const json = await res.json();
@@ -226,7 +261,10 @@
 
     async function fetchContext() {
       try {
-        const res = await fetch(`/api/v1/telemetry/services/${SERVICE_ID}/rca-context?window_minutes=15&log_limit=20`);
+        const token = await ensureAuth();
+        const res = await fetch(`/api/v1/telemetry/services/${SERVICE_ID}/rca-context?window_minutes=15&log_limit=20`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         const json = await res.json();
         if (json.success && json.data) {
           renderLogs(json.data.logs);

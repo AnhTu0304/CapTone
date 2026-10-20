@@ -23,7 +23,7 @@ POST {{baseUrl}}/auth/register
 Content-Type: {{contentType}}
 
 {
-  "email": "tanquocdz@gmail.com",
+  "email": "phamthais@gmail.com",
   "password": "Tanquoc123@",
   "full_name": "Nguyen DevOps"
 }
@@ -82,7 +82,7 @@ POST {{baseUrl}}/auth/login
 Content-Type: {{contentType}}
 
 {
-  "email": "tanquocdz@gmail.com",
+  "email": "phamthais@gmail.com",
   "password": "Tanquoc123@"
 }
 
