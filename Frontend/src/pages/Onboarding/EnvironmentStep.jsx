@@ -40,6 +40,7 @@ export const EnvironmentStep = ({ onNavigate }) => {
 
       <EnvironmentForm
         initialData={environment}
+        organizationId={organization?.id}
         onSave={handleSave}
         onBack={handleBack}
       />

@@ -4,6 +4,7 @@ import PrimaryButton from './PrimaryButton';
 import SecondaryButton from './SecondaryButton';
 import ErrorAlert from './ErrorAlert';
 import SuccessAlert from './SuccessAlert';
+import { onboardingService } from '../../services/onboardingService';
 
 export const OrganizationForm = ({ initialData, onSave, onBack }) => {
   const [name, setName] = useState(initialData?.name || '');
@@ -47,7 +48,7 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -58,14 +59,51 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
 
     setLoading(true);
 
-    // Simulate API request to reserve organization
-    setTimeout(() => {
+    try {
+      // 1. Gọi trực tiếp API tạo mới Tổ chức trên backend
+      const createdOrg = await onboardingService.createOrganization({
+        name: name.trim(),
+        slug: slug.trim(),
+        description: description.trim(),
+      });
+
       setLoading(false);
       setSuccess('Không gian làm việc của tổ chức đã được khởi tạo thành công.');
       setTimeout(() => {
-        onSave({ name: name.trim(), slug: slug.trim(), description: description.trim() });
+        onSave({
+          id: createdOrg.id,
+          name: createdOrg.name,
+          slug: createdOrg.slug,
+          description: createdOrg.description,
+        });
       }, 400);
-    }, 600);
+    } catch (err) {
+      console.warn('[Onboarding] Lỗi tạo tổ chức mới, kiểm tra tổ chức hiện có:', err.message);
+
+      // 2. Nếu đã có tổ chức trong tài khoản (hoặc slug trùng), tự động liên kết với tổ chức hiện có
+      try {
+        const myOrgs = await onboardingService.getMyOrganizations();
+        if (myOrgs.length > 0) {
+          const matchedOrg = myOrgs.find((o) => o.slug === slug.trim()) || myOrgs[0];
+          setLoading(false);
+          setSuccess(`Đã kết nối với tổ chức '${matchedOrg.name}'.`);
+          setTimeout(() => {
+            onSave({
+              id: matchedOrg.id,
+              name: matchedOrg.name,
+              slug: matchedOrg.slug,
+              description: matchedOrg.description,
+            });
+          }, 400);
+          return;
+        }
+      } catch (checkErr) {
+        console.warn('[Onboarding] Không thể kiểm tra tổ chức hiện có:', checkErr);
+      }
+
+      setLoading(false);
+      setError(err.message || 'Không thể tạo tổ chức mới. Vui lòng kiểm tra lại thông tin.');
+    }
   };
 
   return (
