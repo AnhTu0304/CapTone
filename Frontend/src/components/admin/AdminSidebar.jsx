@@ -185,6 +185,12 @@ export const ADMIN_NAV_GROUPS = [
         path: '/admin/settings',
         icon: Settings,
       },
+      {
+        id: 'profile',
+        label: 'Hồ Sơ Cá Nhân',
+        path: '/admin/profile',
+        icon: User,
+      },
     ],
   },
 ];

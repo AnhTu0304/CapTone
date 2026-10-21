@@ -300,11 +300,15 @@ export const AdminProfileMenu = ({ onNavigate }) => {
             {[
               {
                 id: 'profile',
-                label: 'Hồ Sơ Quản Trị Viên',
+                label: 'Hồ Sơ Cá Nhân',
                 icon: User,
                 action: () => {
                   setIsOpen(false);
-                  setIsDetailOpen(true);
+                  if (onNavigate) {
+                    onNavigate('/admin/profile');
+                  } else {
+                    setIsDetailOpen(true);
+                  }
                 },
               },
               {

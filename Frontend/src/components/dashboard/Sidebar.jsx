@@ -125,6 +125,19 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
             { name: 'Bảng điều khiển', path: '/dashboard', icon: LayoutDashboard },
           ],
         },
+        {
+          group: 'CÁ NHÂN & HỆ THỐNG',
+          items: [
+            {
+              name: 'Thông báo',
+              path: '/dashboard/notifications',
+              icon: Bell,
+              badge: unreadNotifsCount > 0 ? `${unreadNotifsCount}` : null,
+              badgeType: 'info',
+            },
+            { name: 'Hồ sơ cá nhân', path: '/dashboard/profile', icon: User },
+          ],
+        },
       ];
     }
 

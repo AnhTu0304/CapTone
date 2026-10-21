@@ -23,6 +23,7 @@ import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
 import { AdminAIPage } from '../pages/Admin/AI';
 import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
 import { AdminUsersPage } from '../pages/Admin/Users';
+import ProfilePage from '../pages/Dashboard/Profile/ProfilePage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
 import TableOfContents from '../components/navigation/TableOfContents';
@@ -145,7 +146,9 @@ export const RouteRenderer = ({
           message="Tài khoản DevOps không có quyền quản lý tài khoản người dùng hoặc gán quyền hệ thống. Quyền này dành riêng cho Quản trị viên (Admin)."
         />
       );
-    } else if (path === '/admin' || path === '/admin/overview' || path === '/admin/profile') {
+    } else if (path === '/admin/profile') {
+      adminContent = <ProfilePage onNavigate={onNavigate} />;
+    } else if (path === '/admin' || path === '/admin/overview') {
       adminContent = <OverviewPage onNavigate={onNavigate} />;
     } else if (path === '/admin/organizations') {
       adminContent = <OrganizationsListPage onNavigate={onNavigate} />;
