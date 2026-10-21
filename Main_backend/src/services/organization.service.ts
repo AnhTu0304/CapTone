@@ -6,12 +6,14 @@ import {
   ICreateOrganizationDto,
   IUpdateOrganizationDto,
   IOrganizationQuery,
+  OrganizationStatus,
   OrganizationModel,
 } from '../models/organization.model';
 import { OrganizationProfileModel } from '../models/organizationProfile.model';
 import { OrganizationRoleModel } from '../models/organizationRole.model';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
 import { IPaginatedResult } from '../models/user.model';
+import { RedisCacheService } from './redisCache.service';
 
 /**
  * Hàm sinh chuỗi slug URL chuẩn hóa từ tên tổ chức (hỗ trợ tiếng Việt)
@@ -103,14 +105,22 @@ export class OrganizationService {
 
       await client.query('COMMIT');
 
-      return {
+      const result: IOrganizationDetail = {
         ...org,
         profile,
         role_in_org: assignedRoleCode,
         members_count: 1,
       };
-    } catch (err) {
+
+      // Ghi vào Redis Cache
+      await RedisCacheService.set(RedisCacheService.organizationKey(org.id), result);
+
+      return result;
+    } catch (err: any) {
       await client.query('ROLLBACK');
+      if (err.code === '23505') {
+        throw new ApiError(409, `Định danh slug '${finalSlug}' đã tồn tại, vui lòng chọn một slug khác`);
+      }
       throw err;
     } finally {
       client.release();
@@ -165,22 +175,41 @@ export class OrganizationService {
   }
 
   /**
-   * 3. Lấy thông tin chi tiết một tổ chức theo ID
+   * 3. Lấy thông tin chi tiết một tổ chức theo ID (Kèm Redis Read-Through Caching)
    */
   public static async getById(
     orgId: string,
     userId: string,
     userRoles: string[] = []
   ): Promise<IOrganizationDetail> {
-    const row = await OrganizationModel.findDetailById(orgId, userId);
-    if (!row) {
-      throw new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa');
-    }
-
     const normalizedRoles = userRoles.map((r) => r.toUpperCase());
     const isSystemAdmin = normalizedRoles.some((r) =>
       ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(r)
     );
+
+    const cacheKey = RedisCacheService.organizationKey(orgId);
+
+    // 1. Thử lấy từ Redis Cache trước (Read-through)
+    const cached = await RedisCacheService.get<IOrganizationDetail>(cacheKey);
+    if (cached) {
+      if (isSystemAdmin) {
+        return cached;
+      }
+      const member = await OrganizationMemberModel.findByOrgAndUser(orgId, userId);
+      if (member && member.status !== 'REMOVED') {
+        return {
+          ...cached,
+          role_in_org: member.role_code || cached.role_in_org,
+        };
+      }
+      throw new ApiError(403, 'Bạn không có quyền truy cập vào thông tin tổ chức này');
+    }
+
+    // 2. Cache miss -> Truy vấn trực tiếp từ PostgreSQL
+    const row = await OrganizationModel.findDetailById(orgId, userId);
+    if (!row) {
+      throw new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa');
+    }
 
     const isMember = Boolean(row.member_status && row.member_status !== 'REMOVED');
 
@@ -188,7 +217,7 @@ export class OrganizationService {
       throw new ApiError(403, 'Bạn không có quyền truy cập vào thông tin tổ chức này');
     }
 
-    return {
+    const result: IOrganizationDetail = {
       id: row.id,
       name: row.name,
       slug: row.slug,
@@ -202,6 +231,11 @@ export class OrganizationService {
       members_count: row.members_count || 0,
       profile: row.profile || null,
     };
+
+    // 3. Ghi kết quả vào Redis Cache với finite TTL
+    await RedisCacheService.set(cacheKey, result);
+
+    return result;
   }
 
   /**
@@ -264,6 +298,9 @@ export class OrganizationService {
       }
 
       await client.query('COMMIT');
+
+      // 3. Invalidate Redis Cache ngay sau khi commit thành công
+      await RedisCacheService.del(RedisCacheService.organizationKey(orgId));
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -296,6 +333,9 @@ export class OrganizationService {
     // Xóa mềm qua OrganizationModel
     await OrganizationModel.softDelete(undefined, orgId);
 
+    // Invalidate Redis Cache
+    await RedisCacheService.del(RedisCacheService.organizationKey(orgId));
+
     return { id: orgId, deleted: true };
   }
 
@@ -317,5 +357,52 @@ export class OrganizationService {
       throw new ApiError(401, 'Yêu cầu đăng nhập trước khi xem danh sách lời mời');
     }
     return OrganizationModel.findPendingInvitationsByUserId(userId);
+  }
+
+  /**
+   * 8. Cập nhật trạng thái tổ chức (Khóa, Mở khóa, Vô hiệu hóa) ([2.12])
+   * Quyền: SUPER_ADMIN, ADMIN hoặc SME_OWNER của chính tổ chức đó
+   */
+  public static async updateStatus(
+    orgId: string,
+    userId: string,
+    userRoles: string[] = [],
+    status: OrganizationStatus,
+    reason?: string
+  ): Promise<IOrganizationDetail> {
+    const normalizedRoles = userRoles.map((r) => r.toUpperCase());
+    const isSystemAdmin = normalizedRoles.some((r) =>
+      ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(r)
+    );
+
+    // 1. Kiểm tra tổ chức tồn tại
+    const org = await OrganizationModel.findById(orgId);
+    if (!org || org.deleted_at) {
+      throw new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa');
+    }
+
+    // 2. Kiểm tra thẩm quyền: SUPER_ADMIN, ADMIN hoặc SME_OWNER của tổ chức
+    if (!isSystemAdmin) {
+      const member = await OrganizationMemberModel.findByOrgAndUser(orgId, userId);
+      if (!member || member.status !== 'ACTIVE' || member.role_code !== 'SME_OWNER') {
+        throw new ApiError(
+          403,
+          'Từ chối truy cập: Chỉ Quản trị viên hệ thống hoặc Chủ sở hữu (SME Owner) mới có quyền thay đổi trạng thái tổ chức'
+        );
+      }
+    }
+
+    // 3. Idempotency: nếu trạng thái không đổi thì không cần cập nhật database
+    if (org.status === status) {
+      return this.getById(orgId, userId, userRoles);
+    }
+
+    // 4. Cập nhật CSDL PostgreSQL
+    await OrganizationModel.update(undefined, orgId, { status });
+
+    // 5. Invalidate Redis Cache ngay lập tức
+    await RedisCacheService.del(RedisCacheService.organizationKey(orgId));
+
+    return this.getById(orgId, userId, userRoles);
   }
 }

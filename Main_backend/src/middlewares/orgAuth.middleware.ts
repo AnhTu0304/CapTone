@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../utils/apiError';
 import { OrganizationMemberModel, MemberStatus } from '../models/organizationMember.model';
 import { OrganizationRoleCode } from '../models/organizationRole.model';
+import { OrganizationModel } from '../models/organization.model';
 
 export interface IOrgMemberContext {
   organizationId: string;
@@ -57,7 +58,7 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
       return next();
     }
 
-    // Kiểm tra trực tiếp trạng thái thành viên trong CSDL qua OrganizationMemberModel
+    // 2. Kiểm tra trực tiếp trạng thái thành viên trong CSDL qua OrganizationMemberModel
     const member = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
     if (!member || member.status !== 'ACTIVE') {
       return next(
@@ -66,6 +67,29 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
           'Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này'
         )
       );
+    }
+
+    // 3. Kiểm tra trạng thái hoạt động của chính Tổ chức
+    // Nếu tổ chức đang bị khóa (SUSPENDED) hoặc ngừng hoạt động (INACTIVE)
+    const org = await OrganizationModel.findById(orgId);
+    if (!org || org.deleted_at) {
+      return next(new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa'));
+    }
+
+    if (org.status === 'SUSPENDED' || org.status === 'INACTIVE') {
+      // Cho phép endpoint GET xem chi tiết chính tổ chức đó (/api/v1/organizations/:id) để hiển thị banner cảnh báo
+      const isGetOrgDetail =
+        req.method === 'GET' &&
+        (req.originalUrl.endsWith(`/${orgId}`) || req.originalUrl.endsWith(`/${orgId}/`));
+
+      if (!isGetOrgDetail) {
+        return next(
+          new ApiError(
+            403,
+            `Tổ chức này đang trong trạng thái '${org.status}' (bị tạm khóa hoặc ngừng hoạt động). Mọi thao tác vận hành đã bị vô hiệu hóa.`
+          )
+        );
+      }
     }
 
     req.orgMember = {

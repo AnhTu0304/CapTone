@@ -63,6 +63,33 @@ export class OrganizationController {
   }
 
   /**
+   * [PATCH] /api/v1/organizations/:id/status
+   * Khóa / Mở khóa / Vô hiệu hóa tổ chức ([2.12])
+   */
+  public static async updateStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const orgId = req.params.id;
+      const { status, reason } = req.body;
+      const result = await OrganizationService.updateStatus(
+        orgId,
+        user.id,
+        user.roles || [],
+        status,
+        reason
+      );
+      return ApiResponse.success(
+        res,
+        `Cập nhật trạng thái tổ chức thành '${status}' thành công`,
+        result,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * [DELETE] /api/v1/organizations/:id
    * Xóa tổ chức (Soft delete)
    */

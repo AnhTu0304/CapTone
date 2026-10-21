@@ -11,6 +11,7 @@ import {
 import {
   createOrganizationSchema,
   updateOrganizationSchema,
+  updateOrgStatusSchema,
   orgIdParamSchema,
   orgQuerySchema,
 } from '../validations/organization.validation';
@@ -99,6 +100,17 @@ router.put(
   validate(updateOrganizationSchema),
   requireOrgRole('SME_OWNER'),
   OrganizationController.update
+);
+
+/**
+ * [PATCH] /api/v1/organizations/:id/status - Khóa / Mở khóa / Vô hiệu hóa tổ chức ([2.12])
+ * Bảo vệ: Yêu cầu đăng nhập, kiểm tra thẩm quyền tại Service (SUPER_ADMIN, ADMIN hoặc SME_OWNER của tổ chức)
+ */
+router.patch(
+  '/:id/status',
+  validate(orgIdParamSchema),
+  validate(updateOrgStatusSchema),
+  OrganizationController.updateStatus
 );
 
 /**
