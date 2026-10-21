@@ -80,6 +80,14 @@ GET {{baseUrl}}/users
 ### PHẦN 2: XEM HỒ SƠ & CHI TIẾT NGƯỜI DÙNG
 ### ===================================================================
 
+### 2.0. LẤY HỒ SƠ CÁ NHÂN NGƯỜI DÙNG ĐANG ĐĂNG NHẬP (GET /users/me)
+### Authentication: Bắt buộc Bearer Token
+### Response: { success: true, data: { id, email, fullName, avatarUrl, status, systemRole, organization, organizationRole, ... } }
+### Các trường nhạy cảm (password_hash, tokens) được bảo đảm KHÔNG BAO GIỜ hiển thị.
+# @name getMyProfile
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+
 ### 2.1. Xem Profile của tài khoản đang đăng nhập (GET /users/profile)
 # @name getUserProfile
 GET {{baseUrl}}/users/profile
@@ -104,6 +112,56 @@ Authorization: Bearer {{token}}
 ### ===================================================================
 ### PHẦN 3: CẬP NHẬT THÔNG TIN NGƯỜI DÙNG
 ### ===================================================================
+
+### 3.0. CẬP NHẬT HỒ SƠ CÁ NHÂN NGƯỜI DÙNG ĐANG ĐĂNG NHẬP (PUT /users/me)
+### Authentication: Bắt buộc Bearer Token
+### Allowed Fields: fullName (hoặc full_name, min 2 ký tự), avatarUrl (hoặc avatar_url), phone, jobTitle
+### Read-only / Forbidden Fields: id, email, systemRole, status, organization, password_hash
+# @name updateMyProfileSuccess
+PUT {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "fullName": "Nguyen Van An Senior DevOps",
+  "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+  "phone": "0912345678",
+  "jobTitle": "Lead Infrastructure Architect"
+}
+
+### 3.0.1. Cập nhật hồ sơ THẤT BẠI: Họ và tên để trống hoặc < 2 ký tự (Kỳ vọng: 400 Bad Request)
+# @name updateMyProfileBlankName
+PUT {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "fullName": " "
+}
+
+### 3.0.2. Cập nhật hồ sơ THẤT BẠI: Định dạng số điện thoại sai (Kỳ vọng: 400 Bad Request)
+# @name updateMyProfileInvalidPhone
+PUT {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "fullName": "Nguyen Van An",
+  "phone": "invalid_phone_format"
+}
+
+### 3.0.3. Cập nhật hồ sơ: Chống leo thang đặc quyền / đổi email (Kỳ vọng: 200, các trường cấm bị bỏ qua không lưu DB)
+# @name updateMyProfileIgnoreForbiddenFields
+PUT {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "fullName": "Nguyen Van An Safe Update",
+  "email": "hacker@evil.com",
+  "systemRole": "SUPER_ADMIN",
+  "status": "SUSPENDED"
+}
 
 ### 3.1. Cập nhật hồ sơ tài khoản hiện tại (PUT /users/profile)
 # @name updateProfileSuccess

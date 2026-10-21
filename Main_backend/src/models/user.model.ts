@@ -18,6 +18,8 @@ export interface IUser {
     password_hash?: string;
     full_name: string;
     avatar_url?: string | null;
+    phone?: string | null;
+    job_title?: string | null;
     status: UserStatus;
     email_verified_at?: Date | null;
     last_login_at?: Date | null;
@@ -33,12 +35,45 @@ export type IUserResponse = Omit<IUser, 'password_hash'> & {
     system_roles?: string[];
 };
 
+export interface IUserProfileResponse {
+    id: string;
+    email: string;
+    full_name: string;
+    fullName: string;
+    avatar_url: string | null;
+    avatarUrl: string | null;
+    phone: string | null;
+    job_title: string | null;
+    jobTitle: string | null;
+    status: UserStatus;
+    accountStatus: UserStatus;
+    system_roles: string[];
+    systemRole: string;
+    organization: {
+        id: string;
+        name: string;
+        slug: string;
+    } | null;
+    organization_role: string | null;
+    organizationRole: string | null;
+    email_verified_at: Date | null;
+    emailVerifiedAt: Date | null;
+    last_login_at: Date | null;
+    lastLoginAt: Date | null;
+    created_at: Date;
+    createdAt: Date;
+    updated_at: Date;
+    updatedAt: Date;
+}
+
 /**
  * DTO cập nhật thông tin cá nhân
  */
 export interface IUpdateUserDto {
     full_name?: string;
     avatar_url?: string | null;
+    phone?: string | null;
+    job_title?: string | null;
     status?: UserStatus;
 }
 
@@ -85,7 +120,7 @@ export class UserModel {
     public static async findById(userId: string, client?: PoolClient): Promise<IUserResponse | null> {
         const db = client || pool;
         const querySql = `
-          SELECT id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
+          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
           FROM users 
           WHERE id = $1 AND deleted_at IS NULL
           LIMIT 1
@@ -197,19 +232,39 @@ export class UserModel {
      */
     public static async updateProfile(
         userId: string,
-        data: { full_name?: string | null; avatar_url?: string | null },
+        data: { full_name?: string | null; avatar_url?: string | null; phone?: string | null; job_title?: string | null },
         client?: PoolClient
     ): Promise<IUserResponse | null> {
         const db = client || pool;
-        const result = await db.query<IUserResponse>(
-            `UPDATE users 
-             SET full_name = COALESCE($1, full_name),
-                 avatar_url = COALESCE($2, avatar_url),
-                 updated_at = NOW()
-             WHERE id = $3 AND deleted_at IS NULL
-             RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
-            [data.full_name, data.avatar_url, userId]
-        );
+        const updates: string[] = ['updated_at = NOW()'];
+        const values: any[] = [];
+        let idx = 1;
+
+        if (data.full_name !== undefined) {
+            updates.push(`full_name = $${idx++}`);
+            values.push(data.full_name);
+        }
+        if (data.avatar_url !== undefined) {
+            updates.push(`avatar_url = $${idx++}`);
+            values.push(data.avatar_url);
+        }
+        if (data.phone !== undefined) {
+            updates.push(`phone = $${idx++}`);
+            values.push(data.phone);
+        }
+        if (data.job_title !== undefined) {
+            updates.push(`job_title = $${idx++}`);
+            values.push(data.job_title);
+        }
+
+        values.push(userId);
+        const query = `
+            UPDATE users 
+            SET ${updates.join(', ')}
+            WHERE id = $${idx} AND deleted_at IS NULL
+            RETURNING id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
+        `;
+        const result = await db.query<IUserResponse>(query, values);
         return result.rows[0] || null;
     }
 

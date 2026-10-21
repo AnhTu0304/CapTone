@@ -17,7 +17,7 @@ export const INITIAL_PROFILE = {
   organizationRole: 'Chủ sở hữu & Quản trị trưởng (Owner)',
   accountStatus: 'ACTIVE', // ACTIVE | SUSPENDED | PENDING
   createdAt: '15/01/2026',
-  lastLogin: '19/10/2026 18:45',
+  lastLogin: '15:30:49 21/10/2026',
   timezone: 'Asia/Ho_Chi_Minh (GMT+7)',
   twoFactorEnabled: true,
 };

@@ -9,7 +9,8 @@ import {
   Clock,
   KeyRound,
   CheckCircle2,
-  Lock
+  Lock,
+  AlertTriangle
 } from 'lucide-react';
 
 export const ProfileOverview = ({ profile }) => {
@@ -185,23 +186,90 @@ export const ProfileOverview = ({ profile }) => {
               Trạng thái tài khoản
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '3px 8px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  backgroundColor: '#ECFDF5',
-                  color: '#059669',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  border: '1px solid #A7F3D0',
-                }}
-              >
-                <CheckCircle2 size={12} />
-                <span>Hoạt động (Active)</span>
-              </span>
+              {(() => {
+                const status = (profile.accountStatus || profile.status || 'ACTIVE').toUpperCase();
+                if (status === 'ACTIVE') {
+                  return (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--dash-radius-full)',
+                        backgroundColor: '#ECFDF5',
+                        color: '#059669',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        border: '1px solid #A7F3D0',
+                      }}
+                    >
+                      <CheckCircle2 size={12} />
+                      <span>Hoạt động (Active)</span>
+                    </span>
+                  );
+                } else if (status === 'SUSPENDED') {
+                  return (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--dash-radius-full)',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        border: '1px solid #FECACA',
+                      }}
+                    >
+                      <Lock size={12} />
+                      <span>Tạm khóa (Suspended)</span>
+                    </span>
+                  );
+                } else if (status === 'INACTIVE') {
+                  return (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--dash-radius-full)',
+                        backgroundColor: '#F3F4F6',
+                        color: '#6B7280',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        border: '1px solid #E5E7EB',
+                      }}
+                    >
+                      <AlertTriangle size={12} />
+                      <span>Ngừng hoạt động (Inactive)</span>
+                    </span>
+                  );
+                } else {
+                  return (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--dash-radius-full)',
+                        backgroundColor: '#FFFBEB',
+                        color: '#D97706',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        border: '1px solid #FDE68A',
+                      }}
+                    >
+                      <Clock size={12} />
+                      <span>Chờ kích hoạt (Pending)</span>
+                    </span>
+                  );
+                }
+              })()}
             </div>
           </div>
 
