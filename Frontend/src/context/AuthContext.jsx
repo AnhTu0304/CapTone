@@ -126,18 +126,15 @@ export const AuthProvider = ({ children }) => {
     VIEWER: ['VIEWER'],
   }), []);
 
-  // Vai trò mô phỏng đang chọn qua Header Switcher
+  // Vai trò mô phỏng đang chọn qua Header Switcher (Mặc định là SME_OWNER để ưu tiên giao diện User/Owner trước)
   const [activeRole, setActiveRole] = useState(() => {
-    return localStorage.getItem('selfheal_active_role') || null;
+    return localStorage.getItem('selfheal_active_role') || 'SME_OWNER';
   });
 
   const switchRole = useCallback((newRole) => {
-    setActiveRole(newRole || null);
-    if (newRole) {
-      localStorage.setItem('selfheal_active_role', newRole);
-    } else {
-      localStorage.removeItem('selfheal_active_role');
-    }
+    const roleToSet = newRole || 'SME_OWNER';
+    setActiveRole(roleToSet);
+    localStorage.setItem('selfheal_active_role', roleToSet);
   }, []);
 
   // Tiện ích lấy danh sách vai trò dạng chuẩn hóa kèm kế thừa phân cấp
@@ -196,27 +193,31 @@ export const AuthProvider = ({ children }) => {
   }, [activeRole, ROLE_HIERARCHY]);
 
   const isSuperAdmin = useCallback((u) => {
+    if (activeRole) return activeRole === 'SUPER_ADMIN';
     const roles = getUserRoles(u);
     return roles.includes('SUPER_ADMIN');
-  }, [getUserRoles]);
+  }, [activeRole, getUserRoles]);
 
   const isAdmin = useCallback((u) => {
+    if (activeRole) return ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(activeRole);
     const roles = getUserRoles(u);
     return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(r));
-  }, [getUserRoles]);
+  }, [activeRole, getUserRoles]);
 
   const isOwner = useCallback((u) => {
+    if (activeRole) return ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(activeRole);
     const roles = getUserRoles(u);
     return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'OWNER'].includes(r));
-  }, [getUserRoles]);
+  }, [activeRole, getUserRoles]);
 
   const isDevOps = useCallback((u) => {
+    if (activeRole) return activeRole === 'DEVOPS';
     const roles = getUserRoles(u);
-    return roles.includes('DEVOPS') && !isAdmin(u);
-  }, [getUserRoles, isAdmin]);
+    return roles.includes('DEVOPS') && !isAdmin(u) && !isOwner(u);
+  }, [activeRole, getUserRoles, isAdmin, isOwner]);
 
   const isViewer = useCallback((u) => {
-    if (activeRole === 'VIEWER') return true;
+    if (activeRole) return activeRole === 'VIEWER';
     if (!u) return true;
     if (isAdmin(u) || isDevOps(u) || isOwner(u)) return false;
     return true;

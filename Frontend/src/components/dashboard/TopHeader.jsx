@@ -662,7 +662,7 @@ export const TopHeader = () => {
                   </span>
                 </div>
               </div>
-              {isAdmin(user) && (
+              {(isAdmin(user) || user?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))) && (
                 <button
                   onClick={() => {
                     setIsProfileMenuOpen(false);
