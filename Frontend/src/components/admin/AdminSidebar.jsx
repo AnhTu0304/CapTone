@@ -23,6 +23,11 @@ import {
   Cpu,
   GitFork,
   BarChart2,
+  Bell,
+  TrendingUp,
+  Scale,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const ADMIN_NAV_GROUPS = [
@@ -36,161 +41,93 @@ export const ADMIN_NAV_GROUPS = [
         path: '/admin',
         icon: LayoutDashboard,
       },
+    ],
+  },
+  {
+    id: 'users-rbac',
+    title: 'QUẢN LÝ NGƯỜI DÙNG & VAI TRÒ',
+    items: [
       {
-        id: 'agents',
-        label: 'Sức Khỏe Tác Tử eBPF',
-        path: '/admin/agents',
-        icon: Activity,
-        badge: '100%',
+        id: 'users',
+        label: 'Danh Sách Người Dùng',
+        path: '/admin/users',
+        icon: Users,
+      },
+      {
+        id: 'roles',
+        label: 'Cấp Quyền & Ma Trận RBAC',
+        path: '/admin/roles',
+        icon: ShieldCheck,
+      },
+    ],
+  },
+  {
+    id: 'organizations-growth',
+    title: 'DOANH NGHIỆP & THỐNG KÊ',
+    items: [
+      {
+        id: 'organizations',
+        label: 'Danh Sách Công Ty/Tổ Chức',
+        path: '/admin/organizations',
+        icon: Building2,
+      },
+      {
+        id: 'analytics',
+        label: 'Thống Kê Tăng Trưởng (Tháng/Năm)',
+        path: '/admin/analytics',
+        icon: TrendingUp,
+        badge: 'KPI',
         badgeColor: '#10B981',
       },
     ],
   },
   {
-    id: 'self-healing',
-    title: 'TỰ LÀNH & HITL GATE',
+    id: 'ai-governance',
+    title: 'QUẢN TRỊ & ĐÁNH GIÁ MÔ HÌNH AI',
     items: [
       {
-        id: 'approvals',
-        label: 'Cổng Phê Duyệt HITL',
-        path: '/admin/approvals',
-        icon: CheckCircle2,
-        badge: '1',
-        badgeColor: '#EF4444',
+        id: 'ai-models',
+        label: 'Kho Mô Hình AI',
+        path: '/admin/ai/models',
+        icon: Cpu,
       },
       {
-        id: 'incidents',
-        label: 'Sự Cố & Điều Tra RCA',
-        path: '/admin/incidents',
-        icon: AlertTriangle,
+        id: 'ai-comparison',
+        label: 'Đánh Giá & So Sánh Trước/Sau',
+        path: '/admin/ai/comparison',
+        icon: Scale,
+        badge: 'MỚI',
+        badgeColor: '#059669',
       },
       {
-        id: 'self-healing-actions',
-        label: 'Hành Động Tự Phục Hồi',
-        path: '/admin/self-healing/actions',
-        icon: Zap,
+        id: 'ai-predictions',
+        label: 'Lịch Sử Dự Báo & Suy Luận',
+        path: '/admin/ai/predictions',
+        icon: Sparkles,
       },
-      {
-        id: 'policies',
-        label: 'Chính Sách Tự Lành',
-        path: '/admin/self-healing/policies',
-        icon: Sliders,
-      },
-    ],
-  },
-  {
-    id: 'infrastructure',
-    title: 'QUẢN TRỊ HẠ TẦNG K8S',
-    items: [
-      {
-        id: 'clusters',
-        label: 'Cụm Kubernetes',
-        path: '/admin/infrastructure/clusters',
-        icon: Layers,
-      },
-      {
-        id: 'agents',
-        label: 'Tác Tử eBPF',
-        path: '/admin/infrastructure/agents',
-        icon: Activity,
-        badge: '100%',
-        badgeColor: '#10B981',
-      },
-      {
-        id: 'nodes',
-        label: 'Hạ Tầng Máy Chủ (Nodes)',
-        path: '/admin/infrastructure/nodes',
-        icon: Server,
-      },
-      {
-        id: 'workloads',
-        label: 'Khối Công Việc (Workloads)',
-        path: '/admin/infrastructure/workloads',
-        icon: Box,
-      },
-    ],
-  },
-  {
-    id: 'ai-engine',
-    title: 'TRÍ TUỆ NHÂN TẠO & RCA',
-    items: [
       {
         id: 'ai-overview',
         label: 'Tổng Quan Động Cơ AI',
         path: '/admin/ai/overview',
         icon: BrainCircuit,
       },
-      {
-        id: 'ai-models',
-        label: 'Kho Mô Hình Học Máy',
-        path: '/admin/ai/models',
-        icon: Cpu,
-      },
-      {
-        id: 'ai-predictions',
-        label: 'Dự Báo Dị Thường',
-        path: '/admin/ai/predictions',
-        icon: Activity,
-      },
-      {
-        id: 'ai-rca',
-        label: 'Đồ Thị Nhân Quả RCA',
-        path: '/admin/ai/rca',
-        icon: GitFork,
-      },
-      {
-        id: 'ai-performance',
-        label: 'Hiệu Năng & Kiểm Chuẩn',
-        path: '/admin/ai/performance',
-        icon: BarChart2,
-      },
     ],
   },
   {
-    id: 'governance',
-    title: 'BẢO MẬT & KIỂM TOÁN',
+    id: 'notifications-security',
+    title: 'THÔNG BÁO & AN NINH HỆ THỐNG',
     items: [
+      {
+        id: 'notifications',
+        label: 'Phát Thông Báo Toàn Mạng',
+        path: '/admin/notifications',
+        icon: Bell,
+      },
       {
         id: 'audit-logs',
         label: 'Nhật Ký Kiểm Toán SHA-256',
         path: '/admin/audit-logs',
         icon: ShieldAlert,
-      },
-      {
-        id: 'reports',
-        label: 'Báo Cáo SLA & Chi Phí',
-        path: '/admin/reports',
-        icon: FileBarChart2,
-      },
-    ],
-  },
-  {
-    id: 'settings',
-    title: 'CẤU HÌNH & TỔ CHỨC',
-    items: [
-      {
-        id: 'organizations',
-        label: 'Tổ Chức & Tenants',
-        path: '/admin/organizations',
-        icon: Building2,
-      },
-      {
-        id: 'members',
-        label: 'Thành Viên & Ma Trận RBAC',
-        path: '/admin/members',
-        icon: Users,
-      },
-      {
-        id: 'settings',
-        label: 'Thiết Lập Quản Trị',
-        path: '/admin/settings',
-        icon: Settings,
-      },
-      {
-        id: 'profile',
-        label: 'Hồ Sơ Cá Nhân',
-        path: '/admin/profile',
-        icon: User,
       },
     ],
   },
@@ -230,19 +167,9 @@ export const AdminSidebar = ({
       ];
     }
 
-    // 2. DevOps: Thấy các tác vụ vận hành hạ tầng/AI, NHƯNG không quản lý User & Phân quyền
+    // 2. DevOps: Không quản lý User & Phân quyền hệ thống
     if (isDevOpsUser) {
-      return ADMIN_NAV_GROUPS.map((group) => {
-        if (group.id === 'settings') {
-          return {
-            ...group,
-            items: group.items.filter(
-              (item) => item.id !== 'members' && item.path !== '/admin/members' && item.path !== '/admin/users'
-            ),
-          };
-        }
-        return group;
-      }).filter((group) => group.items.length > 0);
+      return ADMIN_NAV_GROUPS.filter((group) => group.id !== 'users-rbac');
     }
 
     // 3. Admin & SuperAdmin: Xem toàn bộ các nhóm chức năng

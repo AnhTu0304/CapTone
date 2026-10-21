@@ -23,6 +23,9 @@ import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
 import { AdminAIPage } from '../pages/Admin/AI';
 import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
 import { AdminUsersPage } from '../pages/Admin/Users';
+import { AdminAnalyticsPage } from '../pages/Admin/Analytics/AdminAnalyticsPage';
+import { AdminBroadcastPage } from '../pages/Admin/Notifications/AdminBroadcastPage';
+import { AdminRolesPage } from '../pages/Admin/Roles/AdminRolesPage';
 import ProfilePage from '../pages/Dashboard/Profile/ProfilePage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
@@ -45,11 +48,15 @@ export const ROUTES = {
   ADMIN_AI_OVERVIEW: '/admin/ai/overview',
   ADMIN_AI_MODELS: '/admin/ai/models',
   ADMIN_AI_PREDICTIONS: '/admin/ai/predictions',
+  ADMIN_AI_COMPARISON: '/admin/ai/comparison',
   ADMIN_AI_RCA: '/admin/ai/rca',
   ADMIN_AI_PERFORMANCE: '/admin/ai/performance',
   ADMIN_AUDIT_LOGS: '/admin/audit-logs',
   ADMIN_USERS: '/admin/users',
   ADMIN_MEMBERS: '/admin/members',
+  ADMIN_ROLES: '/admin/roles',
+  ADMIN_ANALYTICS: '/admin/analytics',
+  ADMIN_NOTIFICATIONS: '/admin/notifications',
   GUIDE: '/guide',
   FEATURES: '/features',
   ABOUT: '/about',
@@ -182,6 +189,8 @@ export const RouteRenderer = ({
       adminContent = <AdminAIPage currentSection="overview" onNavigate={onNavigate} />;
     } else if (path === '/admin/ai/models') {
       adminContent = <AdminAIPage currentSection="models" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/comparison') {
+      adminContent = <AdminAIPage currentSection="comparison" onNavigate={onNavigate} />;
     } else if (path === '/admin/ai/predictions') {
       adminContent = <AdminAIPage currentSection="predictions" onNavigate={onNavigate} />;
     } else if (path === '/admin/ai/rca') {
@@ -190,6 +199,12 @@ export const RouteRenderer = ({
       adminContent = <AdminAIPage currentSection="performance" onNavigate={onNavigate} />;
     } else if (path === '/admin/audit-logs') {
       adminContent = <AdminAuditLogsPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/analytics') {
+      adminContent = <AdminAnalyticsPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/notifications') {
+      adminContent = <AdminBroadcastPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/roles') {
+      adminContent = <AdminRolesPage onNavigate={onNavigate} />;
     } else if (path === '/admin/users' || path === '/admin/members') {
       adminContent = <AdminUsersPage onNavigate={onNavigate} />;
     } else {

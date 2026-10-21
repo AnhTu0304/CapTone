@@ -7,7 +7,8 @@ import {
   GitFork, 
   BarChart2, 
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Scale
 } from 'lucide-react';
 import {
   getAIOverviewKPIs,
@@ -23,6 +24,7 @@ import AIModelsTable from '../../../components/admin/ai/AIModelsTable';
 import AIPredictionsTable from '../../../components/admin/ai/AIPredictionsTable';
 import AIRCASection from '../../../components/admin/ai/AIRCASection';
 import AIPerformanceView from '../../../components/admin/ai/AIPerformanceView';
+import AIComparisonView from '../../../components/admin/ai/AIComparisonView';
 
 /**
  * AdminAIPage Component
@@ -91,6 +93,12 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
           title: 'Kho Mô Hình Học Máy (AI Model Registry)',
           desc: 'Quản lý phiên bản, khuôn khổ huấn luyện, trạng thái hoạt động và nguồn gốc dữ liệu của các mô hình AI/ML.',
           icon: Cpu,
+        };
+      case 'comparison':
+        return {
+          title: 'Đánh Giá & So Sánh Mô Hình Trước / Sau (Model Version Comparison)',
+          desc: 'Đối chiếu trực tiếp chỉ số hiệu năng phiên bản cũ vs phiên bản mới, kiểm soát trôi dữ liệu và lịch sử đánh giá.',
+          icon: Scale,
         };
       case 'predictions':
         return {
@@ -187,6 +195,10 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
           />
         )}
 
+        {currentSection === 'comparison' && (
+          <AIComparisonView />
+        )}
+
         {currentSection === 'predictions' && (
           <AIPredictionsTable
             predictions={predictions}
@@ -216,7 +228,7 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
 };
 
 AdminAIPage.propTypes = {
-  currentSection: PropTypes.oneOf(['overview', 'models', 'predictions', 'rca', 'performance']),
+  currentSection: PropTypes.oneOf(['overview', 'models', 'comparison', 'predictions', 'rca', 'performance']),
   onNavigate: PropTypes.func,
 };
 
