@@ -117,9 +117,47 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   ];
 
   const filteredNavGroups = React.useMemo(() => {
-    // Hiển thị đầy đủ tất cả danh mục và bảng dữ liệu cho phân hệ Doanh nghiệp / Owner / Người dùng
+    // 1. Viewer: Chỉ thấy Tổng quan và Cá nhân/Hệ thống
+    if (isViewerUser) {
+      return [
+        {
+          group: 'TỔNG QUAN',
+          items: [
+            { name: 'Bảng điều khiển', path: '/dashboard', icon: LayoutDashboard },
+          ],
+        },
+        {
+          group: 'CÁ NHÂN & HỆ THỐNG',
+          items: [
+            {
+              name: 'Thông báo',
+              path: '/dashboard/notifications',
+              icon: Bell,
+              badge: unreadNotifsCount > 0 ? `${unreadNotifsCount}` : null,
+              badgeType: 'info',
+            },
+            { name: 'Hồ sơ cá nhân', path: '/dashboard/profile', icon: User },
+          ],
+        },
+      ];
+    }
+
+    // 2. DevOps: Thấy toàn bộ hạ tầng, giám sát, AI, nhưng ẩn Quản lý Thành viên
+    if (isDevOpsUser) {
+      return navGroups.map((group) => {
+        if (group.group === 'TỔ CHỨC') {
+          return {
+            ...group,
+            items: group.items.filter((item) => item.path !== '/dashboard/organization/members'),
+          };
+        }
+        return group;
+      });
+    }
+
+    // 3. Cấp cao (SME Owner, Admin, Super Admin): Kế thừa toàn bộ quyền hạn và thấy tất cả 18 trang
     return navGroups;
-  }, [navGroups, pendingApprovalsCount, unreadNotifsCount]);
+  }, [isViewerUser, isDevOpsUser, navGroups, pendingApprovalsCount, unreadNotifsCount]);
 
   const handleItemClick = (path) => {
     if (onNavigate) {

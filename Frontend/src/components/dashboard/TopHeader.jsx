@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, getPrimaryRole, isAdmin } = useAuth();
+  const { user, logout, getInitials, getPrimaryRole, isAdmin, activeRole, switchRole } = useAuth();
   const {
     currentOrg,
     setCurrentOrg,
@@ -91,9 +91,11 @@ export const TopHeader = () => {
   const displayAvatar = profileData?.avatar || null;
 
   const roles = [
-    { key: 'SME_OWNER', label: 'Chủ DN (SME Owner)', desc: 'Toàn quyền quản trị & phê duyệt rủi ro cao' },
-    { key: 'DEVOPS', label: 'Kỹ sư DevOps', desc: 'Quản trị khối lượng công việc, chính sách & giám sát' },
-    { key: 'VIEWER', label: 'Người xem (Viewer)', desc: 'Chỉ xem dữ liệu, giám sát an toàn' },
+    { key: 'SUPER_ADMIN', label: 'Quản Trị Tối Cao (Super Admin)', desc: 'Toàn quyền cấu hình, bảo mật và người dùng' },
+    { key: 'ADMIN', label: 'Quản Trị Vận Hành (Admin)', desc: 'Quản lý toàn bộ tính năng vận hành và hạ tầng' },
+    { key: 'SME_OWNER', label: 'Chủ DN (SME Owner)', desc: 'Toàn quyền quản trị tổ chức, thành viên & phê duyệt' },
+    { key: 'DEVOPS', label: 'Kỹ Sư DevOps (DevOps Lead)', desc: 'Vận hành hạ tầng, tác tử, không quản lý người dùng' },
+    { key: 'VIEWER', label: 'Người Xem (Viewer)', desc: 'Chỉ xem dữ liệu, giám sát an toàn' },
   ];
 
   return (
@@ -332,7 +334,7 @@ export const TopHeader = () => {
             }}
           >
             <Shield size={12} color="var(--dash-primary)" />
-            <span>Vai trò: {roles.find((r) => r.key === currentUserRole)?.label}</span>
+            <span>Vai trò: {(roles.find((r) => r.key === (activeRole || currentUserRole))?.label || 'Chủ DN (SME Owner)').split('(')[0].trim()}</span>
             <ChevronDown size={12} color="var(--dash-text-muted)" />
           </button>
 
@@ -360,6 +362,7 @@ export const TopHeader = () => {
                   key={r.key}
                   onClick={() => {
                     setCurrentUserRole(r.key);
+                    if (switchRole) switchRole(r.key);
                     setIsRoleDropdownOpen(false);
                   }}
                   style={{
@@ -367,8 +370,8 @@ export const TopHeader = () => {
                     padding: '8px 10px',
                     borderRadius: 'var(--dash-radius-sm)',
                     border: 'none',
-                    backgroundColor: currentUserRole === r.key ? 'var(--dash-primary-light)' : 'transparent',
-                    color: currentUserRole === r.key ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
+                    backgroundColor: (activeRole || currentUserRole) === r.key ? 'var(--dash-primary-light)' : 'transparent',
+                    color: (activeRole || currentUserRole) === r.key ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
                     textAlign: 'left',
                     cursor: 'pointer',
                     display: 'block',

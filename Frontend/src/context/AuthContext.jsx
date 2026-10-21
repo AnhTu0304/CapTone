@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext(null);
@@ -116,9 +116,37 @@ export const AuthProvider = ({ children }) => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, []);
 
-  // Tiện ích lấy danh sách vai trò dạng chuẩn hóa (Uppercase Array)
+  // Phân cấp vai trò RBAC (Role Hierarchy): Cấp cao kế thừa toàn bộ quyền của các cấp thấp hơn
+  const ROLE_HIERARCHY = useMemo(() => ({
+    SUPER_ADMIN: ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'DEVOPS', 'VIEWER'],
+    ADMIN: ['ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'DEVOPS', 'VIEWER'],
+    SYSTEM_ADMIN: ['SYSTEM_ADMIN', 'ADMIN', 'SME_OWNER', 'DEVOPS', 'VIEWER'],
+    SME_OWNER: ['SME_OWNER', 'DEVOPS', 'VIEWER'],
+    DEVOPS: ['DEVOPS', 'VIEWER'],
+    VIEWER: ['VIEWER'],
+  }), []);
+
+  // Vai trò mô phỏng đang chọn qua Header Switcher
+  const [activeRole, setActiveRole] = useState(() => {
+    return localStorage.getItem('selfheal_active_role') || null;
+  });
+
+  const switchRole = useCallback((newRole) => {
+    setActiveRole(newRole || null);
+    if (newRole) {
+      localStorage.setItem('selfheal_active_role', newRole);
+    } else {
+      localStorage.removeItem('selfheal_active_role');
+    }
+  }, []);
+
+  // Tiện ích lấy danh sách vai trò dạng chuẩn hóa kèm kế thừa phân cấp
   const getUserRoles = useCallback((u) => {
-    if (!u) return [];
+    if (activeRole) {
+      return ROLE_HIERARCHY[activeRole] || [activeRole, 'VIEWER'];
+    }
+
+    if (!u) return ['VIEWER'];
     const rolesSet = new Set();
 
     // 1. system_roles (array of strings or objects)
@@ -134,7 +162,7 @@ export const AuthProvider = ({ children }) => {
     if (u.systemRole) rolesSet.add(String(u.systemRole).trim().toUpperCase());
     if (u.role) rolesSet.add(String(u.role).trim().toUpperCase());
 
-    // 3. organization_roles (array of objects or strings)
+    // 3. organization_roles
     const rawOrgRoles = u.organization_roles || [];
     if (Array.isArray(rawOrgRoles)) {
       rawOrgRoles.forEach((r) => {
@@ -147,16 +175,25 @@ export const AuthProvider = ({ children }) => {
     if (u.organization_role) rolesSet.add(String(u.organization_role).trim().toUpperCase());
     if (u.organizationRole) rolesSet.add(String(u.organizationRole).trim().toUpperCase());
 
-    // 5. roles array (from JWT if available)
+    // 5. roles array
     if (Array.isArray(u.roles)) {
       u.roles.forEach((r) => {
         if (r) rolesSet.add(String(r).trim().toUpperCase());
       });
     }
 
-    const result = Array.from(rolesSet);
-    return result.length > 0 ? result : ['VIEWER'];
-  }, []);
+    const rawList = Array.from(rolesSet);
+    if (rawList.length === 0) return ['VIEWER'];
+
+    // Mở rộng quyền theo phân cấp (Cấp cao có toàn bộ quyền của cấp thấp)
+    const expandedSet = new Set(rawList);
+    rawList.forEach((r) => {
+      const inherited = ROLE_HIERARCHY[r] || [];
+      inherited.forEach((inh) => expandedSet.add(inh));
+    });
+
+    return Array.from(expandedSet);
+  }, [activeRole, ROLE_HIERARCHY]);
 
   const isSuperAdmin = useCallback((u) => {
     const roles = getUserRoles(u);
@@ -165,7 +202,12 @@ export const AuthProvider = ({ children }) => {
 
   const isAdmin = useCallback((u) => {
     const roles = getUserRoles(u);
-    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(r));
+    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(r));
+  }, [getUserRoles]);
+
+  const isOwner = useCallback((u) => {
+    const roles = getUserRoles(u);
+    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'OWNER'].includes(r));
   }, [getUserRoles]);
 
   const isDevOps = useCallback((u) => {
@@ -174,19 +216,27 @@ export const AuthProvider = ({ children }) => {
   }, [getUserRoles, isAdmin]);
 
   const isViewer = useCallback((u) => {
+    if (activeRole === 'VIEWER') return true;
     if (!u) return true;
-    if (isAdmin(u) || isDevOps(u)) return false;
+    if (isAdmin(u) || isDevOps(u) || isOwner(u)) return false;
     return true;
-  }, [isAdmin, isDevOps]);
+  }, [activeRole, isAdmin, isDevOps, isOwner]);
 
-  // Tiện ích lấy vai trò cao nhất của người dùng
+  // Tiện ích lấy vai trò hiển thị cao nhất của người dùng
   const getPrimaryRole = useCallback((u) => {
+    if (activeRole) {
+      if (activeRole === 'SUPER_ADMIN') return 'SUPER ADMIN';
+      if (activeRole === 'ADMIN') return 'ADMIN';
+      if (activeRole === 'SME_OWNER') return 'SME OWNER';
+      if (activeRole === 'DEVOPS') return 'DEVOPS';
+      return 'VIEWER';
+    }
     if (!u) return 'VIEWER';
     if (isSuperAdmin(u)) return 'SUPER ADMIN';
     if (isAdmin(u)) return 'ADMIN';
     if (isDevOps(u)) return 'DEVOPS';
     return 'VIEWER';
-  }, [isSuperAdmin, isAdmin, isDevOps]);
+  }, [activeRole, isSuperAdmin, isAdmin, isDevOps]);
 
   const value = {
     user,
@@ -200,9 +250,12 @@ export const AuthProvider = ({ children }) => {
     getUserRoles,
     isSuperAdmin,
     isAdmin,
+    isOwner,
     isDevOps,
     isViewer,
     getPrimaryRole,
+    activeRole,
+    switchRole,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
