@@ -164,6 +164,25 @@ export const VerifyAgentStep = ({ onNavigate }) => {
             <span>{retrying ? 'Đang thử lại...' : 'Thử kết nối lại'}</span>
           </button>
 
+          {!isConnected && (
+            <button
+              type="button"
+              onClick={handleContinue}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                padding: '0 8px',
+              }}
+            >
+              Bỏ qua bước này & Hoàn tất
+            </button>
+          )}
+
           <PrimaryButton
             onClick={handleContinue}
             disabled={!isConnected}

@@ -101,14 +101,56 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
         console.warn('[Onboarding] Không thể kiểm tra tổ chức hiện có:', checkErr);
       }
 
+      const errorMsg =
+        err.message === 'Failed to fetch'
+          ? 'Không thể kết nối đến máy chủ Backend (http://localhost:5000). Vui lòng đảm bảo Backend đang chạy.'
+          : (err.message || 'Không thể tạo tổ chức mới. Vui lòng kiểm tra lại thông tin.');
       setLoading(false);
-      setError(err.message || 'Không thể tạo tổ chức mới. Vui lòng kiểm tra lại thông tin.');
+      setError(errorMsg);
     }
   };
 
   return (
     <form onSubmit={handleSubmit} style={{ width: '100%' }}>
-      {error && <ErrorAlert message={error} onRetry={() => setError('')} />}
+      {error && (
+        <div style={{ marginBottom: '16px' }}>
+          <ErrorAlert
+            title="Thông báo kết nối Backend"
+            message={error}
+            onRetry={() => {
+              setError('');
+              handleSubmit({ preventDefault: () => {} });
+            }}
+          />
+          {error.includes('Backend') && (
+            <button
+              type="button"
+              onClick={() => {
+                setError('');
+                onSave({
+                  name: name.trim(),
+                  slug: slug.trim(),
+                  description: description.trim(),
+                });
+              }}
+              style={{
+                fontSize: '0.75rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-primary)',
+                background: 'none',
+                border: 'none',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                marginTop: '-10px',
+                marginBottom: '10px',
+                display: 'block',
+              }}
+            >
+              Hoặc bấm vào đây để tiếp tục ở chế độ mô phỏng (Sandbox Mode)
+            </button>
+          )}
+        </div>
+      )}
       {success && <SuccessAlert message={success} />}
 
       <FormField
