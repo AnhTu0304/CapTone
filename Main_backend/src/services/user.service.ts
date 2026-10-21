@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { ApiError } from '../utils/apiError';
 import {
     IUserResponse,
+    IUserProfileResponse,
     IUpdateUserDto,
     IChangePasswordDto,
     IUserQuery,
@@ -9,6 +10,7 @@ import {
     UserStatus,
     UserModel,
 } from '../models/user.model';
+import { OrganizationModel } from '../models/organization.model';
 import { AuthModel } from '../models/auth.model';
 import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
@@ -16,6 +18,66 @@ import { EmailService } from './email.service';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class UserService {
+    // 0. Lấy thông tin hồ sơ người dùng đang đăng nhập (GET /api/v1/users/me)
+    public static async getMyProfile(userId: string): Promise<IUserProfileResponse> {
+        if (!userId || !UUID_REGEX.test(userId.trim())) {
+            throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
+        }
+
+        const user = await UserModel.findById(userId.trim());
+        if (!user) {
+            throw new ApiError(404, 'Không tìm thấy người dùng');
+        }
+
+        if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+            throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
+        }
+
+        const systemRoles = await UserModel.getUserRoles(userId.trim());
+
+        let primaryOrg: { id: string; name: string; slug: string; role_in_org?: string } | null = null;
+        try {
+            const orgs = await OrganizationModel.findOrganizationsByUserId(userId.trim());
+            if (orgs && orgs.length > 0) {
+                primaryOrg = {
+                    id: orgs[0].id,
+                    name: orgs[0].name,
+                    slug: orgs[0].slug,
+                    role_in_org: (orgs[0] as any).role_in_org || null,
+                };
+            }
+        } catch {
+            primaryOrg = null;
+        }
+
+        return {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            fullName: user.full_name,
+            avatar_url: user.avatar_url || null,
+            avatarUrl: user.avatar_url || null,
+            phone: null,
+            job_title: null,
+            jobTitle: null,
+            status: user.status,
+            accountStatus: user.status,
+            system_roles: systemRoles,
+            systemRole: systemRoles.length > 0 ? systemRoles[0] : 'USER',
+            organization: primaryOrg ? { id: primaryOrg.id, name: primaryOrg.name, slug: primaryOrg.slug } : null,
+            organization_role: primaryOrg?.role_in_org || null,
+            organizationRole: primaryOrg?.role_in_org || null,
+            email_verified_at: user.email_verified_at || null,
+            emailVerifiedAt: user.email_verified_at || null,
+            last_login_at: user.last_login_at || null,
+            lastLoginAt: user.last_login_at || null,
+            created_at: user.created_at,
+            createdAt: user.created_at,
+            updated_at: user.updated_at,
+            updatedAt: user.updated_at,
+        };
+    }
+
     // 1. Lấy chi tiết thông tin người dùng theo ID (hoặc Profile chính mình)
     public static async getById(userId: string): Promise<IUserResponse> {
         if (!userId || !UUID_REGEX.test(userId.trim())) {

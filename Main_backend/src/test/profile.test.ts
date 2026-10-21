@@ -1,0 +1,142 @@
+import test, { describe, before, after } from 'node:test';
+import assert from 'node:assert';
+import http from 'node:http';
+import { AddressInfo } from 'node:net';
+import jwt from 'jsonwebtoken';
+import app from '../app';
+import { config } from '../config/env';
+import { pool } from '../config/database';
+
+describe('Profile API Suite (/api/v1/users/me)', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  // Test fixtures IDs
+  const activeUserId = '53f5bcdb-a15f-43b6-b3d1-afa8eb5843c1';
+  let activeUserToken: string;
+  let suspendedUserToken: string;
+  const nonExistentUserId = '00000000-0000-0000-0000-000000000000';
+
+  before(async () => {
+    // 1. Ensure test user exists in PostgreSQL database
+    await pool.query(`
+      INSERT INTO users (id, email, password_hash, full_name, status, created_at, updated_at)
+      VALUES ($1, 'tungo342005@gmail.com', 'dummy_hash', 'Ngo ANh Tu', 'ACTIVE', NOW(), NOW())
+      ON CONFLICT (id) DO UPDATE SET status = 'ACTIVE', deleted_at = NULL;
+    `, [activeUserId]);
+
+    // 2. Generate valid JWT tokens
+    activeUserToken = jwt.sign(
+      { id: activeUserId, email: 'tungo342005@gmail.com', status: 'ACTIVE', roles: ['USER'] },
+      config.jwt.secret,
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+
+    suspendedUserToken = jwt.sign(
+      { id: activeUserId, email: 'tungo342005@gmail.com', status: 'SUSPENDED', roles: ['USER'] },
+      config.jwt.secret,
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+
+    // 3. Start ephemeral test server
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => {
+        const port = (server.address() as AddressInfo).port;
+        baseUrl = `http://127.0.0.1:${port}/api/v1/users/me`;
+        resolve();
+      });
+    });
+  });
+
+  after(async () => {
+    if (server) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  // --- GET /api/v1/users/me Tests ---
+
+  test('1. GET /api/v1/users/me without Authorization header returns 401', async () => {
+    const res = await fetch(baseUrl);
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(body.success, false);
+    assert.match(body.message, /Yêu cầu đăng nhập/i);
+  });
+
+  test('2. GET /api/v1/users/me with malformed or invalid token returns 401', async () => {
+    const res = await fetch(baseUrl, {
+      headers: { Authorization: 'Bearer invalid.token.signature' },
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(body.success, false);
+    assert.match(body.message, /Token không hợp lệ/i);
+  });
+
+  test('3. GET /api/v1/users/me with expired token returns 401', async () => {
+    const expiredToken = jwt.sign(
+      { id: activeUserId, email: 'tungo342005@gmail.com' },
+      config.jwt.secret,
+      { expiresIn: '-1s', algorithm: 'HS256' }
+    );
+
+    const res = await fetch(baseUrl, {
+      headers: { Authorization: `Bearer ${expiredToken}` },
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(body.success, false);
+    assert.match(body.message, /hết hạn/i);
+  });
+
+  test('4. GET /api/v1/users/me with non-existent user token returns 401', async () => {
+    const ghostToken = jwt.sign(
+      { id: nonExistentUserId, email: 'ghost@example.com', status: 'ACTIVE' },
+      config.jwt.secret,
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+
+    const res = await fetch(baseUrl, {
+      headers: { Authorization: `Bearer ${ghostToken}` },
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(body.success, false);
+  });
+
+  test('5. GET /api/v1/users/me rejects suspended account with 403', async () => {
+    const res = await fetch(baseUrl, {
+      headers: { Authorization: `Bearer ${suspendedUserToken}` },
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 403);
+    assert.strictEqual(body.success, false);
+    assert.match(body.message, /khóa hoặc ngừng hoạt động/i);
+  });
+
+  test('6. GET /api/v1/users/me with valid authenticated user returns 200 and safe profile contract', async () => {
+    const res = await fetch(baseUrl, {
+      headers: { Authorization: `Bearer ${activeUserToken}` },
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(body.success, true);
+    assert.ok(body.data);
+    assert.strictEqual(body.data.id, activeUserId);
+    assert.strictEqual(body.data.email, 'tungo342005@gmail.com');
+    assert.strictEqual(body.data.fullName || body.data.full_name, 'Ngo ANh Tu');
+    assert.strictEqual(body.data.status, 'ACTIVE');
+
+    // Security check: NEVER expose password_hash or internal credentials
+    assert.strictEqual(body.data.password_hash, undefined);
+    assert.strictEqual(body.data.password, undefined);
+    assert.strictEqual(body.data.token, undefined);
+  });
+});

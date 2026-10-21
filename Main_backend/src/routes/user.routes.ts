@@ -19,6 +19,9 @@ const router = Router();
 // Toàn bộ các route phía dưới đều yêu cầu đã đăng nhập (cần Token)
 router.use(authenticateToken);
 
+// [GET] /api/v1/users/me -> Xem thông tin hồ sơ của người dùng đang đăng nhập
+router.get('/me', UserController.getMe);
+
 // [GET] /api/v1/users/me/organizations -> Lấy danh sách các tổ chức mà người dùng đang tham gia
 router.get('/me/organizations', OrganizationController.getMyOrganizations);
 

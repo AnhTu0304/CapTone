@@ -33,6 +33,37 @@ export type IUserResponse = Omit<IUser, 'password_hash'> & {
     system_roles?: string[];
 };
 
+export interface IUserProfileResponse {
+    id: string;
+    email: string;
+    full_name: string;
+    fullName: string;
+    avatar_url: string | null;
+    avatarUrl: string | null;
+    phone: string | null;
+    job_title: string | null;
+    jobTitle: string | null;
+    status: UserStatus;
+    accountStatus: UserStatus;
+    system_roles: string[];
+    systemRole: string;
+    organization: {
+        id: string;
+        name: string;
+        slug: string;
+    } | null;
+    organization_role: string | null;
+    organizationRole: string | null;
+    email_verified_at: Date | null;
+    emailVerifiedAt: Date | null;
+    last_login_at: Date | null;
+    lastLoginAt: Date | null;
+    created_at: Date;
+    createdAt: Date;
+    updated_at: Date;
+    updatedAt: Date;
+}
+
 /**
  * DTO cập nhật thông tin cá nhân
  */

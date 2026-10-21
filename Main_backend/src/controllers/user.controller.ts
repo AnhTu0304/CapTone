@@ -5,6 +5,24 @@ import { ApiError } from '../utils/apiError';
 
 export class UserController {
   /**
+   * [GET] /api/v1/users/me
+   * Lấy thông tin hồ sơ của người dùng đang đăng nhập
+   */
+  public static async getMe(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
+
+      const profile = await UserService.getMyProfile(userId);
+      return ApiResponse.success(res, 'Lấy thông tin hồ sơ cá nhân thành công', profile, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * [GET] /api/v1/users
    * Lấy danh sách người dùng (kèm phân trang, lọc theo status, tìm kiếm theo name, email, id, search)
    */
