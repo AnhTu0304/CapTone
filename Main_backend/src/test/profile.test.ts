@@ -22,7 +22,7 @@ describe('Profile API Suite (/api/v1/users/me)', () => {
     await pool.query(`
       INSERT INTO users (id, email, password_hash, full_name, status, created_at, updated_at)
       VALUES ($1, 'tungo342005@gmail.com', 'dummy_hash', 'Ngo ANh Tu', 'ACTIVE', NOW(), NOW())
-      ON CONFLICT (id) DO UPDATE SET status = 'ACTIVE', deleted_at = NULL;
+      ON CONFLICT (id) DO UPDATE SET full_name = 'Ngo ANh Tu', status = 'ACTIVE', deleted_at = NULL;
     `, [activeUserId]);
 
     // 2. Generate valid JWT tokens
@@ -50,8 +50,10 @@ describe('Profile API Suite (/api/v1/users/me)', () => {
 
   after(async () => {
     if (server) {
+      server.closeAllConnections?.();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+    await pool.end();
   });
 
   // --- GET /api/v1/users/me Tests ---

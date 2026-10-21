@@ -64,47 +64,47 @@ export const updateMyProfileSchema = z.object({
   body: z
     .object({
       full_name: z
-        .string({ invalid_type_error: 'Họ và tên phải là chuỗi ký tự' })
+        .string()
         .trim()
         .min(2, 'Họ và tên phải có ít nhất 2 ký tự')
         .max(150, 'Họ và tên không được vượt quá 150 ký tự')
         .optional(),
       fullName: z
-        .string({ invalid_type_error: 'Họ và tên phải là chuỗi ký tự' })
+        .string()
         .trim()
         .min(2, 'Họ và tên phải có ít nhất 2 ký tự')
         .max(150, 'Họ và tên không được vượt quá 150 ký tự')
         .optional(),
       avatar_url: z
-        .string({ invalid_type_error: 'Đường dẫn avatar phải là chuỗi ký tự' })
+        .string()
         .trim()
         .url('Đường dẫn ảnh đại diện avatar không hợp lệ')
         .optional()
         .or(z.literal(''))
         .nullable(),
       avatarUrl: z
-        .string({ invalid_type_error: 'Đường dẫn avatar phải là chuỗi ký tự' })
+        .string()
         .trim()
         .url('Đường dẫn ảnh đại diện avatar không hợp lệ')
         .optional()
         .or(z.literal(''))
         .nullable(),
       phone: z
-        .string({ invalid_type_error: 'Số điện thoại phải là chuỗi ký tự' })
+        .string()
         .trim()
-        .regex(/^[+]?[(]?[0-9]{2,4}[)]?[-s.]?[0-9]{3,4}[-s.]?[0-9]{3,6}$/, 'Định dạng số điện thoại không hợp lệ (Ví dụ: 0912345678)')
+        .regex(/^[+]?[(]?[0-9]{2,4}[)]?[-\s.]?[0-9]{3,4}[-\s.]?[0-9]{3,6}$/, 'Định dạng số điện thoại không hợp lệ (Ví dụ: 0912345678)')
         .optional()
         .or(z.literal(''))
         .nullable(),
       job_title: z
-        .string({ invalid_type_error: 'Chức danh nghề nghiệp phải là chuỗi ký tự' })
+        .string()
         .trim()
         .max(100, 'Chức danh nghề nghiệp không được vượt quá 100 ký tự')
         .optional()
         .or(z.literal(''))
         .nullable(),
       jobTitle: z
-        .string({ invalid_type_error: 'Chức danh nghề nghiệp phải là chuỗi ký tự' })
+        .string()
         .trim()
         .max(100, 'Chức danh nghề nghiệp không được vượt quá 100 ký tự')
         .optional()
