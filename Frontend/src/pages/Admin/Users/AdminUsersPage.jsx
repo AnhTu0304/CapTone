@@ -20,6 +20,15 @@ import { useToast } from '../../../context/ToastContext';
 import { useAuth } from '../../../context/AuthContext';
 
 /**
+ * Trích xuất tên vai trò dạng chuỗi an toàn từ string hoặc object { role_name }
+ */
+const extractRoleName = (r) => {
+  if (!r) return '';
+  if (typeof r === 'string') return r;
+  return r.role_name || r.name || r.role_id || String(r);
+};
+
+/**
  * Định dạng ngày giờ chuẩn Việt Nam (HH:mm:ss dd/MM/yyyy)
  */
 const formatVnDateTime = (dateInput) => {
@@ -444,7 +453,7 @@ export const AdminUsersPage = () => {
           </div>
           <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#7C3AED', display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }}>
             <ShieldCheck size={18} />
-            {currentAdminUser?.system_roles?.[0] || 'ADMIN / SUPER_ADMIN'}
+            {extractRoleName(currentAdminUser?.system_roles?.[0]) || 'ADMIN / SUPER_ADMIN'}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px' }}>
             Phân định theo Ma trận RBAC
@@ -1088,26 +1097,33 @@ export const AdminUsersPage = () => {
               </div>
 
               {/* Security Protection Notice for Admin Accounts */}
-              {(selectedUserRoles.includes('SUPER_ADMIN') ||
-                selectedUserRoles.includes('ADMIN') ||
-                selectedUser.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN'].includes(r))) && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    backgroundColor: '#F0FDF4',
-                    border: '1px solid #BBF7D0',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                  }}
-                >
-                  <ShieldCheck size={18} color="#059669" style={{ flexShrink: 0 }} />
-                  <div style={{ fontSize: '0.75rem', color: '#166534', lineHeight: 1.4 }}>
-                    <strong>Tài khoản Quản trị viên cấp cao:</strong> Được bảo vệ bởi chính sách IAM & phân quyền RBAC. Mật khẩu và thông tin xác thực nhạy cảm được bảo mật an toàn theo chuẩn SHA-256.
+              {(() => {
+                const roleNames = selectedUserRoles.map(extractRoleName);
+                const userSystemRoles = (selectedUser.system_roles || []).map(extractRoleName);
+                const isSuper = roleNames.includes('SUPER_ADMIN') || userSystemRoles.includes('SUPER_ADMIN');
+                const isAdmin = isSuper || roleNames.includes('ADMIN') || userSystemRoles.includes('ADMIN');
+
+                if (!isAdmin) return null;
+
+                return (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      backgroundColor: '#F0FDF4',
+                      border: '1px solid #BBF7D0',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <ShieldCheck size={18} color="#059669" style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '0.75rem', color: '#166534', lineHeight: 1.4 }}>
+                      <strong>Tài khoản Quản trị viên cấp cao:</strong> Được bảo vệ bởi chính sách IAM & phân quyền RBAC. Mật khẩu và thông tin xác thực nhạy cảm được bảo mật an toàn theo chuẩn SHA-256.
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Information Fields */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1124,22 +1140,26 @@ export const AdminUsersPage = () => {
                     {isLoadingDetails ? (
                       <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>Đang kiểm tra vai trò...</span>
                     ) : selectedUserRoles.length > 0 ? (
-                      selectedUserRoles.map((role) => (
-                        <span
-                          key={role}
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            backgroundColor: role === 'SUPER_ADMIN' ? '#FEE2E2' : '#EEF2FF',
-                            color: role === 'SUPER_ADMIN' ? '#DC2626' : '#4F46E5',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            border: '1px solid currentColor',
-                          }}
-                        >
-                          {role}
-                        </span>
-                      ))
+                      selectedUserRoles.map((role, idx) => {
+                        const roleName = extractRoleName(role);
+                        const isSuper = roleName === 'SUPER_ADMIN';
+                        return (
+                          <span
+                            key={role?.role_id || roleName || idx}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: isSuper ? '#FEE2E2' : '#EEF2FF',
+                              color: isSuper ? '#DC2626' : '#4F46E5',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              border: '1px solid currentColor',
+                            }}
+                          >
+                            {roleName}
+                          </span>
+                        );
+                      })
                     ) : (
                       <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
                         USER (Mặc định)

@@ -118,7 +118,10 @@ export const AuthProvider = ({ children }) => {
 
   // Tiện ích lấy vai trò cao nhất của người dùng
   const getPrimaryRole = useCallback((u) => {
-    const roles = u?.system_roles || [];
+    const rawRoles = u?.system_roles || [];
+    const roles = rawRoles.map((r) =>
+      typeof r === 'object' && r !== null ? r.role_name || r.name || r.role_id : r
+    );
     if (roles.includes('SUPER_ADMIN')) return 'SUPER ADMIN';
     if (roles.includes('ADMIN') || roles.includes('SYSTEM_ADMIN')) return 'ADMIN';
     return 'USER';

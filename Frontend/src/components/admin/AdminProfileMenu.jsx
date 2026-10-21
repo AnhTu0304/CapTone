@@ -39,6 +39,12 @@ const formatVnDateTime = (isoStr) => {
   }
 };
 
+const extractRoleName = (r) => {
+  if (!r) return '';
+  if (typeof r === 'string') return r;
+  return r.role_name || r.name || r.role_id || String(r);
+};
+
 export const AdminProfileMenu = ({ onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -580,22 +586,26 @@ export const AdminProfileMenu = ({ onNavigate }) => {
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '3px' }}>Quyền Hạn Hệ Thống (System Roles)</div>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                    {(user?.system_roles || ['ADMIN']).map((role) => (
-                      <span
-                        key={role}
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          backgroundColor: role === 'SUPER_ADMIN' ? '#FEE2E2' : '#EEF2FF',
-                          color: role === 'SUPER_ADMIN' ? '#DC2626' : '#4F46E5',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          border: '1px solid currentColor',
-                        }}
-                      >
-                        {role}
-                      </span>
-                    ))}
+                    {(user?.system_roles || ['ADMIN']).map((role, idx) => {
+                      const roleName = extractRoleName(role);
+                      const isSuper = roleName === 'SUPER_ADMIN';
+                      return (
+                        <span
+                          key={role?.role_id || roleName || idx}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            backgroundColor: isSuper ? '#FEE2E2' : '#EEF2FF',
+                            color: isSuper ? '#DC2626' : '#4F46E5',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            border: '1px solid currentColor',
+                          }}
+                        >
+                          {roleName}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
 

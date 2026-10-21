@@ -167,7 +167,15 @@ describe('Admin Users Page & Service Suite', () => {
         pagination: { total: 2, page: 1, limit: 10, totalPages: 1 },
       });
       adminUsersService.getUserDetails.mockResolvedValueOnce(mockUserList[0]);
-      adminUsersService.getUserRoles.mockResolvedValueOnce(['SUPER_ADMIN']);
+      adminUsersService.getUserRoles.mockResolvedValueOnce([
+        {
+          role_id: 'role-super-1',
+          role_name: 'SUPER_ADMIN',
+          description: 'Toàn quyền quản trị hệ thống',
+          assigned_at: '2026-10-21T10:00:00.000Z',
+          assigned_by: 'system',
+        },
+      ]);
 
       renderWithProviders(<AdminUsersPage />);
 

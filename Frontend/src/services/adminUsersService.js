@@ -59,7 +59,14 @@ export const adminUsersService = {
     if (!userId) return [];
     try {
       const response = await request(`/users/${encodeURIComponent(userId)}/roles`);
-      return response?.data || [];
+      const data = response?.data || [];
+      if (!Array.isArray(data)) return [];
+      return data
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          return item?.role_name || item?.name || item?.role_id || String(item);
+        })
+        .filter(Boolean);
     } catch (err) {
       console.warn('[adminUsersService] Không thể lấy vai trò hệ thống của user:', err.message);
       return [];
