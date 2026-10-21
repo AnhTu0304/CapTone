@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
+import { getStoredProfile } from '../../mocks/profileMockData';
 import {
   Building2,
   Server,
@@ -12,6 +13,7 @@ import {
   Shield,
   Menu,
   LogOut,
+  User,
 } from 'lucide-react';
 
 export const TopHeader = () => {
@@ -29,7 +31,6 @@ export const TopHeader = () => {
     setIsAgentConnected,
     isAutoRefresh,
     setIsAutoRefresh,
-    lastUpdated,
     isRefreshing,
     triggerRefresh,
     notifications,
@@ -65,6 +66,28 @@ export const TopHeader = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const [profileData, setProfileData] = useState(() => {
+    try {
+      return getStoredProfile();
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const handleProfileUpdate = (e) => {
+      if (e.detail) {
+        setProfileData(e.detail);
+      }
+    };
+    window.addEventListener('selfheal_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('selfheal_profile_updated', handleProfileUpdate);
+  }, []);
+
+  const displayName = user?.full_name || profileData?.fullName || user?.email?.split('@')[0] || 'Tài khoản';
+  const displayEmail = user?.email || profileData?.email || 'user@example.com';
+  const displayAvatar = profileData?.avatar || null;
 
   const roles = [
     { key: 'SME_OWNER', label: 'Chủ DN (SME Owner)', desc: 'Toàn quyền quản trị & phê duyệt rủi ro cao' },
@@ -555,26 +578,40 @@ export const TopHeader = () => {
               cursor: 'pointer',
             }}
           >
-            <div
-              style={{
-                width: '26px',
-                height: '26px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--dash-primary)',
-                color: '#28E99F',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              {getInitials(user?.full_name || user?.email || 'User')}
-            </div>
+            {displayAvatar ? (
+              <img
+                src={displayAvatar}
+                alt={displayName}
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '1.5px solid var(--dash-mint-200)',
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--dash-primary)',
+                  color: '#28E99F',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {getInitials(displayName)}
+              </div>
+            )}
             <div style={{ textAlign: 'left', display: 'none', md: 'block' }}>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-primary)', lineHeight: 1.2 }}>
-                {user?.full_name || user?.email?.split('@')[0] || 'Tài khoản'}
+                {displayName}
               </div>
             </div>
             <ChevronDown size={12} color="var(--dash-text-muted)" />
@@ -598,10 +635,10 @@ export const TopHeader = () => {
             >
               <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--dash-border)' }}>
                 <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
-                  {user?.full_name || 'Người dùng'}
+                  {displayName}
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', wordBreak: 'break-all' }}>
-                  {user?.email || 'user@example.com'}
+                  {displayEmail}
                 </div>
                 <div style={{ marginTop: '6px' }}>
                   <span
@@ -621,6 +658,29 @@ export const TopHeader = () => {
                   </span>
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setIsProfileMenuOpen(false);
+                  if (onNavigate) onNavigate('/dashboard/profile');
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: 'none',
+                  background: 'none',
+                  color: 'var(--dash-text-secondary)',
+                  fontSize: '0.8125rem',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: 'var(--dash-radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <User size={13} color="var(--dash-primary)" />
+                <span>Hồ sơ cá nhân</span>
+              </button>
               <button
                 onClick={() => {
                   setIsProfileMenuOpen(false);

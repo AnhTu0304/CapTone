@@ -3,95 +3,93 @@ import { useDashboard } from '../context/DashboardContext';
 import {
   Bell,
   CheckCircle2,
-  Sparkles,
-  ShieldCheck,
   RefreshCw,
   Check,
-  ArrowRight
+  ArrowRight,
+  Server,
+  Zap,
+  ShieldAlert,
+  Cpu,
+  Inbox
 } from 'lucide-react';
+import { NOTIFICATION_TYPES, NOTIFICATION_SEVERITIES } from '../../../mocks/notificationMockData';
 
-const INITIAL_NOTIFICATIONS = [
-  {
-    id: 'NOTIF-101',
-    category: 'HITL',
-    title: 'Yêu cầu phê duyệt khẩn cấp: Tháo tải máy chủ worker-03 (Drain Node)',
-    message: 'Hạ tầng phát hiện tải CPU 88% và rò rỉ nhiệt. Cần sự phê duyệt của SME Owner để di dời an toàn 12 Pods.',
-    timestamp: '14 phút trước',
-    read: false,
-    severity: 'HIGH',
-    actionPath: '/dashboard/self-healing/approvals',
-    actionText: 'Tới Cổng Phê Duyệt',
-  },
-  {
-    id: 'NOTIF-102',
-    category: 'AI_PREDICTION',
-    title: 'AI Dự báo sớm: Nguy cơ tràn RAM (Memory Leak) tại payment-service',
-    message: 'Mô hình chuỗi thời gian phát hiện độ dốc +2.4MB/phút, dự báo bão hòa bộ nhớ trong 18 phút tới.',
-    timestamp: '32 phút trước',
-    read: false,
-    severity: 'MEDIUM',
-    actionPath: '/dashboard/ai/predictions',
-    actionText: 'Xem Dự Báo AI',
-  },
-  {
-    id: 'NOTIF-103',
-    category: 'SELF_HEAL',
-    title: 'Tự phục hồi thành công: Khởi động lại Pod order-processor',
-    message: 'Sự cố OOMKilled được MAPE-K giải quyết tự động hoàn tất trong 1.4 giây. Trạng thái Pod trở về Healthy 100%.',
-    timestamp: '2 giờ trước',
-    read: true,
-    severity: 'LOW',
-    actionPath: '/dashboard/self-healing/history',
-    actionText: 'Xem Nhật Ký MTTR',
-  },
-  {
-    id: 'NOTIF-104',
-    category: 'SYSTEM',
-    title: 'Đồng bộ hóa tác tử eBPF Agent thành công trên cụm',
-    message: 'Tác tử selfheal-agent-worker-02 đã tự động nâng cấp cấu hình giám sát kernel v1.4.2 không gián đoạn.',
-    timestamp: '5 giờ trước',
-    read: true,
-    severity: 'INFO',
-    actionPath: '/dashboard/agents',
-    actionText: 'Xem Tác Tử Agent',
-  },
-  {
-    id: 'NOTIF-105',
-    category: 'INCIDENT',
-    title: 'Phát hiện sự cố Liveness Probe timeout trên api-gateway',
-    message: 'Độ trễ phản hồi vượt ngưỡng 3000ms kích hoạt quy trình phân tích nguyên nhân gốc rễ RCA tự động.',
-    timestamp: '1 ngày trước',
-    read: true,
-    severity: 'HIGH',
-    actionPath: '/dashboard/incidents',
-    actionText: 'Xem Phân Tích RCA',
-  },
-];
+const EMPTY_NOTIFICATIONS = [];
 
 export const NotificationsPage = () => {
-  const { currentOrg, currentEnv, isRefreshing, triggerRefresh, onNavigate } = useDashboard();
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const dashboard = useDashboard();
+  const currentOrg = dashboard?.currentOrg || { name: 'Acme Corporation' };
+  const currentEnv = dashboard?.currentEnv || { name: 'production-us-east-1' };
+  const isRefreshing = dashboard?.isRefreshing || false;
+  const triggerRefresh = dashboard?.triggerRefresh || (() => {});
+  const onNavigate = dashboard?.onNavigate;
+  const notifications = dashboard?.notifications || EMPTY_NOTIFICATIONS;
+  const toggleNotificationRead = dashboard?.toggleNotificationRead || (() => {});
+  const markAllNotificationsRead = dashboard?.markAllNotificationsRead || (() => {});
+  const unreadCount = dashboard?.unreadNotifsCount ?? notifications.filter((n) => n.unread || !n.read).length;
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // Filter States
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'UNREAD' | 'READ'
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' | 'INFRASTRUCTURE' | 'SELF_HEALING' | 'SECURITY' | 'SYSTEM'
+  const [pageSize, setPageSize] = useState(6);
 
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
-
-  const handleToggleRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: !n.read } : n))
-    );
-  };
-
+  // Filter logic
   const filteredNotifications = useMemo(() => {
     return notifications.filter((n) => {
-      if (selectedCategory === 'ALL') return true;
-      if (selectedCategory === 'UNREAD') return !n.read;
-      return n.category === selectedCategory;
+      const isRead = n.read ?? !n.unread;
+      // Status filter
+      if (statusFilter === 'UNREAD' && isRead) return false;
+      if (statusFilter === 'READ' && !isRead) return false;
+
+      // Type filter
+      if (typeFilter !== 'ALL') {
+        const itemType = n.type || n.category;
+        if (itemType !== typeFilter) return false;
+      }
+
+      return true;
     });
-  }, [notifications, selectedCategory]);
+  }, [notifications, statusFilter, typeFilter]);
+
+  const visibleNotifications = useMemo(() => {
+    return filteredNotifications.slice(0, pageSize);
+  }, [filteredNotifications, pageSize]);
+
+  const hasMore = pageSize < filteredNotifications.length;
+
+  const handleLoadMore = () => {
+    setPageSize((prev) => prev + 6);
+  };
+
+  const getSeverityBadge = (severity) => {
+    switch (severity) {
+      case NOTIFICATION_SEVERITIES.CRITICAL:
+        return { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', label: 'Khẩn Cấp' };
+      case NOTIFICATION_SEVERITIES.HIGH:
+        return { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A', label: 'Cảnh Báo Cao' };
+      case NOTIFICATION_SEVERITIES.MEDIUM:
+        return { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE', label: 'Trung Bình' };
+      case NOTIFICATION_SEVERITIES.LOW:
+        return { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0', label: 'Thấp' };
+      case NOTIFICATION_SEVERITIES.INFO:
+      default:
+        return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0', label: 'Thông Tin' };
+    }
+  };
+
+  const getTypeIcon = (type) => {
+    switch (type) {
+      case NOTIFICATION_TYPES.INFRASTRUCTURE:
+        return <Server size={18} color="#2563EB" />;
+      case NOTIFICATION_TYPES.SELF_HEALING:
+        return <Zap size={18} color="#059669" />;
+      case NOTIFICATION_TYPES.SECURITY:
+        return <ShieldAlert size={18} color="#DC2626" />;
+      case NOTIFICATION_TYPES.SYSTEM:
+      default:
+        return <Cpu size={18} color="#64748B" />;
+    }
+  };
 
   return (
     <div className="dashboard-notifications-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -105,6 +103,7 @@ export const NotificationsPage = () => {
             </h1>
             {unreadCount > 0 && (
               <span
+                data-testid="header-unread-badge"
                 style={{
                   fontSize: '0.6875rem',
                   fontWeight: 800,
@@ -124,7 +123,7 @@ export const NotificationsPage = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={triggerRefresh}
@@ -139,6 +138,7 @@ export const NotificationsPage = () => {
               fontSize: '0.8125rem',
               fontWeight: 600,
               cursor: 'pointer',
+              color: 'var(--dash-text-secondary)',
             }}
           >
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
@@ -147,20 +147,22 @@ export const NotificationsPage = () => {
 
           <button
             type="button"
-            onClick={handleMarkAllAsRead}
+            data-testid="btn-mark-all-read"
+            onClick={markAllNotificationsRead}
             disabled={unreadCount === 0}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '8px 14px',
-              backgroundColor: unreadCount > 0 ? '#FFFFFF' : '#F1F5F9',
+              backgroundColor: unreadCount > 0 ? '#FFFFFF' : '#F8FAFC',
               border: '1px solid var(--dash-border)',
               borderRadius: 'var(--dash-radius-md)',
               color: unreadCount > 0 ? 'var(--dash-primary)' : 'var(--dash-text-muted)',
               fontSize: '0.8125rem',
               fontWeight: 700,
               cursor: unreadCount > 0 ? 'pointer' : 'not-allowed',
+              transition: 'all 0.15s ease',
             }}
           >
             <Check size={14} />
@@ -169,118 +171,257 @@ export const NotificationsPage = () => {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        {[
-          { key: 'ALL', label: 'Tất Cả' },
-          { key: 'UNREAD', label: `Chưa Đọc (${unreadCount})` },
-          { key: 'HITL', label: 'Cổng Phê Duyệt (HITL)' },
-          { key: 'AI_PREDICTION', label: 'Dự Báo AI' },
-          { key: 'INCIDENT', label: 'Sự Cố & RCA' },
-          { key: 'SELF_HEAL', label: 'Tự Phục Hồi' },
-          { key: 'SYSTEM', label: 'Hệ Thống' },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setSelectedCategory(tab.key)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 'var(--dash-radius-full)',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: selectedCategory === tab.key ? 'var(--dash-primary)' : '#FFFFFF',
-              color: selectedCategory === tab.key ? '#FFFFFF' : 'var(--dash-text-secondary)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Filter Controls Row */}
+      <div
+        className="dash-card"
+        style={{
+          padding: '16px 20px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid var(--dash-border)',
+          borderRadius: 'var(--dash-radius-md)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        {/* Status Tabs: All, Unread, Read */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+            Trạng thái:
+          </span>
+          {[
+            { key: 'ALL', label: 'Tất Cả' },
+            { key: 'UNREAD', label: `Chưa Đọc (${unreadCount})` },
+            { key: 'READ', label: 'Đã Đọc' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              data-testid={`filter-status-${tab.key}`}
+              type="button"
+              onClick={() => setStatusFilter(tab.key)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--dash-radius-full)',
+                border: '1px solid var(--dash-border)',
+                backgroundColor: statusFilter === tab.key ? 'var(--dash-primary)' : '#FFFFFF',
+                color: statusFilter === tab.key ? '#FFFFFF' : 'var(--dash-text-secondary)',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Type Category Filter Chips */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+            Phân loại:
+          </span>
+          {[
+            { key: 'ALL', label: 'Tất Cả Loại' },
+            { key: NOTIFICATION_TYPES.INFRASTRUCTURE, label: 'Hạ Tầng' },
+            { key: NOTIFICATION_TYPES.SELF_HEALING, label: 'Tự Phục Hồi' },
+            { key: NOTIFICATION_TYPES.SECURITY, label: 'Bảo Mật' },
+            { key: NOTIFICATION_TYPES.SYSTEM, label: 'Hệ Thống' },
+          ].map((typeChip) => (
+            <button
+              key={typeChip.key}
+              data-testid={`filter-type-${typeChip.key}`}
+              type="button"
+              onClick={() => setTypeFilter(typeChip.key)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 'var(--dash-radius-sm)',
+                border: typeFilter === typeChip.key ? '1px solid var(--dash-primary)' : '1px solid var(--dash-border)',
+                backgroundColor: typeFilter === typeChip.key ? 'var(--dash-mint-50)' : '#FFFFFF',
+                color: typeFilter === typeChip.key ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {typeChip.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Notification Items List */}
-      <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
+      {/* Notifications List */}
+      <div
+        className="dash-card"
+        style={{
+          padding: '0',
+          overflow: 'hidden',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid var(--dash-border)',
+          borderRadius: 'var(--dash-radius-md)',
+        }}
+      >
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {filteredNotifications.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
-              Không có thông báo nào trong phân mục này.
+          {visibleNotifications.length === 0 ? (
+            <div
+              style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                color: 'var(--dash-text-muted)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
+              <Inbox size={40} strokeWidth={1.5} color="var(--dash-text-muted)" />
+              <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--dash-text-secondary)' }}>
+                Không tìm thấy thông báo nào trong phân mục này
+              </div>
+              <p style={{ fontSize: '0.8125rem', margin: 0, maxWidth: '360px' }}>
+                {statusFilter === 'UNREAD'
+                  ? 'Tuyệt vời! Bạn đã xem hết tất cả thông báo quan trọng.'
+                  : 'Hãy thử đổi bộ lọc trạng thái hoặc loại thông báo để xem các cảnh báo khác.'}
+              </p>
             </div>
           ) : (
-            filteredNotifications.map((n) => {
-              const isHitl = n.category === 'HITL';
-              const isAi = n.category === 'AI_PREDICTION';
+            visibleNotifications.map((n) => {
+              const isRead = n.read ?? !n.unread;
+              const severityMeta = getSeverityBadge(n.severity);
+              const typeIcon = getTypeIcon(n.type || n.category);
 
               return (
                 <div
                   key={n.id}
                   style={{
-                    padding: '18px 22px',
+                    padding: '20px 24px',
                     borderBottom: '1px solid var(--dash-border)',
-                    backgroundColor: n.read ? '#FFFFFF' : 'rgba(16, 185, 129, 0.03)',
+                    backgroundColor: isRead ? '#FFFFFF' : 'rgba(5, 150, 105, 0.03)',
                     display: 'flex',
                     alignItems: 'flex-start',
                     justifyContent: 'space-between',
                     gap: '16px',
-                    transition: 'background-color 0.2s',
+                    transition: 'background-color 0.15s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1 }}>
+                  {/* Left: Icon, Details, Tags */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flex: 1 }}>
                     <div
                       style={{
-                        width: '36px',
-                        height: '36px',
+                        width: '40px',
+                        height: '40px',
                         borderRadius: 'var(--dash-radius-md)',
-                        backgroundColor: isHitl ? '#FFFBEB' : isAi ? '#EFF6FF' : '#ECFDF5',
-                        color: isHitl ? '#D97706' : isAi ? '#2563EB' : '#059669',
+                        backgroundColor: isRead ? '#F8FAFC' : '#ECFDF5',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
+                        border: '1px solid var(--dash-border)',
                       }}
                     >
-                      {isHitl ? <ShieldCheck size={18} /> : isAi ? <Sparkles size={18} /> : <CheckCircle2 size={18} />}
+                      {typeIcon}
                     </div>
 
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <div style={{ flex: 1 }}>
+                      {/* Top Meta: Type, Severity, Time, Unread Indicator */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <span
                           style={{
                             fontSize: '0.625rem',
                             fontWeight: 800,
-                            padding: '1px 6px',
+                            padding: '2px 6px',
                             borderRadius: '4px',
-                            backgroundColor: isHitl ? '#FFFBEB' : isAi ? '#EFF6FF' : '#F1F5F9',
-                            color: isHitl ? '#D97706' : isAi ? '#2563EB' : '#64748B',
-                            border: `1px solid ${isHitl ? '#FDE68A' : isAi ? '#BFDBFE' : '#CBD5E1'}`,
+                            backgroundColor: '#F1F5F9',
+                            color: '#475569',
+                            border: '1px solid #CBD5E1',
+                            fontFamily: 'var(--font-mono)',
                           }}
                         >
-                          {n.category}
+                          {n.type || n.category || 'SYSTEM'}
                         </span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>{n.timestamp}</span>
-                        {!n.read && (
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#059669', display: 'inline-block' }} />
+
+                        {n.severity && (
+                          <span
+                            style={{
+                              fontSize: '0.625rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: severityMeta.bg,
+                              color: severityMeta.text,
+                              border: `1px solid ${severityMeta.border}`,
+                            }}
+                          >
+                            {severityMeta.label}
+                          </span>
+                        )}
+
+                        <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                          {n.timestamp || n.time}
+                        </span>
+
+                        {!isRead && (
+                          <span
+                            style={{
+                              width: '7px',
+                              height: '7px',
+                              borderRadius: '50%',
+                              backgroundColor: 'var(--dash-primary)',
+                              display: 'inline-block',
+                            }}
+                            title="Thông báo mới chưa đọc"
+                          />
                         )}
                       </div>
 
-                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: '0 0 4px 0' }}>
+                      {/* Title */}
+                      <h4
+                        style={{
+                          fontSize: '0.9375rem',
+                          fontWeight: isRead ? 600 : 700,
+                          color: 'var(--dash-text-primary)',
+                          margin: '0 0 4px 0',
+                        }}
+                      >
                         {n.title}
                       </h4>
 
-                      <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.45 }}>
-                        {n.message}
+                      {/* Message Body */}
+                      <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '0 0 8px 0', lineHeight: 1.5 }}>
+                        {n.message || n.desc}
                       </p>
+
+                      {/* Metadata Chips if available */}
+                      {n.metadata && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {n.metadata.cluster && (
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--dash-bg-canvas)', padding: '2px 6px', borderRadius: '4px' }}>
+                              Cụm: {n.metadata.cluster}
+                            </span>
+                          )}
+                          {n.metadata.resource && (
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--dash-bg-canvas)', padding: '2px 6px', borderRadius: '4px' }}>
+                              Tài nguyên: {n.metadata.resource}
+                            </span>
+                          )}
+                          {n.metadata.mttr && (
+                            <span style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600, backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px' }}>
+                              MTTR: {n.metadata.mttr}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Actions Column */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                    {n.actionPath && (
+                  {/* Right Actions: Deep-link and Read toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                    {(n.actionPath || n.link) && (
                       <button
                         type="button"
-                        onClick={() => onNavigate && onNavigate(n.actionPath)}
+                        onClick={() => onNavigate && onNavigate(n.actionPath || n.link)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -295,24 +436,30 @@ export const NotificationsPage = () => {
                           cursor: 'pointer',
                         }}
                       >
-                        <span>{n.actionText}</span>
+                        <span>{n.actionText || 'Chi Tiết'}</span>
                         <ArrowRight size={12} />
                       </button>
                     )}
 
                     <button
                       type="button"
-                      onClick={() => handleToggleRead(n.id)}
-                      title={n.read ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
+                      data-testid={`btn-toggle-read-${n.id}`}
+                      onClick={() => toggleNotificationRead(n.id)}
+                      title={isRead ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
+                      aria-label={isRead ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
                       style={{
                         padding: '6px',
                         background: 'none',
                         border: 'none',
-                        color: n.read ? 'var(--dash-text-muted)' : 'var(--dash-primary)',
+                        color: isRead ? 'var(--dash-text-muted)' : 'var(--dash-primary)',
                         cursor: 'pointer',
+                        borderRadius: 'var(--dash-radius-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      <CheckCircle2 size={16} />
+                      <CheckCircle2 size={18} />
                     </button>
                   </div>
                 </div>
@@ -320,6 +467,29 @@ export const NotificationsPage = () => {
             })
           )}
         </div>
+
+        {/* Load More Pagination */}
+        {hasMore && (
+          <div style={{ padding: '16px', textAlign: 'center', borderTop: '1px solid var(--dash-border)', backgroundColor: 'var(--dash-bg-canvas)' }}>
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              style={{
+                padding: '8px 20px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-md)',
+                color: 'var(--dash-text-primary)',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Xem thêm thông báo cũ hơn ({filteredNotifications.length - pageSize} thông báo còn lại)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

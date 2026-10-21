@@ -1,6 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
 const DashboardContext = createContext(null);
+
+const normalizeNotification = (item) => {
+  const isRead = item.read !== undefined ? Boolean(item.read) : !Boolean(item.unread);
+  return {
+    ...item,
+    read: isRead,
+    unread: !isRead,
+    desc: item.desc || item.message,
+    time: item.time || item.timestamp,
+    link: item.link || item.actionPath,
+  };
+};
 
 export const DashboardProvider = ({ children, onNavigate }) => {
   // 1. Organization & Environment State
@@ -44,36 +57,10 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   const [lastUpdated, setLastUpdated] = useState('Vừa xong');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 5. Notifications State
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-1',
-      title: 'Yêu cầu phê duyệt hành động khẩn cấp',
-      desc: 'AI đề xuất Drain Node worker-03 để phòng ngừa Kernel OOM Panic.',
-      time: '2 phút trước',
-      type: 'approval',
-      unread: true,
-      link: '/dashboard/self-healing/approvals',
-    },
-    {
-      id: 'notif-2',
-      title: 'AI Prediction: Rủi ro tràn RAM sớm',
-      desc: 'Dịch vụ payment-gateway có xác suất 87% chạm giới hạn bộ nhớ trong 18 phút.',
-      time: '14 phút trước',
-      type: 'warning',
-      unread: true,
-      link: '/dashboard/ai/predictions',
-    },
-    {
-      id: 'notif-3',
-      title: 'Tác tử Agent đồng bộ thành công',
-      desc: 'Agent eBPF trên cụm k8s-prod-cluster-01 đã kiểm tra và nạp lại cấu hình mTLS 1.3.',
-      time: '1 giờ trước',
-      type: 'info',
-      unread: false,
-      link: '/dashboard/agents',
-    },
-  ]);
+  // 5. Notifications State with centralized persistence
+  const [notifications, setNotifications] = useState(() => {
+    return getStoredNotifications().map(normalizeNotification);
+  });
 
   // Sidebar collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -100,10 +87,24 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   }, [isAutoRefresh]);
 
   const markAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, unread: false, read: true }));
+      saveStoredNotifications(updated);
+      return updated;
+    });
   };
 
-  const unreadNotifsCount = notifications.filter((n) => n.unread).length;
+  const toggleNotificationRead = (id) => {
+    setNotifications((prev) => {
+      const updated = prev.map((n) =>
+        n.id === id ? { ...n, read: !n.read, unread: n.read } : n
+      );
+      saveStoredNotifications(updated);
+      return updated;
+    });
+  };
+
+  const unreadNotifsCount = notifications.filter((n) => !n.read).length;
   const pendingApprovalsCount = 1;
   const activeIncidentsCount = 0;
 
@@ -126,10 +127,12 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         isRefreshing,
         triggerRefresh,
         notifications,
+        setNotifications,
         unreadNotifsCount,
         pendingApprovalsCount,
         activeIncidentsCount,
         markAllNotificationsRead,
+        toggleNotificationRead,
         isSidebarCollapsed,
         setIsSidebarCollapsed,
         isMobileNavOpen,

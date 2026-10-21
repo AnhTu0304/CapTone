@@ -346,6 +346,14 @@ test('renders Settings Page (/dashboard/settings) with tabs for Webhook, API tok
   expect(screen.getByText(/Slack Incoming Webhook URL/i)).toBeInTheDocument();
 });
 
+test('renders Personal Profile Page (/dashboard/profile) with identity cards and edit action', () => {
+  window.history.pushState({}, '', '/dashboard/profile');
+  render(<App />);
+  expect(screen.getByText(/Hồ Sơ Cá Nhân & Quản Trị Danh Tính/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/Nguyễn Văn An/i).length).toBeGreaterThan(0);
+  expect(screen.getByRole('button', { name: /Chỉnh Sửa Hồ Sơ/i })).toBeInTheDocument();
+});
+
 test('renders Organization Profile (/dashboard/organization) and Members Page (/dashboard/organization/members)', () => {
   window.history.pushState({}, '', '/dashboard/organization');
   render(<App />);

@@ -60,6 +60,8 @@ export const ROUTES = {
   ONBOARDING_K8S: '/onboarding/kubernetes',
   ONBOARDING_VERIFY: '/onboarding/verify-agent',
   ONBOARDING_COMPLETE: '/onboarding/complete',
+  PROFILE: '/dashboard/profile',
+  NOTIFICATIONS: '/dashboard/notifications',
 };
 
 export const RouteRenderer = ({ 
@@ -79,6 +81,14 @@ export const RouteRenderer = ({
   // Handle all dashboard routes
   if (path.startsWith('/dashboard')) {
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
+  }
+
+  // Handle standalone profile or notifications paths
+  if (path === '/profile') {
+    return <DashboardPage currentPath="/dashboard/profile" onNavigate={onNavigate} />;
+  }
+  if (path === '/notifications') {
+    return <DashboardPage currentPath="/dashboard/notifications" onNavigate={onNavigate} />;
   }
 
   // Handle all admin routes
