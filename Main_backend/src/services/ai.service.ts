@@ -234,7 +234,7 @@ export class AiService {
 
       if (!environmentId) {
         if (clusterId) {
-          const cRes = await client.query('SELECT environment_id FROM clusters WHERE id = $1', [clusterId]);
+          const cRes = await client.query('SELECT environment_id FROM clusters WHERE id::text = $1 OR name = $1 LIMIT 1', [clusterId]);
           if (cRes.rows.length > 0) environmentId = cRes.rows[0].environment_id;
         }
         if (!environmentId) {
@@ -407,7 +407,7 @@ export class AiService {
 
       if (!environmentId) {
         if (clusterId) {
-          const cRes = await client.query('SELECT environment_id FROM clusters WHERE id = $1', [clusterId]);
+          const cRes = await client.query('SELECT environment_id FROM clusters WHERE id::text = $1 OR name = $1 LIMIT 1', [clusterId]);
           if (cRes.rows.length > 0) environmentId = cRes.rows[0].environment_id;
         }
         if (!environmentId) {
@@ -420,7 +420,7 @@ export class AiService {
       }
 
       if (environmentId && !organizationId) {
-        const envRes = await client.query('SELECT organization_id FROM environments WHERE id = $1', [
+        const envRes = await client.query('SELECT organization_id FROM environments WHERE id::text = $1 OR name = $1 LIMIT 1', [
           environmentId,
         ]);
         if (envRes.rows.length > 0) {

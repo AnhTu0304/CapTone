@@ -4,6 +4,7 @@ import { config } from './config/env';
 import { testDbConnection } from './config/database';
 import { initAgentWebSocket } from './websocket/agentWebSocket';
 import { initTelemetryWebSocket } from './websocket/telemetryWebSocket';
+import { TelemetryPipelineService } from './services/telemetryPipeline.service';
 
 const startServer = async () => {
   // Test connection to PostgreSQL before opening HTTP port
@@ -16,6 +17,9 @@ const startServer = async () => {
   // Initialize Frontend UI Telemetry WebSocket server on WS /api/v1/telemetry/ws
   const uiWss = initTelemetryWebSocket(server);
 
+  // Start continuous AI Ingestion, Forecast & Partitioning Pipeline
+  TelemetryPipelineService.startPipeline(10);
+
   server.listen(config.port, () => {
     console.log(`🚀 Server is running on port ${config.port} in ${config.nodeEnv} mode`);
     console.log(`🔗 Health Check: http://localhost:${config.port}${config.apiPrefix}/health`);
@@ -26,6 +30,7 @@ const startServer = async () => {
   // Graceful shutdown
   const shutdown = () => {
     console.log('Received shutdown signal, closing server gracefully...');
+    TelemetryPipelineService.stopPipeline();
     uiWss.close();
     wss.close(() => {
       server.close(() => {
