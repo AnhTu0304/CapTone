@@ -57,4 +57,14 @@ export const config = {
     from: process.env.EMAIL_FROM || '"AI Self-Heal Support" <noreply@selfheal.io>',
     clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
   },
+
+  // Redis Cache Config
+  redis: {
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
+    password: process.env.REDIS_PASSWORD || undefined,
+    url: process.env.REDIS_URL,
+    ttlSeconds: process.env.REDIS_CACHE_TTL ? parseInt(process.env.REDIS_CACHE_TTL, 10) : 300,
+    enabled: process.env.REDIS_ENABLED !== 'false',
+  },
 };

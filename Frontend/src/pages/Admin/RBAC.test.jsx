@@ -19,7 +19,7 @@ jest.mock('../Dashboard', () => () => <div data-testid="mock-dashboard">Dashboar
 const createAuthContextValue = (roles, overrides = {}) => {
   const normRoles = roles.map(r => r.toUpperCase());
   const isSuperAdmin = normRoles.includes('SUPER_ADMIN');
-  const isAdmin = isSuperAdmin || normRoles.some(r => ['ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(r));
+  const isAdmin = isSuperAdmin || normRoles.some(r => ['ADMIN', 'SYSTEM_ADMIN'].includes(r));
   const isDevOps = normRoles.includes('DEVOPS') && !isAdmin;
   const isViewer = !isAdmin && !isDevOps;
 
@@ -191,6 +191,21 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.getByTestId('mock-admin-users')).toBeInTheDocument();
+    });
+
+    test('2.7. [SEC-01] SME_OWNER is BLOCKED from /admin/users (Access Denied)', () => {
+      const authVal = createAuthContextValue(['SME_OWNER']);
+
+      render(
+        <ToastProvider>
+          <AuthContext.Provider value={authVal}>
+            <RouteRenderer currentPath="/admin/users" />
+          </AuthContext.Provider>
+        </ToastProvider>
+      );
+
+      expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
+      expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
     });
   });
 });

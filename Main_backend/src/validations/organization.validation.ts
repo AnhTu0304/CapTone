@@ -90,3 +90,16 @@ export const orgQuerySchema = z.object({
     order: z.enum(['ASC', 'DESC', 'asc', 'desc']).default('DESC').optional(),
   }),
 });
+
+/**
+ * Schema kiểm tra dữ liệu khi CẬP NHẬT TRẠNG THÁI TỔ CHỨC ([2.12])
+ * PATCH /api/v1/organizations/:id/status
+ */
+export const updateOrgStatusSchema = z.object({
+  body: z.object({
+    status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'], {
+      message: 'Trạng thái tổ chức phải là một trong các giá trị: ACTIVE, INACTIVE, SUSPENDED',
+    }),
+    reason: z.string().trim().max(500, 'Lý do thay đổi trạng thái không vượt quá 500 ký tự').optional(),
+  }),
+});

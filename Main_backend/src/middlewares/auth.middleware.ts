@@ -63,8 +63,9 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
       return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
     }
 
-    // Đồng bộ trạng thái thực tế vào request
+    // Đồng bộ trạng thái thực tế và danh sách vai trò hoạt động mới nhất từ CSDL vào request
     decoded.status = dbUser.status as any;
+    decoded.roles = Array.isArray(dbUser.roles) ? dbUser.roles : [];
   } catch (dbError) {
     if (dbError instanceof ApiError) {
       return next(dbError);
