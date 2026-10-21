@@ -11,13 +11,14 @@ import {
   Check,
   Clock,
   Shield,
+  ShieldCheck,
   Menu,
   LogOut,
   User,
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, getPrimaryRole } = useAuth();
+  const { user, logout, getInitials, getPrimaryRole, isAdmin } = useAuth();
   const {
     currentOrg,
     setCurrentOrg,
@@ -658,6 +659,32 @@ export const TopHeader = () => {
                   </span>
                 </div>
               </div>
+              {isAdmin(user) && (
+                <button
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    if (onNavigate) onNavigate('/admin');
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    border: 'none',
+                    background: 'none',
+                    color: '#059669',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    borderRadius: 'var(--dash-radius-sm)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <ShieldCheck size={13} color="#059669" />
+                  <span>Bảng Quản Trị Hệ Thống (Admin)</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   setIsProfileMenuOpen(false);

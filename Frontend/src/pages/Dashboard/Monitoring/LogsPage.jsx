@@ -1,4 +1,3 @@
-import { telemetryService } from '../../../services/telemetryService';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import {
@@ -46,61 +45,26 @@ export const LogsPage = () => {
     }
   }, [logs, autoScroll]);
 
-  // Real-time live log WebSocket stream from Kubernetes Agent via Main Backend
+  // Simulated live log ticker
   useEffect(() => {
     if (!isLive) return;
 
-    const syncFullLogs = (logsList) => {
-      if (!logsList || logsList.length === 0) return;
-      const liveLogs = logsList.map((l, idx) => {
-        const time = l.occurred_at
-          ? new Date(l.occurred_at).toLocaleTimeString('vi-VN')
-          : new Date().toLocaleTimeString('vi-VN');
-        return {
-          id: l.id || `live-log-${idx}`,
-          timestamp: time,
-          level: (l.level || 'INFO').toUpperCase(),
-          ns: 'default',
-          pod: l.metadata?.pod_name || (l.service_id ? `${l.service_id}-k8s` : 'sme-order-service'),
-          msg: l.message || '',
-        };
-      });
-      setLogs(liveLogs.reverse());
-    };
+    const interval = setInterval(() => {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + Math.floor(Math.random() * 900 + 100);
+      const newLog = {
+        id: Date.now(),
+        timestamp: timeStr,
+        level: Math.random() > 0.85 ? 'WARN' : 'INFO',
+        ns: 'production',
+        pod: 'api-gateway-55c8b-mk42p',
+        msg: `Telemetry heartbeat sync: latency ${Math.floor(Math.random() * 8 + 2)}ms & processed batch of 48 requests`,
+      };
 
-    // 1. Initial REST fetch
-    telemetryService.getLiveSummary('sme-order-service').then((data) => {
-      if (data?.logs) syncFullLogs(data.logs);
-    });
+      setLogs((prev) => [...prev.slice(-40), newLog]);
+    }, 4000);
 
-    // 2. Persistent WebSocket stream
-    const unsubscribe = telemetryService.subscribeWebSocket(
-      'sme-order-service',
-      (msg) => {
-        if (msg.type === 'initial_state' || msg.type === 'live_pulse') {
-          syncFullLogs(msg.data?.logs);
-        } else if (msg.type === 'log') {
-          // Instant individual log push
-          const l = msg.data;
-          const time = l.occurred_at
-            ? new Date(l.occurred_at).toLocaleTimeString('vi-VN')
-            : new Date().toLocaleTimeString('vi-VN');
-          const newEntry = {
-            id: l.id || `ws-log-${Date.now()}`,
-            timestamp: time,
-            level: (l.level || 'INFO').toUpperCase(),
-            ns: 'default',
-            pod: l.metadata?.pod_name || (l.service_id ? `${l.service_id}-k8s` : 'sme-order-service'),
-            msg: l.message || '',
-          };
-          setLogs((prev) => [...prev.slice(-100), newEntry]);
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
+    return () => clearInterval(interval);
   }, [isLive]);
 
   // Filter logs

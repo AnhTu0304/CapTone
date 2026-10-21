@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import {
   User,
+  LayoutDashboard,
   Shield,
   ShieldCheck,
   KeyRound,
@@ -298,6 +299,12 @@ export const AdminProfileMenu = ({ onNavigate }) => {
           {/* Menu Items */}
           <div style={{ padding: '6px' }}>
             {[
+              {
+                id: 'switch_to_dashboard',
+                label: 'Bảng Điều Khiển Doanh Nghiệp (Owner / User)',
+                icon: LayoutDashboard,
+                path: '/dashboard',
+              },
               {
                 id: 'profile',
                 label: 'Hồ Sơ Cá Nhân',

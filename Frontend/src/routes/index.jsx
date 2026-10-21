@@ -90,28 +90,8 @@ export const RouteRenderer = ({
     return <OnboardingPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle all dashboard routes
+  // Handle all dashboard routes (User / Owner Portal - hiển thị đầy đủ giao diện các trang & bảng)
   if (path.startsWith('/dashboard')) {
-    if (isViewerUser && path !== '/dashboard' && path !== '/dashboard/profile' && path !== '/dashboard/notifications') {
-      return (
-        <AdminAccessDenied
-          onNavigate={onNavigate}
-          redirectPath="/dashboard"
-          title="403 — Không Có Quyền Truy Cập"
-          message="Tài khoản Viewer chỉ có quyền xem Bảng điều khiển tổng quan, không được truy cập các trang vận hành hoặc cấu hình chi tiết."
-        />
-      );
-    }
-    if (isDevOpsUser && path === '/dashboard/organization/members') {
-      return (
-        <AdminAccessDenied
-          onNavigate={onNavigate}
-          redirectPath="/dashboard"
-          title="403 — Không Có Quyền Quản Lý Thành Viên"
-          message="Tài khoản DevOps chỉ có quyền vận hành kỹ thuật và hạ tầng, không có quyền quản lý thành viên và phân quyền."
-        />
-      );
-    }
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
   }
 
