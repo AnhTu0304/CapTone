@@ -1,11 +1,12 @@
 import React from 'react';
-import { Layers, ArrowUpRight, Radio } from 'lucide-react';
+import { Layers, ArrowUpRight, Radio, Users, Ban, CheckCircle2 } from 'lucide-react';
 import OrganizationStatusBadge from './OrganizationStatusBadge';
 
 export const OrganizationTable = ({
   organizations = [],
   onViewDetails,
   onSelectOrganization,
+  onToggleStatus,
   isLoading = false,
 }) => {
   const handleSelect = (org) => {
@@ -73,13 +74,13 @@ export const OrganizationTable = ({
         <thead>
           <tr>
             <th style={{ minWidth: '220px' }}>Tổ Chức & Tên Miền</th>
-            <th style={{ minWidth: '140px' }}>Gói Dịch Vụ</th>
-            <th style={{ minWidth: '140px' }}>Cụm K8s (Dùng / Hạn Mức)</th>
-            <th style={{ minWidth: '140px' }}>Pods Hoạt Động</th>
+            <th style={{ minWidth: '130px' }}>Gói Dịch Vụ</th>
+            <th style={{ minWidth: '110px' }}>Thành Viên</th>
+            <th style={{ minWidth: '140px' }}>Cụm K8s & Pods</th>
             <th style={{ minWidth: '130px' }}>Tác Tử eBPF</th>
-            <th style={{ minWidth: '130px' }}>Trạng Thái</th>
+            <th style={{ minWidth: '120px' }}>Trạng Thái</th>
             <th style={{ minWidth: '100px' }}>Ngày Tạo</th>
-            <th style={{ minWidth: '110px', textAlign: 'right' }}>Thao Tác</th>
+            <th style={{ minWidth: '170px', textAlign: 'right' }}>Thao Tác Quản Trị</th>
           </tr>
         </thead>
         <tbody>
@@ -103,105 +104,55 @@ export const OrganizationTable = ({
                         justifyContent: 'center',
                         fontWeight: 800,
                         fontSize: '0.875rem',
-                        border: '1px solid #A7F3D0',
                         flexShrink: 0,
+                        border: '1px solid #A7F3D0',
                       }}
                     >
                       {initial}
                     </div>
                     <div>
-                      <button
-                        type="button"
-                        onClick={() => handleSelect(org)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          textAlign: 'left',
-                          fontWeight: 700,
-                          color: 'var(--dash-text-primary)',
-                          cursor: 'pointer',
-                          display: 'block',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = '#059669')}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--dash-text-primary)')}
-                      >
-                        {org.name}
-                      </button>
+                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{org.name}</div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        {org.slug} &bull; {org.domain}
+                        {org.domain}
                       </div>
                     </div>
                   </div>
                 </td>
 
-                {/* Subscription Plan */}
+                {/* Plan Tier */}
                 <td>
                   <span
                     style={{
-                      padding: '3px 8px',
+                      display: 'inline-block',
+                      padding: '2px 8px',
                       borderRadius: '6px',
                       fontSize: '0.6875rem',
                       fontWeight: 700,
-                      backgroundColor:
-                        org.plan === 'Enterprise Cloud'
-                          ? '#EFF6FF'
-                          : org.plan === 'SME Pro'
-                          ? '#F5F3FF'
-                          : '#F1F5F9',
-                      color:
-                        org.plan === 'Enterprise Cloud'
-                          ? '#1D4ED8'
-                          : org.plan === 'SME Pro'
-                          ? '#6D28D9'
-                          : '#475569',
-                      border: `1px solid ${
-                        org.plan === 'Enterprise Cloud'
-                          ? '#BFDBFE'
-                          : org.plan === 'SME Pro'
-                          ? '#DDD6FE'
-                          : '#E2E8F0'
-                      }`,
+                      backgroundColor: org.plan.includes('Enterprise') ? '#FAF5FF' : org.plan.includes('Pro') ? '#EFF6FF' : '#F1F5F9',
+                      color: org.plan.includes('Enterprise') ? '#7E22CE' : org.plan.includes('Pro') ? '#1D4ED8' : '#475569',
+                      border: org.plan.includes('Enterprise') ? '1px solid #E9D5FF' : org.plan.includes('Pro') ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
                     }}
                   >
                     {org.plan}
                   </span>
                 </td>
 
-                {/* Clusters Quota */}
+                {/* Members Count */}
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Layers size={14} style={{ color: 'var(--dash-text-muted)' }} />
-                    <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                      {org.clustersCount} / {org.clustersLimit} Cụm
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      width: '90px',
-                      height: '4px',
-                      backgroundColor: '#E2E8F0',
-                      borderRadius: '2px',
-                      marginTop: '4px',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${Math.min(100, Math.round((org.clustersCount / org.clustersLimit) * 100))}%`,
-                        height: '100%',
-                        backgroundColor: '#059669',
-                        borderRadius: '2px',
-                      }}
-                    />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                    <Users size={13} />
+                    <span>{org.membersCount || 6} người</span>
                   </div>
                 </td>
 
-                {/* Pods Quota */}
+                {/* Clusters & Pods */}
                 <td>
-                  <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {(org.podsCount ?? 0).toLocaleString('vi-VN')} / {(org.podsLimit ?? 0).toLocaleString('vi-VN')} Pods
-                  </span>
+                  <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                    {org.clustersCount} / {org.clustersLimit} Cụm
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                    {org.podsCount || 0} Pods
+                  </div>
                 </td>
 
                 {/* eBPF Agent Status */}
@@ -244,37 +195,55 @@ export const OrganizationTable = ({
 
                 {/* Actions */}
                 <td style={{ textAlign: 'right' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelect(org)}
-                    aria-label={`Xem chi tiết tổ chức ${org.name}`}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '5px 12px',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid var(--dash-border)',
-                      borderRadius: '8px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      color: 'var(--dash-primary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      boxShadow: 'var(--dash-shadow-xs)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--dash-primary)';
-                      e.currentTarget.style.backgroundColor = 'var(--dash-primary-light)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--dash-border)';
-                      e.currentTarget.style.backgroundColor = '#FFFFFF';
-                    }}
-                  >
-                    <span>Xem Chi Tiết</span>
-                    <ArrowUpRight size={13} />
-                  </button>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {/* Toggle Suspend / Activate */}
+                    {onToggleStatus && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleStatus(org)}
+                        title={org.status === 'SUSPENDED' ? 'Mở lại công ty' : 'Tạm ngưng công ty'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: org.status === 'SUSPENDED' ? '1px solid #BBF7D0' : '1px solid #FECACA',
+                          backgroundColor: org.status === 'SUSPENDED' ? '#F0FDF4' : '#FEF2F2',
+                          color: org.status === 'SUSPENDED' ? '#15803D' : '#DC2626',
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {org.status === 'SUSPENDED' ? <CheckCircle2 size={11} /> : <Ban size={11} />}
+                        <span>{org.status === 'SUSPENDED' ? 'Kích Hoạt' : 'Tạm Ngưng'}</span>
+                      </button>
+                    )}
+
+                    {/* View Details */}
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(org)}
+                      aria-label={`Xem chi tiết tổ chức ${org.name}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '4px 10px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid var(--dash-border)',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: 'var(--dash-primary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>Chi Tiết</span>
+                      <ArrowUpRight size={12} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             );

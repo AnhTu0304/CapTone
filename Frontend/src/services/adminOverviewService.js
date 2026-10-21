@@ -38,6 +38,38 @@ export const SCOPE_OPTIONS = {
 
 const BASE_OVERVIEW_DATA = {
   kpi: {
+    companies: {
+      total: 86,
+      active: 82,
+      incident: 4,
+      diff: '+4 tháng này',
+      status: 'positive',
+      label: '82 Đang hoạt động • 4 Gặp sự cố / Tạm ngưng',
+    },
+    users: {
+      total: 1420,
+      active: 1385,
+      locked: 35,
+      diff: '+128 mới',
+      status: 'positive',
+      label: '1,385 Đang hoạt động • 35 Bị khóa',
+    },
+    agents: {
+      total: 128,
+      online: 122,
+      offline: 6,
+      diff: '95.3% sẵn sàng',
+      status: 'positive',
+      label: '122 Online • 6 Offline',
+    },
+    clusters: {
+      total: 34,
+      healthy: 31,
+      degraded: 3,
+      diff: '6 Vùng (Regions)',
+      status: 'neutral',
+      label: '31 Ổn định • 3 Cần kiểm tra',
+    },
     uptime: { value: '99.98%', diff: '+0.08%', status: 'positive', label: 'Cam kết SLA 99.90%' },
     selfHealingRate: { value: '94.2%', diff: '+2.4%', status: 'positive', label: 'MTTR trung bình 1.4s' },
     activeIncidents: { value: '1 Khẩn Cấp', diff: '-2 so với 24h trước', status: 'critical', label: '1 Critical • 2 Major' },

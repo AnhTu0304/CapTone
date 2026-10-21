@@ -281,9 +281,13 @@ export const AIPredictionsTable = ({
             <thead>
               <tr
                 style={{
-                  background: 'linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 100%)',
-                  borderBottom: '1px solid #BBF7D0',
-                  color: '#166534',
+                  backgroundColor: '#F8FAFC',
+                  borderBottom: '1px solid var(--dash-border)',
+                  color: 'var(--dash-text-muted)',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
                   textAlign: 'left',
                 }}
               >

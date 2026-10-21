@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Building2, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Building2, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck, Plus, X, Save } from 'lucide-react';
 import { getOrganizations } from '../../../services/adminOrganizationsService';
 import OrganizationTable from '../../../components/admin/organizations/OrganizationTable';
 import OrganizationFilters from '../../../components/admin/organizations/OrganizationFilters';
@@ -13,8 +13,25 @@ export const OrganizationsListPage = ({ onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [planFilter, setPlanFilter] = useState('ALL');
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Modal Đăng Ký / Tạo Company mới
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    slug: '',
+    plan: 'SME Pro',
+    domain: '',
+    contactEmail: '',
+    clustersLimit: 3,
+  });
 
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const fetchOrganizationsData = useCallback(async () => {
     setIsLoading(true);
@@ -42,6 +59,56 @@ export const OrganizationsListPage = ({ onNavigate }) => {
     if (onNavigate) {
       onNavigate(`/admin/organizations/${org.id}`);
     }
+  };
+
+  const handleToggleOrgStatus = (org) => {
+    const newStatus = org.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+    setOrganizations((prev) =>
+      prev.map((item) => (item.id === org.id ? { ...item, status: newStatus } : item))
+    );
+    showToast(
+      newStatus === 'ACTIVE'
+        ? `Đã kích hoạt lại hoạt động cho công ty "${org.name}"!`
+        : `Đã tạm ngưng hoạt động của công ty "${org.name}"!`
+    );
+  };
+
+  const handleCreateCompanySubmit = (e) => {
+    e.preventDefault();
+    if (!createForm.name.trim() || !createForm.contactEmail.trim()) {
+      alert('Vui lòng điền tên công ty và email liên hệ.');
+      return;
+    }
+
+    const newOrg = {
+      id: `org-${Date.now()}`,
+      name: createForm.name.trim(),
+      slug: createForm.slug.trim() || createForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      plan: createForm.plan,
+      status: 'ACTIVE',
+      domain: createForm.domain.trim() || `${createForm.slug || 'company'}.com`,
+      contactEmail: createForm.contactEmail.trim(),
+      createdAt: 'Vừa xong',
+      clustersCount: 0,
+      clustersLimit: Number(createForm.clustersLimit) || 3,
+      podsCount: 0,
+      podsLimit: 100,
+      agentHealth: 'Chờ kết nối',
+      enforce2FA: false,
+      membersCount: 1,
+    };
+
+    setOrganizations((prev) => [newOrg, ...prev]);
+    setIsCreateModalOpen(false);
+    setCreateForm({
+      name: '',
+      slug: '',
+      plan: 'SME Pro',
+      domain: '',
+      contactEmail: '',
+      clustersLimit: 3,
+    });
+    showToast(`Đã tạo thành công doanh nghiệp mới "${newOrg.name}"!`);
   };
 
   const { activeCount, trialCount, suspendedCount } = useMemo(() => {
@@ -100,14 +167,36 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             }}
           >
             <Building2 size={26} style={{ color: '#059669' }} />
-            Quản Lý Tổ Chức & Doanh Nghiệp (Tenants)
+            Quản Lý Công Ty & Doanh Nghiệp (Companies)
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
-            Quản lý tập trung toàn bộ doanh nghiệp thuê bao đa người dùng (Multi-tenant), phân bổ hạn mức hạ tầng K8s và giám sát sức khỏe tác tử.
+            Quản lý tập trung toàn bộ doanh nghiệp đăng ký sử dụng SelfAI, kích hoạt/tạm ngưng, theo dõi thành viên, tác tử và cụm máy chủ.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#059669',
+              color: '#FFFFFF',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
+            }}
+          >
+            <Plus size={16} />
+            <span>Tạo Company Mới</span>
+          </button>
+
           <button
             type="button"
             onClick={fetchOrganizationsData}
@@ -128,10 +217,30 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             }}
           >
             <RefreshCw size={14} className={isLoading ? 'spin-icon' : ''} />
-            <span>Làm mới</span>
+            <span>Làm Mới</span>
           </button>
         </div>
       </div>
+
+      {toastMessage && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: '#ECFDF5',
+            border: '1px solid #A7F3D0',
+            color: '#065F46',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <CheckCircle2 size={16} color="#059669" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* Summary KPI Badges */}
       <div
@@ -150,7 +259,9 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             boxShadow: 'var(--dash-shadow-xs)',
           }}
         >
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TỔNG SỐ TỔ CHỨC</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>
+            TỔNG DOANH NGHIỆP
+          </div>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
             {organizations.length}
           </div>
@@ -161,12 +272,12 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             padding: '16px',
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
-            border: '1px solid #BBF7D0',
+            border: '1px solid #A7F3D0',
             boxShadow: 'var(--dash-shadow-xs)',
           }}
         >
           <div style={{ fontSize: '0.75rem', color: '#065F46', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <CheckCircle2 size={13} /> ĐANG HOẠT ĐỘNG
+            <CheckCircle2 size={13} /> ĐANG HOẠT ĐỘNG (ACTIVE)
           </div>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669', marginTop: '4px' }}>
             {activeCount}
@@ -178,14 +289,14 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             padding: '16px',
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
-            border: '1px solid #FEF08A',
+            border: '1px solid #FDE68A',
             boxShadow: 'var(--dash-shadow-xs)',
           }}
         >
-          <div style={{ fontSize: '0.75rem', color: '#854D0E', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Clock size={13} /> ĐANG DÙNG THỬ (TRIAL)
+          <div style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Clock size={13} /> DÙNG THỬ (TRIAL)
           </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#CA8A04', marginTop: '4px' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#D97706', marginTop: '4px' }}>
             {trialCount}
           </div>
         </div>
@@ -234,7 +345,212 @@ export const OrganizationsListPage = ({ onNavigate }) => {
         organizations={organizations}
         isLoading={isLoading}
         onSelectOrganization={handleSelectOrg}
+        onToggleStatus={handleToggleOrgStatus}
       />
+
+      {/* Modal Tạo Company Mới */}
+      {isCreateModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '14px',
+              maxWidth: '520px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Building2 size={20} color="#059669" />
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                  Đăng Ký / Tạo Company Mới
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCompanySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Tên Doanh Nghiệp (Company Name) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: VNG Cloud Technology"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Mã Slug / Định Danh
+                </label>
+                <input
+                  type="text"
+                  placeholder="vngcloud (để trống tự tạo)"
+                  value={createForm.slug}
+                  onChange={(e) => setCreateForm({ ...createForm, slug: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Gói Dịch Vụ Thuê Bao
+                </label>
+                <select
+                  value={createForm.plan}
+                  onChange={(e) => setCreateForm({ ...createForm, plan: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <option value="SME Starter">SME Starter (Tối đa 1 cụm)</option>
+                  <option value="SME Pro">SME Pro (Tối đa 3 cụm)</option>
+                  <option value="Enterprise Cloud">Enterprise Cloud (Không giới hạn)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Tên Miền Doanh Nghiệp (Domain)
+                </label>
+                <input
+                  type="text"
+                  placeholder="vngcloud.vn"
+                  value={createForm.domain}
+                  onChange={(e) => setCreateForm({ ...createForm, domain: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Email Kỹ Thuật / Quản Trị Viên Đại Diện *
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@vngcloud.vn"
+                  value={createForm.contactEmail}
+                  onChange={(e) => setCreateForm({ ...createForm, contactEmail: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Hạn Mức Cụm K8s Cho Phép
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={createForm.clustersLimit}
+                  onChange={(e) => setCreateForm({ ...createForm, clustersLimit: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    backgroundColor: '#FFFFFF',
+                    color: 'var(--dash-text-primary)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    fontSize: '0.8125rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Save size={14} />
+                  <span>Tạo Công Ty</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

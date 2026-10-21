@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../../../context/AuthContext';
 import {
   Users,
   Layers,
@@ -29,6 +30,8 @@ import OrganizationAuditActivity from '../../../components/admin/organizations/O
 import { AdminErrorState } from '../../../components/admin/common';
 
 export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
+  const { activeRole } = useAuth();
+  const isAdminRole = activeRole === 'ADMIN';
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'members' | 'environments' | 'clusters' | 'agents' | 'incidents' | 'audit'
   const [organization, setOrganization] = useState(null);
   const [members, setMembers] = useState([]);

@@ -7,7 +7,8 @@ import {
   GitFork, 
   BarChart2, 
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Scale
 } from 'lucide-react';
 import {
   getAIOverviewKPIs,
@@ -23,15 +24,11 @@ import AIModelsTable from '../../../components/admin/ai/AIModelsTable';
 import AIPredictionsTable from '../../../components/admin/ai/AIPredictionsTable';
 import AIRCASection from '../../../components/admin/ai/AIRCASection';
 import AIPerformanceView from '../../../components/admin/ai/AIPerformanceView';
+import AIComparisonView from '../../../components/admin/ai/AIComparisonView';
 
 /**
  * AdminAIPage Component
- * Trang Quản Trị Trung Tâm Động Cơ Trí Tuệ Nhân Tạo & RCA:
- * Quản lý 5 phân hệ: overview, models, predictions, rca, performance.
- * 
- * Khớp 7 khái niệm CSDL nền tảng:
- * ai_models, ai_model_metrics, ai_predictions, prediction_inputs,
- * rca_analyses, rca_evidences, ai_recommendations.
+ * Trang Quản Trị Trung Tâm Động Cơ Trí Tuệ Nhân Tạo & RCA
  */
 export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
   const [kpis, setKpis] = useState(null);
@@ -92,6 +89,12 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
           desc: 'Quản lý phiên bản, khuôn khổ huấn luyện, trạng thái hoạt động và nguồn gốc dữ liệu của các mô hình AI/ML.',
           icon: Cpu,
         };
+      case 'comparison':
+        return {
+          title: 'Đánh Giá & So Sánh Mô Hình Trước / Sau (Model Version Comparison)',
+          desc: 'Đối chiếu trực tiếp chỉ số hiệu năng phiên bản cũ vs phiên bản mới, kiểm soát trôi dữ liệu và lịch sử đánh giá.',
+          icon: Scale,
+        };
       case 'predictions':
         return {
           title: 'Suy Luận & Dự Báo Dị Thường (AI Predictions)',
@@ -101,7 +104,7 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
       case 'rca':
         return {
           title: 'Đồ Thị Nhân Quả & Phân Tích Sự Cố (Root Cause Analysis - RCA)',
-          desc: 'Khám phá chuỗi lan truyền sự cố, bằng chứng telemetry eBPF đa tầng và khuyến nghị hành động tương ứng.',
+          desc: 'Khám phá chuỗi lan truyền sự cố, bằng chứng viễn trắc eBPF đa tầng và khuyến nghị hành động phục hồi tương ứng.',
           icon: GitFork,
         };
       case 'performance':
@@ -124,53 +127,148 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
   const IconComponent = meta.icon;
 
   return (
-    <div className="space-y-6">
-      {/* Top Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-xl bg-primary-100 dark:bg-primary-950/60 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800">
-            <IconComponent className="w-6 h-6" />
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+        maxWidth: '1440px',
+        margin: '0 auto',
+        paddingTop: '6px',
+        paddingBottom: '40px',
+      }}
+    >
+      {/* 1. Top Page Header Banner */}
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid var(--dash-border)',
+          borderRadius: '16px',
+          padding: '20px 24px',
+          boxShadow: 'var(--dash-shadow-xs)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
+            }}
+          >
+            <IconComponent size={22} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h1
+                style={{
+                  fontSize: '1.375rem',
+                  fontWeight: 800,
+                  color: 'var(--dash-text-primary)',
+                  margin: 0,
+                  letterSpacing: '-0.02em',
+                }}
+              >
                 {meta.title}
               </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800">
-                <Sparkles className="w-3 h-3 text-amber-500" />
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#ECFDF5',
+                  color: '#059669',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  border: '1px solid #A7F3D0',
+                }}
+              >
+                <Sparkles size={12} color="#059669" />
                 eBPF + AI Engine
               </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1D4ED8',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  border: '1px solid #BFDBFE',
+                }}
+              >
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
+                Độ trễ: 1.2ms
+              </span>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
               {meta.desc}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
-          <button
-            onClick={loadData}
-            disabled={isLoading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-colors shadow-xs disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            Làm mới
-          </button>
-        </div>
+        <button
+          onClick={loadData}
+          disabled={isLoading}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: '1px solid var(--dash-border)',
+            backgroundColor: '#FFFFFF',
+            color: 'var(--dash-text-primary)',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            boxShadow: 'var(--dash-shadow-xs)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <RefreshCw size={13} style={{ animation: isLoading ? 'spin 1s linear infinite' : 'none' }} />
+          <span>Làm mới</span>
+        </button>
       </div>
 
-      {/* Navigation Sub-Tabs */}
+      {/* 2. Navigation Sub-Tabs */}
       <AINavTabs currentSection={currentSection} onNavigate={onNavigate} onTabChange={handleTabChange} />
 
-      {/* Error Banner if any */}
+      {/* 3. Error Banner if any */}
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300">
+        <div
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#DC2626',
+            fontSize: '0.8125rem',
+          }}
+        >
           {error}
         </div>
       )}
 
-      {/* Dynamic Content View based on currentSection */}
-      <div className="min-h-[400px]">
+      {/* 4. Dynamic Content View */}
+      <div style={{ minHeight: '400px' }}>
         {currentSection === 'overview' && (
           <AIOverviewSection
             kpis={kpis}
@@ -182,15 +280,19 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
         {currentSection === 'models' && (
           <AIModelsTable
             models={models}
-            loading={isLoading}
+            isLoading={isLoading}
             onRefresh={loadData}
           />
+        )}
+
+        {currentSection === 'comparison' && (
+          <AIComparisonView />
         )}
 
         {currentSection === 'predictions' && (
           <AIPredictionsTable
             predictions={predictions}
-            loading={isLoading}
+            isLoading={isLoading}
             onRefresh={loadData}
           />
         )}
@@ -198,7 +300,7 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
         {currentSection === 'rca' && (
           <AIRCASection
             analyses={rcaAnalyses}
-            loading={isLoading}
+            isLoading={isLoading}
             onRefresh={loadData}
           />
         )}
@@ -206,7 +308,7 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
         {currentSection === 'performance' && (
           <AIPerformanceView
             metrics={performanceMetrics}
-            loading={isLoading}
+            isLoading={isLoading}
             onRefresh={loadData}
           />
         )}
@@ -216,7 +318,7 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
 };
 
 AdminAIPage.propTypes = {
-  currentSection: PropTypes.oneOf(['overview', 'models', 'predictions', 'rca', 'performance']),
+  currentSection: PropTypes.oneOf(['overview', 'models', 'comparison', 'predictions', 'rca', 'performance']),
   onNavigate: PropTypes.func,
 };
 

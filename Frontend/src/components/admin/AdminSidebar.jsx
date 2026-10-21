@@ -3,27 +3,292 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Activity,
-  CheckCircle2,
   AlertTriangle,
-  Zap,
-  Sliders,
   Layers,
-  Server,
-  Box,
   ShieldAlert,
-  FileBarChart2,
   Users,
-  User,
   Settings,
   ChevronLeft,
   ChevronRight,
   Shield,
   Building2,
   BrainCircuit,
-  Cpu,
+  ShieldCheck,
+  Bot,
+  FileCode,
+  Bell,
+  TrendingUp,
+  UserCheck,
+  Server,
+  Box,
+  Sparkles,
   GitFork,
-  BarChart2,
+  Zap,
+  History,
+  CheckCircle2,
 } from 'lucide-react';
+
+export const SME_OWNER_NAV_GROUPS = [
+  {
+    id: 'overview',
+    title: 'TỔNG QUAN',
+    items: [
+      {
+        id: 'dashboard',
+        label: 'Bảng điều khiển',
+        path: '/dashboard',
+        icon: LayoutDashboard,
+      },
+    ],
+  },
+  {
+    id: 'organization',
+    title: 'TỔ CHỨC DOANH NGHIỆP',
+    items: [
+      {
+        id: 'org-info',
+        label: 'Thông tin Tổ chức',
+        path: '/dashboard/organization',
+        icon: Building2,
+      },
+      {
+        id: 'members',
+        label: 'Thành viên & Phân quyền',
+        path: '/dashboard/organization/members',
+        icon: Users,
+      },
+    ],
+  },
+  {
+    id: 'infra-agents',
+    title: 'HẠ TẦNG & TÁC TỬ',
+    items: [
+      {
+        id: 'agents',
+        label: 'Tác tử Agent',
+        path: '/dashboard/agents',
+        icon: Bot,
+      },
+      {
+        id: 'clusters',
+        label: 'Cụm K8s',
+        path: '/dashboard/clusters',
+        icon: Layers,
+      },
+      {
+        id: 'infra',
+        label: 'Hạ tầng máy chủ',
+        path: '/dashboard/infrastructure',
+        icon: Server,
+      },
+      {
+        id: 'workloads',
+        label: 'Khối lượng công việc',
+        path: '/dashboard/workloads',
+        icon: Box,
+      },
+    ],
+  },
+  {
+    id: 'monitoring',
+    title: 'GIÁM SÁT TÀI NGUYÊN',
+    items: [
+      {
+        id: 'metrics',
+        label: 'Chỉ số tài nguyên',
+        path: '/dashboard/monitoring/metrics',
+        icon: Activity,
+        badge: 'LIVE',
+        badgeColor: '#059669',
+      },
+      {
+        id: 'logs',
+        label: 'Nhật ký container',
+        path: '/dashboard/monitoring/logs',
+        icon: FileCode,
+      },
+      {
+        id: 'events',
+        label: 'Sự kiện K8s',
+        path: '/dashboard/monitoring/events',
+        icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    id: 'ai-incidents',
+    title: 'AI & SỰ CỐ',
+    items: [
+      {
+        id: 'predictions',
+        label: 'Dự báo rủi ro AI',
+        path: '/dashboard/ai/predictions',
+        icon: Sparkles,
+        badge: '1',
+        badgeColor: '#059669',
+      },
+      {
+        id: 'incidents',
+        label: 'Quản lý sự cố',
+        path: '/dashboard/incidents',
+        icon: AlertTriangle,
+      },
+      {
+        id: 'rca',
+        label: 'Phân tích nguyên nhân (RCA)',
+        path: '/dashboard/incidents/rca',
+        icon: GitFork,
+      },
+    ],
+  },
+  {
+    id: 'self-healing',
+    title: 'TỰ PHỤC HỒI & PHÊ DUYỆT',
+    items: [
+      {
+        id: 'actions',
+        label: 'Hành động tự sửa',
+        path: '/dashboard/self-healing/actions',
+        icon: Zap,
+      },
+      {
+        id: 'history',
+        label: 'Lịch sử phục hồi',
+        path: '/dashboard/self-healing/history',
+        icon: History,
+      },
+      {
+        id: 'policies',
+        label: 'Chính sách tự động',
+        path: '/dashboard/self-healing/policies',
+        icon: ShieldAlert,
+      },
+      {
+        id: 'approvals',
+        label: 'Cổng phê duyệt (HITL)',
+        path: '/dashboard/self-healing/approvals',
+        icon: CheckCircle2,
+      },
+    ],
+  },
+  {
+    id: 'system',
+    title: 'HỆ THỐNG & BÁO CÁO',
+    items: [
+      {
+        id: 'notifications',
+        label: 'Thông báo',
+        path: '/dashboard/notifications',
+        icon: Bell,
+      },
+      {
+        id: 'reports',
+        label: 'Báo cáo SLA & Chi phí',
+        path: '/dashboard/reports',
+        icon: TrendingUp,
+      },
+      {
+        id: 'audit-logs',
+        label: 'Nhật ký kiểm toán',
+        path: '/dashboard/audit-logs',
+        icon: ShieldCheck,
+      },
+      {
+        id: 'profile',
+        label: 'Hồ sơ cá nhân',
+        path: '/dashboard/profile',
+        icon: UserCheck,
+      },
+      {
+        id: 'settings',
+        label: 'Cài đặt hệ thống',
+        path: '/dashboard/settings',
+        icon: Settings,
+      },
+    ],
+  },
+];
+
+export const ADMIN_ROLE_NAV_GROUPS = [
+  {
+    id: 'overview',
+    title: 'TỔNG QUAN WEBSITE',
+    items: [
+      {
+        id: 'dashboard',
+        label: 'Bảng Điều Khiển',
+        path: '/admin',
+        icon: LayoutDashboard,
+      },
+    ],
+  },
+  {
+    id: 'management',
+    title: 'QUẢN LÝ DOANH NGHIỆP & NGƯỜI DÙNG',
+    items: [
+      {
+        id: 'users',
+        label: 'Quản Lý Người Dùng',
+        path: '/admin/users',
+        icon: Users,
+      },
+      {
+        id: 'companies',
+        label: 'Quản Lý Doanh Nghiệp',
+        path: '/admin/companies',
+        icon: Building2,
+      },
+    ],
+  },
+  {
+    id: 'monitoring-analytics',
+    title: 'HOẠT ĐỘNG, BÁO CÁO & THÔNG BÁO',
+    items: [
+      {
+        id: 'user-activity',
+        label: 'Hoạt Động Người Dùng',
+        path: '/admin/activity',
+        icon: Activity,
+      },
+      {
+        id: 'notifications',
+        label: 'Phát Thông Báo Toàn Mạng',
+        path: '/admin/notifications',
+        icon: Bell,
+      },
+      {
+        id: 'reports',
+        label: 'Báo Cáo & Thống Kê',
+        path: '/admin/analytics',
+        icon: TrendingUp,
+      },
+      {
+        id: 'audit-logs',
+        label: 'Nhật Ký Kiểm Toán',
+        path: '/admin/audit-logs',
+        icon: ShieldAlert,
+      },
+    ],
+  },
+  {
+    id: 'account',
+    title: 'TÀI KHOẢN CÁ NHÂN',
+    items: [
+      {
+        id: 'profile',
+        label: 'Hồ Sơ Cá Nhân',
+        path: '/admin/profile',
+        icon: UserCheck,
+      },
+      {
+        id: 'account-settings',
+        label: 'Cài Đặt Tài Khoản',
+        path: '/admin/settings',
+        icon: Settings,
+      },
+    ],
+  },
+];
 
 export const ADMIN_NAV_GROUPS = [
   {
@@ -32,165 +297,119 @@ export const ADMIN_NAV_GROUPS = [
     items: [
       {
         id: 'dashboard',
-        label: 'Bàn Điều Khiển',
+        label: 'Bảng Điều Khiển',
         path: '/admin',
         icon: LayoutDashboard,
       },
+    ],
+  },
+  {
+    id: 'companies-users',
+    title: 'DOANH NGHIỆP & PHÂN QUYỀN',
+    items: [
+      {
+        id: 'companies',
+        label: 'Quản Lý Doanh Nghiệp',
+        path: '/admin/companies',
+        icon: Building2,
+      },
+      {
+        id: 'users',
+        label: 'Quản Lý Người Dùng',
+        path: '/admin/users',
+        icon: Users,
+      },
+      {
+        id: 'user-activity',
+        label: 'Hoạt Động Người Dùng',
+        path: '/admin/activity',
+        icon: Activity,
+      },
+      {
+        id: 'roles',
+        label: 'Vai Trò & Phân Quyền',
+        path: '/admin/roles',
+        icon: ShieldCheck,
+      },
+      {
+        id: 'reports',
+        label: 'Báo Cáo & Thống Kê',
+        path: '/admin/analytics',
+        icon: TrendingUp,
+      },
+    ],
+  },
+  {
+    id: 'agents-clusters',
+    title: 'TÁC TỬ & HẠ TẦNG NỀN TẢNG',
+    items: [
       {
         id: 'agents',
-        label: 'Sức Khỏe Tác Tử eBPF',
+        label: 'Quản Lý Tác Tử',
         path: '/admin/agents',
-        icon: Activity,
-        badge: '100%',
-        badgeColor: '#10B981',
+        icon: Bot,
       },
-    ],
-  },
-  {
-    id: 'self-healing',
-    title: 'TỰ LÀNH & HITL GATE',
-    items: [
-      {
-        id: 'approvals',
-        label: 'Cổng Phê Duyệt HITL',
-        path: '/admin/approvals',
-        icon: CheckCircle2,
-        badge: '1',
-        badgeColor: '#EF4444',
-      },
-      {
-        id: 'incidents',
-        label: 'Sự Cố & Điều Tra RCA',
-        path: '/admin/incidents',
-        icon: AlertTriangle,
-      },
-      {
-        id: 'self-healing-actions',
-        label: 'Hành Động Tự Phục Hồi',
-        path: '/admin/self-healing/actions',
-        icon: Zap,
-      },
-      {
-        id: 'policies',
-        label: 'Chính Sách Tự Lành',
-        path: '/admin/self-healing/policies',
-        icon: Sliders,
-      },
-    ],
-  },
-  {
-    id: 'infrastructure',
-    title: 'QUẢN TRỊ HẠ TẦNG K8S',
-    items: [
       {
         id: 'clusters',
-        label: 'Cụm Kubernetes',
-        path: '/admin/infrastructure/clusters',
+        label: 'Tổng Quan Cụm K8s',
+        path: '/admin/clusters',
         icon: Layers,
-      },
-      {
-        id: 'agents',
-        label: 'Tác Tử eBPF',
-        path: '/admin/infrastructure/agents',
-        icon: Activity,
-        badge: '100%',
-        badgeColor: '#10B981',
-      },
-      {
-        id: 'nodes',
-        label: 'Hạ Tầng Máy Chủ (Nodes)',
-        path: '/admin/infrastructure/nodes',
-        icon: Server,
-      },
-      {
-        id: 'workloads',
-        label: 'Khối Công Việc (Workloads)',
-        path: '/admin/infrastructure/workloads',
-        icon: Box,
       },
     ],
   },
   {
-    id: 'ai-engine',
-    title: 'TRÍ TUỆ NHÂN TẠO & RCA',
+    id: 'ai-monitoring',
+    title: 'VẬN HÀNH AI & HỆ THỐNG',
     items: [
       {
-        id: 'ai-overview',
-        label: 'Tổng Quan Động Cơ AI',
-        path: '/admin/ai/overview',
+        id: 'ai-models',
+        label: 'Quản Trị Mô Hình AI',
+        path: '/admin/ai/models',
         icon: BrainCircuit,
       },
       {
-        id: 'ai-models',
-        label: 'Kho Mô Hình Học Máy',
-        path: '/admin/ai/models',
-        icon: Cpu,
-      },
-      {
-        id: 'ai-predictions',
-        label: 'Dự Báo Dị Thường',
-        path: '/admin/ai/predictions',
+        id: 'monitoring',
+        label: 'Giám Sát Hệ Thống',
+        path: '/admin/monitoring',
         icon: Activity,
       },
       {
-        id: 'ai-rca',
-        label: 'Đồ Thị Nhân Quả RCA',
-        path: '/admin/ai/rca',
-        icon: GitFork,
+        id: 'alerts',
+        label: 'Sự Cố & Cảnh Báo',
+        path: '/admin/alerts',
+        icon: AlertTriangle,
+        badge: 'Cảnh báo',
+        badgeColor: '#EF4444',
       },
       {
-        id: 'ai-performance',
-        label: 'Hiệu Năng & Kiểm Chuẩn',
-        path: '/admin/ai/performance',
-        icon: BarChart2,
+        id: 'system-logs',
+        label: 'Nhật Ký Hệ Thống',
+        path: '/admin/system-logs',
+        icon: FileCode,
       },
     ],
   },
   {
-    id: 'governance',
-    title: 'BẢO MẬT & KIỂM TOÁN',
+    id: 'security-settings',
+    title: 'AN NINH & CẤU HÌNH',
     items: [
       {
         id: 'audit-logs',
-        label: 'Nhật Ký Kiểm Toán SHA-256',
+        label: 'Nhật Ký Kiểm Toán',
         path: '/admin/audit-logs',
         icon: ShieldAlert,
       },
       {
-        id: 'reports',
-        label: 'Báo Cáo SLA & Chi Phí',
-        path: '/admin/reports',
-        icon: FileBarChart2,
-      },
-    ],
-  },
-  {
-    id: 'settings',
-    title: 'CẤU HÌNH & TỔ CHỨC',
-    items: [
-      {
-        id: 'organizations',
-        label: 'Tổ Chức & Tenants',
-        path: '/admin/organizations',
-        icon: Building2,
-      },
-      {
-        id: 'members',
-        label: 'Thành Viên & Ma Trận RBAC',
-        path: '/admin/members',
-        icon: Users,
+        id: 'notifications',
+        label: 'Phát Thông Báo Toàn Mạng',
+        path: '/admin/notifications',
+        icon: Bell,
       },
       {
         id: 'settings',
-        label: 'Thiết Lập Quản Trị',
+        label: 'Cài Đặt Hệ Thống',
         path: '/admin/settings',
         icon: Settings,
-      },
-      {
-        id: 'profile',
-        label: 'Hồ Sơ Cá Nhân',
-        path: '/admin/profile',
-        icon: User,
       },
     ],
   },
@@ -221,7 +440,7 @@ export const AdminSidebar = ({
           items: [
             {
               id: 'dashboard',
-              label: 'Bàn Điều Khiển',
+              label: 'Bảng Điều Khiển',
               path: '/admin',
               icon: LayoutDashboard,
             },
@@ -230,24 +449,48 @@ export const AdminSidebar = ({
       ];
     }
 
-    // 2. DevOps: Thấy các tác vụ vận hành hạ tầng/AI, NHƯNG không quản lý User & Phân quyền
+    // 2. DevOps: Không quản lý User & Phân quyền hệ thống, ẩn Cài đặt hệ thống & Tổ chức
     if (isDevOpsUser) {
+      return ADMIN_NAV_GROUPS
+        .filter((group) => group.id !== 'companies-users')
+        .map((group) => {
+          if (group.id === 'security-settings') {
+            return {
+              ...group,
+              items: group.items.filter((item) => item.id !== 'settings'),
+            };
+          }
+          return group;
+        });
+    }
+
+    // 3. ADMIN: Quản trị và vận hành toàn hệ thống như Super Admin (Tác tử, Hạ tầng, AI, Giám sát, Dashboard), ngoại trừ Quản lý Phân quyền (Roles & Permissions) và Cấu hình Hệ thống (System Settings)
+    if (auth?.activeRole === 'ADMIN') {
       return ADMIN_NAV_GROUPS.map((group) => {
-        if (group.id === 'settings') {
+        if (group.id === 'companies-users') {
           return {
             ...group,
-            items: group.items.filter(
-              (item) => item.id !== 'members' && item.path !== '/admin/members' && item.path !== '/admin/users'
-            ),
+            items: group.items.filter((item) => item.id !== 'roles'),
+          };
+        }
+        if (group.id === 'security-settings') {
+          return {
+            ...group,
+            items: group.items.filter((item) => item.id !== 'settings'),
           };
         }
         return group;
-      }).filter((group) => group.items.length > 0);
+      });
     }
 
-    // 3. Admin & SuperAdmin: Xem toàn bộ các nhóm chức năng
+    // 4. SME_OWNER: Quản trị theo mô hình bên User (Tổ chức, Thành viên & Phân quyền, Tác tử, Cụm K8s, Giám sát, AI & Sự cố, Tự phục hồi)
+    if (auth?.activeRole === 'SME_OWNER') {
+      return SME_OWNER_NAV_GROUPS;
+    }
+
+    // 5. SUPER_ADMIN: Xem toàn bộ các nhóm chức năng hạ tầng, AI, K8s và Phân quyền Roles
     return ADMIN_NAV_GROUPS;
-  }, [isViewerUser, isDevOpsUser]);
+  }, [isViewerUser, isDevOpsUser, auth?.activeRole]);
 
   const isActive = (itemPath) => {
     const normCurrent = currentPath.toLowerCase().split('?')[0].split('#')[0];
@@ -256,31 +499,25 @@ export const AdminSidebar = ({
     if (normTarget === '/admin') {
       return normCurrent === '/admin' || normCurrent === '/admin/overview';
     }
-    if (normTarget === '/admin/infrastructure/clusters') {
-      return normCurrent === '/admin/infrastructure/clusters' || normCurrent === '/admin/clusters';
-    }
-    if (normTarget === '/admin/infrastructure/agents') {
-      return normCurrent === '/admin/infrastructure/agents' || normCurrent === '/admin/agents';
-    }
-    if (normTarget === '/admin/infrastructure/nodes') {
-      return normCurrent === '/admin/infrastructure/nodes' || normCurrent === '/admin/nodes';
-    }
-    if (normTarget === '/admin/infrastructure/workloads') {
-      return normCurrent === '/admin/infrastructure/workloads' || normCurrent === '/admin/workloads';
-    }
-    if (normTarget === '/admin/self-healing/policies' || normTarget === '/admin/policies') {
-      return normCurrent === '/admin/self-healing/policies' || normCurrent === '/admin/policies';
-    }
-    if (normTarget === '/admin/self-healing/actions') {
+    if (normTarget === '/admin/companies') {
       return (
-        normCurrent === '/admin/self-healing/actions' ||
-        normCurrent === '/admin/self-healing/action-types' ||
-        normCurrent === '/admin/self-healing/analytics' ||
-        normCurrent === '/admin/self-healing'
+        normCurrent === '/admin/companies' ||
+        normCurrent === '/admin/organizations' ||
+        normCurrent.startsWith('/admin/companies/') ||
+        normCurrent.startsWith('/admin/organizations/')
       );
     }
-    if (normTarget === '/admin/ai/overview') {
-      return normCurrent === '/admin/ai/overview' || normCurrent === '/admin/ai';
+    if (normTarget === '/admin/agents') {
+      return normCurrent === '/admin/agents' || normCurrent === '/admin/infrastructure/agents';
+    }
+    if (normTarget === '/admin/clusters') {
+      return normCurrent === '/admin/clusters' || normCurrent === '/admin/infrastructure/clusters';
+    }
+    if (normTarget === '/admin/ai/models') {
+      return normCurrent.startsWith('/admin/ai');
+    }
+    if (normTarget === '/admin/alerts') {
+      return normCurrent === '/admin/alerts' || normCurrent.startsWith('/admin/incidents');
     }
     return normCurrent === normTarget || normCurrent.startsWith(`${normTarget}/`);
   };
@@ -350,18 +587,27 @@ export const AdminSidebar = ({
                 lineHeight: 1.2,
               }}
             >
-              SelfHeal <span style={{ color: 'var(--dash-primary)' }}>Admin</span>
+              SelfAI <span style={{ color: 'var(--dash-primary)' }}>Admin</span>
             </div>
             <div
               style={{
                 fontSize: '0.6875rem',
-                color: 'var(--dash-text-muted)',
+                color: auth?.activeRole === 'ADMIN' ? '#059669' : auth?.activeRole === 'SME_OWNER' ? '#059669' : 'var(--dash-text-muted)',
                 fontFamily: 'var(--font-mono)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
+                fontWeight: (auth?.activeRole === 'ADMIN' || auth?.activeRole === 'SME_OWNER') ? 700 : 400,
               }}
             >
-              K8s Autonomous Shell
+              {auth?.activeRole === 'ADMIN'
+                ? 'Vận Hành Nền Tảng'
+                : auth?.activeRole === 'SME_OWNER'
+                ? 'Cổng Doanh Nghiệp'
+                : auth?.activeRole === 'DEVOPS'
+                ? 'Kỹ Sư Hạ Tầng DevOps'
+                : auth?.activeRole === 'VIEWER'
+                ? 'Người Giám Sát'
+                : 'Tối Cao Toàn Nền Tảng'}
             </div>
           </div>
         )}

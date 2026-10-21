@@ -21,9 +21,8 @@ export const LoginPage = ({ onNavigate }) => {
       setLoggedInUser(user);
       setSubmitted(true);
 
-      const roles = user?.system_roles || [];
-      const isAdmin = roles.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r));
-      const targetPath = isAdmin ? '/admin' : '/dashboard';
+      // Luôn chuyển hướng thẳng vào Bảng điều khiển Doanh nghiệp (User / SME Dashboard) trước
+      const targetPath = '/dashboard';
 
       setTimeout(() => {
         if (onNavigate) {
@@ -146,18 +145,12 @@ export const LoginPage = ({ onNavigate }) => {
             Đăng nhập thành công!
           </strong>
           <p style={{ margin: '0 0 16px 0', color: '#047857' }}>
-            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>.{' '}
-            {loggedInUser?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))
-              ? 'Đang chuyển hướng vào Bảng điều khiển Quản trị viên (Admin Dashboard)...'
-              : 'Đang chuyển hướng vào Bảng điều khiển hệ thống...'}
+            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào Bảng điều khiển hệ thống (User Dashboard)...
           </p>
           <button
             type="button"
             onClick={() => {
-              const isAdmin = loggedInUser?.system_roles?.some((r) =>
-                ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r)
-              );
-              const targetPath = isAdmin ? '/admin' : '/dashboard';
+              const targetPath = '/dashboard';
               if (onNavigate) {
                 onNavigate(targetPath);
               } else {
@@ -180,11 +173,7 @@ export const LoginPage = ({ onNavigate }) => {
               gap: '6px',
             }}
           >
-            <span>
-              {loggedInUser?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))
-                ? 'Vào Admin Dashboard Ngay'
-                : 'Vào Bảng Điều Khiển'}
-            </span>
+            <span>Vào Bảng Điều Khiển Ngay</span>
             <ArrowRight size={16} />
           </button>
         </div>

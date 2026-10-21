@@ -117,9 +117,44 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   ];
 
   const filteredNavGroups = React.useMemo(() => {
-    // Hiển thị đầy đủ tất cả danh mục và bảng dữ liệu cho phân hệ Doanh nghiệp / Owner / Người dùng
+    // 1. Viewer: Xóa Cổng phê duyệt, Cài đặt hệ thống, Tổ chức, Chính sách tự động, Cụm K8s
+    if (isViewerUser) {
+      return navGroups
+        .filter((group) => group.group !== 'TỔ CHỨC')
+        .map((group) => {
+          const filteredItems = group.items.filter((item) => {
+            if (item.path === '/dashboard/clusters') return false;
+            if (item.path === '/dashboard/self-healing/policies') return false;
+            if (item.path === '/dashboard/self-healing/approvals') return false;
+            if (item.path === '/dashboard/settings') return false;
+            return true;
+          });
+          return {
+            ...group,
+            items: filteredItems,
+          };
+        })
+        .filter((group) => group.items.length > 0);
+    }
+
+    // 2. DevOps: Thấy toàn bộ hạ tầng, giám sát, AI, tự phục hồi nhưng ẩn Tổ chức và Cài đặt hệ thống
+    if (isDevOpsUser) {
+      return navGroups
+        .filter((group) => group.group !== 'TỔ CHỨC')
+        .map((group) => {
+          if (group.group === 'HỆ THỐNG') {
+            return {
+              ...group,
+              items: group.items.filter((item) => item.path !== '/dashboard/settings'),
+            };
+          }
+          return group;
+        });
+    }
+
+    // 3. Cấp cao (SME Owner, Admin, Super Admin): Kế thừa toàn bộ quyền hạn và thấy tất cả 18 trang
     return navGroups;
-  }, [navGroups, pendingApprovalsCount, unreadNotifsCount]);
+  }, [isViewerUser, isDevOpsUser, navGroups, pendingApprovalsCount, unreadNotifsCount]);
 
   const handleItemClick = (path) => {
     if (onNavigate) {
