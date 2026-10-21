@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   FileBarChart2,
   Users,
+  User,
   Settings,
   ChevronLeft,
   ChevronRight,
