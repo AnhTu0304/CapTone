@@ -364,6 +364,9 @@ export const TopHeader = () => {
                     setCurrentUserRole(r.key);
                     if (switchRole) switchRole(r.key);
                     setIsRoleDropdownOpen(false);
+                    if ((r.key === 'SUPER_ADMIN' || r.key === 'ADMIN') && onNavigate) {
+                      onNavigate('/admin');
+                    }
                   }}
                   style={{
                     width: '100%',

@@ -18,7 +18,7 @@ import AdminLayout from '../layouts/AdminLayout';
 import OverviewPage from '../pages/Admin/Overview';
 import { OrganizationsListPage, OrganizationDetailsPage } from '../pages/Admin/Organizations';
 import { AdminInfrastructurePage } from '../pages/Admin/Infrastructure';
-import { IncidentsListPage, IncidentDetailPage } from '../pages/Admin/Incidents';
+import { IncidentDetailPage } from '../pages/Admin/Incidents';
 import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
 import { AdminAIPage } from '../pages/Admin/AI';
 import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
@@ -26,6 +26,14 @@ import { AdminUsersPage } from '../pages/Admin/Users';
 import { AdminAnalyticsPage } from '../pages/Admin/Analytics/AdminAnalyticsPage';
 import { AdminBroadcastPage } from '../pages/Admin/Notifications/AdminBroadcastPage';
 import { AdminRolesPage } from '../pages/Admin/Roles/AdminRolesPage';
+import { AdminAgentManagementPage } from '../pages/Admin/Agents/AdminAgentManagementPage';
+import { AdminClusterOverviewPage } from '../pages/Admin/Clusters/AdminClusterOverviewPage';
+import { AdminMonitoringPage } from '../pages/Admin/Monitoring/AdminMonitoringPage';
+import { AdminSystemLogsPage } from '../pages/Admin/SystemLogs/AdminSystemLogsPage';
+import { AdminAlertsPage } from '../pages/Admin/Alerts/AdminAlertsPage';
+import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSettingsPage';
+import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
+import { AdminAccountSettingsPage } from '../pages/Admin/Settings/AdminAccountSettingsPage';
 import ProfilePage from '../pages/Dashboard/Profile/ProfilePage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
@@ -35,7 +43,15 @@ export const ROUTES = {
   HOME: '/',
   DASHBOARD: '/dashboard',
   ADMIN: '/admin',
+  ADMIN_COMPANIES: '/admin/companies',
   ADMIN_ORGANIZATIONS: '/admin/organizations',
+  ADMIN_AGENTS: '/admin/agents',
+  ADMIN_CLUSTERS: '/admin/clusters',
+  ADMIN_MONITORING: '/admin/monitoring',
+  ADMIN_ALERTS: '/admin/alerts',
+  ADMIN_SYSTEM_LOGS: '/admin/system-logs',
+  ADMIN_SETTINGS: '/admin/settings',
+  ADMIN_ACTIVITY: '/admin/activity',
   ADMIN_INCIDENTS: '/admin/incidents',
   ADMIN_SELF_HEALING_ACTIONS: '/admin/self-healing/actions',
   ADMIN_SELF_HEALING_ACTION_TYPES: '/admin/self-healing/action-types',
@@ -99,23 +115,30 @@ export const RouteRenderer = ({
 
   // Handle all dashboard routes (User / Owner Portal với phân cấp RBAC động)
   if (path.startsWith('/dashboard')) {
-    if (isViewerUser && path !== '/dashboard' && path !== '/dashboard/profile' && path !== '/dashboard/notifications') {
+    const isRestrictedForViewer =
+      path.startsWith('/dashboard/organization') ||
+      path === '/dashboard/clusters' ||
+      path === '/dashboard/self-healing/policies' ||
+      path === '/dashboard/self-healing/approvals' ||
+      path === '/dashboard/settings';
+
+    if (isViewerUser && isRestrictedForViewer) {
       return (
         <AdminAccessDenied
           onNavigate={onNavigate}
           redirectPath="/dashboard"
           title="403 — Không Có Quyền Truy Cập"
-          message="Tài khoản Viewer chỉ có quyền xem Bảng điều khiển tổng quan, không được truy cập các trang vận hành hoặc cấu hình chi tiết."
+          message="Tài khoản Viewer không có quyền truy cập Tổ chức, Cụm K8s, Chính sách tự động, Cổng phê duyệt hoặc Cài đặt hệ thống."
         />
       );
     }
-    if (isDevOpsUser && path === '/dashboard/organization/members') {
+    if (isDevOpsUser && (path.startsWith('/dashboard/organization') || path === '/dashboard/settings')) {
       return (
         <AdminAccessDenied
           onNavigate={onNavigate}
           redirectPath="/dashboard"
-          title="403 — Không Có Quyền Quản Lý Thành Viên"
-          message="Tài khoản DevOps chỉ có quyền vận hành kỹ thuật và hạ tầng, không có quyền quản lý thành viên và phân quyền."
+          title="403 — Không Có Quyền Truy Cập"
+          message="Tài khoản DevOps chỉ có quyền vận hành kỹ thuật và hạ tầng, không có quyền quản trị thông tin tổ chức hoặc thay đổi cài đặt hệ thống."
         />
       );
     }
@@ -134,8 +157,64 @@ export const RouteRenderer = ({
   if (path.startsWith('/admin')) {
     let adminContent = null;
 
-    // RBAC Route Guard cho phân hệ Admin
-    if (isViewerUser && path !== '/admin' && path !== '/admin/overview' && path !== '/admin/profile') {
+    const activeRole = auth?.activeRole;
+    const isAdminRole = activeRole === 'ADMIN';
+    const isSmeOwnerRole = activeRole === 'SME_OWNER';
+
+    // SME_OWNER truy cập /admin sẽ điều hướng sang Bàn điều khiển Doanh nghiệp (/dashboard)
+    if (isSmeOwnerRole && (path === '/admin' || path === '/admin/overview')) {
+      return <DashboardPage currentPath="/dashboard" onNavigate={onNavigate} />;
+    }
+
+    if (isSmeOwnerRole && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/'))) {
+      return (
+        <AdminAccessDenied
+          onNavigate={onNavigate}
+          redirectPath="/dashboard"
+          title="403 — Quyền Hạn Dành Riêng Cho Quản Trị Nền Tảng"
+          message="Chức năng quản trị toàn sàn (Roles, Settings, Companies) dành riêng cho Quản trị viên Tối cao và Quản trị viên Vận hành. Chủ Doanh Nghiệp (SME Owner) quản trị tổ chức tại Bàn điều khiển Doanh nghiệp."
+        />
+      );
+    }
+
+    if (isDevOpsUser && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/') || path === '/admin/users')) {
+      return (
+        <AdminAccessDenied
+          onNavigate={onNavigate}
+          redirectPath="/dashboard"
+          title="403 — Không Có Quyền Quản Trị Hệ Thống"
+          message="Tài khoản DevOps chỉ có quyền vận hành kỹ thuật và hạ tầng, không có quyền quản lý người dùng, tổ chức hay thay đổi cài đặt hệ thống."
+        />
+      );
+    }
+
+    // Rào cản bảo vệ (RBAC): Phân quyền vai trò (Roles) và Cấu hình hệ thống (System Settings) dành riêng cho Quản trị viên Tối cao
+    const isRestrictedForAdmin =
+      path.startsWith('/admin/roles') ||
+      path === '/admin/settings' ||
+      path.startsWith('/admin/system-settings');
+
+    if (isAdminRole && isRestrictedForAdmin) {
+      const isRolePath = path.startsWith('/admin/roles');
+      adminContent = (
+        <AdminAccessDenied
+          onNavigate={onNavigate}
+          redirectPath="/admin"
+          title={isRolePath ? '403 — Không Có Quyền Phân Quyền Vai Trò' : '403 — Không Có Quyền Cấu Hình Hệ Thống'}
+          message={
+            isRolePath
+              ? 'Chức năng Quản lý Vai trò & Phân quyền (Roles & Permissions) dành riêng cho Quản trị viên Tối cao (Super Admin). Quản trị viên Vận hành (Admin) không có thẩm quyền gán hoặc sửa đổi vai trò cốt lõi hệ thống.'
+              : 'Chức năng Cấu hình Hệ thống (System Settings) dành riêng cho Quản trị viên Tối cao (Super Admin). Quản trị viên Vận hành (Admin) không có thẩm quyền thay đổi các thông số cấu hình nền tảng.'
+          }
+        />
+      );
+    } else if (path === '/admin/activity') {
+      adminContent = <AdminUserActivityPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/account-settings') {
+      adminContent = <AdminAccountSettingsPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/settings' || path === '/admin/system-settings') {
+      adminContent = <AdminSystemSettingsPage onNavigate={onNavigate} />;
+    } else if (isViewerUser && path !== '/admin' && path !== '/admin/overview' && path !== '/admin/profile') {
       adminContent = (
         <AdminAccessDenied
           onNavigate={onNavigate}
@@ -157,16 +236,29 @@ export const RouteRenderer = ({
       adminContent = <ProfilePage onNavigate={onNavigate} />;
     } else if (path === '/admin' || path === '/admin/overview') {
       adminContent = <OverviewPage onNavigate={onNavigate} />;
-    } else if (path === '/admin/organizations') {
+    } else if (path === '/admin/companies' || path === '/admin/organizations') {
       adminContent = <OrganizationsListPage onNavigate={onNavigate} />;
+    } else if (path.startsWith('/admin/companies/')) {
+      const orgId = path.substring('/admin/companies/'.length);
+      adminContent = <OrganizationDetailsPage orgId={orgId} onNavigate={onNavigate} />;
     } else if (path.startsWith('/admin/organizations/')) {
       const orgId = path.substring('/admin/organizations/'.length);
       adminContent = <OrganizationDetailsPage orgId={orgId} onNavigate={onNavigate} />;
+    } else if (path === '/admin/agents' || path === '/admin/infrastructure/agents') {
+      adminContent = <AdminAgentManagementPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/clusters' || path === '/admin/infrastructure/clusters') {
+      adminContent = <AdminClusterOverviewPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/monitoring') {
+      adminContent = <AdminMonitoringPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/alerts') {
+      adminContent = <AdminAlertsPage onNavigate={onNavigate} />;
     } else if (path === '/admin/incidents') {
-      adminContent = <IncidentsListPage onNavigate={onNavigate} />;
+      adminContent = <AdminAlertsPage onNavigate={onNavigate} />;
     } else if (path.startsWith('/admin/incidents/')) {
       const incidentId = path.substring('/admin/incidents/'.length);
       adminContent = <IncidentDetailPage incidentId={incidentId} onNavigate={onNavigate} />;
+    } else if (path === '/admin/system-logs') {
+      adminContent = <AdminSystemLogsPage onNavigate={onNavigate} />;
     } else if (path === '/admin/self-healing/actions' || path === '/admin/self-healing') {
       adminContent = <AdminSelfHealingPage currentSection="actions" onNavigate={onNavigate} />;
     } else if (path === '/admin/self-healing/action-types') {

@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import { Box, Filter, Search, RotateCcw, CheckCircle2, RefreshCw, XCircle, Eye, X, Layers, Cpu, Activity, ShieldCheck, Database } from 'lucide-react';
+import {
+  Box,
+  Search,
+  RotateCcw,
+  RefreshCw,
+  XCircle,
+  Eye,
+  X,
+  Cpu,
+} from 'lucide-react';
 import AIEmptyState from './AIEmptyState';
 
 export const AIModelsTable = ({
@@ -17,16 +26,21 @@ export const AIModelsTable = ({
       <div
         className="dash-card"
         style={{
-          padding: '40px 20px',
+          padding: '48px 20px',
           textAlign: 'center',
           backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
+          borderRadius: '16px',
           border: '1px solid var(--dash-border)',
           color: 'var(--dash-text-muted)',
           fontSize: '0.875rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px',
         }}
       >
-        Đang tải danh sách mô hình học máy AI...
+        <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', color: '#059669' }} />
+        <span>Đang tải danh sách mô hình học máy AI từ cơ sở dữ liệu...</span>
       </div>
     );
   }
@@ -61,18 +75,19 @@ export const AIModelsTable = ({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
+              gap: '5px',
+              padding: '3px 10px',
+              borderRadius: '9999px',
               backgroundColor: '#ECFDF5',
-              color: '#065F46',
+              color: '#059669',
               border: '1px solid #A7F3D0',
               fontWeight: 700,
-              fontSize: '0.6875rem',
+              fontSize: '0.75rem',
               whiteSpace: 'nowrap',
             }}
           >
-            <CheckCircle2 size={11} /> Đang Hoạt Động (Active)
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#059669' }} />
+            Đang Hoạt Động (Active)
           </span>
         );
       case 'TRAINING':
@@ -81,18 +96,19 @@ export const AIModelsTable = ({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
+              gap: '5px',
+              padding: '3px 10px',
+              borderRadius: '9999px',
               backgroundColor: '#EFF6FF',
               color: '#1D4ED8',
               border: '1px solid #BFDBFE',
               fontWeight: 700,
-              fontSize: '0.6875rem',
+              fontSize: '0.75rem',
               whiteSpace: 'nowrap',
             }}
           >
-            <RefreshCw size={11} className="spin-icon" /> Đang Huấn Luyện (Training)
+            <RefreshCw size={11} style={{ animation: 'spin 1.5s linear infinite' }} />
+            Đang Huấn Luyện (Training)
           </span>
         );
       case 'DEPRECATED':
@@ -102,14 +118,14 @@ export const AIModelsTable = ({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '6px',
+              gap: '5px',
+              padding: '3px 10px',
+              borderRadius: '9999px',
               backgroundColor: '#F1F5F9',
               color: '#64748B',
               border: '1px solid #E2E8F0',
               fontWeight: 600,
-              fontSize: '0.6875rem',
+              fontSize: '0.75rem',
               whiteSpace: 'nowrap',
             }}
           >
@@ -119,11 +135,102 @@ export const AIModelsTable = ({
     }
   };
 
+  const activeCount = models.filter((m) => m.status === 'ACTIVE').length;
+  const trainingCount = models.filter((m) => m.status === 'TRAINING').length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Filter Bar */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 1. Bốn Thẻ KPI Mô Hình AI */}
       <div
-        className="dash-card"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '16px',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '14px',
+            border: '1px solid var(--dash-border)',
+            padding: '18px 20px',
+            boxShadow: 'var(--dash-shadow-xs)',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+            TỔNG SỐ MÔ HÌNH HỌC MÁY
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#1E293B', marginTop: '6px' }}>
+            {models.length} Mô hình
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '4px' }}>
+            ONNX Runtime, PyTorch & Sklearn
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '14px',
+            border: '1px solid var(--dash-border)',
+            padding: '18px 20px',
+            boxShadow: 'var(--dash-shadow-xs)',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase' }}>
+            ĐANG CHẠY CHÍNH THỨC (PRODUCTION)
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#059669', marginTop: '6px' }}>
+            {activeCount} Mô hình
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
+            Độ chính xác trung bình: 98.4%
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '14px',
+            border: '1px solid var(--dash-border)',
+            padding: '18px 20px',
+            boxShadow: 'var(--dash-shadow-xs)',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase' }}>
+            MÔ HÌNH ĐANG THỬ NGHIỆM
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563EB', marginTop: '6px' }}>
+            {trainingCount} Mô hình
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
+            Đang kiểm chuẩn trên Staging
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '14px',
+            border: '1px solid var(--dash-border)',
+            padding: '18px 20px',
+            boxShadow: 'var(--dash-shadow-xs)',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#7C3AED', textTransform: 'uppercase' }}>
+            ĐỘ TRỄ SUY LUẬN TRUNG BÌNH
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7C3AED', marginTop: '6px' }}>
+            1.2 ms
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '4px' }}>
+            Vượt cam kết SLA (&lt; 30ms)
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Filter Bar */}
+      <div
         style={{
           padding: '14px 18px',
           backgroundColor: '#FFFFFF',
@@ -137,20 +244,20 @@ export const AIModelsTable = ({
           gap: '12px',
         }}
       >
-        <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+        <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
           <input
             type="text"
-            placeholder="Tìm tên mô hình, framework, dataset..."
+            placeholder="Tìm theo tên mô hình, framework, dataset..."
             aria-label="Tìm kiếm mô hình AI"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
               width: '100%',
-              padding: '8px 12px 8px 34px',
+              padding: '9px 12px 9px 36px',
               fontSize: '0.8125rem',
               borderRadius: '8px',
               border: '1px solid var(--dash-border)',
-              backgroundColor: '#FFFFFF',
+              backgroundColor: '#F8FAFC',
               color: 'var(--dash-text-primary)',
               outline: 'none',
             }}
@@ -159,7 +266,7 @@ export const AIModelsTable = ({
             size={15}
             style={{
               position: 'absolute',
-              left: '10px',
+              left: '12px',
               top: '50%',
               transform: 'translateY(-50%)',
               color: 'var(--dash-text-muted)',
@@ -171,19 +278,19 @@ export const AIModelsTable = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {/* Model Type Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Filter size={14} style={{ color: 'var(--dash-text-muted)' }} />
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)' }}>Loại:</span>
             <select
               aria-label="Lọc theo loại mô hình"
               value={modelTypeFilter}
               onChange={(e) => setModelTypeFilter(e.target.value)}
               style={{
-                padding: '7px 12px',
+                padding: '8px 12px',
                 borderRadius: '8px',
                 fontSize: '0.8125rem',
                 border: '1px solid var(--dash-border)',
                 backgroundColor: '#FFFFFF',
                 color: 'var(--dash-text-primary)',
-                fontWeight: 500,
+                fontWeight: 600,
                 outline: 'none',
                 cursor: 'pointer',
               }}
@@ -202,13 +309,13 @@ export const AIModelsTable = ({
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              padding: '7px 12px',
+              padding: '8px 12px',
               borderRadius: '8px',
               fontSize: '0.8125rem',
               border: '1px solid var(--dash-border)',
               backgroundColor: '#FFFFFF',
               color: 'var(--dash-text-primary)',
-              fontWeight: 500,
+              fontWeight: 600,
               outline: 'none',
               cursor: 'pointer',
             }}
@@ -228,7 +335,7 @@ export const AIModelsTable = ({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
-                padding: '7px 12px',
+                padding: '8px 12px',
                 borderRadius: '8px',
                 border: '1px solid var(--dash-border)',
                 backgroundColor: '#F8FAFC',
@@ -245,7 +352,7 @@ export const AIModelsTable = ({
         </div>
       </div>
 
-      {/* Empty State */}
+      {/* 3. Main Models Table */}
       {filteredModels.length === 0 ? (
         <AIEmptyState
           title="Không Tìm Thấy Mô Hình Nào"
@@ -254,70 +361,88 @@ export const AIModelsTable = ({
           actionText="Xóa bộ lọc tìm kiếm"
         />
       ) : (
-        /* Main Table with 7 requested fields */
         <div
-          className="dash-table-container"
           style={{
             border: '1px solid var(--dash-border)',
-            borderRadius: '14px',
+            borderRadius: '16px',
             overflowX: 'auto',
             boxShadow: 'var(--dash-shadow-xs)',
             backgroundColor: '#FFFFFF',
           }}
         >
-          <table className="dash-table" style={{ width: '100%', fontSize: '0.8125rem', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', minWidth: '1200px', fontSize: '0.8125rem', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr
                 style={{
-                  background: 'linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 100%)',
-                  borderBottom: '1px solid #BBF7D0',
-                  color: '#166534',
-                  textAlign: 'left',
+                  backgroundColor: '#F8FAFC',
+                  borderBottom: '1px solid var(--dash-border)',
+                  color: 'var(--dash-text-muted)',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
                 }}
               >
-                <th style={{ minWidth: '220px', padding: '12px 14px', fontWeight: 700 }}>Tên Mô Hình (Model Name)</th>
-                <th style={{ minWidth: '160px', padding: '12px 14px', fontWeight: 700 }}>Phân Loại (Model Type)</th>
-                <th style={{ minWidth: '110px', padding: '12px 14px', fontWeight: 700 }}>Phiên Bản (Version)</th>
-                <th style={{ minWidth: '130px', padding: '12px 14px', fontWeight: 700 }}>Khung Công Nghệ (Framework)</th>
-                <th style={{ minWidth: '140px', padding: '12px 14px', fontWeight: 700 }}>Trạng Thái (Status)</th>
-                <th style={{ minWidth: '220px', padding: '12px 14px', fontWeight: 700 }}>Tập Dữ Liệu (Dataset)</th>
-                <th style={{ minWidth: '240px', padding: '12px 14px', fontWeight: 700 }}>Chỉ Số Đánh Giá</th>
-                <th style={{ minWidth: '110px', padding: '12px 14px', fontWeight: 700, textAlign: 'right' }}>THAO TÁC</th>
+                <th style={{ minWidth: '240px', padding: '14px 20px', whiteSpace: 'nowrap' }}>Tên Mô Hình</th>
+                <th style={{ minWidth: '160px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Phân Loại</th>
+                <th style={{ minWidth: '110px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Phiên Bản</th>
+                <th style={{ minWidth: '140px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Khung Công Nghệ</th>
+                <th style={{ minWidth: '180px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                <th style={{ minWidth: '220px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Tập Dữ Liệu</th>
+                <th style={{ minWidth: '240px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Chỉ Số Đánh Giá</th>
+                <th style={{ minWidth: '110px', padding: '14px 20px', whiteSpace: 'nowrap', textAlign: 'right' }}>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
-              {filteredModels.map((m, idx) => (
+              {filteredModels.map((m) => (
                 <tr
                   key={m.id}
                   style={{
                     borderBottom: '1px solid var(--dash-border)',
-                    backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
                     transition: 'background-color 0.15s ease',
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F0FDF4')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA')}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   {/* 1. Model Name */}
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Box size={14} style={{ color: '#059669', flexShrink: 0 }} />
-                      <span style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{m.name}</span>
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
-                      {m.id}
+                  <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#059669',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          border: '1px solid #A7F3D0',
+                        }}
+                      >
+                        <Box size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{m.name}</div>
+                        <div style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                          {m.id}
+                        </div>
+                      </div>
                     </div>
                   </td>
 
                   {/* 2. Model Type */}
-                  <td style={{ padding: '12px 14px' }}>
+                  <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                     <span
                       style={{
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '0.6875rem',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
                         fontWeight: 600,
                         backgroundColor: '#F1F5F9',
-                        color: '#0F172A',
+                        color: '#334155',
+                        border: '1px solid #E2E8F0',
                       }}
                     >
                       {m.modelType}
@@ -325,17 +450,17 @@ export const AIModelsTable = ({
                   </td>
 
                   {/* 3. Version */}
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
+                  <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--dash-text-primary)', whiteSpace: 'nowrap' }}>
                     {m.version}
                   </td>
 
                   {/* 4. Framework */}
-                  <td style={{ padding: '12px 14px' }}>
+                  <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                     <span
                       style={{
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '0.6875rem',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
                         fontWeight: 700,
                         backgroundColor:
                           m.framework === 'ONNX Runtime'
@@ -363,37 +488,40 @@ export const AIModelsTable = ({
                   </td>
 
                   {/* 5. Status */}
-                  <td style={{ padding: '12px 14px' }}>
+                  <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                     {renderStatusBadge(m.status)}
                   </td>
 
                   {/* 6. Dataset */}
-                  <td style={{ padding: '12px 14px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                    {m.dataset}
+                  <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                    <div style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={m.dataset}>
+                      {m.dataset}
+                    </div>
                   </td>
 
                   {/* 7. Evaluation Metrics */}
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#065F46', fontWeight: 600 }}>
+                  <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#059669', fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {m.evaluationMetrics}
                   </td>
 
                   {/* 8. Action */}
-                  <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                  <td style={{ padding: '14px 20px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button
                       type="button"
                       onClick={() => setSelectedModel(m)}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '4px',
-                        padding: '4px 10px',
+                        gap: '5px',
+                        padding: '6px 12px',
                         borderRadius: '6px',
                         border: '1px solid var(--dash-border)',
                         backgroundColor: '#FFFFFF',
-                        color: '#059669',
+                        color: 'var(--dash-text-primary)',
                         fontSize: '0.75rem',
                         fontWeight: 600,
                         cursor: 'pointer',
+                        boxShadow: 'var(--dash-shadow-xs)',
                       }}
                     >
                       <Eye size={13} />
@@ -480,163 +608,67 @@ export const AIModelsTable = ({
 
             {/* Drawer Body Content */}
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Basic Overview Card */}
               <div
                 style={{
-                  padding: '16px',
-                  borderRadius: '10px',
-                  backgroundColor: 'var(--dash-bg-canvas)',
+                  padding: '18px',
+                  borderRadius: '12px',
+                  backgroundColor: '#F8FAFC',
                   border: '1px solid var(--dash-border)',
                 }}
               >
                 <div style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
                   {selectedModel.name}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: '#ECFDF5', color: '#059669', fontWeight: 700, fontSize: '0.6875rem' }}>
-                    {selectedModel.status}
-                  </span>
-                  <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600, fontSize: '0.6875rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                  {renderStatusBadge(selectedModel.status)}
+                  <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600, fontSize: '0.6875rem' }}>
                     Version: {selectedModel.version}
                   </span>
-                  <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: '#EFF6FF', color: '#1D4ED8', fontWeight: 600, fontSize: '0.6875rem' }}>
+                  <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#1D4ED8', fontWeight: 600, fontSize: '0.6875rem' }}>
                     {selectedModel.framework}
                   </span>
                 </div>
               </div>
 
-              {/* Architecture & Hyperparameters */}
-              <div>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '10px' }}>
-                  1. Kiến Trúc Mạng & Siêu Tham Số (Hyperparameters)
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Cấu trúc mạng</div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                      2-Layer Bidirectional GRU
-                    </div>
+              {/* Specs Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ padding: '14px', borderRadius: '10px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+                    Phân Loại Thuật Toán
                   </div>
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Hidden Units / Cửa sổ</div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                      64 units • Sequence: 12 bước
-                    </div>
+                  <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px', fontSize: '0.875rem' }}>
+                    {selectedModel.modelType}
                   </div>
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Tốc độ học (Learning Rate)</div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                      0.001 (AdamW Optimizer)
-                    </div>
+                </div>
+
+                <div style={{ padding: '14px', borderRadius: '10px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+                    Runtime Engine
                   </div>
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Hàm mất mát (Loss Function)</div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                      Focal Loss (Gamma = 2.0)
-                    </div>
+                  <div style={{ fontWeight: 700, color: '#1D4ED8', marginTop: '4px', fontSize: '0.875rem' }}>
+                    {selectedModel.framework}
                   </div>
                 </div>
               </div>
 
-              {/* Training Dataset Specs */}
-              <div>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '10px' }}>
-                  2. Tập Dữ Liệu Huấn Luyện (Training Dataset)
-                </h4>
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    backgroundColor: '#FFFFFF',
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{selectedModel.dataset}</div>
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-                    <span>• Tỷ lệ phân chia: <strong>80% Train / 20% Test</strong></span>
-                    <span>• Kích thước tệp: <strong>14.2 MB (.onnx)</strong></span>
-                  </div>
+              {/* Dataset Info */}
+              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Tập Dữ Liệu Huấn Luyện (Training Dataset)
+                </div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)', fontWeight: 600 }}>
+                  {selectedModel.dataset}
                 </div>
               </div>
 
-              {/* Inference Latency & Benchmarks */}
-              <div>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '10px' }}>
-                  3. Độ Trễ Suy Luận & Hiệu Năng Thực Địa
-                </h4>
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    backgroundColor: '#FFFFFF',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--dash-text-muted)' }}>Thời gian suy luận P50:</span>
-                    <strong style={{ color: '#059669' }}>1.2 ms</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--dash-text-muted)' }}>Thời gian suy luận P99:</span>
-                    <strong style={{ color: '#059669' }}>2.4 ms</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem' }}>
-                    <span style={{ color: 'var(--dash-text-muted)' }}>Chỉ số đánh giá:</span>
-                    <strong style={{ color: 'var(--dash-text-primary)' }}>{selectedModel.evaluationMetrics}</strong>
-                  </div>
+              {/* Performance Metrics */}
+              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #A7F3D0', backgroundColor: '#ECFDF5' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#065F46', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Chỉ Số Đánh Giá Kiểm Chuẩn (Evaluation Metrics)
                 </div>
-              </div>
-
-              {/* Action Buttons in Drawer */}
-              <div
-                style={{
-                  marginTop: 'auto',
-                  paddingTop: '20px',
-                  borderTop: '1px solid var(--dash-border)',
-                  display: 'flex',
-                  gap: '10px',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    alert(`Đã cập nhật trạng thái mô hình ${selectedModel.name} sang ACTIVE`);
-                    setSelectedModel(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#059669',
-                    color: '#FFFFFF',
-                    fontWeight: 700,
-                    fontSize: '0.8125rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Xác Nhận Giữ Bản Quyền Model
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedModel(null)}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    backgroundColor: '#FFFFFF',
-                    color: 'var(--dash-text-secondary)',
-                    fontWeight: 600,
-                    fontSize: '0.8125rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Đóng
-                </button>
+                <div style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                  {selectedModel.evaluationMetrics}
+                </div>
               </div>
             </div>
           </div>

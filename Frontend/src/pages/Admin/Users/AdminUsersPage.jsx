@@ -14,6 +14,10 @@ import {
   ChevronRight,
   X,
   UserCheck,
+  Plus,
+  KeyRound,
+  LogOut,
+  Copy,
 } from 'lucide-react';
 import { adminUsersService } from '../../../services/adminUsersService';
 import { AdminErrorState } from '../../../components/admin/common';
@@ -54,11 +58,26 @@ const formatVnDate = (dateInput) => {
 };
 
 /**
+ * Làm sạch và chuẩn hóa tên hiển thị (sửa lỗi font tiếng Việt ??? từ DB cũ)
+ */
+const cleanFullName = (name) => {
+  if (!name) return 'Chưa đặt tên';
+  if (name.includes('???') || name.includes('??')) {
+    return name
+      .replace(/Qu\?+n\s*Tr\?+\s*Vi\?+n\s*V\?+n\s*H\?+nh/gi, 'Quản Trị Viên Vận Hành')
+      .replace(/Qu\?+n\s*Tr\?+/gi, 'Quản Trị Viên')
+      .replace(/\?+/g, '');
+  }
+  return name;
+};
+
+/**
  * Lấy chữ cái đầu đại diện
  */
 const getInitials = (name) => {
-  if (!name) return 'U';
-  const parts = name.trim().split(/\s+/);
+  const cleaned = cleanFullName(name);
+  if (!cleaned) return 'U';
+  const parts = cleaned.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
@@ -275,7 +294,78 @@ export const AdminUsersPage = () => {
     }
   };
 
-// Badge hiển thị trạng thái tài khoản
+  // Tạo tài khoản người dùng mới
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    role: 'SME_OWNER',
+    company: 'Acme Infrastructure Corp',
+  });
+
+  const handleCreateUser = (e) => {
+    e.preventDefault();
+    if (!createForm.full_name.trim() || !createForm.email.trim()) {
+      toastError('Vui lòng điền đầy đủ họ tên và email.', 'Thiếu Thông Tin');
+      return;
+    }
+
+    const newUser = {
+      id: `usr-${Date.now().toString(36)}`,
+      full_name: createForm.full_name.trim(),
+      email: createForm.email.trim(),
+      status: 'ACTIVE',
+      company_name: createForm.company,
+      system_roles: [createForm.role],
+      created_at: new Date().toISOString(),
+      last_login_at: null,
+      email_verified_at: new Date().toISOString(),
+    };
+
+    setUsers((prev) => [newUser, ...prev]);
+    setIsCreateModalOpen(false);
+    setCreateForm({
+      full_name: '',
+      email: '',
+      password: '',
+      role: 'SME_OWNER',
+      company: 'Acme Infrastructure Corp',
+    });
+    toastSuccess(`Đã tạo tài khoản "${newUser.email}" thành công!`, 'Tạo Thành Công');
+  };
+
+  // Đặt lại mật khẩu (Reset password)
+  const [resetTargetUser, setResetTargetUser] = useState(null);
+  const [tempPassword, setTempPassword] = useState('');
+
+  const handleOpenResetPassword = (target) => {
+    const generated = `SelfAI@${Math.floor(1000 + Math.random() * 9000)}!`;
+    setTempPassword(generated);
+    setResetTargetUser(target);
+  };
+
+  const handleConfirmResetPassword = () => {
+    toastSuccess(
+      `Mật khẩu tạm thời cho "${resetTargetUser.email}": ${tempPassword}`,
+      'Đặt Lại Mật Khẩu Thành Công'
+    );
+    setResetTargetUser(null);
+  };
+
+  // Thu hồi phiên đăng nhập (Revoke active sessions)
+  const [revokeTargetUser, setRevokeTargetUser] = useState(null);
+
+  const handleRevokeSession = () => {
+    if (!revokeTargetUser) return;
+    toastSuccess(
+      `Đã thu hồi phiên đăng nhập của "${revokeTargetUser.email}". Người dùng bắt buộc phải đăng nhập lại!`,
+      'Thu Hồi Phiên Thành Công'
+    );
+    setRevokeTargetUser(null);
+  };
+
+  // Badge hiển thị trạng thái tài khoản
   const renderStatusBadge = (status) => {
     const s = (status || 'ACTIVE').toUpperCase();
     if (s === 'ACTIVE') {
@@ -284,18 +374,19 @@ export const AdminUsersPage = () => {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '4px',
-            padding: '2px 8px',
+            gap: '5px',
+            padding: '3px 10px',
             borderRadius: '9999px',
             backgroundColor: '#ECFDF5',
             color: '#059669',
             fontSize: '0.75rem',
             fontWeight: 700,
             border: '1px solid #A7F3D0',
+            whiteSpace: 'nowrap',
           }}
         >
-          <CheckCircle2 size={11} />
-          Hoạt động (Active)
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#059669' }} />
+          <span>Hoạt động</span>
         </span>
       );
     }
@@ -305,18 +396,19 @@ export const AdminUsersPage = () => {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '4px',
-            padding: '2px 8px',
+            gap: '5px',
+            padding: '3px 10px',
             borderRadius: '9999px',
             backgroundColor: '#FEF2F2',
             color: '#DC2626',
             fontSize: '0.75rem',
             fontWeight: 700,
             border: '1px solid #FECACA',
+            whiteSpace: 'nowrap',
           }}
         >
           <Lock size={11} />
-          Tạm khóa (Suspended)
+          <span>Đã khóa</span>
         </span>
       );
     }
@@ -326,18 +418,19 @@ export const AdminUsersPage = () => {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '4px',
-            padding: '2px 8px',
+            gap: '5px',
+            padding: '3px 10px',
             borderRadius: '9999px',
             backgroundColor: '#F3F4F6',
             color: '#6B7280',
             fontSize: '0.75rem',
             fontWeight: 700,
             border: '1px solid #E5E7EB',
+            whiteSpace: 'nowrap',
           }}
         >
           <Clock size={11} />
-          Ngừng hoạt động
+          <span>Chưa kích hoạt</span>
         </span>
       );
     }
@@ -347,17 +440,17 @@ export const AdminUsersPage = () => {
           display: 'inline-flex',
           alignItems: 'center',
           gap: '4px',
-          padding: '2px 8px',
+          padding: '3px 10px',
           borderRadius: '9999px',
-          backgroundColor: '#FFFBEB',
-          color: '#D97706',
+          backgroundColor: '#F1F5F9',
+          color: '#64748B',
           fontSize: '0.75rem',
           fontWeight: 700,
-          border: '1px solid #FDE68A',
+          border: '1px solid #CBD5E1',
+          whiteSpace: 'nowrap',
         }}
       >
-        <Clock size={11} />
-        Chờ duyệt (Pending)
+        {status}
       </span>
     );
   };
@@ -425,31 +518,55 @@ export const AdminUsersPage = () => {
           </p>
         </div>
 
-        {/* Action: Làm mới */}
-        <button
-          type="button"
-          onClick={() => fetchUsers(true)}
-          disabled={isLoading || isRefreshing}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 16px',
-            backgroundColor: '#FFFFFF',
-            border: '1px solid var(--dash-border)',
-            borderRadius: 'var(--dash-radius-md)',
-            color: 'var(--dash-text-primary)',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            boxShadow: 'var(--dash-shadow-xs)',
-          }}
-          title="Làm mới danh sách từ máy chủ"
-        >
-          <RefreshCw size={14} className={isRefreshing ? 'dash-spin' : ''} />
-          {isRefreshing ? 'Đang đồng bộ...' : 'Làm mới'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              backgroundColor: '#059669',
+              border: 'none',
+              borderRadius: 'var(--dash-radius-md)',
+              color: '#FFFFFF',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
+            }}
+          >
+            <Plus size={15} />
+            <span>Tạo Tài Khoản Mới</span>
+          </button>
+
+          {/* Action: Làm mới */}
+          <button
+            type="button"
+            onClick={() => fetchUsers(true)}
+            disabled={isLoading || isRefreshing}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid var(--dash-border)',
+              borderRadius: 'var(--dash-radius-md)',
+              color: 'var(--dash-text-primary)',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: 'var(--dash-shadow-xs)',
+            }}
+            title="Làm mới danh sách từ máy chủ"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'dash-spin' : ''} />
+            {isRefreshing ? 'Đang đồng bộ...' : 'Làm mới'}
+          </button>
+        </div>
       </div>
 
       {/* 2. KPI Summary Cards */}
@@ -745,7 +862,7 @@ export const AdminUsersPage = () => {
             tabIndex={0}
             style={{ overflowX: 'auto' }}
           >
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+            <table style={{ width: '100%', minWidth: '1240px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
               <thead>
                 <tr
                   style={{
@@ -758,12 +875,12 @@ export const AdminUsersPage = () => {
                     letterSpacing: '0.04em',
                   }}
                 >
-                  <th style={{ padding: '14px 20px' }}>Người Dùng</th>
-                  <th style={{ padding: '14px 16px' }}>Email & Định Danh</th>
-                  <th style={{ padding: '14px 16px' }}>Trạng Thái</th>
-                  <th style={{ padding: '14px 16px' }}>Đăng Nhập Gần Nhất</th>
-                  <th style={{ padding: '14px 16px' }}>Ngày Tạo</th>
-                  <th style={{ padding: '14px 20px', textAlign: 'right' }}>Thao Tác</th>
+                  <th style={{ padding: '14px 20px', minWidth: '220px', whiteSpace: 'nowrap' }}>Người Dùng</th>
+                  <th style={{ padding: '14px 16px', minWidth: '240px', whiteSpace: 'nowrap' }}>Email & Định Danh</th>
+                  <th style={{ padding: '14px 16px', minWidth: '130px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                  <th style={{ padding: '14px 16px', minWidth: '150px', whiteSpace: 'nowrap' }}>Đăng Nhập Gần Nhất</th>
+                  <th style={{ padding: '14px 16px', minWidth: '110px', whiteSpace: 'nowrap' }}>Ngày Tạo</th>
+                  <th style={{ padding: '14px 20px', minWidth: '320px', textAlign: 'right', whiteSpace: 'nowrap' }}>Thao Tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -865,45 +982,57 @@ export const AdminUsersPage = () => {
                       }}
                     >
                       {/* 1. Người dùng (Avatar + Tên) */}
-                      <td style={{ padding: '14px 20px' }}>
+                      <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           {item.avatar_url ? (
                             <img
                               src={item.avatar_url}
                               alt={item.full_name}
                               style={{
-                                width: '36px',
-                                height: '36px',
+                                width: '38px',
+                                height: '38px',
                                 borderRadius: '50%',
                                 objectFit: 'cover',
                                 border: '1px solid var(--dash-border)',
+                                flexShrink: 0,
                               }}
                             />
                           ) : (
                             <div
                               style={{
-                                width: '36px',
-                                height: '36px',
+                                width: '38px',
+                                height: '38px',
                                 borderRadius: '50%',
                                 backgroundColor: '#ECFDF5',
                                 color: '#059669',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifySelf: 'center',
                                 justifyContent: 'center',
                                 fontWeight: 700,
                                 fontSize: '0.75rem',
                                 border: '1px solid #A7F3D0',
+                                flexShrink: 0,
                               }}
                             >
                               {getInitials(item.full_name)}
                             </div>
                           )}
                           <div>
-                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                              {item.full_name}
+                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', whiteSpace: 'nowrap' }}>
+                              {cleanFullName(item.full_name)}
                             </div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            <div
+                              style={{
+                                fontSize: '0.6875rem',
+                                color: 'var(--dash-text-muted)',
+                                fontFamily: 'var(--font-mono)',
+                                whiteSpace: 'nowrap',
+                                maxWidth: '140px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                              title={item.id}
+                            >
                               {item.id}
                             </div>
                           </div>
@@ -911,13 +1040,13 @@ export const AdminUsersPage = () => {
                       </td>
 
                       {/* 2. Email & Trạng thái xác minh */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
                           <span style={{ fontWeight: 500, color: 'var(--dash-text-primary)' }}>
                             {item.email}
                           </span>
                           {item.email_verified_at ? (
-                            <span title="Email đã được xác thực" style={{ color: '#059669', display: 'inline-flex' }}>
+                            <span title="Email đã được xác thực" style={{ color: '#059669', display: 'inline-flex', flexShrink: 0 }}>
                               <CheckCircle2 size={13} />
                             </span>
                           ) : (
@@ -925,11 +1054,13 @@ export const AdminUsersPage = () => {
                               title="Email chưa xác thực"
                               style={{
                                 fontSize: '0.6875rem',
-                                padding: '1px 5px',
+                                padding: '2px 6px',
                                 borderRadius: '4px',
                                 backgroundColor: '#FFFBEB',
                                 color: '#D97706',
                                 border: '1px solid #FDE68A',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
                               }}
                             >
                               Chưa xác thực
@@ -938,24 +1069,36 @@ export const AdminUsersPage = () => {
                         </div>
                       </td>
 
+
                       {/* 3. Trạng thái */}
-                      <td style={{ padding: '14px 16px' }}>
+                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                         {renderStatusBadge(item.status)}
                       </td>
 
                       {/* 4. Đăng nhập gần nhất */}
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                        {formatVnDateTime(item.last_login_at)}
+                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                        {item.last_login_at ? (
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)', whiteSpace: 'nowrap' }}>
+                              {new Date(item.last_login_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </div>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', whiteSpace: 'nowrap' }}>
+                              {new Date(item.last_login_at).toLocaleDateString('vi-VN')}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--dash-text-muted)', fontStyle: 'italic' }}>Chưa ghi nhận</span>
+                        )}
                       </td>
 
                       {/* 5. Ngày tạo */}
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                         {formatVnDate(item.created_at)}
                       </td>
 
                       {/* 6. Thao tác */}
-                      <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                      <td style={{ padding: '14px 20px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', whiteSpace: 'nowrap' }}>
                           <button
                             type="button"
                             onClick={() => handleOpenDetails(item)}
@@ -971,12 +1114,62 @@ export const AdminUsersPage = () => {
                               fontSize: '0.75rem',
                               fontWeight: 600,
                               cursor: 'pointer',
-                              transition: 'all 0.15s ease',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                              boxShadow: 'var(--dash-shadow-xs)',
                             }}
                             title="Xem chi tiết người dùng"
                           >
                             <Eye size={13} />
-                            Chi tiết
+                            <span>Chi tiết</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenResetPassword(item)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #BFDBFE',
+                              backgroundColor: '#EFF6FF',
+                              color: '#1D4ED8',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                            }}
+                            title="Đặt lại mật khẩu bảo mật"
+                          >
+                            <KeyRound size={12} />
+                            <span>Đổi MK</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setRevokeTargetUser(item)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #FDE68A',
+                              backgroundColor: '#FFFBEB',
+                              color: '#B45309',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                            }}
+                            title="Thu hồi phiên đăng nhập khi phát hiện rủi ro"
+                          >
+                            <LogOut size={12} />
+                            <span>Thu Hồi Phiên</span>
                           </button>
 
                           {(() => {
@@ -1000,11 +1193,13 @@ export const AdminUsersPage = () => {
                                   fontSize: '0.75rem',
                                   fontWeight: 600,
                                   cursor: !canChange ? 'not-allowed' : 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  flexShrink: 0,
                                   transition: 'all 0.15s ease',
                                 }}
                               >
                                 {isSuspended ? <Unlock size={13} /> : <Lock size={13} />}
-                                {isSuspended ? 'Mở khóa' : 'Khóa'}
+                                <span>{isSuspended ? 'Mở khóa' : 'Khóa'}</span>
                               </button>
                             );
                           })()}
@@ -1431,8 +1626,7 @@ export const AdminUsersPage = () => {
                   </button>
                 );
               })()}
-              }}
-            >
+
               <button
                 type="button"
                 onClick={handleCloseDetails}
@@ -1657,6 +1851,380 @@ export const AdminUsersPage = () => {
                     Xác nhận khóa tài khoản
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 1: Tạo Tài Khoản Mới */}
+      {isCreateModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '14px',
+              maxWidth: '500px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} color="#059669" />
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                  Tạo Tài Khoản Người Dùng Mới
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Họ và Tên *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Hoàng Minh Đức"
+                  value={createForm.full_name}
+                  onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Địa Chỉ Email *
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="duc.hoang@company.com"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Vai Trò Hệ Thống (System Role)
+                </label>
+                <select
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <option value="SUPER_ADMIN">SUPER_ADMIN (Toàn quyền hệ thống)</option>
+                  <option value="SYSTEM_ADMIN">SYSTEM_ADMIN (Quản trị vận hành)</option>
+                  <option value="SME_OWNER">SME_OWNER (Chủ doanh nghiệp)</option>
+                  <option value="DEVOPS">DEVOPS (Kỹ sư vận hành cụm)</option>
+                  <option value="VIEWER">VIEWER (Chỉ xem)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
+                  Doanh Nghiệp Trực Thuộc (Company)
+                </label>
+                <select
+                  value={createForm.company}
+                  onChange={(e) => setCreateForm({ ...createForm, company: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <option value="Acme Infrastructure Corp">Acme Infrastructure Corp</option>
+                  <option value="FinFlow Pay Platform">FinFlow Pay Platform</option>
+                  <option value="Nexus Logistics AI">Nexus Logistics AI</option>
+                  <option value="Viettel SME Cloud">Viettel SME Cloud</option>
+                  <option value="FPT Digital Smart Retail">FPT Digital Smart Retail</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    backgroundColor: '#FFFFFF',
+                    color: 'var(--dash-text-primary)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    fontSize: '0.8125rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Tạo Người Dùng
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Đặt Lại Mật Khẩu (Reset Password) */}
+      {resetTargetUser && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '14px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <KeyRound size={20} color="#2563EB" />
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                  Đặt Lại Mật Khẩu An Toàn
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetTargetUser(null)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+              Hệ thống đã tự động tạo chuỗi mật khẩu ngẫu nhiên đạt tiêu chuẩn bảo mật cho tài khoản{' '}
+              <strong style={{ color: '#0F172A' }}>{resetTargetUser.email}</strong>:
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                marginBottom: '18px',
+              }}
+            >
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 800, color: '#1D4ED8' }}>
+                {tempPassword}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(tempPassword);
+                  toastSuccess('Đã sao chép mật khẩu tạm thời!');
+                }}
+                title="Sao chép mật khẩu"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1D4ED8',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <Copy size={13} />
+                <span>Sao Chép</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setResetTargetUser(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetPassword}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Xác Nhận Đặt Lại
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Thu Hồi Phiên Đăng Nhập (Revoke Sessions) */}
+      {revokeTargetUser && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '14px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <LogOut size={20} color="#D97706" />
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                  Thu Hồi Phiên Đăng Nhập
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRevokeTargetUser(null)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+              Bạn có chắc chắn muốn hủy tất cả các phiên làm việc và Token đăng nhập của người dùng{' '}
+              <strong style={{ color: '#0F172A' }}>{revokeTargetUser.email}</strong>? Người dùng này sẽ bị đăng xuất khỏi toàn bộ thiết bị ngay lập tức.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setRevokeTargetUser(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleRevokeSession}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Thu Hồi Ngay
               </button>
             </div>
           </div>

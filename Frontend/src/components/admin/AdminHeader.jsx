@@ -13,13 +13,13 @@ export const AdminHeader = ({
   onToggleCollapse,
   onToggleMobileDrawer,
 }) => {
-  const { user, activeRole, switchRole, getPrimaryRole } = useAuth();
+  const { user, activeRole, switchRole } = useAuth();
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const roleDropdownRef = useRef(null);
 
   const ADMIN_ROLES = [
-    { key: 'SUPER_ADMIN', label: 'Quản Trị Tối Cao (Super Admin)', desc: 'Toàn quyền cấu hình, bảo mật và người dùng' },
-    { key: 'ADMIN', label: 'Quản Trị Vận Hành (Admin)', desc: 'Quản lý toàn bộ tính năng vận hành và hạ tầng' },
+    { key: 'SUPER_ADMIN', label: 'Quản Trị Tối Cao (Super Admin)', desc: 'Toàn quyền cấu hình, bảo mật và phân quyền hệ thống' },
+    { key: 'ADMIN', label: 'Quản Trị Vận Hành (Admin)', desc: 'Vận hành AI, tác tử, hạ tầng và quản trị toàn diện hệ thống' },
     { key: 'SME_OWNER', label: 'Chủ Doanh Nghiệp (SME Owner)', desc: 'Toàn quyền trong phạm vi tổ chức doanh nghiệp' },
     { key: 'DEVOPS', label: 'Kỹ Sư DevOps (DevOps Lead)', desc: 'Vận hành kỹ thuật, không quản lý người dùng' },
     { key: 'VIEWER', label: 'Người Giám Sát (Viewer)', desc: 'Chỉ xem báo cáo và bàn điều khiển tổng quan' },
@@ -152,10 +152,12 @@ export const AdminHeader = ({
             }}
           />
           <span style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-            PROD CLUSTER-01
+            {currentRoleKey === 'ADMIN' ? 'PROD CLUSTER-01' : 'PROD CLUSTER-01'}
           </span>
           <span style={{ color: 'var(--dash-text-muted)' }}>&bull;</span>
-          <span style={{ color: '#059669', fontWeight: 600 }}>1.2ms</span>
+          <span style={{ color: '#059669', fontWeight: 600 }}>
+            1.2ms
+          </span>
         </div>
 
         {/* RBAC Role Switcher Dropdown (Mô phỏng chuyển đổi vai trò) */}
@@ -214,6 +216,9 @@ export const AdminHeader = ({
                     onClick={() => {
                       switchRole(r.key);
                       setIsRoleDropdownOpen(false);
+                      if ((r.key === 'SME_OWNER' || r.key === 'DEVOPS' || r.key === 'VIEWER') && onNavigate) {
+                        onNavigate('/dashboard');
+                      }
                     }}
                     style={{
                       width: '100%',

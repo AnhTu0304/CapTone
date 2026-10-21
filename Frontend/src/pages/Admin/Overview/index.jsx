@@ -22,8 +22,12 @@ import PlatformHealthSection from './components/PlatformHealthSection';
 import { OrganizationGrowthSection } from './components/GrowthAndAnalyticsSections';
 import { AIOverviewSection } from './components/AIAndAgentSections';
 import { RecentActivitySection } from './components/FeedsSections';
+import InteractiveOrganizationGrowthChart from '../../../components/admin/InteractiveOrganizationGrowthChart';
+import { useAuth } from '../../../context/AuthContext';
 
 export const OverviewPage = ({ onNavigate }) => {
+  const { activeRole } = useAuth();
+
   // Global scope state
   const [scope, setScope] = useState({
     orgId: 'all',
@@ -104,7 +108,7 @@ export const OverviewPage = ({ onNavigate }) => {
                 margin: 0,
               }}
             >
-              Bàn Điều Khiển Quản Trị Nền Tảng (Super Admin Hub)
+              Bàn Điều Khiển Quản Trị Nền Tảng ({activeRole === 'SUPER_ADMIN' ? 'Super Admin Hub' : 'Admin Operations Hub'})
             </h1>
             <span
               style={{
@@ -118,7 +122,7 @@ export const OverviewPage = ({ onNavigate }) => {
                 border: '1px solid rgba(5, 150, 105, 0.25)',
               }}
             >
-              SUPER ADMIN
+              {activeRole === 'SUPER_ADMIN' ? 'SUPER ADMIN' : 'ADMIN'}
             </span>
           </div>
           <p
@@ -187,14 +191,25 @@ export const OverviewPage = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* SECTION 2: SUPER ADMIN QUICK HUBS (4 CORE OPERATIONS) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '16px',
-        }}
-      >
+      {/* SECTION 2: SUPER ADMIN QUICK HUBS (4 CORE OPERATIONS - 4 CARDS PER ROW) */}
+      <style>{`
+        .admin-overview-hubs-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
+        }
+        @media (max-width: 992px) {
+          .admin-overview-hubs-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 540px) {
+          .admin-overview-hubs-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+      <div className="admin-overview-hubs-grid">
         {/* Hub 1: Quản Lý Người Dùng & Phân Quyền */}
         <div
           onClick={() => onNavigate && onNavigate('/admin/users')}
@@ -386,9 +401,13 @@ export const OverviewPage = ({ onNavigate }) => {
         status={status}
         errorMessage={errorMessage}
         onRetry={handleManualRefresh}
+        onNavigate={onNavigate}
       />
 
-      {/* SECTION 4: PLATFORM CORE SUBSYSTEMS HEALTH */}
+      {/* SECTION 4: INTERACTIVE ORGANIZATION & TENANT GROWTH DYNAMICS (DAY / MONTH / YEAR) */}
+      <InteractiveOrganizationGrowthChart />
+
+      {/* SECTION 5: PLATFORM CORE SUBSYSTEMS HEALTH */}
       <PlatformHealthSection
         healthData={data?.platformHealth}
         status={status}
