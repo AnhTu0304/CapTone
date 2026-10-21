@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import {
   User,
+  LayoutDashboard,
   Shield,
   ShieldCheck,
   KeyRound,
@@ -299,12 +300,22 @@ export const AdminProfileMenu = ({ onNavigate }) => {
           <div style={{ padding: '6px' }}>
             {[
               {
+                id: 'switch_to_dashboard',
+                label: 'Bảng Điều Khiển Doanh Nghiệp (Owner / User)',
+                icon: LayoutDashboard,
+                path: '/dashboard',
+              },
+              {
                 id: 'profile',
-                label: 'Hồ Sơ Quản Trị Viên',
+                label: 'Hồ Sơ Cá Nhân',
                 icon: User,
                 action: () => {
                   setIsOpen(false);
-                  setIsDetailOpen(true);
+                  if (onNavigate) {
+                    onNavigate('/admin/profile');
+                  } else {
+                    setIsDetailOpen(true);
+                  }
                 },
               },
               {

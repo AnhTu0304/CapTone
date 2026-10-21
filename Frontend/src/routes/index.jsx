@@ -23,7 +23,9 @@ import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
 import { AdminAIPage } from '../pages/Admin/AI';
 import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
 import { AdminUsersPage } from '../pages/Admin/Users';
-import { AdminNotFound } from '../components/admin/common';
+import ProfilePage from '../pages/Dashboard/Profile/ProfilePage';
+import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
+import { useAuth } from '../context/AuthContext';
 import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
@@ -76,12 +78,19 @@ export const RouteRenderer = ({
   // Normalize path
   const path = currentPath.toLowerCase().split('?')[0].split('#')[0] || '/';
 
+  // Phân quyền điều hướng (RBAC Route Guard)
+  const auth = useAuth();
+
+  const user = auth?.user || null;
+  const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
+  const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
+
   // Handle all onboarding routes
   if (path.startsWith('/onboarding')) {
     return <OnboardingPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle all dashboard routes
+  // Handle all dashboard routes (User / Owner Portal - hiển thị đầy đủ giao diện các trang & bảng)
   if (path.startsWith('/dashboard')) {
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
   }
@@ -97,7 +106,29 @@ export const RouteRenderer = ({
   // Handle all admin routes
   if (path.startsWith('/admin')) {
     let adminContent = null;
-    if (path === '/admin' || path === '/admin/overview' || path === '/admin/profile') {
+
+    // RBAC Route Guard cho phân hệ Admin
+    if (isViewerUser && path !== '/admin' && path !== '/admin/overview' && path !== '/admin/profile') {
+      adminContent = (
+        <AdminAccessDenied
+          onNavigate={onNavigate}
+          redirectPath="/admin"
+          title="403 — Không Có Quyền Truy Cập"
+          message="Tài khoản Viewer chỉ được xem Bàn điều khiển tổng quan. Bạn không được truy cập các trang chức năng, xem dữ liệu chi tiết, quản lý User, xem logs/metrics, AI Prediction/RCA, incident history, thực hiện remediation, phê duyệt hành động hoặc thay đổi cấu hình."
+        />
+      );
+    } else if (isDevOpsUser && (path === '/admin/users' || path === '/admin/members')) {
+      adminContent = (
+        <AdminAccessDenied
+          onNavigate={onNavigate}
+          redirectPath="/admin"
+          title="403 — Không Có Quyền Quản Lý Người Dùng"
+          message="Tài khoản DevOps không có quyền quản lý tài khoản người dùng hoặc gán quyền hệ thống. Quyền này dành riêng cho Quản trị viên (Admin)."
+        />
+      );
+    } else if (path === '/admin/profile') {
+      adminContent = <ProfilePage onNavigate={onNavigate} />;
+    } else if (path === '/admin' || path === '/admin/overview') {
       adminContent = <OverviewPage onNavigate={onNavigate} />;
     } else if (path === '/admin/organizations') {
       adminContent = <OrganizationsListPage onNavigate={onNavigate} />;

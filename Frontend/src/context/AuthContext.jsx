@@ -116,16 +116,77 @@ export const AuthProvider = ({ children }) => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, []);
 
+  // Tiện ích lấy danh sách vai trò dạng chuẩn hóa (Uppercase Array)
+  const getUserRoles = useCallback((u) => {
+    if (!u) return [];
+    const rolesSet = new Set();
+
+    // 1. system_roles (array of strings or objects)
+    const rawSystemRoles = u.system_roles || [];
+    if (Array.isArray(rawSystemRoles)) {
+      rawSystemRoles.forEach((r) => {
+        const val = typeof r === 'object' && r !== null ? r.role_name || r.name || r.role_id : r;
+        if (val) rolesSet.add(String(val).trim().toUpperCase());
+      });
+    }
+
+    // 2. systemRole / role string
+    if (u.systemRole) rolesSet.add(String(u.systemRole).trim().toUpperCase());
+    if (u.role) rolesSet.add(String(u.role).trim().toUpperCase());
+
+    // 3. organization_roles (array of objects or strings)
+    const rawOrgRoles = u.organization_roles || [];
+    if (Array.isArray(rawOrgRoles)) {
+      rawOrgRoles.forEach((r) => {
+        const val = typeof r === 'object' && r !== null ? r.role_code || r.role_name || r.code : r;
+        if (val) rolesSet.add(String(val).trim().toUpperCase());
+      });
+    }
+
+    // 4. organization_role / organizationRole string
+    if (u.organization_role) rolesSet.add(String(u.organization_role).trim().toUpperCase());
+    if (u.organizationRole) rolesSet.add(String(u.organizationRole).trim().toUpperCase());
+
+    // 5. roles array (from JWT if available)
+    if (Array.isArray(u.roles)) {
+      u.roles.forEach((r) => {
+        if (r) rolesSet.add(String(r).trim().toUpperCase());
+      });
+    }
+
+    const result = Array.from(rolesSet);
+    return result.length > 0 ? result : ['VIEWER'];
+  }, []);
+
+  const isSuperAdmin = useCallback((u) => {
+    const roles = getUserRoles(u);
+    return roles.includes('SUPER_ADMIN');
+  }, [getUserRoles]);
+
+  const isAdmin = useCallback((u) => {
+    const roles = getUserRoles(u);
+    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(r));
+  }, [getUserRoles]);
+
+  const isDevOps = useCallback((u) => {
+    const roles = getUserRoles(u);
+    return roles.includes('DEVOPS') && !isAdmin(u);
+  }, [getUserRoles, isAdmin]);
+
+  const isViewer = useCallback((u) => {
+    if (!u) return true;
+    if (isAdmin(u) || isDevOps(u)) return false;
+    return true;
+  }, [isAdmin, isDevOps]);
+
   // Tiện ích lấy vai trò cao nhất của người dùng
   const getPrimaryRole = useCallback((u) => {
-    const rawRoles = u?.system_roles || [];
-    const roles = rawRoles.map((r) =>
-      typeof r === 'object' && r !== null ? r.role_name || r.name || r.role_id : r
-    );
-    if (roles.includes('SUPER_ADMIN')) return 'SUPER ADMIN';
-    if (roles.includes('ADMIN') || roles.includes('SYSTEM_ADMIN')) return 'ADMIN';
-    return 'USER';
-  }, []);
+    if (!u) return 'VIEWER';
+    if (isSuperAdmin(u)) return 'SUPER ADMIN';
+    if (isAdmin(u)) return 'ADMIN';
+    if (isDevOps(u)) return 'DEVOPS';
+    return 'VIEWER';
+  }, [isSuperAdmin, isAdmin, isDevOps]);
 
   const value = {
     user,
@@ -136,6 +197,11 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     getInitials,
+    getUserRoles,
+    isSuperAdmin,
+    isAdmin,
+    isDevOps,
+    isViewer,
     getPrimaryRole,
   };
 
@@ -144,10 +210,7 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return context || {};
 };
 
 export default AuthContext;

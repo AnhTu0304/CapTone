@@ -29,7 +29,7 @@ export const config = {
   // CORS Config
   corsOrigins: process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-    : [process.env.CLIENT_URL || 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    : [process.env.CLIENT_URL || 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001'],
 
   // JWT Config
   jwt: {

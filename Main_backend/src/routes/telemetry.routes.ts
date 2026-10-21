@@ -1,16 +1,22 @@
 import { Router } from 'express';
 import { TelemetryController } from '../controllers/telemetry.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
+import { requireRoles } from '../middlewares/rbac.middleware';
 
 export const telemetryRoutes = Router();
 
 // GET /api/v1/telemetry/live-summary
-telemetryRoutes.get('/live-summary', TelemetryController.getLiveSummary);
+// Endpoint tổng quan: cho phép tất cả người dùng hợp lệ (kể cả Viewer) truy cập
+telemetryRoutes.get(
+  '/live-summary',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getLiveSummary
+);
 
-
-
-// Protect telemetry routes with JWT authentication
+// Protect all following detailed telemetry routes with JWT authentication + DEVOPS/ADMIN role
 telemetryRoutes.use(authenticateToken);
+telemetryRoutes.use(requireRoles('DEVOPS', 'ADMIN'));
 
 // GET /api/v1/telemetry/services/:serviceId/metrics-sequence
 telemetryRoutes.get(

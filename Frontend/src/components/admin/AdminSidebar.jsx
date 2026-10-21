@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Activity,
@@ -12,6 +13,7 @@ import {
   ShieldAlert,
   FileBarChart2,
   Users,
+  User,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -184,6 +186,12 @@ export const ADMIN_NAV_GROUPS = [
         path: '/admin/settings',
         icon: Settings,
       },
+      {
+        id: 'profile',
+        label: 'Hồ Sơ Cá Nhân',
+        path: '/admin/profile',
+        icon: User,
+      },
     ],
   },
 ];
@@ -195,6 +203,51 @@ export const AdminSidebar = ({
   onToggleCollapse,
 }) => {
   const [hoveredItem, setHoveredItem] = useState(null);
+
+  // Phân quyền hiển thị thanh điều hướng theo vai trò (RBAC)
+  const auth = useAuth();
+
+  const user = auth?.user || null;
+  const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
+  const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
+
+  const displayNavGroups = useMemo(() => {
+    // 1. Viewer: CHỈ thấy Bàn điều khiển tổng quan (/admin)
+    if (isViewerUser) {
+      return [
+        {
+          id: 'overview',
+          title: 'TỔNG QUAN HỆ THỐNG',
+          items: [
+            {
+              id: 'dashboard',
+              label: 'Bàn Điều Khiển',
+              path: '/admin',
+              icon: LayoutDashboard,
+            },
+          ],
+        },
+      ];
+    }
+
+    // 2. DevOps: Thấy các tác vụ vận hành hạ tầng/AI, NHƯNG không quản lý User & Phân quyền
+    if (isDevOpsUser) {
+      return ADMIN_NAV_GROUPS.map((group) => {
+        if (group.id === 'settings') {
+          return {
+            ...group,
+            items: group.items.filter(
+              (item) => item.id !== 'members' && item.path !== '/admin/members' && item.path !== '/admin/users'
+            ),
+          };
+        }
+        return group;
+      }).filter((group) => group.items.length > 0);
+    }
+
+    // 3. Admin & SuperAdmin: Xem toàn bộ các nhóm chức năng
+    return ADMIN_NAV_GROUPS;
+  }, [isViewerUser, isDevOpsUser]);
 
   const isActive = (itemPath) => {
     const normCurrent = currentPath.toLowerCase().split('?')[0].split('#')[0];
@@ -326,7 +379,7 @@ export const AdminSidebar = ({
           gap: isCollapsed ? '16px' : '20px',
         }}
       >
-        {ADMIN_NAV_GROUPS.map((group) => (
+        {displayNavGroups.map((group) => (
           <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             {/* Group Title */}
             {isCollapsed ? (

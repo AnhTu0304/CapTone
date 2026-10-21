@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-import { telemetryService } from '../../../services/telemetryService';
 import React, { useState, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import InteractiveResourceChart from '../../../components/dashboard/InteractiveResourceChart';
@@ -35,67 +33,13 @@ export const MetricsPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
   const [selectedNamespace, setSelectedNamespace] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [liveChartPoints, setLiveChartPoints] = useState([]);
-  const [liveWorkloads, setLiveWorkloads] = useState([]);
-  const [liveSummary, setLiveSummary] = useState(null);
-
-  // Live WebSocket subscription with REST initial load
-  useEffect(() => {
-    const handleSummaryData = (data) => {
-      if (!data) return;
-      setLiveSummary(data);
-
-      if (data.sequence && data.sequence.length > 0) {
-        const formattedPoints = data.sequence.map((pt, idx) => {
-          const timeObj = new Date(Date.now() - (data.sequence.length - 1 - idx) * 5000);
-          return {
-            time: timeObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            fullTime: timeObj.toLocaleTimeString('vi-VN'),
-            cpu: Math.round(pt.cpu),
-            ram: Math.round(pt.ram),
-          };
-        });
-        setLiveChartPoints(formattedPoints);
-      }
-
-      if (data.raw_metrics && data.raw_metrics.length > 0) {
-        const pods = data.raw_metrics.slice(0, 6).map((m, idx) => ({
-          pod: `${m.service_id}-${(m.pod_id || `pod-${idx}`).substring(0, 10)}`,
-          ns: 'default',
-          cpu: `${Math.round(m.cpu * 10)}m`,
-          mem: `${Math.round(m.ram)} MiB`,
-          restarts: m.pod_restart_count || 0,
-          status: 'Running',
-        }));
-        setLiveWorkloads(pods);
-      }
-    };
-
-    // 1. Initial REST fetch
-    telemetryService.getLiveSummary('sme-order-service').then(handleSummaryData);
-
-    // 2. Persistent WebSocket stream
-    const unsubscribe = telemetryService.subscribeWebSocket(
-      'sme-order-service',
-      (msg) => {
-        if (msg.type === 'initial_state' || msg.type === 'live_pulse' || msg.type === 'live_summary') {
-          handleSummaryData(msg.data);
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   const filteredNodes = useMemo(() => {
     return NODE_METRICS.filter((n) => n.name.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm]);
 
   const filteredWorkloads = useMemo(() => {
-    const list = (liveWorkloads && liveWorkloads.length > 0) ? liveWorkloads : WORKLOAD_METRICS;
-    return list.filter((w) => {
+    return WORKLOAD_METRICS.filter((w) => {
       const matchNs = selectedNamespace === 'all' || w.ns === selectedNamespace;
       const matchSearch = w.pod.toLowerCase().includes(searchTerm.toLowerCase()) || w.ns.toLowerCase().includes(searchTerm.toLowerCase());
       return matchNs && matchSearch;
@@ -112,9 +56,6 @@ export const MetricsPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Chỉ Số Viễn Trắc Hạ Tầng Thời Gian Thực
             </h1>
-            <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-              ● LIVE WEBSOCKET AGENT (3s)
-            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
             {currentOrg.name} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv.name}</span> &bull; Phân tích viễn trắc eBPF độ phân giải cao
@@ -146,7 +87,6 @@ export const MetricsPage = () => {
 
       {/* Main Interactive Resource Chart */}
       <InteractiveResourceChart
-        data={liveChartPoints.length > 0 ? liveChartPoints : undefined}
         title="Biểu Đồ Tài Nguyên Cụm Máy Chủ (CPU & RAM Thời Gian Thực)"
         subtitle="Dữ liệu cảm biến trực tiếp từ 8 Nodes Kubernetes thu thập qua eBPF DaemonSet"
         totalCpuCores={48}

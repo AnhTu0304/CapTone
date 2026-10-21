@@ -1,5 +1,6 @@
 import React from 'react';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Building2,
@@ -36,6 +37,12 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     unreadNotifsCount,
     onNavigate,
   } = useDashboard();
+
+  const auth = useAuth();
+
+  const user = auth?.user || null;
+  const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
+  const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
 
   const navGroups = [
     {
@@ -108,6 +115,11 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
       ],
     },
   ];
+
+  const filteredNavGroups = React.useMemo(() => {
+    // Hiển thị đầy đủ tất cả danh mục và bảng dữ liệu cho phân hệ Doanh nghiệp / Owner / Người dùng
+    return navGroups;
+  }, [navGroups, pendingApprovalsCount, unreadNotifsCount]);
 
   const handleItemClick = (path) => {
     if (onNavigate) {
@@ -192,7 +204,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           flex: 1,
         }}
       >
-        {navGroups.map((group, gIdx) => (
+        {filteredNavGroups.map((group, gIdx) => (
           <div key={gIdx}>
             {!isSidebarCollapsed && (
               <div

@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-import { telemetryService } from '../../../services/telemetryService';
 import React, { useState, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import {
@@ -108,60 +106,9 @@ export const EventsPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
   const [selectedType, setSelectedType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveEvents, setLiveEvents] = useState([]);
-
-  useEffect(() => {
-    const handleEventsData = (eventsList) => {
-      if (!eventsList || eventsList.length === 0) return;
-      const mapped = eventsList.map((e, idx) => ({
-        id: e.id || `live-ev-${idx}`,
-        type: e.event_type || 'Normal',
-        reason: e.reason || 'Event',
-        object: e.metadata?.pod_name ? `Pod/${e.metadata.pod_name}` : 'Pod/sme-order-service',
-        ns: 'default',
-        message: e.message || '',
-        age: e.last_seen_at ? new Date(e.last_seen_at).toLocaleTimeString('vi-VN') : 'Vừa xong',
-        count: e.count || 1,
-      }));
-      setLiveEvents(mapped);
-    };
-
-    // 1. Initial REST fetch
-    telemetryService.getLiveSummary('sme-order-service').then((data) => {
-      if (data?.events) handleEventsData(data.events);
-    });
-
-    // 2. Persistent WebSocket stream
-    const unsubscribe = telemetryService.subscribeWebSocket(
-      'sme-order-service',
-      (msg) => {
-        if (msg.type === 'initial_state' || msg.type === 'live_pulse') {
-          handleEventsData(msg.data?.events);
-        } else if (msg.type === 'k8s_event') {
-          const e = msg.data;
-          const newEvt = {
-            id: e.id || `ws-ev-${Date.now()}`,
-            type: e.event?.type || e.event_type || 'Normal',
-            reason: e.event?.reason || e.reason || 'Event',
-            object: e.metadata?.pod_name ? `Pod/${e.metadata.pod_name}` : 'Pod/sme-order-service',
-            ns: 'default',
-            message: e.event?.message || e.message || '',
-            age: 'Vừa xong',
-            count: e.count || 1,
-          };
-          setLiveEvents((prev) => [newEvt, ...prev.slice(0, 40)]);
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   const filteredEvents = useMemo(() => {
-    const list = (liveEvents && liveEvents.length > 0) ? liveEvents : K8S_EVENTS;
-    return list.filter((ev) => {
+    return K8S_EVENTS.filter((ev) => {
       const matchType = selectedType === 'all' || ev.type === selectedType;
       const matchQuery =
         !searchQuery ||
