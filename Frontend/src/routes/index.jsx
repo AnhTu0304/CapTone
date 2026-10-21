@@ -97,7 +97,7 @@ export const RouteRenderer = ({
   // Handle all admin routes
   if (path.startsWith('/admin')) {
     let adminContent = null;
-    if (path === '/admin' || path === '/admin/overview') {
+    if (path === '/admin' || path === '/admin/overview' || path === '/admin/profile') {
       adminContent = <OverviewPage onNavigate={onNavigate} />;
     } else if (path === '/admin/organizations') {
       adminContent = <OrganizationsListPage onNavigate={onNavigate} />;

@@ -1,17 +1,65 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import {
   User,
   Shield,
+  ShieldCheck,
   KeyRound,
   FileText,
   Settings,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  X,
+  CheckCircle2,
+  Lock,
+  Eye,
 } from 'lucide-react';
+import AuthContext from '../../context/AuthContext';
+
+const formatVnDate = (isoStr) => {
+  if (!isoStr) return 'Hôm nay';
+  try {
+    const d = new Date(isoStr);
+    return isNaN(d.getTime())
+      ? 'Hôm nay'
+      : d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch {
+    return 'Hôm nay';
+  }
+};
+
+const formatVnDateTime = (isoStr) => {
+  if (!isoStr) return 'Vừa mới đăng nhập';
+  try {
+    const d = new Date(isoStr);
+    return isNaN(d.getTime())
+      ? 'Vừa mới đăng nhập'
+      : `${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+  } catch {
+    return 'Vừa mới đăng nhập';
+  }
+};
 
 export const AdminProfileMenu = ({ onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const containerRef = useRef(null);
+
+  const auth = useContext(AuthContext);
+  const user = auth?.user || null;
+
+  const displayName = user?.full_name || 'Quản Trị Viên';
+  const displayEmail = user?.email || 'admin@selfheal.systems';
+  const monogram = user?.full_name
+    ? auth?.getInitials
+      ? auth.getInitials(user.full_name)
+      : user.full_name.slice(0, 2).toUpperCase()
+    : 'AD';
+
+  const primaryRole = auth?.getPrimaryRole
+    ? auth.getPrimaryRole(user)
+    : (user?.system_roles?.includes('SUPER_ADMIN') ? 'SUPER ADMIN' : 'Super Admin');
+
+  const isSuperAdmin = user?.system_roles?.includes('SUPER_ADMIN') || primaryRole.includes('SUPER');
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -23,10 +71,11 @@ export const AdminProfileMenu = ({ onNavigate }) => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setIsOpen(false);
+        setIsDetailOpen(false);
       }
     };
 
-    if (isOpen) {
+    if (isOpen || isDetailOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleKeyDown);
     }
@@ -35,19 +84,27 @@ export const AdminProfileMenu = ({ onNavigate }) => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, isDetailOpen]);
 
-  const handleAction = (path) => {
+  const handleAction = (item) => {
     setIsOpen(false);
-    if (onNavigate && path) {
-      onNavigate(path);
+    if (item.action) {
+      item.action();
+    } else if (onNavigate && item.path) {
+      onNavigate(item.path);
     }
   };
 
   const handleLogout = () => {
     setIsOpen(false);
+    if (auth?.logout) {
+      auth.logout();
+    }
     if (onNavigate) {
       onNavigate('/login');
+    } else {
+      window.history.pushState({}, '', '/login');
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
 
@@ -98,7 +155,7 @@ export const AdminProfileMenu = ({ onNavigate }) => {
             letterSpacing: '0.02em',
           }}
         >
-          AD
+          {monogram}
         </div>
 
         {/* Name & Role (Hidden on mobile) */}
@@ -111,7 +168,7 @@ export const AdminProfileMenu = ({ onNavigate }) => {
               lineHeight: 1.2,
             }}
           >
-            Quản Trị Viên
+            {displayName}
           </div>
           <div
             style={{
@@ -125,7 +182,7 @@ export const AdminProfileMenu = ({ onNavigate }) => {
             }}
           >
             <Shield size={10} color="#059669" />
-            <span>Super Admin</span>
+            <span>{primaryRole}</span>
           </div>
         </div>
 
@@ -148,7 +205,7 @@ export const AdminProfileMenu = ({ onNavigate }) => {
             position: 'absolute',
             top: 'calc(100% + 8px)',
             right: 0,
-            width: '260px',
+            width: '280px',
             backgroundColor: '#FFFFFF',
             borderRadius: '14px',
             border: '1px solid var(--dash-border)',
@@ -166,22 +223,56 @@ export const AdminProfileMenu = ({ onNavigate }) => {
               borderBottom: '1px solid #A7F3D0',
             }}
           >
-            <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#065F46' }}>
-              Quản Trị Viên Hệ Thống
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+              <div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#065F46' }}>
+                  {displayName}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    color: '#047857',
+                    fontFamily: 'var(--font-mono)',
+                    marginTop: '2px',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {displayEmail}
+                </div>
+              </div>
+
+              {/* Button Xem Chi Tiết */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  setIsDetailOpen(true);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                }}
+                title="Xem chi tiết tài khoản quản trị"
+              >
+                <Eye size={12} />
+                <span>Xem chi tiết</span>
+              </button>
             </div>
+
             <div
               style={{
-                fontSize: '0.75rem',
-                color: '#047857',
-                fontFamily: 'var(--font-mono)',
-                marginTop: '2px',
-              }}
-            >
-              admin@selfheal.systems
-            </div>
-            <div
-              style={{
-                marginTop: '8px',
+                marginTop: '10px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
@@ -194,7 +285,7 @@ export const AdminProfileMenu = ({ onNavigate }) => {
               }}
             >
               <Shield size={11} color="#059669" />
-              <span>Toàn Quyền Cụm & Chính Sách</span>
+              <span>{isSuperAdmin ? 'Toàn Quyền Cụm & Chính Sách' : 'Quản Trị Hệ Thống'}</span>
             </div>
           </div>
 
@@ -205,7 +296,10 @@ export const AdminProfileMenu = ({ onNavigate }) => {
                 id: 'profile',
                 label: 'Hồ Sơ Quản Trị Viên',
                 icon: User,
-                path: '/admin/profile',
+                action: () => {
+                  setIsOpen(false);
+                  setIsDetailOpen(true);
+                },
               },
               {
                 id: 'security',
@@ -232,7 +326,7 @@ export const AdminProfileMenu = ({ onNavigate }) => {
                   key={item.id}
                   type="button"
                   role="menuitem"
-                  onClick={() => handleAction(item.path)}
+                  onClick={() => handleAction(item)}
                   style={{
                     width: '100%',
                     display: 'flex',
@@ -297,6 +391,269 @@ export const AdminProfileMenu = ({ onNavigate }) => {
               <LogOut size={16} color="#DC2626" />
               <span>Đăng Xuất Khỏi Admin</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Profile Details Modal */}
+      {isDetailOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-profile-detail-title"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={() => setIsDetailOpen(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              boxShadow: 'var(--dash-shadow-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              animation: 'scaleIn 0.2s ease',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--dash-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldCheck size={20} color="#059669" />
+                <h2
+                  id="admin-profile-detail-title"
+                  style={{ fontSize: '1.0625rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}
+                >
+                  Thông Tin Quản Trị Viên & An Toàn
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Đóng chi tiết hồ sơ"
+                onClick={() => setIsDetailOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--dash-text-muted)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                }}
+                title="Đóng chi tiết"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '80vh', overflowY: 'auto' }}>
+              {/* User Overview Box */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '12px',
+                  border: '1px solid var(--dash-border)',
+                }}
+              >
+                {user?.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt={displayName}
+                    style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '50%',
+                      backgroundColor: '#ECFDF5',
+                      color: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.25rem',
+                      fontWeight: 800,
+                      border: '2px solid #A7F3D0',
+                    }}
+                  >
+                    {monogram}
+                  </div>
+                )}
+                <div>
+                  <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                    {displayName}
+                  </h3>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                    {displayEmail}
+                  </div>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                        backgroundColor: '#ECFDF5',
+                        color: '#059669',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        border: '1px solid #A7F3D0',
+                      }}
+                    >
+                      <CheckCircle2 size={11} />
+                      Hoạt động (ACTIVE)
+                    </span>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: isSuperAdmin ? '#FEE2E2' : '#EEF2FF',
+                        color: isSuperAdmin ? '#DC2626' : '#4F46E5',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        border: '1px solid currentColor',
+                      }}
+                    >
+                      {primaryRole}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Banner: Cam kết an toàn thông tin quản trị */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                }}
+              >
+                <ShieldCheck size={18} color="#059669" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '0.75rem', color: '#166534', lineHeight: 1.5 }}>
+                  <strong>Bảo mật thông tin Quản trị viên:</strong> Tài khoản này được bảo vệ ở cấp độ cao nhất theo tiêu chuẩn IAM & Zero Trust. Không bao giờ hiển thị mật khẩu, mã hash hoặc khóa riêng tư trên giao diện.
+                </div>
+              </div>
+
+              {/* Detailed Fields */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '3px' }}>ID Định Danh (Admin UUID)</div>
+                  <div style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)', wordBreak: 'break-all' }}>
+                    {user?.id || 'sys-admin-root-01'}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '3px' }}>Quyền Hạn Hệ Thống (System Roles)</div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {(user?.system_roles || ['ADMIN']).map((role) => (
+                      <span
+                        key={role}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: role === 'SUPER_ADMIN' ? '#FEE2E2' : '#EEF2FF',
+                          color: role === 'SUPER_ADMIN' ? '#DC2626' : '#4F46E5',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          border: '1px solid currentColor',
+                        }}
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '3px' }}>Cơ Chế Xác Thực & Bảo Mật</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: '#059669', fontWeight: 600 }}>
+                      <CheckCircle2 size={14} /> Xác thực token: JSON Web Token (HMAC-SHA256)
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: '#059669', fontWeight: 600 }}>
+                      <Lock size={14} /> Khóa bảo vệ phiên: Phiên đăng nhập được mã hóa an toàn
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '3px' }}>Đăng Nhập Gần Nhất</div>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
+                    {formatVnDateTime(user?.last_login_at)}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '3px' }}>Ngày Khởi Tạo Tài Khoản</div>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
+                    {formatVnDate(user?.created_at)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                padding: '16px 24px',
+                borderTop: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsDetailOpen(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid var(--dash-border)',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

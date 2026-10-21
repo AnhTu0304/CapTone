@@ -173,5 +173,27 @@ describe('Admin Application Shell Suite', () => {
       fireEvent.click(screen.getByText('Đăng Xuất Khỏi Admin'));
       expect(handleNavigate).toHaveBeenCalledWith('/login');
     });
+
+    test('opens admin profile details modal when clicking "Xem chi tiết" button', () => {
+      render(<AdminProfileMenu />);
+
+      const profileBtn = screen.getByLabelText(/Menu hồ sơ quản trị viên/i);
+      fireEvent.click(profileBtn);
+
+      const viewDetailsBtn = screen.getByTitle(/Xem chi tiết tài khoản quản trị/i);
+      expect(viewDetailsBtn).toBeInTheDocument();
+      fireEvent.click(viewDetailsBtn);
+
+      // Verify modal is open and displays security information
+      expect(screen.getByText(/Thông Tin Quản Trị Viên & An Toàn/i)).toBeInTheDocument();
+      expect(screen.getByText(/Bảo mật thông tin Quản trị viên/i)).toBeInTheDocument();
+      expect(screen.getByText(/Xác thực token: JSON Web Token \(HMAC-SHA256\)/i)).toBeInTheDocument();
+
+      // Close modal
+      const closeBtn = screen.getByRole('button', { name: 'Đóng' });
+      fireEvent.click(closeBtn);
+
+      expect(screen.queryByText(/Thông Tin Quản Trị Viên & An Toàn/i)).not.toBeInTheDocument();
+    });
   });
 });

@@ -20,11 +20,16 @@ export const LoginPage = ({ onNavigate }) => {
       const user = await login({ email: email.trim(), password });
       setLoggedInUser(user);
       setSubmitted(true);
+
+      const roles = user?.system_roles || [];
+      const isAdmin = roles.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r));
+      const targetPath = isAdmin ? '/admin' : '/dashboard';
+
       setTimeout(() => {
         if (onNavigate) {
-          onNavigate('/dashboard');
+          onNavigate(targetPath);
         } else {
-          window.history.pushState({}, '', '/dashboard');
+          window.history.pushState({}, '', targetPath);
           window.dispatchEvent(new PopStateEvent('popstate'));
         }
       }, 1000);
@@ -141,15 +146,22 @@ export const LoginPage = ({ onNavigate }) => {
             Đăng nhập thành công!
           </strong>
           <p style={{ margin: '0 0 16px 0', color: '#047857' }}>
-            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào Bảng điều khiển hệ thống...
+            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>.{' '}
+            {loggedInUser?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))
+              ? 'Đang chuyển hướng vào Bảng điều khiển Quản trị viên (Admin Dashboard)...'
+              : 'Đang chuyển hướng vào Bảng điều khiển hệ thống...'}
           </p>
           <button
             type="button"
             onClick={() => {
+              const isAdmin = loggedInUser?.system_roles?.some((r) =>
+                ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r)
+              );
+              const targetPath = isAdmin ? '/admin' : '/dashboard';
               if (onNavigate) {
-                onNavigate('/dashboard');
+                onNavigate(targetPath);
               } else {
-                window.history.pushState({}, '', '/dashboard');
+                window.history.pushState({}, '', targetPath);
                 window.dispatchEvent(new PopStateEvent('popstate'));
               }
             }}
@@ -168,7 +180,11 @@ export const LoginPage = ({ onNavigate }) => {
               gap: '6px',
             }}
           >
-            <span>Vào Bảng Điều Khiển</span>
+            <span>
+              {loggedInUser?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))
+                ? 'Vào Admin Dashboard Ngay'
+                : 'Vào Bảng Điều Khiển'}
+            </span>
             <ArrowRight size={16} />
           </button>
         </div>

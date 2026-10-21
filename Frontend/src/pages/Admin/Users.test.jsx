@@ -181,6 +181,7 @@ describe('Admin Users Page & Service Suite', () => {
       await waitFor(() => {
         expect(screen.getByText('Chi Tiết Người Dùng')).toBeInTheDocument();
         expect(screen.getByText('SUPER_ADMIN')).toBeInTheDocument();
+        expect(screen.getByText(/Tài khoản Quản trị viên cấp cao/i)).toBeInTheDocument();
       });
 
       // Close drawer
