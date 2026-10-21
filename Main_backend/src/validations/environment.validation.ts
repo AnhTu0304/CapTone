@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-export const environmentTypeSchema = z.enum(['DEVELOPMENT', 'STAGING', 'TESTING', 'PRODUCTION']);
+export const environmentTypeSchema = z
+  .string()
+  .trim()
+  .min(1, 'Loại môi trường không được để trống')
+  .max(50, 'Loại môi trường tối đa 50 ký tự');
 export const environmentStatusSchema = z.enum(['ACTIVE', 'INACTIVE', 'DISCONNECTED']);
 
 /**
