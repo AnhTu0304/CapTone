@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { getStoredProfile, saveStoredProfile } from '../mocks/profileMockData';
+import { profileService } from '../services/profileService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -25,6 +26,33 @@ export const useMockProfile = () => {
   });
   const [avatarPreview, setAvatarPreview] = useState(profile.avatar);
   const [errors, setErrors] = useState({});
+
+  // Sync profile data from backend API with fallback
+  useEffect(() => {
+    let isMounted = true;
+    profileService.getProfile()
+      .then((remoteData) => {
+        if (isMounted && remoteData) {
+          setProfile(remoteData);
+          if (!isEditing) {
+            setFormData({
+              fullName: remoteData.fullName || '',
+              phone: remoteData.phone || '',
+              jobTitle: remoteData.jobTitle || '',
+              avatar: remoteData.avatar || null,
+            });
+            setAvatarPreview(remoteData.avatar || null);
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback silently kept in state
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditing]);
 
   const startEdit = useCallback(() => {
     setFormData({
@@ -115,7 +143,7 @@ export const useMockProfile = () => {
     return newErrors;
   }, [formData]);
 
-  const saveChanges = useCallback((e) => {
+  const saveChanges = useCallback(async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
     const validationErrors = validate();
@@ -133,31 +161,39 @@ export const useMockProfile = () => {
       avatar: formData.avatar,
     };
 
-    setProfile(updatedProfile);
-    saveStoredProfile(updatedProfile);
-
-    // Sync to auth localStorage if exists so header updates immediately
     try {
-      const authUserStr = localStorage.getItem('selfheal_auth_user');
-      if (authUserStr) {
-        const authUser = JSON.parse(authUserStr);
-        authUser.full_name = updatedProfile.fullName;
-        localStorage.setItem('selfheal_auth_user', JSON.stringify(authUser));
+      const saved = await profileService.updateProfile(updatedProfile);
+      const finalProfile = saved || updatedProfile;
+
+      setProfile(finalProfile);
+      saveStoredProfile(finalProfile);
+
+      // Sync to auth localStorage if exists so header updates immediately
+      try {
+        const authUserStr = localStorage.getItem('selfheal_auth_user');
+        if (authUserStr) {
+          const authUser = JSON.parse(authUserStr);
+          authUser.full_name = finalProfile.fullName;
+          localStorage.setItem('selfheal_auth_user', JSON.stringify(authUser));
+        }
+      } catch {
+        // Ignore
       }
-    } catch {
-      // Ignore
-    }
 
-    // Broadcast profile update for real-time header sync
-    try {
-      window.dispatchEvent(new CustomEvent('selfheal_profile_updated', { detail: updatedProfile }));
-    } catch {
-      // Ignore in non-browser environments
-    }
+      // Broadcast profile update for real-time header sync
+      try {
+        window.dispatchEvent(new CustomEvent('selfheal_profile_updated', { detail: finalProfile }));
+      } catch {
+        // Ignore in non-browser environments
+      }
 
-    setIsEditing(false);
-    toastSuccess('Hồ sơ cá nhân đã được cập nhật thành công!', 'Cập Nhật Thành Công');
-    return true;
+      setIsEditing(false);
+      toastSuccess('Hồ sơ cá nhân đã được cập nhật thành công!', 'Cập Nhật Thành Công');
+      return true;
+    } catch (err) {
+      toastError(err.message || 'Không thể lưu hồ sơ lên máy chủ', 'Lỗi Cập Nhật');
+      return false;
+    }
   }, [validate, profile, formData, toastSuccess, toastError]);
 
   return {
