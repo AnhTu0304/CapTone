@@ -5,7 +5,10 @@ import {
   LogModel,
   KubernetesEventModel,
   WorkloadModel,
+  EnvironmentModel,
+  ClusterModel,
 } from '../models';
+import { ApiError } from '../utils/apiError';
 import {
   AgentMetricsPayload,
   AgentLogPayload,
@@ -190,4 +193,292 @@ export class AgentService {
     await AgentModel.touchLastSeen(agent.id);
     return result;
   }
+
+  /* =========================================================================
+     CÁC PHƯƠNG THỨC QUẢN TRỊ AGENT (DÀNH CHO WEB/DEVOPS/DASHBOARD)
+     ========================================================================= */
+
+  /**
+   * Tạo mới Agent kèm Token kết nối ban đầu
+   */
+  public static async createAgent(
+    orgId: string,
+    userId: string,
+    data: {
+      name: string;
+      environment_id: string;
+      cluster_id?: string | null;
+      agent_uid?: string;
+      version?: string;
+      token_expires_in_days?: number | null;
+    }
+  ) {
+    // 1. Kiểm tra môi trường có tồn tại và thuộc tổ chức này không
+    const env = await EnvironmentModel.findById(data.environment_id);
+    if (!env || env.organization_id !== orgId) {
+      throw ApiError.badRequest('Môi trường không tồn tại hoặc không thuộc tổ chức này');
+    }
+
+    // 2. Kiểm tra cluster nếu có truyền
+    if (data.cluster_id) {
+      const cluster = await ClusterModel.findByIdOrName(data.cluster_id);
+      if (!cluster || cluster.environment_id !== env.id) {
+        throw ApiError.badRequest('Cụm máy chủ (Cluster) không hợp lệ hoặc không thuộc môi trường này');
+      }
+    }
+
+    // 3. Sinh agent_uid nếu chưa có
+    let agentUid = data.agent_uid?.trim();
+    if (!agentUid) {
+      agentUid = `agent-${crypto.randomBytes(6).toString('hex')}`;
+    }
+
+    // Kiểm tra trùng lặp agent_uid
+    const existing = await AgentModel.findByUid(agentUid);
+    if (existing) {
+      throw ApiError.badRequest(`Agent UID '${agentUid}' đã tồn tại trong hệ thống. Vui lòng chọn UID khác.`);
+    }
+
+    // 4. Tạo Agent trong CSDL
+    const agent = await AgentModel.create({
+      name: data.name,
+      agent_uid: agentUid,
+      environment_id: env.id,
+      cluster_id: data.cluster_id,
+      version: data.version || 'v1.0.0',
+      status: 'PENDING',
+    });
+
+    // 5. Tự động sinh Token kết nối bí mật ban đầu
+    const rawToken = `ag_live_${crypto.randomBytes(24).toString('hex')}`;
+    const tokenPrefix = rawToken.slice(0, 12);
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    const days = data.token_expires_in_days !== undefined && data.token_expires_in_days !== null
+      ? data.token_expires_in_days
+      : 90;
+    const expiresAt = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+
+    const tokenRecord = await AgentModel.createToken({
+      agent_id: agent.id,
+      token_hash: tokenHash,
+      token_prefix: tokenPrefix,
+      expires_at: expiresAt,
+      created_by: userId,
+    });
+
+    return {
+      agent,
+      token: {
+        id: tokenRecord.id,
+        raw_token: rawToken,
+        token_prefix: tokenPrefix,
+        expires_at: tokenRecord.expires_at,
+        created_at: tokenRecord.created_at,
+      },
+      install_command: `curl -sSL https://get.selfheal.io/agent | sh -s -- --token ${rawToken} --env ${env.code}`,
+    };
+  }
+
+  /**
+   * Lấy danh sách Agent của tổ chức kèm bộ lọc phân trang
+   */
+  public static async getAgents(orgId: string, filter: any) {
+    return await AgentModel.findMany({
+      ...filter,
+      organizationId: orgId,
+    });
+  }
+
+  /**
+   * Xem chi tiết Agent (kèm tokens và lịch sử heartbeat)
+   */
+  public static async getAgentDetail(orgId: string, agentId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    const tokens = await AgentModel.findTokensByAgentId(agentId);
+    const recentHeartbeats = await AgentModel.getHeartbeatHistory(agentId, 10);
+
+    return {
+      ...agent,
+      tokens,
+      recent_heartbeats: recentHeartbeats,
+    };
+  }
+
+  /**
+   * Cập nhật thông tin Agent
+   */
+  public static async updateAgent(
+    orgId: string,
+    agentId: string,
+    data: { name?: string; cluster_id?: string | null; version?: string }
+  ) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    if (data.cluster_id) {
+      const cluster = await ClusterModel.findByIdOrName(data.cluster_id);
+      if (!cluster || cluster.environment_id !== agent.environment_id) {
+        throw ApiError.badRequest('Cụm máy chủ (Cluster) không hợp lệ');
+      }
+    }
+
+    const updated = await AgentModel.update(agentId, data);
+    return updated;
+  }
+
+  /**
+   * Thu hồi Agent và vô hiệu hóa toàn bộ Token
+   */
+  public static async revokeAgent(orgId: string, agentId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    const revoked = await AgentModel.revoke(agentId);
+    await AgentModel.revokeAllTokensByAgentId(agentId);
+    return revoked;
+  }
+
+  /**
+   * Xóa Agent khỏi hệ thống
+   */
+  public static async deleteAgent(orgId: string, agentId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    return await AgentModel.delete(agentId);
+  }
+
+  /**
+   * Tạo Token kết nối mới cho Agent (phục vụ xoay vòng token)
+   */
+  public static async createAgentToken(
+    orgId: string,
+    agentId: string,
+    userId: string,
+    expiresInDays?: number | null
+  ) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    if (agent.status === 'REVOKED') {
+      throw ApiError.badRequest('Không thể tạo token cho Agent đã bị thu hồi (REVOKED)');
+    }
+
+    const rawToken = `ag_live_${crypto.randomBytes(24).toString('hex')}`;
+    const tokenPrefix = rawToken.slice(0, 12);
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    const days = expiresInDays !== undefined && expiresInDays !== null ? expiresInDays : 90;
+    const expiresAt = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+
+    const tokenRecord = await AgentModel.createToken({
+      agent_id: agentId,
+      token_hash: tokenHash,
+      token_prefix: tokenPrefix,
+      expires_at: expiresAt,
+      created_by: userId,
+    });
+
+    return {
+      token_id: tokenRecord.id,
+      raw_token: rawToken,
+      token_prefix: tokenPrefix,
+      expires_at: tokenRecord.expires_at,
+      created_at: tokenRecord.created_at,
+    };
+  }
+
+  /**
+   * Lấy danh sách Token của một Agent
+   */
+  public static async getAgentTokens(orgId: string, agentId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    return await AgentModel.findTokensByAgentId(agentId);
+  }
+
+  /**
+   * Thu hồi một Token cụ thể của Agent
+   */
+  public static async revokeAgentToken(orgId: string, agentId: string, tokenId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    const success = await AgentModel.revokeToken(tokenId, agentId);
+    if (!success) {
+      throw ApiError.notFound('Token không tồn tại hoặc đã bị thu hồi trước đó');
+    }
+    return { success: true, message: 'Thu hồi Token thành công' };
+  }
+
+  /**
+   * Xử lý nhịp tim trực tiếp từ Agent daemon (qua HTTP POST /agents/heartbeat)
+   */
+  public static async recordHeartbeatFromDaemon(
+    rawToken: string,
+    data: {
+      latency_ms?: number | null;
+      agent_version?: string | null;
+      status?: any;
+      metadata?: Record<string, unknown> | null;
+    }
+  ) {
+    if (!rawToken) {
+      throw ApiError.unauthorized('Thiếu token xác thực Agent');
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
+    const agentRow = await AgentModel.findByTokenHash(tokenHash, rawToken.trim());
+
+    if (!agentRow) {
+      throw ApiError.unauthorized('Token Agent không hợp lệ, đã hết hạn hoặc đã bị thu hồi');
+    }
+
+    const heartbeat = await AgentModel.recordHeartbeatDetailed(agentRow.id, {
+      status: data.status || 'ONLINE',
+      agent_version: data.agent_version || 'v1.0.0',
+      latency_ms: data.latency_ms,
+      metadata: data.metadata,
+    });
+
+    return {
+      success: true,
+      agent_id: agentRow.id,
+      agent_name: agentRow.name,
+      status: 'ONLINE',
+      heartbeat_id: heartbeat.id,
+      reported_at: heartbeat.reported_at,
+    };
+  }
+
+  /**
+   * Lấy lịch sử Heartbeat của Agent (dành cho Dashboard theo dõi độ trễ)
+   */
+  public static async getHeartbeats(orgId: string, agentId: string, limit?: number) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    return await AgentModel.getHeartbeatHistory(agentId, limit || 50);
+  }
 }
+
