@@ -138,19 +138,50 @@ Content-Type: {{contentType}}
 }
 
 ### ===================================================================
+### BƯỚC 7.1: CHUYỂN ĐỔI LOẠI MÔI TRƯỜNG TỪ 'DEV' SANG 'STAGING'
+### Cho phép chuyển đổi loại môi trường mà không cần xóa tạo lại
+### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'STAGING'
+### ===================================================================
+# @name switchEnvTypeToStaging
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Microservices Staging",
+  "environment_type": "STAGING",
+  "description": "Nâng cấp và chuyển đổi loại môi trường sang STAGING"
+}
+
+### ===================================================================
+### BƯỚC 7.2: CHUYỂN ĐỔI LOẠI MÔI TRƯỜNG NGƯỢC LẠI TỪ 'STAGING' VỀ 'DEV'
+### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'DEV'
+### ===================================================================
+# @name switchEnvTypeToDev
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Microservices Development Sandbox",
+  "environment_type": "DEV",
+  "description": "Chuyển đổi ngược loại môi trường về DEV"
+}
+
+### ===================================================================
 ### BƯỚC 8: XÓA MỀM MÔI TRƯỜNG (SOFT DELETE)
 ### Lưu ý: Nếu môi trường đang có Cluster hoặc Agent hoạt động,
 ### API sẽ chặn xóa và trả về HTTP 400 để bảo đảm an toàn dữ liệu.
 ### ===================================================================
 # @name deleteEnv
-DELETE {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+DELETE {{baseUrl}}/organizations/{{orgId}}/environments/ae48b464-dd24-4f24-b71b-94ad9dc49278
 Authorization: Bearer {{token}}
 
 ### ===================================================================
 ### BƯỚC 9: XÁC MINH MÔI TRƯỜNG ĐÃ ĐƯỢC XÓA MỀM KHÔNG XUẤT HIỆN LẠI
 ### Kỳ vọng: HTTP 404 Not Found (Môi trường không tồn tại hoặc đã bị xóa)
 ### ===================================================================
-GET {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+GET {{baseUrl}}/organizations/{{orgId}}/environments/ae48b464-dd24-4f24-b71b-94ad9dc49278
 Authorization: Bearer {{token}}
 
 ### ===================================================================

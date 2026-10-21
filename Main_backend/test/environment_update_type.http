@@ -1,0 +1,165 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử Chức Năng Cập Nhật & Chuyển Đổi Loại Môi Trường
+### Quy tắc nghiệp vụ:
+### 1. Mỗi tổ chức chỉ được sở hữu 1 môi trường hoạt động (DEV hoặc STAGING).
+### 2. Cho phép chuyển đổi linh hoạt loại môi trường giữa DEV và STAGING
+###    qua API cập nhật (PUT /organizations/:orgId/environments/:id).
+### 3. Validation Zod kiểm soát nghiêm ngặt: Chỉ chấp nhận 'DEV' hoặc 'STAGING'.
+###    Từ chối các loại khác như 'PRODUCTION', 'UAT',...
+### 4. Hệ thống tự động cập nhật số liệu phân bổ cụm K8s trong Dashboard Summary.
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN OWNER / DEVOPS)
+### ===================================================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "phamtha@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@token = {{login.response.body.data.token}}
+
+### ===================================================================
+### BƯỚC 0.1: LẤY DANH SÁCH TỔ CHỨC CỦA BẠN (TỰ ĐỘNG BẮT ORG ID)
+### ===================================================================
+# @name getMyOrgs
+GET {{baseUrl}}/organizations?page=1&limit=5
+Authorization: Bearer {{token}}
+
+### Tự động lấy orgId từ phần tử đầu tiên của danh sách tổ chức
+@orgId = {{getMyOrgs.response.body.data.items[0].id}}
+
+### ===================================================================
+### BƯỚC 0.2: LẤY DANH SÁCH MÔI TRƯỜNG HIỆN CÓ CỦA TỔ CHỨC
+### ===================================================================
+# @name getEnvs
+GET {{baseUrl}}/organizations/{{orgId}}/environments?page=1&limit=5
+Authorization: Bearer {{token}}
+
+### Tự động lấy envId từ môi trường đầu tiên
+@envId = {{getEnvs.response.body.data.environments[0].id}}
+
+### ===================================================================
+### BƯỚC 1: XEM CHI TIẾT TRẠNG THÁI VÀ LOẠI MÔI TRƯỜNG BAN ĐẦU
+### Kỳ vọng: HTTP 200 OK, trả về chi tiết môi trường hiện tại
+### ===================================================================
+# @name getInitialEnv
+GET {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 2: CHUYỂN ĐỔI LOẠI MÔI TRƯỜNG SANG 'STAGING'
+### Quyền: OWNER, SME_OWNER, DEVOPS
+### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'STAGING'
+### ===================================================================
+# @name switchToStaging
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Infrastructure Staging Environment",
+  "environment_type": "STAGING",
+  "description": "Đã chuyển đổi loại môi trường sang STAGING để kiểm thử tiền phát hành"
+}
+
+### ===================================================================
+### BƯỚC 3: XÁC MINH CHI TIẾT SAU KHI CHUYỂN ĐỔI SANG STAGING
+### Kỳ vọng: HTTP 200 OK, data.environment_type === "STAGING"
+### ===================================================================
+# @name verifyStagingDetails
+GET {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 4: KIỂM TRA THỐNG KÊ TỔNG QUAN (DASHBOARD SUMMARY) SAU KHI CHUYỂN SANG STAGING
+### Kỳ vọng: HTTP 200 OK
+### data.staging.count = 1
+### data.dev.count = 0
+### ===================================================================
+# @name verifySummaryAfterStaging
+GET {{baseUrl}}/organizations/{{orgId}}/environments/summary
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 5: CHUYỂN ĐỔI NGƯỢC LOẠI MÔI TRƯỜNG SANG 'DEV'
+### Hỗ trợ truyền 'DEV' hoặc 'development' (hệ thống tự chuẩn hóa về 'DEV')
+### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'DEV'
+### ===================================================================
+# @name switchToDev
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Infrastructure Development Sandbox",
+  "environment_type": "DEV",
+  "description": "Đã chuyển đổi ngược loại môi trường về DEV phục vụ các kỹ sư phát triển"
+}
+
+### ===================================================================
+### BƯỚC 6: XÁC MINH CHI TIẾT SAU KHI CHUYỂN ĐỔI VỀ DEV
+### Kỳ vọng: HTTP 200 OK, data.environment_type === "DEV"
+### ===================================================================
+# @name verifyDevDetails
+GET {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 7: KIỂM TRA THỐNG KÊ TỔNG QUAN (DASHBOARD SUMMARY) SAU KHI CHUYỂN VỀ DEV
+### Kỳ vọng: HTTP 200 OK
+### data.dev.count = 1
+### data.staging.count = 0
+### ===================================================================
+# @name verifySummaryAfterDev
+GET {{baseUrl}}/organizations/{{orgId}}/environments/summary
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 8: CẬP NHẬT ĐỒNG THỜI: TÊN + MÔ TẢ + TRẠNG THÁI + LOẠI MÔI TRƯỜNG
+### Kỳ vọng: HTTP 200 OK, tất cả các trường được cập nhật đồng bộ
+### ===================================================================
+# @name updateAllFields
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Core Staging Cluster",
+  "description": "Môi trường staging tích hợp hệ thống tự phục hồi SelfHeal AI",
+  "environment_type": "STAGING",
+  "status": "ACTIVE"
+}
+
+### ===================================================================
+### BƯỚC 9: KIỂM THỬ VALIDATION - TỪ CHỐI CHUYỂN ĐỔI SANG LOẠI KHÔNG HỢP LỆ
+### Thử chuyển đổi sang 'PRODUCTION' hoặc 'UAT' (không được phép trong hệ thống)
+### Kỳ vọng: HTTP 400 Bad Request kèm thông báo lỗi:
+### "Loại môi trường chỉ được phép là 'DEV' hoặc 'STAGING'"
+### ===================================================================
+# @name testRejectInvalidTypeProduction
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "environment_type": "PRODUCTION"
+}
+
+### ===================================================================
+### BƯỚC 10: TỪ CHỐI CẬP NHẬT NẾU BODY RỖNG
+### Kỳ vọng: HTTP 400 Bad Request
+### ===================================================================
+# @name testEmptyUpdate
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{envId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{}
