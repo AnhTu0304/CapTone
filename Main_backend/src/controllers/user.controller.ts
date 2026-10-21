@@ -8,6 +8,24 @@ export class UserController {
    * [GET] /api/v1/users/me
    * Lấy thông tin hồ sơ của người dùng đang đăng nhập
    */
+  /**
+   * [PUT] /api/v1/users/me
+   * Cập nhật thông tin hồ sơ của người dùng đang đăng nhập
+   */
+  public static async updateMe(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
+
+      const updatedProfile = await UserService.updateMyProfile(userId, req.body);
+      return ApiResponse.success(res, 'Cập nhật hồ sơ cá nhân thành công', updatedProfile, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async getMe(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req as any).user?.id;

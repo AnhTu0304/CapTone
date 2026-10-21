@@ -5,7 +5,8 @@ import { requireRoles, requireSelfOrAdmin } from '../middlewares/rbac.middleware
 import { sensitiveOpRateLimiter } from '../middlewares/rateLimit.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import { 
-  updateProfileSchema, 
+  updateProfileSchema,
+  updateMyProfileSchema, 
   userIdParamSchema, 
   userQuerySchema, 
   changePasswordSchema 
@@ -21,6 +22,9 @@ router.use(authenticateToken);
 
 // [GET] /api/v1/users/me -> Xem thông tin hồ sơ của người dùng đang đăng nhập
 router.get('/me', UserController.getMe);
+
+// [PUT] /api/v1/users/me -> Cập nhật thông tin hồ sơ của người dùng đang đăng nhập
+router.put('/me', validate(updateMyProfileSchema), UserController.updateMe);
 
 // [GET] /api/v1/users/me/organizations -> Lấy danh sách các tổ chức mà người dùng đang tham gia
 router.get('/me/organizations', OrganizationController.getMyOrganizations);

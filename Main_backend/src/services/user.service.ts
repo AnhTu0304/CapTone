@@ -77,6 +77,51 @@ export class UserService {
             updatedAt: user.updated_at,
         };
     }
+    // Cập nhật thông tin hồ sơ của người dùng hiện tại (PUT /api/v1/users/me)
+    public static async updateMyProfile(
+        userId: string,
+        data: {
+            fullName?: string;
+            full_name?: string;
+            avatarUrl?: string | null;
+            avatar_url?: string | null;
+            phone?: string | null;
+            jobTitle?: string | null;
+            job_title?: string | null;
+        }
+    ): Promise<IUserProfileResponse> {
+        if (!userId || !UUID_REGEX.test(userId.trim())) {
+            throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
+        }
+
+        const existingUser = await UserModel.findById(userId.trim());
+        if (!existingUser) {
+            throw new ApiError(404, 'Không tìm thấy người dùng');
+        }
+
+        if (existingUser.status === 'SUSPENDED' || existingUser.status === 'INACTIVE') {
+            throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
+        }
+
+        const rawName = data.fullName !== undefined ? data.fullName : data.full_name;
+        const trimmedName = rawName !== undefined ? rawName.trim() : undefined;
+        if (trimmedName !== undefined && trimmedName.length < 2) {
+            throw new ApiError(400, 'Họ và tên phải có ít nhất 2 ký tự');
+        }
+
+        const rawAvatar = data.avatarUrl !== undefined ? data.avatarUrl : data.avatar_url;
+        const avatarUrl = rawAvatar !== undefined ? (rawAvatar ? rawAvatar.trim() : null) : undefined;
+
+        if (trimmedName !== undefined || avatarUrl !== undefined) {
+            await UserModel.updateProfile(userId.trim(), {
+                full_name: trimmedName,
+                avatar_url: avatarUrl,
+            });
+        }
+
+        return this.getMyProfile(userId.trim());
+    }
+
 
     // 1. Lấy chi tiết thông tin người dùng theo ID (hoặc Profile chính mình)
     public static async getById(userId: string): Promise<IUserResponse> {
