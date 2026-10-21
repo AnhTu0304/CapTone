@@ -17,8 +17,7 @@ Content-Type: {{contentType}}
 }
 
 ###
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzM2E3NjcwLWI5ZDYtNDkwNS04ZWUxLWQ1NjEwZTQwMDkxYyIsImVtYWlsIjoicGhhbXRoYWlzQGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4NTExLCJleHAiOjE3OTMwODMzMTF9.nyWFthhxq1oiLjUGhvn3v1OqUH_QDxMOFNimskik5ho
-### ===================================================================
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijk2YjRkMDY2LTI5MWQtNGExMy04OWZiLTI2NjExMTExMTljYSIsImVtYWlsIjoicGhhbXRoYWlzQGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNTc4OTEwLCJleHAiOjE3OTMxODM3MTB9.hF5hESgf3vet03a61Z8i82IIhAOYYeKKowkr9bKXmbs
 ### BƯỚC 1: TẠO TỔ CHỨC MỚI (KÈM PROFILE & TỰ ĐỘNG GÁN SME_OWNER)
 ### ===================================================================
 # @name createOrg
