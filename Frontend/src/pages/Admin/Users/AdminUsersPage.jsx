@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock,
   Lock,
+  Unlock,
   ShieldCheck,
   ShieldAlert,
   ChevronLeft,
@@ -64,7 +65,9 @@ const getInitials = (name) => {
 
 export const AdminUsersPage = () => {
   const { user: currentAdminUser } = useAuth();
-  const { toastSuccess, toastError } = useToast();
+  const toast = useToast();
+  const toastSuccess = toast?.toastSuccess || toast?.success || (() => {});
+  const toastError = toast?.toastError || toast?.error || (() => {});
 
   // State danh sách và phân trang
   const [users, setUsers] = useState([]);
@@ -87,6 +90,10 @@ export const AdminUsersPage = () => {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [verifyConfirmUserId, setVerifyConfirmUserId] = useState(null);
+
+  // State khóa / mở khóa tài khoản người dùng
+  const [statusTargetUser, setStatusTargetUser] = useState(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Debounce search query 300ms
   useEffect(() => {
@@ -194,7 +201,81 @@ export const AdminUsersPage = () => {
     }
   };
 
-  // Badge hiển thị trạng thái tài khoản
+    // Helper kiểm tra quyền tác động trạng thái tài khoản
+  const checkStatusChangeEligibility = (targetUser) => {
+    if (!targetUser) return { canChange: false, reason: '' };
+    // 1. Không thể tự khóa chính mình
+    if (currentAdminUser?.id && targetUser.id === currentAdminUser.id) {
+      return { canChange: false, reason: 'Không thể tự khóa tài khoản của chính mình' };
+    }
+    // 2. Quản trị viên (ADMIN) không thể khóa SUPER_ADMIN
+    const targetRoles = (targetUser.system_roles || []).map((r) => extractRoleName(r).toUpperCase());
+    const isTargetSuperAdmin = targetRoles.includes('SUPER_ADMIN');
+    const myRoles = (currentAdminUser?.roles || currentAdminUser?.system_roles || []).map((r) =>
+      extractRoleName(r).toUpperCase()
+    );
+    const amISuperAdmin = myRoles.includes('SUPER_ADMIN');
+
+    if (isTargetSuperAdmin && !amISuperAdmin) {
+      return { canChange: false, reason: 'Quản trị viên (ADMIN) không có quyền thay đổi trạng thái của Super Admin' };
+    }
+
+    return { canChange: true, reason: '' };
+  };
+
+  // Mở modal xác nhận Khóa / Mở khóa
+  const handleInitiateStatusChange = (targetUser) => {
+    setStatusTargetUser(targetUser);
+  };
+
+  // Hủy modal
+  const handleCancelStatusChange = () => {
+    if (isUpdatingStatus) return;
+    setStatusTargetUser(null);
+  };
+
+  // Xác nhận thực hiện Khóa / Mở khóa
+  const handleConfirmStatusChange = async () => {
+    if (!statusTargetUser) return;
+    const isCurrentlySuspended = statusTargetUser.status === 'SUSPENDED';
+    const nextStatus = isCurrentlySuspended ? 'ACTIVE' : 'SUSPENDED';
+    const actionName = isCurrentlySuspended ? 'Mở khóa' : 'Khóa';
+
+    setIsUpdatingStatus(true);
+    try {
+      const updated = await adminUsersService.updateUserStatus(statusTargetUser.id, nextStatus);
+      toastSuccess(
+        `Đã ${actionName.toLowerCase()} tài khoản "${statusTargetUser.email}" thành công!`,
+        `${actionName} Thành Công`
+      );
+
+      // Cập nhật lại trong danh sách local
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === statusTargetUser.id
+            ? { ...u, status: updated?.status || nextStatus, updated_at: updated?.updated_at || new Date().toISOString() }
+            : u
+        )
+      );
+
+      // Cập nhật selectedUser nếu đang xem chi tiết
+      if (selectedUser && selectedUser.id === statusTargetUser.id) {
+        setSelectedUser((prev) => ({
+          ...prev,
+          status: updated?.status || nextStatus,
+          updated_at: updated?.updated_at || new Date().toISOString(),
+        }));
+      }
+
+      setStatusTargetUser(null);
+    } catch (err) {
+      toastError(err.message || `Không thể ${actionName.toLowerCase()} tài khoản lúc này.`, 'Lỗi Thao Tác');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+// Badge hiển thị trạng thái tài khoản
   const renderStatusBadge = (status) => {
     const s = (status || 'ACTIVE').toUpperCase();
     if (s === 'ACTIVE') {
@@ -897,6 +978,36 @@ export const AdminUsersPage = () => {
                             <Eye size={13} />
                             Chi tiết
                           </button>
+
+                          {(() => {
+                            const { canChange, reason } = checkStatusChangeEligibility(item);
+                            const isSuspended = item.status === 'SUSPENDED';
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleInitiateStatusChange(item)}
+                                disabled={!canChange}
+                                title={!canChange ? reason : (isSuspended ? 'Mở khóa tài khoản' : 'Khóa tài khoản')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  border: isSuspended ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                                  backgroundColor: !canChange ? '#F3F4F6' : (isSuspended ? '#ECFDF5' : '#FEF2F2'),
+                                  color: !canChange ? '#9CA3AF' : (isSuspended ? '#059669' : '#DC2626'),
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: !canChange ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                {isSuspended ? <Unlock size={13} /> : <Lock size={13} />}
+                                {isSuspended ? 'Mở khóa' : 'Khóa'}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>
@@ -1287,7 +1398,39 @@ export const AdminUsersPage = () => {
                 borderTop: '1px solid var(--dash-border)',
                 backgroundColor: '#F8FAFC',
                 display: 'flex',
-                justifyContent: 'flex-end',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              {/* Nút Khóa / Mở khóa trong Drawer */}
+              {(() => {
+                const { canChange, reason } = checkStatusChangeEligibility(selectedUser);
+                const isSuspended = selectedUser.status === 'SUSPENDED';
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleInitiateStatusChange(selectedUser)}
+                    disabled={!canChange}
+                    title={!canChange ? reason : (isSuspended ? 'Mở khóa tài khoản' : 'Khóa tài khoản')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      border: isSuspended ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                      backgroundColor: !canChange ? '#F3F4F6' : (isSuspended ? '#ECFDF5' : '#FEF2F2'),
+                      color: !canChange ? '#9CA3AF' : (isSuspended ? '#059669' : '#DC2626'),
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      cursor: !canChange ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSuspended ? <Unlock size={14} /> : <Lock size={14} />}
+                    {isSuspended ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                  </button>
+                );
+              })()}
               }}
             >
               <button
@@ -1305,6 +1448,215 @@ export const AdminUsersPage = () => {
                 }}
               >
                 Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal xác nhận Khóa / Mở khóa tài khoản */}
+      {statusTargetUser && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="status-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCancelStatusChange();
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '480px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden',
+              border: '1px solid var(--dash-border)',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid var(--dash-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: statusTargetUser.status === 'SUSPENDED' ? '#F0FDF4' : '#FEF2F2',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: statusTargetUser.status === 'SUSPENDED' ? '#DCFCE7' : '#FEE2E2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: statusTargetUser.status === 'SUSPENDED' ? '#059669' : '#DC2626',
+                  }}
+                >
+                  {statusTargetUser.status === 'SUSPENDED' ? <Unlock size={20} /> : <ShieldAlert size={20} />}
+                </div>
+                <h3
+                  id="status-modal-title"
+                  style={{
+                    fontSize: '1.0625rem',
+                    fontWeight: 700,
+                    color: statusTargetUser.status === 'SUSPENDED' ? '#166534' : '#991B1B',
+                    margin: 0,
+                  }}
+                >
+                  {statusTargetUser.status === 'SUSPENDED' ? 'Xác Nhận Mở Khóa Tài Khoản' : 'Xác Nhận Khóa Tài Khoản'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelStatusChange}
+                disabled={isUpdatingStatus}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748B',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)', lineHeight: 1.5 }}>
+                Bạn có chắc chắn muốn{' '}
+                <strong>
+                  {statusTargetUser.status === 'SUSPENDED' ? 'mở khóa' : 'tạm khóa'}
+                </strong>{' '}
+                tài khoản sau?
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '10px',
+                  border: '1px solid var(--dash-border)',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>
+                  {statusTargetUser.full_name}
+                </div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px' }}>
+                  {statusTargetUser.email}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
+                  UUID: {statusTargetUser.id}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 14px',
+                  backgroundColor: statusTargetUser.status === 'SUSPENDED' ? '#F0FDF4' : '#FFFBEB',
+                  borderRadius: '8px',
+                  border: statusTargetUser.status === 'SUSPENDED' ? '1px solid #BBF7D0' : '1px solid #FDE68A',
+                  fontSize: '0.8125rem',
+                  color: statusTargetUser.status === 'SUSPENDED' ? '#166534' : '#92400E',
+                  lineHeight: 1.4,
+                }}
+              >
+                {statusTargetUser.status === 'SUSPENDED' ? (
+                  <>
+                    <strong>Hiệu lực ngay lập tức:</strong> Người dùng sẽ có thể đăng nhập và truy cập lại toàn bộ tài nguyên được phân quyền trong hệ thống.
+                  </>
+                ) : (
+                  <>
+                    <strong>Hiệu lực tức thì:</strong> Tài khoản này sẽ bị thu hồi quyền truy cập ngay lập tức. Mọi phiên đăng nhập hiện tại bằng Access Token sẽ bị từ chối truy cập (403 Forbidden).
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div
+              style={{
+                padding: '16px 24px',
+                borderTop: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleCancelStatusChange}
+                disabled={isUpdatingStatus}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid var(--dash-border)',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: isUpdatingStatus ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmStatusChange}
+                disabled={isUpdatingStatus}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: statusTargetUser.status === 'SUSPENDED' ? '#059669' : '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: isUpdatingStatus ? 'not-allowed' : 'pointer',
+                  boxShadow: statusTargetUser.status === 'SUSPENDED'
+                    ? '0 2px 4px rgba(5, 150, 105, 0.25)'
+                    : '0 2px 4px rgba(220, 38, 38, 0.25)',
+                }}
+              >
+                {isUpdatingStatus ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    Đang xử lý...
+                  </>
+                ) : statusTargetUser.status === 'SUSPENDED' ? (
+                  <>
+                    <Unlock size={14} />
+                    Xác nhận mở khóa
+                  </>
+                ) : (
+                  <>
+                    <Lock size={14} />
+                    Xác nhận khóa tài khoản
+                  </>
+                )}
               </button>
             </div>
           </div>

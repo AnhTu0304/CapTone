@@ -299,21 +299,56 @@ export class UserService {
         return updatedUser;
     }
 
-    // 7. Cập nhật trạng thái tài khoản (PENDING, ACTIVE, INACTIVE, SUSPENDED)
-    public static async updateStatus(userId: string, status: UserStatus): Promise<IUserResponse> {
-        if (!userId || !UUID_REGEX.test(userId.trim())) {
+    // 7. Cập nhật trạng thái tài khoản (Khóa/Mở khóa) bởi Quản trị viên
+    public static async updateStatus(
+        operatorId: string,
+        operatorRoles: string[],
+        targetUserId: string,
+        status: UserStatus
+    ): Promise<IUserResponse> {
+        if (!targetUserId || !UUID_REGEX.test(targetUserId.trim())) {
             throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ (yêu cầu UUID)');
         }
-        const validStatuses: UserStatus[] = ['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED'];
-        if (!validStatuses.includes(status)) {
-            throw new ApiError(400, `Trạng thái tài khoản không hợp lệ: ${status}`);
+
+        // 7.1. Chặn tự khóa / thay đổi trạng thái tài khoản của chính mình (Self-lock prevention)
+        if (operatorId && operatorId.trim().toLowerCase() === targetUserId.trim().toLowerCase()) {
+            throw new ApiError(400, 'Không thể tự thay đổi trạng thái hoặc khóa tài khoản của chính mình');
         }
 
-        const updatedUser = await UserModel.updateStatus(userId.trim(), status);
-        if (!updatedUser) {
+        // 7.2. Kiểm tra trạng thái hợp lệ
+        const validStatuses: UserStatus[] = ['ACTIVE', 'SUSPENDED'];
+        if (!validStatuses.includes(status)) {
+            throw new ApiError(400, `Trạng thái tài khoản không hợp lệ: ${status}. Chỉ chấp nhận ACTIVE hoặc SUSPENDED`);
+        }
+
+        // 7.3. Kiểm tra sự tồn tại của target user
+        const targetUser = await UserModel.findById(targetUserId.trim());
+        if (!targetUser) {
             throw new ApiError(404, 'Không tìm thấy người dùng để cập nhật trạng thái');
         }
 
+        // 7.4. Kiểm tra trạng thái trùng lặp
+        if (targetUser.status === status) {
+            const statusLabel = status === 'SUSPENDED' ? 'tạm khóa' : 'hoạt động';
+            throw new ApiError(400, `Tài khoản đã ở trạng thái ${statusLabel}`);
+        }
+
+        // 7.5. Bảo vệ đặc quyền cao nhất (Privilege Protection): ADMIN không được khóa/mở khóa SUPER_ADMIN
+        const targetRoles = await UserModel.getUserRoles(targetUserId.trim());
+        const isTargetSuperAdmin = targetRoles.includes('SUPER_ADMIN');
+        const isOperatorSuperAdmin = operatorRoles.includes('SUPER_ADMIN');
+
+        if (isTargetSuperAdmin && !isOperatorSuperAdmin) {
+            throw new ApiError(403, 'Quản trị viên (ADMIN) không có quyền thay đổi trạng thái của Super Admin');
+        }
+
+        // 7.6. Cập nhật trạng thái người dùng trong DB
+        const updatedUser = await UserModel.updateStatus(targetUserId.trim(), status);
+        if (!updatedUser) {
+            throw new ApiError(500, 'Cập nhật trạng thái người dùng thất bại');
+        }
+
+        updatedUser.system_roles = targetRoles;
         return updatedUser;
     }
 

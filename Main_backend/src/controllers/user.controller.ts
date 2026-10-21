@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserService } from '../services/user.service';
+import { UserModel } from '../models/user.model';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 
@@ -222,5 +223,34 @@ export class UserController {
       next(error);
     }
   }
-}
+  /**
+   * [PATCH] /api/v1/users/:id/status
+   * Cập nhật trạng thái tài khoản (Khóa/Mở khóa) - Yêu cầu ADMIN hoặc SUPER_ADMIN
+   */
+  public static async updateUserStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const operatorId = (req as any).user?.id;
+      if (!operatorId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
 
+      const targetUserId = req.params.id;
+      const { status } = req.body;
+
+      // Lấy danh sách vai trò hệ thống của operator
+      let operatorRoles: string[] = Array.isArray((req as any).user?.roles)
+        ? (req as any).user.roles
+        : [];
+      if (!operatorRoles.includes('SUPER_ADMIN')) {
+        const dbRoles = await UserModel.getUserRoles(operatorId);
+        operatorRoles = Array.from(new Set([...operatorRoles, ...dbRoles]));
+      }
+
+      const updatedUser = await UserService.updateStatus(operatorId, operatorRoles, targetUserId, status);
+      const actionText = status === 'SUSPENDED' ? 'Khóa' : 'Mở khóa';
+      return ApiResponse.success(res, `${actionText} tài khoản người dùng thành công`, updatedUser, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+}

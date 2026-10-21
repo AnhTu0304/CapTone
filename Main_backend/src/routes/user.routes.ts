@@ -9,7 +9,8 @@ import {
   updateMyProfileSchema, 
   userIdParamSchema, 
   userQuerySchema, 
-  changePasswordSchema 
+  changePasswordSchema,
+  updateUserStatusSchema
 } from '../validations';
 
 import { SystemRoleController } from '../controllers/systemRole.controller';
@@ -67,5 +68,23 @@ router.get('/:id', validate(userIdParamSchema), requireSelfOrAdmin((req) => req.
 
 // [PUT] /api/v1/users/:id -> Cập nhật thông tin người dùng theo ID (Chính chủ hoặc ADMIN/SUPER_ADMIN)
 router.put('/:id', validate(userIdParamSchema), requireSelfOrAdmin((req) => req.params.id), validate(updateProfileSchema), UserController.updateUserById);
+
+// [PATCH] /api/v1/users/:id/status -> Khóa hoặc mở khóa tài khoản người dùng (ADMIN / SUPER_ADMIN)
+router.patch(
+  '/:id/status',
+  requireRoles('ADMIN', 'SUPER_ADMIN'),
+  validate(userIdParamSchema),
+  validate(updateUserStatusSchema),
+  UserController.updateUserStatus
+);
+
+// [PUT] /api/v1/users/:id/status -> Hỗ trợ alias PUT cho cập nhật trạng thái (ADMIN / SUPER_ADMIN)
+router.put(
+  '/:id/status',
+  requireRoles('ADMIN', 'SUPER_ADMIN'),
+  validate(userIdParamSchema),
+  validate(updateUserStatusSchema),
+  UserController.updateUserStatus
+);
 
 export { router as userRoutes };
