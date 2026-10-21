@@ -1,5 +1,6 @@
 import React from 'react';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Building2,
@@ -36,6 +37,12 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     unreadNotifsCount,
     onNavigate,
   } = useDashboard();
+
+  const auth = useAuth();
+
+  const user = auth?.user || null;
+  const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
+  const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
 
   const navGroups = [
     {
@@ -108,6 +115,33 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
       ],
     },
   ];
+
+  const filteredNavGroups = React.useMemo(() => {
+    if (isViewerUser) {
+      return [
+        {
+          group: 'TỔNG QUAN',
+          items: [
+            { name: 'Bảng điều khiển', path: '/dashboard', icon: LayoutDashboard },
+          ],
+        },
+      ];
+    }
+
+    if (isDevOpsUser) {
+      return navGroups.map((group) => {
+        if (group.group === 'TỔ CHỨC') {
+          return {
+            ...group,
+            items: group.items.filter((item) => item.path !== '/dashboard/organization/members'),
+          };
+        }
+        return group;
+      });
+    }
+
+    return navGroups;
+  }, [isViewerUser, isDevOpsUser, pendingApprovalsCount, unreadNotifsCount]);
 
   const handleItemClick = (path) => {
     if (onNavigate) {
@@ -192,7 +226,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           flex: 1,
         }}
       >
-        {navGroups.map((group, gIdx) => (
+        {filteredNavGroups.map((group, gIdx) => (
           <div key={gIdx}>
             {!isSidebarCollapsed && (
               <div

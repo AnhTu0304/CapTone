@@ -1,11 +1,15 @@
 import React from 'react';
 import { History, ArrowRight } from 'lucide-react';
 import WidgetContainer from '../../../../components/admin/WidgetContainer';
+import { useAuth } from '../../../../context/AuthContext';
 
 /**
  * Section 11: Critical Incident Feed
  */
 export const CriticalIncidentFeedSection = ({ incidents, status, errorMessage, onRetry, onNavigate }) => {
+  const auth = useAuth();
+  const isViewer = auth?.isViewer ? auth.isViewer(auth.user) : false;
+
   return (
     <WidgetContainer
       title="Bảng Theo Dõi Sự Cố Nghiêm Trọng (Critical Incident Feed)"
@@ -15,6 +19,7 @@ export const CriticalIncidentFeedSection = ({ incidents, status, errorMessage, o
       errorMessage={errorMessage}
       onRetry={onRetry}
       action={
+        isViewer ? null : (
         <button
           type="button"
           onClick={() => onNavigate && onNavigate('/admin/incidents')}
@@ -33,6 +38,7 @@ export const CriticalIncidentFeedSection = ({ incidents, status, errorMessage, o
           <span>Xem tất cả sự cố</span>
           <ArrowRight size={13} />
         </button>
+        )
       }
     >
       {incidents && incidents.length > 0 && (
