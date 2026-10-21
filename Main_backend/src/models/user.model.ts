@@ -148,7 +148,12 @@ export class UserModel {
              FROM user_system_roles usr 
              JOIN system_roles sr ON usr.system_role_id = sr.id 
              WHERE usr.user_id = $1 
-             ORDER BY usr.assigned_at ASC`,
+             UNION 
+             SELECT r.code AS name 
+             FROM organization_members om 
+             JOIN roles r ON om.role_id = r.id 
+             WHERE om.user_id = $1 AND om.status != 'REMOVED' 
+             ORDER BY name ASC`,
             [userId]
         );
         return rolesRes.rows.map((r) => r.name);
