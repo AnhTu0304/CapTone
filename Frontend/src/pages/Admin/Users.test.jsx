@@ -76,6 +76,16 @@ describe('Admin Users Page & Service Suite', () => {
       const res = await adminUsersService.verifyUserEmail(mockUserList[1].id);
       expect(res.email_verified_at).toBeDefined();
     });
+
+    test('updateUserStatus calls API and returns updated user', async () => {
+      adminUsersService.updateUserStatus.mockResolvedValueOnce({
+        ...mockUserList[0],
+        status: 'SUSPENDED',
+      });
+
+      const res = await adminUsersService.updateUserStatus(mockUserList[0].id, 'SUSPENDED');
+      expect(res.status).toBe('SUSPENDED');
+    });
   });
 
   describe('UI Component Rendering & Interactions', () => {
@@ -218,5 +228,112 @@ describe('Admin Users Page & Service Suite', () => {
         );
       });
     });
+
+    test('8. Opens confirmation modal when clicking Khóa and updates status on confirm', async () => {
+      adminUsersService.getUsers.mockResolvedValueOnce({
+        items: mockUserList,
+        pagination: { total: 2, page: 1, limit: 10, totalPages: 1 },
+      });
+      adminUsersService.updateUserStatus.mockResolvedValueOnce({
+        ...mockUserList[0],
+        status: 'SUSPENDED',
+      });
+
+      renderWithProviders(<AdminUsersPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Nguyễn Văn An')).toBeInTheDocument();
+      });
+
+      // Find Lock buttons (both users are not suspended)
+      const lockButtons = screen.getAllByRole('button', { name: /khóa/i });
+      expect(lockButtons.length).toBeGreaterThan(0);
+
+      // Click Lock on first user
+      fireEvent.click(lockButtons[0]);
+
+      // Verify Modal opens
+      await waitFor(() => {
+        expect(screen.getByText('Xác Nhận Khóa Tài Khoản')).toBeInTheDocument();
+        expect(screen.getByText(/Bạn có chắc chắn muốn/i)).toBeInTheDocument();
+      });
+
+      // Click Confirm Lock
+      const confirmLockBtn = screen.getByRole('button', { name: /xác nhận khóa tài khoản/i });
+      fireEvent.click(confirmLockBtn);
+
+      await waitFor(() => {
+        expect(adminUsersService.updateUserStatus).toHaveBeenCalledWith(
+          mockUserList[0].id,
+          'SUSPENDED'
+        );
+      });
+    });
+
+    test('9. Can cancel status modal without modifying user status', async () => {
+      adminUsersService.getUsers.mockResolvedValueOnce({
+        items: mockUserList,
+        pagination: { total: 2, page: 1, limit: 10, totalPages: 1 },
+      });
+
+      renderWithProviders(<AdminUsersPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Nguyễn Văn An')).toBeInTheDocument();
+      });
+
+      const lockButtons = screen.getAllByRole('button', { name: /khóa/i });
+      fireEvent.click(lockButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText('Xác Nhận Khóa Tài Khoản')).toBeInTheDocument();
+      });
+
+      const cancelBtn = screen.getByRole('button', { name: /hủy bỏ/i });
+      fireEvent.click(cancelBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByText('Xác Nhận Khóa Tài Khoản')).not.toBeInTheDocument();
+      });
+    });
+
+    test('10. Renders Mở khóa button for SUSPENDED user and unlocks on confirm', async () => {
+      const suspendedUser = {
+        ...mockUserList[0],
+        status: 'SUSPENDED',
+      };
+
+      adminUsersService.getUsers.mockResolvedValueOnce({
+        items: [suspendedUser],
+        pagination: { total: 1, page: 1, limit: 10, totalPages: 1 },
+      });
+      adminUsersService.updateUserStatus.mockResolvedValueOnce({
+        ...suspendedUser,
+        status: 'ACTIVE',
+      });
+
+      renderWithProviders(<AdminUsersPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Nguyễn Văn An')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /mở khóa/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /mở khóa/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Xác Nhận Mở Khóa Tài Khoản')).toBeInTheDocument();
+      });
+
+      const confirmUnlockBtn = screen.getByRole('button', { name: /xác nhận mở khóa/i });
+      fireEvent.click(confirmUnlockBtn);
+
+      await waitFor(() => {
+        expect(adminUsersService.updateUserStatus).toHaveBeenCalledWith(
+          suspendedUser.id,
+          'ACTIVE'
+        );
+  });
+});
   });
 });

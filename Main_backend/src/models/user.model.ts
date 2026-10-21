@@ -31,8 +31,17 @@ export interface IUser {
 /**
  * Interface an toàn trả về cho Client (Loại bỏ mật khẩu băm password_hash)
  */
+export interface IUserOrgRole {
+    organization_id: string;
+    organization_name: string;
+    role_name: string;
+    role_code: string;
+    member_status: string;
+}
+
 export type IUserResponse = Omit<IUser, 'password_hash'> & {
     system_roles?: string[];
+    organization_roles?: IUserOrgRole[];
 };
 
 export interface IUserProfileResponse {
@@ -195,7 +204,43 @@ export class UserModel {
         const db = client || pool;
         const queryParams = [...params, limit, offset];
         const usersQuery = `
-          SELECT id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
+          SELECT 
+            users.id, 
+            users.email, 
+            users.full_name, 
+            users.avatar_url, 
+            users.phone,
+            users.job_title,
+            users.status, 
+            users.email_verified_at, 
+            users.last_login_at, 
+            users.created_at, 
+            users.updated_at,
+            COALESCE(
+              (
+                SELECT json_agg(sr.name ORDER BY usr.assigned_at ASC)
+                FROM user_system_roles usr
+                JOIN system_roles sr ON usr.system_role_id = sr.id
+                WHERE usr.user_id = users.id
+              ),
+              '[]'::json
+            ) AS system_roles,
+            COALESCE(
+              (
+                SELECT json_agg(json_build_object(
+                  'organization_id', o.id,
+                  'organization_name', o.name,
+                  'role_name', r.name,
+                  'role_code', r.code,
+                  'member_status', om.status
+                ))
+                FROM organization_members om
+                JOIN organizations o ON om.organization_id = o.id
+                JOIN roles r ON om.role_id = r.id
+                WHERE om.user_id = users.id AND om.status != 'REMOVED'
+              ),
+              '[]'::json
+            ) AS organization_roles
           FROM users
           ${whereClause}
           ORDER BY ${sortBy} ${order}
@@ -311,7 +356,7 @@ export class UserModel {
                  status = CASE WHEN status = 'PENDING' THEN 'ACTIVE' ELSE status END,
                  updated_at = NOW()
              WHERE id = $1 AND deleted_at IS NULL
-             RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
+             RETURNING id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at`,
             [userId]
         );
         return result.rows[0] || null;

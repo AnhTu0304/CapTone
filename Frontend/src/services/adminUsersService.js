@@ -102,6 +102,21 @@ export const adminUsersService = {
     });
     return response?.data;
   },
+
+  /**
+   * Cập nhật trạng thái tài khoản người dùng (Khóa / Mở khóa)
+   * @param {string} userId
+   * @param {'ACTIVE' | 'SUSPENDED'} status
+   * @returns {Promise<any>}
+   */
+  async updateUserStatus(userId, status) {
+    if (!userId) throw new Error('Yêu cầu ID người dùng cần cập nhật trạng thái');
+    const response = await request(`/users/${encodeURIComponent(userId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+    return response?.data;
+  },
 };
 
 export default adminUsersService;

@@ -12,7 +12,8 @@
     "test:telemetry": "tsx test/telemetry-aggregator.test.ts",
     "test:realtime": "tsx test/realtime-simulator.ts",
     "migrate:users": "tsx src/scripts/migrate.ts",
-    "test:profile": "tsx src/test/profile.test.ts"
+    "test:profile": "tsx src/test/profile.test.ts",
+    "test:status": "tsx src/test/userStatus.test.ts"
   },
   "keywords": [
     "nodejs",

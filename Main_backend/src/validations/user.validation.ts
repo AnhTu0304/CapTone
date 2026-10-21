@@ -134,3 +134,16 @@ export const updateMyProfileSchema = z.object({
       { message: 'Vui lòng cung cấp ít nhất một thông tin cần cập nhật' }
     ),
 });
+
+
+/**
+ * Schema kiểm tra dữ liệu khi CẬP NHẬT TRẠNG THÁI TÀI KHOẢN (Khóa/Mở khóa)
+ * Chỉ chấp nhận ACTIVE hoặc SUSPENDED
+ */
+export const updateUserStatusSchema = z.object({
+  body: z.object({
+    status: z.enum(['ACTIVE', 'SUSPENDED'], {
+      message: 'Trạng thái tài khoản không hợp lệ. Chỉ chấp nhận ACTIVE hoặc SUSPENDED',
+    }),
+  }),
+});
