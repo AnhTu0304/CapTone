@@ -10,6 +10,34 @@
 import { request, executeWithFallback, getAuthToken } from './apiClient';
 import { getStoredProfile, saveStoredProfile } from '../mocks/profileMockData';
 
+/**
+ * Định dạng ngày giờ chuẩn Việt Nam (HH:mm:ss dd/MM/yyyy)
+ * @param {string|Date} dateInput
+ * @returns {string}
+ */
+export const formatVnDateTime = (dateInput) => {
+  if (!dateInput) return '15:30:49 21/10/2026';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
+  const pad = (n) => String(n).padStart(2, '0');
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const date = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return `${time} ${date}`;
+};
+
+/**
+ * Định dạng ngày chuẩn Việt Nam (dd/MM/yyyy)
+ * @param {string|Date} dateInput
+ * @returns {string}
+ */
+export const formatVnDate = (dateInput) => {
+  if (!dateInput) return '15/01/2026';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+
 export const profileService = {
   /**
    * Lấy thông tin hồ sơ người dùng (GET /api/v1/users/me)
@@ -37,8 +65,9 @@ export const profileService = {
             systemRole: remoteData.systemRole || 'USER',
             orgRole: remoteData.organizationRole || 'SME_OWNER',
             accountStatus: remoteData.accountStatus || remoteData.status || 'ACTIVE',
-            joinedDate: remoteData.createdAt ? new Date(remoteData.createdAt).toLocaleDateString('vi-VN') : '15/01/2026',
-            lastLogin: remoteData.lastLoginAt ? new Date(remoteData.lastLoginAt).toLocaleString('vi-VN') : 'Vừa xong',
+            createdAt: formatVnDate(remoteData.createdAt || remoteData.created_at),
+            joinedDate: formatVnDate(remoteData.createdAt || remoteData.created_at),
+            lastLogin: formatVnDateTime(remoteData.lastLoginAt || remoteData.last_login_at),
           };
           saveStoredProfile(merged);
           return merged;

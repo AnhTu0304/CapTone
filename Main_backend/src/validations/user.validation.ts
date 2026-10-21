@@ -1,6 +1,34 @@
 import { z } from 'zod';
 
 /**
+ * Schema kiểm tra ảnh đại diện avatar (Hỗ trợ URL http/https và chuỗi ảnh Base64 data:image/...)
+ */
+export const avatarSchema = z
+  .string()
+  .trim()
+  .refine(
+    (val) => {
+      if (!val) return true;
+      if (val.startsWith('http://') || val.startsWith('https://')) {
+        try {
+          new URL(val);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      if (val.startsWith('data:image/')) {
+        return true;
+      }
+      return false;
+    },
+    { message: 'Đường dẫn avatar phải là URL hợp lệ hoặc chuỗi ảnh Base64 (data:image/...)' }
+  )
+  .optional()
+  .or(z.literal(''))
+  .nullable();
+
+/**
  * Schema kiểm tra dữ liệu khi CẬP NHẬT PROFILE
  */
 export const updateProfileSchema = z.object({
@@ -12,12 +40,7 @@ export const updateProfileSchema = z.object({
         .min(2, 'Họ và tên phải có ít nhất 2 ký tự')
         .max(150, 'Họ và tên không được vượt quá 150 ký tự')
         .optional(),
-      avatar_url: z
-        .string()
-        .trim()
-        .url('Đường dẫn ảnh đại diện avatar không hợp lệ')
-        .optional()
-        .or(z.literal('')),
+      avatar_url: avatarSchema,
     })
     .refine(
       (data) => data.full_name !== undefined || data.avatar_url !== undefined,
@@ -75,20 +98,8 @@ export const updateMyProfileSchema = z.object({
         .min(2, 'Họ và tên phải có ít nhất 2 ký tự')
         .max(150, 'Họ và tên không được vượt quá 150 ký tự')
         .optional(),
-      avatar_url: z
-        .string()
-        .trim()
-        .url('Đường dẫn ảnh đại diện avatar không hợp lệ')
-        .optional()
-        .or(z.literal(''))
-        .nullable(),
-      avatarUrl: z
-        .string()
-        .trim()
-        .url('Đường dẫn ảnh đại diện avatar không hợp lệ')
-        .optional()
-        .or(z.literal(''))
-        .nullable(),
+      avatar_url: avatarSchema,
+      avatarUrl: avatarSchema,
       phone: z
         .string()
         .trim()

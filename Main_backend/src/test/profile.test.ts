@@ -290,4 +290,52 @@ describe('Profile API Suite (/api/v1/users/me)', () => {
     );
     assert.strictEqual(roleCheck.rows.some((r: any) => r.name === 'SUPER_ADMIN'), false);
   });
+
+  test('14. PUT /api/v1/users/me with Base64 data URL avatar succeeds and persists into PostgreSQL database', async () => {
+    // Generate a 250KB base64 image payload (typical realistic photo)
+    const largePadding = 'A'.repeat(250 * 1024);
+    const sampleBase64Avatar = `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==${largePadding}`;
+
+    const res = await fetch(baseUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${activeUserToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        avatarUrl: sampleBase64Avatar,
+      }),
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.data.avatarUrl, sampleBase64Avatar);
+
+    // Verify database record actually persisted avatar_url
+    const dbCheck = await pool.query('SELECT avatar_url FROM users WHERE id = $1', [activeUserId]);
+    assert.strictEqual(dbCheck.rows[0].avatar_url, sampleBase64Avatar);
+  });
+
+  test('15. GET /api/v1/users/me returns valid createdAt and lastLoginAt corresponding to database timestamps', async () => {
+    // Explicitly update last_login_at in database to test synchronization
+    const testLoginTime = new Date('2026-10-21T08:30:49.000Z');
+    await pool.query('UPDATE users SET last_login_at = $1 WHERE id = $2', [testLoginTime, activeUserId]);
+
+    const res = await fetch(baseUrl, {
+      headers: { Authorization: `Bearer ${activeUserToken}` },
+    });
+    const body = await res.json() as any;
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(body.success, true);
+    assert.ok(body.data.createdAt, 'createdAt must exist');
+    assert.ok(body.data.lastLoginAt, 'lastLoginAt must exist');
+
+    const dbUser = await pool.query('SELECT created_at, last_login_at FROM users WHERE id = $1', [activeUserId]);
+    assert.strictEqual(
+      new Date(body.data.lastLoginAt).toISOString(),
+      new Date(dbUser.rows[0].last_login_at).toISOString()
+    );
+  });
 });
