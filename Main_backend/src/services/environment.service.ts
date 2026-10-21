@@ -23,7 +23,15 @@ export class EnvironmentService {
       throw ApiError.notFound('Tổ chức không tồn tại');
     }
 
-    // 2. Kiểm tra trùng lặp mã code trong cùng tổ chức
+    // 2. Ràng buộc nghiệp vụ: Mỗi tổ chức chỉ được đăng ký duy nhất 1 trong 2 loại môi trường (DEV hoặc STAGING)
+    const existingEnv = await EnvironmentModel.findActiveByOrgId(organizationId);
+    if (existingEnv) {
+      throw ApiError.badRequest(
+        `Tổ chức này đã đăng ký môi trường '${existingEnv.name}' (${existingEnv.environment_type}). Mỗi tổ chức chỉ được phép đăng ký duy nhất 1 trong 2 loại môi trường (DEV hoặc STAGING). Vui lòng xóa môi trường hiện tại nếu muốn đổi sang môi trường khác.`
+      );
+    }
+
+    // 3. Kiểm tra trùng lặp mã code trong cùng tổ chức
     const existingCode = await EnvironmentModel.findByCode(organizationId, data.code);
     if (existingCode) {
       throw ApiError.badRequest(

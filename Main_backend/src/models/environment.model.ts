@@ -108,6 +108,23 @@ export class EnvironmentModel {
   }
 
   /**
+   * Tìm môi trường đang hoạt động của Tổ chức (Mỗi tổ chức chỉ có tối đa 1 môi trường hoạt động)
+   */
+  public static async findActiveByOrgId(
+    organizationId: string,
+    client?: PoolClient
+  ): Promise<IEnvironment | null> {
+    const db = client || pool;
+    const query = `
+      SELECT * FROM environments 
+      WHERE organization_id = $1 AND deleted_at IS NULL 
+      LIMIT 1;
+    `;
+    const res = await db.query<IEnvironment>(query, [organizationId]);
+    return res.rows[0] || null;
+  }
+
+  /**
    * Lấy danh sách môi trường theo Tổ chức kèm phân trang, tìm kiếm, lọc
    */
   public static async findByOrgId(

@@ -1,6 +1,6 @@
 ### ===================================================================
 ### CapTone - Bộ Kiểm Thử API Module Môi Trường (Environments)
-### Chỉ chấp nhận 2 loại môi trường: DEV và STAGING
+### Quy tắc nghiệp vụ: Mỗi tổ chức chỉ được đăng ký 1 trong 2 loại môi trường (DEV hoặc STAGING)
 ### Kiểm thực dữ liệu nghiêm ngặt tại tầng Validation (Zod)
 ### Cơ sở dữ liệu: VARCHAR(50) linh hoạt, không khóa ENUM
 ### ===================================================================
@@ -15,12 +15,12 @@ POST {{baseUrl}}/auth/login
 Content-Type: {{contentType}}
 
 {
-  "email": "tanquoc280325@gmail.com",
+  "email": "phamtha@gmail.com",
   "password": "Tanquoc123@"
 }
 
 ###
-@token = {{login.response.body.data.accessToken}}
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImI1ZjViNjk4LTU1NjktNGI0NC1hYTVjLWE2MWQ2ZjNkNjAyMyIsImVtYWlsIjoicGhhbXRoYUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6W10sImlhdCI6MTc5MjU4MDE5MSwiZXhwIjoxNzkzMTg0OTkxfQ.iHC7pOdBwxe16JUnMFvsHadyYaVO7qR7cmShcEcK9nk
 
 ### ===================================================================
 ### BƯỚC 0.1: LẤY DANH SÁCH TỔ CHỨC CỦA BẠN (TỰ ĐỘNG BẮT ORG ID)
@@ -52,10 +52,12 @@ Content-Type: {{contentType}}
 @devEnvId = {{createDevEnv.response.body.data.id}}
 
 ### ===================================================================
-### BƯỚC 2: TẠO MÔI TRƯỜNG STAGING HỢP LỆ (Hỗ trợ "STAGING" hoặc "staging")
-### Kỳ vọng: HTTP 201 Created, environment_type tự động chuẩn hóa về 'STAGING'
+### BƯỚC 2: KIỂM THỬ RÀNG BUỘC - MỖI TỔ CHỨC CHỈ ĐƯỢC ĐĂNG KÝ 1 TRONG 2 LOẠI MÔI TRƯỜNG
+### Thử tạo thêm môi trường thứ 2 (STAGING) trong cùng tổ chức đã có DEV
+### Kỳ vọng: HTTP 400 Bad Request kèm thông báo:
+### "Tổ chức này đã đăng ký môi trường... Mỗi tổ chức chỉ được phép đăng ký duy nhất 1 trong 2 loại môi trường (DEV hoặc STAGING)."
 ### ===================================================================
-# @name createStagingEnv
+# @name testSecondEnvRejected
 POST {{baseUrl}}/organizations/{{orgId}}/environments
 Authorization: Bearer {{token}}
 Content-Type: {{contentType}}
@@ -64,11 +66,8 @@ Content-Type: {{contentType}}
   "name": "Acme Pre-Release Staging",
   "code": "acme-staging-cloud",
   "environment_type": "STAGING",
-  "description": "Môi trường thử nghiệm tiền phát hành diễn tập tự phục hồi MAPE-K"
+  "description": "Thử nghiệm tạo môi trường thứ 2 trong cùng tổ chức sẽ bị từ chối"
 }
-
-###
-@stagingEnvId = {{createStagingEnv.response.body.data.id}}
 
 ### ===================================================================
 ### BƯỚC 3: KIỂM THỬ VALIDATION - TỪ CHỐI LOẠI MÔI TRƯỜNG NGOÀI DEV & STAGING
@@ -88,45 +87,29 @@ Content-Type: {{contentType}}
 }
 
 ### ===================================================================
-### BƯỚC 4: KIỂM THỬ VALIDATION - TỪ CHỐI MÃ CODE TRÙNG TRONG CÙNG TỔ CHỨC
-### Kỳ vọng: HTTP 400 Bad Request (Mã môi trường 'acme-dev-local' đã tồn tại)
-### ===================================================================
-# @name testDuplicateCode
-POST {{baseUrl}}/organizations/{{orgId}}/environments
-Authorization: Bearer {{token}}
-Content-Type: {{contentType}}
-
-{
-  "name": "Acme Duplicate Code",
-  "code": "acme-dev-local",
-  "environment_type": "DEV",
-  "description": "Thử nghiệm tạo trùng mã code 'acme-dev-local'"
-}
-
-### ===================================================================
-### BƯỚC 5: LẤY DANH SÁCH MÔI TRƯỜNG CỦA TỔ CHỨC (PHÂN TRANG & THỐNG KÊ METRICS)
+### BƯỚC 4: LẤY DANH SÁCH MÔI TRƯỜNG CỦA TỔ CHỨC (PHÂN TRANG & THỐNG KÊ METRICS)
 ### ===================================================================
 # @name listEnvironments
 GET {{baseUrl}}/organizations/{{orgId}}/environments?page=1&limit=10
 Authorization: Bearer {{token}}
 
 ###
-### 5.1. Tìm kiếm môi trường theo từ khóa (Ví dụ: "dev" hoặc "staging")
+### 4.1. Tìm kiếm môi trường theo từ khóa (Ví dụ: "dev" hoặc "staging")
 GET {{baseUrl}}/organizations/{{orgId}}/environments?search=dev
 Authorization: Bearer {{token}}
 
 ###
-### 5.2. Lọc danh sách chỉ lấy môi trường DEV
+### 4.2. Lọc danh sách chỉ lấy môi trường DEV
 GET {{baseUrl}}/organizations/{{orgId}}/environments?type=DEV
 Authorization: Bearer {{token}}
 
 ###
-### 5.3. Lọc danh sách chỉ lấy môi trường STAGING
+### 4.3. Lọc danh sách chỉ lấy môi trường STAGING
 GET {{baseUrl}}/organizations/{{orgId}}/environments?type=STAGING
 Authorization: Bearer {{token}}
 
 ### ===================================================================
-### BƯỚC 6: LẤY THỐNG KÊ TỔNG QUAN MÔI TRƯỜNG (DASHBOARD SUMMARY)
+### BƯỚC 5: LẤY THỐNG KÊ TỔNG QUAN MÔI TRƯỜNG (DASHBOARD SUMMARY)
 ### Trả về: total, active, inactive, breakdown theo DEV / STAGING
 ### ===================================================================
 # @name envSummary
@@ -134,14 +117,14 @@ GET {{baseUrl}}/organizations/{{orgId}}/environments/summary
 Authorization: Bearer {{token}}
 
 ### ===================================================================
-### BƯỚC 7: XEM CHI TIẾT MỘT MÔI TRƯỜNG THEO ID
+### BƯỚC 6: XEM CHI TIẾT MỘT MÔI TRƯỜNG THEO ID
 ### ===================================================================
 # @name getEnvDetails
 GET {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
 Authorization: Bearer {{token}}
 
 ### ===================================================================
-### BƯỚC 8: CẬP NHẬT THÔNG TIN MÔI TRƯỜNG (TÊN, MÔ TẢ, TRẠNG THÁI)
+### BƯỚC 7: CẬP NHẬT THÔNG TIN MÔI TRƯỜNG (TÊN, MÔ TẢ, TRẠNG THÁI)
 ### ===================================================================
 # @name updateEnv
 PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
@@ -155,7 +138,7 @@ Content-Type: {{contentType}}
 }
 
 ### ===================================================================
-### BƯỚC 9: XÓA MỀM MÔI TRƯỜNG (SOFT DELETE)
+### BƯỚC 8: XÓA MỀM MÔI TRƯỜNG (SOFT DELETE)
 ### Lưu ý: Nếu môi trường đang có Cluster hoặc Agent hoạt động,
 ### API sẽ chặn xóa và trả về HTTP 400 để bảo đảm an toàn dữ liệu.
 ### ===================================================================
@@ -164,8 +147,25 @@ DELETE {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
 Authorization: Bearer {{token}}
 
 ### ===================================================================
-### BƯỚC 10: XÁC MINH MÔI TRƯỜNG ĐÃ ĐƯỢC XÓA MỀM KHÔNG XUẤT HIỆN LẠI
+### BƯỚC 9: XÁC MINH MÔI TRƯỜNG ĐÃ ĐƯỢC XÓA MỀM KHÔNG XUẤT HIỆN LẠI
 ### Kỳ vọng: HTTP 404 Not Found (Môi trường không tồn tại hoặc đã bị xóa)
 ### ===================================================================
 GET {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
 Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 10: TẠO MÔI TRƯỜNG STAGING SAU KHI ĐÃ XÓA MÔI TRƯỜNG DEV CŨ
+### Vì môi trường DEV cũ đã được xóa mềm, tổ chức giờ đây có thể đăng ký môi trường mới
+### Kỳ vọng: HTTP 201 Created
+### ===================================================================
+# @name createStagingAfterDelete
+POST {{baseUrl}}/organizations/{{orgId}}/environments
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Pre-Release Staging",
+  "code": "acme-staging-cloud",
+  "environment_type": "STAGING",
+  "description": "Đăng ký thành công môi trường STAGING sau khi môi trường DEV đã xóa"
+}
