@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { getStoredProfile, saveStoredProfile } from '../mocks/profileMockData';
 import { profileService } from '../services/profileService';
+import { getAuthToken } from '../services/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -27,8 +28,11 @@ export const useMockProfile = () => {
   const [avatarPreview, setAvatarPreview] = useState(profile.avatar);
   const [errors, setErrors] = useState({});
 
-  // Sync profile data from backend API with fallback
+  // Sync profile data from backend API with fallback when authenticated
   useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
     let isMounted = true;
     profileService.getProfile()
       .then((remoteData) => {
