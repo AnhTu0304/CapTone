@@ -63,7 +63,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'GIÁM SÁT',
       items: [
-        { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart },
+        { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart, badge: 'LIVE', badgeType: 'mint' },
         { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },
         { name: 'Sự kiện K8s', path: '/dashboard/monitoring/events', icon: Activity },
       ],

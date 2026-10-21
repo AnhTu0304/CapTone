@@ -12,11 +12,18 @@ import {
 } from '../validations';
 
 import { SystemRoleController } from '../controllers/systemRole.controller';
+import { OrganizationController } from '../controllers/organization.controller';
 
 const router = Router();
 
 // Toàn bộ các route phía dưới đều yêu cầu đã đăng nhập (cần Token)
 router.use(authenticateToken);
+
+// [GET] /api/v1/users/me/organizations -> Lấy danh sách các tổ chức mà người dùng đang tham gia
+router.get('/me/organizations', OrganizationController.getMyOrganizations);
+
+// [GET] /api/v1/users/me/invitations -> Lấy danh sách các lời mời đang chờ chấp nhận
+router.get('/me/invitations', OrganizationController.getMyInvitations);
 
 // [GET] /api/v1/users -> Lấy danh sách người dùng (chỉ ADMIN hoặc SUPER_ADMIN)
 router.get('/', requireRoles('ADMIN', 'SUPER_ADMIN'), validate(userQuerySchema), UserController.getAllUsers);

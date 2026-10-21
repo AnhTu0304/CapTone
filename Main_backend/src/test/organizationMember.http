@@ -1,0 +1,169 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử API Module 2: Quản Lý Thành Viên & Vai Trò Tổ Chức
+### (Organization Members, Roles & Invitations)
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 0.1: ĐĂNG NHẬP VỚI TÀI KHOẢN CHỦ SỞ HỮU / QUẢN TRỊ VIÊN (SME_OWNER)
+### ===================================================================
+# @name loginOwner
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tanquoc280325@gmail.com",
+  "password": "Tanquoc123@"
+}
+###
+@ownerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijk0YTA4ZDliLTc4OWQtNGNmMi1iOGZkLTUwYTJkYTk2Nzg1MyIsImVtYWlsIjoidGFucXVvY2R6QGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4MzU3LCJleHAiOjE3OTMwODMxNTd9.OIBdUqvoNcKvzTT7genHr542ViTwGT-GKozEAOZVLNQ
+@ownerUserId = {{loginOwner.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 0.2: ĐĂNG NHẬP VỚI TÀI KHOẢN THÀNH VIÊN ĐƯỢC MỜI (INVITEE)
+### ===================================================================
+# @name loginInvitee
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "tungo34205@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@inviteeToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzM2E3NjcwLWI5ZDYtNDkwNS04ZWUxLWQ1NjEwZTQwMDkxYyIsImVtYWlsIjoicGhhbXRoYWlzQGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4NDIyLCJleHAiOjE3OTMwODMyMjJ9.MMOVRiAUMPt87k_WzQECUTSet-LOT2Dk5JdMTgSKXcc
+@inviteeUserId = {{loginInvitee.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 1: TẠO TỔ CHỨC KIỂM THỬ (NẾU CHƯA CÓ ORG ID)
+### ===================================================================
+# @name createTestOrg
+POST {{baseUrl}}/organizations
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Cloud DevOps Engineering Hub",
+  "slug": "devops-hub-test",
+  "type": "Engineering Org",
+  "description": "Tổ chức kiểm thử phân quyền thành viên và vai trò Module 2",
+  "city": "Hồ Chí Minh",
+  "timezone": "Asia/Ho_Chi_Minh"
+}
+
+###
+@orgId = {{createTestOrg.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 2: LẤY DANH MỤC VAI TRÒ TỔ CHỨC KHẢ DỤNG (ROLES)
+### ===================================================================
+# @name getRoles
+GET {{baseUrl}}/organizations/roles
+Authorization: Bearer {{ownerToken}}
+
+### ===================================================================
+### BƯỚC 3: LẤY DANH SÁCH THÀNH VIÊN BAN ĐẦU (CHỈ CÓ SME_OWNER SÁNG LẬP)
+### ===================================================================
+# @name listMembersInitial
+GET {{baseUrl}}/organizations/004d9976-057a-481b-ae66-afe565b85404/members?page=1&limit=10
+Authorization: Bearer {{ownerToken}}
+
+### ===================================================================
+### BƯỚC 4: GỬI LỜI MỜI THÀNH VIÊN MỚI QUA EMAIL (VAI TRÒ: DEVOPS)
+### ===================================================================
+# @name inviteMember
+POST {{baseUrl}}/organizations/004d9976-057a-481b-ae66-afe565b85404/members/invite
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "tanquocdz@gmail.com",
+  "role_code": "DEVOPS"
+}
+
+###
+@targetUserId = {{inviteMember.response.body.data.user.id}}
+
+### ===================================================================
+### BƯỚC 5: KIỂM TRA TRẠNG THÁI LỜI MỜI (STATUS = INVITED)
+### ===================================================================
+# @name listInvitedMembers
+GET {{baseUrl}}/organizations/{{orgId}}/members?status=INVITED
+Authorization: Bearer {{ownerToken}}
+
+### ===================================================================
+### BƯỚC 6: TEST LỖI: MỜI TRÙNG LẶP KHI ĐANG CHỜ (KỲ VỌNG: 409 CONFLICT)
+### ===================================================================
+# @name inviteDuplicateFail
+POST {{baseUrl}}/organizations/{{orgId}}/members/invite
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "email": "tungo34205@gmail.com",
+  "role_code": "DEVOPS"
+}
+
+### ===================================================================
+### BƯỚC 7: THÀNH VIÊN ĐƯỢC MỜI CHẤP NHẬN LỜI MỜI (ACCEPT INVITATION)
+### (Dùng Token của người được mời: Bearer {{inviteeToken}})
+### ===================================================================
+# @name acceptInvitation
+POST {{baseUrl}}/organizations/6557b262-e8aa-40ff-b850-426b3b3461d2/members/accept
+Authorization: Bearer {{inviteeToken}}
+Content-Type: {{contentType}}
+
+### ===================================================================
+### BƯỚC 8: KIỂM TRA LẠI DANH SÁCH THÀNH VIÊN ACTIVE
+### ===================================================================
+# @name listActiveMembers
+GET {{baseUrl}}/organizations/{{orgId}}/members?status=ACTIVE
+Authorization: Bearer {{ownerToken}}
+
+### ===================================================================
+### BƯỚC 9: CẬP NHẬT VAI TRÒ THÀNH VIÊN (ĐỔI TỪ DEVOPS SANG VIEWER)
+### ===================================================================
+# @name updateMemberRole
+PUT {{baseUrl}}/organizations/{{orgId}}/members/{{targetUserId}}
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "role_code": "VIEWER",
+  "status": "ACTIVE"
+}
+
+### ===================================================================
+### BƯỚC 10: TEST RÀNG BUỘC: KHÔNG CHO PHÉP HẠ CẤP SME_OWNER DUY NHẤT (KỲ VỌNG: 400)
+### ===================================================================
+# @name protectSoleOwner
+PUT {{baseUrl}}/organizations/{{orgId}}/members/{{ownerUserId}}
+Authorization: Bearer {{ownerToken}}
+Content-Type: {{contentType}}
+
+{
+  "role_code": "VIEWER"
+}
+
+### ===================================================================
+### BƯỚC 11: TÌM KIẾM VÀ LỌC THÀNH VIÊN THEO EMAIL & VAI TRÒ
+### ===================================================================
+# @name searchMembers
+GET {{baseUrl}}/organizations/{{orgId}}/members?search=tungo&role=VIEWER
+Authorization: Bearer {{ownerToken}}
+
+### ===================================================================
+### BƯỚC 12: LOẠI BỎ THÀNH VIÊN KHỎI TỔ CHỨC (REMOVE MEMBER)
+### ===================================================================
+# @name removeMember
+DELETE {{baseUrl}}/organizations/{{orgId}}/members/{{targetUserId}}
+Authorization: Bearer {{ownerToken}}
+
+### ===================================================================
+### BƯỚC 13: XÁC MINH THÀNH VIÊN ĐÃ BỊ LOẠI BỎ (STATUS = REMOVED)
+### ===================================================================
+# @name verifyRemoved
+GET {{baseUrl}}/organizations/{{orgId}}/members?status=REMOVED
+Authorization: Bearer {{ownerToken}}

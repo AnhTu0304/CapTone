@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { telemetryService } from '../../../services/telemetryService';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import {
@@ -32,6 +34,42 @@ export const AgentsPage = () => {
   const [activeInstallTab, setActiveInstallTab] = useState('helm');
   const [copiedHelm, setCopiedHelm] = useState(false);
   const [copiedKubectl, setCopiedKubectl] = useState(false);
+
+  const [liveAgents, setLiveAgents] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchAgents = async () => {
+      try {
+        const data = await telemetryService.getLiveSummary();
+        if (!active || !data || !data.agents || data.agents.length === 0) return;
+
+        const mapped = data.agents.map((a, idx) => ({
+          id: a.agent_uid || a.id,
+          name: a.name || 'Production K8s SME Agent',
+          node: `minikube (${a.cluster_id || 'default'})`,
+          status: a.status || 'ONLINE',
+          heartbeat: a.last_seen_at ? new Date(a.last_seen_at).toLocaleTimeString('vi-VN') : 'Vừa xong',
+          version: 'v1.0.0',
+          cpu: '0.4%',
+          mem: '64 MB',
+          ebpfHooks: 'socket, k8s-api, ws-stream',
+          restarts: 0,
+          ip: '10.244.0.4',
+        }));
+        setLiveAgents(mapped);
+      } catch (err) {
+        console.warn('Agents poll error:', err);
+      }
+    };
+
+    fetchAgents();
+    const interval = setInterval(fetchAgents, 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Agents mock data
   const agents = [

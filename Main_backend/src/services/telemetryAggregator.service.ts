@@ -3,7 +3,15 @@ import { GRUMetricPoint } from '../schemas/ai.schema';
 import { RuleEngineService } from './ruleEngine.service';
 import { AiService, PredictionResult, RCAResult } from './ai.service';
 import { RuleEvaluationResult } from '../schemas/ruleEngine.schema';
-import { MetricModel, LogModel, KubernetesEventModel } from '../models';
+import {
+  MetricModel,
+  LogModel,
+  KubernetesEventModel,
+  AgentModel,
+  IncidentModel,
+  RecommendationModel,
+  AiPredictionModel,
+} from '../models';
 
 export interface RcaContext {
   service_id: string;
@@ -136,6 +144,7 @@ export class TelemetryAggregatorService {
       windowMinutes?: number;
       forceRca?: boolean;
       autoTriggerRca?: boolean;
+      providedSequence?: GRUMetricPoint[];
     }
   ): Promise<ServiceEvaluationResult> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -143,12 +152,15 @@ export class TelemetryAggregatorService {
     const forceRca = options?.forceRca ?? false;
     const autoTriggerRca = options?.autoTriggerRca ?? true;
 
-    // 1. Fetch 12-timestep sequence
-    const sequence = await this.getServiceMetricsSequence(serviceId, {
-      bucketSeconds,
-      limit: 12,
-      fillPadding: true,
-    });
+    // 1. Fetch 12-timestep sequence (or use provided 12-point fresh tumbling batch)
+    const sequence =
+      options?.providedSequence && options.providedSequence.length >= 12
+        ? options.providedSequence
+        : await this.getServiceMetricsSequence(serviceId, {
+            bucketSeconds,
+            limit: 12,
+            fillPadding: true,
+          });
 
     if (sequence.length < 12) {
       throw ApiError.badRequest(
@@ -208,7 +220,6 @@ export class TelemetryAggregatorService {
 
     if (rcaTriggered && autoTriggerRca) {
       // Determine primary risk type for RCA:
-      // Real-time critical anomalies (e.g. MEMORY_PRESSURE / OOM) take precedence over statistical forecasts
       let riskType: any = undefined;
       let confidence = 0.90;
 
@@ -227,7 +238,11 @@ export class TelemetryAggregatorService {
       } else if (ruleEvaluation.anomalies.includes('TRAFFIC_SURGE')) {
         riskType = 'TRAFFIC_OVERLOAD';
         confidence = 0.85;
-      } else if (gruPrediction?.primary_risk && gruPrediction.primary_risk !== 'NONE') {
+      } else if (
+        gruPrediction?.primary_risk &&
+        gruPrediction.primary_risk !== 'NONE' &&
+        gruPrediction.primary_risk !== 'NORMAL'
+      ) {
         riskType = gruPrediction.primary_risk;
         confidence = gruPrediction.confidence_score;
       } else {
@@ -264,6 +279,39 @@ export class TelemetryAggregatorService {
         logs: rcaContext.logs.length,
         kubernetes_events: rcaContext.kubernetes_events.length,
       },
+    };
+  }
+
+  /**
+   * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
+   */
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service') {
+    const agents = await AgentModel.listAll();
+    const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
+      bucketSeconds: 5,
+      limit: 15,
+      fillPadding: false,
+    });
+    const rawMetrics = await MetricModel.getRecentRaw(10);
+    const logs = await LogModel.getRecent(30);
+    const events = await KubernetesEventModel.getRecent(20);
+    const incidents = await IncidentModel.getRecent(10);
+    const recommendations = await RecommendationModel.getRecent(10);
+    const predictions = await AiPredictionModel.getRecent(5);
+    const latestPoint = sequence.length > 0 ? sequence[sequence.length - 1] : null;
+
+    return {
+      service_id: serviceId,
+      agents,
+      sequence,
+      latest_point: latestPoint,
+      raw_metrics: rawMetrics,
+      logs,
+      events,
+      incidents,
+      recommendations,
+      predictions,
+      timestamp: new Date().toISOString(),
     };
   }
 }

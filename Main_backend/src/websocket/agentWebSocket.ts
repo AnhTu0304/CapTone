@@ -3,6 +3,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import url from 'url';
 import { AgentService, AuthenticatedAgent } from '../services/agent.service';
 import { AgentWsMessageSchema } from '../schemas/agentWebSocket.schema';
+import { broadcastTelemetryToUi } from './telemetryWebSocket';
+import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
 
 interface ExtWebSocket extends WebSocket {
   isAlive: boolean;
@@ -160,6 +162,30 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
         switch (msg.type) {
           case 'metrics': {
             const saved = await AgentService.storeMetrics(ws.agent, msg.data);
+            console.log(`📊 [REALTIME METRICS] [${ws.agent.name}] Service: ${msg.data.service_id} | Pod: ${msg.data.pod_id || "all"} | CPU: ${msg.data.cpu}% | RAM: ${msg.data.ram}MB | Req: ${msg.data.request_rate}/s | Latency: ${msg.data.latency}ms`);
+            
+            broadcastTelemetryToUi({
+              type: 'metrics',
+              data: {
+                ...msg.data,
+                id: saved.id,
+                timestamp: new Date().toISOString(),
+              }
+            });
+
+            // Trigger urgent AI diagnosis if metrics exceed anomaly thresholds
+            if (
+              msg.data.cpu >= 70 ||
+              msg.data.http_5xx_rate >= 10 ||
+              msg.data.pod_restart_count > 0 ||
+              msg.data.latency >= 1500
+            ) {
+              TelemetryPipelineService.triggerUrgentEvaluation(
+                msg.data.service_id,
+                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, Restarts: ${msg.data.pod_restart_count})`
+              );
+            }
+
             ws.send(
               JSON.stringify({
                 status: 'ack',
@@ -174,6 +200,29 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
           case 'log': {
             const saved = await AgentService.storeLog(ws.agent, msg.data);
+            console.log(`📝 [REALTIME LOG] [${ws.agent.name}] [${msg.data.level}] ${msg.data.message.slice(0, 110)}`);
+            
+            broadcastTelemetryToUi({
+              type: 'log',
+              data: {
+                ...msg.data,
+                id: saved.id,
+                occurred_at: new Date().toISOString(),
+              }
+            });
+
+            // Check if log indicates an error / crash / OOM
+            const upperLevel = msg.data.level.toUpperCase();
+            const isErrorLog = ['ERROR', 'FATAL', 'CRITICAL'].includes(upperLevel);
+            const hasErrorKeywords = /(exception|timeout|oom|crash|connection error|killed|deadlock|fail)/i.test(msg.data.message);
+
+            if (isErrorLog || hasErrorKeywords) {
+              TelemetryPipelineService.triggerUrgentEvaluation(
+                msg.data.service_id,
+                `Error log: ${msg.data.message.slice(0, 70)}`
+              );
+            }
+
             ws.send(
               JSON.stringify({
                 status: 'ack',
@@ -188,6 +237,28 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
           case 'k8s_event': {
             const saved = await AgentService.storeK8sEvent(ws.agent, msg.data);
+            console.log(`⚡ [REALTIME EVENT] [${ws.agent.name}] [${msg.data.event.type}] ${msg.data.event.reason}: ${msg.data.event.message.slice(0, 110)}`);
+            
+            broadcastTelemetryToUi({
+              type: 'k8s_event',
+              data: {
+                ...msg.data,
+                id: saved.id,
+                last_seen_at: new Date().toISOString(),
+              }
+            });
+
+            // Check if event is warning or pod failure
+            if (
+              msg.data.event.type === 'Warning' ||
+              /(oomkilled|backoff|killing|failed|unhealthy)/i.test(msg.data.event.reason)
+            ) {
+              TelemetryPipelineService.triggerUrgentEvaluation(
+                msg.data.service_id,
+                `K8s Warning Event: ${msg.data.event.reason} - ${msg.data.event.message.slice(0, 70)}`
+              );
+            }
+
             ws.send(
               JSON.stringify({
                 status: 'ack',
@@ -211,7 +282,6 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
         }
       } catch (err) {
         console.error('Error handling WebSocket message from agent:', err);
-        // Do not crash server, send safe error feedback
         ws.send(
           JSON.stringify({
             status: 'error',

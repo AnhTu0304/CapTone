@@ -66,7 +66,7 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id IN (SELECT id FROM workloads WHERE name = $1)
+          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
         )
         AND occurred_at >= NOW() - ($2 || ' minutes')::interval
       )
@@ -88,7 +88,7 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id IN (SELECT id FROM workloads WHERE name = $1)
+          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
         )
         ORDER BY occurred_at DESC
         LIMIT $2;
@@ -97,6 +97,20 @@ export class LogModel {
       res = { ...fallbackRes, rows: fallbackRes.rows.reverse() };
     }
 
+    return res.rows;
+  }
+
+  /**
+   * Get recent logs for telemetry live feed
+   */
+  public static async getRecent(limit: number = 30) {
+    const res = await pool.query(
+      `SELECT id, service_id, level, message, source, occurred_at, metadata
+       FROM logs
+       ORDER BY occurred_at DESC
+       LIMIT $1`,
+      [limit]
+    );
     return res.rows;
   }
 }

@@ -4,6 +4,11 @@ import { authenticateToken } from '../middlewares/auth.middleware';
 
 export const telemetryRoutes = Router();
 
+// GET /api/v1/telemetry/live-summary
+telemetryRoutes.get('/live-summary', TelemetryController.getLiveSummary);
+
+
+
 // Protect telemetry routes with JWT authentication
 telemetryRoutes.use(authenticateToken);
 

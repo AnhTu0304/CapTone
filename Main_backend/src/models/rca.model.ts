@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import { pool } from '../config/database';
 
 export interface IRcaAnalysis {
   id?: string;
@@ -66,5 +67,27 @@ export class RcaModel {
         [rcaAnalysisId, serviceId, JSON.stringify({ summary: ev })]
       );
     }
+  }
+
+  /**
+   * Get evidences by incident ID
+   */
+  public static async findEvidencesByIncidentId(incidentId: string): Promise<any[]> {
+    const query = `
+      SELECT 
+        e.id,
+        e.rca_analysis_id,
+        e.source_type,
+        e.source_reference,
+        e.evidence_data,
+        e.importance_score,
+        e.created_at
+      FROM rca_evidences e
+      JOIN rca_analyses a ON a.id = e.rca_analysis_id
+      WHERE a.incident_id = $1
+      ORDER BY e.importance_score DESC, e.created_at DESC;
+    `;
+    const res = await pool.query(query, [incidentId]);
+    return res.rows;
   }
 }

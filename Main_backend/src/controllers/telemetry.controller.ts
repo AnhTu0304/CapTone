@@ -78,7 +78,7 @@ export class TelemetryController {
 
       const { window_minutes, log_limit, event_limit } = parsedQuery.data;
 
-      const context = await TelemetryAggregatorService.buildRcaContext(serviceId, {
+      const rcaContext = await TelemetryAggregatorService.buildRcaContext(serviceId, {
         windowMinutes: window_minutes,
         logLimit: log_limit,
         eventLimit: event_limit,
@@ -86,8 +86,8 @@ export class TelemetryController {
 
       return ApiResponse.success(
         res,
-        `Built RCA context for service '${serviceId}' (${context.logs.length} logs, ${context.kubernetes_events.length} events)`,
-        context,
+        `Filtered RCA context for service '${serviceId}' (logs: ${rcaContext.logs.length}, events: ${rcaContext.kubernetes_events.length})`,
+        rcaContext,
         200
       );
     } catch (error) {
@@ -97,7 +97,7 @@ export class TelemetryController {
 
   /**
    * POST /api/v1/telemetry/services/:serviceId/evaluate
-   * Full end-to-end evaluation: Aggregate -> Rule Engine -> GRU Predict -> Conditional RCA
+   * Full end-to-end evaluation: metrics sequence -> rule engine -> GRU forecast -> AI RCA
    */
   public static async evaluateService(
     req: Request,
@@ -106,12 +106,12 @@ export class TelemetryController {
   ): Promise<any> {
     try {
       const { serviceId } = req.params;
-      const parsedBody = EvaluateServiceBodySchema.safeParse(req.body || {});
+      const parsedBody = EvaluateServiceBodySchema.safeParse(req.body);
 
       if (!parsedBody.success) {
         return ApiResponse.error(
           res,
-          'Validation failed: Invalid evaluation request body',
+          'Validation failed: Invalid body parameters for service evaluation',
           400,
           parsedBody.error.format()
         );
@@ -128,10 +128,31 @@ export class TelemetryController {
 
       return ApiResponse.success(
         res,
-        `Completed service evaluation and diagnosis for '${serviceId}'`,
+        `Evaluation and diagnosis completed for service '${serviceId}'`,
         result,
         200
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
+   */
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service') {
+    return TelemetryAggregatorService.getLiveSummaryData(serviceId);
+  }
+
+  public static async getLiveSummary(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const serviceId = (req.query.service_id as string) || 'sme-order-service';
+      const data = await TelemetryController.getLiveSummaryData(serviceId);
+      return ApiResponse.success(res, 'Live telemetry summary fetched successfully', data, 200);
     } catch (error) {
       next(error);
     }

@@ -15,7 +15,7 @@ POST {{baseUrl}}/auth/register
 Content-Type: {{contentType}}
 
 {
-  "email": "test_role_user@gmail.com",
+  "email": "tanquoc280325@gmail.com",
   "password": "Password123@",
   "full_name": "Test Role Operator"
 }
@@ -28,8 +28,8 @@ POST {{baseUrl}}/auth/login
 Content-Type: {{contentType}}
 
 {
-  "email": "phamthaisang1710@gmail.com",
-  "password": "AdminPassword123@"
+  "email": "tanquoc280325@gmail.com",
+  "password": "Tanquoc123@"
 }
 
 ###

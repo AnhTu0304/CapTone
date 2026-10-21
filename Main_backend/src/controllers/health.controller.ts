@@ -1,20 +1,11 @@
 import { Request, Response } from 'express';
 import { ApiResponse } from '../utils/apiResponse';
-import { pool } from '../config/database';
+import { getDbHealth } from '../config/database';
 import { config } from '../config/env';
 
 export class HealthController {
   public static async check(req: Request, res: Response) {
-    let dbStatus = 'DISCONNECTED';
-    let dbTime: string | null = null;
-
-    try {
-      const result = await pool.query('SELECT NOW() as now');
-      dbStatus = 'CONNECTED';
-      dbTime = result.rows[0].now;
-    } catch (error) {
-      dbStatus = `ERROR: ${(error as Error).message}`;
-    }
+    const dbHealth = await getDbHealth();
 
     const healthData = {
       status: 'UP',
@@ -23,11 +14,12 @@ export class HealthController {
       environment: process.env.NODE_ENV || 'development',
       nodeVersion: process.version,
       database: {
-        status: dbStatus,
+        status: dbHealth.status,
         name: config.db.database,
         host: config.db.host,
         port: config.db.port,
-        serverTime: dbTime,
+        serverTime: dbHealth.serverTime,
+        ...(dbHealth.error ? { error: dbHealth.error } : {}),
       },
     };
 
