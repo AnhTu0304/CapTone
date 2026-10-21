@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const environmentTypeSchema = z.enum(['DEVELOPMENT', 'STAGING']);
+export const environmentTypeSchema = z.enum(['DEVELOPMENT', 'STAGING', 'TESTING', 'PRODUCTION']);
 export const environmentStatusSchema = z.enum(['ACTIVE', 'INACTIVE', 'DISCONNECTED']);
 
 /**

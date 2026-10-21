@@ -114,27 +114,29 @@ export class EnvironmentService {
   }
 
   /**
-   * Thống kê tổng quan số lượng môi trường theo từng loại (DEV vs STAGING)
+   * Thống kê tổng quan số lượng môi trường và cụm K8s theo từng loại
    */
   public static async getSummary(organizationId: string) {
-    const devList = await EnvironmentModel.findByOrgId(organizationId, { type: 'DEVELOPMENT', limit: 100 });
-    const stagingList = await EnvironmentModel.findByOrgId(organizationId, { type: 'STAGING', limit: 100 });
+    const allEnvs = await EnvironmentModel.findByOrgId(organizationId, { limit: 100 });
+    const byType: Record<string, { count: number; clusters_count: number; environments: IEnvironment[] }> = {};
 
-    const totalClustersDev = devList.environments.reduce((acc, e) => acc + (e.clusters_count || 0), 0);
-    const totalClustersStaging = stagingList.environments.reduce((acc, e) => acc + (e.clusters_count || 0), 0);
+    for (const env of allEnvs.environments) {
+      const typeKey = env.environment_type;
+      if (!byType[typeKey]) {
+        byType[typeKey] = { count: 0, clusters_count: 0, environments: [] };
+      }
+      byType[typeKey].count += 1;
+      byType[typeKey].clusters_count += env.clusters_count || 0;
+      byType[typeKey].environments.push(env);
+    }
 
     return {
-      total_environments: devList.total + stagingList.total,
-      development: {
-        count: devList.total,
-        clusters_count: totalClustersDev,
-        environments: devList.environments,
-      },
-      staging: {
-        count: stagingList.total,
-        clusters_count: totalClustersStaging,
-        environments: stagingList.environments,
-      },
+      total_environments: allEnvs.total,
+      by_type: byType,
+      development: byType['DEVELOPMENT'] || { count: 0, clusters_count: 0, environments: [] },
+      staging: byType['STAGING'] || { count: 0, clusters_count: 0, environments: [] },
+      testing: byType['TESTING'] || { count: 0, clusters_count: 0, environments: [] },
+      production: byType['PRODUCTION'] || { count: 0, clusters_count: 0, environments: [] },
     };
   }
 }

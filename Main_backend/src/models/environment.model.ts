@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
 
-export type EnvironmentType = 'DEVELOPMENT' | 'STAGING';
+export type EnvironmentType = 'DEVELOPMENT' | 'STAGING' | 'TESTING' | 'PRODUCTION';
 export type EnvironmentStatus = 'ACTIVE' | 'INACTIVE' | 'DISCONNECTED';
 
 export interface IEnvironment {
