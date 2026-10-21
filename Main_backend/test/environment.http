@@ -20,8 +20,7 @@ Content-Type: {{contentType}}
 }
 
 ###
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImI1ZjViNjk4LTU1NjktNGI0NC1hYTVjLWE2MWQ2ZjNkNjAyMyIsImVtYWlsIjoicGhhbXRoYUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6W10sImlhdCI6MTc5MjU4MDE5MSwiZXhwIjoxNzkzMTg0OTkxfQ.iHC7pOdBwxe16JUnMFvsHadyYaVO7qR7cmShcEcK9nk
-
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImI1ZjViNjk4LTU1NjktNGI0NC1hYTVjLWE2MWQ2ZjNkNjAyMyIsImVtYWlsIjoicGhhbXRoYUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6W10sImlhdCI6MTc5MjU4NTY3OCwiZXhwIjoxNzkzMTkwNDc4fQ.MQdIiT0SIeWiSXS0cP0QgLoqlwGi9lbUwRmEWNPuSKA
 ### ===================================================================
 ### BƯỚC 0.1: LẤY DANH SÁCH TỔ CHỨC CỦA BẠN (TỰ ĐỘNG BẮT ORG ID)
 ### ===================================================================

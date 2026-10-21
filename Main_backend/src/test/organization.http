@@ -12,12 +12,12 @@ POST {{baseUrl}}/auth/login
 Content-Type: {{contentType}}
 
 {
-  "email": "tanquoc280325@gmail.com",
+  "email": "phamtha@gmail.com",
   "password": "Tanquoc123@"
 }
 
 ###
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzM2E3NjcwLWI5ZDYtNDkwNS04ZWUxLWQ1NjEwZTQwMDkxYyIsImVtYWlsIjoicGhhbXRoYWlzQGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4NTExLCJleHAiOjE3OTMwODMzMTF9.nyWFthhxq1oiLjUGhvn3v1OqUH_QDxMOFNimskik5ho
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImI1ZjViNjk4LTU1NjktNGI0NC1hYTVjLWE2MWQ2ZjNkNjAyMyIsImVtYWlsIjoicGhhbXRoYUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6W10sImlhdCI6MTc5MjU4MDE5MSwiZXhwIjoxNzkzMTg0OTkxfQ.iHC7pOdBwxe16JUnMFvsHadyYaVO7qR7cmShcEcK9nk
 ### ===================================================================
 ### BƯỚC 1: TẠO TỔ CHỨC MỚI (KÈM PROFILE & TỰ ĐỘNG GÁN SME_OWNER)
 ### ===================================================================
@@ -28,7 +28,7 @@ Content-Type: {{contentType}}
 
 {
   "name": "Acme Cloud Infrastructure",
-  "slug": "acme-cloud",
+  "slug": "acme-clkoud1222",
   "type": "SaaS Enterprise",
   "description": "Nền tảng hạ tầng đám mây và vi dịch vụ tự động hóa",
   "email": "contact@acme.io",

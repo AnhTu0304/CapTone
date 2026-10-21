@@ -34,7 +34,7 @@ GET {{baseUrl}}/organizations?page=1&limit=5
 Authorization: Bearer {{token}}
 
 ### Tự động lấy orgId từ phần tử đầu tiên của danh sách tổ chức
-@orgId = {{getMyOrgs.response.body.data.items[0].id}}
+@orgId = 4af1b566-4ee8-40be-8316-d7b4404e8399
 
 ### ===================================================================
 ### BƯỚC 0.2: LẤY DANH SÁCH MÔI TRƯỜNG HIỆN CÓ CỦA TỔ CHỨC
@@ -44,7 +44,7 @@ GET {{baseUrl}}/organizations/{{orgId}}/environments?page=1&limit=5
 Authorization: Bearer {{token}}
 
 ### Tự động lấy envId từ môi trường đầu tiên
-@envId = {{getEnvs.response.body.data.environments[0].id}}
+@envId = 640165c9-ec14-4ccc-b766-8fbbb7687f5d
 
 ### ===================================================================
 ### BƯỚC 1: XEM CHI TIẾT TRẠNG THÁI VÀ LOẠI MÔI TRƯỜNG BAN ĐẦU
