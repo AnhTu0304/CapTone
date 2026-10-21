@@ -130,13 +130,15 @@ export class EnvironmentService {
       byType[typeKey].environments.push(env);
     }
 
+    const devData = byType['DEV'] || byType['DEVELOPMENT'] || { count: 0, clusters_count: 0, environments: [] };
+    const stagingData = byType['STAGING'] || { count: 0, clusters_count: 0, environments: [] };
+
     return {
       total_environments: allEnvs.total,
       by_type: byType,
-      development: byType['DEVELOPMENT'] || { count: 0, clusters_count: 0, environments: [] },
-      staging: byType['STAGING'] || { count: 0, clusters_count: 0, environments: [] },
-      testing: byType['TESTING'] || { count: 0, clusters_count: 0, environments: [] },
-      production: byType['PRODUCTION'] || { count: 0, clusters_count: 0, environments: [] },
+      dev: devData,
+      staging: stagingData,
+      development: devData,
     };
   }
 }

@@ -1,10 +1,25 @@
 import { z } from 'zod';
 
+/**
+ * Validation schema cho loại môi trường:
+ * Kiểm tra chặt chẽ ở tầng Application/Validation: CHỈ CHẤP NHẬN 2 LOẠI LÀ DEV VÀ STAGING.
+ * Tự động chuẩn hóa về dạng chữ hoa ('DEV' hoặc 'STAGING').
+ * Chấp nhận 'DEV', 'dev', 'DEVELOPMENT', 'development' -> 'DEV'
+ * Chấp nhận 'STAGING', 'staging' -> 'STAGING'
+ * Bất kỳ giá trị nào khác sẽ bị chặn ngay tại validation.
+ */
 export const environmentTypeSchema = z
   .string()
   .trim()
-  .min(1, 'Loại môi trường không được để trống')
-  .max(50, 'Loại môi trường tối đa 50 ký tự');
+  .toUpperCase()
+  .refine(
+    (val) => val === 'DEV' || val === 'DEVELOPMENT' || val === 'STAGING',
+    {
+      message: "Loại môi trường chỉ được phép là 'DEV' hoặc 'STAGING'",
+    }
+  )
+  .transform((val) => (val === 'DEVELOPMENT' ? 'DEV' : val));
+
 export const environmentStatusSchema = z.enum(['ACTIVE', 'INACTIVE', 'DISCONNECTED']);
 
 /**
