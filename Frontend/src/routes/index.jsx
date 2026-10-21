@@ -22,6 +22,7 @@ import { IncidentsListPage, IncidentDetailPage } from '../pages/Admin/Incidents'
 import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
 import { AdminAIPage } from '../pages/Admin/AI';
 import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
+import { AdminUsersPage } from '../pages/Admin/Users';
 import { AdminNotFound } from '../components/admin/common';
 import TableOfContents from '../components/navigation/TableOfContents';
 
@@ -45,6 +46,8 @@ export const ROUTES = {
   ADMIN_AI_RCA: '/admin/ai/rca',
   ADMIN_AI_PERFORMANCE: '/admin/ai/performance',
   ADMIN_AUDIT_LOGS: '/admin/audit-logs',
+  ADMIN_USERS: '/admin/users',
+  ADMIN_MEMBERS: '/admin/members',
   GUIDE: '/guide',
   FEATURES: '/features',
   ABOUT: '/about',
@@ -136,6 +139,8 @@ export const RouteRenderer = ({
       adminContent = <AdminAIPage currentSection="performance" onNavigate={onNavigate} />;
     } else if (path === '/admin/audit-logs') {
       adminContent = <AdminAuditLogsPage onNavigate={onNavigate} />;
+    } else if (path === '/admin/users' || path === '/admin/members') {
+      adminContent = <AdminUsersPage onNavigate={onNavigate} />;
     } else {
       adminContent = <AdminNotFound onNavigate={onNavigate} />;
     }

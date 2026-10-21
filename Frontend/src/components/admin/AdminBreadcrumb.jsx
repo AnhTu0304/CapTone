@@ -14,6 +14,7 @@ const PATH_NAME_MAP = {
   reports: 'Báo Cáo SLA & Chi Phí',
   notifications: 'Trung Tâm Cảnh Báo',
   members: 'Thành Viên & Ma Trận RBAC',
+  users: 'Quản Lý Người Dùng & RBAC',
   settings: 'Thiết Lập Quản Trị',
   profile: 'Hồ Sơ Quản Trị Viên',
 };
