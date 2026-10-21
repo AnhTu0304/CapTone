@@ -48,14 +48,10 @@ if (config.isDevelopment) {
   app.use(morgan("combined"));
 }
 
-// Static files (Dashboard UI)
-app.use("/dashboard", express.static(path.join(__dirname, "../public")));
-
 // Root Route
 app.get("/", (req, res) => {
   res.json({
     message: "Welcome to Main Backend API",
-    dashboard: "/dashboard",
     healthCheck: `${config.apiPrefix}/health`,
   });
 });
