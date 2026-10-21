@@ -36,12 +36,12 @@ router.get(
 /**
  * [POST] /api/v1/organizations/:orgId/agents
  * Tạo Agent mới cho một môi trường và sinh Token kết nối bí mật ban đầu
- * Quyền: OWNER, SME_OWNER, DEVOPS
+ * Quyền: SME_OWNER, DEVOPS
  */
 router.post(
   '/',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(createAgentSchema),
   AgentController.create
 );
@@ -49,7 +49,7 @@ router.post(
 /**
  * [GET] /api/v1/organizations/:orgId/agents/:agentId
  * Xem thông tin chi tiết một Agent (kèm tokens và lịch sử heartbeat gần nhất)
- * Quyền: Mọi thành viên hợp lệ trong tổ chức
+ * Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
  */
 router.get(
   '/:agentId',
@@ -61,12 +61,12 @@ router.get(
 /**
  * [PUT] /api/v1/organizations/:orgId/agents/:agentId
  * Cập nhật cấu hình Agent (tên, cluster_id, version)
- * Quyền: OWNER, SME_OWNER, DEVOPS
+ * Quyền: SME_OWNER, DEVOPS
  */
 router.put(
   '/:agentId',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(agentIdParamSchema),
   validate(updateAgentSchema),
   AgentController.update
@@ -75,12 +75,12 @@ router.put(
 /**
  * [POST] /api/v1/organizations/:orgId/agents/:agentId/revoke
  * Thu hồi Agent (chuyển sang REVOKED và vô hiệu hóa toàn bộ Token)
- * Quyền: OWNER, SME_OWNER, DEVOPS
+ * Quyền: SME_OWNER, DEVOPS
  */
 router.post(
   '/:agentId/revoke',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(agentIdParamSchema),
   AgentController.revoke
 );
@@ -88,12 +88,12 @@ router.post(
 /**
  * [DELETE] /api/v1/organizations/:orgId/agents/:agentId
  * Xóa Agent khỏi hệ thống
- * Quyền: Chỉ OWNER, SME_OWNER
+ * Quyền: Chỉ duy nhất SME_OWNER
  */
 router.delete(
   '/:agentId',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER'),
+  requireOrgRole('SME_OWNER'),
   validate(agentIdParamSchema),
   AgentController.delete
 );
@@ -105,7 +105,7 @@ router.delete(
 /**
  * [GET] /api/v1/organizations/:orgId/agents/:agentId/tokens
  * Lấy danh sách Token của Agent (chỉ hiện token_prefix, ngày tạo, ngày hết hạn)
- * Quyền: Mọi thành viên hợp lệ trong tổ chức
+ * Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
  */
 router.get(
   '/:agentId/tokens',
@@ -117,12 +117,12 @@ router.get(
 /**
  * [POST] /api/v1/organizations/:orgId/agents/:agentId/tokens
  * Sinh Token kết nối mới cho Agent (phục vụ xoay vòng token bảo mật)
- * Quyền: OWNER, SME_OWNER, DEVOPS
+ * Quyền: SME_OWNER, DEVOPS
  */
 router.post(
   '/:agentId/tokens',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(agentIdParamSchema),
   validate(createTokenSchema),
   AgentController.createToken
@@ -131,12 +131,12 @@ router.post(
 /**
  * [DELETE] /api/v1/organizations/:orgId/agents/:agentId/tokens/:tokenId
  * Thu hồi một Token cụ thể của Agent
- * Quyền: OWNER, SME_OWNER, DEVOPS
+ * Quyền: SME_OWNER, DEVOPS
  */
 router.delete(
   '/:agentId/tokens/:tokenId',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(agentIdParamSchema),
   AgentController.revokeToken
 );

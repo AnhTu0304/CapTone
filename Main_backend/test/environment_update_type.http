@@ -12,7 +12,7 @@
 @contentType = application/json
 
 ### ===================================================================
-### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN OWNER / DEVOPS)
+### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN SME_OWNER / DEVOPS)
 ### ===================================================================
 # @name login
 POST {{baseUrl}}/auth/login
@@ -56,7 +56,7 @@ Authorization: Bearer {{token}}
 
 ### ===================================================================
 ### BƯỚC 2: CHUYỂN ĐỔI LOẠI MÔI TRƯỜNG SANG 'STAGING'
-### Quyền: OWNER, SME_OWNER, DEVOPS
+### Quyền: SME_OWNER, DEVOPS
 ### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'STAGING'
 ### ===================================================================
 # @name switchToStaging

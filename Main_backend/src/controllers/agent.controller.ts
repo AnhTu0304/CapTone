@@ -6,7 +6,7 @@ export class AgentController {
   /**
    * [POST] /api/v1/organizations/:orgId/agents
    * Tạo Agent mới và tự động sinh Agent Token bí mật ban đầu
-   * Quyền: OWNER, SME_OWNER, DEVOPS
+   * Quyền: SME_OWNER, DEVOPS
    */
   public static async create(req: Request, res: Response, next: NextFunction) {
     try {
@@ -53,7 +53,7 @@ export class AgentController {
   /**
    * [PUT] /api/v1/organizations/:orgId/agents/:agentId
    * Cập nhật thông tin cấu hình Agent (tên, cluster_id, version)
-   * Quyền: OWNER, SME_OWNER, DEVOPS
+   * Quyền: SME_OWNER, DEVOPS
    */
   public static async update(req: Request, res: Response, next: NextFunction) {
     try {
@@ -69,7 +69,7 @@ export class AgentController {
   /**
    * [POST] /api/v1/organizations/:orgId/agents/:agentId/revoke
    * Thu hồi Agent (chuyển trạng thái REVOKED và vô hiệu hóa tất cả các Token kết nối)
-   * Quyền: OWNER, SME_OWNER, DEVOPS
+   * Quyền: SME_OWNER, DEVOPS
    */
   public static async revoke(req: Request, res: Response, next: NextFunction) {
     try {
@@ -85,7 +85,7 @@ export class AgentController {
   /**
    * [DELETE] /api/v1/organizations/:orgId/agents/:agentId
    * Xóa Agent khỏi hệ thống
-   * Quyền: Chỉ OWNER, SME_OWNER
+   * Quyền: Chỉ duy nhất SME_OWNER
    */
   public static async delete(req: Request, res: Response, next: NextFunction) {
     try {
@@ -101,7 +101,7 @@ export class AgentController {
   /**
    * [POST] /api/v1/organizations/:orgId/agents/:agentId/tokens
    * Tạo Token mới cho Agent (phục vụ việc xoay vòng token bảo mật)
-   * Quyền: OWNER, SME_OWNER, DEVOPS
+   * Quyền: SME_OWNER, DEVOPS
    */
   public static async createToken(req: Request, res: Response, next: NextFunction) {
     try {
@@ -135,7 +135,7 @@ export class AgentController {
   /**
    * [DELETE] /api/v1/organizations/:orgId/agents/:agentId/tokens/:tokenId
    * Thu hồi một Token cụ thể của Agent
-   * Quyền: OWNER, SME_OWNER, DEVOPS
+   * Quyền: SME_OWNER, DEVOPS
    */
   public static async revokeToken(req: Request, res: Response, next: NextFunction) {
     try {

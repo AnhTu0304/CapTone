@@ -2,13 +2,13 @@
 ### CapTone - Bộ Kiểm Thử API Quản Lý Agent (Agents, Tokens, Heartbeats)
 ### Quản lý 3 bảng: agents, agent_tokens, agent_heartbeats
 ### Kiểm thực dữ liệu nghiêm ngặt tại tầng Validation (Zod)
-### Phân quyền RBAC: OWNER, SME_OWNER, DEVOPS, VIEWER
+### Phân quyền RBAC: SME_OWNER, DEVOPS, VIEWER (Chỉ gồm 3 vai trò chuẩn)
 ### ===================================================================
 @baseUrl = http://localhost:5000/api/v1
 @contentType = application/json
 
 ### ===================================================================
-### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN OWNER / DEVOPS)
+### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN SME_OWNER / DEVOPS)
 ### ===================================================================
 # @name login
 POST {{baseUrl}}/auth/login
@@ -44,7 +44,7 @@ Authorization: Bearer {{token}}
 
 ### ===================================================================
 ### BƯỚC 1: TẠO AGENT MỚI CHO MÔI TRƯỜNG KÈM TOKEN KẾT NỐI BAN ĐẦU
-### Quyền: OWNER, SME_OWNER, DEVOPS
+### Quyền: SME_OWNER, DEVOPS
 ### Kỳ vọng: HTTP 201 Created, sinh bí mật raw_token và install_command
 ### ===================================================================
 # @name createAgent
@@ -66,7 +66,7 @@ Content-Type: {{contentType}}
 ### ===================================================================
 ### BƯỚC 2: LẤY DANH SÁCH CÁC AGENT TRONG TỔ CHỨC
 ### Hỗ trợ: page, limit, status (PENDING, ONLINE, OFFLINE, REVOKED), search
-### Quyền: Mọi thành viên tổ chức (OWNER, SME_OWNER, DEVOPS, VIEWER)
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
 ### Kỳ vọng: HTTP 200 OK kèm danh sách và phân trang
 ### ===================================================================
 # @name getAgents
@@ -76,7 +76,7 @@ Authorization: Bearer {{token}}
 ### ===================================================================
 ### BƯỚC 3: XEM CHI TIẾT AGENT
 ### Bao gồm: Tên, UID, môi trường, cụm K8s, số token hoạt động, nhịp tim gần nhất
-### Quyền: Mọi thành viên tổ chức
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
 ### Kỳ vọng: HTTP 200 OK
 ### ===================================================================
 # @name getAgentDetail
@@ -85,7 +85,7 @@ Authorization: Bearer {{token}}
 
 ### ===================================================================
 ### BƯỚC 4: CẬP NHẬT THÔNG TIN AGENT (Tên, Version)
-### Quyền: OWNER, SME_OWNER, DEVOPS
+### Quyền: SME_OWNER, DEVOPS
 ### Kỳ vọng: HTTP 200 OK
 ### ===================================================================
 # @name updateAgent
@@ -123,7 +123,7 @@ Content-Type: {{contentType}}
 
 ### ===================================================================
 ### BƯỚC 6: XEM LỊCH SỬ NHỊP TIM CỦA AGENT TRÊN DASHBOARD
-### Quyền: Mọi thành viên tổ chức
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
 ### Kỳ vọng: HTTP 200 OK kèm mảng các nhịp tim gần nhất
 ### ===================================================================
 # @name getHeartbeatHistory
@@ -132,7 +132,7 @@ Authorization: Bearer {{token}}
 
 ### ===================================================================
 ### BƯỚC 7: TẠO THÊM TOKEN CHO AGENT (XOAY VÒNG TOKEN BẢO MẬT)
-### Quyền: OWNER, SME_OWNER, DEVOPS
+### Quyền: SME_OWNER, DEVOPS
 ### Kỳ vọng: HTTP 201 Created kèm raw_token mới
 ### ===================================================================
 # @name createNewToken
@@ -150,7 +150,7 @@ Content-Type: {{contentType}}
 
 ### ===================================================================
 ### BƯỚC 8: LẤY DANH SÁCH CÁC TOKEN CỦA AGENT
-### Quyền: Mọi thành viên tổ chức
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
 ### Bảo mật: Không làm lộ token_hash, chỉ hiển thị token_prefix
 ### ===================================================================
 # @name getAgentTokens
@@ -159,7 +159,7 @@ Authorization: Bearer {{token}}
 
 ### ===================================================================
 ### BƯỚC 9: THU HỒI MỘT TOKEN CỤ THỂ CỦA AGENT
-### Quyền: OWNER, SME_OWNER, DEVOPS
+### Quyền: SME_OWNER, DEVOPS
 ### Kỳ vọng: HTTP 200 OK ("Thu hồi Token Agent thành công")
 ### ===================================================================
 # @name revokeSpecificToken
@@ -169,7 +169,7 @@ Authorization: Bearer {{token}}
 ### ===================================================================
 ### BƯỚC 10: THU HỒI TOÀN BỘ AGENT (REVOKE AGENT)
 ### Chuyển trạng thái Agent sang REVOKED và vô hiệu hóa tất cả các Token kết nối
-### Quyền: OWNER, SME_OWNER, DEVOPS
+### Quyền: SME_OWNER, DEVOPS
 ### ===================================================================
 # @name revokeAgent
 POST {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}/revoke
@@ -191,7 +191,7 @@ Content-Type: {{contentType}}
 
 ### ===================================================================
 ### BƯỚC 12: XÓA AGENT KHỎI HỆ THỐNG
-### Quyền: Chỉ OWNER, SME_OWNER
+### Quyền: Chỉ duy nhất SME_OWNER
 ### Kỳ vọng: HTTP 200 OK
 ### ===================================================================
 # @name deleteAgent

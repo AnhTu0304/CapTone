@@ -42,12 +42,12 @@ router.get(
 /**
  * [POST] /api/v1/organizations/:orgId/environments
  * Tạo môi trường mới (chỉ chấp nhận 'DEVELOPMENT' hoặc 'STAGING')
- * Quyền: OWNER hoặc DEVOPS của tổ chức
+ * Quyền: SME_OWNER hoặc DEVOPS của tổ chức
  */
 router.post(
   '/',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(createEnvironmentSchema),
   EnvironmentController.create
 );
@@ -55,7 +55,7 @@ router.post(
 /**
  * [GET] /api/v1/organizations/:orgId/environments/:id
  * Xem chi tiết thông tin môi trường
- * Quyền: Mọi thành viên hợp lệ
+ * Quyền: Mọi thành viên hợp lệ (SME_OWNER, DEVOPS, VIEWER)
  */
 router.get(
   '/:id',
@@ -67,12 +67,12 @@ router.get(
 /**
  * [PUT] /api/v1/organizations/:orgId/environments/:id
  * Cập nhật môi trường (tên, mô tả, trạng thái, loại)
- * Quyền: OWNER hoặc DEVOPS của tổ chức
+ * Quyền: SME_OWNER hoặc DEVOPS của tổ chức
  */
 router.put(
   '/:id',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   validate(envParamSchema),
   validate(updateEnvironmentSchema),
   EnvironmentController.update
@@ -81,12 +81,12 @@ router.put(
 /**
  * [DELETE] /api/v1/organizations/:orgId/environments/:id
  * Xóa mềm môi trường (Soft Delete)
- * Quyền: Chỉ duy nhất OWNER của tổ chức
+ * Quyền: Chỉ duy nhất SME_OWNER của tổ chức
  */
 router.delete(
   '/:id',
   requireOrgMember,
-  requireOrgRole('OWNER', 'SME_OWNER'),
+  requireOrgRole('SME_OWNER'),
   validate(envParamSchema),
   EnvironmentController.delete
 );
