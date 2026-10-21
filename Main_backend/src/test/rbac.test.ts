@@ -2,14 +2,18 @@ import test, { describe, before, after } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
+import WebSocket, { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
 import app from '../app';
 import { config } from '../config/env';
 import { pool } from '../config/database';
+import { initTelemetryWebSocket } from '../websocket/telemetryWebSocket';
 
 describe('RBAC Verification Suite (Admin, DevOps, Viewer)', () => {
   let server: http.Server;
+  let uiWss: WebSocketServer;
   let baseUrl: string;
+  let wsBaseUrl: string;
 
   // Test Fixture User IDs
   const superAdminId = 'e0000000-0000-0000-0000-000000000001';
@@ -56,23 +60,32 @@ describe('RBAC Verification Suite (Admin, DevOps, Viewer)', () => {
     }
 
     // Assign org roles for DevOps & Viewer
-    const orgRes = await pool.query(`SELECT id FROM organizations LIMIT 1`);
-    if (orgRes.rows.length > 0) {
-      const orgId = orgRes.rows[0].id;
-      if (devopsRoleId) {
-        await pool.query(`
-          INSERT INTO organization_members (organization_id, user_id, role_id, status)
-          VALUES ($1, $2, $3, 'ACTIVE')
-          ON CONFLICT (organization_id, user_id) DO UPDATE SET role_id = $3, status = 'ACTIVE';
-        `, [orgId, devopsId, devopsRoleId]);
+    let orgRes = await pool.query(`SELECT id FROM organizations LIMIT 1`);
+    if (orgRes.rows.length === 0) {
+      orgRes = await pool.query(`
+        INSERT INTO organizations (id, name, slug, status, created_at, updated_at)
+        VALUES ('f0000000-0000-0000-0000-000000000001', 'Test Organization', 'test-org', 'ACTIVE', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id;
+      `);
+      if (orgRes.rows.length === 0) {
+        orgRes = await pool.query(`SELECT id FROM organizations LIMIT 1`);
       }
-      if (viewerRoleId) {
-        await pool.query(`
-          INSERT INTO organization_members (organization_id, user_id, role_id, status)
-          VALUES ($1, $2, $3, 'ACTIVE')
-          ON CONFLICT (organization_id, user_id) DO UPDATE SET role_id = $3, status = 'ACTIVE';
-        `, [orgId, viewerId, viewerRoleId]);
-      }
+    }
+    const orgId = orgRes.rows[0].id;
+    if (devopsRoleId) {
+      await pool.query(`
+        INSERT INTO organization_members (organization_id, user_id, role_id, status)
+        VALUES ($1, $2, $3, 'ACTIVE')
+        ON CONFLICT (organization_id, user_id) DO UPDATE SET role_id = $3, status = 'ACTIVE';
+      `, [orgId, devopsId, devopsRoleId]);
+    }
+    if (viewerRoleId) {
+      await pool.query(`
+        INSERT INTO organization_members (organization_id, user_id, role_id, status)
+        VALUES ($1, $2, $3, 'ACTIVE')
+        ON CONFLICT (organization_id, user_id) DO UPDATE SET role_id = $3, status = 'ACTIVE';
+      `, [orgId, viewerId, viewerRoleId]);
     }
 
     // 3. Generate JWT tokens
@@ -100,18 +113,23 @@ describe('RBAC Verification Suite (Admin, DevOps, Viewer)', () => {
       { expiresIn: '1h', algorithm: 'HS256' }
     );
 
-    // 4. Start HTTP test server
+    // 4. Start HTTP test server with UI WebSocket
     server = http.createServer(app);
+    uiWss = initTelemetryWebSocket(server);
     await new Promise<void>((resolve) => {
       server.listen(0, () => {
         const addr = server.address() as AddressInfo;
         baseUrl = `http://127.0.0.1:${addr.port}`;
+        wsBaseUrl = `ws://127.0.0.1:${addr.port}`;
         resolve();
       });
     });
   });
 
   after(async () => {
+    if (uiWss) {
+      uiWss.close();
+    }
     if (server) {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -295,6 +313,121 @@ describe('RBAC Verification Suite (Admin, DevOps, Viewer)', () => {
 
       const resAi = await requestApi('/api/v1/ai/predictions', { token: superAdminToken });
       assert.strictEqual(resAi.status, 200);
+    });
+  });
+
+  // ==========================================
+  // 5. SECURITY VULNERABILITY REGRESSION TESTS
+  // ==========================================
+  describe('5. Security Vulnerability Regression Tests', () => {
+    test('5.1. [SEC-01] SME_OWNER is strictly FORBIDDEN (403) from Platform User Management', async () => {
+      const smeOwnerToken = jwt.sign(
+        { id: viewerId, email: 'sme.owner@tenant-a.com', status: 'ACTIVE', roles: ['SME_OWNER'] },
+        config.jwt.secret,
+        { expiresIn: '1h', algorithm: 'HS256' }
+      );
+
+      const res = await requestApi('/api/v1/users', { token: smeOwnerToken });
+      assert.strictEqual(res.status, 403, 'SME_OWNER must not be escalated to platform ADMIN');
+      assert.match(res.data?.message, /Từ chối truy cập/i);
+    });
+
+    test('5.2. [SEC-02] Stale JWT with Revoked Role is FORBIDDEN (403) immediately', async () => {
+      const tempAdminId = 'e0000000-0000-0000-0000-000000000099';
+      // Create active user
+      await pool.query(`
+        INSERT INTO users (id, email, password_hash, full_name, status, created_at, updated_at)
+        VALUES ($1, 'temp.admin@test.com', 'dummy_hash', 'Temp Admin', 'ACTIVE', NOW(), NOW())
+        ON CONFLICT (id) DO UPDATE SET status = 'ACTIVE';
+      `, [tempAdminId]);
+
+      // Assign ADMIN role in DB
+      const adminRoleRes = await pool.query(`SELECT id FROM system_roles WHERE name = 'ADMIN'`);
+      if (adminRoleRes.rows[0]) {
+        await pool.query(`
+          INSERT INTO user_system_roles (user_id, system_role_id)
+          VALUES ($1, $2)
+          ON CONFLICT DO NOTHING;
+        `, [tempAdminId, adminRoleRes.rows[0].id]);
+      }
+
+      // Generate token claiming ADMIN
+      const tokenWithAdmin = jwt.sign(
+        { id: tempAdminId, email: 'temp.admin@test.com', status: 'ACTIVE', roles: ['ADMIN'] },
+        config.jwt.secret,
+        { expiresIn: '1h', algorithm: 'HS256' }
+      );
+
+      // Now REVOKE ADMIN role in DB
+      await pool.query(`DELETE FROM user_system_roles WHERE user_id = $1`, [tempAdminId]);
+
+      // Request User Management with stale token claiming ADMIN
+      const res = await requestApi('/api/v1/users', { token: tokenWithAdmin });
+      assert.strictEqual(res.status, 403, 'Stale token with revoked role must be rejected with 403');
+    });
+
+    test('5.3. [SEC-04] Viewer live-summary does NOT leak raw metrics, container logs, or AI predictions', async () => {
+      const res = await requestApi('/api/v1/telemetry/live-summary', { token: viewerToken });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.data?.success, true);
+
+      // Verify sanitized payload
+      const payload = res.data?.data;
+      assert.ok(payload, 'Payload exists');
+      assert.strictEqual(payload.raw_metrics?.length ?? 0, 0, 'raw_metrics must be omitted for Viewer');
+      assert.strictEqual(payload.logs?.length ?? 0, 0, 'logs must be omitted for Viewer');
+      assert.strictEqual(payload.predictions?.length ?? 0, 0, 'predictions must be omitted for Viewer');
+      assert.strictEqual(payload.events?.length ?? 0, 0, 'events must be omitted for Viewer');
+    });
+
+    test('5.4. [SEC-05] WebSocket /api/v1/telemetry/ws rejects unauthenticated connection (401)', async () => {
+      const unauthWs = new WebSocket(`${wsBaseUrl}/api/v1/telemetry/ws`);
+
+      const errorOrClosePromise = new Promise<{ rejected: boolean; codeOrStatus?: any }>((resolve) => {
+        unauthWs.on('error', (err: any) => {
+          resolve({ rejected: true, codeOrStatus: err.message });
+        });
+        unauthWs.on('unexpected-response', (req, res) => {
+          resolve({ rejected: true, codeOrStatus: res.statusCode });
+        });
+        unauthWs.on('open', () => {
+          resolve({ rejected: false });
+        });
+      });
+
+      const result = await errorOrClosePromise;
+      unauthWs.close();
+      assert.strictEqual(result.rejected, true, 'Unauthenticated WebSocket connection must be rejected');
+    });
+
+    test('5.5. [SEC-05] WebSocket /api/v1/telemetry/ws accepts authenticated viewer and sanitizes initial_state', async () => {
+      const authWs = new WebSocket(`${wsBaseUrl}/api/v1/telemetry/ws?token=${viewerToken}`);
+
+      const msgPromise = new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('WebSocket timeout waiting for initial_state')), 4000);
+        authWs.on('message', (data) => {
+          clearTimeout(timer);
+          try {
+            resolve(JSON.parse(data.toString()));
+          } catch (e) {
+            reject(e);
+          }
+        });
+        authWs.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+
+      const initialMsg = await msgPromise;
+      authWs.close();
+
+      assert.strictEqual(initialMsg.type, 'initial_state');
+      assert.ok(initialMsg.data, 'initial_state data must exist');
+      assert.strictEqual(initialMsg.data.raw_metrics?.length ?? 0, 0, 'WebSocket initial_state raw_metrics must be omitted for Viewer');
+      assert.strictEqual(initialMsg.data.logs?.length ?? 0, 0, 'WebSocket initial_state logs must be omitted for Viewer');
+      assert.strictEqual(initialMsg.data.events?.length ?? 0, 0, 'WebSocket initial_state events must be omitted for Viewer');
+      assert.strictEqual(initialMsg.data.predictions?.length ?? 0, 0, 'WebSocket initial_state predictions must be omitted for Viewer');
     });
   });
 });

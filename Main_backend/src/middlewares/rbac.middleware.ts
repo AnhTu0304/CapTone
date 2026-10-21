@@ -4,10 +4,11 @@ import { SystemRoleService } from '../services/systemRole.service';
 
 /**
  * Mở rộng vai trò kế thừa (Role inheritance / expansion)
- * - SUPER_ADMIN: toàn quyền truy cập
- * - ADMIN / SME_OWNER: quản trị viên (Admin + DevOps + Viewer + User)
- * - SYSTEM_ADMIN: quản trị viên hệ thống (DevOps + Viewer + User)
+ * - SUPER_ADMIN: toàn quyền truy cập toàn hệ thống
+ * - ADMIN: quản trị viên hệ thống (Admin + DevOps + Viewer + User)
+ * - SYSTEM_ADMIN: quản trị viên kỹ thuật hạ tầng (DevOps + Viewer + User)
  * - DEVOPS: vận hành hạ tầng (DevOps + Viewer + User), không có quyền quản trị User
+ * - SME_OWNER: chủ sở hữu tổ chức (SME_OWNER + Viewer + User), KHÔNG có quyền Admin hệ thống
  * - VIEWER / USER: người dùng chỉ xem (Viewer + User), không có quyền can thiệp hay xem chi tiết
  */
 export const expandRoles = (roles: string[]): string[] => {
@@ -23,7 +24,7 @@ export const expandRoles = (roles: string[]): string[] => {
       expanded.add('DEVOPS');
       expanded.add('VIEWER');
       expanded.add('USER');
-    } else if (role === 'ADMIN' || role === 'SME_OWNER') {
+    } else if (role === 'ADMIN') {
       expanded.add('ADMIN');
       expanded.add('DEVOPS');
       expanded.add('VIEWER');
@@ -33,6 +34,10 @@ export const expandRoles = (roles: string[]): string[] => {
       expanded.add('VIEWER');
       expanded.add('USER');
     } else if (role === 'DEVOPS') {
+      expanded.add('VIEWER');
+      expanded.add('USER');
+    } else if (role === 'SME_OWNER') {
+      expanded.add('SME_OWNER');
       expanded.add('VIEWER');
       expanded.add('USER');
     } else if (role === 'VIEWER' || role === 'USER') {
@@ -60,7 +65,7 @@ export const requireRoles = (...allowedRoles: string[]) => {
 
       const normalizedAllowed = allowedRoles.map((r) => r.trim().toUpperCase());
 
-      // 1. Kiểm tra nhanh qua roles đã nhúng trong JWT Token
+      // 1. Kiểm tra nhanh qua roles đã được đồng bộ từ CSDL mới nhất trong auth.middleware
       const rawTokenRoles: string[] = Array.isArray(user.roles)
         ? user.roles.map((r: string) => String(r).trim().toUpperCase())
         : (user.roles ? [String(user.roles).trim().toUpperCase()] : []);
@@ -77,20 +82,16 @@ export const requireRoles = (...allowedRoles: string[]) => {
         return next();
       }
 
-      // Kiểm tra xem vai trò hiệu lực trong token có khớp với danh sách cho phép không
+      // Kiểm tra xem vai trò hiệu lực có khớp với danh sách cho phép không
       const hasTokenMatch = effectiveTokenRoles.some((r) => normalizedAllowed.includes(r));
       if (hasTokenMatch) {
         return next();
       }
 
       // 2. Dự phòng: Kiểm tra trực tiếp trong Database
-      // Đảm bảo không bị trễ quyền nếu tài khoản vừa được cấp vai trò mới mà chưa đăng nhập lại
       const rolesThatSatisfyAllowed: string[] = ['SUPER_ADMIN', ...normalizedAllowed];
       if (normalizedAllowed.includes('DEVOPS')) {
-        rolesThatSatisfyAllowed.push('ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER');
-      }
-      if (normalizedAllowed.includes('ADMIN')) {
-        rolesThatSatisfyAllowed.push('SME_OWNER');
+        rolesThatSatisfyAllowed.push('ADMIN', 'SYSTEM_ADMIN');
       }
       if (normalizedAllowed.includes('VIEWER') || normalizedAllowed.includes('USER')) {
         rolesThatSatisfyAllowed.push('DEVOPS', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'USER', 'VIEWER');
@@ -150,7 +151,7 @@ export const requireSelfOrAdmin = (getTargetUserId: (req: Request) => string | u
       }
 
       // Kiểm tra DB nếu trong token chưa có quyền
-      const isAdminInDb = await SystemRoleService.hasAnyRole(user.id, ['ADMIN', 'SUPER_ADMIN', 'SME_OWNER']);
+      const isAdminInDb = await SystemRoleService.hasAnyRole(user.id, ['ADMIN', 'SUPER_ADMIN']);
       if (isAdminInDb) {
         return next();
       }

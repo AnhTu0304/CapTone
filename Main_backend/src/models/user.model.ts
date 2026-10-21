@@ -418,10 +418,36 @@ export class UserModel {
     public static async findAuthStatus(
         userId: string,
         client?: PoolClient
-    ): Promise<{ id: string; status: UserStatus; deleted_at?: Date | null } | null> {
+    ): Promise<{ id: string; status: UserStatus; deleted_at?: Date | null; roles: string[] } | null> {
         const db = client || pool;
-        const res = await db.query<{ id: string; status: UserStatus; deleted_at?: Date | null }>(
-            'SELECT id, status, deleted_at FROM users WHERE id = $1 LIMIT 1',
+        const sql = `
+            SELECT 
+                u.id, 
+                u.status, 
+                u.deleted_at,
+                COALESCE(
+                  (
+                    SELECT json_agg(DISTINCT r_name)
+                    FROM (
+                      SELECT sr.name AS r_name
+                      FROM user_system_roles usr
+                      JOIN system_roles sr ON usr.system_role_id = sr.id
+                      WHERE usr.user_id = u.id
+                      UNION
+                      SELECT r.code AS r_name
+                      FROM organization_members om
+                      JOIN roles r ON om.role_id = r.id
+                      WHERE om.user_id = u.id AND om.status != 'REMOVED'
+                    ) all_r
+                  ),
+                  '[]'::json
+                ) AS roles
+            FROM users u 
+            WHERE u.id = $1 
+            LIMIT 1
+        `;
+        const res = await db.query<{ id: string; status: UserStatus; deleted_at?: Date | null; roles: string[] }>(
+            sql,
             [userId]
         );
         return res.rows[0] || null;
