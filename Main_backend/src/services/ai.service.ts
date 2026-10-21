@@ -8,6 +8,9 @@ import {
   RcaModel,
   RecommendationModel,
   WorkloadModel,
+  ClusterModel,
+  EnvironmentModel,
+  OrganizationModel,
 } from '../models';
 
 export interface AiBackendHealth {
@@ -225,21 +228,21 @@ export class AiService {
       }
 
       if (!clusterId) {
-        const cRes = await client.query('SELECT id, environment_id FROM clusters LIMIT 1');
-        if (cRes.rows.length > 0) {
-          clusterId = cRes.rows[0].id;
-          if (!environmentId) environmentId = cRes.rows[0].environment_id;
+        const cluster = await ClusterModel.findFirst(client);
+        if (cluster) {
+          clusterId = cluster.id;
+          if (!environmentId) environmentId = cluster.environment_id;
         }
       }
 
       if (!environmentId) {
         if (clusterId) {
-          const cRes = await client.query('SELECT environment_id FROM clusters WHERE id::text = $1 OR name = $1 LIMIT 1', [clusterId]);
-          if (cRes.rows.length > 0) environmentId = cRes.rows[0].environment_id;
+          const cluster = await ClusterModel.findByIdOrName(clusterId, client);
+          if (cluster) environmentId = cluster.environment_id;
         }
         if (!environmentId) {
-          const envRes = await client.query('SELECT id FROM environments LIMIT 1');
-          if (envRes.rows.length > 0) environmentId = envRes.rows[0].id;
+          const env = await EnvironmentModel.findFirst(client);
+          if (env) environmentId = env.id;
         }
       }
 
@@ -370,68 +373,59 @@ export class AiService {
 
       // If prediction_id provided, pull linked context from ai_predictions
       if (input.prediction_id) {
-        const predRes = await client.query(
-          'SELECT environment_id, cluster_id, workload_id FROM ai_predictions WHERE id = $1',
-          [input.prediction_id]
-        );
-        if (predRes.rows.length > 0) {
-          const p = predRes.rows[0];
-          if (!environmentId) environmentId = p.environment_id;
-          if (!clusterId) clusterId = p.cluster_id;
-          if (!workloadId) workloadId = p.workload_id;
+        const predContext = await AiPredictionModel.findContextById(input.prediction_id, client);
+        if (predContext) {
+          if (!environmentId) environmentId = predContext.environment_id;
+          if (!clusterId) clusterId = predContext.cluster_id || null;
+          if (!workloadId) workloadId = predContext.workload_id || null;
         }
       }
 
       if (!workloadId) {
-        const wRes = await client.query('SELECT id, cluster_id FROM workloads WHERE name = $1 LIMIT 1', [
-          input.service_id,
-        ]);
-        if (wRes.rows.length > 0) {
-          workloadId = wRes.rows[0].id;
-          if (!clusterId) clusterId = wRes.rows[0].cluster_id;
+        const workload = await WorkloadModel.findByName(input.service_id, client);
+        if (workload) {
+          workloadId = workload.id;
+          if (!clusterId && workload.cluster_id) clusterId = workload.cluster_id;
         }
       }
 
       if (!clusterId && workloadId) {
-        const wRes = await client.query('SELECT cluster_id FROM workloads WHERE id = $1', [workloadId]);
-        if (wRes.rows.length > 0) clusterId = wRes.rows[0].cluster_id;
+        clusterId = await WorkloadModel.findClusterId(workloadId, client);
       }
 
       if (!clusterId) {
-        const cRes = await client.query('SELECT id, environment_id FROM clusters LIMIT 1');
-        if (cRes.rows.length > 0) {
-          clusterId = cRes.rows[0].id;
-          if (!environmentId) environmentId = cRes.rows[0].environment_id;
+        const cluster = await ClusterModel.findFirst(client);
+        if (cluster) {
+          clusterId = cluster.id;
+          if (!environmentId) environmentId = cluster.environment_id;
         }
       }
 
       if (!environmentId) {
         if (clusterId) {
-          const cRes = await client.query('SELECT environment_id FROM clusters WHERE id::text = $1 OR name = $1 LIMIT 1', [clusterId]);
-          if (cRes.rows.length > 0) environmentId = cRes.rows[0].environment_id;
+          const cluster = await ClusterModel.findByIdOrName(clusterId, client);
+          if (cluster) environmentId = cluster.environment_id;
         }
         if (!environmentId) {
-          const envRes = await client.query('SELECT id, organization_id FROM environments LIMIT 1');
-          if (envRes.rows.length > 0) {
-            environmentId = envRes.rows[0].id;
-            organizationId = envRes.rows[0].organization_id;
+          const env = await EnvironmentModel.findFirst(client);
+          if (env) {
+            environmentId = env.id;
+            organizationId = env.organization_id;
           }
         }
       }
 
       if (environmentId && !organizationId) {
-        const envRes = await client.query('SELECT organization_id FROM environments WHERE id::text = $1 OR name = $1 LIMIT 1', [
-          environmentId,
-        ]);
-        if (envRes.rows.length > 0) {
-          organizationId = envRes.rows[0].organization_id;
+        const env = await EnvironmentModel.findByIdOrName(environmentId, client);
+        if (env) {
+          organizationId = env.organization_id;
         }
       }
 
       if (!organizationId) {
-        const orgRes = await client.query('SELECT id FROM organizations LIMIT 1');
-        if (orgRes.rows.length > 0) {
-          organizationId = orgRes.rows[0].id;
+        const org = await OrganizationModel.findFirst(client);
+        if (org) {
+          organizationId = org.id;
         }
       }
 

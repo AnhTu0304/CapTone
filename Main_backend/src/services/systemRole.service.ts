@@ -1,6 +1,6 @@
-import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
-import { ISystemRole, IUserSystemRoleDetail } from '../models/systemRole.model';
+import { ISystemRole, IUserSystemRoleDetail, SystemRoleModel } from '../models/systemRole.model';
+import { UserModel } from '../models/user.model';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -9,10 +9,7 @@ export class SystemRoleService {
      * 1. Lấy danh sách tất cả vai trò quản trị hệ thống
      */
     public static async getAllRoles(): Promise<ISystemRole[]> {
-        const result = await pool.query<ISystemRole>(
-            'SELECT id, name, description, created_at, updated_at FROM system_roles ORDER BY created_at ASC'
-        );
-        return result.rows;
+        return SystemRoleModel.findAll();
     }
 
     /**
@@ -22,21 +19,7 @@ export class SystemRoleService {
         if (!userId || !UUID_REGEX.test(userId.trim())) {
             throw new ApiError(400, 'Định dạng User ID không hợp lệ');
         }
-
-        const sql = `
-            SELECT 
-                sr.id AS role_id,
-                sr.name AS role_name,
-                sr.description,
-                usr.assigned_at,
-                usr.assigned_by
-            FROM user_system_roles usr
-            JOIN system_roles sr ON usr.system_role_id = sr.id
-            WHERE usr.user_id = $1
-            ORDER BY usr.assigned_at ASC
-        `;
-        const result = await pool.query<IUserSystemRoleDetail>(sql, [userId.trim()]);
-        return result.rows;
+        return SystemRoleModel.getUserRoles(userId.trim());
     }
 
     /**
@@ -53,30 +36,19 @@ export class SystemRoleService {
 
         // Tìm role theo id hoặc theo name
         const isUuid = UUID_REGEX.test(roleNameOrId.trim());
-        const roleQuery = isUuid
-            ? 'SELECT id, name FROM system_roles WHERE id = $1 LIMIT 1'
-            : 'SELECT id, name FROM system_roles WHERE UPPER(name) = UPPER($1) LIMIT 1';
-
-        const roleResult = await pool.query<{ id: string; name: string }>(roleQuery, [roleNameOrId.trim()]);
-        if (roleResult.rows.length === 0) {
+        const role = await SystemRoleModel.findByNameOrId(roleNameOrId.trim(), isUuid);
+        if (!role) {
             throw new ApiError(404, `Không tìm thấy vai trò hệ thống: ${roleNameOrId}`);
         }
 
-        const roleId = roleResult.rows[0].id;
-
-        // Kiểm tra User có tồn tại không
-        const userCheck = await pool.query('SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1', [userId.trim()]);
-        if (userCheck.rows.length === 0) {
+        // Kiểm tra User có tồn tại không qua UserModel
+        const userExists = await UserModel.exists(userId.trim());
+        if (!userExists) {
             throw new ApiError(404, 'Người dùng không tồn tại hoặc đã bị xóa');
         }
 
-        // Gán vai trò (bỏ qua nếu đã được gán)
-        const insertSql = `
-            INSERT INTO user_system_roles (user_id, system_role_id, assigned_by)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (user_id, system_role_id) DO NOTHING
-        `;
-        await pool.query(insertSql, [userId.trim(), roleId, assignedBy || null]);
+        // Gán vai trò qua Model
+        await SystemRoleModel.assignRole(userId.trim(), role.id, assignedBy || null);
     }
 
     /**
@@ -88,20 +60,12 @@ export class SystemRoleService {
         }
 
         const isUuid = UUID_REGEX.test(roleNameOrId.trim());
-        const roleQuery = isUuid
-            ? 'SELECT id FROM system_roles WHERE id = $1 LIMIT 1'
-            : 'SELECT id FROM system_roles WHERE UPPER(name) = UPPER($1) LIMIT 1';
-
-        const roleResult = await pool.query<{ id: string }>(roleQuery, [roleNameOrId.trim()]);
-        if (roleResult.rows.length === 0) {
+        const role = await SystemRoleModel.findByNameOrId(roleNameOrId.trim(), isUuid);
+        if (!role) {
             throw new ApiError(404, `Không tìm thấy vai trò hệ thống: ${roleNameOrId}`);
         }
 
-        const roleId = roleResult.rows[0].id;
-        await pool.query(
-            'DELETE FROM user_system_roles WHERE user_id = $1 AND system_role_id = $2',
-            [userId.trim(), roleId]
-        );
+        await SystemRoleModel.revokeRole(userId.trim(), role.id);
     }
 
     /**
@@ -113,14 +77,6 @@ export class SystemRoleService {
         }
 
         const upperRoleNames = roleNames.map(r => r.toUpperCase());
-        const sql = `
-            SELECT 1 
-            FROM user_system_roles usr
-            JOIN system_roles sr ON usr.system_role_id = sr.id
-            WHERE usr.user_id = $1 AND UPPER(sr.name) = ANY($2::text[])
-            LIMIT 1
-        `;
-        const result = await pool.query(sql, [userId.trim(), upperRoleNames]);
-        return result.rows.length > 0;
+        return SystemRoleModel.hasAnyRole(userId.trim(), upperRoleNames);
     }
 }

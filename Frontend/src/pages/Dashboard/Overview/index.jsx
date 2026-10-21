@@ -275,25 +275,6 @@ export const OverviewPage = () => {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => onNavigate ? onNavigate('/dashboard/monitoring/metrics') : (window.location.href = '/dashboard/monitoring/metrics')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#3b82f6',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
-          <span>Xem Biến Thiên Metrics</span>
-          <ArrowUpRight size={14} />
-        </button>
       </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

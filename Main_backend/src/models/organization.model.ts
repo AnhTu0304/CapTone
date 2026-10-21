@@ -525,4 +525,19 @@ export class OrganizationModel {
       created_at: row.created_at,
     }));
   }
+
+  /**
+   * Lay to chuc dau tien trong he thong
+   */
+  public static async findFirst(client?: PoolClient): Promise<{ id: string; name: string } | null> {
+    const db = client || pool;
+    try {
+      const res = await db.query<{ id: string; name: string }>(
+        'SELECT id, name FROM organizations WHERE deleted_at IS NULL LIMIT 1;'
+      );
+      return res.rows[0] || null;
+    } catch {
+      return null;
+    }
+  }
 }

@@ -130,4 +130,18 @@ export class KubernetesEventModel {
       // Non-critical
     }
   }
+
+  /**
+   * Get recent Kubernetes events
+   */
+  public static async getRecent(limit: number = 20) {
+    const res = await pool.query(
+      `SELECT id, event_type, reason, message, first_seen_at, last_seen_at, count, metadata
+       FROM kubernetes_events
+       ORDER BY last_seen_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.rows;
+  }
 }

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../utils/apiError';
-import { pool } from '../config/database';
+import { OrganizationMemberModel } from '../models/organizationMember.model';
 
 /**
  * Middleware ensuring tenant/organization data isolation.
@@ -29,7 +29,7 @@ export const requireTenantAccess = (getOrgId: (req: Request) => string | undefin
       }
 
       // Check if user has explicit tenant claim in token
-      const userOrg = (user as any).company_id || (user as any).organization_id;
+      const userOrg = (user as any).organization_id || (user as any).company_id;
       if (userOrg) {
         if (userOrg !== orgId) {
           return next(
@@ -39,23 +39,19 @@ export const requireTenantAccess = (getOrgId: (req: Request) => string | undefin
         return next();
       }
 
-      // Query database to ensure user belongs to this company / organization
+      // Query database via OrganizationMemberModel to ensure user belongs to this organization
       try {
-        const memberRes = await pool.query(
-          `SELECT role, status FROM company_members 
-           WHERE company_id = $1 AND user_id = $2 AND status = 'ACTIVE' LIMIT 1`,
-          [orgId, user.id]
-        );
+        const member = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
 
-        if (memberRes.rows.length === 0) {
+        if (!member || member.status !== 'ACTIVE') {
           return next(
             new ApiError(403, 'Từ chối truy cập: Bạn không thuộc tổ chức này hoặc tài khoản chưa kích hoạt trong tổ chức')
           );
         }
 
-        (req as any).orgMember = memberRes.rows[0];
+        (req as any).orgMember = member;
         return next();
-      } catch (dbErr) {
+      } catch {
         // Fail securely if DB membership cannot be confirmed for non-admin
         return next(
           new ApiError(403, 'Từ chối truy cập: Bạn không có quyền truy cập vào dữ liệu của tổ chức này')

@@ -7,6 +7,8 @@ export * from './incident.model';
 export * from './rca.model';
 export * from './recommendation.model';
 export * from './workload.model';
+export * from './cluster.model';
+export * from './environment.model';
 export * from './auditLog.model';
 export * from './company.model';
 export * from './user.model';

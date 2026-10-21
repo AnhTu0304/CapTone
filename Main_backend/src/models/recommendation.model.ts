@@ -159,4 +159,19 @@ export class RecommendationModel {
     const res = await pool.query(query, [status, id]);
     return res.rows[0] || null;
   }
+
+  /**
+   * Get recent recommendations
+   */
+  public static async getRecent(limit: number = 10, client?: PoolClient) {
+    const db = client || pool;
+    const res = await db.query(
+      `SELECT r.id, r.incident_id, r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at
+       FROM ai_recommendations r
+       ORDER BY r.created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.rows;
+  }
 }
