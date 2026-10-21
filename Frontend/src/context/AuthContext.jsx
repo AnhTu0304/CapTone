@@ -165,7 +165,7 @@ export const AuthProvider = ({ children }) => {
 
   const isAdmin = useCallback((u) => {
     const roles = getUserRoles(u);
-    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(r));
+    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(r));
   }, [getUserRoles]);
 
   const isDevOps = useCallback((u) => {

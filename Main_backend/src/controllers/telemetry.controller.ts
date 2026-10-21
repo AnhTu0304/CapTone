@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { TelemetryAggregatorService } from '../services/telemetryAggregator.service';
 import { ApiResponse } from '../utils/apiResponse';
+import { expandRoles } from '../middlewares/rbac.middleware';
 import {
   GetServiceSequenceQuerySchema,
   GetRcaContextQuerySchema,
@@ -152,7 +153,25 @@ export class TelemetryController {
     try {
       const serviceId = (req.query.service_id as string) || 'sme-order-service';
       const data = await TelemetryController.getLiveSummaryData(serviceId);
-      return ApiResponse.success(res, 'Live telemetry summary fetched successfully', data, 200);
+
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const expanded = expandRoles(userRoles);
+      const isPrivileged = expanded.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'DEVOPS'].includes(r));
+
+      const payload = isPrivileged
+        ? data
+        : {
+            ...data,
+            raw_metrics: [],
+            logs: [],
+            events: [],
+            incidents: [],
+            recommendations: [],
+            predictions: [],
+          };
+
+      return ApiResponse.success(res, 'Live telemetry summary fetched successfully', payload, 200);
     } catch (error) {
       next(error);
     }

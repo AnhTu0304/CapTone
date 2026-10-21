@@ -125,7 +125,12 @@ export const telemetryService = {
         const protocol = isSecure ? 'wss:' : 'ws:';
         // Connect to port 5000 if running locally on port 3000, else window.location.host
         const host = window.location.hostname === 'localhost' ? 'localhost:5000' : window.location.host;
-        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}`;
+        const token =
+          getAuthToken() ||
+          localStorage.getItem('selfheal_auth_token') ||
+          localStorage.getItem('token');
+        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}${tokenParam}`;
 
         ws = new WebSocket(wsUrl);
 
