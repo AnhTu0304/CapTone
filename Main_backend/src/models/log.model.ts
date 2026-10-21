@@ -66,7 +66,7 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id IN (SELECT id FROM workloads WHERE name = $1)
+          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
         )
         AND occurred_at >= NOW() - ($2 || ' minutes')::interval
       )
@@ -88,7 +88,7 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id IN (SELECT id FROM workloads WHERE name = $1)
+          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
         )
         ORDER BY occurred_at DESC
         LIMIT $2;
@@ -100,3 +100,4 @@ export class LogModel {
     return res.rows;
   }
 }
+

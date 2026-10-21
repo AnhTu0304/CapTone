@@ -4,13 +4,69 @@ import { authenticateToken } from '../middlewares/auth.middleware';
 
 const aiRoutes = Router();
 
-// GET /api/v1/ai/health - Verify connection to AI Backend & GRU Model (Public health check)
+// ==========================================
+// 1. Health & Prediction Core
+// ==========================================
+
+// GET /api/v1/ai/health - Verify connection to AI Backend & GRU Model (Public)
 aiRoutes.get('/health', AiController.getAiHealth);
 
-// POST /api/v1/ai/predict - Run GRU risk prediction and persist to database (Protected)
+// POST /api/v1/ai/predict - Run GRU risk prediction and persist to database
 aiRoutes.post('/predict', authenticateToken, AiController.predict);
 
-// POST /api/v1/ai/rca - Run Root Cause Analysis, open incident & record recommendations (Protected)
+// POST /api/v1/ai/rca - Run Root Cause Analysis, open incident & record recommendations
 aiRoutes.post('/rca', authenticateToken, AiController.analyzeRootCause);
+
+// ==========================================
+// 2. AI Models Management
+// ==========================================
+
+// GET /api/v1/ai/models - List registered AI models
+aiRoutes.get('/models', authenticateToken, AiController.getModels);
+
+// ==========================================
+// 3. Predictions & Inputs
+// ==========================================
+
+// GET /api/v1/ai/predictions - List historical predictions (filtering, pagination)
+aiRoutes.get('/predictions', authenticateToken, AiController.getPredictions);
+
+// GET /api/v1/ai/predictions/stats - Statistics on prediction types & confidence
+aiRoutes.get('/predictions/stats', authenticateToken, AiController.getPredictionStats);
+
+// GET /api/v1/ai/predictions/:id - Get prediction detail
+aiRoutes.get('/predictions/:id', authenticateToken, AiController.getPredictionById);
+
+// GET /api/v1/ai/predictions/:id/inputs - Get 12 timesteps input sequence
+aiRoutes.get('/predictions/:id/inputs', authenticateToken, AiController.getPredictionInputs);
+
+// ==========================================
+// 4. Incidents & RCA Evidences
+// ==========================================
+
+// GET /api/v1/ai/incidents - List incidents (filtering, pagination)
+aiRoutes.get('/incidents', authenticateToken, AiController.getIncidents);
+
+// GET /api/v1/ai/incidents/:id - Get incident details with RCA summary
+aiRoutes.get('/incidents/:id', authenticateToken, AiController.getIncidentById);
+
+// PATCH /api/v1/ai/incidents/:id/status - Update incident status (OPEN, RESOLVED, IGNORED)
+aiRoutes.patch('/incidents/:id/status', authenticateToken, AiController.updateIncidentStatus);
+
+// GET /api/v1/ai/incidents/:id/evidences - List RCA evidence logs/events
+aiRoutes.get('/incidents/:id/evidences', authenticateToken, AiController.getIncidentEvidences);
+
+// GET /api/v1/ai/incidents/:id/recommendations - List recommendations for incident
+aiRoutes.get('/incidents/:id/recommendations', authenticateToken, AiController.getIncidentRecommendations);
+
+// ==========================================
+// 5. Recommendations & Healing Action Types
+// ==========================================
+
+// GET /api/v1/ai/healing-action-types - List 7 healing action types
+aiRoutes.get('/healing-action-types', authenticateToken, AiController.getHealingActionTypes);
+
+// POST /api/v1/ai/recommendations/:id/apply - Apply recommendation
+aiRoutes.post('/recommendations/:id/apply', authenticateToken, AiController.applyRecommendation);
 
 export { aiRoutes };

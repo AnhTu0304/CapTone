@@ -1,0 +1,36 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-role
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+rules:
+  # Least Privilege: Read-only access to Core resources for metrics & logs
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "namespaces", "events"]
+    verbs: ["get", "list", "watch"]
+  # Workload metadata
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Kubernetes Metrics Server access
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-rolebinding
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -16,9 +16,8 @@ Content-Type: {{contentType}}
   "email": "tanquoc280325@gmail.com",
   "password": "Tanquoc123@"
 }
-
 ###
-@ownerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjQwZTZmZDk5LTA4ZTAtNDg5ZS05M2M4LWQ5Y2ZhYTA0NDAzYyIsImVtYWlsIjoidGFucXVvYzI4MDMyNUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6WyJBRE1JTiIsIlNVUEVSX0FETUlOIl0sImlhdCI6MTc5MjQxMTcxNCwiZXhwIjoxNzkzMDE2NTE0fQ.1ip1mSj_XLu2VHJDorzJPY5kPpcJS4zmKDDoGLlRq_U
+@ownerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijk0YTA4ZDliLTc4OWQtNGNmMi1iOGZkLTUwYTJkYTk2Nzg1MyIsImVtYWlsIjoidGFucXVvY2R6QGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4MzU3LCJleHAiOjE3OTMwODMxNTd9.OIBdUqvoNcKvzTT7genHr542ViTwGT-GKozEAOZVLNQ
 @ownerUserId = {{loginOwner.response.body.data.id}}
 
 ### ===================================================================
@@ -34,7 +33,7 @@ Content-Type: {{contentType}}
 }
 
 ###
-@inviteeToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY0MzczNDc3LTdkNzgtNDM2MS04ZjQzLTcxNTgyZjQ1NzUzYSIsImVtYWlsIjoidGFucXVvY2R6QGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDEwOTEzLCJleHAiOjE3OTMwMTU3MTN9.jgcVe9LCjjQFF4L-_6Siii0PDS-Z1KJdOvkdsi6Wwrc
+@inviteeToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzM2E3NjcwLWI5ZDYtNDkwNS04ZWUxLWQ1NjEwZTQwMDkxYyIsImVtYWlsIjoicGhhbXRoYWlzQGdtYWlsLmNvbSIsInN0YXR1cyI6IkFDVElWRSIsInJvbGVzIjpbIlVTRVIiXSwiaWF0IjoxNzkyNDc4NDIyLCJleHAiOjE3OTMwODMyMjJ9.MMOVRiAUMPt87k_WzQECUTSet-LOT2Dk5JdMTgSKXcc
 @inviteeUserId = {{loginInvitee.response.body.data.id}}
 
 ### ===================================================================
@@ -68,14 +67,14 @@ Authorization: Bearer {{ownerToken}}
 ### BƯỚC 3: LẤY DANH SÁCH THÀNH VIÊN BAN ĐẦU (CHỈ CÓ SME_OWNER SÁNG LẬP)
 ### ===================================================================
 # @name listMembersInitial
-GET {{baseUrl}}/organizations/6557b262-e8aa-40ff-b850-426b3b3461d2/members?page=1&limit=10
+GET {{baseUrl}}/organizations/004d9976-057a-481b-ae66-afe565b85404/members?page=1&limit=10
 Authorization: Bearer {{ownerToken}}
 
 ### ===================================================================
 ### BƯỚC 4: GỬI LỜI MỜI THÀNH VIÊN MỚI QUA EMAIL (VAI TRÒ: DEVOPS)
 ### ===================================================================
 # @name inviteMember
-POST {{baseUrl}}/organizations/6557b262-e8aa-40ff-b850-426b3b3461d2/members/invite
+POST {{baseUrl}}/organizations/004d9976-057a-481b-ae66-afe565b85404/members/invite
 Authorization: Bearer {{ownerToken}}
 Content-Type: {{contentType}}
 

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: selfheal-agent
+description: Helm chart for SelfHeal Kubernetes Agent - AI-Driven Proactive Self-Healing
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
