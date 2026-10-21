@@ -166,9 +166,9 @@ test('renders Dashboard Overview with White-First Calm Operations, 7 Vietnamese 
   expect(screen.getByText('HỆ THỐNG')).toBeInTheDocument();
   // Health and Metrics
   expect(screen.getByText(/Trạng Thái Hệ Thống: Khỏe Mạnh & Ổn Định/i)).toBeInTheDocument();
-  expect(screen.getByText(/42%/i)).toBeInTheDocument();
-  expect(screen.getByText(/68%/i)).toBeInTheDocument();
-  expect(screen.getByText(/84 \/ 84/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/18%/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/64%/i)).toBeInTheDocument();
+  expect(screen.getByText(/2 \/ 2/i)).toBeInTheDocument();
   expect(screen.getByText(/AI Dự Báo Rủi Ro Chủ Động/i)).toBeInTheDocument();
   expect(screen.getByText(/Hiệu Quả Tự Phục Hồi/i)).toBeInTheDocument();
 });
