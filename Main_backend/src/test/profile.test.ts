@@ -244,6 +244,13 @@ describe('Profile API Suite (/api/v1/users/me)', () => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(body.success, true);
     assert.strictEqual(body.data.fullName, 'Ngo Anh Tu SRE');
+    assert.strictEqual(body.data.phone, '0987654321');
+    assert.strictEqual(body.data.jobTitle, 'Senior Infrastructure Engineer');
+
+    // Verify database record actually persisted phone and job_title
+    const dbCheck = await pool.query('SELECT phone, job_title FROM users WHERE id = $1', [activeUserId]);
+    assert.strictEqual(dbCheck.rows[0].phone, '0987654321');
+    assert.strictEqual(dbCheck.rows[0].job_title, 'Senior Infrastructure Engineer');
   });
 
   test('13. PUT /api/v1/users/me ignores forbidden fields (systemRole, status, id, email) and never mutates them', async () => {

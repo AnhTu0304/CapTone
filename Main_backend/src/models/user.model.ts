@@ -18,6 +18,8 @@ export interface IUser {
     password_hash?: string;
     full_name: string;
     avatar_url?: string | null;
+    phone?: string | null;
+    job_title?: string | null;
     status: UserStatus;
     email_verified_at?: Date | null;
     last_login_at?: Date | null;
@@ -70,6 +72,8 @@ export interface IUserProfileResponse {
 export interface IUpdateUserDto {
     full_name?: string;
     avatar_url?: string | null;
+    phone?: string | null;
+    job_title?: string | null;
     status?: UserStatus;
 }
 
@@ -116,7 +120,7 @@ export class UserModel {
     public static async findById(userId: string, client?: PoolClient): Promise<IUserResponse | null> {
         const db = client || pool;
         const querySql = `
-          SELECT id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
+          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
           FROM users 
           WHERE id = $1 AND deleted_at IS NULL
           LIMIT 1
@@ -228,7 +232,7 @@ export class UserModel {
      */
     public static async updateProfile(
         userId: string,
-        data: { full_name?: string | null; avatar_url?: string | null },
+        data: { full_name?: string | null; avatar_url?: string | null; phone?: string | null; job_title?: string | null },
         client?: PoolClient
     ): Promise<IUserResponse | null> {
         const db = client || pool;
@@ -236,10 +240,12 @@ export class UserModel {
             `UPDATE users 
              SET full_name = COALESCE($1, full_name),
                  avatar_url = COALESCE($2, avatar_url),
+                 phone = COALESCE($3, phone),
+                 job_title = COALESCE($4, job_title),
                  updated_at = NOW()
-             WHERE id = $3 AND deleted_at IS NULL
-             RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at`,
-            [data.full_name, data.avatar_url, userId]
+             WHERE id = $5 AND deleted_at IS NULL
+             RETURNING id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at`,
+            [data.full_name, data.avatar_url, data.phone, data.job_title, userId]
         );
         return result.rows[0] || null;
     }

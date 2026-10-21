@@ -57,9 +57,9 @@ export class UserService {
             fullName: user.full_name,
             avatar_url: user.avatar_url || null,
             avatarUrl: user.avatar_url || null,
-            phone: null,
-            job_title: null,
-            jobTitle: null,
+            phone: user.phone || null,
+            job_title: user.job_title || null,
+            jobTitle: user.job_title || null,
             status: user.status,
             accountStatus: user.status,
             system_roles: systemRoles,
@@ -112,10 +112,18 @@ export class UserService {
         const rawAvatar = data.avatarUrl !== undefined ? data.avatarUrl : data.avatar_url;
         const avatarUrl = rawAvatar !== undefined ? (rawAvatar ? rawAvatar.trim() : null) : undefined;
 
-        if (trimmedName !== undefined || avatarUrl !== undefined) {
+        const rawPhone = data.phone;
+        const phone = rawPhone !== undefined ? (rawPhone ? rawPhone.trim() : null) : undefined;
+
+        const rawJob = data.jobTitle !== undefined ? data.jobTitle : data.job_title;
+        const jobTitle = rawJob !== undefined ? (rawJob ? rawJob.trim() : null) : undefined;
+
+        if (trimmedName !== undefined || avatarUrl !== undefined || phone !== undefined || jobTitle !== undefined) {
             await UserModel.updateProfile(userId.trim(), {
                 full_name: trimmedName,
                 avatar_url: avatarUrl,
+                phone,
+                job_title: jobTitle,
             });
         }
 
