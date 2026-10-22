@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/auth.service';
+import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { UserService } from '../services/user.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
@@ -345,6 +346,47 @@ export class AuthController {
           </html>
         `);
       }
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/auth/google
+   * Đăng nhập hoặc đăng ký nhanh qua Google OAuth
+   */
+  public static async googleLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        throw new ApiError(400, 'Vui lòng cung cấp mã xác thực Google (Token)');
+      }
+
+      const result = await AuthService.loginWithGoogle(token);
+      return ApiResponse.success(res, 'Đăng nhập Google thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/auth/logout
+   * Đăng xuất và thu hồi Access Token hiện tại
+   */
+  public static async logout(req: Request, res: Response, next: NextFunction) {
+    try {
+      const authHeader = req.headers.authorization;
+      const match = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
+      const token = match ? match[1].trim() : null;
+
+      if (token) {
+        const decoded: any = jwt.decode(token);
+        const expSeconds = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
+        await SessionRevocationService.revokeToken(token, Math.max(60, expSeconds));
+      }
+
+      return ApiResponse.success(res, 'Đăng xuất thành công, phiên đăng nhập đã bị vô hiệu hóa', null, 200);
+    } catch (error) {
       next(error);
     }
   }

@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
-import { IUser, IUserResponse, UserStatus } from './user.model';
+import { IUser, IUserResponse, UserStatus, IUserOrgRole } from './user.model';
 
 /**
  * DTO (Data Transfer Object) cho dữ liệu Đăng ký tài khoản
@@ -47,6 +47,8 @@ export interface ILoginResult {
     id: string;
     email: string;
     token: string;
+    has_organization?: boolean;
+    organization_roles?: IUserOrgRole[];
 }
 
 /**
