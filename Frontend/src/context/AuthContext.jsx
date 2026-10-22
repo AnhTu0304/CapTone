@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { authService } from '../services/authService';
+import multiTabSync, { SYNC_EVENTS } from '../services/multiTabSync';
 
 const AuthContext = createContext(null);
 
@@ -17,6 +18,33 @@ export const AuthProvider = ({ children }) => {
     }
   });
   const [loading, setLoading] = useState(true);
+  // Lắng nghe sự kiện đồng bộ đa Tab (Đăng xuất / Thu hồi phiên / Đăng nhập)
+  useEffect(() => {
+    const unsubLogout = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGOUT, () => {
+      setToken(null);
+      setUser(null);
+    });
+    const unsubRevoke = multiTabSync.subscribe(SYNC_EVENTS.SESSION_REVOKED, () => {
+      setToken(null);
+      setUser(null);
+    });
+    const unsubLogin = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGIN, () => {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      const savedUser = localStorage.getItem(USER_KEY);
+      if (savedToken) {
+        setToken(savedToken);
+        try {
+          if (savedUser) setUser(JSON.parse(savedUser));
+        } catch {}
+      }
+    });
+    return () => {
+      unsubLogout();
+      unsubRevoke();
+      unsubLogin();
+    };
+  }, []);
+
 
   // Khôi phục phiên đăng nhập khi tải ứng dụng
   useEffect(() => {
@@ -76,6 +104,7 @@ export const AuthProvider = ({ children }) => {
 
     setUser(profile);
     localStorage.setItem(USER_KEY, JSON.stringify(profile));
+    multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGIN);
     return profile;
   }, []);
 
@@ -107,6 +136,7 @@ export const AuthProvider = ({ children }) => {
 
     setUser(profile);
     localStorage.setItem(USER_KEY, JSON.stringify(profile));
+    multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGIN);
     return profile;
   }, []);
 
@@ -158,6 +188,7 @@ export const AuthProvider = ({ children }) => {
     } catch {}
     setToken(null);
     setUser(null);
+    multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGOUT);
   }, []);
 
   // Tiện ích lấy chữ cái viết tắt đại diện (Initials)

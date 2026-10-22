@@ -7,8 +7,11 @@
  * 2. Tự động chèn Bearer Token từ storage vào header Authorization.
  * 3. Tự động chèn `X-Organization-Id` cho các endpoint thuộc phạm vi tenant khi đã có Organization context.
  * 4. Hỗ trợ hủy bỏ (abort) in-flight requests cũ khi người dùng chuyển đổi Organization để chống race conditions.
- * 5. Hỗ trợ cơ chế `executeWithFallback`: gọi API thật khi có endpoint, tự động dự phòng mock fixture khi môi trường dev/chưa nối backend.
+ * 5. Tự động phát tín hiệu SESSION_REVOKED qua bus đa tab khi gặp 401 Unauthorized.
+ * 6. Hỗ trợ cơ chế `executeWithFallback`: gọi API thật khi có endpoint, tự động dự phòng mock fixture khi môi trường dev/chưa nối backend.
  */
+
+import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
 
@@ -143,6 +146,13 @@ export const request = async (endpoint, options = {}) => {
   }
 
   if (!response.ok) {
+    // Nếu token bị từ chối 401 trên endpoint bảo vệ, phát tín hiệu thoát session cho tất cả các tab
+    if (response.status === 401 && !isPublicOrGlobalEndpoint(endpoint)) {
+      try {
+        multiTabSync.broadcast(SYNC_EVENTS.SESSION_REVOKED);
+      } catch {}
+    }
+
     let errorData = null;
     try {
       errorData = await response.json();
