@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
-import { useAuth } from '../../../context/AuthContext';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { useToast } from '../../../context/ToastContext';
 import { organizationMemberService } from '../../../services/organizationMemberService';
 import {
@@ -35,20 +35,12 @@ const RBAC_PERMISSIONS = [
 
 export const MembersPage = () => {
   const { currentOrg } = useDashboard();
-  const auth = useAuth();
   const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
 
   // Xác định thẩm quyền quản trị của người dùng hiện tại
-  const currentUser = auth?.user || null;
-  const isViewer = auth?.isViewer ? auth.isViewer(currentUser) : false;
-  const isDevOps = auth?.isDevOps ? auth.isDevOps(currentUser) : false;
-  const activeRole = auth?.activeRole || 'SME_OWNER';
 
   // Chỉ SME_OWNER hoặc Quản trị viên hệ thống (Admin/SuperAdmin) mới có quyền Mời / Sửa / Xóa thành viên
-  const canManageMembers =
-    !isViewer &&
-    !isDevOps &&
-    (activeRole === 'SME_OWNER' || activeRole === 'ADMIN' || activeRole === 'SUPER_ADMIN');
+  const { canManageOrg: canManageMembers } = usePermissions();
 
   // Danh sách thành viên và trạng thái tải dữ liệu
   const [members, setMembers] = useState([]);

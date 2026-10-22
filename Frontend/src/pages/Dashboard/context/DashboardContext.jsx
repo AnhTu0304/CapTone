@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { request, setActiveOrganizationId, cancelPendingRequests } from '../../../services/apiClient';
+import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
 const DashboardContext = createContext(null);
@@ -124,6 +125,11 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     }
 
     triggerRefresh();
+    multiTabSync.broadcast(SYNC_EVENTS.ORG_SWITCHED, {
+      orgId: target.id,
+      orgName: target.name,
+      orgRole: activeRole,
+    });
 
     setTimeout(() => {
       setIsSwitchingOrg(false);
@@ -209,6 +215,38 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   useEffect(() => {
     fetchUserOrgs();
   }, [fetchUserOrgs]);
+  // Lắng nghe sự kiện chuyển đổi Organization từ các Tab khác
+  useEffect(() => {
+    const unsubOrg = multiTabSync.subscribe(SYNC_EVENTS.ORG_SWITCHED, (payload) => {
+      if (!payload || !payload.orgId) return;
+      setOrgList((currentList) => {
+        const matched = currentList.find((o) => o.id === payload.orgId);
+        if (matched) {
+          const activeRole = matched.role_in_org || matched.role || payload.orgRole || 'SME_OWNER';
+          setCurrentOrg((prev) => ({
+            ...prev,
+            ...matched,
+            role: activeRole,
+            role_in_org: activeRole,
+          }));
+          setCurrentUserRole(activeRole);
+          localStorage.setItem('selfheal_active_org_id', matched.id);
+          localStorage.setItem('selfheal_active_org_name', matched.name);
+          localStorage.setItem('selfheal_active_org_role', activeRole);
+          if (setActiveOrganizationId) {
+            setActiveOrganizationId(matched.id);
+          }
+          triggerRefresh();
+        }
+        return currentList;
+      });
+    });
+
+    return () => {
+      unsubOrg();
+    };
+  }, [triggerRefresh]);
+
 
   // Notifications State with centralized persistence
   const [notifications, setNotifications] = useState(() => {

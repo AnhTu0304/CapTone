@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { PermissionGate } from '../../../components/common/PermissionGate';
+import { PERMISSIONS } from '../../../hooks/usePermissions';
 import { useToast } from '../../../context/ToastContext';
 import {
   CheckCircle2,
@@ -265,6 +267,7 @@ metadata:
                             <span>Xem trước Diff (YAML)</span>
                           </button>
 
+                        <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ Chủ doanh nghiệp (SME Owner) hoặc Quản trị viên mới có quyền phê duyệt HITL">
                           <button
                             type="button"
                             onClick={() => handleApprove(req.id)}
@@ -284,8 +287,10 @@ metadata:
                             <Check size={14} />
                             <span>Phê Duyệt Ngay</span>
                           </button>
+                        </PermissionGate>
                         </div>
 
+                      <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ Chủ doanh nghiệp (SME Owner) hoặc Quản trị viên mới có quyền từ chối HITL">
                         <button
                           type="button"
                           onClick={() => handleReject(req.id)}
@@ -301,6 +306,7 @@ metadata:
                         >
                           Từ chối yêu cầu này
                         </button>
+                      </PermissionGate>
                       </>
                     )}
                   </div>
