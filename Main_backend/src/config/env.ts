@@ -68,4 +68,7 @@ export const config = {
     ttlSeconds: process.env.REDIS_CACHE_TTL ? parseInt(process.env.REDIS_CACHE_TTL, 10) : 300,
     enabled: process.env.REDIS_ENABLED !== 'false',
   },
+
+  // Google OAuth Config
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com',
 };

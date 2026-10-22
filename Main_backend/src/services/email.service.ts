@@ -316,4 +316,77 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Gửi email chào mừng và bảo mật cho tài khoản đăng ký / đăng nhập lần đầu qua Google
+   */
+  public static async sendGoogleWelcomeEmail(toEmail: string, fullName: string): Promise<boolean> {
+    const transporter = this.getTransporter();
+    const portalUrl = `${config.email.clientUrl}/onboarding/organization`;
+
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log('✉️  [EMAIL SERVICE - DEV MODE] CHÀO MỪNG TÀI KHOẢN GOOGLE');
+      console.log(`➡️  Người nhận: ${fullName} <${toEmail}>`);
+      console.log(`🌐  Đường dẫn Onboarding: ${portalUrl}`);
+      console.log('============================================================\n');
+      return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <title>Chào mừng bạn đến với CapTone AI Self-Heal</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+        .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
+        .btn-wrapper { text-align: center; margin: 28px 0; }
+        .btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; }
+        .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>CapTone AI Self-Heal Platform</h1>
+          <p>Chào mừng bạn đã liên kết tài khoản Google</p>
+        </div>
+        <div class="content">
+          <p>Xin chào <strong>${fullName}</strong>,</p>
+          <p>Tài khoản của bạn đã được liên kết thành công với tài khoản Google (<strong>${toEmail}</strong>).</p>
+          <p>Hệ thống của chúng tôi đã tự động xác thực địa chỉ email từ nhà cung cấp Google. Bạn có thể thiết lập tổ chức và cấu hình giám sát hạ tầng ngay bây giờ.</p>
+          <div class="btn-wrapper">
+            <a href="${portalUrl}" class="btn" target="_blank">Tiếp Tục Thiết Lập Tổ Chức</a>
+          </div>
+          <p style="font-size: 13px; color: #64748b;">
+            Nếu bạn không thực hiện đăng nhập hoặc đăng ký này, vui lòng liên hệ ngay với đội ngũ bảo mật của chúng tôi.
+          </p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} CapTone AI Self-Heal Platform.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
+        to: toEmail,
+        subject: '🎉 [CapTone] Chào mừng bạn - Tài khoản Google đã được kích hoạt',
+        html: htmlContent,
+      });
+      console.log(`✅ [EMAIL] Đã gửi thành công email chào mừng Google tới: ${toEmail}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL ERROR] Gửi email chào mừng Google tới ${toEmail} thất bại:`, (error as Error).message);
+      return false;
+    }
+  }
 }

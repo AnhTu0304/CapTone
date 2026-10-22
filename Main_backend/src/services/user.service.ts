@@ -143,6 +143,8 @@ export class UserService {
         }
 
         user.system_roles = await UserModel.getUserRoles(userId.trim());
+        user.organization_roles = await UserModel.getUserOrganizations(userId.trim());
+        user.has_organization = (user.organization_roles || []).length > 0;
         return user;
     }
 

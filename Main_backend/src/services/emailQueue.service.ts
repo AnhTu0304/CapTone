@@ -3,7 +3,7 @@ import { redisClient, isRedisReady } from '../config/redis';
 import { config } from '../config/env';
 import { EmailService } from './email.service';
 
-export type EmailJobType = 'VERIFICATION_EMAIL' | 'INVITATION_EMAIL';
+export type EmailJobType = 'VERIFICATION_EMAIL' | 'INVITATION_EMAIL' | 'WELCOME_GOOGLE_EMAIL';
 
 export interface BaseEmailJob {
   id: string;
@@ -30,7 +30,12 @@ export interface InvitationEmailJob extends BaseEmailJob {
   roleName: string;
 }
 
-export type EmailJob = VerificationEmailJob | InvitationEmailJob;
+export interface GoogleWelcomeEmailJob extends BaseEmailJob {
+  type: 'WELCOME_GOOGLE_EMAIL';
+  fullName: string;
+}
+
+export type EmailJob = VerificationEmailJob | InvitationEmailJob | GoogleWelcomeEmailJob;
 
 export interface EmailQueueStats {
   pendingJobs: number;
@@ -70,6 +75,7 @@ export class EmailQueue {
     jobData:
       | Omit<VerificationEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
       | Omit<InvitationEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
+      | Omit<GoogleWelcomeEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
   ): Promise<string> {
     const jobId = crypto.randomUUID();
     const job: EmailJob = {
@@ -94,7 +100,9 @@ export class EmailQueue {
         const safeDetail =
           job.type === 'VERIFICATION_EMAIL'
             ? `(token: ${maskSecret((job as VerificationEmailJob).token)})`
-            : `(org: ${(job as InvitationEmailJob).orgName})`;
+            : job.type === 'INVITATION_EMAIL'
+            ? `(org: ${(job as InvitationEmailJob).orgName})`
+            : `(name: ${(job as GoogleWelcomeEmailJob).fullName})`;
 
         console.log(`📥 [EMAIL QUEUE] Enqueued job ${job.id} [${job.type}] to ${job.toEmail} ${safeDetail}`);
         return jobId;
@@ -153,6 +161,17 @@ export class EmailQueue {
       inviterName,
       orgName,
       roleName,
+    });
+  }
+
+  /**
+   * Enqueue email chào mừng và bảo mật cho tài khoản liên kết Google
+   */
+  public static async enqueueGoogleWelcome(toEmail: string, fullName: string): Promise<string> {
+    return this.enqueue({
+      type: 'WELCOME_GOOGLE_EMAIL',
+      toEmail,
+      fullName,
     });
   }
 
@@ -328,6 +347,9 @@ export class EmailWorker {
           iJob.orgName,
           iJob.roleName
         );
+      } else if (job.type === 'WELCOME_GOOGLE_EMAIL') {
+        const gJob = job as GoogleWelcomeEmailJob;
+        success = await EmailService.sendGoogleWelcomeEmail(gJob.toEmail, gJob.fullName);
       }
 
       if (success) {

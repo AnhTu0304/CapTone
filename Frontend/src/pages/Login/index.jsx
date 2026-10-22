@@ -1,15 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const LoginPage = ({ onNavigate }) => {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState(null);
+
+  // Tải Google Identity Services SDK nếu chưa có
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.google?.accounts?.id || window.google?.accounts?.oauth2) return;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, []);
+
+  const handleRedirect = (user, fallbackEmail = '', immediate = false) => {
+    const rawSysRoles = (user?.system_roles || []).map((r) =>
+      typeof r === 'object' && r !== null ? r.name || r.role_name : r
+    ).map((r) => String(r).toUpperCase());
+
+    const isPlatformAdmin =
+      rawSysRoles.includes('SUPER_ADMIN') ||
+      rawSysRoles.includes('ADMIN') ||
+      rawSysRoles.includes('SYSTEM_ADMIN');
+
+    let targetPath = '/dashboard';
+    if (isPlatformAdmin) {
+      targetPath = '/admin';
+    } else {
+      const orgRoles = user?.organization_roles || [];
+      const hasOrg = Boolean(user?.has_organization || orgRoles.length > 0 || user?.organization || user?.organization_id);
+      if (!hasOrg) {
+        targetPath = '/onboarding/organization';
+      }
+    }
+
+    const doNav = () => {
+      if (onNavigate) {
+        onNavigate(targetPath);
+      } else {
+        window.history.pushState({}, '', targetPath);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    };
+
+    if (immediate) {
+      doNav();
+    } else {
+      setTimeout(doNav, 1000);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,31 +67,7 @@ export const LoginPage = ({ onNavigate }) => {
       const user = await login({ email: email.trim(), password });
       setLoggedInUser(user);
       setSubmitted(true);
-
-      // Tự động chuyển hướng chính xác vào không gian tương ứng theo vai trò thực tế
-      const rawSysRoles = (user?.system_roles || []).map((r) =>
-        typeof r === 'object' && r !== null ? r.name || r.role_name : r
-      ).map((r) => String(r).toUpperCase());
-      const emailLower = String(user?.email || email).toLowerCase();
-
-      const isPlatformAdmin =
-        rawSysRoles.includes('SUPER_ADMIN') ||
-        rawSysRoles.includes('ADMIN') ||
-        rawSysRoles.includes('SYSTEM_ADMIN') ||
-        emailLower === 'superadmin@selfheal.com' ||
-        emailLower === 'admin@selfheal.com' ||
-        emailLower === 'phamthaisang1710@gmail.com';
-
-      const targetPath = isPlatformAdmin ? '/admin' : '/dashboard';
-
-      setTimeout(() => {
-        if (onNavigate) {
-          onNavigate(targetPath);
-        } else {
-          window.history.pushState({}, '', targetPath);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        }
-      }, 1000);
+      handleRedirect(user, email);
     } catch (err) {
       setError(err.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
     } finally {
@@ -53,8 +76,78 @@ export const LoginPage = ({ onNavigate }) => {
   };
 
   const handleGoogleSignIn = () => {
-    // Simulated Google OAuth redirect
-    setSubmitted(true);
+    setError('');
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com';
+
+    // Đảm bảo truy cập bằng localhost thay vì 127.0.0.1 (Google OAuth console chỉ cấp phép http://localhost:3000)
+    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
+      window.location.hostname = 'localhost';
+      return;
+    }
+
+    if (!window.google?.accounts?.oauth2) {
+      setLoading(true);
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        if (window.google?.accounts?.oauth2) {
+          clearInterval(interval);
+          setLoading(false);
+          handleGoogleSignIn();
+        } else if (attempts >= 15) {
+          clearInterval(interval);
+          setLoading(false);
+          setError('Không thể kết nối dịch vụ Google. Vui lòng tắt trình chặn quảng cáo nếu có và tải lại trang.');
+        }
+      }, 200);
+      return;
+    }
+
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'email profile openid',
+        callback: async (response) => {
+          if (response.error) {
+            setLoading(false);
+            setError('Đăng nhập Google không thành công: ' + response.error);
+            return;
+          }
+
+          if (!response.access_token) {
+            setLoading(false);
+            setError('Không nhận được mã xác thực từ Google');
+            return;
+          }
+
+          setLoading(true);
+          try {
+            const authFn = loginWithGoogle || login;
+            const user = await authFn(response.access_token);
+            setLoggedInUser(user);
+            setSubmitted(true);
+            handleRedirect(user);
+          } catch (err) {
+            setError(err.message || 'Đăng nhập Google không thành công. Vui lòng thử lại.');
+          } finally {
+            setLoading(false);
+          }
+        },
+        error_callback: (err) => {
+          setLoading(false);
+          if (err?.type === 'popup_closed') return;
+          if (err?.type === 'popup_blocked_by_browser') {
+            setError('Trình duyệt đã chặn cửa sổ đăng nhập Google. Vui lòng nhấn vào biểu tượng ổ khóa/popup trên thanh địa chỉ để cho phép popup và thử lại.');
+            return;
+          }
+          setError(err?.message || 'Không thể mở cửa sổ Google. Vui lòng kiểm tra chặn popup trên trình duyệt.');
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    } catch (err) {
+      setError('Không thể khởi tạo phiên đăng nhập Google: ' + err.message);
+    }
   };
 
   return (
@@ -162,27 +255,7 @@ export const LoginPage = ({ onNavigate }) => {
           </p>
           <button
             type="button"
-            onClick={() => {
-              const rawSysRoles = (loggedInUser?.system_roles || []).map((r) =>
-                typeof r === 'object' && r !== null ? r.name || r.role_name : r
-              ).map((r) => String(r).toUpperCase());
-              const emailLower = String(loggedInUser?.email || email).toLowerCase();
-              const isPlatformAdmin =
-                rawSysRoles.includes('SUPER_ADMIN') ||
-                rawSysRoles.includes('ADMIN') ||
-                rawSysRoles.includes('SYSTEM_ADMIN') ||
-                emailLower === 'superadmin@selfheal.com' ||
-                emailLower === 'admin@selfheal.com' ||
-                emailLower === 'phamthaisang1710@gmail.com';
-              const targetPath = isPlatformAdmin ? '/admin' : '/dashboard';
-
-              if (onNavigate) {
-                onNavigate(targetPath);
-              } else {
-                window.history.pushState({}, '', targetPath);
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }
-            }}
+            onClick={() => handleRedirect(loggedInUser, email, true)}
             style={{
               padding: '10px 20px',
               backgroundColor: 'var(--color-primary)',
@@ -407,6 +480,7 @@ export const LoginPage = ({ onNavigate }) => {
           {/* Gmail / Google Sign-In Button */}
           <button
             type="button"
+            disabled={loading}
             onClick={handleGoogleSignIn}
             style={{
               width: '100%',
@@ -418,7 +492,8 @@ export const LoginPage = ({ onNavigate }) => {
               fontFamily: 'var(--font-body)',
               borderRadius: '4px',
               border: '1px solid #D1D5DB',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

@@ -74,6 +74,8 @@ export class AuthService {
         } catch (roleError) {
             console.warn('Không thể gán vai trò mặc định USER khi đăng ký:', (roleError as Error).message);
         }
+        newUser.organization_roles = [];
+        newUser.has_organization = false;
 
         const verificationToken = await this.createEmailVerificationToken(newUser.id);
         
@@ -115,12 +117,15 @@ export class AuthService {
 
         // Lấy danh sách các vai trò hệ thống hiện có của người dùng qua UserModel
         const roles = await UserModel.getUserRoles(user.id);
+        const orgRoles = await UserModel.getUserOrganizations(user.id);
 
         const token = this.generateToken(user, roles);
         return {
             id: user.id,
             email: user.email,
             token,
+            has_organization: orgRoles.length > 0,
+            organization_roles: orgRoles,
         };
     }
 
@@ -187,6 +192,127 @@ export class AuthService {
             email: user.email,
             code: rawCode,
             token: rawCode,
+        };
+    }
+
+    /**
+     * Xác thực token với Google (hỗ trợ cả ID token và OAuth2 access token)
+     */
+    public static async verifyGoogleToken(token: string): Promise<{ email: string; name: string; picture?: string }> {
+        // 1. Thử xác thực theo ID Token nếu token có định dạng JWT (3 phần)
+        if (token.includes('.') && token.split('.').length === 3) {
+            try {
+                const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
+                if (res.ok) {
+                    const data = await res.json() as any;
+                    if (data.email) {
+                        return {
+                            email: data.email,
+                            name: data.name || data.email.split('@')[0],
+                            picture: data.picture,
+                        };
+                    }
+                }
+            } catch {
+                // Tiếp tục thử phương án access_token
+            }
+        }
+
+        // 2. Thử xác thực theo Google OAuth2 Access Token qua UserInfo endpoint
+        try {
+            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json() as any;
+                if (data.email) {
+                    return {
+                        email: data.email,
+                        name: data.name || data.email.split('@')[0],
+                        picture: data.picture,
+                    };
+                }
+            }
+        } catch {
+            // Lỗi kết nối Google API
+        }
+
+        throw new ApiError(401, 'Xác thực Google không thành công hoặc mã token đã hết hạn');
+    }
+
+    /**
+     * Đăng nhập hoặc đăng ký tài khoản liên kết Google
+     */
+    public static async loginWithGoogle(token: string): Promise<{ user: any; token: string }> {
+        if (!token || typeof token !== 'string' || !token.trim()) {
+            throw new ApiError(400, 'Vui lòng cung cấp mã xác thực Google (Token)');
+        }
+
+        const googleUser = await this.verifyGoogleToken(token.trim());
+        const email = googleUser.email.toLowerCase().trim();
+
+        let user = await UserModel.findFullByEmail(email);
+
+        if (!user) {
+            // Chưa có tài khoản -> Tạo mới tài khoản đã xác thực email
+            const created = await UserModel.create({
+                email,
+                full_name: googleUser.name || email.split('@')[0],
+                avatar_url: googleUser.picture || null,
+                status: 'ACTIVE',
+                email_verified_at: new Date(),
+            });
+
+            try {
+                await SystemRoleService.assignRole(created.id, 'USER');
+            } catch (roleError) {
+                console.warn('Không thể gán vai trò mặc định USER khi đăng nhập Google:', (roleError as Error).message);
+            }
+
+            user = {
+                ...created,
+                system_roles: ['USER'],
+            };
+
+            // Gửi email chào mừng và thông báo kích hoạt tài khoản qua Google
+            EmailQueue.enqueueGoogleWelcome(user.email, user.full_name).catch(() => {});
+        } else {
+            // Đã có tài khoản -> Kiểm tra trạng thái
+            if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+                throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
+            }
+
+            // Tự động kích hoạt nếu đang PENDING
+            if (user.status === 'PENDING') {
+                await UserModel.updateStatus(user.id, 'ACTIVE');
+                user.status = 'ACTIVE';
+            }
+
+            await UserModel.updateLastLogin(user.id);
+
+            // Cập nhật avatar nếu người dùng chưa có
+            if (!user.avatar_url && googleUser.picture) {
+                await UserModel.updateProfile(user.id, { avatar_url: googleUser.picture });
+                user.avatar_url = googleUser.picture;
+            }
+        }
+
+        const roles = await UserModel.getUserRoles(user.id);
+        const orgRoles = await UserModel.getUserOrganizations(user.id);
+        const jwtToken = this.generateToken(user, roles);
+
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                full_name: user.full_name,
+                avatar_url: user.avatar_url,
+                status: user.status,
+                system_roles: roles,
+                organization_roles: orgRoles,
+                has_organization: orgRoles.length > 0,
+            },
+            token: jwtToken,
         };
     }
 }

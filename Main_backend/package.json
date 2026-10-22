@@ -15,6 +15,7 @@
     "test:profile": "tsx src/test/profile.test.ts",
     "test:status": "tsx src/test/userStatus.test.ts",
     "test:email": "tsx src/test/email.test.ts",
+    "test:google": "tsx src/test/googleAuth.test.ts",
     "worker:email": "tsx src/workers/email.worker.ts",
     "test:invitation": "tsx src/test/organizationInvitation.test.ts"
   },

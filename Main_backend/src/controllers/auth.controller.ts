@@ -2,6 +2,7 @@ import { SessionRevocationService } from '../services/sessionRevocation.service'
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/auth.service';
+import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { UserService } from '../services/user.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
@@ -349,6 +350,25 @@ export class AuthController {
       next(error);
     }
   }
+  /**
+   * [POST] /api/v1/auth/google
+   * Đăng nhập hoặc đăng ký nhanh qua Google OAuth
+   */
+  public static async googleLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        throw new ApiError(400, 'Vui lòng cung cấp mã xác thực Google (Token)');
+      }
+
+      const result = await AuthService.loginWithGoogle(token);
+      return ApiResponse.success(res, 'Đăng nhập Google thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * [POST] /api/v1/auth/logout
    * Đăng xuất và thu hồi Access Token hiện tại qua Redis Blacklist
