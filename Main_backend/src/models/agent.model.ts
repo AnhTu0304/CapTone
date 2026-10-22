@@ -231,7 +231,7 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
-      LEFT JOIN clusters c ON a.cluster_id = c.id
+      LEFT JOIN clusters c ON a.cluster_id = c.id::text
       WHERE a.id = $1
       LIMIT 1;
     `;
@@ -326,7 +326,7 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
-      LEFT JOIN clusters c ON a.cluster_id = c.id
+      LEFT JOIN clusters c ON a.cluster_id = c.id::text
       ${whereClause}
       ORDER BY 
         CASE 
@@ -429,7 +429,7 @@ export class AgentModel {
     data: {
       agent_id: string;
       token_hash: string;
-      token_prefix: string;
+      token_prefix?: string;
       expires_at?: Date | null;
       created_by?: string | null;
     },
@@ -438,17 +438,15 @@ export class AgentModel {
     const db = client || pool;
     const query = `
       INSERT INTO agent_tokens (
-        agent_id, token_hash, token_prefix, expires_at, created_by, created_at
+        agent_id, token_hash, expires_at, created_at
       ) VALUES (
-        $1, $2, $3, $4, $5, NOW()
+        $1, $2, $3, NOW()
       ) RETURNING *;
     `;
     const values = [
       data.agent_id,
       data.token_hash,
-      data.token_prefix,
       data.expires_at || null,
-      data.created_by || null,
     ];
     const res = await db.query<IAgentToken>(query, values);
     return res.rows[0];
@@ -461,7 +459,7 @@ export class AgentModel {
     const db = client || pool;
     const query = `
       SELECT 
-        id, agent_id, token_prefix, expires_at, last_used_at, revoked_at, created_by, created_at,
+        id, agent_id, expires_at, last_used_at, revoked_at, created_at,
         (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS is_active
       FROM agent_tokens
       WHERE agent_id = $1

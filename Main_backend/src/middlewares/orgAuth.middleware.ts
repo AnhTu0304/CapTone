@@ -47,8 +47,8 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
       ? user.roles.map((r: string) => r.trim().toUpperCase())
       : [];
 
-    // SUPER_ADMIN luôn có toàn quyền truy cập
-    if (tokenRoles.includes('SUPER_ADMIN')) {
+    // SUPER_ADMIN hoặc ADMIN luôn có toàn quyền truy cập
+    if (tokenRoles.includes('SUPER_ADMIN') || tokenRoles.includes('ADMIN') || tokenRoles.includes('SYSTEM_ADMIN')) {
       req.orgMember = {
         organizationId: orgId,
         roleCode: 'SUPER_ADMIN',

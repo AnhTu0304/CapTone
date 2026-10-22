@@ -258,7 +258,7 @@ export const SetupSummary = ({
             borderColor: 'var(--color-accent)',
           }}
         >
-          Đi tới Bảng điều khiển
+          Đến Doanh Nghiệp Của Tôi (Dashboard)
         </PrimaryButton>
 
         <SecondaryButton

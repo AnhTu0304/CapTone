@@ -79,12 +79,17 @@ export const OnboardingProgress = ({ currentStep = 1, onStepClick }) => {
           {STEPS_METADATA.map((item, idx) => {
             const isCompleted = item.step < currentStep;
             const isActive = item.step === currentStep;
+            const isLocked = currentStep >= 5;
 
             return (
               <div
                 key={item.step}
                 onClick={() => {
-                  // Only allow jumping to previously completed steps or current step
+                  // Khi đã qua bước 5 (hoàn tất): Khóa hoàn toàn, không cho click lại các bước nào nữa
+                  if (isLocked) {
+                    return;
+                  }
+                  // Chỉ cho phép click các bước trước đó nếu chưa ở bước 5
                   if (item.step <= currentStep && onStepClick) {
                     onStepClick(item.step, item.path);
                   }
@@ -100,7 +105,8 @@ export const OnboardingProgress = ({ currentStep = 1, onStepClick }) => {
                     ? '1px solid var(--border-strong)'
                     : '1px solid transparent',
                   borderRadius: '0px',
-                  cursor: item.step <= currentStep ? 'pointer' : 'default',
+                  cursor: isLocked ? 'not-allowed' : (item.step <= currentStep ? 'pointer' : 'default'),
+                  opacity: isLocked && item.step < 5 ? 0.7 : 1,
                   transition: 'all 0.15s ease',
                 }}
               >

@@ -11,16 +11,20 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
   const [slug, setSlug] = useState(initialData?.slug || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(Boolean(initialData?.slug));
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+  // eslint-disable-next-line no-unused-vars
+  const [slugChecking, setSlugChecking] = useState(false);
+  const [slugStatus, setSlugStatus] = useState(null); // 'available' | 'taken' | null
 
-  // Auto-generate slug from name if not manually modified
+  // Tự động sinh slug từ tên tổ chức nếu chưa chỉnh sửa thủ công
   useEffect(() => {
     if (!isSlugManuallyEdited && name.trim()) {
       const generatedSlug = name
         .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
         .trim()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
@@ -28,27 +32,72 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
     }
   }, [name, isSlugManuallyEdited]);
 
+  // Kiểm tra ràng buộc tồn tại của Slug thời gian thực (Real-time conflict check)
+  useEffect(() => {
+    if (!slug.trim() || slug.length < 2) {
+      setSlugStatus(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSlugChecking(true);
+      const res = await onboardingService.checkSlugAvailable(slug);
+      setSlugChecking(false);
+
+      if (res && res.exists) {
+        setSlugStatus('taken');
+        setValidationErrors((prev) => ({
+          ...prev,
+          slug: `Định danh slug '${slug}' đã tồn tại, vui lòng chọn một slug khác`,
+        }));
+      } else {
+        setSlugStatus('available');
+        setValidationErrors((prev) => {
+          const next = { ...prev };
+          if (next.slug && next.slug.includes('đã tồn tại')) {
+            delete next.slug;
+          }
+          return next;
+        });
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [slug]);
+
   const validate = () => {
     const errors = {};
     if (!name.trim()) {
       errors.name = 'Tên tổ chức là bắt buộc';
     } else if (name.trim().length < 2) {
       errors.name = 'Tên tổ chức phải có ít nhất 2 ký tự';
+    } else if (name.trim().length > 150) {
+      errors.name = 'Tên tổ chức không được vượt quá 150 ký tự';
+    }
+
+    if (slugStatus === 'taken') {
+      errors.slug = `Định danh slug '${slug}' đã tồn tại, vui lòng chọn một slug khác`;
     }
 
     if (!slug.trim()) {
       errors.slug = 'Định danh slug tổ chức là bắt buộc';
-    } else if (!/^[a-z0-9-]+$/.test(slug)) {
-      errors.slug = 'Slug chỉ được chứa chữ thường, số và dấu gạch ngang';
+    } else if (slug.trim().length < 2) {
+      errors.slug = 'Slug phải có ít nhất 2 ký tự';
+    } else if (slug.trim().length > 150) {
+      errors.slug = 'Slug không được vượt quá 150 ký tự';
     } else if (slug.startsWith('-') || slug.endsWith('-')) {
       errors.slug = 'Slug không được bắt đầu hoặc kết thúc bằng dấu gạch ngang';
+    } else if (slug.includes('--')) {
+      errors.slug = 'Slug không được chứa hai dấu gạch ngang liên tiếp';
+    } else if (!/^[a-z0-9-]+$/.test(slug)) {
+      errors.slug = 'Slug chỉ được chứa chữ thường, số và dấu gạch ngang';
     }
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -57,100 +106,24 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
       return;
     }
 
-    setLoading(true);
+    // Lưu thông tin tạm vào Context (chưa gọi Database để tránh lỗi khi quay lại bước)
+    // Nếu tên hoặc slug thay đổi so với initialData, reset id về null để tránh dùng nhầm ID cũ không tồn tại
+    const isSameIdentity =
+      initialData?.id &&
+      initialData?.name?.trim() === name.trim() &&
+      initialData?.slug?.trim() === slug.trim();
 
-    try {
-      // 1. Gọi trực tiếp API tạo mới Tổ chức trên backend
-      const createdOrg = await onboardingService.createOrganization({
-        name: name.trim(),
-        slug: slug.trim(),
-        description: description.trim(),
-      });
-
-      setLoading(false);
-      setSuccess('Không gian làm việc của tổ chức đã được khởi tạo thành công.');
-      setTimeout(() => {
-        onSave({
-          id: createdOrg.id,
-          name: createdOrg.name,
-          slug: createdOrg.slug,
-          description: createdOrg.description,
-        });
-      }, 400);
-    } catch (err) {
-      console.warn('[Onboarding] Lỗi tạo tổ chức mới, kiểm tra tổ chức hiện có:', err.message);
-
-      // 2. Nếu đã có tổ chức trong tài khoản (hoặc slug trùng), tự động liên kết với tổ chức hiện có
-      try {
-        const myOrgs = await onboardingService.getMyOrganizations();
-        if (myOrgs.length > 0) {
-          const matchedOrg = myOrgs.find((o) => o.slug === slug.trim()) || myOrgs[0];
-          setLoading(false);
-          setSuccess(`Đã kết nối với tổ chức '${matchedOrg.name}'.`);
-          setTimeout(() => {
-            onSave({
-              id: matchedOrg.id,
-              name: matchedOrg.name,
-              slug: matchedOrg.slug,
-              description: matchedOrg.description,
-            });
-          }, 400);
-          return;
-        }
-      } catch (checkErr) {
-        console.warn('[Onboarding] Không thể kiểm tra tổ chức hiện có:', checkErr);
-      }
-
-      const errorMsg =
-        err.message === 'Failed to fetch'
-          ? 'Không thể kết nối đến máy chủ Backend (http://localhost:5000). Vui lòng đảm bảo Backend đang chạy.'
-          : (err.message || 'Không thể tạo tổ chức mới. Vui lòng kiểm tra lại thông tin.');
-      setLoading(false);
-      setError(errorMsg);
-    }
+    onSave({
+      id: isSameIdentity ? initialData.id : null,
+      name: name.trim(),
+      slug: slug.trim(),
+      description: description.trim(),
+    });
   };
 
   return (
     <form onSubmit={handleSubmit} style={{ width: '100%' }}>
-      {error && (
-        <div style={{ marginBottom: '16px' }}>
-          <ErrorAlert
-            title="Thông báo kết nối Backend"
-            message={error}
-            onRetry={() => {
-              setError('');
-              handleSubmit({ preventDefault: () => {} });
-            }}
-          />
-          {error.includes('Backend') && (
-            <button
-              type="button"
-              onClick={() => {
-                setError('');
-                onSave({
-                  name: name.trim(),
-                  slug: slug.trim(),
-                  description: description.trim(),
-                });
-              }}
-              style={{
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--color-primary)',
-                background: 'none',
-                border: 'none',
-                textDecoration: 'underline',
-                cursor: 'pointer',
-                marginTop: '-10px',
-                marginBottom: '10px',
-                display: 'block',
-              }}
-            >
-              Hoặc bấm vào đây để tiếp tục ở chế độ mô phỏng (Sandbox Mode)
-            </button>
-          )}
-        </div>
-      )}
+      {error && <ErrorAlert message={error} onRetry={() => setError('')} />}
       {success && <SuccessAlert message={success} />}
 
       <FormField
@@ -168,7 +141,7 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
             setName(e.target.value);
             if (validationErrors.name) setValidationErrors((prev) => ({ ...prev, name: '' }));
           }}
-          placeholder="Ví dụ: Acme Cloud Corp"
+          placeholder="Ví dụ: Công ty TNHH Giải pháp Đám mây Acme"
           style={{
             width: '100%',
             height: '44px',
@@ -293,7 +266,7 @@ export const OrganizationForm = ({ initialData, onSave, onBack }) => {
         ) : (
           <span />
         )}
-        <PrimaryButton type="submit" loading={loading}>
+        <PrimaryButton type="submit">
           Tiếp tục sang Môi trường
         </PrimaryButton>
       </div>

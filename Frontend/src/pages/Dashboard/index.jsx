@@ -16,6 +16,7 @@ import PoliciesPage from './SelfHealing/PoliciesPage';
 import OrganizationPage from './Organization/OrganizationPage';
 import MembersPage from './Organization/MembersPage';
 import ClustersPage from './Clusters/ClustersPage';
+import ClusterDetailPage from './Clusters/ClusterDetailPage';
 import NotificationsPage from './Notifications/NotificationsPage';
 import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
@@ -37,10 +38,16 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       accumulatedPath += `/${part}`;
       if (index === 0) return; // Skip 'dashboard' root crumb as layout handles it
 
-      const label = part
+      let label = part
         .split('-')
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
+
+      if (part === 'clusters') {
+        label = 'Cụm Kubernetes';
+      } else if (parts[index - 1] === 'clusters') {
+        label = 'Chi Tiết Cụm';
+      }
 
       crumbs.push({
         label,
@@ -69,8 +76,18 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     if (path === '/dashboard/agents') {
       return <AgentsPage />;
     }
+    if (path.startsWith('/dashboard/clusters/')) {
+      const clusterId = currentPath.split('/dashboard/clusters/')[1]?.split('/')[0]?.split('?')[0];
+      return (
+        <ClusterDetailPage
+          clusterId={clusterId}
+          onBack={() => onNavigate?.('/dashboard/clusters')}
+          onNavigate={onNavigate}
+        />
+      );
+    }
     if (path === '/dashboard/clusters') {
-      return <ClustersPage />;
+        return <ClustersPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/infrastructure') {
       return <InfrastructurePage />;

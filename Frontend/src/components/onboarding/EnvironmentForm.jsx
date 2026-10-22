@@ -4,13 +4,11 @@ import FormField from './FormField';
 import PrimaryButton from './PrimaryButton';
 import SecondaryButton from './SecondaryButton';
 import ErrorAlert from './ErrorAlert';
-import { onboardingService } from '../../services/onboardingService';
 
 export const EnvironmentForm = ({ initialData, organizationId, onSave, onBack }) => {
   const [name, setName] = useState(initialData?.name || 'Staging');
   const [type, setType] = useState(initialData?.type || 'staging');
   const [description, setDescription] = useState(initialData?.description || '');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -26,7 +24,7 @@ export const EnvironmentForm = ({ initialData, organizationId, onSave, onBack })
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
 
@@ -34,71 +32,12 @@ export const EnvironmentForm = ({ initialData, organizationId, onSave, onBack })
       return;
     }
 
-    setLoading(true);
-
-    if (organizationId) {
-      try {
-        const envType = type === 'development' ? 'DEV' : 'STAGING';
-        const createdEnv = await onboardingService.createEnvironment(organizationId, {
-          name: name.trim(),
-          environment_type: envType,
-          description: description.trim(),
-        });
-
-        setLoading(false);
-        onSave({
-          id: createdEnv.id,
-          name: createdEnv.name,
-          type: createdEnv.environment_type ? createdEnv.environment_type.toLowerCase() : type,
-          description: createdEnv.description,
-        });
-        return;
-      } catch (err) {
-        console.warn('[Onboarding] Lỗi tạo môi trường qua API:', err.message);
-        // Nếu tổ chức đã có môi trường, tự động tải môi trường hiện có
-        try {
-          const existingEnvs = await onboardingService.getEnvironments(organizationId);
-          if (existingEnvs && existingEnvs.length > 0) {
-            const matchedEnv = existingEnvs[0];
-            setLoading(false);
-            onSave({
-              id: matchedEnv.id,
-              name: matchedEnv.name,
-              type: matchedEnv.environment_type ? matchedEnv.environment_type.toLowerCase() : type,
-              description: matchedEnv.description,
-            });
-            return;
-          }
-        } catch (fetchErr) {
-          console.warn('[Onboarding] Lỗi kiểm tra môi trường:', fetchErr);
-        }
-
-        // Hoặc tiếp tục với fallback
-        if (err.message && (err.message.includes('đã đăng ký môi trường') || err.message.includes('tồn tại'))) {
-          setLoading(false);
-          onSave({
-            name: name.trim(),
-            type,
-            description: description.trim(),
-          });
-          return;
-        }
-
-        setLoading(false);
-        setError(err.message || 'Không thể tạo môi trường. Vui lòng thử lại.');
-        return;
-      }
-    }
-
-    // Fallback nếu chưa có organizationId
-    setTimeout(() => {
-      setLoading(false);
-      onSave({
-        name: name.trim(),
-        type,
-        description: description.trim(),
-      });
-    }, 400);
+    // Lưu thông tin tạm vào Context (chưa gọi Database để tránh lỗi khi quay lại bước)
+    onSave({
+      name: name.trim(),
+      type,
+      description: description.trim(),
+    });
   };
 
   const envOptions = [
@@ -340,7 +279,7 @@ export const EnvironmentForm = ({ initialData, organizationId, onSave, onBack })
         }}
       >
         <SecondaryButton onClick={onBack}>Quay lại Tổ chức</SecondaryButton>
-        <PrimaryButton type="submit" loading={loading}>
+        <PrimaryButton type="submit">
           Tiếp tục sang Kubernetes
         </PrimaryButton>
       </div>

@@ -277,7 +277,6 @@ CREATE TABLE IF NOT EXISTS environments (
     name VARCHAR(255) NOT NULL,
     code VARCHAR(100),
     description TEXT,
-    env_type VARCHAR(50) DEFAULT 'PRODUCTION',
     environment_type environment_type DEFAULT 'PRODUCTION',
     status environment_status DEFAULT 'ACTIVE',
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -944,7 +943,7 @@ BEGIN
 END $$;
 
 -- 7. Môi trường mặc định
-INSERT INTO environments (id, organization_id, name, env_type, code)
+INSERT INTO environments (id, organization_id, name, environment_type, code)
 VALUES (
     'e0000000-0000-0000-0000-000000000001',
     '00000000-0000-0000-0000-000000000001',

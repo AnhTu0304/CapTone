@@ -211,6 +211,7 @@ export class AgentService {
       agent_uid?: string;
       version?: string;
       token_expires_in_days?: number | null;
+      initial_token?: string;
     }
   ) {
     // 1. Kiểm tra môi trường có tồn tại và thuộc tổ chức này không
@@ -219,11 +220,20 @@ export class AgentService {
       throw ApiError.badRequest('Môi trường không tồn tại hoặc không thuộc tổ chức này');
     }
 
-    // 2. Kiểm tra cluster nếu có truyền
+    // 2. Tự động liên kết hoặc tạo mới Cụm máy chủ (Cluster) cho môi trường
+    let clusterId = null;
     if (data.cluster_id) {
       const cluster = await ClusterModel.findByIdOrName(data.cluster_id);
-      if (!cluster || cluster.environment_id !== env.id) {
-        throw ApiError.badRequest('Cụm máy chủ (Cluster) không hợp lệ hoặc không thuộc môi trường này');
+      if (cluster && cluster.environment_id === env.id) {
+        clusterId = cluster.id;
+      }
+    }
+    if (!clusterId) {
+      try {
+        const cluster = await ClusterModel.findOrCreate(env.id, data.name || "k8s-cluster-01");
+        clusterId = cluster.id;
+      } catch (err) {
+        console.warn("[AgentService] Không thể tự động tạo Cluster:", err);
       }
     }
 
@@ -244,13 +254,13 @@ export class AgentService {
       name: data.name,
       agent_uid: agentUid,
       environment_id: env.id,
-      cluster_id: data.cluster_id,
+      cluster_id: clusterId,
       version: data.version || 'v1.0.0',
       status: 'PENDING',
     });
 
     // 5. Tự động sinh Token kết nối bí mật ban đầu
-    const rawToken = `ag_live_${crypto.randomBytes(24).toString('hex')}`;
+    const rawToken = data.initial_token?.trim() || "ag_live_" + crypto.randomBytes(24).toString("hex");
     const tokenPrefix = rawToken.slice(0, 12);
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
@@ -262,9 +272,7 @@ export class AgentService {
     const tokenRecord = await AgentModel.createToken({
       agent_id: agent.id,
       token_hash: tokenHash,
-      token_prefix: tokenPrefix,
       expires_at: expiresAt,
-      created_by: userId,
     });
 
     return {
@@ -377,7 +385,7 @@ export class AgentService {
       throw ApiError.badRequest('Không thể tạo token cho Agent đã bị thu hồi (REVOKED)');
     }
 
-    const rawToken = `ag_live_${crypto.randomBytes(24).toString('hex')}`;
+    const rawToken = "ag_live_" + crypto.randomBytes(24).toString("hex");
     const tokenPrefix = rawToken.slice(0, 12);
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
@@ -387,9 +395,7 @@ export class AgentService {
     const tokenRecord = await AgentModel.createToken({
       agent_id: agentId,
       token_hash: tokenHash,
-      token_prefix: tokenPrefix,
       expires_at: expiresAt,
-      created_by: userId,
     });
 
     return {

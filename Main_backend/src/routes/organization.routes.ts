@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { OrganizationController } from '../controllers/organization.controller';
+import { OrganizationModel } from '../models/organization.model';
 import { OrganizationMemberController } from '../controllers/organizationMember.controller';
 import { OrganizationInvitationController } from '../controllers/organizationInvitation.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
@@ -28,10 +29,36 @@ import {
 } from '../validations/organizationMember.validation';
 import { environmentRoutes } from './environment.routes';
 import { agentRoutes } from './agent.routes';
+import { clusterRoutes } from './cluster.routes';
 
 const router = Router();
 
-// Toàn bộ API Organizations đều yêu cầu xác thực JWT Bearer Token
+/**
+ * [GET] /api/v1/organizations/check-slug/:slug
+ * Kiểm tra ràng buộc duy nhất của Slug (Public / Tiện ích xác thực)
+ */
+router.get(
+  '/check-slug/:slug',
+  async (req, res, next) => {
+    try {
+      const slug = (req.params.slug || '').trim().toLowerCase();
+      const existing = await OrganizationModel.findBySlug(slug);
+      return res.json({
+        success: true,
+        message: existing ? 'Slug đã được sử dụng' : 'Slug khả dụng',
+        data: {
+          slug,
+          available: !existing,
+          exists: !!existing,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Toàn bộ API Organizations phía sau đều yêu cầu xác thực JWT Bearer Token
 router.use(authenticateToken);
 
 /* ==========================================================================
@@ -71,6 +98,8 @@ router.get(
   '/roles',
   OrganizationController.getRoles
 );
+
+
 
 /* ==========================================================================
    2. CÁC ĐƯỜNG DẪN TỔ CHỨC & HỒ SƠ (MODULE 1)
@@ -252,5 +281,8 @@ router.use('/:id/environments', environmentRoutes);
    ========================================================================== */
 router.use('/:orgId/agents', agentRoutes);
 router.use('/:id/agents', agentRoutes);
+
+router.use('/:orgId/clusters', clusterRoutes);
+router.use('/:id/clusters', clusterRoutes);
 
 export const organizationRoutes = router;

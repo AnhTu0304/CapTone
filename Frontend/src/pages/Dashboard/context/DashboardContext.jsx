@@ -265,6 +265,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         isSwitchingOrg,
         orgError,
         fetchUserOrgs,
+        refreshOrganizations: fetchUserOrgs,
         currentEnv,
         setCurrentEnv,
         envList,
