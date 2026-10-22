@@ -268,6 +268,8 @@ Write-Host ""
 # 6. Kiểm tra trạng thái Pods
 # ------------------------------------------------------------------------------
 Write-Host "--- Kiem tra trang thai Pod ---" -ForegroundColor Yellow
+Write-Host "  Khoi dong lai Pod de ap dung Token moi nhat..."
+kubectl rollout restart deployment/$releaseName --namespace $Namespace | Out-Null
 Write-Host "  Cho Pod khoi dong va san sang..."
 kubectl rollout status deployment/$releaseName --namespace $Namespace --timeout=60s
 

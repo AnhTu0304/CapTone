@@ -1,4 +1,5 @@
-import crypto from 'crypto';
+import crypto from 'crypto';
+
 import { pool } from '../config/database';
 import {
   AgentModel,
@@ -297,6 +298,8 @@ export class AgentService {
     return await AgentModel.findMany({
       ...filter,
       organizationId: orgId,
+      clusterId: filter.clusterId || filter.cluster_id,
+      environmentId: filter.environmentId || filter.environment_id,
     });
   }
 

@@ -14,15 +14,18 @@ telemetryRoutes.get(
   TelemetryController.getLiveSummary
 );
 
-// Protect all following detailed telemetry routes with JWT authentication + DEVOPS/ADMIN role
-telemetryRoutes.use(authenticateToken);
-telemetryRoutes.use(requireRoles('DEVOPS', 'ADMIN'));
-
 // GET /api/v1/telemetry/services/:serviceId/metrics-sequence
+// Cho phép tất cả người dùng hợp lệ xem chuỗi viễn trắc để vẽ biểu đồ
 telemetryRoutes.get(
   '/services/:serviceId/metrics-sequence',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
   TelemetryController.getMetricsSequence
 );
+
+// Protect all following sensitive operations with JWT authentication + DEVOPS/ADMIN role
+telemetryRoutes.use(authenticateToken);
+telemetryRoutes.use(requireRoles('DEVOPS', 'ADMIN'));
 
 // GET /api/v1/telemetry/services/:serviceId/rca-context
 telemetryRoutes.get(

@@ -29,6 +29,7 @@ export const TopHeader = () => {
     currentEnv,
     setCurrentEnv,
     envList,
+    isLoadingEnvs,
     isAgentConnected,
     setIsAgentConnected,
     isAutoRefresh,
@@ -337,10 +338,11 @@ export const TopHeader = () => {
         {/* Divider */}
         <span style={{ color: 'var(--dash-border)', fontSize: '1.2rem' }}>/</span>
 
-        {/* Environment Selector Dropdown */}
+        {/* Environment & K8s Cluster Selector Dropdown */}
         <div ref={envRef} style={{ position: 'relative' }}>
           <button
             onClick={() => setIsEnvDropdownOpen(!isEnvDropdownOpen)}
+            title="Chọn Môi Trường & Cụm Kubernetes"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -356,7 +358,32 @@ export const TopHeader = () => {
             }}
           >
             <Server size={15} color="var(--dash-text-secondary)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{currentEnv.name}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+              {currentEnv?.cluster ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}` : (currentEnv?.displayName || currentEnv?.name || 'Chọn Cụm K8s')}
+            </span>
+            {currentEnv?.agentStatus === 'ONLINE' ? (
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#10B981',
+                  display: 'inline-block',
+                }}
+                title="Agent eBPF Online"
+              />
+            ) : currentEnv?.agentStatus === 'OFFLINE' ? (
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#EF4444',
+                  display: 'inline-block',
+                }}
+                title="Agent Offline"
+              />
+            ) : null}
             <ChevronDown size={14} color="var(--dash-text-muted)" />
           </button>
 
@@ -367,7 +394,7 @@ export const TopHeader = () => {
                 top: '100%',
                 left: 0,
                 marginTop: '6px',
-                width: '240px',
+                width: '280px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 borderRadius: 'var(--dash-radius-md)',
@@ -376,38 +403,124 @@ export const TopHeader = () => {
                 zIndex: 50,
               }}
             >
-              <div style={{ padding: '6px 10px', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
-                Chọn Môi Trường
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 10px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  color: 'var(--dash-text-muted)',
+                  textTransform: 'uppercase',
+                  borderBottom: '1px solid var(--dash-border)',
+                  marginBottom: '4px',
+                }}
+              >
+                <span>Môi Trường & Cụm K8s</span>
+                <span style={{ fontSize: '0.625rem', color: 'var(--dash-primary)' }}>{envList.length} Cụm</span>
               </div>
-              {envList.map((env) => (
+
+              {isLoadingEnvs && envList.length === 0 && (
+                <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
+                  Đang tải danh sách cụm...
+                </div>
+              )}
+
+              {!isLoadingEnvs && envList.length === 0 && (
+                <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
+                  Chưa có cụm K8s nào trong tổ chức.
+                </div>
+              )}
+
+              {envList.map((env) => {
+                const isSelected = currentEnv?.id === env.id;
+                const isOnline = env.agentStatus === 'ONLINE';
+
+                return (
+                  <button
+                    key={env.id}
+                    onClick={() => {
+                      setCurrentEnv(env);
+                      setIsAgentConnected(env.agentStatus === 'ONLINE');
+                      localStorage.setItem('selfheal_active_cluster_id', env.id);
+                      localStorage.setItem('selfheal_active_cluster_name', env.cluster || env.name);
+                      localStorage.setItem('selfheal_active_env_name', env.envName || 'Production');
+                      setIsEnvDropdownOpen(false);
+                      triggerRefresh();
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      borderRadius: 'var(--dash-radius-sm)',
+                      border: 'none',
+                      backgroundColor: isSelected ? 'var(--dash-primary-light)' : 'transparent',
+                      color: isSelected ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
+                      fontSize: '0.8125rem',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background-color 0.1s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {env.cluster || env.name}
+                        </span>
+                        {isOnline ? (
+                          <span style={{ fontSize: '0.5625rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 700 }}>
+                            ONLINE
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.5625rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: 600 }}>
+                            {env.agentStatus || 'OFFLINE'}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{env.envName || env.name}</span>
+                        {env.nodes > 0 && <span>&bull; {env.nodes} Node</span>}
+                        {env.pods > 0 && <span>&bull; {env.pods} Pods</span>}
+                      </div>
+                    </div>
+                    {isSelected && <Check size={14} color="var(--dash-primary)" style={{ flexShrink: 0 }} />}
+                  </button>
+                );
+              })}
+
+              <div style={{ borderTop: '1px solid var(--dash-border)', marginTop: '4px', paddingTop: '4px' }}>
                 <button
-                  key={env.id}
+                  type="button"
                   onClick={() => {
-                    setCurrentEnv(env);
                     setIsEnvDropdownOpen(false);
+                    if (onNavigate) {
+                      onNavigate('/dashboard/clusters');
+                    } else {
+                      window.location.hash = '#/dashboard/clusters';
+                    }
                   }}
                   style={{
                     width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 10px',
+                    padding: '7px 10px',
                     borderRadius: 'var(--dash-radius-sm)',
                     border: 'none',
-                    backgroundColor: currentEnv.id === env.id ? 'var(--dash-primary-light)' : 'transparent',
-                    color: currentEnv.id === env.id ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
-                    fontSize: '0.8125rem',
+                    background: 'none',
+                    color: 'var(--dash-primary)',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
                     cursor: 'pointer',
                     textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{env.name}</div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{env.cluster}</div>
-                  </div>
-                  {currentEnv.id === env.id && <Check size={14} color="var(--dash-primary)" />}
+                  <span>+ Quản Lý & Thêm Cụm Kubernetes</span>
                 </button>
-              ))}
+              </div>
             </div>
           )}
         </div>
