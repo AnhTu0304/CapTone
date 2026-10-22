@@ -9,6 +9,8 @@ import { systemRoleRoutes } from './systemRole.routes';
 import { organizationRoutes } from './organization.routes';
 import { agentDaemonRoutes } from './agent.routes';
 import { clusterGlobalRoutes } from './cluster.routes';
+import { nodeRoutes } from './node.routes';
+import { podRoutes } from './pod.routes';
 
 const apiRouter = Router();
 
@@ -23,5 +25,7 @@ apiRouter.use('/system-roles', systemRoleRoutes);
 apiRouter.use('/organizations', organizationRoutes);
 apiRouter.use('/agents', agentDaemonRoutes);
 apiRouter.use('/clusters', clusterGlobalRoutes);
+apiRouter.use('/nodes', nodeRoutes);
+apiRouter.use('/pods', podRoutes);
 
 export default apiRouter;

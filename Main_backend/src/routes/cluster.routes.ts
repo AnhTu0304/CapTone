@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { ClusterController } from '../controllers/cluster.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { requireOrgMember, requireOrgRole } from '../middlewares/orgAuth.middleware';
+import { nodeRoutes } from './node.routes';
+import { podRoutes } from './pod.routes';
 
 // Router nhận orgId từ parent router
 const router = Router({ mergeParams: true });
@@ -97,13 +99,19 @@ router.delete(
   ClusterController.removeCluster
 );
 
+// Tuyến đường độc lập cho Nodes và Pods theo cụm
+router.use('/:clusterId/nodes', nodeRoutes);
+router.use('/:clusterId/pods', podRoutes);
+
 export const clusterRoutes = router;
 
-// Global router cho admin
+// Global router cho direct access
 const globalRouter = Router();
 globalRouter.use(authenticateToken);
 globalRouter.get('/', ClusterController.getAll);
 globalRouter.get('/:clusterId', ClusterController.getDetail);
+globalRouter.use('/:clusterId/nodes', nodeRoutes);
+globalRouter.use('/:clusterId/pods', podRoutes);
 globalRouter.post('/:clusterId/rotate-token', ClusterController.rotateToken);
 globalRouter.delete('/:clusterId/tokens/:tokenId', ClusterController.revokeToken);
 globalRouter.put('/:clusterId/agent-config', ClusterController.updateConfig);

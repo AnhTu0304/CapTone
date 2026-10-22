@@ -220,6 +220,52 @@ export class ClusterModel {
   }
 
   /**
+   * Lấy danh sách Nodes của tổ chức (kèm lọc theo clusterId tùy chọn)
+   */
+  public static async findNodesByOrg(
+    orgId: string,
+    clusterId?: string,
+    client?: PoolClient
+  ): Promise<any[]> {
+    const db = client || pool;
+    let query = `
+      SELECT 
+        n.id, 
+        n.name, 
+        n.status, 
+        n.cluster_id,
+        c.name AS cluster_name,
+        c.status AS cluster_status,
+        c.provider AS cluster_provider,
+        n.cpu_capacity_millicores, 
+        n.memory_capacity_bytes, 
+        n.disk_capacity_bytes, 
+        n.kubelet_version, 
+        n.roles, 
+        n.labels,
+        n.created_at,
+        COUNT(p.id)::int AS pods_count
+      FROM nodes n
+      JOIN clusters c ON n.cluster_id = c.id
+      JOIN environments e ON c.environment_id = e.id
+      LEFT JOIN pods p ON p.node_id = n.id AND p.deleted_at IS NULL
+      WHERE (e.organization_id::text = $1 OR c.environment_id::text = $1)
+        AND c.deleted_at IS NULL
+    `;
+    const params: any[] = [orgId];
+
+    if (clusterId && !clusterId.startsWith('org-') && !clusterId.startsWith('sandbox-')) {
+      params.push(clusterId);
+      query += ` AND (c.id::text = $${params.length} OR c.name = $${params.length})`;
+    }
+
+    query += ` GROUP BY n.id, c.name, c.status, c.provider ORDER BY c.name ASC, n.name ASC`;
+
+    const res = await db.query(query, params);
+    return res.rows;
+  }
+
+  /**
    * Lấy chi tiết toàn diện của một Cụm K8s (kèm danh sách Nodes, Pods, Namespaces và Agent)
    */
   public static async findFullDetailById(
@@ -342,12 +388,25 @@ export class ClusterModel {
       );
     }
 
-    // 2. Danh sách Nodes
+    // 2. Danh sách Nodes kèm số lượng Pods và Labels
     const nodesRes = await db.query(
-      `SELECT id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at
-       FROM nodes
-       WHERE cluster_id = $1
-       ORDER BY name ASC`,
+      `SELECT 
+        n.id, 
+        n.name, 
+        n.status, 
+        n.cpu_capacity_millicores, 
+        n.memory_capacity_bytes, 
+        n.disk_capacity_bytes, 
+        n.kubelet_version, 
+        n.roles, 
+        n.labels, 
+        n.created_at,
+        COUNT(p.id)::int AS pods_count
+       FROM nodes n
+       LEFT JOIN pods p ON p.node_id = n.id AND p.deleted_at IS NULL
+       WHERE n.cluster_id = $1
+       GROUP BY n.id
+       ORDER BY n.name ASC`,
       [cluster.id]
     );
 
