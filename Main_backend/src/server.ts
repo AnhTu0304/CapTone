@@ -6,6 +6,7 @@ import { testRedisConnection, closeRedis } from './config/redis';
 import { initAgentWebSocket } from './websocket/agentWebSocket';
 import { initTelemetryWebSocket } from './websocket/telemetryWebSocket';
 import { TelemetryPipelineService } from './services/telemetryPipeline.service';
+import { EmailWorker } from './services/emailQueue.service';
 
 const startServer = async () => {
   // Test connection to PostgreSQL before opening HTTP port
@@ -13,6 +14,11 @@ const startServer = async () => {
 
   // Test connection to Redis Cache
   await testRedisConnection();
+
+  // Start background Email Queue Worker (if in-process worker enabled)
+  if (config.email.inProcessWorker) {
+    await EmailWorker.start(1000);
+  }
 
   const server = http.createServer(app);
 
@@ -35,6 +41,7 @@ const startServer = async () => {
   const shutdown = async () => {
     console.log('Received shutdown signal, closing server gracefully...');
     TelemetryPipelineService.stopPipeline();
+    await EmailWorker.stop();
     uiWss.close();
     await closeRedis();
     wss.close(() => {

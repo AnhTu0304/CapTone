@@ -42,6 +42,7 @@ export interface IUserOrgRole {
 export type IUserResponse = Omit<IUser, 'password_hash'> & {
     system_roles?: string[];
     organization_roles?: IUserOrgRole[];
+    has_organization?: boolean;
 };
 
 export interface IUserProfileResponse {
@@ -160,6 +161,28 @@ export class UserModel {
     }
 
     /**
+     * Lấy danh sách tổ chức và vai trò tổ chức của người dùng
+     */
+    public static async getUserOrganizations(userId: string, client?: PoolClient): Promise<IUserOrgRole[]> {
+        const db = client || pool;
+        const sql = `
+          SELECT 
+            o.id AS organization_id,
+            o.name AS organization_name,
+            r.name AS role_name,
+            r.code AS role_code,
+            om.status AS member_status
+          FROM organization_members om
+          JOIN organizations o ON om.organization_id = o.id
+          JOIN roles r ON om.role_id = r.id
+          WHERE om.user_id = $1 AND om.status != 'REMOVED' AND o.deleted_at IS NULL
+          ORDER BY o.created_at ASC
+        `;
+        const res = await db.query<IUserOrgRole>(sql, [userId]);
+        return res.rows;
+    }
+
+    /**
      * Tìm người dùng theo email (kèm password_hash phục vụ xác thực đăng nhập)
      */
     public static async findByEmailWithPassword(email: string, client?: PoolClient): Promise<IUser | null> {
@@ -181,6 +204,19 @@ export class UserModel {
             'SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL LIMIT 1',
             [email]
         );
+        return result.rows[0] || null;
+    }
+
+    /**
+     * Tìm thông tin người dùng theo email (đầy đủ các trường an toàn)
+     */
+    public static async findFullByEmail(email: string, client?: PoolClient): Promise<IUserResponse | null> {
+        const db = client || pool;
+        const querySql = `
+          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
+          FROM users WHERE email = $1 AND deleted_at IS NULL LIMIT 1
+        `;
+        const result = await db.query<IUserResponse>(querySql, [email]);
         return result.rows[0] || null;
     }
 
@@ -259,20 +295,22 @@ export class UserModel {
      * Tạo mới người dùng
      */
     public static async create(
-        data: { email: string; password_hash: string; full_name: string; status?: UserStatus },
+        data: { email: string; password_hash?: string | null; full_name: string; status?: UserStatus; avatar_url?: string | null; email_verified_at?: Date | null },
         client?: PoolClient
     ): Promise<IUserResponse> {
         const db = client || pool;
         const insertSql = `
-          INSERT INTO users (email, password_hash, full_name, status)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO users (email, password_hash, full_name, avatar_url, status, email_verified_at)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
         `;
         const result = await db.query<IUserResponse>(insertSql, [
             data.email,
-            data.password_hash,
+            data.password_hash || null,
             data.full_name,
+            data.avatar_url || null,
             data.status || 'ACTIVE',
+            data.email_verified_at || null,
         ]);
         return result.rows[0];
     }

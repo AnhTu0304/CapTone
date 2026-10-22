@@ -9,6 +9,7 @@ import {
   User,
   ShieldCheck,
   LogOut,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { personalPortalService } from '../../services/personalPortalService';
@@ -135,8 +136,30 @@ export const PersonalHeader = ({
       </div>
 
       {/* Right Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Quick Link to Dashboard */}
+        <button
+          type="button"
+          onClick={() => onNavigate && onNavigate('/dashboard')}
+          title="Bàn Điều Khiển Doanh Nghiệp (Dashboard)"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            border: '1px solid #E2E8F0',
+            backgroundColor: '#F8FAFC',
+            color: '#334155',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <LayoutDashboard size={15} color="#059669" />
+          <span>Về Dashboard</span>
+        </button>
 
         {/* Notifications Icon Button */}
         <button
@@ -290,6 +313,32 @@ export const PersonalHeader = ({
               >
                 <ShieldCheck size={16} color="#0284C7" />
                 <span>Bảo Mật & Đổi Mật Khẩu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProfileDropdownOpen(false);
+                  onNavigate && onNavigate('/dashboard');
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#334155',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  textAlign: 'left',
+                }}
+              >
+                <LayoutDashboard size={16} color="#059669" />
+                <span>Bàn Điều Khiển Doanh Nghiệp</span>
               </button>
 
               {canAccessAdmin && (

@@ -9,7 +9,11 @@ import {
 import { OrganizationModel } from '../models/organization.model';
 import { OrganizationRoleModel } from '../models/organizationRole.model';
 import { IPaginatedResult } from '../models/user.model';
-import { EmailService } from './email.service';
+import { EmailQueue } from './emailQueue.service';
+import { SessionRevocationService } from './sessionRevocation.service';
+import { OrganizationInvitationService } from './organizationInvitation.service';
+import { OrganizationInvitationModel } from '../models/organizationInvitation.model';
+import { pool } from '../config/database';
 
 /**
  * Service xử lý logic nghiệp vụ cho Thành viên Tổ chức (Organization Members)
@@ -92,113 +96,43 @@ export class OrganizationMemberService {
 
   /**
    * 2. Mời thành viên mới vào tổ chức qua Email
-   * Chỉ SME_OWNER của tổ chức hoặc SUPER_ADMIN mới có quyền mời
+   * Tích hợp với OrganizationInvitationService để sinh token bảo mật, lưu hạn dùng và enqueue email
    */
   public static async inviteMember(
     orgId: string,
     currentUserId: string,
     currentUserRoles: string[] = [],
     dto: IInviteMemberDto
-  ): Promise<IOrganizationMemberDetail> {
-    const hasPermission = await this.isSuperAdminOrOwner(orgId, currentUserId, currentUserRoles);
-    if (!hasPermission) {
-      throw new ApiError(403, 'Chỉ Chủ sở hữu (SME Owner) hoặc Quản trị viên tối cao mới có quyền mời thành viên');
-    }
-
-    // Kiểm tra tổ chức tồn tại qua OrganizationModel
-    const org = await OrganizationModel.findById(orgId);
-    if (!org) {
-      throw new ApiError(404, 'Không tìm thấy tổ chức');
-    }
-
-    // Kiểm tra vai trò cần gán qua OrganizationRoleModel
-    const roleCode = dto.role_code || 'DEVOPS';
-    const role = await OrganizationRoleModel.findByCode(roleCode);
-    if (!role) {
-      throw new ApiError(400, `Vai trò '${roleCode}' không hợp lệ hoặc không tồn tại`);
-    }
-
-    // Tìm người dùng theo Email qua OrganizationMemberModel
-    const targetEmail = dto.email.trim().toLowerCase();
-    const targetUser = await OrganizationMemberModel.findUserByEmail(targetEmail);
-    if (!targetUser) {
-      throw new ApiError(
-        404,
-        `Không tìm thấy tài khoản với email '${targetEmail}'. Người dùng cần đăng ký tài khoản trước khi tham gia tổ chức.`
-      );
-    }
-
-    // Lấy thông tin người mời để gửi email
-    const inviter = await OrganizationMemberModel.findUserById(currentUserId);
-
-    // Kiểm tra xem đã là thành viên trong tổ chức chưa
-    const existing = await OrganizationMemberModel.findByOrgAndUser(orgId, targetUser.id);
-
-    let memberId: string;
-
-    if (existing) {
-      if (existing.status === 'ACTIVE') {
-        throw new ApiError(409, `Người dùng '${targetUser.email}' đã là thành viên đang hoạt động trong tổ chức`);
+  ): Promise<IOrganizationMemberDetail & { token?: string }> {
+    const result = await OrganizationInvitationService.createInvitation(
+      orgId,
+      currentUserId,
+      currentUserRoles,
+      {
+        email: dto.email,
+        role_code: dto.role_code,
       }
-      if (existing.status === 'INVITED') {
-        throw new ApiError(409, `Người dùng '${targetUser.email}' đã có một lời mời đang chờ chấp nhận`);
-      }
+    );
 
-      // Nếu đã từng bị REMOVED hoặc INACTIVE -> Kích hoạt lại lời mời qua OrganizationMemberModel
-      const updated = await OrganizationMemberModel.update(undefined, existing.id, {
-        role_id: role.id,
-        status: 'INVITED',
-        invited_by: currentUserId,
-      });
-      memberId = updated.id;
-    } else {
-      // Chèn bản ghi mới qua OrganizationMemberModel
-      const created = await OrganizationMemberModel.create(undefined, {
-        organization_id: orgId,
-        user_id: targetUser.id,
-        role_id: role.id,
-        status: 'INVITED',
-        invited_by: currentUserId,
-      });
-      memberId = created.id;
-    }
-
-    // Gửi email thông báo mời tham gia
-    EmailService.sendInvitationEmail(
-      targetUser.email,
-      targetUser.full_name,
-      inviter?.full_name || 'Quản trị viên',
-      org.name,
-      role.name
-    ).catch(() => {});
+    const targetUser = await OrganizationMemberModel.findUserByEmail(dto.email.trim());
 
     return {
-      id: memberId,
+      id: result.invitation.id,
       organization_id: orgId,
       user: {
-        id: targetUser.id,
-        email: targetUser.email,
-        full_name: targetUser.full_name,
-        avatar_url: targetUser.avatar_url,
-        status: targetUser.status,
+        id: targetUser?.id || result.invitation.id,
+        email: result.invitation.email,
+        full_name: targetUser?.full_name || dto.email.split('@')[0],
+        avatar_url: targetUser?.avatar_url || null,
+        status: targetUser?.status || 'PENDING',
       },
-      role: {
-        id: role.id,
-        code: role.code,
-        name: role.name,
-        description: role.description,
-      },
+      role: result.invitation.role,
       status: 'INVITED',
-      inviter: inviter
-        ? {
-            id: inviter.id,
-            email: inviter.email,
-            full_name: inviter.full_name,
-          }
-        : null,
+      inviter: result.invitation.invited_by || null,
       joined_at: null,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: result.invitation.created_at,
+      updated_at: result.invitation.created_at,
+      token: result.token,
     };
   }
 
@@ -210,28 +144,83 @@ export class OrganizationMemberService {
     orgId: string,
     currentUserId: string
   ): Promise<{ message: string; organization_id: string; role_code: string; joined_at: Date }> {
-    const invite = await OrganizationMemberModel.findPendingInvite(orgId, currentUserId);
+    const user = await OrganizationMemberModel.findUserById(currentUserId);
+    if (!user) {
+      throw new ApiError(401, 'Không tìm thấy thông tin tài khoản người dùng');
+    }
 
-    if (!invite) {
+    const memberInvite = await OrganizationMemberModel.findPendingInvite(orgId, currentUserId);
+    const invitationRecord = await OrganizationInvitationModel.findPendingByEmailAndOrg(user.email, orgId);
+
+    if (!memberInvite && !invitationRecord) {
       throw new ApiError(404, 'Không tìm thấy lời mời đang chờ nào cho tài khoản của bạn tại tổ chức này');
     }
 
-    const updated = await OrganizationMemberModel.update(undefined, invite.id, {
-      status: 'ACTIVE',
-      joined_at: new Date(),
-    });
+    const org = await OrganizationModel.findById(orgId);
+    const orgName = org?.name || memberInvite?.org_name || 'Tổ chức';
+    const roleId =
+      invitationRecord?.role_id ||
+      (await OrganizationMemberModel.findByOrgAndUser(orgId, currentUserId))?.role_id;
+
+    const client = await pool.connect();
+    let joinedAt = new Date();
+
+    try {
+      await client.query('BEGIN');
+
+      if (invitationRecord) {
+        await OrganizationInvitationModel.acceptAtomic(invitationRecord.id, currentUserId, client);
+      }
+
+      const upsertMemberQuery = `
+        INSERT INTO organization_members (
+          organization_id, user_id, role_id, status, invited_by, joined_at, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, 'ACTIVE', $4, NOW(), NOW(), NOW()
+        )
+        ON CONFLICT (organization_id, user_id)
+        DO UPDATE SET 
+          role_id = COALESCE(EXCLUDED.role_id, organization_members.role_id),
+          status = 'ACTIVE',
+          joined_at = NOW(),
+          updated_at = NOW()
+        RETURNING joined_at;
+      `;
+
+      const memberRes = await client.query(upsertMemberQuery, [
+        orgId,
+        currentUserId,
+        roleId,
+        invitationRecord?.invited_by || null,
+      ]);
+
+      if (memberRes.rows[0]?.joined_at) {
+        joinedAt = memberRes.rows[0].joined_at;
+      }
+
+      await client.query('COMMIT');
+      await SessionRevocationService.revokeUserOrgSessions(orgId, currentUserId);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const role = roleId ? await OrganizationRoleModel.findById(roleId) : null;
 
     return {
-      message: `Chào mừng bạn gia nhập tổ chức ${invite.org_name}!`,
+      message: `Chào mừng bạn gia nhập tổ chức ${orgName}!`,
       organization_id: orgId,
-      role_code: invite.role_code,
-      joined_at: updated.joined_at || new Date(),
+      role_code: role?.code || memberInvite?.role_code || 'DEVOPS',
+      joined_at: joinedAt,
     };
   }
 
   /**
    * 4. Cập nhật vai trò hoặc trạng thái của thành viên trong tổ chức
    * Chỉ SME_OWNER của tổ chức hoặc SUPER_ADMIN mới có quyền
+   * Thu hồi phiên làm việc / quyền cũ ngay lập tức (Session & Access Revocation)
    */
   public static async updateMember(
     orgId: string,
@@ -250,6 +239,11 @@ export class OrganizationMemberService {
 
     if (!currentMember) {
       throw new ApiError(404, 'Thành viên này không tồn tại trong tổ chức');
+    }
+
+    // Bảo vệ: Tuyệt đối không cho phép gán vai trò hệ thống (SUPER_ADMIN, ADMIN) cho thành viên tổ chức
+    if (dto.role_code && ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(dto.role_code.toUpperCase())) {
+      throw new ApiError(403, 'Không thể cấp vai trò hệ thống thông qua API quản lý thành viên tổ chức');
     }
 
     // Ràng buộc bảo vệ SME_OWNER duy nhất
@@ -283,6 +277,9 @@ export class OrganizationMemberService {
         role_id: roleId,
         status: dto.status as any,
       });
+
+      // Thu hồi quyền cũ của thành viên trong Redis Session / Cache
+      await SessionRevocationService.revokeUserOrgSessions(orgId, targetUserId);
     }
 
     // Lấy thông tin cập nhật chi tiết trả về qua OrganizationMemberModel
@@ -296,10 +293,7 @@ export class OrganizationMemberService {
 
   /**
    * 5. Xóa / Loại bỏ thành viên khỏi tổ chức
-   * Cho phép nếu:
-   * - Người thao tác là SME_OWNER của tổ chức
-   * - Hoặc SUPER_ADMIN
-   * - Hoặc thành viên tự rời tổ chức (targetUserId === currentUserId)
+   * Thu hồi phiên làm việc / quyền cũ ngay lập tức (Session & Access Revocation)
    */
   public static async removeMember(
     orgId: string,
@@ -334,6 +328,9 @@ export class OrganizationMemberService {
 
     // Đánh dấu REMOVED qua OrganizationMemberModel
     await OrganizationMemberModel.setStatus(undefined, targetMember.id, 'REMOVED');
+
+    // Thu hồi quyền / session của user trong tổ chức
+    await SessionRevocationService.revokeUserOrgSessions(orgId, targetUserId);
 
     return {
       success: true,

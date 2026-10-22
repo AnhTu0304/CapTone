@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Building2,
@@ -82,6 +83,8 @@ export const PersonalSidebar = ({
   isCollapsed = false,
   onToggleCollapse,
 }) => {
+  const { user, isSuperAdmin, isAdmin } = useAuth();
+  const canAccessAdmin = (isSuperAdmin && isSuperAdmin(user)) || (isAdmin && isAdmin(user));
   const [hoveredItem, setHoveredItem] = useState(null);
 
   const isActive = (itemPath) => {
@@ -310,7 +313,93 @@ export const PersonalSidebar = ({
           );
         })}
 
+        {/* Switch Space Divider & Links */}
+        <div style={{ margin: '12px 10px 4px', borderTop: '1px solid #E2E8F0' }} />
 
+        {!isCollapsed && (
+          <div
+            style={{
+              padding: '6px 14px 2px',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              color: '#94A3B8',
+              letterSpacing: '0.04em',
+            }}
+          >
+            CHUYỂN KHÔNG GIAN
+          </div>
+        )}
+
+        <div style={{ padding: '0 8px' }}>
+          <button
+            type="button"
+            onClick={(e) => handleItemClick(e, '/dashboard')}
+            title="Bàn Điều Khiển Doanh Nghiệp (Dashboard)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              width: '100%',
+              padding: isCollapsed ? '10px 0' : '9px 12px',
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+              borderRadius: '9px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: '#334155',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#F0FDF4';
+              e.currentTarget.style.color = '#059669';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#334155';
+            }}
+          >
+            <LayoutDashboard size={18} color="#059669" />
+            {!isCollapsed && <span>Về Dashboard</span>}
+          </button>
+
+          {canAccessAdmin && (
+            <button
+              type="button"
+              onClick={(e) => handleItemClick(e, '/admin')}
+              title="Cổng Quản Trị Hệ Thống (Admin)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                width: '100%',
+                marginTop: '2px',
+                padding: isCollapsed ? '10px 0' : '9px 12px',
+                justifyContent: isCollapsed ? 'center' : 'flex-start',
+                borderRadius: '9px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#F5F3FF';
+                e.currentTarget.style.color = '#7C3AED';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#334155';
+              }}
+            >
+              <Building2 size={18} color="#7C3AED" />
+              {!isCollapsed && <span>Cổng Quản Trị</span>}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Sidebar Footer / Collapse Toggle */}

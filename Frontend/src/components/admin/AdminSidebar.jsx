@@ -196,7 +196,7 @@ export const SME_OWNER_NAV_GROUPS = [
       {
         id: 'profile',
         label: 'Hồ sơ cá nhân',
-        path: '/dashboard/profile',
+        path: '/portal/profile',
         icon: UserCheck,
       },
       {

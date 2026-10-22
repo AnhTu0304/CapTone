@@ -58,6 +58,9 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         // ignore
       }
     }
+    if (newOrg?.role_in_org) {
+      setCurrentUserRole(newOrg.role_in_org);
+    }
   };
 
   const [orgList, setOrgList] = useState(() => {
@@ -84,14 +87,32 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     return baseList;
   });
 
+  // 2. User & RBAC Role State ('SME_OWNER' | 'DEVOPS' | 'VIEWER')
+  const [currentUserRole, setCurrentUserRole] = useState(() => {
+    return auth?.activeRole || 'SME_OWNER';
+  });
+
+  useEffect(() => {
+    if (auth?.activeRole && auth.activeRole !== currentUserRole) {
+      setCurrentUserRole(auth.activeRole);
+    }
+  }, [auth?.activeRole, currentUserRole]);
+
   // Tải danh sách Tổ chức thật 100% từ Database PostgreSQL
   const refreshOrganizations = useCallback(async () => {
     try {
+      const token =
+        localStorage.getItem('selfheal_auth_token') ||
+        sessionStorage.getItem('admin_access_token');
+      if (!token) return;
+
       let orgs = [];
       // 1. Thử lấy danh sách tổ chức của user hiện tại
       try {
         const res = await request('/organizations/me/list');
         if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+          orgs = res.data;
+        } else if (Array.isArray(res?.data) && res.data.length > 0) {
           orgs = res.data;
         }
       } catch (e) {
@@ -119,6 +140,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           slug: o.slug || (o.name ? o.name.toLowerCase().replace(/\s+/g, '-') : 'org'),
           plan: o.plan || 'SME Production Pro',
           clusterCount: o.clusters_count || o.cluster_count || 1,
+          role_in_org: o.role_in_org,
         }));
 
         setOrgList(formattedOrgs);
@@ -127,16 +149,29 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         setCurrentOrgState((prev) => {
           const storedId = localStorage.getItem('selfheal_active_org_id');
           const matchedByStored = storedId && formattedOrgs.find((o) => o.id === storedId);
-          if (matchedByStored) return matchedByStored;
+          if (matchedByStored) {
+            if (matchedByStored.role_in_org) {
+              setCurrentUserRole(matchedByStored.role_in_org);
+            }
+            return matchedByStored;
+          }
 
           const matchedByPrev = prev?.id && formattedOrgs.find((o) => o.id === prev.id);
-          if (matchedByPrev && !matchedByPrev.id.startsWith('org-')) return matchedByPrev;
+          if (matchedByPrev && !matchedByPrev.id.startsWith('org-')) {
+            if (matchedByPrev.role_in_org) {
+              setCurrentUserRole(matchedByPrev.role_in_org);
+            }
+            return matchedByPrev;
+          }
 
           const firstReal = formattedOrgs[0];
           try {
             localStorage.setItem('selfheal_active_org_id', firstReal.id);
             localStorage.setItem('selfheal_active_org_name', firstReal.name);
           } catch {}
+          if (firstReal.role_in_org) {
+            setCurrentUserRole(firstReal.role_in_org);
+          }
           return firstReal;
         });
       }
@@ -181,17 +216,6 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     { id: 'env-staging', name: 'staging-us-east-2', cluster: 'k8s-staging-cluster-02', status: 'Healthy' },
     { id: 'env-dev', name: 'dev-sandbox-cluster', cluster: 'k8s-dev-cluster-local', status: 'Warning' },
   ];
-
-  // 2. User & RBAC Role State ('SME_OWNER' | 'DEVOPS' | 'VIEWER')
-  const [currentUserRole, setCurrentUserRole] = useState(() => {
-    return auth?.activeRole || 'SME_OWNER';
-  });
-
-  useEffect(() => {
-    if (auth?.activeRole && auth.activeRole !== currentUserRole) {
-      setCurrentUserRole(auth.activeRole);
-    }
-  }, [auth?.activeRole, currentUserRole]);
 
   // 3. Agent Connectivity State (Toggleable to demo honest Empty State)
   const [isAgentConnected, setIsAgentConnected] = useState(true);

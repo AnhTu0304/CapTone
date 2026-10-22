@@ -34,7 +34,6 @@ import { AdminAlertsPage } from '../pages/Admin/Alerts/AdminAlertsPage';
 import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSettingsPage';
 import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
 import { AdminAccountSettingsPage } from '../pages/Admin/Settings/AdminAccountSettingsPage';
-import ProfilePage from '../pages/Dashboard/Profile/ProfilePage';
 import PersonalPortalPage from '../pages/Personal';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
@@ -98,7 +97,7 @@ export const ROUTES = {
   ONBOARDING_K8S: '/onboarding/kubernetes',
   ONBOARDING_VERIFY: '/onboarding/verify-agent',
   ONBOARDING_COMPLETE: '/onboarding/complete',
-  PROFILE: '/dashboard/profile',
+  PROFILE: '/portal/profile',
   NOTIFICATIONS: '/dashboard/notifications',
 };
 
@@ -117,6 +116,11 @@ export const RouteRenderer = ({
   const user = auth?.user || null;
   const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
+
+  // Handle profile routes (unify into Personal Portal Profile)
+  if (path === '/dashboard/profile' || path === '/profile' || path === '/admin/profile') {
+    return <PersonalPortalPage currentPath="/portal/profile" onNavigate={onNavigate} />;
+  }
 
   // Handle all Personal Portal routes (Tầng Cá Nhân)
   if (path.startsWith('/portal') || path === '/user' || path === '/personal' || path === '/me') {
@@ -160,10 +164,7 @@ export const RouteRenderer = ({
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle standalone profile or notifications paths
-  if (path === '/profile') {
-    return <DashboardPage currentPath="/dashboard/profile" onNavigate={onNavigate} />;
-  }
+  // Handle standalone notifications paths
   if (path === '/notifications') {
     return <DashboardPage currentPath="/dashboard/notifications" onNavigate={onNavigate} />;
   }
@@ -247,8 +248,6 @@ export const RouteRenderer = ({
           message="Tài khoản DevOps không có quyền quản lý tài khoản người dùng hoặc gán quyền hệ thống. Quyền này dành riêng cho Quản trị viên (Admin)."
         />
       );
-    } else if (path === '/admin/profile') {
-      adminContent = <ProfilePage onNavigate={onNavigate} />;
     } else if (path === '/admin' || path === '/admin/overview') {
       adminContent = <OverviewPage onNavigate={onNavigate} />;
     } else if (path === '/admin/companies' || path === '/admin/organizations') {

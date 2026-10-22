@@ -47,6 +47,26 @@ export const authService = {
   },
 
   /**
+   * Đăng nhập / Đăng ký nhanh bằng Google OAuth Token
+   * @param {string} token
+   */
+  async googleLogin(token) {
+    const res = await fetch(`${API_BASE_URL}/auth/google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Đăng nhập với Google không thành công');
+    }
+    return data;
+  },
+
+  /**
    * Lấy thông tin hồ sơ người dùng đang đăng nhập
    * @param {string} token
    */

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { OrganizationController } from '../controllers/organization.controller';
 import { OrganizationModel } from '../models/organization.model';
 import { OrganizationMemberController } from '../controllers/organizationMember.controller';
+import { OrganizationInvitationController } from '../controllers/organizationInvitation.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
@@ -22,6 +23,9 @@ import {
   memberParamSchema,
   orgMemberIdOnlySchema,
   memberQuerySchema,
+  acceptInvitationByTokenSchema,
+  invitationParamSchema,
+  invitationQuerySchema,
 } from '../validations/organizationMember.validation';
 import { environmentRoutes } from './environment.routes';
 import { agentRoutes } from './agent.routes';
@@ -76,6 +80,15 @@ router.get(
 router.get(
   '/me/invitations',
   OrganizationController.getMyInvitations
+);
+
+/**
+ * [POST] /api/v1/organizations/invitations/accept - Chấp nhận lời mời tham gia tổ chức bằng Token
+ */
+router.post(
+  '/invitations/accept',
+  validate(acceptInvitationByTokenSchema),
+  OrganizationInvitationController.acceptInvitationByToken
 );
 
 /**
@@ -211,6 +224,50 @@ router.delete(
   validate(memberParamSchema),
   requireOrgSelfOrOwner,
   OrganizationMemberController.removeMember
+);
+
+/**
+ * [GET] /api/v1/organizations/:id/invitations - Lấy danh sách lời mời của tổ chức
+ * Bảo vệ: Chỉ SME_OWNER hoặc SUPER_ADMIN
+ */
+router.get(
+  '/:id/invitations',
+  validate(invitationQuerySchema),
+  requireOrgRole('SME_OWNER'),
+  OrganizationInvitationController.listInvitations
+);
+
+/**
+ * [POST] /api/v1/organizations/:id/invitations - Tạo lời mời thành viên vào tổ chức
+ * Bảo vệ: Chỉ SME_OWNER hoặc SUPER_ADMIN
+ */
+router.post(
+  '/:id/invitations',
+  validate(inviteMemberSchema),
+  requireOrgRole('SME_OWNER'),
+  OrganizationInvitationController.createInvitation
+);
+
+/**
+ * [DELETE] /api/v1/organizations/:id/invitations/:invitationId - Thu hồi lời mời
+ * Bảo vệ: Chỉ SME_OWNER hoặc SUPER_ADMIN
+ */
+router.delete(
+  '/:id/invitations/:invitationId',
+  validate(invitationParamSchema),
+  requireOrgRole('SME_OWNER'),
+  OrganizationInvitationController.revokeInvitation
+);
+
+/**
+ * [POST] /api/v1/organizations/:id/invitations/:invitationId/resend - Gửi lại lời mời
+ * Bảo vệ: Chỉ SME_OWNER hoặc SUPER_ADMIN
+ */
+router.post(
+  '/:id/invitations/:invitationId/resend',
+  validate(invitationParamSchema),
+  requireOrgRole('SME_OWNER'),
+  OrganizationInvitationController.resendInvitation
 );
 
 /* ==========================================================================

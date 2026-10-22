@@ -79,6 +79,37 @@ export const AuthProvider = ({ children }) => {
     return profile;
   }, []);
 
+  // Hàm Đăng nhập bằng Google
+  const loginWithGoogle = useCallback(async (googleToken) => {
+    const res = await authService.googleLogin(googleToken);
+    const receivedToken = res?.data?.token;
+
+    if (!receivedToken) {
+      throw new Error('Không nhận được mã xác thực token từ máy chủ');
+    }
+
+    setToken(receivedToken);
+    localStorage.setItem(TOKEN_KEY, receivedToken);
+
+    let profile = res?.data?.user;
+    if (!profile) {
+      try {
+        profile = await authService.getProfile(receivedToken);
+      } catch {
+        profile = {
+          id: res.data?.id,
+          email: res.data?.email,
+          full_name: res.data?.email?.split('@')[0],
+          system_roles: ['USER'],
+        };
+      }
+    }
+
+    setUser(profile);
+    localStorage.setItem(USER_KEY, JSON.stringify(profile));
+    return profile;
+  }, []);
+
   // Hàm Đăng ký
   const register = useCallback(async ({ email, password, full_name }) => {
     try {
@@ -276,6 +307,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: Boolean(token && user),
     loading,
     login,
+    loginWithGoogle,
     register,
     logout,
     getInitials,

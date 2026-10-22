@@ -1,3 +1,4 @@
+import { request } from './apiClient';
 /**
  * @file personalPortalService.js
  * @description Dịch vụ quản lý dữ liệu Tầng Cá Nhân (Personal Space / User Portal)
@@ -619,6 +620,118 @@ export const personalPortalService = {
     const updated = current.filter((c) => c.id !== orgId);
     this.saveCompanies(updated);
     this.logActivity('COMPANY_LEAVE', 'Rời Company', `Đã rời khỏi tổ chức ${target.name}`, 'COMPANY');
+    return true;
+  },
+
+  async fetchMyInvitations() {
+    try {
+      const token =
+        localStorage.getItem('selfheal_auth_token') ||
+        sessionStorage.getItem('admin_access_token');
+      if (!token) {
+        return this.getInvitations();
+      }
+      const response = await request('/organizations/me/invitations');
+      if (response && Array.isArray(response.data)) {
+        const mapped = response.data.map((inv) => {
+          const orgId = inv.organization?.id || inv.organization_id;
+          const orgName = inv.organization?.name || inv.organization_name || 'Tổ chức';
+          const roleCode = inv.role?.code || inv.invitedRole || 'DEVOPS';
+          const roleTitle =
+            inv.role?.name ||
+            (roleCode === 'SME_OWNER'
+              ? 'Chủ Doanh Nghiệp (Owner)'
+              : roleCode === 'DEVOPS'
+              ? 'Kỹ Sư DevOps / SRE'
+              : 'Người Quan Sát (Viewer)');
+
+          return {
+            id: inv.id,
+            organizationId: orgId,
+            organizationName: orgName,
+            inviterName: inv.inviter?.full_name || 'Quản trị viên',
+            inviterEmail: inv.inviter?.email || '',
+            invitedRole: roleCode,
+            invitedRoleTitle: roleTitle,
+            createdAt: inv.created_at ? formatVnDate(new Date(inv.created_at)) : 'Gần đây',
+            expiresAt: inv.expires_at ? formatVnDate(new Date(inv.expires_at)) : '7 ngày sau',
+            status: 'PENDING',
+            clustersCount: 1,
+          };
+        });
+
+        localStorage.setItem(STORAGE_INVITATIONS_KEY, JSON.stringify(mapped));
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('[personalPortalService] fetchMyInvitations failed, using local cache:', err.message);
+    }
+    return this.getInvitations();
+  },
+
+  async fetchMyCompanies() {
+    try {
+      const token =
+        localStorage.getItem('selfheal_auth_token') ||
+        sessionStorage.getItem('admin_access_token');
+      if (!token) {
+        return this.getMyCompanies();
+      }
+      const response = await request('/organizations/me/list');
+      if (response && Array.isArray(response.data)) {
+        const mapped = response.data.map((org, index) => {
+          const roleCode = org.role_in_org || 'SME_OWNER';
+          const roleTitle =
+            roleCode === 'SME_OWNER'
+              ? 'Chủ Doanh Nghiệp (Owner)'
+              : roleCode === 'DEVOPS'
+              ? 'Kỹ Sư Vận Hành Hạ Tầng (DevOps)'
+              : 'Người Giám Sát (Viewer)';
+
+          return {
+            id: org.id,
+            name: org.name,
+            slug: org.slug,
+            plan: 'Enterprise Cloud',
+            status: org.status || 'ACTIVE',
+            role: roleCode,
+            roleTitle: roleTitle,
+            joinedAt: org.created_at ? formatVnDate(new Date(org.created_at)) : '15/01/2026',
+            clustersCount: 2,
+            membersCount: 5,
+            activeWorkloads: 10,
+            domain: `${org.slug}.com`,
+            isPrimary: index === 0,
+            lastAccessedAt: 'Vừa xong',
+            healthStatus: 'HEALTHY',
+          };
+        });
+
+        if (mapped.length > 0) {
+          this.saveCompanies(mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('[personalPortalService] fetchMyCompanies failed, using local cache:', err.message);
+    }
+    return this.getMyCompanies();
+  },
+
+  async acceptBackendInvitation(invitationId, orgId) {
+    if (orgId && !orgId.startsWith('org-data') && !orgId.startsWith('org-nexus')) {
+      try {
+        await request(`/organizations/${encodeURIComponent(orgId)}/members/accept`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        console.warn('[personalPortalService] acceptBackendInvitation API failed:', err.message);
+        throw err;
+      }
+    }
+
+    this.respondInvitation(invitationId, true);
+    await this.fetchMyCompanies();
     return true;
   },
 
