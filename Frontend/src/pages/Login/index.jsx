@@ -31,15 +31,12 @@ export const LoginPage = ({ onNavigate }) => {
       rawSysRoles.includes('ADMIN') ||
       rawSysRoles.includes('SYSTEM_ADMIN');
 
-    let targetPath = '/dashboard';
+    let targetPath = '/portal';
     if (isPlatformAdmin) {
       targetPath = '/admin';
     } else {
-      const orgRoles = user?.organization_roles || [];
-      const hasOrg = Boolean(user?.has_organization || orgRoles.length > 0 || user?.organization || user?.organization_id);
-      if (!hasOrg) {
-        targetPath = '/onboarding/organization';
-      }
+      // Đăng nhập điều hướng chuẩn xác về Tầng Cá Nhân (/portal)
+      targetPath = '/portal';
     }
 
     const doNav = () => {

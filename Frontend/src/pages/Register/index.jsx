@@ -15,7 +15,7 @@ export const RegisterPage = ({ onNavigate }) => {
   const [submitted, setSubmitted] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [regType, setRegType] = useState('form');
-  const [targetPath, setTargetPath] = useState('/onboarding/organization');
+  const [targetPath, setTargetPath] = useState('/portal');
   const [resendStatus, setResendStatus] = useState('');
   const [resending, setResending] = useState(false);
   const [errors, setErrors] = useState({});
@@ -86,7 +86,7 @@ export const RegisterPage = ({ onNavigate }) => {
       });
       setRegisteredEmail(email.trim());
       setRegType('form');
-      setTargetPath('/onboarding/organization');
+      setTargetPath('/portal');
       setSubmitted(true);
     } catch (err) {
       setErrors({ submit: err.message || 'Đăng ký tài khoản không thành công. Vui lòng thử lại.' });
@@ -145,7 +145,7 @@ export const RegisterPage = ({ onNavigate }) => {
             const authFn = loginWithGoogle || register;
             const user = await authFn(response.access_token);
 
-            // Kiểm tra điều hướng: admin -> /admin, đã có org -> /dashboard, chưa có org -> /onboarding/organization
+            // Kiểm tra điều hướng: admin -> /admin, đã có org -> /dashboard, chưa có org -> /portal
             const rawSysRoles = (user?.system_roles || []).map((r) =>
               typeof r === 'object' && r !== null ? r.name || r.role_name : r
             ).map((r) => String(r).toUpperCase());
@@ -162,7 +162,7 @@ export const RegisterPage = ({ onNavigate }) => {
               const orgRoles = user?.organization_roles || [];
               const hasOrg = Boolean(user?.has_organization || orgRoles.length > 0 || user?.organization || user?.organization_id);
               if (!hasOrg) {
-                destPath = '/onboarding/organization';
+                destPath = '/portal';
               }
             }
 
