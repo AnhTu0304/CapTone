@@ -1,11 +1,15 @@
 import { Request, Response } from 'express';
 import { ApiResponse } from '../utils/apiResponse';
 import { getDbHealth } from '../config/database';
+import { getRedisHealth } from '../config/redis';
 import { config } from '../config/env';
 
 export class HealthController {
   public static async check(req: Request, res: Response) {
-    const dbHealth = await getDbHealth();
+    const [dbHealth, redisHealth] = await Promise.all([
+      getDbHealth(),
+      getRedisHealth(),
+    ]);
 
     const healthData = {
       status: 'UP',
@@ -21,6 +25,7 @@ export class HealthController {
         serverTime: dbHealth.serverTime,
         ...(dbHealth.error ? { error: dbHealth.error } : {}),
       },
+      redis: redisHealth,
     };
 
     return ApiResponse.success(res, 'Server is healthy and running', healthData, 200);
