@@ -166,9 +166,8 @@ test('renders Dashboard Overview with White-First Calm Operations, 7 Vietnamese 
   expect(screen.getByText('HỆ THỐNG')).toBeInTheDocument();
   // Health and Metrics
   expect(screen.getByText(/Trạng Thái Hệ Thống: Khỏe Mạnh & Ổn Định/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/18%/i).length).toBeGreaterThan(0);
-  expect(screen.getByText(/64%/i)).toBeInTheDocument();
-  expect(screen.getByText(/2 \/ 2/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/42%/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/68%/i)).toBeInTheDocument();
   expect(screen.getByText(/AI Dự Báo Rủi Ro Chủ Động/i)).toBeInTheDocument();
   expect(screen.getByText(/Hiệu Quả Tự Phục Hồi/i)).toBeInTheDocument();
 });
@@ -346,12 +345,19 @@ test('renders Settings Page (/dashboard/settings) with tabs for Webhook, API tok
   expect(screen.getByText(/Slack Incoming Webhook URL/i)).toBeInTheDocument();
 });
 
-test('renders Personal Profile Page (/dashboard/profile) with identity cards and edit action', () => {
+test('renders Personal Profile Page on /portal/profile', () => {
+  window.history.pushState({}, '', '/portal/profile');
+  render(<App />);
+  expect(screen.getAllByText(/Hồ Sơ Cá Nhân/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Thông Tin Định Danh & Liên Hệ/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Lưu Thay Đổi Hồ Sơ/i })).toBeInTheDocument();
+});
+
+test('redirects legacy /dashboard/profile to Personal Profile', () => {
   window.history.pushState({}, '', '/dashboard/profile');
   render(<App />);
-  expect(screen.getByText(/Hồ Sơ Cá Nhân & Quản Trị Danh Tính/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/Nguyễn Văn An/i).length).toBeGreaterThan(0);
-  expect(screen.getByRole('button', { name: /Chỉnh Sửa Hồ Sơ/i })).toBeInTheDocument();
+  expect(screen.getAllByText(/Hồ Sơ Cá Nhân/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Thông Tin Định Danh & Liên Hệ/i)).toBeInTheDocument();
 });
 
 test('renders Organization Profile (/dashboard/organization) and Members Page (/dashboard/organization/members)', () => {

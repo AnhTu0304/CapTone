@@ -14,6 +14,7 @@ import {
   Menu,
   LogOut,
   User,
+  Sparkles,
 } from 'lucide-react';
 
 export const TopHeader = () => {
@@ -607,7 +608,31 @@ export const TopHeader = () => {
               <button
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  if (onNavigate) onNavigate('/dashboard/profile');
+                  if (onNavigate) onNavigate('/portal');
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  border: 'none',
+                  background: 'none',
+                  color: '#059669',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: 'var(--dash-radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Sparkles size={13} color="#059669" />
+                <span>Không Gian Cá Nhân (Portal)</span>
+              </button>
+              <button
+                onClick={() => {
+                  setIsProfileMenuOpen(false);
+                  if (onNavigate) onNavigate('/portal/profile');
                 }}
                 style={{
                   width: '100%',
