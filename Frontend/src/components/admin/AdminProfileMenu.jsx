@@ -300,6 +300,12 @@ export const AdminProfileMenu = ({ onNavigate }) => {
           <div style={{ padding: '6px' }}>
             {[
               {
+                id: 'switch_to_portal',
+                label: 'Không Gian Cá Nhân (Personal Portal)',
+                icon: User,
+                path: '/portal',
+              },
+              {
                 id: 'switch_to_dashboard',
                 label: 'Bảng Điều Khiển Doanh Nghiệp (Owner / User)',
                 icon: LayoutDashboard,

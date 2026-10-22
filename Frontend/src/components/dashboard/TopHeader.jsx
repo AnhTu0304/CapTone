@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, getPrimaryRole, isAdmin, activeRole, switchRole } = useAuth();
+  const { user, logout, getInitials, getPrimaryRole, isAdmin, activeRole, switchRole, baseRole, availableRoles, canSwitchRole } = useAuth();
   const {
     currentOrg,
     setCurrentOrg,
@@ -317,28 +317,51 @@ export const TopHeader = () => {
 
         {/* Role Switcher Badge (Interactive RBAC Demo) */}
         <div ref={roleRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 10px',
-              backgroundColor: 'var(--dash-bg-canvas)',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-full)',
-              color: 'var(--dash-text-secondary)',
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <Shield size={12} color="var(--dash-primary)" />
-            <span>Vai trò: {(roles.find((r) => r.key === (activeRole || currentUserRole))?.label || 'Chủ DN (SME Owner)').split('(')[0].trim()}</span>
-            <ChevronDown size={12} color="var(--dash-text-muted)" />
-          </button>
+          {canSwitchRole ? (
+            <button
+              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+              title="Nhấn để chuyển đổi vai trò (RBAC)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 10px',
+                backgroundColor: 'var(--dash-bg-canvas)',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-full)',
+                color: 'var(--dash-text-secondary)',
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Shield size={12} color="var(--dash-primary)" />
+              <span>Vai trò: {(roles.find((r) => r.key === (activeRole || currentUserRole))?.label || 'Chủ DN (SME Owner)').split('(')[0].trim()}</span>
+              <ChevronDown size={12} color="var(--dash-text-muted)" />
+            </button>
+          ) : (
+            <div
+              title="Tài khoản cố định vai trò, không có quyền đổi sang vai trò khác"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 10px',
+                backgroundColor: 'var(--dash-bg-canvas)',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-full)',
+                color: 'var(--dash-text-secondary)',
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                cursor: 'default',
+              }}
+            >
+              <Shield size={12} color="var(--dash-text-muted)" />
+              <span>Vai trò: {(roles.find((r) => r.key === (activeRole || currentUserRole))?.label || (baseRole === 'DEVOPS' ? 'Kỹ Sư DevOps' : 'Người Xem')).split('(')[0].trim()}</span>
+            </div>
+          )}
 
-          {isRoleDropdownOpen && (
+          {canSwitchRole && isRoleDropdownOpen && (
             <div
               style={{
                 position: 'absolute',
@@ -357,7 +380,7 @@ export const TopHeader = () => {
               <div style={{ padding: '6px 10px', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
                 Chuyển Đổi Vai Trò (RBAC)
               </div>
-              {roles.map((r) => (
+              {(availableRoles && availableRoles.length > 0 ? availableRoles : roles).map((r) => (
                 <button
                   key={r.key}
                   onClick={() => {

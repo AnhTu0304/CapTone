@@ -21,8 +21,8 @@ export const LoginPage = ({ onNavigate }) => {
       setLoggedInUser(user);
       setSubmitted(true);
 
-      // Luôn chuyển hướng thẳng vào Bảng điều khiển Doanh nghiệp (User / SME Dashboard) trước
-      const targetPath = '/dashboard';
+      // Luôn chuyển hướng thẳng vào Tầng Cá Nhân (Personal Portal) trước
+      const targetPath = '/portal';
 
       setTimeout(() => {
         if (onNavigate) {
@@ -145,12 +145,12 @@ export const LoginPage = ({ onNavigate }) => {
             Đăng nhập thành công!
           </strong>
           <p style={{ margin: '0 0 16px 0', color: '#047857' }}>
-            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào Bảng điều khiển hệ thống (User Dashboard)...
+            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào Không Gian Cá Nhân (Personal Portal)...
           </p>
           <button
             type="button"
             onClick={() => {
-              const targetPath = '/dashboard';
+              const targetPath = '/portal';
               if (onNavigate) {
                 onNavigate(targetPath);
               } else {

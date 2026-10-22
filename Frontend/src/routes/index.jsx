@@ -35,6 +35,7 @@ import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSett
 import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
 import { AdminAccountSettingsPage } from '../pages/Admin/Settings/AdminAccountSettingsPage';
 import ProfilePage from '../pages/Dashboard/Profile/ProfilePage';
+import PersonalPortalPage from '../pages/Personal';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
 import TableOfContents from '../components/navigation/TableOfContents';
@@ -42,6 +43,15 @@ import TableOfContents from '../components/navigation/TableOfContents';
 export const ROUTES = {
   HOME: '/',
   DASHBOARD: '/dashboard',
+  PORTAL: '/portal',
+  PORTAL_DASHBOARD: '/portal/dashboard',
+  PORTAL_COMPANIES: '/portal/companies',
+  PORTAL_PROFILE: '/portal/profile',
+  PORTAL_SECURITY: '/portal/security',
+  PORTAL_PREFERENCES: '/portal/preferences',
+  PORTAL_NOTIFICATIONS: '/portal/notifications',
+  PORTAL_HELP: '/portal/help',
+  PORTAL_ACTIVITY: '/portal/activity',
   ADMIN: '/admin',
   ADMIN_COMPANIES: '/admin/companies',
   ADMIN_ORGANIZATIONS: '/admin/organizations',
@@ -107,6 +117,11 @@ export const RouteRenderer = ({
   const user = auth?.user || null;
   const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
+
+  // Handle all Personal Portal routes (Tầng Cá Nhân)
+  if (path.startsWith('/portal') || path === '/user' || path === '/personal' || path === '/me') {
+    return <PersonalPortalPage currentPath={path} onNavigate={onNavigate} />;
+  }
 
   // Handle all onboarding routes
   if (path.startsWith('/onboarding')) {

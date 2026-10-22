@@ -13,7 +13,7 @@ export const INITIAL_PROFILE = {
   phone: '0912345678',
   jobTitle: 'Trưởng nhóm SRE & DevOps Lead',
   organization: 'Acme Corporation',
-  systemRole: 'SME_OWNER / ADMIN',
+  systemRole: 'USER',
   organizationRole: 'Chủ sở hữu & Quản trị trưởng (Owner)',
   accountStatus: 'ACTIVE', // ACTIVE | SUSPENDED | PENDING
   createdAt: '15/01/2026',

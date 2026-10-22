@@ -126,16 +126,154 @@ export const AuthProvider = ({ children }) => {
     VIEWER: ['VIEWER'],
   }), []);
 
-  // Vai trò mô phỏng đang chọn qua Header Switcher (Mặc định là SME_OWNER để ưu tiên giao diện User/Owner trước)
+  // Xác định vai trò gốc thực tế (Base Granted Role) được cấp cho tài khoản
+  const getActualBaseRole = useCallback((u) => {
+    if (u) {
+      const rawSystemRoles = (u.system_roles || []).map((r) =>
+        typeof r === 'object' && r !== null ? r.role_name || r.name || r.role_id : r
+      ).map((r) => String(r).toUpperCase());
+      const email = String(u.email || '').toLowerCase();
+      const roleStr = String(u.role || u.systemRole || '').toUpperCase();
+
+      // 1. Quản trị viên tối cao (SUPER_ADMIN)
+      if (
+        rawSystemRoles.includes('SUPER_ADMIN') ||
+        roleStr === 'SUPER_ADMIN' ||
+        email === 'superadmin@selfheal.com' ||
+        email === 'phamthaisang1710@gmail.com'
+      ) {
+        return 'SUPER_ADMIN';
+      }
+
+      // 2. Quản trị viên vận hành (ADMIN)
+      if (
+        rawSystemRoles.includes('ADMIN') ||
+        rawSystemRoles.includes('SYSTEM_ADMIN') ||
+        roleStr === 'ADMIN' ||
+        email === 'admin@selfheal.com'
+      ) {
+        return 'ADMIN';
+      }
+
+      // 3. Vai trò cấp tổ chức doanh nghiệp (DevOps / Viewer / Owner)
+      const rawOrgRoles = (u.organization_roles || []).map((r) =>
+        typeof r === 'object' && r !== null ? r.role_code || r.role_name || r.code : r
+      ).map((r) => String(r).toUpperCase());
+      const orgRoleStr = String(u.organization_role || u.organizationRole || '').toUpperCase();
+
+      if (rawOrgRoles.includes('DEVOPS') || orgRoleStr.includes('DEVOPS') || roleStr === 'DEVOPS') {
+        return 'DEVOPS';
+      }
+
+      if (rawOrgRoles.includes('VIEWER') || orgRoleStr.includes('VIEWER') || roleStr === 'VIEWER') {
+        return 'VIEWER';
+      }
+
+      if (
+        rawOrgRoles.includes('OWNER') ||
+        rawOrgRoles.includes('SME_OWNER') ||
+        orgRoleStr.includes('OWNER') ||
+        roleStr === 'SME_OWNER' ||
+        roleStr === 'OWNER'
+      ) {
+        return 'SME_OWNER';
+      }
+
+      // Tài khoản User thông thường mặc định quản trị tổ chức của họ
+      return 'SME_OWNER';
+    }
+
+    // Fallback cho tài khoản mẫu mock profile
+    try {
+      const raw = localStorage.getItem('selfheal_mock_profile_v1');
+      if (raw) {
+        const mock = JSON.parse(raw);
+        const orgRole = String(mock.organizationRole || '').toUpperCase();
+        const sysRole = String(mock.systemRole || '').toUpperCase();
+        if (sysRole.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
+        if (sysRole.includes('ADMIN')) return 'ADMIN';
+        if (orgRole.includes('DEVOPS')) return 'DEVOPS';
+        if (orgRole.includes('VIEWER')) return 'VIEWER';
+        if (orgRole.includes('OWNER') || orgRole.includes('CHỦ')) return 'SME_OWNER';
+      }
+    } catch {
+      // Ignore
+    }
+
+    return 'SME_OWNER';
+  }, []);
+
+  const baseRole = useMemo(() => getActualBaseRole(user), [user, getActualBaseRole]);
+
+  // Danh sách các vai trò được phép chuyển đổi theo đúng phân cấp RBAC
+  const availableRoles = useMemo(() => {
+    const ALL_ROLES = [
+      { key: 'SUPER_ADMIN', label: 'Quản Trị Tối Cao (Super Admin)', desc: 'Toàn quyền cấu hình, bảo mật và người dùng' },
+      { key: 'ADMIN', label: 'Quản Trị Vận Hành (Admin)', desc: 'Quản lý toàn bộ tính năng vận hành và hạ tầng' },
+      { key: 'SME_OWNER', label: 'Chủ DN (SME Owner)', desc: 'Toàn quyền quản trị tổ chức, thành viên & phê duyệt' },
+      { key: 'DEVOPS', label: 'Kỹ Sư DevOps (DevOps Lead)', desc: 'Vận hành hạ tầng, tác tử, không quản lý người dùng' },
+      { key: 'VIEWER', label: 'Người Xem (Viewer)', desc: 'Chỉ xem dữ liệu, giám sát an toàn' },
+    ];
+
+    // SUPER_ADMIN: Toàn quyền xem và chuyển đổi cả 5 vai trò
+    if (baseRole === 'SUPER_ADMIN') {
+      return ALL_ROLES;
+    }
+
+    // ADMIN: Quản trị vận hành xem được 4 vai trò (không có Super Admin)
+    if (baseRole === 'ADMIN') {
+      return ALL_ROLES.filter((r) => r.key !== 'SUPER_ADMIN');
+    }
+
+    // SME_OWNER (Tài khoản doanh nghiệp):
+    // "nếu như tài khoản user thì không hiện admin chớ. owner thì hiện hai cái kia nữa"
+    // => Hiện 3 vai trò: SME_OWNER + DEVOPS + VIEWER. Không hiển thị SUPER_ADMIN hay ADMIN.
+    if (baseRole === 'SME_OWNER') {
+      return ALL_ROLES.filter((r) => ['SME_OWNER', 'DEVOPS', 'VIEWER'].includes(r.key));
+    }
+
+    // DEVOPS hoặc VIEWER:
+    // "còn dev hay viewer thì không được đổi sang vai trò gì"
+    // => Không được phép chuyển đổi sang bất kỳ vai trò nào khác.
+    return [];
+  }, [baseRole]);
+
+  const canSwitchRole = availableRoles.length > 1;
+
+  // Vai trò mô phỏng đang chọn qua Header Switcher
   const [activeRole, setActiveRole] = useState(() => {
-    return localStorage.getItem('selfheal_active_role') || 'SME_OWNER';
+    const saved = localStorage.getItem('selfheal_active_role');
+    return saved || 'SME_OWNER';
   });
 
+  // Tự động kiểm tra và hiệu chỉnh activeRole: nếu vai trò lưu trữ không được phép theo baseRole thì đặt lại hợp lệ
+  useEffect(() => {
+    if (availableRoles.length > 0) {
+      const isAllowed = availableRoles.some((r) => r.key === activeRole);
+      if (!isAllowed) {
+        const fallback = availableRoles[0]?.key || baseRole || 'SME_OWNER';
+        setActiveRole(fallback);
+        localStorage.setItem('selfheal_active_role', fallback);
+      }
+    } else if (baseRole) {
+      if (activeRole !== baseRole) {
+        setActiveRole(baseRole);
+        localStorage.setItem('selfheal_active_role', baseRole);
+      }
+    }
+  }, [baseRole, availableRoles, activeRole]);
+
   const switchRole = useCallback((newRole) => {
-    const roleToSet = newRole || 'SME_OWNER';
-    setActiveRole(roleToSet);
-    localStorage.setItem('selfheal_active_role', roleToSet);
-  }, []);
+    // Chỉ cho phép chuyển đổi nếu vai trò mới nằm trong danh sách được cấp phép
+    const isPermitted = availableRoles.some((r) => r.key === newRole);
+    if (!isPermitted) {
+      console.warn(`Tài khoản ${baseRole} không có thẩm quyền chuyển sang vai trò ${newRole}`);
+      return false;
+    }
+    setActiveRole(newRole);
+    localStorage.setItem('selfheal_active_role', newRole);
+    return true;
+  }, [availableRoles, baseRole]);
 
   // Tiện ích lấy danh sách vai trò dạng chuẩn hóa kèm kế thừa phân cấp
   const getUserRoles = useCallback((u) => {
@@ -257,6 +395,9 @@ export const AuthProvider = ({ children }) => {
     getPrimaryRole,
     activeRole,
     switchRole,
+    baseRole,
+    availableRoles,
+    canSwitchRole,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

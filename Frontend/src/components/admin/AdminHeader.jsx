@@ -13,7 +13,7 @@ export const AdminHeader = ({
   onToggleCollapse,
   onToggleMobileDrawer,
 }) => {
-  const { user, activeRole, switchRole } = useAuth();
+  const { user, activeRole, switchRole, baseRole, availableRoles, canSwitchRole } = useAuth();
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const roleDropdownRef = useRef(null);
 
@@ -207,7 +207,7 @@ export const AdminHeader = ({
               <div style={{ padding: '6px 10px', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
                 Chuyển Đổi Quyền Hệ Thống (RBAC)
               </div>
-              {ADMIN_ROLES.map((r) => {
+              {(availableRoles && availableRoles.length > 0 ? availableRoles : ADMIN_ROLES).map((r) => {
                 const isSelected = r.key === currentRoleKey;
                 return (
                   <button
