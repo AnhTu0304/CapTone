@@ -1,4 +1,5 @@
-import crypto from 'crypto';
+import crypto from 'crypto';
+import { pool } from '../config/database';
 import {
   AgentModel,
   MetricModel,
@@ -13,6 +14,7 @@ import {
   AgentMetricsPayload,
   AgentLogPayload,
   AgentK8sEventPayload,
+  AgentK8sInventoryPayload,
 } from '../schemas/agentWebSocket.schema';
 
 export interface AuthenticatedAgent {
@@ -486,5 +488,227 @@ export class AgentService {
 
     return await AgentModel.getHeartbeatHistory(agentId, limit || 50);
   }
-}
 
+  /**
+   * Synchronize Real Kubernetes Cluster Inventory (Namespaces, Nodes, Pods)
+   */
+  public static async syncClusterInventory(
+    agent: AuthenticatedAgent,
+    data: AgentK8sInventoryPayload
+  ): Promise<{ synced_nodes: number; synced_pods: number }> {
+    const clusterId = agent.cluster_id;
+    if (!clusterId) {
+      console.warn(`[AgentService] Agent ${agent.name} (${agent.id}) has no cluster_id to sync inventory.`);
+      return { synced_nodes: 0, synced_pods: 0 };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Sync Namespaces
+      const namespaceMap: Record<string, string> = {};
+      const existingNsRes = await client.query(
+        'SELECT id, name FROM namespaces WHERE cluster_id = $1',
+        [clusterId]
+      );
+      for (const row of existingNsRes.rows) {
+        namespaceMap[row.name] = row.id;
+      }
+
+      for (const ns of data.namespaces) {
+        if (namespaceMap[ns.name]) {
+          await client.query(
+            `UPDATE namespaces 
+             SET kubernetes_uid = COALESCE($1, kubernetes_uid),
+                 status = $2,
+                 labels = $3,
+                 updated_at = NOW()
+             WHERE id = $4`,
+            [ns.kubernetes_uid || null, ns.status, JSON.stringify(ns.labels || {}), namespaceMap[ns.name]]
+          );
+        } else {
+          const insRes = await client.query(
+            `INSERT INTO namespaces (cluster_id, name, kubernetes_uid, status, labels, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+             RETURNING id, name`,
+            [clusterId, ns.name, ns.kubernetes_uid || null, ns.status, JSON.stringify(ns.labels || {})]
+          );
+          if (insRes.rows[0]) {
+            namespaceMap[insRes.rows[0].name] = insRes.rows[0].id;
+          }
+        }
+      }
+
+      // Also ensure namespaces of reported pods exist in namespaceMap
+      for (const pod of data.pods) {
+        const pNs = pod.namespace || 'default';
+        if (!namespaceMap[pNs]) {
+          const insNs = await client.query(
+            `INSERT INTO namespaces (cluster_id, name, status, created_at, updated_at)
+             VALUES ($1, $2, 'Active', NOW(), NOW())
+             RETURNING id, name`,
+            [clusterId, pNs]
+          );
+          if (insNs.rows[0]) {
+            namespaceMap[insNs.rows[0].name] = insNs.rows[0].id;
+          }
+        }
+      }
+
+      // 2. Sync Nodes
+      const nodeMap: Record<string, string> = {};
+      const existingNodesRes = await client.query(
+        'SELECT id, name FROM nodes WHERE cluster_id = $1',
+        [clusterId]
+      );
+      for (const row of existingNodesRes.rows) {
+        nodeMap[row.name] = row.id;
+      }
+
+      const reportedNodeNames = new Set(data.nodes.map((n) => n.name));
+
+      for (const node of data.nodes) {
+        if (nodeMap[node.name]) {
+          await client.query(
+            `UPDATE nodes
+             SET kubernetes_uid = COALESCE($1, kubernetes_uid),
+                 status = $2,
+                 cpu_capacity_millicores = $3,
+                 memory_capacity_bytes = $4,
+                 disk_capacity_bytes = $5,
+                 kubelet_version = $6,
+                 roles = $7,
+                 labels = $8,
+                 updated_at = NOW()
+             WHERE id = $9`,
+            [
+              node.kubernetes_uid || null,
+              node.status || 'Ready',
+              node.cpu_capacity_millicores || 4000,
+              node.memory_capacity_bytes || 8589934592,
+              node.disk_capacity_bytes || 53687091200,
+              node.kubelet_version || 'v1.37.0',
+              JSON.stringify(node.roles || ['worker']),
+              JSON.stringify(node.labels || {}),
+              nodeMap[node.name],
+            ]
+          );
+        } else {
+          const insNode = await client.query(
+            `INSERT INTO nodes (cluster_id, name, kubernetes_uid, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, labels, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+             RETURNING id, name`,
+            [
+              clusterId,
+              node.name,
+              node.kubernetes_uid || null,
+              node.status || 'Ready',
+              node.cpu_capacity_millicores || 4000,
+              node.memory_capacity_bytes || 8589934592,
+              node.disk_capacity_bytes || 53687091200,
+              node.kubelet_version || 'v1.37.0',
+              JSON.stringify(node.roles || ['worker']),
+              JSON.stringify(node.labels || {}),
+            ]
+          );
+          if (insNode.rows[0]) {
+            nodeMap[insNode.rows[0].name] = insNode.rows[0].id;
+          }
+        }
+      }
+
+      // Delete stale nodes that are not reported by the real cluster
+      if (reportedNodeNames.size > 0) {
+        const staleNodes = existingNodesRes.rows.filter((n) => !reportedNodeNames.has(n.name));
+        for (const stale of staleNodes) {
+          await client.query('DELETE FROM nodes WHERE id = $1', [stale.id]);
+        }
+      }
+
+      // 3. Sync Pods
+      const existingPodsRes = await client.query(
+        'SELECT id, name FROM pods WHERE cluster_id = $1',
+        [clusterId]
+      );
+      const podMap: Record<string, string> = {};
+      for (const row of existingPodsRes.rows) {
+        podMap[row.name] = row.id;
+      }
+
+      const reportedPodNames = new Set(data.pods.map((p) => p.name));
+
+      for (const pod of data.pods) {
+        const nsId = namespaceMap[pod.namespace] || Object.values(namespaceMap)[0] || null;
+        const nodeId = pod.node_name ? nodeMap[pod.node_name] || null : null;
+
+        if (podMap[pod.name]) {
+          await client.query(
+            `UPDATE pods
+             SET namespace_id = COALESCE($1, namespace_id),
+                 node_id = $2,
+                 kubernetes_uid = COALESCE($3, kubernetes_uid),
+                 status = $4,
+                 phase = $5,
+                 restart_count = $6,
+                 image = $7,
+                 labels = $8,
+                 updated_at = NOW()
+             WHERE id = $9`,
+            [
+              nsId,
+              nodeId,
+              pod.kubernetes_uid || null,
+              pod.status || 'Running',
+              pod.phase || 'Running',
+              pod.restart_count || 0,
+              pod.image || '',
+              JSON.stringify(pod.labels || {}),
+              podMap[pod.name],
+            ]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO pods (cluster_id, namespace_id, node_id, name, kubernetes_uid, status, phase, restart_count, image, labels, started_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+            [
+              clusterId,
+              nsId,
+              nodeId,
+              pod.name,
+              pod.kubernetes_uid || null,
+              pod.status || 'Running',
+              pod.phase || 'Running',
+              pod.restart_count || 0,
+              pod.image || '',
+              JSON.stringify(pod.labels || {}),
+              pod.started_at ? new Date(pod.started_at) : null,
+            ]
+          );
+        }
+      }
+
+      // Delete stale pods that are not in reportedPodNames
+      if (reportedPodNames.size > 0) {
+        const stalePods = existingPodsRes.rows.filter((p) => !reportedPodNames.has(p.name));
+        for (const stale of stalePods) {
+          await client.query('DELETE FROM pods WHERE id = $1', [stale.id]);
+        }
+      }
+
+      await client.query('COMMIT');
+      console.log(`✅ [INVENTORY SYNC] Cluster ${clusterId}: Synced ${data.nodes.length} nodes, ${data.pods.length} pods, ${Object.keys(namespaceMap).length} namespaces.`);
+
+      return {
+        synced_nodes: data.nodes.length,
+        synced_pods: data.pods.length,
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('[AgentService] Error syncing cluster inventory:', err);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+}

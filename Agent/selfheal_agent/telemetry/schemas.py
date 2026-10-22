@@ -77,7 +77,20 @@ class K8sEventMessage(BaseModel):
     data: AgentK8sEventData
 
 
-OutgoingEnvelope = Union[AuthMessage, MetricsMessage, LogMessage, K8sEventMessage]
+class AgentK8sInventoryData(BaseModel):
+    """Kubernetes cluster topology and inventory payload."""
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
+    namespaces: list[dict[str, Any]] = Field(default_factory=list)
+    pods: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class K8sInventoryMessage(BaseModel):
+    """Kubernetes inventory envelope sent over WebSocket."""
+    type: Literal["k8s_inventory"] = "k8s_inventory"
+    data: AgentK8sInventoryData
+
+
+OutgoingEnvelope = Union[AuthMessage, MetricsMessage, LogMessage, K8sEventMessage, K8sInventoryMessage]
 
 
 # ==========================================

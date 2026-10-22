@@ -164,7 +164,42 @@ export const AgentK8sEventPayloadSchema = z.object({
 });
 
 /**
- * 4. Validation Schema for Agent Authentication (tables: agent_tokens, agents)
+ * 4. Validation Schema for Kubernetes Cluster Inventory Sync (tables: namespaces, nodes, pods)
+ */
+export const AgentK8sInventoryPayloadSchema = z.object({
+  nodes: z.array(z.object({
+    name: z.string().trim().min(1).max(255),
+    kubernetes_uid: z.string().optional().nullable(),
+    status: z.string().default('Ready'),
+    cpu_capacity_millicores: z.number().optional().nullable(),
+    memory_capacity_bytes: z.number().optional().nullable(),
+    disk_capacity_bytes: z.number().optional().nullable(),
+    kubelet_version: z.string().optional().nullable(),
+    roles: z.array(z.string()).optional().default([]),
+    labels: z.record(z.string(), z.any()).optional().default({}),
+  })).default([]),
+  namespaces: z.array(z.object({
+    name: z.string().trim().min(1).max(255),
+    kubernetes_uid: z.string().optional().nullable(),
+    status: z.string().default('Active'),
+    labels: z.record(z.string(), z.any()).optional().default({}),
+  })).default([]),
+  pods: z.array(z.object({
+    name: z.string().trim().min(1).max(255),
+    namespace: z.string().default('default'),
+    node_name: z.string().optional().nullable(),
+    kubernetes_uid: z.string().optional().nullable(),
+    status: z.string().default('Running'),
+    phase: z.string().default('Running'),
+    restart_count: z.number().int().nonnegative().default(0),
+    image: z.string().optional().nullable(),
+    labels: z.record(z.string(), z.any()).optional().default({}),
+    started_at: z.string().optional().nullable(),
+  })).default([]),
+});
+
+/**
+ * 5. Validation Schema for Agent Authentication (tables: agent_tokens, agents)
  */
 export const AgentAuthPayloadSchema = z.object({
   type: z.literal('auth'),
@@ -188,10 +223,16 @@ export const AgentWsMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('k8s_event'),
     data: AgentK8sEventPayloadSchema,
   }),
+  z.object({
+    type: z.literal('k8s_inventory'),
+    data: AgentK8sInventoryPayloadSchema,
+  }),
   AgentAuthPayloadSchema,
 ]);
 
 export type AgentMetricsPayload = z.infer<typeof AgentMetricsPayloadSchema>;
 export type AgentLogPayload = z.infer<typeof AgentLogPayloadSchema>;
 export type AgentK8sEventPayload = z.infer<typeof AgentK8sEventPayloadSchema>;
+export type AgentK8sInventoryPayload = z.infer<typeof AgentK8sInventoryPayloadSchema>;
+
 export type AgentWsMessage = z.infer<typeof AgentWsMessageSchema>;

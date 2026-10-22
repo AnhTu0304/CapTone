@@ -274,6 +274,32 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             break;
           }
 
+          case 'k8s_inventory': {
+            const syncResult = await AgentService.syncClusterInventory(ws.agent, msg.data);
+            console.log(`📦 [REALTIME INVENTORY] [${ws.agent.name}] Synced ${syncResult.synced_nodes} Nodes, ${syncResult.synced_pods} Pods`);
+
+            broadcastTelemetryToUi({
+              type: 'cluster_inventory_sync',
+              data: {
+                cluster_id: ws.agent.cluster_id,
+                nodes_count: syncResult.synced_nodes,
+                pods_count: syncResult.synced_pods,
+                timestamp: new Date().toISOString(),
+              },
+            });
+
+            ws.send(
+              JSON.stringify({
+                status: 'ack',
+                type: 'k8s_inventory',
+                synced_nodes: syncResult.synced_nodes,
+                synced_pods: syncResult.synced_pods,
+                timestamp: new Date().toISOString(),
+              })
+            );
+            break;
+          }
+
           default: {
             ws.send(
               JSON.stringify({

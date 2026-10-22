@@ -171,7 +171,7 @@ metadata:
     app.kubernetes.io/name: selfheal-agent
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "services", "namespaces", "events"]
+    resources: ["pods", "pods/log", "services", "namespaces", "events", "nodes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]

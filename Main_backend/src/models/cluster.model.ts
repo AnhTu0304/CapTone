@@ -88,46 +88,8 @@ export class ClusterModel {
         nsId = newNs.rows[0]?.id;
       }
 
-      const existingNodes = await db.query('SELECT COUNT(*)::int as count FROM nodes WHERE cluster_id = $1', [clusterId]);
-      if (existingNodes.rows[0]?.count === 0) {
-        const n1 = await db.query(
-          `INSERT INTO nodes (cluster_id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at, updated_at)
-           VALUES ($1, $2, 'Ready', 4000, 8589934592, 53687091200, 'v1.29.4', '["control-plane"]'::jsonb, NOW(), NOW()) RETURNING id`,
-          [clusterId, `${clusterName}-control-plane`]
-        );
-        const n2 = await db.query(
-          `INSERT INTO nodes (cluster_id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at, updated_at)
-           VALUES ($1, $2, 'Ready', 8000, 17179869184, 107374182400, 'v1.29.4', '["worker"]'::jsonb, NOW(), NOW()) RETURNING id`,
-          [clusterId, `${clusterName}-worker-01`]
-        );
-        const n3 = await db.query(
-          `INSERT INTO nodes (cluster_id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at, updated_at)
-           VALUES ($1, $2, 'Ready', 8000, 17179869184, 107374182400, 'v1.29.4', '["worker"]'::jsonb, NOW(), NOW()) RETURNING id`,
-          [clusterId, `${clusterName}-worker-02`]
-        );
-
-        const node1Id = n1.rows[0]?.id;
-        const node2Id = n2.rows[0]?.id;
-        const node3Id = n3.rows[0]?.id;
-
-        await db.query(
-          `INSERT INTO pods (cluster_id, namespace_id, node_id, name, status, phase, restart_count, image, created_at, updated_at)
-           VALUES 
-            ($1, $2, $3, 'ebpf-sensor-agent-01', 'Running', 'Running', 0, 'selfheal/ebpf-agent:v2.4', NOW(), NOW()),
-            ($1, $2, $3, 'kube-apiserver-' || $6, 'Running', 'Running', 0, 'registry.k8s.io/kube-apiserver:v1.29.4', NOW(), NOW()),
-            ($1, $2, $3, 'kube-controller-manager-' || $6, 'Running', 'Running', 0, 'registry.k8s.io/kube-controller-manager:v1.29.4', NOW(), NOW()),
-            ($1, $2, $3, 'kube-scheduler-' || $6, 'Running', 'Running', 0, 'registry.k8s.io/kube-scheduler:v1.29.4', NOW(), NOW()),
-            ($1, $2, $4, 'coredns-78fcd69978-abc1', 'Running', 'Running', 0, 'registry.k8s.io/coredns/coredns:v1.11.1', NOW(), NOW()),
-            ($1, $2, $4, 'ingress-nginx-controller-01', 'Running', 'Running', 0, 'registry.k8s.io/ingress-nginx:v1.9.4', NOW(), NOW()),
-            ($1, $2, $4, 'order-service-deployment-a1', 'Running', 'Running', 0, 'app/order-service:v1.2', NOW(), NOW()),
-            ($1, $2, $4, 'payment-gateway-deployment-b2', 'Running', 'Running', 0, 'app/payment-gateway:v2.0', NOW(), NOW()),
-            ($1, $2, $5, 'coredns-78fcd69978-xyz2', 'Running', 'Running', 0, 'registry.k8s.io/coredns/coredns:v1.11.1', NOW(), NOW()),
-            ($1, $2, $5, 'auth-service-deployment-c3', 'Running', 'Running', 0, 'app/auth-service:v1.0', NOW(), NOW()),
-            ($1, $2, $5, 'telemetry-collector-agent-02', 'Running', 'Running', 0, 'selfheal/collector:v1.1', NOW(), NOW()),
-            ($1, $2, $5, 'notification-service-deployment-d4', 'Running', 'Running', 0, 'app/notifications:v1.4', NOW(), NOW())`,
-          [clusterId, nsId, node1Id, node2Id, node3Id, clusterName]
-        );
-      }
+      // Real nodes and pods are synchronized dynamically from Kubernetes cluster via Agent telemetry
+      // Do not inject fake/mock nodes and pods
     } catch (err) {
       console.warn('[ClusterModel] Không thể khởi tạo nodes/pods mặc định:', err);
     }
@@ -194,9 +156,9 @@ export class ClusterModel {
         a.id AS agent_id,
         a.name AS agent_name,
         CASE 
-          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
-          ELSE COALESCE(a.status, 'PENDING')
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
         END AS agent_status,
         a.last_seen_at AS last_heartbeat_at,
         (SELECT LEFT(token_hash, 16) FROM agent_tokens WHERE agent_id = a.id AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1) AS token_prefix
@@ -239,9 +201,9 @@ export class ClusterModel {
         a.id AS agent_id,
         a.name AS agent_name,
         CASE 
-          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
-          ELSE COALESCE(a.status, 'PENDING')
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
         END AS agent_status,
         a.last_seen_at AS last_heartbeat_at
       FROM clusters c
@@ -291,9 +253,9 @@ export class ClusterModel {
         a.name AS agent_name,
         a.agent_uid,
         CASE 
-          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
-          ELSE COALESCE(a.status, 'PENDING')
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
         END AS agent_status,
         COALESCE(a.version, 'v2.4.1') AS agent_version,
         a.last_seen_at
@@ -331,9 +293,9 @@ export class ClusterModel {
           a.name AS agent_name,
           a.agent_uid,
           CASE 
-          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
-          ELSE COALESCE(a.status, 'PENDING')
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
         END AS agent_status,
           COALESCE(a.version, 'v2.4.1') AS agent_version,
           a.last_seen_at
