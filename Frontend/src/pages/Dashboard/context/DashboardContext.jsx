@@ -1,5 +1,5 @@
-import { request } from '../../../services/apiClient';
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { request, setActiveOrganizationId, cancelPendingRequests } from '../../../services/apiClient';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
 const DashboardContext = createContext(null);
@@ -17,25 +17,44 @@ const normalizeNotification = (item) => {
 };
 
 export const DashboardProvider = ({ children, onNavigate }) => {
-  // 1. Organization & Environment State
+  // 1. Organization State
   const [currentOrg, setCurrentOrg] = useState(() => {
     const savedId = localStorage.getItem('selfheal_active_org_id');
     const savedName = localStorage.getItem('selfheal_active_org_name');
+    const savedRole = localStorage.getItem('selfheal_active_org_role') || 'SME_OWNER';
+    if (!savedId) {
+      return {
+        id: 'org-acme',
+        name: 'Acme Corporation',
+        slug: 'acme-corp',
+        plan: 'SME Production Pro',
+        clusterCount: 3,
+        role: savedRole,
+        role_in_org: savedRole,
+      };
+    }
     return {
-      id: savedId || 'org-acme',
-      name: savedName || 'Acme Corporation',
-      slug: 'acme-corp',
+      id: savedId,
+      name: savedName || 'Tổ chức hiện tại',
+      slug: (savedName || 'org').toLowerCase().replace(/\s+/g, '-'),
       plan: 'SME Production Pro',
       clusterCount: 3,
+      role: savedRole,
+      role_in_org: savedRole,
     };
   });
 
-  const [orgList, setOrgList] = useState([
-    { id: 'org-acme', name: 'Acme Corporation', slug: 'acme-corp' },
-    { id: 'org-nexus', name: 'Nexus Logistics', slug: 'nexus-logistics' },
-    { id: 'org-finflow', name: 'FinFlow Pay', slug: 'finflow-pay' },
-  ]);
+  const [orgList, setOrgList] = useState([]);
+  const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
+  const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
+  const [orgError, setOrgError] = useState(null);
 
+  // 2. User & RBAC Role State ('SME_OWNER' | 'DEVOPS' | 'VIEWER')
+  const [currentUserRole, setCurrentUserRole] = useState(() => {
+    return localStorage.getItem('selfheal_active_org_role') || 'SME_OWNER';
+  });
+
+  // 3. Environment State
   const [currentEnv, setCurrentEnv] = useState({
     id: 'env-prod',
     name: 'production-us-east-1',
@@ -51,65 +70,147 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     { id: 'env-dev', name: 'dev-sandbox-cluster', cluster: 'k8s-dev-cluster-local', status: 'Warning' },
   ];
 
-  // 2. User & RBAC Role State ('SME_OWNER' | 'DEVOPS' | 'VIEWER')
-  const [currentUserRole, setCurrentUserRole] = useState('SME_OWNER');
-
-  // 3. Agent Connectivity State (Toggleable to demo honest Empty State)
+  // 4. Agent Connectivity State
   const [isAgentConnected, setIsAgentConnected] = useState(true);
 
-  // 4. Auto-refresh & Timestamp State
+  // 5. Auto-refresh & Timestamp State
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState('Vừa xong');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Tự động tải danh sách tổ chức thật của tài khoản từ backend
-  useEffect(() => {
-    let isMounted = true;
-    const fetchUserOrgs = async () => {
-      try {
-        const token =
-          localStorage.getItem('selfheal_auth_token') ||
-          sessionStorage.getItem('admin_access_token');
-        if (!token) return;
-
-        const res = await request('/organizations/me/list');
-        if (res && res.data && res.data.length > 0 && isMounted) {
-          const list = res.data.map((o) => ({
-            id: o.id,
-            name: o.name,
-            slug: o.slug,
-            plan: 'SME Production Pro',
-            clusterCount: 3,
-            role_in_org: o.role_in_org,
-          }));
-          setOrgList(list);
-
-          const savedOrgId = localStorage.getItem('selfheal_active_org_id');
-          const matched = list.find((o) => o.id === savedOrgId) || list[0];
-          setCurrentOrg((prev) => ({
-            ...prev,
-            id: matched.id,
-            name: matched.name,
-            slug: matched.slug,
-            role: matched.role_in_org || prev.role,
-          }));
-          if (matched.role_in_org) {
-            setCurrentUserRole(matched.role_in_org);
-          }
-          localStorage.setItem('selfheal_active_org_id', matched.id);
-          localStorage.setItem('selfheal_active_org_name', matched.name);
-        }
-      } catch (err) {
-        // Fallback gracefully
-      }
-    };
-    fetchUserOrgs();
-    return () => {
-      isMounted = false;
-    };
+  // Trigger manual refresh
+  const triggerRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      const now = new Date();
+      setLastUpdated(now.toLocaleTimeString());
+      setIsRefreshing(false);
+    }, 400);
   }, []);
 
-  // 5. Notifications State with centralized persistence
+  // Chuyển đổi tổ chức có kiểm soát ngữ cảnh, xóa cache cũ và ngăn ngừa race conditions
+  const switchOrganization = useCallback((orgOrId) => {
+    const targetId = typeof orgOrId === 'object' && orgOrId !== null ? orgOrId.id : orgOrId;
+    const target = orgList.find((o) => o.id === targetId) || (typeof orgOrId === 'object' ? orgOrId : null);
+
+    if (!target) {
+      console.warn('[DashboardContext] switchOrganization: Tổ chức không tồn tại trong danh sách truy cập');
+      return false;
+    }
+
+    setIsSwitchingOrg(true);
+    setOrgError(null);
+
+    // Hủy các request API đang xử lý của tổ chức cũ
+    if (cancelPendingRequests) {
+      cancelPendingRequests();
+    }
+
+    const activeRole = target.role_in_org || target.role || 'SME_OWNER';
+
+    setCurrentOrg({
+      ...target,
+      role: activeRole,
+      role_in_org: activeRole,
+    });
+    setCurrentUserRole(activeRole);
+
+    localStorage.setItem('selfheal_active_org_id', target.id);
+    localStorage.setItem('selfheal_active_org_name', target.name);
+    localStorage.setItem('selfheal_active_org_role', activeRole);
+
+    if (setActiveOrganizationId) {
+      setActiveOrganizationId(target.id);
+    }
+
+    triggerRefresh();
+
+    setTimeout(() => {
+      setIsSwitchingOrg(false);
+    }, 200);
+
+    return true;
+  }, [orgList, triggerRefresh]);
+
+  // Tự động tải danh sách tổ chức thật của tài khoản từ backend
+  const fetchUserOrgs = useCallback(async () => {
+    setIsLoadingOrgs(true);
+    setOrgError(null);
+    try {
+      const token =
+        localStorage.getItem('selfheal_auth_token') ||
+        sessionStorage.getItem('admin_access_token');
+      if (!token) {
+        setIsLoadingOrgs(false);
+        return;
+      }
+
+      const res = await request('/organizations/me/list');
+      if (res && res.data) {
+        const list = res.data.map((o) => ({
+          id: o.id,
+          name: o.name,
+          slug: o.slug,
+          plan: 'SME Production Pro',
+          clusterCount: o.members_count || 1,
+          role_in_org: o.role_in_org || 'SME_OWNER',
+          role: o.role_in_org || 'SME_OWNER',
+          status: o.status,
+        }));
+        setOrgList(list);
+
+        const savedOrgId = localStorage.getItem('selfheal_active_org_id');
+        let matched = list.find((o) => o.id === savedOrgId);
+
+        // Fallback: nếu ID đã lưu không hợp lệ, chọn tổ chức đầu tiên được backend xác nhận
+        if (!matched && list.length > 0) {
+          matched = list[0];
+        }
+
+        if (matched) {
+          const activeRole = matched.role_in_org || 'SME_OWNER';
+          setCurrentOrg((prev) => ({
+            ...prev,
+            ...matched,
+            role: activeRole,
+            role_in_org: activeRole,
+          }));
+          setCurrentUserRole(activeRole);
+          localStorage.setItem('selfheal_active_org_id', matched.id);
+          localStorage.setItem('selfheal_active_org_name', matched.name);
+          localStorage.setItem('selfheal_active_org_role', activeRole);
+          if (setActiveOrganizationId) {
+            setActiveOrganizationId(matched.id);
+          }
+        } else if (list.length === 0) {
+          setCurrentOrg(null);
+          setCurrentUserRole('VIEWER');
+          localStorage.removeItem('selfheal_active_org_id');
+          localStorage.removeItem('selfheal_active_org_name');
+          localStorage.removeItem('selfheal_active_org_role');
+          if (setActiveOrganizationId) {
+            setActiveOrganizationId(null);
+          }
+        }
+      }
+    } catch (err) {
+      setOrgError(err.message || 'Không thể tải danh sách tổ chức');
+      setOrgList((prev) => {
+        if (prev.length > 0) return prev;
+        return [
+          { id: 'org-acme', name: 'Acme Corporation', slug: 'acme-corp', role_in_org: 'SME_OWNER', role: 'SME_OWNER' },
+        ];
+      });
+    } finally {
+      setIsLoadingOrgs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUserOrgs();
+  }, [fetchUserOrgs]);
+
+  // Notifications State with centralized persistence
   const [notifications, setNotifications] = useState(() => {
     return getStoredNotifications().map(normalizeNotification);
   });
@@ -117,16 +218,6 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   // Sidebar collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-
-  // Trigger manual refresh
-  const triggerRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      const now = new Date();
-      setLastUpdated(now.toLocaleTimeString());
-      setIsRefreshing(false);
-    }, 600);
-  };
 
   // Auto-refresh interval (every 30s)
   useEffect(() => {
@@ -164,8 +255,16 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     <DashboardContext.Provider
       value={{
         currentOrg,
+        currentOrganizationId: currentOrg?.id || null,
         setCurrentOrg,
         orgList,
+        setOrgList,
+        switchOrganization,
+        switchOrg: switchOrganization,
+        isLoadingOrgs,
+        isSwitchingOrg,
+        orgError,
+        fetchUserOrgs,
         currentEnv,
         setCurrentEnv,
         envList,
@@ -203,6 +302,25 @@ export const useDashboard = () => {
     throw new Error('useDashboard must be used within a DashboardProvider');
   }
   return context;
+};
+
+export const useOrganization = () => {
+  const context = useContext(DashboardContext);
+  if (!context) {
+    throw new Error('useOrganization must be used within a DashboardProvider');
+  }
+  return {
+    currentOrg: context.currentOrg,
+    currentOrganizationId: context.currentOrganizationId,
+    orgList: context.orgList,
+    currentUserRole: context.currentUserRole,
+    isLoadingOrgs: context.isLoadingOrgs,
+    isSwitchingOrg: context.isSwitchingOrg,
+    orgError: context.orgError,
+    switchOrganization: context.switchOrganization,
+    switchOrg: context.switchOrg,
+    fetchUserOrgs: context.fetchUserOrgs,
+  };
 };
 
 export default DashboardContext;

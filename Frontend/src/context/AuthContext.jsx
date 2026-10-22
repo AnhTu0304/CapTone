@@ -135,6 +135,10 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('selfheal_active_org_id');
+    localStorage.removeItem('selfheal_active_org_name');
+    localStorage.removeItem('selfheal_active_org_role');
+    sessionStorage.removeItem('admin_access_token');
     setToken(null);
     setUser(null);
   }, []);

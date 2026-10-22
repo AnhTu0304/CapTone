@@ -5,10 +5,65 @@
  * Hỗ trợ chuyển đổi liền mạch giữa Real Backend API và Mock Fallback Fixtures:
  * 1. Đọc cấu hình biến môi trường `REACT_APP_API_URL`.
  * 2. Tự động chèn Bearer Token từ storage vào header Authorization.
- * 3. Hỗ trợ cơ chế `executeWithFallback`: gọi API thật khi có endpoint, tự động dự phòng mock fixture khi môi trường dev/chưa nối backend.
+ * 3. Tự động chèn `X-Organization-Id` cho các endpoint thuộc phạm vi tenant khi đã có Organization context.
+ * 4. Hỗ trợ hủy bỏ (abort) in-flight requests cũ khi người dùng chuyển đổi Organization để chống race conditions.
+ * 5. Hỗ trợ cơ chế `executeWithFallback`: gọi API thật khi có endpoint, tự động dự phòng mock fixture khi môi trường dev/chưa nối backend.
  */
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
+
+let currentActiveOrgId = null;
+let currentSwitchAbortController = null;
+
+const PUBLIC_OR_GLOBAL_ENDPOINTS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/verify-email',
+  '/health',
+  '/organizations/me/list',
+  '/organizations/me/invitations',
+  '/users/me/organizations',
+  '/users/me/invitations',
+];
+
+const isPublicOrGlobalEndpoint = (endpoint = '') => {
+  const clean = endpoint.toLowerCase().split('?')[0];
+  return PUBLIC_OR_GLOBAL_ENDPOINTS.some((p) => clean.includes(p));
+};
+
+/**
+ * Lấy Organization ID hiện hành đang được active
+ * @returns {string|null}
+ */
+export const getActiveOrganizationId = () => {
+  if (currentActiveOrgId) return currentActiveOrgId;
+  try {
+    return localStorage.getItem('selfheal_active_org_id') || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * Đặt Organization ID hiện hành và đồng bộ context cho API Client
+ * @param {string|null} orgId 
+ */
+export const setActiveOrganizationId = (orgId) => {
+  currentActiveOrgId = orgId || null;
+};
+
+/**
+ * Hủy các request đang chờ xử lý liên quan đến tổ chức cũ khi người dùng switch tổ chức
+ */
+export const cancelPendingRequests = () => {
+  if (currentSwitchAbortController) {
+    currentSwitchAbortController.abort();
+  }
+  currentSwitchAbortController = new AbortController();
+};
 
 /**
  * Lấy Bearer Token xác thực hiện hành (nếu có)
@@ -31,9 +86,10 @@ export const getAuthToken = () => {
 /**
  * Tạo Headers mặc định cho request API
  * @param {Record<string, string>} [customHeaders]
+ * @param {string} [endpoint]
  * @returns {HeadersInit}
  */
-export const createDefaultHeaders = (customHeaders = {}) => {
+export const createDefaultHeaders = (customHeaders = {}, endpoint = '') => {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -43,6 +99,14 @@ export const createDefaultHeaders = (customHeaders = {}) => {
   const token = getAuthToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Tự động đính kèm X-Organization-Id nếu không phải endpoint public hoặc danh sách tổ chức toàn cục
+  if (!isPublicOrGlobalEndpoint(endpoint)) {
+    const orgId = getActiveOrganizationId();
+    if (orgId && !headers['X-Organization-Id'] && !headers['x-organization-id']) {
+      headers['X-Organization-Id'] = orgId;
+    }
   }
 
   return headers;
@@ -57,12 +121,26 @@ export const createDefaultHeaders = (customHeaders = {}) => {
 export const request = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
 
+  const signal = options.signal || (currentSwitchAbortController ? currentSwitchAbortController.signal : undefined);
+
   const config = {
     ...options,
-    headers: createDefaultHeaders(options.headers),
+    headers: createDefaultHeaders(options.headers, endpoint),
+    signal,
   };
 
-  const response = await fetch(url, config);
+  let response;
+  try {
+    response = await fetch(url, config);
+  } catch (fetchErr) {
+    if (fetchErr && fetchErr.name === 'AbortError') {
+      const abortError = new Error('Yêu cầu đã bị hủy do chuyển đổi tổ chức');
+      abortError.name = 'AbortError';
+      abortError.isAborted = true;
+      throw abortError;
+    }
+    throw fetchErr;
+  }
 
   if (!response.ok) {
     let errorData = null;
@@ -104,6 +182,9 @@ export const executeWithFallback = async (apiCall, fallbackMockCall) => {
 const apiClient = {
   API_BASE_URL,
   getAuthToken,
+  getActiveOrganizationId,
+  setActiveOrganizationId,
+  cancelPendingRequests,
   createDefaultHeaders,
   request,
   executeWithFallback,
