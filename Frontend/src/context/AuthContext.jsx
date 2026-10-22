@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }) => {
     VIEWER: ['VIEWER'],
   }), []);
 
-  // Xác định vai trò gốc thực tế (Base Granted Role) được cấp cho tài khoản
+  // Xác định vai trò gốc thực tế (Base Granted Role) của tài khoản
   const getActualBaseRole = useCallback((u) => {
     if (u) {
       const rawSystemRoles = (u.system_roles || []).map((r) =>
@@ -179,7 +179,6 @@ export const AuthProvider = ({ children }) => {
         return 'SME_OWNER';
       }
 
-      // Tài khoản User thông thường mặc định quản trị tổ chức của họ
       return 'SME_OWNER';
     }
 
@@ -205,177 +204,52 @@ export const AuthProvider = ({ children }) => {
 
   const baseRole = useMemo(() => getActualBaseRole(user), [user, getActualBaseRole]);
 
-  // Danh sách các vai trò được phép chuyển đổi theo đúng phân cấp RBAC
-  const availableRoles = useMemo(() => {
-    const ALL_ROLES = [
-      { key: 'SUPER_ADMIN', label: 'Quản Trị Tối Cao (Super Admin)', desc: 'Toàn quyền cấu hình, bảo mật và người dùng' },
-      { key: 'ADMIN', label: 'Quản Trị Vận Hành (Admin)', desc: 'Quản lý toàn bộ tính năng vận hành và hạ tầng' },
-      { key: 'SME_OWNER', label: 'Chủ DN (SME Owner)', desc: 'Toàn quyền quản trị tổ chức, thành viên & phê duyệt' },
-      { key: 'DEVOPS', label: 'Kỹ Sư DevOps (DevOps Lead)', desc: 'Vận hành hạ tầng, tác tử, không quản lý người dùng' },
-      { key: 'VIEWER', label: 'Người Xem (Viewer)', desc: 'Chỉ xem dữ liệu, giám sát an toàn' },
-    ];
-
-    // SUPER_ADMIN: Toàn quyền xem và chuyển đổi cả 5 vai trò
-    if (baseRole === 'SUPER_ADMIN') {
-      return ALL_ROLES;
-    }
-
-    // ADMIN: Quản trị vận hành xem được 4 vai trò (không có Super Admin)
-    if (baseRole === 'ADMIN') {
-      return ALL_ROLES.filter((r) => r.key !== 'SUPER_ADMIN');
-    }
-
-    // SME_OWNER (Tài khoản doanh nghiệp):
-    // "nếu như tài khoản user thì không hiện admin chớ. owner thì hiện hai cái kia nữa"
-    // => Hiện 3 vai trò: SME_OWNER + DEVOPS + VIEWER. Không hiển thị SUPER_ADMIN hay ADMIN.
-    if (baseRole === 'SME_OWNER') {
-      return ALL_ROLES.filter((r) => ['SME_OWNER', 'DEVOPS', 'VIEWER'].includes(r.key));
-    }
-
-    // DEVOPS hoặc VIEWER:
-    // "còn dev hay viewer thì không được đổi sang vai trò gì"
-    // => Không được phép chuyển đổi sang bất kỳ vai trò nào khác.
-    return [];
-  }, [baseRole]);
-
-  const canSwitchRole = availableRoles.length > 1;
-
-  // Vai trò mô phỏng đang chọn qua Header Switcher
-  const [activeRole, setActiveRole] = useState(() => {
-    const saved = localStorage.getItem('selfheal_active_role');
-    return saved || 'SME_OWNER';
-  });
-
-  // Tự động kiểm tra và hiệu chỉnh activeRole: nếu vai trò lưu trữ không được phép theo baseRole thì đặt lại hợp lệ
-  useEffect(() => {
-    if (availableRoles.length > 0) {
-      const isAllowed = availableRoles.some((r) => r.key === activeRole);
-      if (!isAllowed) {
-        const fallback = availableRoles[0]?.key || baseRole || 'SME_OWNER';
-        setActiveRole(fallback);
-        localStorage.setItem('selfheal_active_role', fallback);
-      }
-    } else if (baseRole) {
-      if (activeRole !== baseRole) {
-        setActiveRole(baseRole);
-        localStorage.setItem('selfheal_active_role', baseRole);
-      }
-    }
-  }, [baseRole, availableRoles, activeRole]);
-
-  const switchRole = useCallback((newRole) => {
-    // Chỉ cho phép chuyển đổi nếu vai trò mới nằm trong danh sách được cấp phép
-    const isPermitted = availableRoles.some((r) => r.key === newRole);
-    if (!isPermitted) {
-      console.warn(`Tài khoản ${baseRole} không có thẩm quyền chuyển sang vai trò ${newRole}`);
-      return false;
-    }
-    setActiveRole(newRole);
-    localStorage.setItem('selfheal_active_role', newRole);
-    return true;
-  }, [availableRoles, baseRole]);
+  // Không dùng chuyển vai trò nữa: vai trò đang kích hoạt là chính vai trò thật của tài khoản
+  const activeRole = baseRole;
+  const availableRoles = useMemo(() => [], []);
+  const canSwitchRole = false;
+  const switchRole = useCallback(() => {}, []);
 
   // Tiện ích lấy danh sách vai trò dạng chuẩn hóa kèm kế thừa phân cấp
   const getUserRoles = useCallback((u) => {
-    if (activeRole) {
-      return ROLE_HIERARCHY[activeRole] || [activeRole, 'VIEWER'];
-    }
-
-    if (!u) return ['VIEWER'];
-    const rolesSet = new Set();
-
-    // 1. system_roles (array of strings or objects)
-    const rawSystemRoles = u.system_roles || [];
-    if (Array.isArray(rawSystemRoles)) {
-      rawSystemRoles.forEach((r) => {
-        const val = typeof r === 'object' && r !== null ? r.role_name || r.name || r.role_id : r;
-        if (val) rolesSet.add(String(val).trim().toUpperCase());
-      });
-    }
-
-    // 2. systemRole / role string
-    if (u.systemRole) rolesSet.add(String(u.systemRole).trim().toUpperCase());
-    if (u.role) rolesSet.add(String(u.role).trim().toUpperCase());
-
-    // 3. organization_roles
-    const rawOrgRoles = u.organization_roles || [];
-    if (Array.isArray(rawOrgRoles)) {
-      rawOrgRoles.forEach((r) => {
-        const val = typeof r === 'object' && r !== null ? r.role_code || r.role_name || r.code : r;
-        if (val) rolesSet.add(String(val).trim().toUpperCase());
-      });
-    }
-
-    // 4. organization_role / organizationRole string
-    if (u.organization_role) rolesSet.add(String(u.organization_role).trim().toUpperCase());
-    if (u.organizationRole) rolesSet.add(String(u.organizationRole).trim().toUpperCase());
-
-    // 5. roles array
-    if (Array.isArray(u.roles)) {
-      u.roles.forEach((r) => {
-        if (r) rolesSet.add(String(r).trim().toUpperCase());
-      });
-    }
-
-    const rawList = Array.from(rolesSet);
-    if (rawList.length === 0) return ['VIEWER'];
-
-    // Mở rộng quyền theo phân cấp (Cấp cao có toàn bộ quyền của cấp thấp)
-    const expandedSet = new Set(rawList);
-    rawList.forEach((r) => {
-      const inherited = ROLE_HIERARCHY[r] || [];
-      inherited.forEach((inh) => expandedSet.add(inh));
-    });
-
-    return Array.from(expandedSet);
-  }, [activeRole, ROLE_HIERARCHY]);
+    const role = u ? getActualBaseRole(u) : baseRole;
+    return ROLE_HIERARCHY[role] || [role, 'VIEWER'];
+  }, [baseRole, getActualBaseRole, ROLE_HIERARCHY]);
 
   const isSuperAdmin = useCallback((u) => {
-    if (activeRole) return activeRole === 'SUPER_ADMIN';
-    const roles = getUserRoles(u);
-    return roles.includes('SUPER_ADMIN');
-  }, [activeRole, getUserRoles]);
+    const role = u ? getActualBaseRole(u) : baseRole;
+    return role === 'SUPER_ADMIN';
+  }, [baseRole, getActualBaseRole]);
 
   const isAdmin = useCallback((u) => {
-    if (activeRole) return ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(activeRole);
-    const roles = getUserRoles(u);
-    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(r));
-  }, [activeRole, getUserRoles]);
+    const role = u ? getActualBaseRole(u) : baseRole;
+    return ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(role);
+  }, [baseRole, getActualBaseRole]);
 
   const isOwner = useCallback((u) => {
-    if (activeRole) return ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(activeRole);
-    const roles = getUserRoles(u);
-    return roles.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'OWNER'].includes(r));
-  }, [activeRole, getUserRoles]);
+    const role = u ? getActualBaseRole(u) : baseRole;
+    return ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER'].includes(role);
+  }, [baseRole, getActualBaseRole]);
 
   const isDevOps = useCallback((u) => {
-    if (activeRole) return activeRole === 'DEVOPS';
-    const roles = getUserRoles(u);
-    return roles.includes('DEVOPS') && !isAdmin(u) && !isOwner(u);
-  }, [activeRole, getUserRoles, isAdmin, isOwner]);
+    const role = u ? getActualBaseRole(u) : baseRole;
+    return role === 'DEVOPS';
+  }, [baseRole, getActualBaseRole]);
 
   const isViewer = useCallback((u) => {
-    if (activeRole) return activeRole === 'VIEWER';
-    if (!u) return true;
-    if (isAdmin(u) || isDevOps(u) || isOwner(u)) return false;
-    return true;
-  }, [activeRole, isAdmin, isDevOps, isOwner]);
+    const role = u ? getActualBaseRole(u) : baseRole;
+    return role === 'VIEWER';
+  }, [baseRole, getActualBaseRole]);
 
   // Tiện ích lấy vai trò hiển thị cao nhất của người dùng
   const getPrimaryRole = useCallback((u) => {
-    if (activeRole) {
-      if (activeRole === 'SUPER_ADMIN') return 'SUPER ADMIN';
-      if (activeRole === 'ADMIN') return 'ADMIN';
-      if (activeRole === 'SME_OWNER') return 'SME OWNER';
-      if (activeRole === 'DEVOPS') return 'DEVOPS';
-      return 'VIEWER';
-    }
-    if (!u) return 'VIEWER';
-    if (isSuperAdmin(u)) return 'SUPER ADMIN';
-    if (isAdmin(u)) return 'ADMIN';
-    if (isDevOps(u)) return 'DEVOPS';
+    const role = u ? getActualBaseRole(u) : baseRole;
+    if (role === 'SUPER_ADMIN') return 'SUPER ADMIN';
+    if (role === 'ADMIN') return 'ADMIN';
+    if (role === 'SME_OWNER') return 'SME OWNER';
+    if (role === 'DEVOPS') return 'DEVOPS';
     return 'VIEWER';
-  }, [activeRole, isSuperAdmin, isAdmin, isDevOps]);
+  }, [baseRole, getActualBaseRole]);
 
   const value = {
     user,

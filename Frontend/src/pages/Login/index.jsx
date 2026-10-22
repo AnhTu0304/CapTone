@@ -21,8 +21,21 @@ export const LoginPage = ({ onNavigate }) => {
       setLoggedInUser(user);
       setSubmitted(true);
 
-      // Luôn chuyển hướng thẳng vào Tầng Cá Nhân (Personal Portal) trước
-      const targetPath = '/portal';
+      // Tự động chuyển hướng chính xác vào không gian tương ứng theo vai trò thực tế
+      const rawSysRoles = (user?.system_roles || []).map((r) =>
+        typeof r === 'object' && r !== null ? r.name || r.role_name : r
+      ).map((r) => String(r).toUpperCase());
+      const emailLower = String(user?.email || email).toLowerCase();
+
+      const isPlatformAdmin =
+        rawSysRoles.includes('SUPER_ADMIN') ||
+        rawSysRoles.includes('ADMIN') ||
+        rawSysRoles.includes('SYSTEM_ADMIN') ||
+        emailLower === 'superadmin@selfheal.com' ||
+        emailLower === 'admin@selfheal.com' ||
+        emailLower === 'phamthaisang1710@gmail.com';
+
+      const targetPath = isPlatformAdmin ? '/admin' : '/dashboard';
 
       setTimeout(() => {
         if (onNavigate) {
@@ -145,12 +158,24 @@ export const LoginPage = ({ onNavigate }) => {
             Đăng nhập thành công!
           </strong>
           <p style={{ margin: '0 0 16px 0', color: '#047857' }}>
-            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào Không Gian Cá Nhân (Personal Portal)...
+            Chào mừng <strong>{loggedInUser?.full_name || email}</strong>. Đang chuyển hướng vào không gian làm việc của bạn...
           </p>
           <button
             type="button"
             onClick={() => {
-              const targetPath = '/portal';
+              const rawSysRoles = (loggedInUser?.system_roles || []).map((r) =>
+                typeof r === 'object' && r !== null ? r.name || r.role_name : r
+              ).map((r) => String(r).toUpperCase());
+              const emailLower = String(loggedInUser?.email || email).toLowerCase();
+              const isPlatformAdmin =
+                rawSysRoles.includes('SUPER_ADMIN') ||
+                rawSysRoles.includes('ADMIN') ||
+                rawSysRoles.includes('SYSTEM_ADMIN') ||
+                emailLower === 'superadmin@selfheal.com' ||
+                emailLower === 'admin@selfheal.com' ||
+                emailLower === 'phamthaisang1710@gmail.com';
+              const targetPath = isPlatformAdmin ? '/admin' : '/dashboard';
+
               if (onNavigate) {
                 onNavigate(targetPath);
               } else {

@@ -270,24 +270,6 @@ export const ADMIN_ROLE_NAV_GROUPS = [
       },
     ],
   },
-  {
-    id: 'account',
-    title: 'TÀI KHOẢN CÁ NHÂN',
-    items: [
-      {
-        id: 'profile',
-        label: 'Hồ Sơ Cá Nhân',
-        path: '/admin/profile',
-        icon: UserCheck,
-      },
-      {
-        id: 'account-settings',
-        label: 'Cài Đặt Tài Khoản',
-        path: '/admin/settings',
-        icon: Settings,
-      },
-    ],
-  },
 ];
 
 export const ADMIN_NAV_GROUPS = [

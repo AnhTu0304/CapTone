@@ -10,7 +10,6 @@ import {
   ChevronDown,
   Check,
   Clock,
-  Shield,
   ShieldCheck,
   Menu,
   LogOut,
@@ -18,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, getPrimaryRole, isAdmin, activeRole, switchRole, baseRole, availableRoles, canSwitchRole } = useAuth();
+  const { user, logout, getInitials, getPrimaryRole, isAdmin } = useAuth();
   const {
     currentOrg,
     setCurrentOrg,
@@ -26,8 +25,6 @@ export const TopHeader = () => {
     currentEnv,
     setCurrentEnv,
     envList,
-    currentUserRole,
-    setCurrentUserRole,
     isAgentConnected,
     setIsAgentConnected,
     isAutoRefresh,
@@ -45,13 +42,11 @@ export const TopHeader = () => {
   // Dropdown states
   const [isOrgDropdownOpen, setIsOrgDropdownOpen] = useState(false);
   const [isEnvDropdownOpen, setIsEnvDropdownOpen] = useState(false);
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isNotifPopoverOpen, setIsNotifPopoverOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const orgRef = useRef(null);
   const envRef = useRef(null);
-  const roleRef = useRef(null);
   const notifRef = useRef(null);
   const profileRef = useRef(null);
 
@@ -60,7 +55,6 @@ export const TopHeader = () => {
     const handleClickOutside = (e) => {
       if (orgRef.current && !orgRef.current.contains(e.target)) setIsOrgDropdownOpen(false);
       if (envRef.current && !envRef.current.contains(e.target)) setIsEnvDropdownOpen(false);
-      if (roleRef.current && !roleRef.current.contains(e.target)) setIsRoleDropdownOpen(false);
       if (notifRef.current && !notifRef.current.contains(e.target)) setIsNotifPopoverOpen(false);
       if (profileRef.current && !profileRef.current.contains(e.target)) setIsProfileMenuOpen(false);
     };
@@ -89,14 +83,6 @@ export const TopHeader = () => {
   const displayName = user?.full_name || profileData?.fullName || user?.email?.split('@')[0] || 'Tài khoản';
   const displayEmail = user?.email || profileData?.email || 'user@example.com';
   const displayAvatar = profileData?.avatar || null;
-
-  const roles = [
-    { key: 'SUPER_ADMIN', label: 'Quản Trị Tối Cao (Super Admin)', desc: 'Toàn quyền cấu hình, bảo mật và người dùng' },
-    { key: 'ADMIN', label: 'Quản Trị Vận Hành (Admin)', desc: 'Quản lý toàn bộ tính năng vận hành và hạ tầng' },
-    { key: 'SME_OWNER', label: 'Chủ DN (SME Owner)', desc: 'Toàn quyền quản trị tổ chức, thành viên & phê duyệt' },
-    { key: 'DEVOPS', label: 'Kỹ Sư DevOps (DevOps Lead)', desc: 'Vận hành hạ tầng, tác tử, không quản lý người dùng' },
-    { key: 'VIEWER', label: 'Người Xem (Viewer)', desc: 'Chỉ xem dữ liệu, giám sát an toàn' },
-  ];
 
   return (
     <header
@@ -314,102 +300,6 @@ export const TopHeader = () => {
           />
           <span>{isAgentConnected ? 'Tác tử: Trực tuyến' : 'Tác tử: Ngoại tuyến'}</span>
         </button>
-
-        {/* Role Switcher Badge (Interactive RBAC Demo) */}
-        <div ref={roleRef} style={{ position: 'relative' }}>
-          {canSwitchRole ? (
-            <button
-              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-              title="Nhấn để chuyển đổi vai trò (RBAC)"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 10px',
-                backgroundColor: 'var(--dash-bg-canvas)',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-full)',
-                color: 'var(--dash-text-secondary)',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              <Shield size={12} color="var(--dash-primary)" />
-              <span>Vai trò: {(roles.find((r) => r.key === (activeRole || currentUserRole))?.label || 'Chủ DN (SME Owner)').split('(')[0].trim()}</span>
-              <ChevronDown size={12} color="var(--dash-text-muted)" />
-            </button>
-          ) : (
-            <div
-              title="Tài khoản cố định vai trò, không có quyền đổi sang vai trò khác"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 10px',
-                backgroundColor: 'var(--dash-bg-canvas)',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-full)',
-                color: 'var(--dash-text-secondary)',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                cursor: 'default',
-              }}
-            >
-              <Shield size={12} color="var(--dash-text-muted)" />
-              <span>Vai trò: {(roles.find((r) => r.key === (activeRole || currentUserRole))?.label || (baseRole === 'DEVOPS' ? 'Kỹ Sư DevOps' : 'Người Xem')).split('(')[0].trim()}</span>
-            </div>
-          )}
-
-          {canSwitchRole && isRoleDropdownOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '6px',
-                width: '260px',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-md)',
-                boxShadow: 'var(--dash-shadow-dropdown)',
-                padding: '6px',
-                zIndex: 50,
-              }}
-            >
-              <div style={{ padding: '6px 10px', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
-                Chuyển Đổi Vai Trò (RBAC)
-              </div>
-              {(availableRoles && availableRoles.length > 0 ? availableRoles : roles).map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => {
-                    setCurrentUserRole(r.key);
-                    if (switchRole) switchRole(r.key);
-                    setIsRoleDropdownOpen(false);
-                    if ((r.key === 'SUPER_ADMIN' || r.key === 'ADMIN') && onNavigate) {
-                      onNavigate('/admin');
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--dash-radius-sm)',
-                    border: 'none',
-                    backgroundColor: (activeRole || currentUserRole) === r.key ? 'var(--dash-primary-light)' : 'transparent',
-                    color: (activeRole || currentUserRole) === r.key ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    display: 'block',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: '0.75rem' }}>{r.label}</div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>{r.desc}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Manual Refresh & Auto-refresh status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
