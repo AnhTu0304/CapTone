@@ -6,6 +6,8 @@ import { AgentWsMessageSchema } from '../schemas/agentWebSocket.schema';
 import { broadcastTelemetryToUi } from './telemetryWebSocket';
 import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
 
+let activeAgentWss: WebSocketServer | null = null;
+
 interface ExtWebSocket extends WebSocket {
   isAlive: boolean;
   agent?: AuthenticatedAgent;
@@ -15,6 +17,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({
     noServer: true,
   });
+  activeAgentWss = wss;
 
   // Handle HTTP Upgrade request for WS /api/v1/agent/connect
   server.on('upgrade', (request, socket, head) => {
@@ -324,4 +327,28 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
   console.log('📡 Agent WebSocket endpoint initialized at WS /api/v1/agent/connect');
   return wss;
+}
+
+/**
+ * Ngắt ngay lập tức phiên WebSocket của Agent khi Token bị thu hồi hoặc xoay vòng
+ */
+export function disconnectAgentSession(agentId: string): void {
+  if (!activeAgentWss) return;
+  activeAgentWss.clients.forEach((client) => {
+    const extWs = client as ExtWebSocket;
+    if (extWs.agent && extWs.agent.id === agentId) {
+      console.log(`🔒 Force-disconnecting revoked agent [${extWs.agent.name}] (ID: ${agentId})`);
+      try {
+        extWs.send(
+          JSON.stringify({
+            status: 'error',
+            message: 'Unauthorized: Agent token has been revoked or rotated. Connection terminated.',
+          })
+        );
+        extWs.close(4001, 'Token Revoked');
+      } catch (err) {
+        extWs.terminate();
+      }
+    }
+  });
 }

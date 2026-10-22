@@ -544,6 +544,20 @@ export class ClusterModel {
       [agentId]
     );
 
+    // Chuyển Agent sang OFFLINE vì token cũ đã bị thu hồi
+    await db.query(
+      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+      [agentId]
+    );
+
+    // Ngắt ngay lập tức kết nối WebSocket đang hoạt động của Agent dùng token cũ
+    try {
+      const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+      disconnectAgentSession(agentId);
+    } catch (e) {
+      // ignore
+    }
+
     const rawToken = "sh_live_sec_" + crypto.randomBytes(18).toString("hex") + "_ebpf";
     const tokenPrefix = rawToken.slice(0, 16);
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -760,9 +774,20 @@ export class ClusterModel {
   ) {
     const db = client || pool;
     const res = await db.query(
-      `UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 RETURNING id`,
+      `UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 RETURNING id, agent_id`,
       [tokenId]
     );
+    const row = res.rows[0];
+    if (row?.agent_id) {
+      await db.query(
+        `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+        [row.agent_id]
+      );
+      try {
+        const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+        disconnectAgentSession(row.agent_id);
+      } catch (e) {}
+    }
     return (res.rowCount || 0) > 0;
   }
 
