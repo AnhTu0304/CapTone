@@ -12,6 +12,8 @@ import { IPaginatedResult } from '../models/user.model';
 import { EmailQueue } from './emailQueue.service';
 import { SessionRevocationService } from './sessionRevocation.service';
 import { OrganizationInvitationService } from './organizationInvitation.service';
+import { OrganizationInvitationModel } from '../models/organizationInvitation.model';
+import { pool } from '../config/database';
 
 /**
  * Service xử lý logic nghiệp vụ cho Thành viên Tổ chức (Organization Members)
@@ -142,22 +144,76 @@ export class OrganizationMemberService {
     orgId: string,
     currentUserId: string
   ): Promise<{ message: string; organization_id: string; role_code: string; joined_at: Date }> {
-    const invite = await OrganizationMemberModel.findPendingInvite(orgId, currentUserId);
+    const user = await OrganizationMemberModel.findUserById(currentUserId);
+    if (!user) {
+      throw new ApiError(401, 'Không tìm thấy thông tin tài khoản người dùng');
+    }
 
-    if (!invite) {
+    const memberInvite = await OrganizationMemberModel.findPendingInvite(orgId, currentUserId);
+    const invitationRecord = await OrganizationInvitationModel.findPendingByEmailAndOrg(user.email, orgId);
+
+    if (!memberInvite && !invitationRecord) {
       throw new ApiError(404, 'Không tìm thấy lời mời đang chờ nào cho tài khoản của bạn tại tổ chức này');
     }
 
-    const updated = await OrganizationMemberModel.update(undefined, invite.id, {
-      status: 'ACTIVE',
-      joined_at: new Date(),
-    });
+    const org = await OrganizationModel.findById(orgId);
+    const orgName = org?.name || memberInvite?.org_name || 'Tổ chức';
+    const roleId =
+      invitationRecord?.role_id ||
+      (await OrganizationMemberModel.findByOrgAndUser(orgId, currentUserId))?.role_id;
+
+    const client = await pool.connect();
+    let joinedAt = new Date();
+
+    try {
+      await client.query('BEGIN');
+
+      if (invitationRecord) {
+        await OrganizationInvitationModel.acceptAtomic(invitationRecord.id, currentUserId, client);
+      }
+
+      const upsertMemberQuery = `
+        INSERT INTO organization_members (
+          organization_id, user_id, role_id, status, invited_by, joined_at, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, 'ACTIVE', $4, NOW(), NOW(), NOW()
+        )
+        ON CONFLICT (organization_id, user_id)
+        DO UPDATE SET 
+          role_id = COALESCE(EXCLUDED.role_id, organization_members.role_id),
+          status = 'ACTIVE',
+          joined_at = NOW(),
+          updated_at = NOW()
+        RETURNING joined_at;
+      `;
+
+      const memberRes = await client.query(upsertMemberQuery, [
+        orgId,
+        currentUserId,
+        roleId,
+        invitationRecord?.invited_by || null,
+      ]);
+
+      if (memberRes.rows[0]?.joined_at) {
+        joinedAt = memberRes.rows[0].joined_at;
+      }
+
+      await client.query('COMMIT');
+      await SessionRevocationService.revokeUserOrgSessions(orgId, currentUserId);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const role = roleId ? await OrganizationRoleModel.findById(roleId) : null;
 
     return {
-      message: `Chào mừng bạn gia nhập tổ chức ${invite.org_name}!`,
+      message: `Chào mừng bạn gia nhập tổ chức ${orgName}!`,
       organization_id: orgId,
-      role_code: invite.role_code,
-      joined_at: updated.joined_at || new Date(),
+      role_code: role?.code || memberInvite?.role_code || 'DEVOPS',
+      joined_at: joinedAt,
     };
   }
 

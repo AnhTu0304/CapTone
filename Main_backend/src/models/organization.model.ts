@@ -487,6 +487,23 @@ export class OrganizationModel {
   }>> {
     const db = client || pool;
     const query = `
+      WITH user_info AS (
+        SELECT id, LOWER(email) AS email FROM users WHERE id = $1
+      )
+      SELECT 
+        oi.id, oi.created_at,
+        o.id AS org_id, o.name AS org_name, o.slug AS org_slug, o.description AS org_description,
+        r.id AS role_id, r.code AS role_code, r.name AS role_name,
+        inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
+      FROM organization_invitations oi
+      JOIN organizations o ON oi.organization_id = o.id
+      JOIN roles r ON oi.role_id = r.id
+      LEFT JOIN users inv ON oi.invited_by = inv.id
+      JOIN user_info ui ON LOWER(oi.email) = ui.email
+      WHERE oi.status = 'PENDING'
+        AND oi.expires_at > NOW()
+        AND o.deleted_at IS NULL
+      UNION
       SELECT 
         om.id, om.created_at,
         o.id AS org_id, o.name AS org_name, o.slug AS org_slug, o.description AS org_description,
@@ -499,7 +516,7 @@ export class OrganizationModel {
       WHERE om.user_id = $1 
         AND om.status = 'INVITED' 
         AND o.deleted_at IS NULL
-      ORDER BY om.created_at DESC;
+      ORDER BY created_at DESC;
     `;
     const res = await db.query(query, [userId]);
     return res.rows.map((row) => ({

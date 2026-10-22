@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   Search,
@@ -16,6 +16,28 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
   const [companies, setCompanies] = useState(() => personalPortalService.getMyCompanies());
   const [invitations, setInvitations] = useState(() => personalPortalService.getInvitations());
   const [activeTab, setActiveTab] = useState('joined'); // 'joined' | 'invitations'
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadData = async () => {
+      try {
+        const [invs, comps] = await Promise.all([
+          personalPortalService.fetchMyInvitations(),
+          personalPortalService.fetchMyCompanies(),
+        ]);
+        if (isMounted) {
+          if (invs) setInvitations(invs);
+          if (comps) setCompanies(comps);
+        }
+      } catch (err) {
+        console.warn('Lỗi khi tải dữ liệu personal portal:', err);
+      }
+    };
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
@@ -87,10 +109,18 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
     }
   };
 
-  const handleAcceptInvite = (invId) => {
-    personalPortalService.respondInvitation(invId, true);
-    setInvitations(personalPortalService.getInvitations());
-    setCompanies(personalPortalService.getMyCompanies());
+  const handleAcceptInvite = async (invId, orgId) => {
+    try {
+      await personalPortalService.acceptBackendInvitation(invId, orgId);
+      const [invs, comps] = await Promise.all([
+        personalPortalService.fetchMyInvitations(),
+        personalPortalService.fetchMyCompanies(),
+      ]);
+      setInvitations(invs);
+      setCompanies(comps);
+    } catch (err) {
+      alert(err.message || 'Không thể chấp nhận lời mời');
+    }
   };
 
   const handleRejectInvite = (invId) => {
@@ -518,7 +548,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                       type="button"
-                      onClick={() => handleAcceptInvite(inv.id)}
+                      onClick={() => handleAcceptInvite(inv.id, inv.organizationId)}
                       style={{
                         flex: 1,
                         padding: '9px',

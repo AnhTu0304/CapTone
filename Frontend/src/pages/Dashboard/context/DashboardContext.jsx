@@ -1,3 +1,4 @@
+import { request } from '../../../services/apiClient';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
@@ -17,19 +18,23 @@ const normalizeNotification = (item) => {
 
 export const DashboardProvider = ({ children, onNavigate }) => {
   // 1. Organization & Environment State
-  const [currentOrg, setCurrentOrg] = useState({
-    id: 'org-acme',
-    name: 'Acme Corporation',
-    slug: 'acme-corp',
-    plan: 'SME Production Pro',
-    clusterCount: 3,
+  const [currentOrg, setCurrentOrg] = useState(() => {
+    const savedId = localStorage.getItem('selfheal_active_org_id');
+    const savedName = localStorage.getItem('selfheal_active_org_name');
+    return {
+      id: savedId || 'org-acme',
+      name: savedName || 'Acme Corporation',
+      slug: 'acme-corp',
+      plan: 'SME Production Pro',
+      clusterCount: 3,
+    };
   });
 
-  const orgList = [
+  const [orgList, setOrgList] = useState([
     { id: 'org-acme', name: 'Acme Corporation', slug: 'acme-corp' },
     { id: 'org-nexus', name: 'Nexus Logistics', slug: 'nexus-logistics' },
     { id: 'org-finflow', name: 'FinFlow Pay', slug: 'finflow-pay' },
-  ];
+  ]);
 
   const [currentEnv, setCurrentEnv] = useState({
     id: 'env-prod',
@@ -56,6 +61,53 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState('Vừa xong');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Tự động tải danh sách tổ chức thật của tài khoản từ backend
+  useEffect(() => {
+    let isMounted = true;
+    const fetchUserOrgs = async () => {
+      try {
+        const token =
+          localStorage.getItem('selfheal_auth_token') ||
+          sessionStorage.getItem('admin_access_token');
+        if (!token) return;
+
+        const res = await request('/organizations/me/list');
+        if (res && res.data && res.data.length > 0 && isMounted) {
+          const list = res.data.map((o) => ({
+            id: o.id,
+            name: o.name,
+            slug: o.slug,
+            plan: 'SME Production Pro',
+            clusterCount: 3,
+            role_in_org: o.role_in_org,
+          }));
+          setOrgList(list);
+
+          const savedOrgId = localStorage.getItem('selfheal_active_org_id');
+          const matched = list.find((o) => o.id === savedOrgId) || list[0];
+          setCurrentOrg((prev) => ({
+            ...prev,
+            id: matched.id,
+            name: matched.name,
+            slug: matched.slug,
+            role: matched.role_in_org || prev.role,
+          }));
+          if (matched.role_in_org) {
+            setCurrentUserRole(matched.role_in_org);
+          }
+          localStorage.setItem('selfheal_active_org_id', matched.id);
+          localStorage.setItem('selfheal_active_org_name', matched.name);
+        }
+      } catch (err) {
+        // Fallback gracefully
+      }
+    };
+    fetchUserOrgs();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // 5. Notifications State with centralized persistence
   const [notifications, setNotifications] = useState(() => {

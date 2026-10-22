@@ -152,7 +152,12 @@ export const organizationMemberService = {
    * @param {Object} [params] - Query params: page, limit, search, status, role
    */
   async getMembers(orgId, params = {}) {
-    if (!orgId) {
+    let targetOrgId = orgId;
+    if (!targetOrgId || targetOrgId === 'org-acme') {
+      targetOrgId = localStorage.getItem('selfheal_active_org_id') || orgId;
+    }
+
+    if (!targetOrgId) {
       return {
         items: getLocalMockMembers(),
         pagination: { total: getLocalMockMembers().length, page: 1, limit: 20, totalPages: 1 },
@@ -167,7 +172,7 @@ export const organizationMemberService = {
     if (params.role && params.role !== 'ALL') query.append('role', params.role.trim().toUpperCase());
 
     const qs = query.toString();
-    const endpoint = `/organizations/${encodeURIComponent(orgId)}/members${qs ? `?${qs}` : ''}`;
+    const endpoint = `/organizations/${encodeURIComponent(targetOrgId)}/members${qs ? `?${qs}` : ''}`;
 
     try {
       const response = await request(endpoint);
@@ -217,9 +222,26 @@ export const organizationMemberService = {
       throw new Error('Địa chỉ email không hợp lệ');
     }
 
-    if (orgId && !orgId.startsWith('org-acme')) {
+    let targetOrgId = orgId;
+    if (!targetOrgId || targetOrgId === 'org-acme') {
+      targetOrgId = localStorage.getItem('selfheal_active_org_id');
+    }
+
+    if (!targetOrgId || targetOrgId === 'org-acme') {
       try {
-        const response = await request(`/organizations/${encodeURIComponent(orgId)}/members/invite`, {
+        const myOrgs = await request('/organizations/me/list');
+        if (myOrgs?.data?.length > 0) {
+          targetOrgId = myOrgs.data[0].id;
+          localStorage.setItem('selfheal_active_org_id', targetOrgId);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (targetOrgId && targetOrgId !== 'org-acme') {
+      try {
+        const response = await request(`/organizations/${encodeURIComponent(targetOrgId)}/invitations`, {
           method: 'POST',
           body: JSON.stringify({ email: email.trim(), role_code }),
         });
@@ -227,11 +249,10 @@ export const organizationMemberService = {
           return response.data;
         }
       } catch (err) {
-        // Nếu server trả về lỗi nghiệp vụ 404, 409, 403: Ném ra để UI xử lý thông báo chính xác
-        if (err.status && err.data?.message) {
-          throw new Error(err.data.message);
+        if (err.data?.message || err.message) {
+          throw new Error(err.data?.message || err.message);
         }
-        console.warn('[organizationMemberService] inviteMember API failed, using fallback mock:', err.message);
+        throw err;
       }
     }
 
