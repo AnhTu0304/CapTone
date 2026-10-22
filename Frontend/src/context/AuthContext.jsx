@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { authService } from '../services/authService';
+import multiTabSync, { SYNC_EVENTS } from '../services/multiTabSync';
 
 const AuthContext = createContext(null);
 
@@ -17,6 +18,22 @@ export const AuthProvider = ({ children }) => {
     }
   });
   const [loading, setLoading] = useState(true);
+  // Lắng nghe sự kiện đồng bộ đa Tab (Đăng xuất / Thu hồi phiên)
+  useEffect(() => {
+    const unsubLogout = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGOUT, () => {
+      setToken(null);
+      setUser(null);
+    });
+    const unsubRevoke = multiTabSync.subscribe(SYNC_EVENTS.SESSION_REVOKED, () => {
+      setToken(null);
+      setUser(null);
+    });
+    return () => {
+      unsubLogout();
+      unsubRevoke();
+    };
+  }, []);
+
 
   // Khôi phục phiên đăng nhập khi tải ứng dụng
   useEffect(() => {
