@@ -74,6 +74,8 @@ export class AuthService {
         } catch (roleError) {
             console.warn('Không thể gán vai trò mặc định USER khi đăng ký:', (roleError as Error).message);
         }
+        newUser.organization_roles = [];
+        newUser.has_organization = false;
 
         const verificationToken = await this.createEmailVerificationToken(newUser.id);
         
@@ -115,12 +117,15 @@ export class AuthService {
 
         // Lấy danh sách các vai trò hệ thống hiện có của người dùng qua UserModel
         const roles = await UserModel.getUserRoles(user.id);
+        const orgRoles = await UserModel.getUserOrganizations(user.id);
 
         const token = this.generateToken(user, roles);
         return {
             id: user.id,
             email: user.email,
             token,
+            has_organization: orgRoles.length > 0,
+            organization_roles: orgRoles,
         };
     }
 
@@ -290,6 +295,7 @@ export class AuthService {
         }
 
         const roles = await UserModel.getUserRoles(user.id);
+        const orgRoles = await UserModel.getUserOrganizations(user.id);
         const jwtToken = this.generateToken(user, roles);
 
         return {
@@ -300,6 +306,8 @@ export class AuthService {
                 avatar_url: user.avatar_url,
                 status: user.status,
                 system_roles: roles,
+                organization_roles: orgRoles,
+                has_organization: orgRoles.length > 0,
             },
             token: jwtToken,
         };

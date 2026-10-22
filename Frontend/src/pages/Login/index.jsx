@@ -35,7 +35,16 @@ export const LoginPage = ({ onNavigate }) => {
       emailLower === 'admin@selfheal.com' ||
       emailLower === 'phamthaisang1710@gmail.com';
 
-    const targetPath = isPlatformAdmin ? '/admin' : '/dashboard';
+    let targetPath = '/dashboard';
+    if (isPlatformAdmin) {
+      targetPath = '/admin';
+    } else {
+      const orgRoles = user?.organization_roles || [];
+      const hasOrg = Boolean(user?.has_organization || orgRoles.length > 0 || user?.organization || user?.organization_id);
+      if (!hasOrg) {
+        targetPath = '/onboarding/organization';
+      }
+    }
 
     const doNav = () => {
       if (onNavigate) {

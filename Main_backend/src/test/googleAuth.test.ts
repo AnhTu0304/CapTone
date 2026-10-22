@@ -76,6 +76,8 @@ describe('Google OAuth API Suite (/api/v1/auth/google)', () => {
       assert.strictEqual(res.status, 200);
       assert.strictEqual(body.success, true);
       assert.strictEqual(body.data.user.email, 'google_test_user@gmail.com');
+      assert.strictEqual(body.data.user.has_organization, false);
+      assert.deepStrictEqual(body.data.user.organization_roles, []);
       assert.ok(body.data.token, 'Should return JWT token');
     } finally {
       AuthService.verifyGoogleToken = originalVerify;

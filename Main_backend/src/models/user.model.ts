@@ -42,6 +42,7 @@ export interface IUserOrgRole {
 export type IUserResponse = Omit<IUser, 'password_hash'> & {
     system_roles?: string[];
     organization_roles?: IUserOrgRole[];
+    has_organization?: boolean;
 };
 
 export interface IUserProfileResponse {
@@ -157,6 +158,28 @@ export class UserModel {
             [userId]
         );
         return rolesRes.rows.map((r) => r.name);
+    }
+
+    /**
+     * Lấy danh sách tổ chức và vai trò tổ chức của người dùng
+     */
+    public static async getUserOrganizations(userId: string, client?: PoolClient): Promise<IUserOrgRole[]> {
+        const db = client || pool;
+        const sql = `
+          SELECT 
+            o.id AS organization_id,
+            o.name AS organization_name,
+            r.name AS role_name,
+            r.code AS role_code,
+            om.status AS member_status
+          FROM organization_members om
+          JOIN organizations o ON om.organization_id = o.id
+          JOIN roles r ON om.role_id = r.id
+          WHERE om.user_id = $1 AND om.status != 'REMOVED' AND o.deleted_at IS NULL
+          ORDER BY o.created_at ASC
+        `;
+        const res = await db.query<IUserOrgRole>(sql, [userId]);
+        return res.rows;
     }
 
     /**

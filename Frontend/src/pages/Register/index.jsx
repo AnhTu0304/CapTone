@@ -3,7 +3,7 @@ import { ArrowRight, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const RegisterPage = ({ onNavigate }) => {
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -98,19 +98,82 @@ export const RegisterPage = ({ onNavigate }) => {
   };
 
   const handleGoogleSignUp = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setSubmitted(true);
-      setTimeout(() => {
-        if (onNavigate) {
-          onNavigate('/onboarding/organization');
-        } else {
-          window.history.pushState({}, '', '/onboarding/organization');
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        }
-      }, 1000);
-    }, 600);
+    setErrors({});
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com';
+
+    if (!window.google?.accounts?.oauth2) {
+      setErrors({ submit: 'Dịch vụ Google đang tải, vui lòng thử lại sau vài giây' });
+      return;
+    }
+
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'email profile openid',
+        callback: async (response) => {
+          if (response.error) {
+            setLoading(false);
+            setErrors({ submit: 'Đăng ký Google không thành công: ' + response.error });
+            return;
+          }
+
+          if (!response.access_token) {
+            setLoading(false);
+            setErrors({ submit: 'Không nhận được mã xác thực từ Google' });
+            return;
+          }
+
+          setLoading(true);
+          try {
+            const authFn = loginWithGoogle || register;
+            const user = await authFn(response.access_token);
+            setSubmitted(true);
+
+            // Kiểm tra điều hướng: admin -> /admin, đã có org -> /dashboard, chưa có org -> /onboarding/organization
+            const rawSysRoles = (user?.system_roles || []).map((r) =>
+              typeof r === 'object' && r !== null ? r.name || r.role_name : r
+            ).map((r) => String(r).toUpperCase());
+            const emailLower = String(user?.email || '').toLowerCase();
+
+            const isPlatformAdmin =
+              rawSysRoles.includes('SUPER_ADMIN') ||
+              rawSysRoles.includes('ADMIN') ||
+              rawSysRoles.includes('SYSTEM_ADMIN') ||
+              emailLower === 'superadmin@selfheal.com' ||
+              emailLower === 'admin@selfheal.com' ||
+              emailLower === 'phamthaisang1710@gmail.com';
+
+            let targetPath = '/dashboard';
+            if (isPlatformAdmin) {
+              targetPath = '/admin';
+            } else {
+              const orgRoles = user?.organization_roles || [];
+              const hasOrg = Boolean(user?.has_organization || orgRoles.length > 0 || user?.organization || user?.organization_id);
+              if (!hasOrg) {
+                targetPath = '/onboarding/organization';
+              }
+            }
+
+            setTimeout(() => {
+              if (onNavigate) {
+                onNavigate(targetPath);
+              } else {
+                window.history.pushState({}, '', targetPath);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }
+            }, 1200);
+          } catch (err) {
+            setErrors({ submit: err.message || 'Đăng ký Google không thành công. Vui lòng thử lại.' });
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    } catch (err) {
+      setErrors({ submit: 'Không thể khởi tạo phiên đăng ký Google: ' + err.message });
+    }
   };
 
   const handleLink = (e, path) => {
@@ -586,6 +649,7 @@ export const RegisterPage = ({ onNavigate }) => {
           {/* Continue with Google Button */}
           <button
             type="button"
+            disabled={loading}
             onClick={handleGoogleSignUp}
             style={{
               width: '100%',
@@ -597,7 +661,8 @@ export const RegisterPage = ({ onNavigate }) => {
               fontFamily: 'var(--font-body)',
               borderRadius: '4px',
               border: '1px solid #D1D5DB',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
