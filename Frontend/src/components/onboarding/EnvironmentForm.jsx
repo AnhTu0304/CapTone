@@ -4,8 +4,9 @@ import FormField from './FormField';
 import PrimaryButton from './PrimaryButton';
 import SecondaryButton from './SecondaryButton';
 import ErrorAlert from './ErrorAlert';
+import { onboardingService } from '../../services/onboardingService';
 
-export const EnvironmentForm = ({ initialData, onSave, onBack }) => {
+export const EnvironmentForm = ({ initialData, organizationId, onSave, onBack }) => {
   const [name, setName] = useState(initialData?.name || 'Staging');
   const [type, setType] = useState(initialData?.type || 'staging');
   const [description, setDescription] = useState(initialData?.description || '');
@@ -25,7 +26,7 @@ export const EnvironmentForm = ({ initialData, onSave, onBack }) => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -34,6 +35,62 @@ export const EnvironmentForm = ({ initialData, onSave, onBack }) => {
     }
 
     setLoading(true);
+
+    if (organizationId) {
+      try {
+        const envType = type === 'development' ? 'DEV' : 'STAGING';
+        const createdEnv = await onboardingService.createEnvironment(organizationId, {
+          name: name.trim(),
+          environment_type: envType,
+          description: description.trim(),
+        });
+
+        setLoading(false);
+        onSave({
+          id: createdEnv.id,
+          name: createdEnv.name,
+          type: createdEnv.environment_type ? createdEnv.environment_type.toLowerCase() : type,
+          description: createdEnv.description,
+        });
+        return;
+      } catch (err) {
+        console.warn('[Onboarding] Lỗi tạo môi trường qua API:', err.message);
+        // Nếu tổ chức đã có môi trường, tự động tải môi trường hiện có
+        try {
+          const existingEnvs = await onboardingService.getEnvironments(organizationId);
+          if (existingEnvs && existingEnvs.length > 0) {
+            const matchedEnv = existingEnvs[0];
+            setLoading(false);
+            onSave({
+              id: matchedEnv.id,
+              name: matchedEnv.name,
+              type: matchedEnv.environment_type ? matchedEnv.environment_type.toLowerCase() : type,
+              description: matchedEnv.description,
+            });
+            return;
+          }
+        } catch (fetchErr) {
+          console.warn('[Onboarding] Lỗi kiểm tra môi trường:', fetchErr);
+        }
+
+        // Hoặc tiếp tục với fallback
+        if (err.message && (err.message.includes('đã đăng ký môi trường') || err.message.includes('tồn tại'))) {
+          setLoading(false);
+          onSave({
+            name: name.trim(),
+            type,
+            description: description.trim(),
+          });
+          return;
+        }
+
+        setLoading(false);
+        setError(err.message || 'Không thể tạo môi trường. Vui lòng thử lại.');
+        return;
+      }
+    }
+
+    // Fallback nếu chưa có organizationId
     setTimeout(() => {
       setLoading(false);
       onSave({
@@ -41,7 +98,7 @@ export const EnvironmentForm = ({ initialData, onSave, onBack }) => {
         type,
         description: description.trim(),
       });
-    }, 450);
+    }, 400);
   };
 
   const envOptions = [

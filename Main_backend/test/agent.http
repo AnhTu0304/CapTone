@@ -1,0 +1,199 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử API Quản Lý Agent (Agents, Tokens, Heartbeats)
+### Quản lý 3 bảng: agents, agent_tokens, agent_heartbeats
+### Kiểm thực dữ liệu nghiêm ngặt tại tầng Validation (Zod)
+### Phân quyền RBAC: SME_OWNER, DEVOPS, VIEWER (Chỉ gồm 3 vai trò chuẩn)
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN SME_OWNER / DEVOPS)
+### ===================================================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "phamtha@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@token = {{login.response.body.data.token}}
+
+### ===================================================================
+### BƯỚC 0.1: LẤY DANH SÁCH TỔ CHỨC CỦA BẠN (TỰ ĐỘNG BẮT ORG ID)
+### ===================================================================
+# @name getMyOrgs
+GET {{baseUrl}}/organizations?page=1&limit=5
+Authorization: Bearer {{token}}
+
+###
+@orgId = {{getMyOrgs.response.body.data.items[0].id}}
+
+### ===================================================================
+### BƯỚC 0.2: LẤY DANH SÁCH MÔI TRƯỜNG CỦA TỔ CHỨC (BẮT ENV ID)
+### ===================================================================
+# @name getEnvs
+GET {{baseUrl}}/organizations/{{orgId}}/environments?page=1&limit=5
+Authorization: Bearer {{token}}
+
+###
+@envId = {{getEnvs.response.body.data.environments[0].id}}
+
+### ===================================================================
+### BƯỚC 1: TẠO AGENT MỚI CHO MÔI TRƯỜNG KÈM TOKEN KẾT NỐI BAN ĐẦU
+### Quyền: SME_OWNER, DEVOPS
+### Kỳ vọng: HTTP 201 Created, sinh bí mật raw_token và install_command
+### ===================================================================
+# @name createAgent
+POST {{baseUrl}}/organizations/{{orgId}}/agents
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "K8s Worker Telemetry Agent",
+  "environment_id": "{{envId}}",
+  "version": "v1.2.0",
+  "token_expires_in_days": 90
+}
+
+###
+@agentId = {{createAgent.response.body.data.agent.id}}
+@agentToken = {{createAgent.response.body.data.token.raw_token}}
+
+### ===================================================================
+### BƯỚC 2: LẤY DANH SÁCH CÁC AGENT TRONG TỔ CHỨC
+### Hỗ trợ: page, limit, status (PENDING, ONLINE, OFFLINE, REVOKED), search
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
+### Kỳ vọng: HTTP 200 OK kèm danh sách và phân trang
+### ===================================================================
+# @name getAgents
+GET {{baseUrl}}/organizations/{{orgId}}/agents?page=1&limit=10&status=PENDING
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 3: XEM CHI TIẾT AGENT
+### Bao gồm: Tên, UID, môi trường, cụm K8s, số token hoạt động, nhịp tim gần nhất
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
+### Kỳ vọng: HTTP 200 OK
+### ===================================================================
+# @name getAgentDetail
+GET {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 4: CẬP NHẬT THÔNG TIN AGENT (Tên, Version)
+### Quyền: SME_OWNER, DEVOPS
+### Kỳ vọng: HTTP 200 OK
+### ===================================================================
+# @name updateAgent
+PUT {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "K8s Production Monitoring Daemon",
+  "version": "v1.2.1"
+}
+
+### ===================================================================
+### BƯỚC 5: AGENT DAEMON GỬI NHỊP TIM (HEARTBEAT) ĐỊNH KỲ TỪ K8S
+### Endpoint: POST /api/v1/agents/heartbeat
+### Xác thực: x-agent-token header HOẶC Authorization: Bearer <agent_token>
+### Kỳ vọng: HTTP 200 OK, chuyển trạng thái Agent sang ONLINE
+### ===================================================================
+# @name recordHeartbeat
+POST {{baseUrl}}/agents/heartbeat
+x-agent-token: {{agentToken}}
+Content-Type: {{contentType}}
+
+{
+  "latency_ms": 28,
+  "agent_version": "v1.2.1",
+  "status": "ONLINE",
+  "metadata": {
+    "node_name": "k8s-node-worker-01",
+    "cpu_usage_percent": 18.5,
+    "memory_used_mb": 420,
+    "active_pods_monitored": 12
+  }
+}
+
+### ===================================================================
+### BƯỚC 6: XEM LỊCH SỬ NHỊP TIM CỦA AGENT TRÊN DASHBOARD
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
+### Kỳ vọng: HTTP 200 OK kèm mảng các nhịp tim gần nhất
+### ===================================================================
+# @name getHeartbeatHistory
+GET {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}/heartbeats?limit=10
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 7: TẠO THÊM TOKEN CHO AGENT (XOAY VÒNG TOKEN BẢO MẬT)
+### Quyền: SME_OWNER, DEVOPS
+### Kỳ vọng: HTTP 201 Created kèm raw_token mới
+### ===================================================================
+# @name createNewToken
+POST {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}/tokens
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "expires_in_days": 30
+}
+
+###
+@secondTokenId = {{createNewToken.response.body.data.token_id}}
+@secondRawToken = {{createNewToken.response.body.data.raw_token}}
+
+### ===================================================================
+### BƯỚC 8: LẤY DANH SÁCH CÁC TOKEN CỦA AGENT
+### Quyền: Mọi thành viên hợp lệ trong tổ chức (SME_OWNER, DEVOPS, VIEWER)
+### Bảo mật: Không làm lộ token_hash, chỉ hiển thị token_prefix
+### ===================================================================
+# @name getAgentTokens
+GET {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}/tokens
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 9: THU HỒI MỘT TOKEN CỤ THỂ CỦA AGENT
+### Quyền: SME_OWNER, DEVOPS
+### Kỳ vọng: HTTP 200 OK ("Thu hồi Token Agent thành công")
+### ===================================================================
+# @name revokeSpecificToken
+DELETE {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}/tokens/{{secondTokenId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 10: THU HỒI TOÀN BỘ AGENT (REVOKE AGENT)
+### Chuyển trạng thái Agent sang REVOKED và vô hiệu hóa tất cả các Token kết nối
+### Quyền: SME_OWNER, DEVOPS
+### ===================================================================
+# @name revokeAgent
+POST {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}/revoke
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 11: KIỂM THỬ BẢO MẬT - THỬ GỬI HEARTBEAT VỚI TOKEN BỊ THU HỒI
+### Kỳ vọng: HTTP 401 Unauthorized kèm thông báo:
+### "Token Agent không hợp lệ, đã hết hạn hoặc đã bị thu hồi"
+### ===================================================================
+# @name testRevokedHeartbeatRejected
+POST {{baseUrl}}/agents/heartbeat
+x-agent-token: {{agentToken}}
+Content-Type: {{contentType}}
+
+{
+  "latency_ms": 50
+}
+
+### ===================================================================
+### BƯỚC 12: XÓA AGENT KHỎI HỆ THỐNG
+### Quyền: Chỉ duy nhất SME_OWNER
+### Kỳ vọng: HTTP 200 OK
+### ===================================================================
+# @name deleteAgent
+DELETE {{baseUrl}}/organizations/{{orgId}}/agents/{{agentId}}
+Authorization: Bearer {{token}}

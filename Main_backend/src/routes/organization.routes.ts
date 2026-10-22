@@ -22,6 +22,8 @@ import {
   orgMemberIdOnlySchema,
   memberQuerySchema,
 } from '../validations/organizationMember.validation';
+import { environmentRoutes } from './environment.routes';
+import { agentRoutes } from './agent.routes';
 
 const router = Router();
 
@@ -181,5 +183,17 @@ router.delete(
   requireOrgSelfOrOwner,
   OrganizationMemberController.removeMember
 );
+
+/* ==========================================================================
+   4. CÁC ĐƯỜNG DẪN MÔI TRƯỜNG THUỘC TỔ CHỨC (DEV & STAGING)
+   ========================================================================== */
+router.use('/:orgId/environments', environmentRoutes);
+router.use('/:id/environments', environmentRoutes);
+
+/* ==========================================================================
+   5. CÁC ĐƯỜNG DẪN AGENT THUỘC TỔ CHỨC
+   ========================================================================== */
+router.use('/:orgId/agents', agentRoutes);
+router.use('/:id/agents', agentRoutes);
 
 export const organizationRoutes = router;

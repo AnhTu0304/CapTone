@@ -101,10 +101,12 @@ export const executeWithFallback = async (apiCall, fallbackMockCall) => {
   }
 };
 
-export default {
+const apiClient = {
   API_BASE_URL,
   getAuthToken,
   createDefaultHeaders,
   request,
   executeWithFallback,
 };
+
+export default apiClient;

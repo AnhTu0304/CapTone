@@ -1,0 +1,202 @@
+### ===================================================================
+### CapTone - Bộ Kiểm Thử API Module Môi Trường (Environments)
+### Quy tắc nghiệp vụ: Mỗi tổ chức chỉ được đăng ký 1 trong 2 loại môi trường (DEV hoặc STAGING)
+### Kiểm thực dữ liệu nghiêm ngặt tại tầng Validation (Zod)
+### Cơ sở dữ liệu: VARCHAR(50) linh hoạt, không khóa ENUM
+### ===================================================================
+@baseUrl = http://localhost:5000/api/v1
+@contentType = application/json
+
+### ===================================================================
+### BƯỚC 0: ĐĂNG NHẬP LẤY JWT TOKEN (TÀI KHOẢN OWNER / DEVOPS)
+### ===================================================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "phamtha@gmail.com",
+  "password": "Tanquoc123@"
+}
+
+###
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImI1ZjViNjk4LTU1NjktNGI0NC1hYTVjLWE2MWQ2ZjNkNjAyMyIsImVtYWlsIjoicGhhbXRoYUBnbWFpbC5jb20iLCJzdGF0dXMiOiJBQ1RJVkUiLCJyb2xlcyI6W10sImlhdCI6MTc5MjU4MDE5MSwiZXhwIjoxNzkzMTg0OTkxfQ.iHC7pOdBwxe16JUnMFvsHadyYaVO7qR7cmShcEcK9nk
+
+### ===================================================================
+### BƯỚC 0.1: LẤY DANH SÁCH TỔ CHỨC CỦA BẠN (TỰ ĐỘNG BẮT ORG ID)
+### ===================================================================
+# @name getMyOrgs
+GET {{baseUrl}}/organizations?page=1&limit=5
+Authorization: Bearer {{token}}
+
+### Tự động lấy orgId từ phần tử đầu tiên của danh sách tổ chức (hoặc bạn có thể tự điền orgId cố định)
+@orgId = {{getMyOrgs.response.body.data.items[0].id}}
+
+### ===================================================================
+### BƯỚC 1: TẠO MÔI TRƯỜNG DEV HỢP LỆ (Hỗ trợ "DEV" hoặc "development")
+### Kỳ vọng: HTTP 201 Created, environment_type tự động chuẩn hóa về 'DEV'
+### ===================================================================
+# @name createDevEnv
+POST {{baseUrl}}/organizations/{{orgId}}/environments
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Local Microservices",
+  "code": "acme-dev-local",
+  "environment_type": "DEV",
+  "description": "Môi trường phát triển kỹ sư cục bộ trên Minikube sandbox"
+}
+
+###
+@devEnvId = {{createDevEnv.response.body.data.id}}
+
+### ===================================================================
+### BƯỚC 2: KIỂM THỬ RÀNG BUỘC - MỖI TỔ CHỨC CHỈ ĐƯỢC ĐĂNG KÝ 1 TRONG 2 LOẠI MÔI TRƯỜNG
+### Thử tạo thêm môi trường thứ 2 (STAGING) trong cùng tổ chức đã có DEV
+### Kỳ vọng: HTTP 400 Bad Request kèm thông báo:
+### "Tổ chức này đã đăng ký môi trường... Mỗi tổ chức chỉ được phép đăng ký duy nhất 1 trong 2 loại môi trường (DEV hoặc STAGING)."
+### ===================================================================
+# @name testSecondEnvRejected
+POST {{baseUrl}}/organizations/{{orgId}}/environments
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Pre-Release Staging",
+  "code": "acme-staging-cloud",
+  "environment_type": "STAGING",
+  "description": "Thử nghiệm tạo môi trường thứ 2 trong cùng tổ chức sẽ bị từ chối"
+}
+
+### ===================================================================
+### BƯỚC 3: KIỂM THỬ VALIDATION - TỪ CHỐI LOẠI MÔI TRƯỜNG NGOÀI DEV & STAGING
+### Kỳ vọng: HTTP 400 Bad Request kèm thông báo:
+### "Loại môi trường chỉ được phép là 'DEV' (hoặc 'development') hoặc 'STAGING'"
+### ===================================================================
+# @name testInvalidTypeProduction
+POST {{baseUrl}}/organizations/{{orgId}}/environments
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Production Cluster",
+  "code": "acme-prod-test",
+  "environment_type": "PRODUCTION",
+  "description": "Thử nghiệm gửi loại môi trường PRODUCTION không được phép"
+}
+
+### ===================================================================
+### BƯỚC 4: LẤY DANH SÁCH MÔI TRƯỜNG CỦA TỔ CHỨC (PHÂN TRANG & THỐNG KÊ METRICS)
+### ===================================================================
+# @name listEnvironments
+GET {{baseUrl}}/organizations/{{orgId}}/environments?page=1&limit=10
+Authorization: Bearer {{token}}
+
+###
+### 4.1. Tìm kiếm môi trường theo từ khóa (Ví dụ: "dev" hoặc "staging")
+GET {{baseUrl}}/organizations/{{orgId}}/environments?search=dev
+Authorization: Bearer {{token}}
+
+###
+### 4.2. Lọc danh sách chỉ lấy môi trường DEV
+GET {{baseUrl}}/organizations/{{orgId}}/environments?type=DEV
+Authorization: Bearer {{token}}
+
+###
+### 4.3. Lọc danh sách chỉ lấy môi trường STAGING
+GET {{baseUrl}}/organizations/{{orgId}}/environments?type=STAGING
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 5: LẤY THỐNG KÊ TỔNG QUAN MÔI TRƯỜNG (DASHBOARD SUMMARY)
+### Trả về: total, active, inactive, breakdown theo DEV / STAGING
+### ===================================================================
+# @name envSummary
+GET {{baseUrl}}/organizations/{{orgId}}/environments/summary
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 6: XEM CHI TIẾT MỘT MÔI TRƯỜNG THEO ID
+### ===================================================================
+# @name getEnvDetails
+GET {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 7: CẬP NHẬT THÔNG TIN MÔI TRƯỜNG (TÊN, MÔ TẢ, TRẠNG THÁI)
+### ===================================================================
+# @name updateEnv
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Local Microservices (Updated)",
+  "description": "Cập nhật mô tả môi trường dev phục vụ calibration AI",
+  "status": "ACTIVE"
+}
+
+### ===================================================================
+### BƯỚC 7.1: CHUYỂN ĐỔI LOẠI MÔI TRƯỜNG TỪ 'DEV' SANG 'STAGING'
+### Cho phép chuyển đổi loại môi trường mà không cần xóa tạo lại
+### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'STAGING'
+### ===================================================================
+# @name switchEnvTypeToStaging
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Microservices Staging",
+  "environment_type": "STAGING",
+  "description": "Nâng cấp và chuyển đổi loại môi trường sang STAGING"
+}
+
+### ===================================================================
+### BƯỚC 7.2: CHUYỂN ĐỔI LOẠI MÔI TRƯỜNG NGƯỢC LẠI TỪ 'STAGING' VỀ 'DEV'
+### Kỳ vọng: HTTP 200 OK, environment_type chuyển thành 'DEV'
+### ===================================================================
+# @name switchEnvTypeToDev
+PUT {{baseUrl}}/organizations/{{orgId}}/environments/{{devEnvId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Microservices Development Sandbox",
+  "environment_type": "DEV",
+  "description": "Chuyển đổi ngược loại môi trường về DEV"
+}
+
+### ===================================================================
+### BƯỚC 8: XÓA MỀM MÔI TRƯỜNG (SOFT DELETE)
+### Lưu ý: Nếu môi trường đang có Cluster hoặc Agent hoạt động,
+### API sẽ chặn xóa và trả về HTTP 400 để bảo đảm an toàn dữ liệu.
+### ===================================================================
+# @name deleteEnv
+DELETE {{baseUrl}}/organizations/{{orgId}}/environments/ae48b464-dd24-4f24-b71b-94ad9dc49278
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 9: XÁC MINH MÔI TRƯỜNG ĐÃ ĐƯỢC XÓA MỀM KHÔNG XUẤT HIỆN LẠI
+### Kỳ vọng: HTTP 404 Not Found (Môi trường không tồn tại hoặc đã bị xóa)
+### ===================================================================
+GET {{baseUrl}}/organizations/{{orgId}}/environments/ae48b464-dd24-4f24-b71b-94ad9dc49278
+Authorization: Bearer {{token}}
+
+### ===================================================================
+### BƯỚC 10: TẠO MÔI TRƯỜNG STAGING SAU KHI ĐÃ XÓA MÔI TRƯỜNG DEV CŨ
+### Vì môi trường DEV cũ đã được xóa mềm, tổ chức giờ đây có thể đăng ký môi trường mới
+### Kỳ vọng: HTTP 201 Created
+### ===================================================================
+# @name createStagingAfterDelete
+POST {{baseUrl}}/organizations/{{orgId}}/environments
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "name": "Acme Pre-Release Staging",
+  "code": "acme-staging-cloud",
+  "environment_type": "STAGING",
+  "description": "Đăng ký thành công môi trường STAGING sau khi môi trường DEV đã xóa"
+}

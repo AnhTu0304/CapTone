@@ -1,34 +1,40 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { onboardingService } from '../services/onboardingService';
 
 const STORAGE_KEY = 'selfheal_onboarding_state_v1';
 
 const initialDefaultState = {
   organization: {
+    id: null,
     name: 'Acme Cloud Corp',
     slug: 'acme-cloud-corp',
     description: 'Cloud native microservices infrastructure for retail platform',
   },
   environment: {
-    name: 'Production',
+    id: null,
+    name: 'Staging',
     type: 'staging', // 'development' | 'staging'
     description: 'Primary staging cluster before production deployment',
   },
   cluster: {
+    id: null,
+    agentId: null,
     name: 'k8s-prod-east-01',
-    token: 'sh_live_sec_994a8f21e7b30c1d64aa9c80f4',
-    tokenGeneratedAt: '2026-09-18T09:30:00Z',
-    isRegistered: true,
+    token: 'ag_live_sec_default_token',
+    tokenGeneratedAt: new Date().toISOString(),
+    installCommand: '',
+    isRegistered: false,
   },
   agentStatus: {
-    state: 'connected', // 'waiting' | 'connecting' | 'connected' | 'failed' | 'permission_denied' | 'token_expired' | 'offline'
-    lastHeartbeat: '3s ago',
-    latencyMs: 14,
+    state: 'waiting', // 'waiting' | 'connecting' | 'connected' | 'failed' | 'permission_denied' | 'token_expired' | 'offline'
+    lastHeartbeat: 'Chờ nhận tín hiệu đầu tiên...',
+    latencyMs: null,
     k8sVersion: 'v1.29.4',
-    nodeCount: 4,
-    podsMonitored: 38,
+    nodeCount: 3,
+    podsMonitored: 12,
     k8sAccess: true,
     monitoringReady: true,
-    aiDataReadiness: 'calibrating', // 'calibrating' (collecting baseline telemetry) | 'ready'
+    aiDataReadiness: 'calibrating', // 'calibrating' | 'ready'
     telemetrySamples: 1420,
     requiredSamples: 3000,
   },
@@ -97,11 +103,32 @@ export const OnboardingProvider = ({ children }) => {
     });
   }, []);
 
-  const generateNewToken = () => {
+  /**
+   * Sinh Token kết nối mới (Xoay vòng token bảo mật)
+   * Kết nối với backend API nếu có orgId và agentId
+   */
+  const generateNewToken = async () => {
+    const orgId = state.organization?.id;
+    const agentId = state.cluster?.agentId;
+
+    if (orgId && agentId) {
+      try {
+        const tokenData = await onboardingService.generateNewToken(orgId, agentId);
+        updateCluster({
+          token: tokenData.raw_token,
+          tokenGeneratedAt: tokenData.created_at || new Date().toISOString(),
+        });
+        return tokenData.raw_token;
+      } catch (err) {
+        console.warn('[Onboarding] Lỗi gọi API xoay vòng token, dùng fallback local:', err);
+      }
+    }
+
+    // Fallback nếu chạy offline hoặc chưa có agentId
     const randomHex = Array.from({ length: 24 }, () =>
       Math.floor(Math.random() * 16).toString(16)
     ).join('');
-    const newToken = `sh_live_sec_${randomHex}`;
+    const newToken = `ag_live_${randomHex}`;
     updateCluster({
       token: newToken,
       tokenGeneratedAt: new Date().toISOString(),
@@ -109,17 +136,51 @@ export const OnboardingProvider = ({ children }) => {
     return newToken;
   };
 
-  const retryAgentVerification = () => {
+  /**
+   * Kiểm tra và xác thực trạng thái kết nối của Agent
+   * Kết nối với backend API để kiểm tra trạng thái thực tế
+   */
+  const retryAgentVerification = async () => {
     updateAgentStatus({ state: 'connecting' });
+
+    const orgId = state.organization?.id;
+    const agentId = state.cluster?.agentId;
+
+    if (orgId && agentId) {
+      try {
+        const agentDetail = await onboardingService.checkAgentStatus(orgId, agentId);
+        if (agentDetail?.status === 'ONLINE') {
+          updateAgentStatus({
+            state: 'connected',
+            lastHeartbeat: 'Vừa xong',
+            latencyMs: agentDetail.last_latency_ms || 18,
+            k8sAccess: true,
+            monitoringReady: true,
+          });
+          return;
+        } else {
+          updateAgentStatus({
+            state: 'waiting',
+            lastHeartbeat: 'Chờ tín hiệu từ Pod Agent trong Kubernetes...',
+            latencyMs: null,
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('[Onboarding] Không thể kiểm tra Agent qua backend API:', err.message);
+      }
+    }
+
+    // Fallback mô phỏng cho môi trường sandbox dev
     setTimeout(() => {
       updateAgentStatus({
         state: 'connected',
-        lastHeartbeat: 'just now',
-        latencyMs: 12,
+        lastHeartbeat: 'Vừa xong (mô phỏng sandbox)',
+        latencyMs: 14,
         k8sAccess: true,
         monitoringReady: true,
       });
-    }, 1200);
+    }, 1000);
   };
 
   const resetOnboarding = () => {

@@ -74,7 +74,7 @@ export class MetricModel {
         COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
         GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
       FROM agent_metrics
-      WHERE service_id = $1
+      WHERE service_id::text = $1
       GROUP BY time_bucket
       ORDER BY time_bucket DESC
       LIMIT $3;
@@ -124,7 +124,7 @@ export class MetricModel {
           COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
           GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
         FROM agent_metrics
-        WHERE service_id = $1 AND collected_at > $3
+        WHERE service_id::text = $1 AND collected_at > $3
         GROUP BY time_bucket
         ORDER BY time_bucket ASC
         LIMIT $4;
@@ -144,7 +144,7 @@ export class MetricModel {
             COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
             GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
           FROM agent_metrics
-          WHERE service_id = $1
+          WHERE service_id::text = $1
           GROUP BY time_bucket
           ORDER BY time_bucket DESC
           LIMIT $3

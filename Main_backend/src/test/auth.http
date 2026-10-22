@@ -23,7 +23,7 @@ POST {{baseUrl}}/auth/register
 Content-Type: {{contentType}}
 
 {
-  "email": "phamthais@gmail.com",
+  "email": "phamtha@gmail.com",
   "password": "Tanquoc123@",
   "full_name": "Nguyen DevOps"
 }

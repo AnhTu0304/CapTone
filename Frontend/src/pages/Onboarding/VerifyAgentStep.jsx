@@ -18,6 +18,19 @@ export const VerifyAgentStep = ({ onNavigate }) => {
   const [simulatedState, setSimulatedState] = useState(agentStatus?.state || 'connected');
   const [retrying, setRetrying] = useState(false);
 
+  // Đồng bộ trạng thái khi agentStatus trong context thay đổi
+  React.useEffect(() => {
+    if (agentStatus?.state) {
+      setSimulatedState(agentStatus.state);
+    }
+  }, [agentStatus?.state]);
+
+  // Kiểm tra trạng thái Agent một lần khi bước này được mở
+  React.useEffect(() => {
+    retryAgentVerification();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleBack = () => {
     setStep(3);
     if (onNavigate) {
@@ -25,16 +38,14 @@ export const VerifyAgentStep = ({ onNavigate }) => {
     }
   };
 
-  const handleRetry = () => {
+  const handleRetry = async () => {
     setRetrying(true);
     setSimulatedState('connecting');
-    updateAgentStatus({ state: 'connecting' });
-
-    setTimeout(() => {
+    try {
+      await retryAgentVerification();
+    } finally {
       setRetrying(false);
-      setSimulatedState('connected');
-      retryAgentVerification();
-    }, 1200);
+    }
   };
 
   const handleContinue = () => {
@@ -152,6 +163,25 @@ export const VerifyAgentStep = ({ onNavigate }) => {
             <RefreshCw size={14} className={retrying ? 'animate-spin' : ''} />
             <span>{retrying ? 'Đang thử lại...' : 'Thử kết nối lại'}</span>
           </button>
+
+          {!isConnected && (
+            <button
+              type="button"
+              onClick={handleContinue}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                padding: '0 8px',
+              }}
+            >
+              Bỏ qua bước này & Hoàn tất
+            </button>
+          )}
 
           <PrimaryButton
             onClick={handleContinue}
