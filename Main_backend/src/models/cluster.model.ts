@@ -193,7 +193,11 @@ export class ClusterModel {
         COUNT(DISTINCT p.id)::int AS pods_count,
         a.id AS agent_id,
         a.name AS agent_name,
-        COALESCE(a.status, 'PENDING') AS agent_status,
+        CASE 
+          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
+          ELSE COALESCE(a.status, 'PENDING')
+        END AS agent_status,
         a.last_seen_at AS last_heartbeat_at,
         (SELECT LEFT(token_hash, 16) FROM agent_tokens WHERE agent_id = a.id AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1) AS token_prefix
       FROM clusters c
@@ -234,7 +238,11 @@ export class ClusterModel {
         COUNT(DISTINCT p.id)::int AS pods_count,
         a.id AS agent_id,
         a.name AS agent_name,
-        COALESCE(a.status, 'PENDING') AS agent_status,
+        CASE 
+          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
+          ELSE COALESCE(a.status, 'PENDING')
+        END AS agent_status,
         a.last_seen_at AS last_heartbeat_at
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
@@ -282,7 +290,11 @@ export class ClusterModel {
         a.id AS agent_id,
         a.name AS agent_name,
         a.agent_uid,
-        COALESCE(a.status, 'ONLINE') AS agent_status,
+        CASE 
+          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
+          ELSE COALESCE(a.status, 'PENDING')
+        END AS agent_status,
         COALESCE(a.version, 'v2.4.1') AS agent_version,
         a.last_seen_at
       FROM clusters c
@@ -318,7 +330,11 @@ export class ClusterModel {
           a.id AS agent_id,
           a.name AS agent_name,
           a.agent_uid,
-          COALESCE(a.status, 'ONLINE') AS agent_status,
+          CASE 
+          WHEN a.status = 'ONLINE' AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.status = 'ONLINE' AND (a.last_seen_at IS NULL OR a.last_seen_at < NOW() - INTERVAL '30 seconds') THEN 'OFFLINE'
+          ELSE COALESCE(a.status, 'PENDING')
+        END AS agent_status,
           COALESCE(a.version, 'v2.4.1') AS agent_version,
           a.last_seen_at
         FROM clusters c
@@ -339,7 +355,7 @@ export class ClusterModel {
     if (!cluster.agent_id) {
       const agentRes = await db.query(
         `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'v2.4.1', 'ONLINE', NOW(), NOW())
+         VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
          RETURNING id, name, agent_uid, status, version`,
         [
           `${cluster.name}-ebpf-agent`,
@@ -460,7 +476,7 @@ export class ClusterModel {
     );
 
     // Tính toán trạng thái Agent chuẩn: ONLINE | OFFLINE | CONNECTING | DEGRADED
-    let normalizedAgentStatus = (cluster.agent_status || 'ONLINE').toUpperCase();
+    let normalizedAgentStatus = (cluster.agent_status || 'PENDING').toUpperCase();
     if (normalizedAgentStatus === 'PENDING') {
       normalizedAgentStatus = 'CONNECTING';
     } else if (normalizedAgentStatus === 'ONLINE') {
@@ -526,7 +542,7 @@ export class ClusterModel {
     if (!agentId) {
       const agentRes = await db.query(
         `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'v2.4.1', 'ONLINE', NOW(), NOW())
+         VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
          RETURNING id`,
         [
           `${cluster.name}-ebpf-agent`,
