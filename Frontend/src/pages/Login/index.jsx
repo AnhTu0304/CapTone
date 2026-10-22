@@ -25,15 +25,11 @@ export const LoginPage = ({ onNavigate }) => {
     const rawSysRoles = (user?.system_roles || []).map((r) =>
       typeof r === 'object' && r !== null ? r.name || r.role_name : r
     ).map((r) => String(r).toUpperCase());
-    const emailLower = String(user?.email || fallbackEmail || '').toLowerCase();
 
     const isPlatformAdmin =
       rawSysRoles.includes('SUPER_ADMIN') ||
       rawSysRoles.includes('ADMIN') ||
-      rawSysRoles.includes('SYSTEM_ADMIN') ||
-      emailLower === 'superadmin@selfheal.com' ||
-      emailLower === 'admin@selfheal.com' ||
-      emailLower === 'phamthaisang1710@gmail.com';
+      rawSysRoles.includes('SYSTEM_ADMIN');
 
     let targetPath = '/dashboard';
     if (isPlatformAdmin) {
@@ -83,8 +79,27 @@ export const LoginPage = ({ onNavigate }) => {
     setError('');
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com';
 
+    // Đảm bảo truy cập bằng localhost thay vì 127.0.0.1 (Google OAuth console chỉ cấp phép http://localhost:3000)
+    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
+      window.location.hostname = 'localhost';
+      return;
+    }
+
     if (!window.google?.accounts?.oauth2) {
-      setError('Dịch vụ Google đang tải, vui lòng thử lại sau vài giây');
+      setLoading(true);
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        if (window.google?.accounts?.oauth2) {
+          clearInterval(interval);
+          setLoading(false);
+          handleGoogleSignIn();
+        } else if (attempts >= 15) {
+          clearInterval(interval);
+          setLoading(false);
+          setError('Không thể kết nối dịch vụ Google. Vui lòng tắt trình chặn quảng cáo nếu có và tải lại trang.');
+        }
+      }, 200);
       return;
     }
 
@@ -117,6 +132,15 @@ export const LoginPage = ({ onNavigate }) => {
           } finally {
             setLoading(false);
           }
+        },
+        error_callback: (err) => {
+          setLoading(false);
+          if (err?.type === 'popup_closed') return;
+          if (err?.type === 'popup_blocked_by_browser') {
+            setError('Trình duyệt đã chặn cửa sổ đăng nhập Google. Vui lòng nhấn vào biểu tượng ổ khóa/popup trên thanh địa chỉ để cho phép popup và thử lại.');
+            return;
+          }
+          setError(err?.message || 'Không thể mở cửa sổ Google. Vui lòng kiểm tra chặn popup trên trình duyệt.');
         },
       });
 
