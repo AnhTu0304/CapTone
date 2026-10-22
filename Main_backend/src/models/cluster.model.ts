@@ -88,46 +88,8 @@ export class ClusterModel {
         nsId = newNs.rows[0]?.id;
       }
 
-      const existingNodes = await db.query('SELECT COUNT(*)::int as count FROM nodes WHERE cluster_id = $1', [clusterId]);
-      if (existingNodes.rows[0]?.count === 0) {
-        const n1 = await db.query(
-          `INSERT INTO nodes (cluster_id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at, updated_at)
-           VALUES ($1, $2, 'Ready', 4000, 8589934592, 53687091200, 'v1.29.4', '["control-plane"]'::jsonb, NOW(), NOW()) RETURNING id`,
-          [clusterId, `${clusterName}-control-plane`]
-        );
-        const n2 = await db.query(
-          `INSERT INTO nodes (cluster_id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at, updated_at)
-           VALUES ($1, $2, 'Ready', 8000, 17179869184, 107374182400, 'v1.29.4', '["worker"]'::jsonb, NOW(), NOW()) RETURNING id`,
-          [clusterId, `${clusterName}-worker-01`]
-        );
-        const n3 = await db.query(
-          `INSERT INTO nodes (cluster_id, name, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, created_at, updated_at)
-           VALUES ($1, $2, 'Ready', 8000, 17179869184, 107374182400, 'v1.29.4', '["worker"]'::jsonb, NOW(), NOW()) RETURNING id`,
-          [clusterId, `${clusterName}-worker-02`]
-        );
-
-        const node1Id = n1.rows[0]?.id;
-        const node2Id = n2.rows[0]?.id;
-        const node3Id = n3.rows[0]?.id;
-
-        await db.query(
-          `INSERT INTO pods (cluster_id, namespace_id, node_id, name, status, phase, restart_count, image, created_at, updated_at)
-           VALUES 
-            ($1, $2, $3, 'ebpf-sensor-agent-01', 'Running', 'Running', 0, 'selfheal/ebpf-agent:v2.4', NOW(), NOW()),
-            ($1, $2, $3, 'kube-apiserver-' || $6, 'Running', 'Running', 0, 'registry.k8s.io/kube-apiserver:v1.29.4', NOW(), NOW()),
-            ($1, $2, $3, 'kube-controller-manager-' || $6, 'Running', 'Running', 0, 'registry.k8s.io/kube-controller-manager:v1.29.4', NOW(), NOW()),
-            ($1, $2, $3, 'kube-scheduler-' || $6, 'Running', 'Running', 0, 'registry.k8s.io/kube-scheduler:v1.29.4', NOW(), NOW()),
-            ($1, $2, $4, 'coredns-78fcd69978-abc1', 'Running', 'Running', 0, 'registry.k8s.io/coredns/coredns:v1.11.1', NOW(), NOW()),
-            ($1, $2, $4, 'ingress-nginx-controller-01', 'Running', 'Running', 0, 'registry.k8s.io/ingress-nginx:v1.9.4', NOW(), NOW()),
-            ($1, $2, $4, 'order-service-deployment-a1', 'Running', 'Running', 0, 'app/order-service:v1.2', NOW(), NOW()),
-            ($1, $2, $4, 'payment-gateway-deployment-b2', 'Running', 'Running', 0, 'app/payment-gateway:v2.0', NOW(), NOW()),
-            ($1, $2, $5, 'coredns-78fcd69978-xyz2', 'Running', 'Running', 0, 'registry.k8s.io/coredns/coredns:v1.11.1', NOW(), NOW()),
-            ($1, $2, $5, 'auth-service-deployment-c3', 'Running', 'Running', 0, 'app/auth-service:v1.0', NOW(), NOW()),
-            ($1, $2, $5, 'telemetry-collector-agent-02', 'Running', 'Running', 0, 'selfheal/collector:v1.1', NOW(), NOW()),
-            ($1, $2, $5, 'notification-service-deployment-d4', 'Running', 'Running', 0, 'app/notifications:v1.4', NOW(), NOW())`,
-          [clusterId, nsId, node1Id, node2Id, node3Id, clusterName]
-        );
-      }
+      // Real nodes and pods are synchronized dynamically from Kubernetes cluster via Agent telemetry
+      // Do not inject fake/mock nodes and pods
     } catch (err) {
       console.warn('[ClusterModel] Không thể khởi tạo nodes/pods mặc định:', err);
     }
@@ -193,7 +155,11 @@ export class ClusterModel {
         COUNT(DISTINCT p.id)::int AS pods_count,
         a.id AS agent_id,
         a.name AS agent_name,
-        COALESCE(a.status, 'PENDING') AS agent_status,
+        CASE 
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
+        END AS agent_status,
         a.last_seen_at AS last_heartbeat_at,
         (SELECT LEFT(token_hash, 16) FROM agent_tokens WHERE agent_id = a.id AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1) AS token_prefix
       FROM clusters c
@@ -234,7 +200,11 @@ export class ClusterModel {
         COUNT(DISTINCT p.id)::int AS pods_count,
         a.id AS agent_id,
         a.name AS agent_name,
-        COALESCE(a.status, 'PENDING') AS agent_status,
+        CASE 
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
+        END AS agent_status,
         a.last_seen_at AS last_heartbeat_at
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
@@ -282,7 +252,11 @@ export class ClusterModel {
         a.id AS agent_id,
         a.name AS agent_name,
         a.agent_uid,
-        COALESCE(a.status, 'ONLINE') AS agent_status,
+        CASE 
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
+        END AS agent_status,
         COALESCE(a.version, 'v2.4.1') AS agent_version,
         a.last_seen_at
       FROM clusters c
@@ -318,7 +292,11 @@ export class ClusterModel {
           a.id AS agent_id,
           a.name AS agent_name,
           a.agent_uid,
-          COALESCE(a.status, 'ONLINE') AS agent_status,
+          CASE 
+          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
+          WHEN a.id IS NOT NULL THEN 'OFFLINE'
+          ELSE 'PENDING'
+        END AS agent_status,
           COALESCE(a.version, 'v2.4.1') AS agent_version,
           a.last_seen_at
         FROM clusters c
@@ -339,7 +317,7 @@ export class ClusterModel {
     if (!cluster.agent_id) {
       const agentRes = await db.query(
         `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'v2.4.1', 'ONLINE', NOW(), NOW())
+         VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
          RETURNING id, name, agent_uid, status, version`,
         [
           `${cluster.name}-ebpf-agent`,
@@ -460,7 +438,7 @@ export class ClusterModel {
     );
 
     // Tính toán trạng thái Agent chuẩn: ONLINE | OFFLINE | CONNECTING | DEGRADED
-    let normalizedAgentStatus = (cluster.agent_status || 'ONLINE').toUpperCase();
+    let normalizedAgentStatus = (cluster.agent_status || 'PENDING').toUpperCase();
     if (normalizedAgentStatus === 'PENDING') {
       normalizedAgentStatus = 'CONNECTING';
     } else if (normalizedAgentStatus === 'ONLINE') {
@@ -526,7 +504,7 @@ export class ClusterModel {
     if (!agentId) {
       const agentRes = await db.query(
         `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'v2.4.1', 'ONLINE', NOW(), NOW())
+         VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
          RETURNING id`,
         [
           `${cluster.name}-ebpf-agent`,
@@ -543,6 +521,20 @@ export class ClusterModel {
       `UPDATE agent_tokens SET revoked_at = NOW() WHERE agent_id = $1 AND revoked_at IS NULL`,
       [agentId]
     );
+
+    // Chuyển Agent sang OFFLINE vì token cũ đã bị thu hồi
+    await db.query(
+      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+      [agentId]
+    );
+
+    // Ngắt ngay lập tức kết nối WebSocket đang hoạt động của Agent dùng token cũ
+    try {
+      const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+      disconnectAgentSession(agentId);
+    } catch (e) {
+      // ignore
+    }
 
     const rawToken = "sh_live_sec_" + crypto.randomBytes(18).toString("hex") + "_ebpf";
     const tokenPrefix = rawToken.slice(0, 16);
@@ -760,9 +752,20 @@ export class ClusterModel {
   ) {
     const db = client || pool;
     const res = await db.query(
-      `UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 RETURNING id`,
+      `UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 RETURNING id, agent_id`,
       [tokenId]
     );
+    const row = res.rows[0];
+    if (row?.agent_id) {
+      await db.query(
+        `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+        [row.agent_id]
+      );
+      try {
+        const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+        disconnectAgentSession(row.agent_id);
+      } catch (e) {}
+    }
     return (res.rowCount || 0) > 0;
   }
 

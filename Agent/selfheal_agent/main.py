@@ -17,6 +17,7 @@ from selfheal_agent.config import AgentConfig, load_config
 from selfheal_agent.telemetry.metrics import MetricsManager, PrometheusCollector
 from selfheal_agent.telemetry.schemas import (
     K8sEventMessage,
+    K8sInventoryMessage,
     LogMessage,
     MetricsMessage,
 )
@@ -109,6 +110,7 @@ class AgentService:
         self._tasks.append(asyncio.create_task(self._metrics_loop(), name="metrics_loop"))
         self._tasks.append(asyncio.create_task(self._logs_loop(), name="logs_loop"))
         self._tasks.append(asyncio.create_task(self._events_loop(), name="events_loop"))
+        self._tasks.append(asyncio.create_task(self._inventory_loop(), name="inventory_loop"))
         logger.info("🚀 All SelfHeal Agent telemetry loops initialized")
 
     async def stop(self) -> None:
@@ -199,6 +201,31 @@ class AgentService:
 
             try:
                 await asyncio.sleep(5.0)
+            except asyncio.CancelledError:
+                break
+
+
+    async def _inventory_loop(self) -> None:
+        logger.info("Cluster inventory sync loop active (interval: 30.0s)")
+
+        while self._is_running:
+            try:
+                nodes = self.nodes_collector.list_nodes_detail()
+                namespaces = self.nodes_collector.list_namespaces()
+                pods = self.pods_collector.list_pods_detail()
+                if nodes or pods:
+                    await self.ws_client.send(K8sInventoryMessage(data={
+                        "nodes": nodes,
+                        "namespaces": namespaces,
+                        "pods": pods,
+                    }))
+            except asyncio.CancelledError:
+                break
+            except Exception as err:
+                logger.error("Error in inventory loop: %s", err)
+
+            try:
+                await asyncio.sleep(30.0)
             except asyncio.CancelledError:
                 break
 

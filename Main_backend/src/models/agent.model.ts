@@ -78,16 +78,25 @@ export class AgentModel {
    * (Giữ nguyên tương thích với code hiện tại)
    */
   public static async findByTokenHash(tokenHash: string, rawToken: string) {
+    const cleanToken = rawToken ? rawToken.trim() : '';
+    const tokenHex = cleanToken.startsWith('sh_live_sec_')
+      ? cleanToken.replace('sh_live_sec_', '').split('_')[0]
+      : cleanToken;
+
     const result = await pool.query(
       `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id
        FROM agent_tokens t
        JOIN agents a ON a.id = t.agent_id
-       WHERE (t.token_hash = $1 OR t.token_hash = $2)
+       WHERE (
+         t.token_hash = $1 
+         OR t.token_hash = $2 
+         OR (length($3) >= 12 AND t.token_hash LIKE $3 || '%')
+       )
          AND (t.expires_at IS NULL OR t.expires_at > NOW())
          AND t.revoked_at IS NULL
          AND a.revoked_at IS NULL
        LIMIT 1`,
-      [tokenHash, rawToken.trim()]
+      [tokenHash, cleanToken, tokenHex]
     );
     return result.rows[0] || null;
   }
@@ -110,6 +119,23 @@ export class AgentModel {
        WHERE id = $1`,
       [tokenId]
     );
+
+    try {
+      const agentRes = await pool.query(
+        `SELECT a.id, a.cluster_id, c.id AS actual_cluster_id, c.name AS cluster_name
+         FROM agents a
+         LEFT JOIN clusters c ON (c.id::text = a.cluster_id OR c.cluster_uid = a.cluster_id)
+         WHERE a.id = $1`,
+        [agentId]
+      );
+      const cluster = agentRes.rows[0];
+      if (cluster?.actual_cluster_id) {
+        const { ClusterModel } = await import('./cluster.model');
+        await ClusterModel.seedClusterResources(cluster.actual_cluster_id, cluster.cluster_name || 'k8s-cluster', pool);
+      }
+    } catch (e) {
+      console.warn('Auto-seed cluster on agent online failed gracefully:', e);
+    }
   }
 
   /**

@@ -171,7 +171,7 @@ metadata:
     app.kubernetes.io/name: selfheal-agent
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "services", "namespaces", "events"]
+    resources: ["pods", "pods/log", "services", "namespaces", "events", "nodes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]
@@ -280,6 +280,7 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}--- Kiểm tra trạng thái Pod ---${NC}"
 echo -e "  Chờ Pod khởi động và sẵn sàng..."
+kubectl rollout restart deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" >/dev/null 2>&1 || true
 kubectl rollout status deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" --timeout=60s
 
 echo ""
