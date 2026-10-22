@@ -81,6 +81,16 @@ export const AuthProvider = ({ children }) => {
 
   // Hàm Đăng ký
   const register = useCallback(async ({ email, password, full_name }) => {
+    try {
+      sessionStorage.removeItem('selfheal_onboarding_state_v1');
+      sessionStorage.removeItem('selfheal_onboarding_state_guest');
+      Object.keys(sessionStorage).forEach((k) => {
+        if (k.startsWith('selfheal_onboarding_state_')) sessionStorage.removeItem(k);
+      });
+      localStorage.removeItem('selfheal_active_org_id');
+      localStorage.removeItem('selfheal_active_org_name');
+    } catch {}
+
     const res = await authService.register({ email, password, full_name });
     const receivedToken = res?.data?.token;
 
@@ -104,6 +114,15 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('selfheal_active_org_id');
+    localStorage.removeItem('selfheal_active_org_name');
+    try {
+      sessionStorage.removeItem('selfheal_onboarding_state_v1');
+      sessionStorage.removeItem('selfheal_onboarding_state_guest');
+      Object.keys(sessionStorage).forEach((k) => {
+        if (k.startsWith('selfheal_onboarding_state_')) sessionStorage.removeItem(k);
+      });
+    } catch {}
     setToken(null);
     setUser(null);
   }, []);

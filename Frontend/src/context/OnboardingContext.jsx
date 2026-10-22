@@ -1,26 +1,25 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { onboardingService } from '../services/onboardingService';
-
-const STORAGE_KEY = 'selfheal_onboarding_state_v1';
+import { useAuth } from './AuthContext';
 
 const initialDefaultState = {
   organization: {
     id: null,
-    name: 'Acme Cloud Corp',
-    slug: 'acme-cloud-corp',
-    description: 'Cloud native microservices infrastructure for retail platform',
+    name: '',
+    slug: '',
+    description: '',
   },
   environment: {
     id: null,
-    name: 'Staging',
+    name: 'Production',
     type: 'staging', // 'development' | 'staging'
-    description: 'Primary staging cluster before production deployment',
+    description: 'Cụm máy chủ sản xuất chính',
   },
   cluster: {
     id: null,
     agentId: null,
-    name: 'k8s-prod-east-01',
-    token: 'ag_live_sec_default_token',
+    name: 'k8s-cluster-01',
+    token: 'sh_live_sec_default_token',
     tokenGeneratedAt: new Date().toISOString(),
     installCommand: '',
     isRegistered: false,
@@ -44,9 +43,13 @@ const initialDefaultState = {
 const OnboardingContext = createContext(null);
 
 export const OnboardingProvider = ({ children }) => {
+  const auth = useAuth?.() || {};
+  const userId = auth?.user?.id || auth?.user?.email || 'guest';
+  const storageKey = `selfheal_onboarding_state_${userId}`;
+
   const [state, setState] = useState(() => {
     try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
+      const saved = sessionStorage.getItem(storageKey);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -56,13 +59,29 @@ export const OnboardingProvider = ({ children }) => {
     return initialDefaultState;
   });
 
+  // Tự động chuyển đổi hoặc làm mới trạng thái Onboarding khi đổi tài khoản (userId thay đổi)
+  const prevUserRef = useRef(userId);
+  useEffect(() => {
+    if (prevUserRef.current !== userId) {
+      prevUserRef.current = userId;
+      try {
+        const saved = sessionStorage.getItem(`selfheal_onboarding_state_${userId}`);
+        if (saved) {
+          setState(JSON.parse(saved));
+          return;
+        }
+      } catch {}
+      setState(initialDefaultState);
+    }
+  }, [userId]);
+
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      sessionStorage.setItem(storageKey, JSON.stringify(state));
     } catch {
       // Ignore quota errors
     }
-  }, [state]);
+  }, [state, storageKey]);
 
   const updateOrganization = (orgData) => {
     setState((prev) => ({
@@ -95,6 +114,10 @@ export const OnboardingProvider = ({ children }) => {
   const setStep = useCallback((stepNumber) => {
     const target = Math.max(1, Math.min(5, stepNumber));
     setState((prev) => {
+      // Khi đã qua bước 5 (hoàn tất): Khóa không cho lùi về các bước trung gian 2, 3, 4
+      if (prev.currentStep >= 5 && target < 5 && target > 1) {
+        return prev;
+      }
       if (prev.currentStep === target) return prev;
       return {
         ...prev,
@@ -183,12 +206,19 @@ export const OnboardingProvider = ({ children }) => {
     }, 1000);
   };
 
-  const resetOnboarding = () => {
+  const resetOnboarding = useCallback(() => {
     setState(initialDefaultState);
     try {
-      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(storageKey);
+      sessionStorage.removeItem('selfheal_onboarding_state_v1');
+      sessionStorage.removeItem('selfheal_onboarding_state_guest');
+      Object.keys(sessionStorage).forEach((k) => {
+        if (k.startsWith('selfheal_onboarding_state_')) {
+          sessionStorage.removeItem(k);
+        }
+      });
     } catch {}
-  };
+  }, [storageKey]);
 
   return (
     <OnboardingContext.Provider

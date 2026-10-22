@@ -43,6 +43,12 @@ export const createAgentSchema = z.object({
       .max(365, 'Thời hạn token tối đa 365 ngày')
       .optional()
       .nullable(),
+    initial_token: z
+      .string()
+      .trim()
+      .max(255)
+      .optional()
+      .nullable(),
   }),
 });
 

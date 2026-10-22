@@ -132,7 +132,7 @@ export const RouteRenderer = ({
   if (path.startsWith('/dashboard')) {
     const isRestrictedForViewer =
       path.startsWith('/dashboard/organization') ||
-      path === '/dashboard/clusters' ||
+      path.startsWith('/dashboard/clusters') ||
       path === '/dashboard/self-healing/policies' ||
       path === '/dashboard/self-healing/approvals' ||
       path === '/dashboard/settings';

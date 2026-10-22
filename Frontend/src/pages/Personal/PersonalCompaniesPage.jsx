@@ -124,7 +124,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
           style={{
-            padding: '9px 16px',
+            padding: '9px 18px',
             borderRadius: '9px',
             backgroundColor: '#059669',
             color: '#FFFFFF',

@@ -8,9 +8,32 @@ export const CompleteStep = ({ onNavigate }) => {
     environment,
     cluster,
     agentStatus,
+    resetOnboarding,
   } = useOnboarding();
 
+  // Chuyển hướng trực tiếp vào Dashboard của Doanh nghiệp (/dashboard)
   const handleGoToDashboard = () => {
+    if (organization?.id) {
+      try {
+        localStorage.setItem('selfheal_active_org_id', organization.id);
+        if (organization.name) {
+          localStorage.setItem('selfheal_active_org_name', organization.name);
+        }
+        if (environment?.name) {
+          localStorage.setItem('selfheal_active_env_name', environment.name);
+        }
+        if (cluster?.cluster_name || cluster?.name) {
+          localStorage.setItem('selfheal_active_cluster_name', cluster.cluster_name || cluster.name);
+        }
+      } catch (e) {
+        console.warn('Cannot set active org in localStorage:', e);
+      }
+    }
+
+    if (resetOnboarding) {
+      resetOnboarding();
+    }
+
     if (onNavigate) {
       onNavigate('/dashboard');
     } else {

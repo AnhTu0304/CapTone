@@ -57,6 +57,39 @@ export const onboardingService = {
   },
 
   /**
+   * Kiểm tra tính khả dụng của Slug (Kiểm tra ràng buộc tồn tại hay chưa)
+   * GET /api/v1/organizations/check-slug/:slug
+   */
+  async checkSlugAvailable(slug) {
+    if (!slug || !slug.trim()) return { available: true, exists: false };
+    try {
+      const res = await fetch(`${API_BASE_URL}/organizations/check-slug/${encodeURIComponent(slug.trim().toLowerCase())}`);
+      const json = await res.json();
+      return json.data || { available: true, exists: false };
+    } catch {
+      return { available: true, exists: false };
+    }
+  },
+
+  /**
+   * Lấy chi tiết thông tin tổ chức theo ID
+   * GET /api/v1/organizations/:id
+   */
+  async getOrganizationById(orgId) {
+    if (!orgId) return null;
+    const res = await fetch(`${API_BASE_URL}/organizations/${orgId}`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.message || 'Không tìm thấy tổ chức');
+    }
+    return json.data;
+  },
+
+  /**
    * Lấy danh sách tổ chức của user hiện tại (nếu user đã có tổ chức)
    * GET /api/v1/organizations
    */
@@ -145,7 +178,7 @@ export const onboardingService = {
    * BƯỚC 3: Tạo Agent cho Cụm K8s & Sinh Token Bí Mật Ban Đầu
    * POST /api/v1/organizations/:orgId/agents
    */
-  async createAgent(orgId, { name, environment_id, version = 'v1.0.0' }) {
+  async createAgent(orgId, { name, environment_id, version = 'v1.0.0', initial_token }) {
     const res = await fetch(`${API_BASE_URL}/organizations/${orgId}/agents`, {
       method: 'POST',
       headers: getHeaders(),
@@ -153,6 +186,7 @@ export const onboardingService = {
         name,
         environment_id,
         version,
+        initial_token: initial_token || undefined,
         token_expires_in_days: 90,
       }),
     });
