@@ -56,6 +56,7 @@ export const config = {
     pass: process.env.SMTP_PASS || '',
     from: process.env.EMAIL_FROM || '"AI Self-Heal Support" <noreply@selfheal.io>',
     clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+    inProcessWorker: process.env.EMAIL_WORKER_IN_PROCESS !== 'false',
   },
 
   // Redis Cache Config

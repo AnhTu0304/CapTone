@@ -15,8 +15,10 @@ const startServer = async () => {
   // Test connection to Redis Cache
   await testRedisConnection();
 
-  // Start background Email Queue Worker
-  EmailWorker.start(1000);
+  // Start background Email Queue Worker (if in-process worker enabled)
+  if (config.email.inProcessWorker) {
+    await EmailWorker.start(1000);
+  }
 
   const server = http.createServer(app);
 

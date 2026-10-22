@@ -27,14 +27,15 @@ async function startWorkerProcess() {
   const stats = await EmailQueue.getQueueStats();
   console.log(`📊 [EMAIL WORKER PROCESS] Initial Queue Stats:`, {
     pending: stats.pendingJobs,
+    processing: stats.processingJobs,
     deadLetter: stats.deadLetterJobs,
     totalEnqueued: stats.enqueued,
     totalSent: stats.sent,
     totalFailed: stats.failed,
   });
 
-  // Start consumer loop with 1-second interval
-  EmailWorker.start(1000);
+  // Start consumer loop with 1-second interval (with orphan recovery)
+  await EmailWorker.start(1000);
   console.log('⚡ [EMAIL WORKER PROCESS] Email Worker is actively listening for jobs...');
 
   // Graceful shutdown handlers

@@ -11,6 +11,9 @@ export class EmailService {
    * Setter phục vụ việc inject mock transporter trong unit test
    */
   public static setTransporterForTesting(customTransporter: Transporter | null): void {
+    if (config.isProduction) {
+      throw new Error('SECURITY VIOLATION: setTransporterForTesting is strictly forbidden in production');
+    }
     this.transporter = customTransporter;
   }
 
