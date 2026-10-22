@@ -13,7 +13,7 @@ import {
 import { OrganizationModel } from '../models/organization.model';
 import { AuthModel } from '../models/auth.model';
 import { AuthService } from './auth.service';
-import { EmailService } from './email.service';
+import { EmailQueue } from './emailQueue.service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -273,7 +273,7 @@ export class UserService {
         const token = await AuthService.createEmailVerificationToken(user.id);
 
         // Gửi email xác thực
-        await EmailService.sendVerificationEmail(user.email, token, user.full_name);
+        await EmailQueue.enqueueVerification(user.email, token, user.full_name);
 
         return {
             email: user.email,

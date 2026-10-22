@@ -9,7 +9,7 @@ import {
 import { OrganizationModel } from '../models/organization.model';
 import { OrganizationRoleModel } from '../models/organizationRole.model';
 import { IPaginatedResult } from '../models/user.model';
-import { EmailService } from './email.service';
+import { EmailQueue } from './emailQueue.service';
 
 /**
  * Service xử lý logic nghiệp vụ cho Thành viên Tổ chức (Organization Members)
@@ -164,7 +164,7 @@ export class OrganizationMemberService {
     }
 
     // Gửi email thông báo mời tham gia
-    EmailService.sendInvitationEmail(
+    EmailQueue.enqueueInvitation(
       targetUser.email,
       targetUser.full_name,
       inviter?.full_name || 'Quản trị viên',

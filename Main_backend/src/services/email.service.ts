@@ -1,4 +1,4 @@
-import nodemailer, { Transporter } from 'nodemailer';
+import nodemailer, { Transporter, SendMailOptions } from 'nodemailer';
 import { config } from '../config/env';
 
 /**
@@ -8,7 +8,61 @@ export class EmailService {
   private static transporter: Transporter | null = null;
 
   /**
-   * Khởi tạo hoặc lấy Transporter hiện tại của nodemailer
+   * Setter phục vụ việc inject mock transporter trong unit test
+   */
+  public static setTransporterForTesting(customTransporter: Transporter | null): void {
+    if (config.isProduction) {
+      throw new Error('SECURITY VIOLATION: setTransporterForTesting is strictly forbidden in production');
+    }
+    this.transporter = customTransporter;
+  }
+
+  /**
+   * Phân biệt lỗi tạm thời (Transient) có thể retry vs lỗi vĩnh viễn (Permanent) không được retry
+   * - Transient: ETIMEDOUT, ECONNRESET, ECONNREFUSED, ESOCKET, EAI_AGAIN, ENOTFOUND, SMTP 4xx (421, 450, 451, 452)
+   * - Permanent: SMTP 535 (Auth Failed), 501 (Syntax), 550 (User Unknown), 553 (Relay Denied)
+   */
+  public static isTransientError(error: any): boolean {
+    if (!error) return false;
+
+    const code = error.code || '';
+    const responseCode = Number(error.responseCode);
+
+    // Lỗi mạng hoặc DNS tạm thời
+    const transientCodes = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ESOCKET', 'EAI_AGAIN', 'ENOTFOUND'];
+    if (transientCodes.includes(code)) {
+      return true;
+    }
+
+    // SMTP 4xx: Transient negative completion
+    if (responseCode >= 400 && responseCode < 500) {
+      return true;
+    }
+
+    // SMTP 5xx (535 Auth Failed, 501 Syntax, 550 Recipient Rejected) -> Permanent, tuyệt đối không retry
+    if (responseCode >= 500 && responseCode < 600) {
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Xác định địa chỉ người gửi (FROM) tuân thủ chặt chẽ chính sách SPF/DMARC của Gmail SMTP
+   */
+  public static getFromAddress(): string {
+    // Nếu sử dụng Gmail SMTP (smtp.gmail.com), địa chỉ email gửi phải trùng với tài khoản xác thực SMTP_USER
+    if (config.email.host.includes('gmail.com') && config.email.user) {
+      const match = config.email.from.match(/^"?(.*?)"?\s*<.*?>$/);
+      const displayName = match && match[1] ? match[1] : 'AI Self-Heal Support';
+      return `"${displayName}" <${config.email.user}>`;
+    }
+
+    return config.email.from || (config.email.user ? `"AI Self-Heal Support" <${config.email.user}>` : 'noreply@selfheal.io');
+  }
+
+  /**
+   * Khởi tạo hoặc lấy Transporter hiện tại của nodemailer với cấu hình timeout và STARTTLS
    */
   private static getTransporter(): Transporter | null {
     if (!config.email.user || !config.email.pass) {
@@ -20,6 +74,10 @@ export class EmailService {
         host: config.email.host,
         port: config.email.port,
         secure: config.email.secure,
+        requireTLS: !config.email.secure && config.email.port === 587,
+        connectionTimeout: 10000, // 10 giây tránh treo request khi nghẽn mạng
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
         auth: {
           user: config.email.user,
           pass: config.email.pass,
@@ -31,6 +89,50 @@ export class EmailService {
   }
 
   /**
+   * Kiểm tra kết nối tới SMTP Server (dùng cho healthcheck và test)
+   */
+  public static async verifyConnection(): Promise<{ success: boolean; message: string }> {
+    const transporter = this.getTransporter();
+    if (!transporter) {
+      return { success: false, message: 'SMTP credentials chưa được cấu hình (thiếu SMTP_USER hoặc SMTP_PASS)' };
+    }
+
+    try {
+      await transporter.verify();
+      return { success: true, message: 'Kết nối SMTP thành công và sẵn sàng gửi email' };
+    } catch (error: any) {
+      return { success: false, message: `Kết nối SMTP thất bại: ${error.message || 'Lỗi không xác định'}` };
+    }
+  }
+
+  /**
+   * Helper gửi email có cơ chế thử lại (1 retry) khi gặp lỗi mạng tạm thời
+   */
+  private static async sendMailWithRetry(mailOptions: SendMailOptions): Promise<void> {
+    const transporter = this.getTransporter();
+    if (!transporter) return;
+
+    let attempt = 0;
+    const maxRetries = 1;
+
+    while (attempt <= maxRetries) {
+      try {
+        await transporter.sendMail(mailOptions);
+        return;
+      } catch (error: any) {
+        attempt++;
+        const isTransient = this.isTransientError(error);
+        if (attempt <= maxRetries && isTransient) {
+          console.warn(`⚠️ [EMAIL] Gửi email gặp sự cố mạng tạm thời (${error.code || error.responseCode || 'TRANSIENT'}), đang thử lại...`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  /**
    * Gửi email xác thực tài khoản kèm token kích hoạt
    */
   public static async sendVerificationEmail(toEmail: string, token: string, fullName: string): Promise<boolean> {
@@ -39,14 +141,15 @@ export class EmailService {
 
     const transporter = this.getTransporter();
 
-    // Nếu chưa cấu hình SMTP trong .env -> In link ra terminal cho môi trường phát triển
+    // Nếu chưa cấu hình SMTP trong .env -> In link ra terminal cho môi trường phát triển (Mã hóa / Che giấu token nhạy cảm)
     if (!transporter) {
+      const maskedToken = token.length > 6 ? `${token.slice(0, 3)}***${token.slice(-3)}` : '***';
       console.log('\n============================================================');
       console.log('✉️  [EMAIL SERVICE - DEV MODE] CHƯA CẤU HÌNH TÀI KHOẢN SMTP');
       console.log(`➡️  Người nhận: ${fullName} <${toEmail}>`);
-      console.log(`🔑  Token kích hoạt: ${token}`);
-      console.log(`🔗  Link kích hoạt (Backend): ${backendVerifyUrl}`);
-      console.log(`🌐  Link kích hoạt (Frontend): ${frontendVerifyUrl}`);
+      console.log(`🔑  Token kích hoạt: ${maskedToken} (Bảo mật: đã ẩn một phần)`);
+      console.log(`🔗  Link kích hoạt (Backend): ${backendVerifyUrl.replace(token, maskedToken)}`);
+      console.log(`🌐  Link kích hoạt (Frontend): ${frontendVerifyUrl.replace(token, maskedToken)}`);
       console.log('💡  (Để gửi email thật qua Gmail, hãy điền SMTP_USER và SMTP_PASS trong file .env)');
       console.log('============================================================\n');
       return true;
@@ -117,8 +220,8 @@ export class EmailService {
     `;
 
     try {
-      await transporter.sendMail({
-        from: config.email.from,
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
         to: toEmail,
         subject: '🔒 [AI Self-Heal] Xác thực địa chỉ email kích hoạt tài khoản',
         html: htmlContent,
@@ -128,7 +231,6 @@ export class EmailService {
       return true;
     } catch (error) {
       console.error(`❌ [EMAIL ERROR] Gửi email xác thực tới ${toEmail} thất bại:`, (error as Error).message);
-      // Không để lỗi gửi email làm crash API đăng ký, vẫn cho phép người dùng tiếp tục
       return false;
     }
   }
@@ -170,6 +272,8 @@ export class EmailService {
         .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
         .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
         .badge { display: inline-block; background-color: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+        .btn-wrapper { text-align: center; margin: 28px 0; }
+        .btn { display: inline-block; background-color: #059669; color: #ffffff !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; }
         .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
       </style>
     </head>
@@ -183,7 +287,12 @@ export class EmailService {
           <p>Xin chào <strong>${recipientName}</strong>,</p>
           <p><strong>${inviterName}</strong> vừa mời bạn tham gia quản trị hệ thống cho tổ chức <strong>${orgName}</strong> trên nền tảng CapTone.</p>
           <p>Vai trò được chỉ định: <span class="badge">${roleName}</span></p>
-          <p>Vui lòng đăng nhập vào hệ thống để chấp nhận lời mời và bắt đầu quản lý cụm Kubernetes cùng đồng đội.</p>
+          <div class="btn-wrapper">
+            <a href="${config.email.clientUrl}/portal/dashboard" class="btn" target="_blank">Xem và Chấp Nhận Lời Mời</a>
+          </div>
+          <p style="font-size: 13px; color: #64748b;">
+            Vui lòng đăng nhập vào hệ thống để chấp nhận lời mời và bắt đầu quản lý cụm Kubernetes cùng đồng đội.
+          </p>
         </div>
         <div class="footer">
           <p>© ${new Date().getFullYear()} CapTone AI Self-Heal Platform.</p>
@@ -194,8 +303,8 @@ export class EmailService {
     `;
 
     try {
-      await transporter.sendMail({
-        from: config.email.from,
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
         to: toEmail,
         subject: `🏢 [CapTone] Lời mời tham gia tổ chức ${orgName}`,
         html: htmlContent,
@@ -208,4 +317,3 @@ export class EmailService {
     }
   }
 }
-

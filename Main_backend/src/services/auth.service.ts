@@ -14,7 +14,7 @@ import {
 } from '../models/auth.model';
 import { UserModel } from '../models/user.model';
 import { SystemRoleService } from './systemRole.service';
-import { EmailService } from './email.service';
+import { EmailQueue } from './emailQueue.service';
 
 export class AuthService {
     /**
@@ -78,7 +78,7 @@ export class AuthService {
         const verificationToken = await this.createEmailVerificationToken(newUser.id);
         
         // Gửi email xác thực nếu muốn xác minh tài khoản sau này (không bắt buộc)
-        EmailService.sendVerificationEmail(newUser.email, verificationToken, newUser.full_name).catch(() => {});
+        EmailQueue.enqueueVerification(newUser.email, verificationToken, newUser.full_name).catch(() => {});
 
         return { 
             user: newUser, 
@@ -181,7 +181,7 @@ export class AuthService {
         const rawCode = await this.createEmailVerificationToken(user.id);
         
         // Gửi email xác thực
-        await EmailService.sendVerificationEmail(user.email, rawCode, user.full_name);
+        await EmailQueue.enqueueVerification(user.email, rawCode, user.full_name);
 
         return {
             email: user.email,

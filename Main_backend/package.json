@@ -13,7 +13,9 @@
     "test:realtime": "tsx test/realtime-simulator.ts",
     "migrate:users": "tsx src/scripts/migrate.ts",
     "test:profile": "tsx src/test/profile.test.ts",
-    "test:status": "tsx src/test/userStatus.test.ts"
+    "test:status": "tsx src/test/userStatus.test.ts",
+    "test:email": "tsx src/test/email.test.ts",
+    "worker:email": "tsx src/workers/email.worker.ts"
   },
   "keywords": [
     "nodejs",
