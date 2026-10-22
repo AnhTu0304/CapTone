@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { request, setActiveOrganizationId, cancelPendingRequests } from '../../../services/apiClient';
-import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
+import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
+import { clusterService } from '../../../services/clusterService';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
 const DashboardContext = createContext(null);
@@ -55,24 +56,102 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     return localStorage.getItem('selfheal_active_org_role') || 'SME_OWNER';
   });
 
-  // 3. Environment State
-  const [currentEnv, setCurrentEnv] = useState({
-    id: 'env-prod',
-    name: 'production-us-east-1',
-    cluster: 'k8s-prod-cluster-01',
-    k8sVersion: 'v1.29.4',
-    nodes: 8,
-    status: 'Healthy',
+  // 3. Dynamic Environment & K8s Cluster State
+  const [currentEnv, setCurrentEnv] = useState(() => {
+    const savedClusterId = localStorage.getItem('selfheal_active_cluster_id');
+    const savedClusterName = localStorage.getItem('selfheal_active_cluster_name') || 'k8s-cluster-01';
+    const savedEnvName = localStorage.getItem('selfheal_active_env_name') || 'Production';
+    return {
+      id: savedClusterId || 'k8s-cluster-01',
+      clusterId: savedClusterId || 'k8s-cluster-01',
+      name: `${savedEnvName} / ${savedClusterName}`,
+      displayName: `${savedEnvName} / ${savedClusterName}`,
+      cluster: savedClusterName,
+      envName: savedEnvName,
+      status: 'Healthy',
+      agentStatus: 'ONLINE',
+    };
   });
 
-  const envList = [
-    { id: 'env-prod', name: 'production-us-east-1', cluster: 'k8s-prod-cluster-01', status: 'Healthy' },
-    { id: 'env-staging', name: 'staging-us-east-2', cluster: 'k8s-staging-cluster-02', status: 'Healthy' },
-    { id: 'env-dev', name: 'dev-sandbox-cluster', cluster: 'k8s-dev-cluster-local', status: 'Warning' },
-  ];
+  const [envList, setEnvList] = useState([]);
+  const [isLoadingEnvs, setIsLoadingEnvs] = useState(false);
 
-  // 4. Agent Connectivity State
-  const [isAgentConnected, setIsAgentConnected] = useState(true);
+  // Tự động tải danh sách Môi trường & Cụm K8s thực tế theo Tổ chức đang chọn
+  const fetchOrgEnvironmentsAndClusters = useCallback(async (orgId) => {
+    if (!orgId || orgId.startsWith('sandbox-') || orgId === 'org-acme') return;
+    setIsLoadingEnvs(true);
+    try {
+      const clusters = await clusterService.getClustersByOrg(orgId);
+      if (Array.isArray(clusters) && clusters.length > 0) {
+        const mapped = clusters.map((c) => ({
+          id: c.id,
+          clusterId: c.id,
+          name: `${c.environment_name || 'Production'} / ${c.name}`,
+          displayName: `${c.environment_name || 'Production'} / ${c.name}`,
+          cluster: c.name,
+          envName: c.environment_name || 'Production',
+          environment_type: c.environment_type,
+          environment_id: c.environment_id,
+          nodes: c.nodes_count || 0,
+          pods: c.pods_count || 0,
+          status: c.agent_status === 'ONLINE' ? 'Healthy' : (c.status === 'CONNECTED' ? 'Ready' : 'Pending'),
+          agentStatus: c.agent_status || 'PENDING',
+        }));
+        setEnvList(mapped);
+
+        const savedClusterId = localStorage.getItem('selfheal_active_cluster_id');
+        let active = mapped.find((item) => item.id === savedClusterId);
+        if (!active) {
+          active = mapped.find((item) => item.agentStatus === 'ONLINE') || mapped[0];
+        }
+        if (active) {
+          setCurrentEnv(active);
+          localStorage.setItem('selfheal_active_cluster_id', active.id);
+          localStorage.setItem('selfheal_active_cluster_name', active.cluster);
+          localStorage.setItem('selfheal_active_env_name', active.envName);
+        }
+      } else {
+        try {
+          const envsRes = await request(`/organizations/${orgId}/environments`);
+          const items = envsRes?.data?.items || envsRes?.data || [];
+          if (Array.isArray(items) && items.length > 0) {
+            const mapped = items.map((e) => ({
+              id: e.id,
+              name: e.name,
+              displayName: e.name,
+              cluster: 'Chưa liên kết cụm K8s',
+              envName: e.name,
+              status: 'Ready',
+              nodes: 0,
+              pods: 0,
+            }));
+            setEnvList(mapped);
+            setCurrentEnv(mapped[0]);
+          } else {
+            setEnvList([]);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.warn('[DashboardContext] Lỗi tải môi trường & cụm của tổ chức:', err);
+    } finally {
+      setIsLoadingEnvs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentOrg?.id) {
+      fetchOrgEnvironmentsAndClusters(currentOrg.id);
+    }
+  }, [currentOrg?.id, fetchOrgEnvironmentsAndClusters]);
+
+  // 4. Agent Connectivity State - Đồng bộ động theo cụm K8s đang chọn
+  const [isAgentConnected, setIsAgentConnected] = useState(() => currentEnv?.agentStatus === 'ONLINE');
+  useEffect(() => {
+    setIsAgentConnected(currentEnv?.agentStatus === 'ONLINE');
+  }, [currentEnv?.agentStatus, currentEnv?.id]);
 
   // 5. Auto-refresh & Timestamp State
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);

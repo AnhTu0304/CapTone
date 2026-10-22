@@ -321,7 +321,7 @@ export class AiPredictionModel {
     const db = client || pool;
     try {
       const res = await db.query(
-        'SELECT environment_id, cluster_id, workload_id FROM ai_predictions WHERE id = ',
+        'SELECT environment_id, cluster_id, workload_id FROM ai_predictions WHERE id = $1',
         [predictionId]
       );
       return res.rows[0] || null;

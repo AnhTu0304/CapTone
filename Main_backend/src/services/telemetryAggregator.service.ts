@@ -67,8 +67,10 @@ export class TelemetryAggregatorService {
     if (fillPadding && points.length < limit) {
       const missingCount = limit - points.length;
       const earliestPoint = points[0];
-      const paddingPoints: GRUMetricPoint[] = Array.from({ length: missingCount }, () => ({
+      const earliestTime = earliestPoint?.time_bucket ? new Date(earliestPoint.time_bucket).getTime() : Date.now();
+      const paddingPoints: GRUMetricPoint[] = Array.from({ length: missingCount }, (_, i) => ({
         ...earliestPoint,
+        time_bucket: earliestPoint?.time_bucket ? new Date(earliestTime - (missingCount - i) * bucketSeconds * 1000).toISOString() : undefined,
       }));
       return [...paddingPoints, ...points];
     }
@@ -289,7 +291,7 @@ export class TelemetryAggregatorService {
     const agents = await AgentModel.listAll();
     const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
       bucketSeconds: 5,
-      limit: 15,
+      limit: 20,
       fillPadding: false,
     });
     const rawMetrics = await MetricModel.getRecentRaw(10);
