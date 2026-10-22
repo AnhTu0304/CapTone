@@ -2,6 +2,7 @@ import http from 'http';
 import app from './app';
 import { config } from './config/env';
 import { testDbConnection } from './config/database';
+import { testRedisConnection, closeRedis } from './config/redis';
 import { initAgentWebSocket } from './websocket/agentWebSocket';
 import { initTelemetryWebSocket } from './websocket/telemetryWebSocket';
 import { TelemetryPipelineService } from './services/telemetryPipeline.service';
@@ -9,6 +10,9 @@ import { TelemetryPipelineService } from './services/telemetryPipeline.service';
 const startServer = async () => {
   // Test connection to PostgreSQL before opening HTTP port
   await testDbConnection();
+
+  // Test connection to Redis Cache
+  await testRedisConnection();
 
   const server = http.createServer(app);
 
@@ -28,10 +32,11 @@ const startServer = async () => {
   });
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     console.log('Received shutdown signal, closing server gracefully...');
     TelemetryPipelineService.stopPipeline();
     uiWss.close();
+    await closeRedis();
     wss.close(() => {
       server.close(() => {
         console.log('HTTP & WebSocket server closed.');
