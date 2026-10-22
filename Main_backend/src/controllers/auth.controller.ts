@@ -1,4 +1,3 @@
-import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/auth.service';
