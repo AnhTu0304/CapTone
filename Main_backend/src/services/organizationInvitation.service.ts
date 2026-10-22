@@ -12,6 +12,7 @@ import { OrganizationMemberModel } from '../models/organizationMember.model';
 import { UserModel } from '../models/user.model';
 import { EmailQueue } from './emailQueue.service';
 import { IPaginatedResult } from '../models/user.model';
+import { SessionRevocationService } from './sessionRevocation.service';
 
 export class OrganizationInvitationService {
   /**
@@ -230,11 +231,18 @@ export class OrganizationInvitationService {
     }
 
     // Xác minh email người nhận khớp với lời mời (Chống người khác đánh cắp token)
+
     if (currentUser.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
       throw new ApiError(
         403,
         `Tài khoản đăng nhập (${currentUser.email}) không trùng khớp với email nhận lời mời (${invite.email})`
       );
+    }
+
+    // Kiểm tra nếu người dùng đã là thành viên ACTIVE trong tổ chức
+    const existingActive = await OrganizationMemberModel.findByOrgAndUser(invite.organization_id, currentUserId);
+    if (existingActive && existingActive.status === 'ACTIVE') {
+      throw new ApiError(409, 'Bạn đã là thành viên đang hoạt động của tổ chức này');
     }
 
     // Giao dịch cơ sở dữ liệu nguyên tử (Transaction)
@@ -278,6 +286,7 @@ export class OrganizationInvitationService {
       }
 
       await client.query('COMMIT');
+      await SessionRevocationService.revokeUserOrgSessions(invite.organization_id, currentUserId);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -406,7 +415,10 @@ export class OrganizationInvitationService {
     const tokenHash = this.hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await OrganizationInvitationModel.resend(invitationId, orgId, tokenHash, expiresAt);
+    const updated = await OrganizationInvitationModel.resend(invitationId, orgId, tokenHash, expiresAt);
+    if (!updated) {
+      throw new ApiError(400, `Không thể gửi lại lời mời ở trạng thái '${invite.status}'`);
+    }
 
     // Đẩy vào hàng đợi Email
     const inviter = await OrganizationMemberModel.findUserById(currentUserId);

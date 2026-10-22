@@ -464,4 +464,235 @@ describe('Invitation, Acceptance, Role Management & Session Revocation API Suite
     const body = (await afterRemoveRes.json()) as any;
     assert.match(body.message, /không phải là thành viên đang hoạt động/i);
   });
+  // =========================================================================
+  // TEST SUITE 5: REDIS FAILURE FAIL-CLOSED & SECURITY AUDIT (P0)
+  // =========================================================================
+
+  test('14. Redis unavailable khi kiểm tra token hợp lệ -> Trả về 503 Fail-Closed', async () => {
+    const authUrl = baseUrl.replace('/organizations', '/auth');
+    SessionRevocationService.setSimulatedOffline(true);
+    try {
+      const res = await fetch(`${authUrl}/me`, {
+        headers: { Authorization: `Bearer ${ownerAToken}` },
+      });
+      assert.strictEqual(res.status, 503);
+      const body = (await res.json()) as any;
+      assert.match(body.message, /không khả dụng|thử lại/i);
+    } finally {
+      SessionRevocationService.setSimulatedOffline(false);
+    }
+  });
+
+  test('15. Redis unavailable khi kiểm tra token đã thu hồi -> Trả về 503 Fail-Closed (không cho phép lọt qua)', async () => {
+    const authUrl = baseUrl.replace('/organizations', '/auth');
+    const tempToken = jwt.sign(
+      { id: ownerBId, email: 'owner.b@test.com', status: 'ACTIVE', roles: ['USER'] },
+      config.jwt.secret,
+      { expiresIn: '10m', algorithm: 'HS256' }
+    );
+
+    // 1. Thu hồi token khi Redis hoạt động
+    await fetch(`${authUrl}/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tempToken}` },
+    });
+
+    // 2. Giả lập Redis offline
+    SessionRevocationService.setSimulatedOffline(true);
+    try {
+      const res = await fetch(`${authUrl}/me`, {
+        headers: { Authorization: `Bearer ${tempToken}` },
+      });
+      // Fail-closed: Tuyệt đối không cho phép truy cập (phải là 503)
+      assert.strictEqual(res.status, 503);
+    } finally {
+      SessionRevocationService.setSimulatedOffline(false);
+    }
+  });
+
+  test('16. Redis unavailable khi gọi POST /auth/logout -> Trả về 503 Fail-Closed', async () => {
+    const authUrl = baseUrl.replace('/organizations', '/auth');
+    SessionRevocationService.setSimulatedOffline(true);
+    try {
+      const res = await fetch(`${authUrl}/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ownerAToken}` },
+      });
+      assert.strictEqual(res.status, 503);
+    } finally {
+      SessionRevocationService.setSimulatedOffline(false);
+    }
+  });
+
+  // =========================================================================
+  // TEST SUITE 6: TRANSACTION CONCURRENCY & RACE CONDITIONS (P1)
+  // =========================================================================
+
+  test('17. Race condition: Hai request accept đồng thời với cùng token -> Đúng 1 request thành công (200), request còn lại bị từ chối (409 Conflict)', async () => {
+    // 1. Tạo user và invitation mới
+    const raceUserId = 'c1000000-0000-0000-0000-000000000099';
+    await pool.query(`
+      INSERT INTO users (id, email, password_hash, full_name, status)
+      VALUES ($1, 'race.user@test.com', 'dummy_hash', 'Race User', 'ACTIVE')
+      ON CONFLICT (id) DO UPDATE SET status = 'ACTIVE';
+    `, [raceUserId]);
+
+    const raceUserToken = jwt.sign(
+      { id: raceUserId, email: 'race.user@test.com', status: 'ACTIVE', roles: ['USER'] },
+      config.jwt.secret,
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+
+    const raceToken = 'concurrent_race_test_token_12345';
+    const raceTokenHash = crypto.createHash('sha256').update(raceToken).digest('hex');
+
+    await OrganizationInvitationModel.create(undefined, {
+      organization_id: orgAId,
+      email: 'race.user@test.com',
+      role_id: devopsRoleId,
+      invited_by: ownerAId,
+      token_hash: raceTokenHash,
+      expires_at: new Date(Date.now() + 86400000),
+    });
+
+    // 2. Gửi 2 request accept cùng một lúc qua Promise.all
+    const [res1, res2] = await Promise.all([
+      fetch(`${baseUrl}/invitations/accept`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${raceUserToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: raceToken }),
+      }),
+      fetch(`${baseUrl}/invitations/accept`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${raceUserToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: raceToken }),
+      }),
+    ]);
+
+    const statuses = [res1.status, res2.status].sort();
+    // Phải có đúng một 200 và đúng một 409
+    assert.deepStrictEqual(statuses, [200, 409]);
+
+    // Dọn dẹp
+    await pool.query(`DELETE FROM organization_members WHERE user_id = $1`, [raceUserId]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [raceUserId]);
+  });
+
+  test('18. Gửi lại lời mời (Resend) sinh token mới và vô hiệu hóa token cũ', async () => {
+    // 1. Tạo lời mời ban đầu
+    const createRes = await fetch(`${baseUrl}/${orgAId}/invitations`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ownerAToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'resend.target@test.com', role_code: 'VIEWER' }),
+    });
+    assert.strictEqual(createRes.status, 201);
+    const createBody = (await createRes.json()) as any;
+    const oldToken = createBody.data.token;
+    const inviteId = createBody.data.invitation.id;
+
+    // 2. Gọi API Resend
+    const resendRes = await fetch(`${baseUrl}/${orgAId}/invitations/${inviteId}/resend`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ownerAToken}` },
+    });
+    assert.strictEqual(resendRes.status, 200);
+    const resendBody = (await resendRes.json()) as any;
+    const newToken = resendBody.data.token;
+    assert.notStrictEqual(oldToken, newToken);
+
+    // 3. User mới đăng ký
+    const resendUserId = 'c1000000-0000-0000-0000-000000000098';
+    await pool.query(`
+      INSERT INTO users (id, email, password_hash, full_name, status)
+      VALUES ($1, 'resend.target@test.com', 'dummy_hash', 'Resend User', 'ACTIVE')
+      ON CONFLICT (id) DO UPDATE SET status = 'ACTIVE';
+    `, [resendUserId]);
+
+    const resendUserToken = jwt.sign(
+      { id: resendUserId, email: 'resend.target@test.com', status: 'ACTIVE', roles: ['USER'] },
+      config.jwt.secret,
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+
+    // 4. Accept bằng oldToken phải trả về 404 (đã bị vô hiệu hóa)
+    const oldAcceptRes = await fetch(`${baseUrl}/invitations/accept`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendUserToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: oldToken }),
+    });
+    assert.strictEqual(oldAcceptRes.status, 404);
+
+    // 5. Accept bằng newToken phải thành công 200
+    const newAcceptRes = await fetch(`${baseUrl}/invitations/accept`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendUserToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: newToken }),
+    });
+    assert.strictEqual(newAcceptRes.status, 200);
+
+    // Dọn dẹp
+    await pool.query(`DELETE FROM organization_members WHERE user_id = $1`, [resendUserId]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [resendUserId]);
+  });
+
+  test('19. Không thể gửi lại lời mời đã bị thu hồi (REVOKED returns 400)', async () => {
+    // 1. Tạo lời mời mới
+    const createRes = await fetch(`${baseUrl}/${orgAId}/invitations`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ownerAToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'revoke.resend@test.com', role_code: 'VIEWER' }),
+    });
+    const createBody = (await createRes.json()) as any;
+    const inviteId = createBody.data.invitation.id;
+
+    // 2. Thu hồi lời mời
+    const revokeRes = await fetch(`${baseUrl}/${orgAId}/invitations/${inviteId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${ownerAToken}` },
+    });
+    assert.strictEqual(revokeRes.status, 200);
+
+    // 3. Cố tình gửi lại lời mời đã thu hồi -> Phải bị từ chối 400
+    const resendRes = await fetch(`${baseUrl}/${orgAId}/invitations/${inviteId}/resend`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ownerAToken}` },
+    });
+    assert.strictEqual(resendRes.status, 400);
+  });
+
+  test('20. Thành viên đang ACTIVE không thể accept lại lời mời vào cùng tổ chức (returns 409 Conflict)', async () => {
+    // devopsA đang là ACTIVE member của Org A
+    // Tạo lời mời cho devopsA vào Org A
+    const token = 'active_member_dup_token_123';
+    await OrganizationInvitationModel.create(undefined, {
+      organization_id: orgAId,
+      email: 'devops.a@test.com',
+      role_id: viewerRoleId,
+      invited_by: ownerAId,
+      token_hash: crypto.createHash('sha256').update(token).digest('hex'),
+      expires_at: new Date(Date.now() + 86400000),
+    });
+
+    // devopsA cố tình accept lời mời này
+    const res = await fetch(`${baseUrl}/invitations/accept`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${devopsAToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+
+    assert.strictEqual(res.status, 409);
+    const body = (await res.json()) as any;
+    assert.match(body.message, /đã là thành viên đang hoạt động/i);
+  });
+
+  test('21. Cấm tuyệt đối cấp vai trò hệ thống (ADMIN) khi cập nhật thành viên qua PUT /:id/members/:userId', async () => {
+    const res = await fetch(`${baseUrl}/${orgAId}/members/${devopsAId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${ownerAToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_code: 'ADMIN' }),
+    });
+
+    // Phải bị từ chối 400 hoặc 403
+    assert.ok([400, 403].includes(res.status));
+  });
 });

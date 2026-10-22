@@ -39,7 +39,7 @@ export class OrganizationRoleModel {
   }
 
   /**
-   * Tìm vai trò theo mã Code
+   * Tìm vai trò theo mã Code (chỉ trong phạm vi scope = 'ORGANIZATION')
    */
   public static async findByCode(
     code: string,
@@ -47,7 +47,7 @@ export class OrganizationRoleModel {
   ): Promise<IOrganizationRole | null> {
     const db = client || pool;
     const res = await db.query<IOrganizationRole>(
-      'SELECT id, code, name, description, scope, created_at FROM roles WHERE UPPER(code) = UPPER($1) LIMIT 1;',
+      "SELECT id, code, name, description, scope, created_at FROM roles WHERE UPPER(code) = UPPER($1) AND scope = 'ORGANIZATION' LIMIT 1;",
       [code.trim()]
     );
     return res.rows[0] || null;
@@ -62,8 +62,8 @@ export class OrganizationRoleModel {
   ): Promise<IOrganizationRole | null> {
     const db = client || pool;
     const res = await db.query<IOrganizationRole>(
-      'SELECT id, code, name, description, scope, created_at FROM roles WHERE id = $1 LIMIT 1;',
-      [id.trim()]
+      "SELECT id, code, name, description, scope, created_at FROM roles WHERE id = $1 AND scope = 'ORGANIZATION' LIMIT 1;",
+      [id]
     );
     return res.rows[0] || null;
   }
