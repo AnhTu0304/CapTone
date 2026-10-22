@@ -46,8 +46,8 @@ if (broadcastChannel) {
   };
 }
 
-// Handler fallback khi dùng storage event
-if (typeof window !== 'undefined') {
+// Handler fallback khi dùng storage event (chỉ kích hoạt nếu không hỗ trợ BroadcastChannel)
+if (typeof window !== 'undefined' && !broadcastChannel) {
   window.addEventListener('storage', (event) => {
     if (event.key !== STORAGE_FALLBACK_KEY || !event.newValue) return;
     try {
@@ -89,18 +89,10 @@ export const broadcastSyncEvent = (type, payload = {}) => {
     } catch (err) {
       console.warn('[multiTabSync] BroadcastChannel postMessage error:', err);
     }
-  }
-
-  // Luôn kích hoạt storage event fallback để hỗ trợ trình duyệt hoặc test runner không có BroadcastChannel
-  if (typeof window !== 'undefined' && window.localStorage) {
+  } else if (typeof window !== 'undefined' && window.localStorage) {
+    // Chỉ kích hoạt storage fallback nếu môi trường/trình duyệt không có BroadcastChannel (ví dụ JSDOM test)
     try {
       window.localStorage.setItem(STORAGE_FALLBACK_KEY, JSON.stringify(message));
-      // Xóa ngay sau đó để không để lại rác trong localStorage
-      setTimeout(() => {
-        try {
-          window.localStorage.removeItem(STORAGE_FALLBACK_KEY);
-        } catch {}
-      }, 100);
     } catch {}
   }
 };

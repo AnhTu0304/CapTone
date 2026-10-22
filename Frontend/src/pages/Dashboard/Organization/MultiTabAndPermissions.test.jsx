@@ -100,6 +100,27 @@ describe('TASK [S2][PB07] 3.2 — Multi-Tab Sync & Permission-Based UI Suite', (
       );
       setItemSpy.mockRestore();
     });
+
+    test('1.4. AUTH_LOGIN event is correctly received and triggers subscriber callbacks', () => {
+      const loginHandler = jest.fn();
+      const unsub = subscribeSyncEvent(SYNC_EVENTS.AUTH_LOGIN, loginHandler);
+
+      const loginMsg = {
+        type: SYNC_EVENTS.AUTH_LOGIN,
+        payload: {},
+        senderId: 'tab_other_123',
+        timestamp: Date.now(),
+      };
+
+      const storageEvent = new StorageEvent('storage', {
+        key: 'selfheal_tab_sync_ping',
+        newValue: JSON.stringify(loginMsg),
+      });
+      window.dispatchEvent(storageEvent);
+
+      expect(loginHandler).toHaveBeenCalledTimes(1);
+      unsub();
+    });
   });
 
   describe('2. Permission Hook & RBAC Gate (Phase 5)', () => {

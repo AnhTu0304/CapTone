@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { organizationMemberService } from '../../../services/organizationMemberService';
 import {
@@ -36,7 +35,6 @@ const RBAC_PERMISSIONS = [
 
 export const MembersPage = () => {
   const { currentOrg } = useDashboard();
-  const auth = useAuth();
   const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
 
   // Xác định thẩm quyền quản trị của người dùng hiện tại
