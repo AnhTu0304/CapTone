@@ -34,7 +34,7 @@ describe('RegisterPage Suite & Google Registration', () => {
     expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument();
   });
 
-  test('2. Submits registration form and redirects to /onboarding/organization', async () => {
+  test('2. Submits registration form and shows Gmail verification waiting screen', async () => {
     const handleNavigate = jest.fn();
     const mockRegister = jest.fn().mockResolvedValue({
       id: 'reg-user-1',
@@ -64,14 +64,24 @@ describe('RegisterPage Suite & Google Registration', () => {
       full_name: 'Alex Developer',
     });
 
-    act(() => {
-      jest.advanceTimersByTime(1200);
-    });
+    // Màn hình chờ Gmail xuất hiện
+    expect(screen.getByText(/Kiểm tra hộp thư Gmail của bạn/i)).toBeInTheDocument();
+    expect(screen.getByText('alex@company.com')).toBeInTheDocument();
 
+    const openGmailLink = screen.getByRole('link', { name: /Mở Gmail ngay/i });
+    expect(openGmailLink).toBeInTheDocument();
+    expect(openGmailLink).toHaveAttribute('href', 'https://mail.google.com');
+    expect(openGmailLink).toHaveAttribute('target', '_blank');
+
+    // Nút tiếp tục sang onboarding
+    const continueBtn = screen.getByRole('button', { name: /Tiếp tục thiết lập Onboarding/i });
+    expect(continueBtn).toBeInTheDocument();
+
+    fireEvent.click(continueBtn);
     expect(handleNavigate).toHaveBeenCalledWith('/onboarding/organization');
   });
 
-  test('3. Triggers Google OAuth sign up and redirects to /onboarding/organization', async () => {
+  test('3. Triggers Google OAuth sign up and shows Gmail waiting screen', async () => {
     const handleNavigate = jest.fn();
     const mockLoginWithGoogle = jest.fn().mockResolvedValue({
       id: 'google-reg-1',
@@ -112,10 +122,54 @@ describe('RegisterPage Suite & Google Registration', () => {
 
     expect(mockLoginWithGoogle).toHaveBeenCalledWith('mock_google_reg_token');
 
-    act(() => {
-      jest.advanceTimersByTime(1200);
+    // Màn hình chờ Gmail xuất hiện cho Google registration
+    expect(screen.getByText(/Kiểm tra hộp thư Gmail của bạn/i)).toBeInTheDocument();
+    expect(screen.getByText('alex.google@gmail.com')).toBeInTheDocument();
+
+    const openGmailLink = screen.getByRole('link', { name: /Mở Gmail ngay/i });
+    expect(openGmailLink).toBeInTheDocument();
+    expect(openGmailLink).toHaveAttribute('href', 'https://mail.google.com');
+
+    const continueBtn = screen.getByRole('button', { name: /Tiếp tục thiết lập Onboarding/i });
+    expect(continueBtn).toBeInTheDocument();
+
+    fireEvent.click(continueBtn);
+    expect(handleNavigate).toHaveBeenCalledWith('/onboarding/organization');
+  });
+
+  test('4. Resends verification email in waiting screen for form registration', async () => {
+    const mockRegister = jest.fn().mockResolvedValue({
+      id: 'reg-user-2',
+      email: 'resend@company.com',
+      full_name: 'Resend User',
+      has_organization: false,
     });
 
-    expect(handleNavigate).toHaveBeenCalledWith('/onboarding/organization');
+    renderWithAuth(<RegisterPage />, {
+      register: mockRegister,
+      loginWithGoogle: jest.fn(),
+    });
+
+    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Resend User' } });
+    fireEvent.change(screen.getByLabelText(/Work email/i), { target: { value: 'resend@company.com' } });
+    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+    });
+
+    expect(screen.getByText(/Kiểm tra hộp thư Gmail của bạn/i)).toBeInTheDocument();
+
+    const resendBtn = screen.getByRole('button', { name: /Gửi lại email xác thực/i });
+    expect(resendBtn).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(resendBtn);
+      jest.advanceTimersByTime(500);
+    });
+
+    expect(screen.getByText(/Đã gửi lại email xác thực thành công/i)).toBeInTheDocument();
   });
 });

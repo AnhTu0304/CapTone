@@ -273,6 +273,9 @@ export class AuthService {
                 ...created,
                 system_roles: ['USER'],
             };
+
+            // Gửi email chào mừng và thông báo kích hoạt tài khoản qua Google
+            EmailQueue.enqueueGoogleWelcome(user.email, user.full_name).catch(() => {});
         } else {
             // Đã có tài khoản -> Kiểm tra trạng thái
             if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {

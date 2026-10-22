@@ -116,6 +116,22 @@ describe('Mail Service & Background Worker Email Queue Suite [PB06 2.3]', () => 
     assert.match(jobId, /^[0-9a-f-]{36}$/i, 'Job ID phải có định dạng UUID');
   });
 
+  test('7b. Enqueue Google Welcome Email vào Redis với Job ID hợp lệ và type WELCOME_GOOGLE_EMAIL', async () => {
+    const jobId = await (EmailQueue as any).enqueueGoogleWelcome(
+      'google.user@gmail.com',
+      'Google User Test'
+    );
+    assert.ok(jobId, 'Job ID trả về phải tồn tại');
+    assert.match(jobId, /^[0-9a-f-]{36}$/i, 'Job ID phải có định dạng UUID');
+
+    if (isRedisReady()) {
+      const jobsList = await redisClient.lrange(REDIS_KEYS.JOBS, 0, -1);
+      const enqueuedJob = jobsList.find((item) => item.includes('google.user@gmail.com'));
+      assert.ok(enqueuedJob, 'Job Google Welcome phải nằm trong danh sách JOBS');
+      assert.ok(enqueuedJob.includes('WELCOME_GOOGLE_EMAIL'), 'Job type phải là WELCOME_GOOGLE_EMAIL');
+    }
+  });
+
   test('8. Lấy thống kê hàng đợi EmailQueue.getQueueStats()', async () => {
     const stats = await EmailQueue.getQueueStats();
     assert.strictEqual(typeof stats.pendingJobs, 'number');
@@ -166,6 +182,40 @@ describe('Mail Service & Background Worker Email Queue Suite [PB06 2.3]', () => 
     }
 
     // Reset transporter về null
+    EmailService.setTransporterForTesting(null);
+  });
+
+  test('9b. Worker xử lý job WELCOME_GOOGLE_EMAIL thành công và gửi mail chào mừng', async () => {
+    let sentMailOptions: any = null;
+    const mockTransporter: any = {
+      sendMail: async (options: any) => {
+        sentMailOptions = options;
+        return { messageId: 'mock-google-welcome-123' };
+      },
+    };
+    EmailService.setTransporterForTesting(mockTransporter);
+
+    const testJob: any = {
+      id: 'test-job-google-welcome-1',
+      type: 'WELCOME_GOOGLE_EMAIL',
+      toEmail: 'welcome.google@selfheal.io',
+      fullName: 'Google Newbie',
+      createdAt: Date.now(),
+      attempts: 0,
+      maxAttempts: 3,
+    };
+
+    const rawJob = JSON.stringify(testJob);
+    if (isRedisReady()) {
+      await redisClient.lpush(REDIS_KEYS.PROCESSING, rawJob);
+    }
+
+    const success = await EmailWorker.processJob(testJob, rawJob);
+    assert.strictEqual(success, true, 'Worker phải xử lý job WELCOME_GOOGLE_EMAIL thành công');
+    assert.ok(sentMailOptions, 'Email chào mừng Google phải được gửi qua transporter');
+    assert.strictEqual(sentMailOptions.to, 'welcome.google@selfheal.io');
+    assert.ok(sentMailOptions.subject.includes('Chào mừng') || sentMailOptions.subject.includes('Google'));
+
     EmailService.setTransporterForTesting(null);
   });
 
@@ -284,5 +334,25 @@ describe('Mail Service & Background Worker Email Queue Suite [PB06 2.3]', () => 
       true,
       `Xác thực kết nối SMTP thất bại: ${verification.message}`
     );
+  });
+
+  test('14. EmailService.sendGoogleWelcomeEmail tạo và gửi email chào mừng tài khoản Google', async () => {
+    let sentMailOptions: any = null;
+    const mockTransporter: any = {
+      sendMail: async (options: any) => {
+        sentMailOptions = options;
+        return { messageId: 'mock-msg-welcome-test' };
+      },
+    };
+    EmailService.setTransporterForTesting(mockTransporter);
+
+    const result = await (EmailService as any).sendGoogleWelcomeEmail('test.newbie@gmail.com', 'Alex Developer');
+    assert.strictEqual(result, true, 'sendGoogleWelcomeEmail phải trả về true');
+    assert.ok(sentMailOptions, 'Phải gọi transporter.sendMail');
+    assert.strictEqual(sentMailOptions.to, 'test.newbie@gmail.com');
+    assert.ok(sentMailOptions.html.includes('Alex Developer'));
+    assert.ok(sentMailOptions.html.includes('Google'));
+
+    EmailService.setTransporterForTesting(null);
   });
 });

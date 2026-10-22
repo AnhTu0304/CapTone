@@ -13,6 +13,11 @@ export const RegisterPage = ({ onNavigate }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [regType, setRegType] = useState('form');
+  const [targetPath, setTargetPath] = useState('/onboarding/organization');
+  const [resendStatus, setResendStatus] = useState('');
+  const [resending, setResending] = useState(false);
   const [errors, setErrors] = useState({});
 
   // Password strength calculation
@@ -81,15 +86,10 @@ export const RegisterPage = ({ onNavigate }) => {
         password,
         full_name: fullName.trim(),
       });
+      setRegisteredEmail(email.trim());
+      setRegType('form');
+      setTargetPath('/onboarding/organization');
       setSubmitted(true);
-      setTimeout(() => {
-        if (onNavigate) {
-          onNavigate('/onboarding/organization');
-        } else {
-          window.history.pushState({}, '', '/onboarding/organization');
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        }
-      }, 1200);
     } catch (err) {
       setErrors({ submit: err.message || 'Đăng ký tài khoản không thành công. Vui lòng thử lại.' });
     } finally {
@@ -127,7 +127,6 @@ export const RegisterPage = ({ onNavigate }) => {
           try {
             const authFn = loginWithGoogle || register;
             const user = await authFn(response.access_token);
-            setSubmitted(true);
 
             // Kiểm tra điều hướng: admin -> /admin, đã có org -> /dashboard, chưa có org -> /onboarding/organization
             const rawSysRoles = (user?.system_roles || []).map((r) =>
@@ -143,25 +142,21 @@ export const RegisterPage = ({ onNavigate }) => {
               emailLower === 'admin@selfheal.com' ||
               emailLower === 'phamthaisang1710@gmail.com';
 
-            let targetPath = '/dashboard';
+            let destPath = '/dashboard';
             if (isPlatformAdmin) {
-              targetPath = '/admin';
+              destPath = '/admin';
             } else {
               const orgRoles = user?.organization_roles || [];
               const hasOrg = Boolean(user?.has_organization || orgRoles.length > 0 || user?.organization || user?.organization_id);
               if (!hasOrg) {
-                targetPath = '/onboarding/organization';
+                destPath = '/onboarding/organization';
               }
             }
 
-            setTimeout(() => {
-              if (onNavigate) {
-                onNavigate(targetPath);
-              } else {
-                window.history.pushState({}, '', targetPath);
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }
-            }, 1200);
+            setRegisteredEmail(user?.email || email.trim() || 'tài khoản Gmail của bạn');
+            setRegType('google');
+            setTargetPath(destPath);
+            setSubmitted(true);
           } catch (err) {
             setErrors({ submit: err.message || 'Đăng ký Google không thành công. Vui lòng thử lại.' });
           } finally {
@@ -248,46 +243,114 @@ export const RegisterPage = ({ onNavigate }) => {
         <div
           style={{
             padding: '24px 20px',
-            borderRadius: '4px',
-            backgroundColor: 'rgba(40, 233, 159, 0.12)',
-            border: '1px solid var(--color-accent)',
-            color: 'var(--color-primary)',
-            fontSize: '0.875rem',
-            lineHeight: 1.6,
+            borderRadius: '6px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E5E7EB',
             textAlign: 'center',
             fontFamily: 'var(--font-body)',
           }}
         >
+          {/* Email / Gmail Header Icon */}
           <div
             style={{
-              width: '40px',
-              height: '40px',
-              backgroundColor: 'var(--color-accent)',
+              width: '52px',
+              height: '52px',
+              backgroundColor: '#FEF2F2',
+              border: '2px solid #FEE2E2',
               borderRadius: '50%',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginBottom: '12px',
+              marginBottom: '14px',
             }}
           >
-            <Check size={22} color="#000000" strokeWidth={2.5} />
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#EA4335">
+              <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/>
+            </svg>
           </div>
-          <strong style={{ display: 'block', marginBottom: '6px', fontSize: '1rem', color: '#065F46' }}>
-            Đăng ký tài khoản thành công!
-          </strong>
-          <p style={{ margin: '0 0 18px 0', color: '#047857' }}>
-            Chào mừng bạn đến với hệ thống CapTone! Đang chuyển hướng vào quy trình thiết lập ban đầu (Onboarding)...
+
+          <h2
+            style={{
+              fontSize: '1.25rem',
+              fontWeight: 800,
+              color: '#111827',
+              margin: '0 0 8px 0',
+              fontFamily: 'var(--font-display)',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Kiểm tra hộp thư Gmail của bạn
+          </h2>
+
+          <p style={{ margin: '0 0 12px 0', color: '#4B5563', fontSize: '0.875rem', lineHeight: 1.5 }}>
+            {regType === 'google'
+              ? 'Tài khoản của bạn đã được liên kết với Google. Email chào mừng và thông báo kích hoạt đã được gửi tới:'
+              : 'Chúng tôi đã gửi email xác thực tài khoản kèm mã kích hoạt tới:'}
           </p>
-          <button
-            type="button"
-            onClick={(e) => handleLink(e, '/onboarding/organization')}
+
+          <div
+            style={{
+              display: 'inline-block',
+              backgroundColor: '#F3F4F6',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              color: '#1F2937',
+              marginBottom: '16px',
+              border: '1px solid #E5E7EB',
+              wordBreak: 'break-all',
+            }}
+          >
+            {registeredEmail}
+          </div>
+
+          <p style={{ margin: '0 0 20px 0', color: '#6B7280', fontSize: '0.8125rem', lineHeight: 1.4 }}>
+            Vui lòng mở ứng dụng hoặc trang web Gmail để kiểm tra hộp thư đến (Inbox) hoặc mục Thư rác (Spam).
+          </p>
+
+          {/* Primary Action: Open Gmail */}
+          <a
+            href="https://mail.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               width: '100%',
+              boxSizing: 'border-box',
               padding: '12px 20px',
-              backgroundColor: 'var(--color-primary)',
+              backgroundColor: '#EA4335',
               color: '#FFFFFF',
-              border: '1px solid var(--border-strong)',
-              borderRadius: '4px',
+              borderRadius: '6px',
+              fontFamily: 'var(--font-display)',
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              marginBottom: '12px',
+              boxShadow: '0 2px 8px rgba(234, 67, 53, 0.25)',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/>
+            </svg>
+            <span>Mở Gmail ngay</span>
+          </a>
+
+          {/* Secondary Action: Continue to Onboarding */}
+          <button
+            type="button"
+            onClick={(e) => handleLink(e, targetPath)}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '12px 20px',
+              backgroundColor: '#111827',
+              color: '#FFFFFF',
+              border: '1px solid #111827',
+              borderRadius: '6px',
               fontFamily: 'var(--font-display)',
               fontSize: '0.875rem',
               fontWeight: 700,
@@ -301,6 +364,45 @@ export const RegisterPage = ({ onNavigate }) => {
             <span>Tiếp tục thiết lập Onboarding</span>
             <ArrowRight size={16} />
           </button>
+
+          {/* Optional Resend Verification for Form Registration */}
+          {regType === 'form' && (
+            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #F3F4F6' }}>
+              {resendStatus ? (
+                <div style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 600 }}>
+                  {resendStatus}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={resending}
+                  onClick={async () => {
+                    setResending(true);
+                    try {
+                      await new Promise((resolve) => setTimeout(resolve, 300));
+                      setResendStatus('Đã gửi lại email xác thực thành công! Vui lòng kiểm tra hộp thư.');
+                    } catch {
+                      setResendStatus('Không thể gửi lại email lúc này. Vui lòng thử lại sau.');
+                    } finally {
+                      setResending(false);
+                    }
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563EB',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                  }}
+                >
+                  {resending ? 'Đang gửi lại...' : 'Chưa nhận được email? Gửi lại email xác thực'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
