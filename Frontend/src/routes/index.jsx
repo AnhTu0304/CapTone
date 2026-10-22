@@ -132,8 +132,13 @@ export const RouteRenderer = ({
     return <OnboardingPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle all dashboard routes (User / Owner Portal với phân cấp RBAC động)
+  // Handle all dashboard routes (User / Owner Portal với phân cấp RBAC động theo tenant role)
   if (path.startsWith('/dashboard')) {
+    const activeOrgRole = (localStorage.getItem('selfheal_active_org_role') || '').toUpperCase();
+    const effectiveDashboardRole = activeOrgRole || (isViewerUser ? 'VIEWER' : isDevOpsUser ? 'DEVOPS' : 'SME_OWNER');
+    const isDashboardDevOps = effectiveDashboardRole === 'DEVOPS';
+    const isDashboardViewer = effectiveDashboardRole === 'VIEWER';
+
     const isRestrictedForViewer =
       path.startsWith('/dashboard/organization') ||
       path.startsWith('/dashboard/clusters') ||
@@ -141,7 +146,7 @@ export const RouteRenderer = ({
       path === '/dashboard/self-healing/approvals' ||
       path === '/dashboard/settings';
 
-    if (isViewerUser && isRestrictedForViewer) {
+    if (isDashboardViewer && isRestrictedForViewer) {
       return (
         <AdminAccessDenied
           onNavigate={onNavigate}
@@ -151,7 +156,7 @@ export const RouteRenderer = ({
         />
       );
     }
-    if (isDevOpsUser && (path.startsWith('/dashboard/organization') || path === '/dashboard/settings')) {
+    if (isDashboardDevOps && (path.startsWith('/dashboard/organization') || path === '/dashboard/settings')) {
       return (
         <AdminAccessDenied
           onNavigate={onNavigate}

@@ -36,13 +36,23 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     pendingApprovalsCount,
     unreadNotifsCount,
     onNavigate,
+    currentOrg,
+    currentUserRole,
   } = useDashboard();
 
   const auth = useAuth();
 
   const user = auth?.user || null;
-  const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
-  const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
+  // Quyền hạn tenant trong Tổ chức đang chọn có ưu tiên tối cao trong Dashboard
+  const effectiveRole = (
+    currentUserRole ||
+    currentOrg?.role_in_org ||
+    currentOrg?.role ||
+    (auth?.isViewer && auth.isViewer(user) ? 'VIEWER' : auth?.isDevOps && auth.isDevOps(user) ? 'DEVOPS' : 'SME_OWNER')
+  ).toUpperCase();
+
+  const isDevOpsUser = effectiveRole === 'DEVOPS';
+  const isViewerUser = effectiveRole === 'VIEWER';
 
   const navGroups = [
     {
@@ -155,7 +165,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
 
     // 3. Cấp cao (SME Owner, Admin, Super Admin): Kế thừa toàn bộ quyền hạn và thấy tất cả 18 trang
     return navGroups;
-  }, [isViewerUser, isDevOpsUser, navGroups, pendingApprovalsCount, unreadNotifsCount]);
+  }, [isViewerUser, isDevOpsUser, navGroups]);
 
   const handleItemClick = (path) => {
     if (onNavigate) {

@@ -93,6 +93,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
   const handleEnterWorkspace = (company) => {
     localStorage.setItem('selfheal_active_org_id', company.id);
     localStorage.setItem('selfheal_active_org_name', company.name);
+    localStorage.setItem('selfheal_active_org_role', company.role || 'SME_OWNER');
     if (onNavigate) {
       onNavigate('/dashboard');
     }

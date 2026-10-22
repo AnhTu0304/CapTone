@@ -147,6 +147,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem('selfheal_active_org_id');
     localStorage.removeItem('selfheal_active_org_name');
+    localStorage.removeItem('selfheal_active_org_role');
+    sessionStorage.removeItem('admin_access_token');
     try {
       sessionStorage.removeItem('selfheal_onboarding_state_v1');
       sessionStorage.removeItem('selfheal_onboarding_state_guest');

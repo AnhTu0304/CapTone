@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getStoredProfile } from '../../mocks/profileMockData';
 import {
   Building2,
+  Loader2,
   Server,
   RefreshCw,
   Bell,
@@ -21,8 +22,10 @@ export const TopHeader = () => {
   const { user, logout, getInitials, getPrimaryRole, isAdmin } = useAuth();
   const {
     currentOrg,
-    setCurrentOrg,
     orgList,
+    switchOrganization,
+    isLoadingOrgs,
+    isSwitchingOrg,
     currentEnv,
     setCurrentEnv,
     envList,
@@ -42,6 +45,37 @@ export const TopHeader = () => {
 
   // Dropdown states
   const [isOrgDropdownOpen, setIsOrgDropdownOpen] = useState(false);
+  const [focusedOrgIndex, setFocusedOrgIndex] = useState(-1);
+
+  const handleOrgKeyDown = (e) => {
+    if (!isOrgDropdownOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setIsOrgDropdownOpen(true);
+        setFocusedOrgIndex(0);
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOrgDropdownOpen(false);
+      setFocusedOrgIndex(-1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedOrgIndex((prev) => (orgList.length > 0 ? (prev + 1) % orgList.length : -1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedOrgIndex((prev) => (orgList.length > 0 ? (prev - 1 + orgList.length) % orgList.length : -1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (focusedOrgIndex >= 0 && focusedOrgIndex < orgList.length) {
+        if (switchOrganization) switchOrganization(orgList[focusedOrgIndex].id);
+        setIsOrgDropdownOpen(false);
+        setFocusedOrgIndex(-1);
+      }
+    }
+  };
   const [isEnvDropdownOpen, setIsEnvDropdownOpen] = useState(false);
   const [isNotifPopoverOpen, setIsNotifPopoverOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -122,72 +156,180 @@ export const TopHeader = () => {
         {/* Organization Selector Dropdown */}
         <div ref={orgRef} style={{ position: 'relative' }}>
           <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={isOrgDropdownOpen}
+            aria-label="Chọn tổ chức"
+            disabled={isSwitchingOrg}
             onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
+            onKeyDown={handleOrgKeyDown}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
               padding: '6px 12px',
               backgroundColor: 'var(--dash-bg-canvas)',
-              border: '1px solid var(--dash-border)',
+              border: isOrgDropdownOpen ? '1px solid var(--dash-primary)' : '1px solid var(--dash-border)',
               borderRadius: 'var(--dash-radius-md)',
               color: 'var(--dash-text-primary)',
               fontSize: '0.8125rem',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isSwitchingOrg ? 'wait' : 'pointer',
+              opacity: isSwitchingOrg ? 0.75 : 1,
+              outline: 'none',
+              transition: 'all 0.15s ease',
             }}
           >
-            <Building2 size={15} color="var(--dash-primary)" />
-            <span>{currentOrg.name}</span>
+            {isSwitchingOrg ? (
+              <Loader2 size={15} color="var(--dash-primary)" style={{ animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <Building2 size={15} color="var(--dash-primary)" />
+            )}
+            <span>
+              {isSwitchingOrg
+                ? 'Đang chuyển...'
+                : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa chọn tổ chức')}
+            </span>
+            {currentOrg?.role_in_org && (
+              <span
+                style={{
+                  fontSize: '0.625rem',
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  backgroundColor:
+                    currentOrg.role_in_org === 'SME_OWNER'
+                      ? '#FEF3C7'
+                      : currentOrg.role_in_org === 'DEVOPS'
+                      ? '#E0E7FF'
+                      : '#F1F5F9',
+                  color:
+                    currentOrg.role_in_org === 'SME_OWNER'
+                      ? '#92400E'
+                      : currentOrg.role_in_org === 'DEVOPS'
+                      ? '#3730A3'
+                      : '#475569',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {currentOrg.role_in_org}
+              </span>
+            )}
             <ChevronDown size={14} color="var(--dash-text-muted)" />
           </button>
 
           {isOrgDropdownOpen && (
             <div
+              role="listbox"
+              aria-label="Danh sách tổ chức của bạn"
               style={{
                 position: 'absolute',
                 top: '100%',
                 left: 0,
                 marginTop: '6px',
-                width: '220px',
+                width: '260px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 borderRadius: 'var(--dash-radius-md)',
                 boxShadow: 'var(--dash-shadow-dropdown)',
                 padding: '6px',
-                zIndex: 50,
+                zIndex: 60,
               }}
             >
-              <div style={{ padding: '6px 10px', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
-                Chọn Tổ Chức
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 10px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  color: 'var(--dash-text-muted)',
+                  textTransform: 'uppercase',
+                  borderBottom: '1px solid var(--dash-border)',
+                  marginBottom: '4px',
+                }}
+              >
+                <span>Tổ Chức Của Bạn</span>
+                {isLoadingOrgs && (
+                  <Loader2 size={12} color="var(--dash-text-muted)" style={{ animation: 'spin 1s linear infinite' }} />
+                )}
               </div>
-              {orgList.map((org) => (
-                <button
-                  key={org.id}
-                  onClick={() => {
-                    setCurrentOrg(org);
-                    setIsOrgDropdownOpen(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--dash-radius-sm)',
-                    border: 'none',
-                    backgroundColor: currentOrg.id === org.id ? 'var(--dash-primary-light)' : 'transparent',
-                    color: currentOrg.id === org.id ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  <span>{org.name}</span>
-                  {currentOrg.id === org.id && <Check size={14} color="var(--dash-primary)" />}
-                </button>
-              ))}
+
+              {isLoadingOrgs && orgList.length === 0 && (
+                <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
+                  Đang tải danh sách...
+                </div>
+              )}
+
+              {!isLoadingOrgs && orgList.length === 0 && (
+                <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
+                  Chưa có tổ chức nào.
+                </div>
+              )}
+
+              {orgList.map((org, idx) => {
+                const isSelected = currentOrg?.id === org.id;
+                const isFocused = focusedOrgIndex === idx;
+                const roleBadge = org.role_in_org || org.role || 'SME_OWNER';
+
+                return (
+                  <button
+                    key={org.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      if (switchOrganization) switchOrganization(org.id);
+                      setIsOrgDropdownOpen(false);
+                      setFocusedOrgIndex(-1);
+                    }}
+                    onMouseEnter={() => setFocusedOrgIndex(idx)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      borderRadius: 'var(--dash-radius-sm)',
+                      border: isFocused ? '1px solid var(--dash-primary)' : '1px solid transparent',
+                      backgroundColor: isSelected
+                        ? 'var(--dash-primary-light)'
+                        : isFocused
+                        ? '#F8FAFC'
+                        : 'transparent',
+                      color: isSelected ? 'var(--dash-primary)' : 'var(--dash-text-primary)',
+                      fontSize: '0.8125rem',
+                      fontWeight: isSelected ? 600 : 500,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      outline: 'none',
+                      transition: 'background-color 0.1s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {org.name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.625rem',
+                          fontWeight: 600,
+                          color:
+                            roleBadge === 'SME_OWNER'
+                              ? '#B45309'
+                              : roleBadge === 'DEVOPS'
+                              ? '#4338CA'
+                              : '#64748B',
+                        }}
+                      >
+                        {roleBadge}
+                      </span>
+                    </div>
+                    {isSelected && <Check size={14} color="var(--dash-primary)" style={{ flexShrink: 0 }} />}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
