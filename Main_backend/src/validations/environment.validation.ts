@@ -77,10 +77,12 @@ export const updateEnvironmentSchema = z.object({
 /**
  * Validation schema cho params (ID)
  */
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const envParamSchema = z.object({
   params: z.object({
-    id: z.string().uuid('Định danh ID môi trường không hợp lệ'),
-    orgId: z.string().uuid('Định danh ID tổ chức không hợp lệ').optional(),
+    id: z.string().regex(uuidRegex, 'Định danh ID môi trường không hợp lệ'),
+    orgId: z.string().regex(uuidRegex, 'Định danh ID tổ chức không hợp lệ').optional(),
   }),
 });
 

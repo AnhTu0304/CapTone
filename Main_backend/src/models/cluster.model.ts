@@ -200,7 +200,7 @@ export class ClusterModel {
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
       LEFT JOIN pods p ON p.cluster_id = c.id
-      LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+      LEFT JOIN agents a ON a.cluster_id = c.id
       WHERE e.organization_id = $1 AND c.deleted_at IS NULL
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, a.id, a.name, a.status, a.last_seen_at
       ORDER BY c.created_at DESC`,
@@ -241,7 +241,7 @@ export class ClusterModel {
       LEFT JOIN organizations o ON e.organization_id = o.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
       LEFT JOIN pods p ON p.cluster_id = c.id
-      LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+      LEFT JOIN agents a ON a.cluster_id = c.id
       WHERE c.deleted_at IS NULL
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, o.name, a.id, a.name, a.status, a.last_seen_at
       ORDER BY c.created_at DESC`
@@ -260,8 +260,7 @@ export class ClusterModel {
     const db = client || pool;
 
     // 1. Thông tin Cụm & Môi trường & Agent
-    let clusterRes = await db.query(
-      `SELECT 
+    let query = `SELECT 
         c.id,
         c.name,
         c.environment_id,
@@ -288,14 +287,19 @@ export class ClusterModel {
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN organizations o ON e.organization_id = o.id
-      LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
-      WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
-      LIMIT 1`,
-      [clusterId]
-    );
+      LEFT JOIN agents a ON a.cluster_id = c.id
+      WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL`;
 
-    // Fallback: nếu không tìm thấy theo clusterId nhưng có orgId, tìm cụm đầu tiên của tổ chức đó
-    if (!clusterRes.rows[0] && orgId) {
+    const params: any[] = [clusterId];
+    if (orgId) {
+      query += ` AND e.organization_id = $2`;
+      params.push(orgId);
+    }
+    query += ` LIMIT 1`;
+
+    let clusterRes = await db.query(query, params);
+
+    if (!clusterRes.rows[0] && orgId && (clusterId === 'current' || clusterId === 'default')) {
       clusterRes = await db.query(
         `SELECT 
           c.id,
@@ -324,7 +328,7 @@ export class ClusterModel {
         FROM clusters c
         JOIN environments e ON c.environment_id = e.id
         LEFT JOIN organizations o ON e.organization_id = o.id
-        LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+        LEFT JOIN agents a ON a.cluster_id = c.id
         WHERE e.organization_id = $1 AND c.deleted_at IS NULL
         ORDER BY c.created_at DESC
         LIMIT 1`,
@@ -357,10 +361,11 @@ export class ClusterModel {
 
       const rawTok = "sh_live_sec_" + crypto.randomBytes(18).toString("hex") + "_ebpf";
       const tokHash = crypto.createHash('sha256').update(rawTok).digest('hex');
+      const tokPrefix = rawTok.substring(0, 16);
       await db.query(
-        `INSERT INTO agent_tokens (agent_id, token_hash, expires_at, created_at)
-         VALUES ($1, $2, NOW() + INTERVAL '90 days', NOW())`,
-        [cluster.agent_id, tokHash]
+        `INSERT INTO agent_tokens (agent_id, token_hash, token_prefix, expires_at, created_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '90 days', NOW())`,
+        [cluster.agent_id, tokHash, tokPrefix]
       );
     }
 
@@ -511,7 +516,7 @@ export class ClusterModel {
     const clusterRes = await db.query(
       `SELECT c.id, c.name, c.environment_id, a.id AS agent_id
        FROM clusters c
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -553,11 +558,12 @@ export class ClusterModel {
       : 90;
     const expiresAt = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
 
+    const tokPrefix = rawToken.substring(0, 16);
     const tokenRes = await db.query(
-      `INSERT INTO agent_tokens (agent_id, token_hash, expires_at, created_at)
-       VALUES ($1, $2, $3, NOW())
+      `INSERT INTO agent_tokens (agent_id, token_hash, token_prefix, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
        RETURNING id, expires_at, created_at`,
-      [agentId, tokenHash, expiresAt]
+      [agentId, tokenHash, tokPrefix, expiresAt]
     );
     const tokenRecord = tokenRes.rows[0];
 
@@ -595,7 +601,7 @@ export class ClusterModel {
       `SELECT c.id, e.organization_id, a.id AS agent_id
        FROM clusters c
        LEFT JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -628,7 +634,7 @@ export class ClusterModel {
       `SELECT c.id, e.organization_id, a.id AS agent_id
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -672,7 +678,7 @@ export class ClusterModel {
     const clusterRes = await db.query(
       `SELECT c.id, a.id AS agent_id
        FROM clusters c
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -708,17 +714,22 @@ export class ClusterModel {
    */
   public static async removeCluster(
     clusterId: string,
+    orgId?: string,
     client?: PoolClient
   ) {
     const db = client || pool;
-    const clusterRes = await db.query(
-      `SELECT c.id, c.name, a.id AS agent_id
+    let query = `SELECT c.id, c.name, a.id AS agent_id
        FROM clusters c
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
-       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
-       LIMIT 1`,
-      [clusterId]
-    );
+       JOIN environments e ON c.environment_id = e.id
+       LEFT JOIN agents a ON a.cluster_id = c.id
+       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL`;
+    const params: any[] = [clusterId];
+    if (orgId) {
+      query += ` AND e.organization_id = $2`;
+      params.push(orgId);
+    }
+    query += ` LIMIT 1`;
+    const clusterRes = await db.query(query, params);
     if (!clusterRes.rows[0]) throw new Error('Cluster not found');
     const cluster = clusterRes.rows[0];
 
@@ -823,11 +834,12 @@ export class ClusterModel {
     // 4. TỰ ĐỘNG TẠO TOKEN XÁC THỰC CHO AGENT
     const rawToken = 'sh_live_sec_' + crypto.randomBytes(18).toString('hex') + '_ebpf';
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const tokPrefix = rawToken.substring(0, 16);
     const tokenRes = await db.query(
-      `INSERT INTO agent_tokens (agent_id, token_hash, expires_at, created_at)
-       VALUES ($1, $2, NOW() + INTERVAL '90 days', NOW())
+      `INSERT INTO agent_tokens (agent_id, token_hash, token_prefix, expires_at, created_at)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '90 days', NOW())
        RETURNING id, expires_at, created_at`,
-      [newAgent.id, tokenHash]
+      [newAgent.id, tokenHash, tokPrefix]
     );
     const tokenRecord = tokenRes.rows[0];
 

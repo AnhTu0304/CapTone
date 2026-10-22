@@ -3,9 +3,6 @@ import { EnvironmentModel } from '../models/environment.model';
 import { ApiError } from '../utils/apiError';
 
 export class ClusterService {
-  /**
-   * Lấy danh sách cụm Kubernetes của một tổ chức
-   */
   public static async getClustersByOrg(orgId: string): Promise<IClusterDetail[]> {
     if (!orgId) {
       throw new ApiError(400, 'Mã tổ chức không hợp lệ');
@@ -14,16 +11,10 @@ export class ClusterService {
     return clusters;
   }
 
-  /**
-   * Lấy toàn bộ danh sách cụm Kubernetes hệ thống (Platform Admin)
-   */
   public static async getAllClusters(): Promise<IClusterDetail[]> {
     return ClusterModel.findAll();
   }
 
-  /**
-   * Lấy chi tiết toàn diện cụm Kubernetes (Nodes, Pods, Namespaces, Agent)
-   */
   public static async getClusterDetail(clusterId: string, orgId?: string): Promise<any> {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
@@ -35,72 +26,70 @@ export class ClusterService {
     return detail;
   }
 
-  /**
-   * Cấp mới hoặc xoay vòng Token kết nối của Agent cho cụm K8s
-   */
   public static async rotateAgentToken(
     clusterId: string,
-    data: { expires_in_days?: number | null; revoke_previous?: boolean }
+    data: { expires_in_days?: number | null; revoke_previous?: boolean },
+    orgId?: string
   ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
+    if (orgId) {
+      await this.getClusterDetail(clusterId, orgId);
+    }
     return await ClusterModel.rotateAgentToken(clusterId, data);
   }
 
-  /**
-   * Thu hồi Token kết nối của Agent thuộc cụm K8s
-   */
-  public static async revokeAgentToken(clusterId: string, tokenId: string) {
+  public static async revokeAgentToken(clusterId: string, tokenId: string, orgId?: string) {
     if (!clusterId || !tokenId) {
       throw new ApiError(400, 'Mã cụm hoặc mã Token không hợp lệ');
+    }
+    if (orgId) {
+      await this.getClusterDetail(clusterId, orgId);
     }
     return await ClusterModel.revokeAgentToken(clusterId, tokenId);
   }
 
-  /**
-   * Cập nhật cấu hình Agent
-   */
-  public static async updateAgentConfig(clusterId: string, configData: any) {
+  public static async updateAgentConfig(clusterId: string, configData: any, orgId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
+    }
+    if (orgId) {
+      await this.getClusterDetail(clusterId, orgId);
     }
     return await ClusterModel.updateAgentConfig(clusterId, configData);
   }
 
-  /**
-   * Kích hoạt kết nối Agent
-   */
-  public static async connectAgent(clusterId: string) {
+  public static async connectAgent(clusterId: string, orgId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
+    }
+    if (orgId) {
+      await this.getClusterDetail(clusterId, orgId);
     }
     return await ClusterModel.connectAgent(clusterId);
   }
 
-  /**
-   * Ngắt kết nối Agent
-   */
-  public static async disconnectAgent(clusterId: string) {
+  public static async disconnectAgent(clusterId: string, orgId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
+    }
+    if (orgId) {
+      await this.getClusterDetail(clusterId, orgId);
     }
     return await ClusterModel.disconnectAgent(clusterId);
   }
 
-  /**
-   * Xóa cấu hình Cụm Kubernetes
-   */
-  public static async removeCluster(clusterId: string) {
+  public static async removeCluster(clusterId: string, orgId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
-    return await ClusterModel.removeCluster(clusterId);
+    if (orgId) {
+      await this.getClusterDetail(clusterId, orgId);
+    }
+    return await ClusterModel.removeCluster(clusterId, orgId);
   }
 
-  /**
-   * Đăng ký tạo cụm Kubernetes mới cho tổ chức
-   */
   public static async createCluster(
     orgId: string,
     data: {
@@ -118,7 +107,6 @@ export class ClusterService {
 
     let envId = data.environment_id;
 
-    // Nếu không truyền environment_id, tìm môi trường sẵn có của org hoặc tạo mới
     if (!envId) {
       const activeEnv = await EnvironmentModel.findActiveByOrgId(orgId);
       if (activeEnv) {

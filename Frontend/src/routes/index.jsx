@@ -35,6 +35,7 @@ import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSett
 import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
 import { AdminAccountSettingsPage } from '../pages/Admin/Settings/AdminAccountSettingsPage';
 import PersonalPortalPage from '../pages/Personal';
+import ForbiddenPage from '../pages/Error/ForbiddenPage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
 import TableOfContents from '../components/navigation/TableOfContents';
@@ -99,6 +100,7 @@ export const ROUTES = {
   ONBOARDING_COMPLETE: '/onboarding/complete',
   PROFILE: '/portal/profile',
   NOTIFICATIONS: '/dashboard/notifications',
+  FORBIDDEN: '/403',
 };
 
 export const RouteRenderer = ({ 
@@ -116,6 +118,10 @@ export const RouteRenderer = ({
   const user = auth?.user || null;
   const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
+
+  if (path === '/403' || path === '/forbidden') {
+    return <ForbiddenPage onNavigate={onNavigate} />;
+  }
 
   // Handle profile routes (unify into Personal Portal Profile)
   if (path === '/dashboard/profile' || path === '/profile' || path === '/admin/profile') {
