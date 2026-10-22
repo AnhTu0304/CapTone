@@ -573,7 +573,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <Cpu size={14} color="#2563EB" /> Máy chủ Nodes:
             </span>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
-              {nodes.length} Nodes &bull; <span style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700 }}>100% Ready</span>
+              {nodes.length > 0 ? (
+                <>{nodes.length} Nodes &bull; <span style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700 }}>100% Ready</span></>
+              ) : (
+                <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Nodes &bull; Chờ kết nối...</span>
+              )}
             </div>
           </div>
 
@@ -582,7 +586,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <Box size={14} color="#7C3AED" /> Khối lượng Pods:
             </span>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
-              {pods.length} Pods &bull; <span style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700 }}>Đang chạy</span>
+              {pods.length > 0 ? (
+                <>{pods.length} Pods &bull; <span style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700 }}>Đang chạy</span></>
+              ) : (
+                <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Pods &bull; Chưa có dữ liệu</span>
+              )}
             </div>
           </div>
         </div>
@@ -1253,71 +1261,83 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       {/* ============================================================== */}
       {activeTab === 'nodes' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Cpu size={18} color="var(--dash-primary)" />
-                <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>Danh Sách Máy Chủ Nodes Thực Tế Trong Database ({nodes.length} Nodes)</h3>
+          {nodes.length === 0 ? (
+            <div className="dash-card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '12px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Cpu size={28} />
               </div>
-              <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>● 100% Sẵn Sàng (Ready)</span>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1E293B' }}>Chưa nhận diện máy chủ Node nào</h3>
+              <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748B', maxWidth: '500px', lineHeight: '1.6' }}>
+                Tác tử eBPF Agent đang ở trạng thái <strong>Chờ kết nối...</strong>. Sau khi triển khai và kết nối Agent vào cụm Kubernetes thành công, hệ thống sẽ tự động quét và hiển thị toàn bộ máy chủ Control Plane & Worker Nodes tại đây.
+              </p>
             </div>
+          ) : (
+            <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Cpu size={18} color="var(--dash-primary)" />
+                  <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>Danh Sách Máy Chủ Nodes Thực Tế Trong Database ({nodes.length} Nodes)</h3>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>● 100% Sẵn Sàng (Ready)</span>
+              </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                    <th style={{ padding: '12px 18px' }}>Tên Node</th>
-                    <th style={{ padding: '12px 18px' }}>Vai Trò (Role)</th>
-                    <th style={{ padding: '12px 18px' }}>Trạng Thái</th>
-                    <th style={{ padding: '12px 18px' }}>CPU Cores</th>
-                    <th style={{ padding: '12px 18px' }}>Bộ Nhớ RAM</th>
-                    <th style={{ padding: '12px 18px' }}>Dung Lượng Ổ Cứng</th>
-                    <th style={{ padding: '12px 18px' }}>Phiên Bản Kubelet</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nodes.map((node, index) => {
-                    const ramGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : '8.0';
-                    const diskGb = node.disk_capacity_bytes ? (node.disk_capacity_bytes / (1024 ** 3)).toFixed(0) : '50';
-                    const cpuCores = node.cpu_capacity_millicores ? (node.cpu_capacity_millicores / 1000).toFixed(0) : '4';
-                    const rolesArr = typeof node.roles === 'string' ? JSON.parse(node.roles || '[]') : (node.roles || []);
-                    const roleLabel = rolesArr.includes('control-plane') ? 'control-plane' : 'worker';
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '12px 18px' }}>Tên Node</th>
+                      <th style={{ padding: '12px 18px' }}>Vai Trò (Role)</th>
+                      <th style={{ padding: '12px 18px' }}>Trạng Thái</th>
+                      <th style={{ padding: '12px 18px' }}>CPU Cores</th>
+                      <th style={{ padding: '12px 18px' }}>Bộ Nhớ RAM</th>
+                      <th style={{ padding: '12px 18px' }}>Dung Lượng Ổ Cứng</th>
+                      <th style={{ padding: '12px 18px' }}>Phiên Bản Kubelet</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nodes.map((node, index) => {
+                      const ramGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : '8.0';
+                      const diskGb = node.disk_capacity_bytes ? (node.disk_capacity_bytes / (1024 ** 3)).toFixed(0) : '50';
+                      const cpuCores = node.cpu_capacity_millicores ? (node.cpu_capacity_millicores / 1000).toFixed(0) : '4';
+                      const rolesArr = typeof node.roles === 'string' ? JSON.parse(node.roles || '[]') : (node.roles || []);
+                      const roleLabel = rolesArr.includes('control-plane') ? 'control-plane' : 'worker';
 
-                    return (
-                      <tr key={node.id || index} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                        <td style={{ padding: '14px 18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
-                          {node.name}
-                        </td>
-                        <td style={{ padding: '14px 18px' }}>
-                          <span
-                            style={{
-                              fontSize: '0.6875rem',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontWeight: 700,
-                              backgroundColor: roleLabel === 'control-plane' ? '#F3E8FF' : '#E0E7FF',
-                              color: roleLabel === 'control-plane' ? '#7E22CE' : '#4338CA',
-                            }}
-                          >
-                            {roleLabel}
-                          </span>
-                        </td>
-                        <td style={{ padding: '14px 18px' }}>
-                          <span style={{ color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle2 size={14} /> Ready
-                          </span>
-                        </td>
-                        <td style={{ padding: '14px 18px' }}>{cpuCores} vCPU</td>
-                        <td style={{ padding: '14px 18px' }}>{ramGb} GB</td>
-                        <td style={{ padding: '14px 18px' }}>{diskGb} GB</td>
-                        <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)' }}>{node.kubelet_version || 'v1.29.4'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      return (
+                        <tr key={node.id || index} style={{ borderBottom: '1px solid var(--dash-border)' }}>
+                          <td style={{ padding: '14px 18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
+                            {node.name}
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <span
+                              style={{
+                                fontSize: '0.6875rem',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontWeight: 700,
+                                backgroundColor: roleLabel === 'control-plane' ? '#F3E8FF' : '#E0E7FF',
+                                color: roleLabel === 'control-plane' ? '#7E22CE' : '#4338CA',
+                              }}
+                            >
+                              {roleLabel}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <span style={{ color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <CheckCircle2 size={14} /> Ready
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>{cpuCores} vCPU</td>
+                          <td style={{ padding: '14px 18px' }}>{ramGb} GB</td>
+                          <td style={{ padding: '14px 18px' }}>{diskGb} GB</td>
+                          <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)' }}>{node.kubelet_version || 'v1.29.4'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -1326,89 +1346,101 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       {/* ============================================================== */}
       {activeTab === 'pods' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
-            {/* Filter & Search Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', backgroundColor: '#F8FAFC' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Box size={18} color="var(--dash-primary)" />
-                <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>
-                  Danh Sách Pods Đang Vận Hành ({filteredPods.length}/{pods.length} Pods)
-                </h3>
+          {pods.length === 0 ? (
+            <div className="dash-card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '12px', backgroundColor: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box size={28} />
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative' }}>
-                  <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-                  <input
-                    type="text"
-                    placeholder="Tìm kiếm Pod hoặc Image..."
-                    value={podSearch}
-                    onChange={(e) => setPodSearch(e.target.value)}
-                    style={{ padding: '7px 12px 7px 30px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem', width: '220px' }}
-                  />
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1E293B' }}>Chưa có khối lượng Pods nào</h3>
+              <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748B', maxWidth: '500px', lineHeight: '1.6' }}>
+                Cụm chưa nhận dữ liệu viễn trắc. Ngay khi Agent được kết nối thành công, các Pods đang vận hành trên các Namespaces sẽ được đồng bộ theo thời gian thực về màn hình này.
+              </p>
+            </div>
+          ) : (
+            <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+              {/* Filter & Search Header */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', backgroundColor: '#F8FAFC' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Box size={18} color="var(--dash-primary)" />
+                  <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>
+                    Danh Sách Pods Đang Vận Hành ({filteredPods.length}/{pods.length} Pods)
+                  </h3>
                 </div>
 
-                <select
-                  value={selectedNamespace}
-                  onChange={(e) => setSelectedNamespace(e.target.value)}
-                  style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
-                >
-                  <option value="ALL">Tất cả Namespace ({namespaces.length})</option>
-                  {namespaces.map((ns) => {
-                    const nsName = ns.name || ns;
-                    return (
-                      <option key={nsName} value={nsName}>
-                        Namespace: {nsName}
-                      </option>
-                    );
-                  })}
-                </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm Pod hoặc Image..."
+                      value={podSearch}
+                      onChange={(e) => setPodSearch(e.target.value)}
+                      style={{ padding: '7px 12px 7px 30px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem', width: '220px' }}
+                    />
+                  </div>
+
+                  <select
+                    value={selectedNamespace}
+                    onChange={(e) => setSelectedNamespace(e.target.value)}
+                    style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
+                  >
+                    <option value="ALL">Tất cả Namespace ({namespaces.length})</option>
+                    {namespaces.map((ns) => {
+                      const nsName = ns.name || ns;
+                      return (
+                        <option key={nsName} value={nsName}>
+                          Namespace: {nsName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Pods Table */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '12px 18px' }}>Tên Pod</th>
+                      <th style={{ padding: '12px 18px' }}>Namespace</th>
+                      <th style={{ padding: '12px 18px' }}>Máy Chủ Node</th>
+                      <th style={{ padding: '12px 18px' }}>Trạng Thái</th>
+                      <th style={{ padding: '12px 18px' }}>Khởi Động Lại (Restarts)</th>
+                      <th style={{ padding: '12px 18px' }}>Container Image</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPods.map((pod, idx) => (
+                      <tr key={pod.id || idx} style={{ borderBottom: '1px solid var(--dash-border)' }}>
+                        <td style={{ padding: '12px 18px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
+                          {pod.name}
+                        </td>
+                        <td style={{ padding: '12px 18px' }}>
+                          <span style={{ fontSize: '0.6875rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600 }}>
+                            {pod.namespace || 'default'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
+                          {pod.node_name || 'k8s-node'}
+                        </td>
+                        <td style={{ padding: '12px 18px' }}>
+                          <span style={{ color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                            {pod.status || 'Running'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 18px' }}>{pod.restart_count ?? 0}</td>
+                        <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pod.image}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            {/* Pods Table */}
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                    <th style={{ padding: '12px 18px' }}>Tên Pod</th>
-                    <th style={{ padding: '12px 18px' }}>Namespace</th>
-                    <th style={{ padding: '12px 18px' }}>Máy Chủ Node</th>
-                    <th style={{ padding: '12px 18px' }}>Trạng Thái</th>
-                    <th style={{ padding: '12px 18px' }}>Khởi Động Lại (Restarts)</th>
-                    <th style={{ padding: '12px 18px' }}>Container Image</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPods.map((pod, idx) => (
-                    <tr key={pod.id || idx} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                      <td style={{ padding: '12px 18px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
-                        {pod.name}
-                      </td>
-                      <td style={{ padding: '12px 18px' }}>
-                        <span style={{ fontSize: '0.6875rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600 }}>
-                          {pod.namespace || 'default'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-                        {pod.node_name || 'k8s-node'}
-                      </td>
-                      <td style={{ padding: '12px 18px' }}>
-                        <span style={{ color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-                          {pod.status || 'Running'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 18px' }}>{pod.restart_count ?? 0}</td>
-                      <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {pod.image}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       )}
 

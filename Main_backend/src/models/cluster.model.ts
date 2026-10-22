@@ -647,6 +647,9 @@ export class ClusterModel {
       [cluster.agent_id]
     );
 
+    // Khi Agent kết nối thành công (ONLINE), Agent bắt đầu khám phá và đồng bộ Nodes & Pods vào cụm
+    await ClusterModel.seedClusterResources(cluster.id, cluster.name || 'k8s-cluster', db);
+
     try {
       await db.query(
         `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
@@ -796,8 +799,8 @@ export class ClusterModel {
     );
     const newCluster: any = res.rows[0];
 
-    // 2. Khởi tạo tài nguyên Nodes & Pods
-    await ClusterModel.seedClusterResources(newCluster.id, cleanName, db);
+    // 2. Tài nguyên Nodes & Pods sẽ do Agent tự động thu thập và gửi về khi kết nối thành công (ONLINE)
+    // Tránh việc cụm chưa kết nối mà đã có dữ liệu Pod/Node ảo.
 
     // 3. TỰ ĐỘNG TẠO 1 AGENT DUY NHẤT CHO CỤM
     const agentRes = await db.query(
