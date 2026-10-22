@@ -1,3 +1,4 @@
+import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/auth.service';
@@ -345,6 +346,27 @@ export class AuthController {
           </html>
         `);
       }
+      next(error);
+    }
+  }
+  /**
+   * [POST] /api/v1/auth/logout
+   * Đăng xuất và thu hồi Access Token hiện tại qua Redis Blacklist
+   */
+  public static async logout(req: Request, res: Response, next: NextFunction) {
+    try {
+      const authHeader = req.headers.authorization;
+      const match = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
+      const token = match ? match[1].trim() : null;
+
+      if (token) {
+        const decoded = jwt.decode(token) as any;
+        const expSeconds = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
+        await SessionRevocationService.revokeToken(token, Math.max(60, expSeconds));
+      }
+
+      return ApiResponse.success(res, 'Đăng xuất thành công, phiên đăng nhập đã bị vô hiệu hóa', null, 200);
+    } catch (error) {
       next(error);
     }
   }

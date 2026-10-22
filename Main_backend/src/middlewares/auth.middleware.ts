@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
 import { ApiError } from '../utils/apiError';
 import { IJwtPayload, UserModel } from '../models/user.model';
+import { SessionRevocationService } from '../services/sessionRevocation.service';
 
 /**
  * Middleware kiểm tra và giải mã JWT Access Token
@@ -34,6 +35,12 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
       return next(new ApiError(401, 'Token không hợp lệ hoặc chữ ký không đúng'));
     }
     return next(new ApiError(401, 'Lỗi xác thực Token'));
+  }
+
+  // 0. Kiểm tra Token có trong Blacklist (Đã đăng xuất / bị thu hồi) không
+  const isRevoked = await SessionRevocationService.isTokenRevoked(token);
+  if (isRevoked) {
+    return next(new ApiError(401, 'Phiên đăng nhập đã kết thúc hoặc Token đã bị thu hồi'));
   }
 
   if (!decoded || typeof decoded !== 'object' || !decoded.id || !decoded.email) {

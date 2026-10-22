@@ -85,3 +85,38 @@ export const memberQuerySchema = z.object({
     role: z.enum(['SME_OWNER', 'DEVOPS', 'VIEWER']).optional(),
   }),
 });
+
+
+/**
+ * Schema kiểm tra dữ liệu khi CHẤP NHẬN LỜI MỜI BẰNG TOKEN (/organizations/invitations/accept)
+ */
+export const acceptInvitationByTokenSchema = z.object({
+  body: z.object({
+    token: z.string({ error: 'Mã token là bắt buộc' }).trim().min(1, 'Mã token không được để trống'),
+  }),
+});
+
+/**
+ * Schema kiểm tra URL params khi thao tác với 1 lời mời cụ thể (/organizations/:id/invitations/:invitationId)
+ */
+export const invitationParamSchema = z.object({
+  params: z.object({
+    id: z.string().trim().regex(uuidRegex, 'Định dạng ID tổ chức không hợp lệ (yêu cầu UUID)'),
+    invitationId: z.string().trim().regex(uuidRegex, 'Định dạng ID lời mời không hợp lệ (yêu cầu UUID)'),
+  }),
+});
+
+/**
+ * Schema kiểm tra query string khi XEM DANH SÁCH LỜI MỜI (/organizations/:id/invitations)
+ */
+export const invitationQuerySchema = z.object({
+  params: z.object({
+    id: z.string().trim().regex(uuidRegex, 'Định dạng ID tổ chức không hợp lệ (yêu cầu UUID)'),
+  }),
+  query: z.object({
+    page: z.coerce.number().int().min(1).default(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20).optional(),
+    search: z.string().trim().optional(),
+    status: z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']).optional(),
+  }),
+});

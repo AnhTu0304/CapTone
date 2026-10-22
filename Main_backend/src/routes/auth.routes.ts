@@ -37,4 +37,8 @@ router.get('/verify-email', validate(verifyEmailSchema), AuthController.verifyEm
 // [POST] /api/v1/auth/send-verification -> Người dùng đăng nhập gửi mã xác thực về email (Yêu cầu Token & Rate limit)
 router.post('/send-verification', authenticateToken, sensitiveOpRateLimiter, AuthController.sendVerification);
 
+
+// [POST] /api/v1/auth/logout -> Đăng xuất và thu hồi Token
+router.post('/logout', authenticateToken, AuthController.logout);
+
 export { router as authRoutes };
