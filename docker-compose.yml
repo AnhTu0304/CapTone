@@ -23,6 +23,26 @@ services:
       - captone-network
 
   # ==========================================
+  # Cache / Session Blacklist / Email Queue: Redis 7
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: captone-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - captone-network
+
+  # ==========================================
   # Core Backend: Node.js Express TypeScript MVC
   # ==========================================
   main-backend:
@@ -34,8 +54,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       PORT: 5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_ENABLED: "true"
       NODE_ENV: production
       API_PREFIX: /api/v1
       DB_HOST: postgres
@@ -153,6 +178,8 @@ services:
 # ==========================================
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:
