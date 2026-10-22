@@ -185,6 +185,19 @@ export class UserModel {
     }
 
     /**
+     * Tìm thông tin người dùng theo email (đầy đủ các trường an toàn)
+     */
+    public static async findFullByEmail(email: string, client?: PoolClient): Promise<IUserResponse | null> {
+        const db = client || pool;
+        const querySql = `
+          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
+          FROM users WHERE email = $1 AND deleted_at IS NULL LIMIT 1
+        `;
+        const result = await db.query<IUserResponse>(querySql, [email]);
+        return result.rows[0] || null;
+    }
+
+    /**
      * Đếm tổng số bản ghi thỏa mãn điều kiện lọc
      */
     public static async count(whereClause: string, params: unknown[], client?: PoolClient): Promise<number> {
@@ -259,20 +272,22 @@ export class UserModel {
      * Tạo mới người dùng
      */
     public static async create(
-        data: { email: string; password_hash: string; full_name: string; status?: UserStatus },
+        data: { email: string; password_hash?: string | null; full_name: string; status?: UserStatus; avatar_url?: string | null; email_verified_at?: Date | null },
         client?: PoolClient
     ): Promise<IUserResponse> {
         const db = client || pool;
         const insertSql = `
-          INSERT INTO users (email, password_hash, full_name, status)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO users (email, password_hash, full_name, avatar_url, status, email_verified_at)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
         `;
         const result = await db.query<IUserResponse>(insertSql, [
             data.email,
-            data.password_hash,
+            data.password_hash || null,
             data.full_name,
+            data.avatar_url || null,
             data.status || 'ACTIVE',
+            data.email_verified_at || null,
         ]);
         return result.rows[0];
     }
