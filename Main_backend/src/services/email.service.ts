@@ -8,6 +8,43 @@ export class EmailService {
   private static transporter: Transporter | null = null;
 
   /**
+   * Setter phục vụ việc inject mock transporter trong unit test
+   */
+  public static setTransporterForTesting(customTransporter: Transporter | null): void {
+    this.transporter = customTransporter;
+  }
+
+  /**
+   * Phân biệt lỗi tạm thời (Transient) có thể retry vs lỗi vĩnh viễn (Permanent) không được retry
+   * - Transient: ETIMEDOUT, ECONNRESET, ECONNREFUSED, ESOCKET, EAI_AGAIN, ENOTFOUND, SMTP 4xx (421, 450, 451, 452)
+   * - Permanent: SMTP 535 (Auth Failed), 501 (Syntax), 550 (User Unknown), 553 (Relay Denied)
+   */
+  public static isTransientError(error: any): boolean {
+    if (!error) return false;
+
+    const code = error.code || '';
+    const responseCode = Number(error.responseCode);
+
+    // Lỗi mạng hoặc DNS tạm thời
+    const transientCodes = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ESOCKET', 'EAI_AGAIN', 'ENOTFOUND'];
+    if (transientCodes.includes(code)) {
+      return true;
+    }
+
+    // SMTP 4xx: Transient negative completion
+    if (responseCode >= 400 && responseCode < 500) {
+      return true;
+    }
+
+    // SMTP 5xx (535 Auth Failed, 501 Syntax, 550 Recipient Rejected) -> Permanent, tuyệt đối không retry
+    if (responseCode >= 500 && responseCode < 600) {
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
    * Xác định địa chỉ người gửi (FROM) tuân thủ chặt chẽ chính sách SPF/DMARC của Gmail SMTP
    */
   public static getFromAddress(): string {
@@ -81,9 +118,9 @@ export class EmailService {
         return;
       } catch (error: any) {
         attempt++;
-        const isTransient = error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ESOCKET';
+        const isTransient = this.isTransientError(error);
         if (attempt <= maxRetries && isTransient) {
-          console.warn(`⚠️ [EMAIL] Gửi email gặp sự cố mạng tạm thời (${error.code}), đang thử lại...`);
+          console.warn(`⚠️ [EMAIL] Gửi email gặp sự cố mạng tạm thời (${error.code || error.responseCode || 'TRANSIENT'}), đang thử lại...`);
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
