@@ -447,6 +447,7 @@ export const LoginPage = ({ onNavigate }) => {
           {/* Gmail / Google Sign-In Button */}
           <button
             type="button"
+            disabled={loading}
             onClick={handleGoogleSignIn}
             style={{
               width: '100%',
@@ -458,7 +459,8 @@ export const LoginPage = ({ onNavigate }) => {
               fontFamily: 'var(--font-body)',
               borderRadius: '4px',
               border: '1px solid #D1D5DB',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
