@@ -17,6 +17,7 @@ import { useOnboarding } from '../../context/OnboardingContext';
 import { useAuth } from '../../context/AuthContext';
 import { onboardingService } from '../../services/onboardingService';
 import { personalPortalService } from '../../services/personalPortalService';
+import { clusterService } from '../../services/clusterService';
 
 export const VerifyAgentStep = ({ onNavigate }) => {
   const {
@@ -146,16 +147,17 @@ export const VerifyAgentStep = ({ onNavigate }) => {
       // 2. Tạo Môi trường (Environment) liên kết với Organization vừa tạo
       let currentEnvId = environment?.id;
       let currentEnvData = environment;
+      const envType = environment?.type === 'development' ? 'DEV' : 'STAGING';
+
       if (currentOrgId && !currentEnvId && !String(currentOrgId).startsWith('sandbox-')) {
         try {
-          const envType = environment?.type === 'development' ? 'DEV' : 'STAGING';
           const envName = (environment?.name || 'Production').trim();
           const createdEnv = await onboardingService.createEnvironment(currentOrgId, {
             name: envName,
             environment_type: envType,
             description: environment?.description ? environment.description.trim() : 'Cụm máy chủ sản xuất chính',
           });
-          currentEnvId = createdEnv.id;
+          currentEnvId = createdEnv?.id;
           currentEnvData = createdEnv;
         } catch (envErr) {
           console.warn('[VerifyAgentStep] Lỗi tạo môi trường, kiểm tra môi trường sẵn có:', envErr.message);
@@ -166,31 +168,71 @@ export const VerifyAgentStep = ({ onNavigate }) => {
               currentEnvData = existingEnvs[0];
             }
           } catch {}
+          if (!currentEnvId) {
+            throw new Error(envErr?.message || 'Không thể khởi tạo môi trường máy chủ. Vui lòng thử lại.');
+          }
         }
       }
 
-      // 3. Đăng ký Tác tử Agent K8s & Token liên kết với Org và Environment
-      if (currentOrgId && currentEnvId && !cluster?.agentId && !String(currentOrgId).startsWith('sandbox-')) {
-        try {
-          const agName = (clusterName || cluster?.name || 'k8s-cluster-01').trim();
-          const agToken = cluster?.token || `ag_live_${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+      // 3. Đăng ký Cụm máy chủ K8s & Tác tử Agent liên kết với Org và Environment
+      let clusterId = cluster?.id || cluster?.clusterId;
+      const agName = (clusterName || cluster?.name || 'k8s-cluster-01').trim();
 
-          const createdAgent = await onboardingService.createAgent(currentOrgId, {
-            name: agName,
-            environment_id: currentEnvId,
-            version: 'v1.0.0',
-            initial_token: agToken,
-          });
-          if (createdAgent?.token?.raw_token) {
-            updateCluster({
-              agentId: createdAgent.agent?.id,
-              token: createdAgent.token.raw_token,
-              tokenGeneratedAt: createdAgent.token.created_at || new Date().toISOString(),
-              isRegistered: true,
+      if (currentOrgId && currentEnvId && !String(currentOrgId).startsWith('sandbox-')) {
+        let createdAgent = null;
+        if (!cluster?.agentId) {
+          try {
+            const agToken = cluster?.token || `ag_live_${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+
+            createdAgent = await onboardingService.createAgent(currentOrgId, {
+              name: agName,
+              environment_id: currentEnvId,
+              version: 'v1.0.0',
+              initial_token: agToken,
             });
+
+            if (createdAgent?.agent?.cluster_id) {
+              clusterId = createdAgent.agent.cluster_id;
+            }
+          } catch (agentErr) {
+            console.warn('[VerifyAgentStep] Lỗi đăng ký agent:', agentErr.message);
           }
-        } catch (agentErr) {
-          console.warn('[VerifyAgentStep] Lỗi đăng ký agent:', agentErr.message);
+        }
+
+        // Đảm bảo Cluster luôn tồn tại trong Database (dự phòng tạo trực tiếp nếu agent chưa tạo cluster)
+        if (!clusterId) {
+          try {
+            const directCluster = await clusterService.createCluster(currentOrgId, {
+              name: agName,
+              environment_id: currentEnvId,
+              environment_type: envType,
+              provider: 'MINIKUBE',
+            });
+            if (directCluster?.id) {
+              clusterId = directCluster.id;
+            }
+          } catch (clusterErr) {
+            console.warn('[VerifyAgentStep] Lỗi tạo cụm trực tiếp:', clusterErr);
+          }
+        }
+
+        // Cập nhật State trong Context và lưu localStorage để Dashboard nhận diện ngay lập tức
+        updateCluster({
+          id: clusterId,
+          clusterId: clusterId,
+          name: agName,
+          cluster_name: agName,
+          agentId: createdAgent?.agent?.id || cluster?.agentId,
+          token: createdAgent?.token?.raw_token || cluster?.token,
+          tokenGeneratedAt: createdAgent?.token?.created_at || cluster?.tokenGeneratedAt || new Date().toISOString(),
+          isRegistered: true,
+        });
+
+        if (clusterId) {
+          try {
+            localStorage.setItem('selfheal_active_cluster_id', clusterId);
+            localStorage.setItem('selfheal_active_cluster_name', agName);
+          } catch {}
         }
       }
 

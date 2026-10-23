@@ -163,25 +163,38 @@ export class RecommendationModel {
   /**
    * Get recent recommendations (deduplicated by recommendation action and status)
    */
-  public static async getRecent(limit: number = 10, client?: PoolClient) {
+  public static async getRecent(limit: number = 10, clusterId?: string, client?: PoolClient) {
     const db = client || pool;
+    let whereClause = '';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (clusterId && clusterId !== 'ALL') {
+      whereClause = `WHERE (i.cluster_id = $${idx} OR i.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR i.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`;
+      params.push(clusterId);
+      idx++;
+    }
+
     const res = await db.query(
       `WITH ranked_recs AS (
         SELECT 
           r.id, r.incident_id, r.rca_analysis_id, r.prediction_id, r.action_type_id,
           h.code AS action_code, h.name AS action_name,
           r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at,
+          i.cluster_id,
           ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status ORDER BY r.created_at DESC) as rn
         FROM ai_recommendations r
         LEFT JOIN healing_action_types h ON h.id = r.action_type_id
+        LEFT JOIN incidents i ON r.incident_id = i.id
+        ${whereClause}
       )
       SELECT id, incident_id, rca_analysis_id, prediction_id, action_type_id,
-             action_code, action_name, recommendation, reasoning, risk_level, priority, status, created_at
+             action_code, action_name, recommendation, reasoning, risk_level, priority, status, created_at, cluster_id
       FROM ranked_recs
       WHERE rn <= 2
       ORDER BY created_at DESC
-      LIMIT $1;`,
-      [limit]
+      LIMIT $${idx};`,
+      [...params, limit]
     );
     return res.rows;
   }
@@ -257,7 +270,17 @@ export class RecommendationModel {
   /**
    * List recent healing actions with action type and incident info
    */
-  public static async getHealingActions(limit: number = 20): Promise<any[]> {
+  public static async getHealingActions(limit: number = 20, clusterId?: string): Promise<any[]> {
+    let whereClause = '';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (clusterId && clusterId !== 'ALL') {
+      whereClause = `WHERE (i.cluster_id = $${idx} OR i.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR i.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`;
+      params.push(clusterId);
+      idx++;
+    }
+
     const query = `
       SELECT 
         h.id,
@@ -282,10 +305,11 @@ export class RecommendationModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
+      ${whereClause}
       ORDER BY h.created_at DESC
-      LIMIT $1;
+      LIMIT $${idx};
     `;
-    const res = await pool.query(query, [limit]);
+    const res = await pool.query(query, [...params, limit]);
     return res.rows;
   }
 }

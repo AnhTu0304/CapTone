@@ -6,7 +6,7 @@ import { ApiError } from '../utils/apiError';
 export class ClusterController {
   public static async getByOrg(req: Request, res: Response, next: NextFunction) {
     try {
-      const orgId = req.params.orgId || req.params.id || req.orgMember?.organizationId;
+      const orgId = (req.params.orgId || req.params.id || req.orgMember?.organizationId)!;
       const clusters = await ClusterService.getClustersByOrg(orgId);
       return ApiResponse.success(res, 'Lấy danh sách cụm Kubernetes thành công', clusters, 200);
     } catch (error) {
@@ -44,7 +44,7 @@ export class ClusterController {
 
   public static async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const orgId = req.params.orgId || req.params.id || req.orgMember?.organizationId;
+      const orgId = (req.params.orgId || req.params.id || req.orgMember?.organizationId)!;
       const cluster = await ClusterService.createCluster(orgId, req.body);
       return ApiResponse.success(res, 'Đăng ký cụm Kubernetes thành công', cluster, 201);
     } catch (error) {

@@ -104,6 +104,7 @@ export class TelemetryPipelineService {
         forceRca: false,
         autoTriggerRca: true,
         providedSequence: freshBatch.points,
+        clusterId: freshBatch.clusterId,
       });
 
       // Advance boundary: any point up to this timestamp is now part of the past!

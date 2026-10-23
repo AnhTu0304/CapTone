@@ -113,11 +113,14 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
 
     const parsedUrl = request.url ? url.parse(request.url, true) : null;
     const serviceId = (parsedUrl?.query?.service_id as string) || 'sme-order-service';
+    const clusterId = (parsedUrl?.query?.cluster_id as string) || undefined;
+    (ws as any).clusterId = clusterId;
+    (ws as any).serviceId = serviceId;
     const isPrivileged = ws.user?.isPrivileged ?? false;
 
     // Send immediate initial state upon connection
     try {
-      const summary = await TelemetryController.getLiveSummaryData(serviceId);
+      const summary = await TelemetryController.getLiveSummaryData(serviceId, clusterId);
       const dataToSend = isPrivileged ? summary : sanitizeSummaryForViewer(summary);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
@@ -170,21 +173,17 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
   const pulseInterval = setInterval(async () => {
     if (uiClients.size === 0) return;
     try {
-      const summary = await TelemetryController.getLiveSummaryData('sme-order-service');
-      const privilegedPayload = JSON.stringify({
-        type: 'live_pulse',
-        data: summary,
-        timestamp: new Date().toISOString(),
-      });
-      const viewerPayload = JSON.stringify({
-        type: 'live_pulse',
-        data: sanitizeSummaryForViewer(summary),
-        timestamp: new Date().toISOString(),
-      });
-
       for (const client of uiClients) {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(client.user?.isPrivileged ? privilegedPayload : viewerPayload);
+          const cClusterId = (client as any).clusterId;
+          const cServiceId = (client as any).serviceId || 'sme-order-service';
+          const summary = await TelemetryController.getLiveSummaryData(cServiceId, cClusterId);
+          const payload = JSON.stringify({
+            type: 'live_pulse',
+            data: client.user?.isPrivileged ? summary : sanitizeSummaryForViewer(summary),
+            timestamp: new Date().toISOString(),
+          });
+          client.send(payload);
         }
       }
     } catch (err) {

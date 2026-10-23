@@ -3,14 +3,24 @@ import { pool } from '../config/database';
 
 export class WorkloadModel {
   /**
-   * Find workload by service name
+   * Find workload by service name, optionally filtered by cluster
    */
   public static async findByName(
     name: string,
-    client?: PoolClient
+    client?: PoolClient,
+    clusterId?: string | null
   ): Promise<{ id: string; cluster_id?: string | null } | null> {
     const db = client || pool;
     try {
+      if (clusterId) {
+        const res = await db.query(
+          `SELECT id, cluster_id FROM workloads 
+           WHERE name = $1 AND (cluster_id = $2 OR cluster_id IN (SELECT name FROM clusters WHERE id::text = $2 OR cluster_uid = $2) OR cluster_id IN (SELECT id::text FROM clusters WHERE name = $2))
+           LIMIT 1`,
+          [name, clusterId]
+        );
+        if (res.rows.length > 0) return res.rows[0];
+      }
       const res = await db.query(
         'SELECT id, cluster_id FROM workloads WHERE name = $1 LIMIT 1',
         [name]

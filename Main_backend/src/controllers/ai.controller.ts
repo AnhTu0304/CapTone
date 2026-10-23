@@ -129,12 +129,14 @@ export class AiController {
       const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
       const status = req.query.status as string | undefined;
       const prediction_type = req.query.prediction_type as string | undefined;
+      const cluster_id = req.query.cluster_id as string | undefined;
 
       const result = await AiPredictionModel.findMany({
         limit,
         offset,
         status,
         prediction_type,
+        cluster_id,
       });
 
       return ApiResponse.success(res, 'Retrieved predictions list', result, 200);
@@ -149,7 +151,8 @@ export class AiController {
    */
   public static async getPredictionStats(req: Request, res: Response) {
     try {
-      const stats = await AiPredictionModel.getPredictionStats();
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const stats = await AiPredictionModel.getPredictionStats(cluster_id);
       return ApiResponse.success(res, 'Retrieved prediction statistics', stats, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);
@@ -202,12 +205,14 @@ export class AiController {
       const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
       const status = req.query.status as string | undefined;
       const severity = req.query.severity as string | undefined;
+      const cluster_id = req.query.cluster_id as string | undefined;
 
       const result = await IncidentModel.findMany({
         limit,
         offset,
         status,
         severity,
+        cluster_id,
       });
 
       return ApiResponse.success(res, 'Retrieved incidents list', result, 200);
@@ -301,7 +306,8 @@ export class AiController {
   public static async getRecommendations(req: Request, res: Response) {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-      const result = await RecommendationModel.getRecent(limit);
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const result = await RecommendationModel.getRecent(limit, cluster_id);
       return ApiResponse.success(res, 'Retrieved recommendations list', result, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);
@@ -333,7 +339,8 @@ export class AiController {
   public static async getHealingActions(req: Request, res: Response) {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-      const actions = await RecommendationModel.getHealingActions(limit);
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const actions = await RecommendationModel.getHealingActions(limit, cluster_id);
       return ApiResponse.success(res, 'Retrieved executed healing actions', actions, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);

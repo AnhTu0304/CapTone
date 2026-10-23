@@ -141,8 +141,8 @@ export class TelemetryController {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service') {
-    return TelemetryAggregatorService.getLiveSummaryData(serviceId);
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string) {
+    return TelemetryAggregatorService.getLiveSummaryData(serviceId, clusterId);
   }
 
   public static async getLiveSummary(
@@ -152,7 +152,8 @@ export class TelemetryController {
   ): Promise<any> {
     try {
       const serviceId = (req.query.service_id as string) || 'sme-order-service';
-      const data = await TelemetryController.getLiveSummaryData(serviceId);
+      const clusterId = (req.query.cluster_id as string) || undefined;
+      const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId);
 
       const user = (req as any).user;
       const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);

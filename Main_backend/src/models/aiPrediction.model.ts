@@ -145,6 +145,7 @@ export class AiPredictionModel {
     offset?: number;
     status?: string;
     prediction_type?: string;
+    cluster_id?: string;
   }): Promise<{ items: any[]; total: number }> {
     const limit = params.limit ?? 20;
     const offset = params.offset ?? 0;
@@ -159,6 +160,11 @@ export class AiPredictionModel {
     if (params.prediction_type) {
       conditions.push(`p.prediction_type ILIKE $${idx++}`);
       values.push(`%${params.prediction_type}%`);
+    }
+    if (params.cluster_id && params.cluster_id !== 'ALL') {
+      conditions.push(`(p.cluster_id = $${idx} OR p.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR p.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`);
+      values.push(params.cluster_id);
+      idx++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -263,18 +269,25 @@ export class AiPredictionModel {
   /**
    * Aggregated statistics of predictions
    */
-  public static async getPredictionStats(): Promise<{
+  public static async getPredictionStats(clusterId?: string): Promise<{
     total: number;
     by_type: Record<string, number>;
     avg_confidence: number;
   }> {
-    const totalRes = await pool.query('SELECT count(*), AVG(confidence_score) as avg_conf FROM ai_predictions;');
+    let whereClause = '';
+    const params: any[] = [];
+    if (clusterId && clusterId !== 'ALL') {
+      whereClause = 'WHERE (cluster_id = $1 OR cluster_id IN (SELECT name FROM clusters WHERE id::text = $1 OR cluster_uid = $1) OR cluster_id IN (SELECT id::text FROM clusters WHERE name = $1))';
+      params.push(clusterId);
+    }
+    const totalRes = await pool.query(`SELECT count(*), AVG(confidence_score) as avg_conf FROM ai_predictions ${whereClause};`, params);
     const byTypeRes = await pool.query(`
       SELECT prediction_type, count(*) as count 
       FROM ai_predictions 
+      ${whereClause}
       GROUP BY prediction_type 
       ORDER BY count DESC;
-    `);
+    `, params);
 
     const byType: Record<string, number> = {};
     for (const row of byTypeRes.rows) {

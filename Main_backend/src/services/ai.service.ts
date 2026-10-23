@@ -226,7 +226,7 @@ export class AiService {
       let environmentId: string | null = input.environment_id || null;
 
       if (!workloadId) {
-        const workload = await WorkloadModel.findByName(input.service_id, client);
+        const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
         if (workload) {
           workloadId = workload.id;
           if (!clusterId && workload.cluster_id) clusterId = workload.cluster_id;
@@ -401,7 +401,7 @@ export class AiService {
       }
 
       if (!workloadId) {
-        const workload = await WorkloadModel.findByName(input.service_id, client);
+        const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
         if (workload) {
           workloadId = workload.id;
           if (!clusterId && workload.cluster_id) clusterId = workload.cluster_id;

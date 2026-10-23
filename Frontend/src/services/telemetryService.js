@@ -113,7 +113,7 @@ export const telemetryService = {
    * @param {Function} onStatusChange - Callback receives (isConnected: boolean)
    * @returns {Function} cleanup / unsubscribe function
    */
-  subscribeWebSocket(serviceId = 'sme-order-service', onMessage, onStatusChange) {
+  subscribeWebSocket(serviceId = 'sme-order-service', onMessage, onStatusChange, clusterId = null) {
     let ws = null;
     let reconnectTimeout = null;
     let isClosedExplicitly = false;

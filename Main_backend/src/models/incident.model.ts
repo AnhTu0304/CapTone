@@ -100,6 +100,7 @@ export class IncidentModel {
     offset?: number;
     status?: string;
     severity?: string;
+    cluster_id?: string;
   }): Promise<{ items: any[]; total: number }> {
     const limit = params.limit ?? 20;
     const offset = params.offset ?? 0;
@@ -140,11 +141,17 @@ export class IncidentModel {
         i.detected_at,
         i.started_at,
         i.resolved_at,
-        i.created_at
+        i.created_at,
+        r.id AS rca_id,
+        r.root_cause_type,
+        r.root_cause_description,
+        r.confidence_score AS rca_confidence,
+        r.analysis_result
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+      LEFT JOIN rca_analyses r ON r.incident_id = i.id
       ${whereClause}
       ORDER BY i.detected_at DESC
       LIMIT $${idx++} OFFSET $${idx++};

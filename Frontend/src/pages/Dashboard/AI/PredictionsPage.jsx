@@ -138,15 +138,17 @@ export const PredictionsPage = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [healthRes, statsRes, predRes, recRes, healRes] = await Promise.all([
         aiService.getAiHealth(),
-        aiService.getPredictionStats(),
+        aiService.getPredictionStats({ cluster_id: clusterParam }),
         aiService.getPredictions({
           limit: 15,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
+          cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 10 }),
-        aiService.getHealingActions({ limit: 10 }),
+        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
       ]);
 
       setAiHealth(healthRes);
@@ -171,19 +173,21 @@ export const PredictionsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedTypeFilter]);
+  }, [selectedTypeFilter, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
 
   // Đồng bộ dữ liệu ngầm định kỳ (Silent Sync) không giật lag
   const silentSyncData = useCallback(async () => {
     try {
+      const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [statsRes, predRes, recRes, healRes] = await Promise.all([
-        aiService.getPredictionStats(),
+        aiService.getPredictionStats({ cluster_id: clusterParam }),
         aiService.getPredictions({
           limit: 15,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
+          cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 10 }),
-        aiService.getHealingActions({ limit: 10 }),
+        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
       ]);
 
       if (statsRes) setStats(statsRes);
@@ -191,25 +195,33 @@ export const PredictionsPage = () => {
       if (recRes) setRecommendations(recRes || []);
 
       const predItems = predRes?.items || [];
+      setPredictions(predItems);
       if (predItems.length > 0) {
-        setPredictions((prev) => {
-          if (prev.length === 0 || prev[0].id !== predItems[0].id) {
-            setSelectedPrediction(predItems[0]);
+        setSelectedPrediction((prev) => {
+          if (!prev || prev.id !== predItems[0].id) {
             loadInputs(predItems[0].id);
+            return predItems[0];
           }
-          return predItems;
+          return prev;
         });
+      } else {
+        setSelectedPrediction(null);
+        setPredictionInputs([]);
       }
     } catch (err) {
       // Bỏ qua lỗi ngầm
     }
-  }, [selectedTypeFilter]);
+  }, [selectedTypeFilter, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
 
   useEffect(() => {
-    if (isAgentConnected) {
-      loadData();
-    }
-  }, [isAgentConnected, currentEnv?.id, loadData]);
+    setSelectedPrediction(null);
+    setPredictionInputs([]);
+    setPredictions([]);
+    setRecommendations([]);
+    setHealingActions([]);
+    setStats({ total: 0, by_type: {}, avg_confidence: 0 });
+    loadData();
+  }, [currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id, loadData]);
 
   // Tự động Polling ngầm mỗi 5 giây đảm bảo giao diện luôn nhảy số Realtime (chỉ khi Agent Online)
   useEffect(() => {
@@ -227,6 +239,7 @@ export const PredictionsPage = () => {
       setBatchProgress(null);
       return;
     }
+    const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
     const unsubscribe = telemetryService.subscribeWebSocket(
       'sme-order-service',
       (payload) => {
@@ -306,7 +319,8 @@ export const PredictionsPage = () => {
       },
       (connected) => {
         setIsWsLive(connected);
-      }
+      },
+      clusterParam
     );
 
     return () => {
@@ -320,7 +334,8 @@ export const PredictionsPage = () => {
   const handleRunManualInference = async () => {
     setIsEvaluating(true);
     try {
-      const res = await aiService.triggerManualInference('sme-order-service', {
+      const targetWorkload = displaySelectedPrediction?.workload_name || displayPredictions[0]?.workload_name || 'sme-order-service';
+      const res = await aiService.triggerManualInference(targetWorkload, {
         forceRca: false,
         autoTriggerRca: true,
       });
@@ -411,9 +426,10 @@ export const PredictionsPage = () => {
       });
 
       // Tải lại danh sách khuyến nghị & danh sách healing_actions
+      const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [updatedRecs, updatedHeals] = await Promise.all([
-        aiService.getRecommendations({ limit: 10 }),
-        aiService.getHealingActions({ limit: 10 }),
+        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
       ]);
       setRecommendations(updatedRecs || []);
       setHealingActions(updatedHeals || []);
@@ -535,8 +551,13 @@ export const PredictionsPage = () => {
 
   const displayRecommendations = useMemo(() => {
     if (!isAgentConnected) return [];
-    return recommendations;
-  }, [isAgentConnected, recommendations]);
+    const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
+    if (!clusterParam || clusterParam === 'ALL') return recommendations;
+    return recommendations.filter((r) => {
+      if (!r.cluster_id) return true;
+      return r.cluster_id === clusterParam || r.cluster_id === currentEnv?.clusterId || r.cluster_id === currentEnv?.id || r.cluster_id === currentEnv?.cluster;
+    });
+  }, [isAgentConnected, recommendations, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
 
   const displayHealingActions = useMemo(() => {
     if (!isAgentConnected) return [];
@@ -820,7 +841,7 @@ export const PredictionsPage = () => {
             </span>
             <Activity size={18} color="#6366F1" />
           </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: isAgentConnected ? 'var(--dash-text-primary)' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: (isAgentConnected && displaySelectedPrediction) ? 'var(--dash-text-primary)' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
             {displayStats.total.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: isAgentConnected ? '#10B981' : '#94A3B8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -980,7 +1001,7 @@ export const PredictionsPage = () => {
                 </h3>
               </div>
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Mỗi mốc cách nhau 5 giây. Lượt: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</span> &bull; Workload: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.workload_name || 'sme-order-service') : 'Chưa kết nối'}</span>
+                Mỗi mốc cách nhau 5 giây. Lượt: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</span> &bull; Workload: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{displaySelectedPrediction?.workload_name || (isAgentConnected ? (displayPredictions.length > 0 ? 'N/A' : 'Chưa có workload') : 'Chưa kết nối')}</span>
               </p>
             </div>
 
@@ -1099,7 +1120,7 @@ export const PredictionsPage = () => {
           {!isAgentConnected ? (
             <div style={{ height: `${height}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#94A3B8', fontSize: '0.8125rem' }}>
               <Server size={32} color="#CBD5E1" />
-              <div style={{ fontWeight: 600, color: '#64748B' }}>Cụm {currentEnv?.cluster || 'k8s-cluster-01'} chưa kết nối tác tử viễn trắc (Agent Offline)</div>
+              <div style={{ fontWeight: 600, color: '#64748B' }}>Cụm {currentEnv?.cluster || 'N/A'} chưa kết nối tác tử viễn trắc (Agent Offline)</div>
               <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Chưa có dữ liệu chuỗi viễn trắc thu thập cho cụm này</div>
             </div>
           ) : loadingInputs ? (
@@ -1350,37 +1371,37 @@ export const PredictionsPage = () => {
 
           <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '0 0 14px 0', lineHeight: 1.4 }}>
             Điểm rủi ro tổng hợp lượt hiện tại:{' '}
-            <strong style={{ color: isAgentConnected ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
-              {isAgentConnected ? (displaySelectedPrediction?.risk_score || '0.0002') : '0.0000'}
+            <strong style={{ color: displaySelectedPrediction ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+              {displaySelectedPrediction ? (displaySelectedPrediction.risk_score || '0.0000') : '0.0000'}
             </strong>{' '}
             (Trạng thái:{' '}
-            <span style={{ color: isAgentConnected ? '#059669' : '#94A3B8', fontWeight: 700 }}>
-              {isAgentConnected ? (displaySelectedPrediction?.status || 'HEALTHY') : 'DISCONNECTED'}
+            <span style={{ color: displaySelectedPrediction ? '#059669' : '#94A3B8', fontWeight: 700 }}>
+              {displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? 'CHƯA CÓ LƯỢT SUY LUẬN' : 'DISCONNECTED')}
             </span>)
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '11px', flex: 1, justifyContent: 'center' }}>
             {RISK_HEADS_CONFIG.map((head) => {
-              const isDetected = isAgentConnected && displaySelectedPrediction?.prediction_type === head.key;
-              const probValue = !isAgentConnected
+              const isDetected = isAgentConnected && Boolean(displaySelectedPrediction) && displaySelectedPrediction?.prediction_type === head.key;
+              const probValue = (!isAgentConnected || !displaySelectedPrediction)
                 ? 0
                 : isDetected
                 ? (parseFloat(displaySelectedPrediction?.confidence_score) || 0.85)
-                : Math.min(parseFloat(displaySelectedPrediction?.risk_score || 0.001) * 10, head.threshold * 0.4);
-              const probPercent = !isAgentConnected ? 0 : Math.min(Math.round(probValue * 100), 100);
-              const isExceeded = isAgentConnected && probValue >= head.threshold;
+                : Math.min(parseFloat(displaySelectedPrediction?.risk_score || 0) * 10, head.threshold * 0.4);
+              const probPercent = (!isAgentConnected || !displaySelectedPrediction) ? 0 : Math.min(Math.round(probValue * 100), 100);
+              const isExceeded = isAgentConnected && Boolean(displaySelectedPrediction) && probValue >= head.threshold;
 
               return (
                 <div key={head.key} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                    <span style={{ fontWeight: 600, color: isAgentConnected ? 'var(--dash-text-primary)' : '#94A3B8' }}>
+                    <span style={{ fontWeight: 600, color: (isAgentConnected && displaySelectedPrediction) ? 'var(--dash-text-primary)' : '#94A3B8' }}>
                       {head.label}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isExceeded ? '#E11D48' : 'var(--dash-text-muted)' }}>
                         Ngưỡng: {(head.threshold * 100).toFixed(0)}%
                       </span>
-                      <strong style={{ fontFamily: 'var(--font-mono)', color: !isAgentConnected ? '#94A3B8' : (isExceeded ? '#E11D48' : '#059669') }}>
+                      <strong style={{ fontFamily: 'var(--font-mono)', color: (!isAgentConnected || !displaySelectedPrediction) ? '#94A3B8' : (isExceeded ? '#E11D48' : '#059669') }}>
                         {probPercent}%
                       </strong>
                     </div>
@@ -1392,7 +1413,7 @@ export const PredictionsPage = () => {
                       style={{
                         width: `${probPercent}%`,
                         height: '100%',
-                        backgroundColor: !isAgentConnected ? '#CBD5E1' : (isExceeded ? '#EF4444' : '#10B981'),
+                        backgroundColor: (!isAgentConnected || !displaySelectedPrediction) ? '#CBD5E1' : (isExceeded ? '#EF4444' : '#10B981'),
                         transition: 'width 0.3s ease',
                       }}
                     />
@@ -1404,8 +1425,8 @@ export const PredictionsPage = () => {
 
           <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #F1F5F9', fontSize: '0.6875rem', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Mỗi đầu nhãn GRU dùng sigmoid nhị phân độc lập</span>
-            <span style={{ color: isAgentConnected ? '#059669' : '#94A3B8', fontWeight: 600 }}>
-              {isAgentConnected ? 'Tất cả dưới ngưỡng an toàn' : 'Cụm chưa kết nối • Không có dữ liệu suy luận'}
+            <span style={{ color: (isAgentConnected && displaySelectedPrediction) ? '#059669' : '#94A3B8', fontWeight: 600 }}>
+              {displaySelectedPrediction ? 'Tất cả dưới ngưỡng an toàn' : (isAgentConnected ? 'Chưa có lượt suy luận' : 'Cụm chưa kết nối • Không có dữ liệu suy luận')}
             </span>
           </div>
         </div>
@@ -1765,7 +1786,7 @@ export const PredictionsPage = () => {
                         </span>
                       </td>
                       <td style={{ padding: '10px 12px', color: '#1E293B', fontWeight: 500 }}>
-                        {act.target_name || 'sme-order-service'}
+                        {act.target_name || '-'}
                       </td>
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
                         {act.execution_mode}
@@ -1892,10 +1913,10 @@ export const PredictionsPage = () => {
                       {p.id?.substring(0, 8)}...
                     </td>
                     <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                      {p.workload_name || 'sme-order-service'}
+                      {p.workload_name || '-'}
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      {p.cluster_name || 'cluster-k8s-sme-01'}
+                      {p.cluster_name || currentEnv?.cluster || '-'}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       <span
@@ -2087,7 +2108,7 @@ export const PredictionsPage = () => {
                           {summaryText}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
-                          Nguồn tham chiếu: <span style={{ fontFamily: 'var(--font-mono)' }}>{ev.source_reference || 'sme-order-service'}</span> &bull; Ghi nhận: {new Date(ev.created_at).toLocaleString('vi-VN')}
+                          Nguồn tham chiếu: <span style={{ fontFamily: 'var(--font-mono)' }}>{ev.source_reference || '-'}</span> &bull; Ghi nhận: {new Date(ev.created_at).toLocaleString('vi-VN')}
                         </div>
                       </div>
                     );
