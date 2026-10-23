@@ -225,9 +225,10 @@ export const aiService = {
       if (params.limit) search.append('limit', params.limit);
       if (params.offset) search.append('offset', params.offset);
       if (params.status) search.append('status', params.status);
-      if (params.severity) search.append('severity', params.severity);
-      if (params.cluster_id) search.append('cluster_id', params.cluster_id);
-      if (params.organization_id) search.append('organization_id', params.organization_id);
+      if (params.severity && params.severity !== 'all') search.append('severity', params.severity);
+      if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
+      if (params.search) search.append('search', params.search);
 
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/incidents${qs}`);

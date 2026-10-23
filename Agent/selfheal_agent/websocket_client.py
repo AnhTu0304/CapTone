@@ -18,6 +18,7 @@ from selfheal_agent.telemetry.schemas import (
     AuthenticatedPayload,
     AuthMessage,
     ErrorPayload,
+    ExecuteActionPayload,
     IncomingMessage,
     OutgoingEnvelope,
 )
@@ -226,6 +227,9 @@ class AgentWebSocketClient:
         elif status == "error":
             logger.error("Server returned error: %s", data.get("message"))
             payload = ErrorPayload.model_validate(data)
+        elif msg_type == "execute_action":
+            logger.info("⚡ Received execute_action command: %s", data.get("data"))
+            payload = ExecuteActionPayload.model_validate(data)
         else:
             logger.debug("Received generic message: %s", data)
             return

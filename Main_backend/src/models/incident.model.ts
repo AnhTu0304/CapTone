@@ -101,20 +101,64 @@ export class IncidentModel {
     status?: string;
     severity?: string;
     cluster_id?: string;
+    organization_id?: string;
+    search?: string;
   }): Promise<{ items: any[]; total: number }> {
-    const limit = params.limit ?? 20;
+    const limit = params.limit ?? 50;
     const offset = params.offset ?? 0;
     const conditions: string[] = [];
     const values: any[] = [];
     let idx = 1;
 
-    if (params.status) {
-      conditions.push(`i.status = $${idx++}`);
-      values.push(params.status);
+    if (params.organization_id && params.organization_id !== 'all' && !params.organization_id.startsWith('sandbox-') && params.organization_id !== 'org-acme') {
+      conditions.push(`(i.organization_id = $${idx} OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id = $${idx}))`);
+      values.push(params.organization_id);
+      idx++;
     }
-    if (params.severity) {
+
+    if (params.cluster_id && params.cluster_id !== 'all') {
+      conditions.push(`(
+        i.cluster_id = $${idx} OR 
+        EXISTS (
+          SELECT 1 FROM clusters c2 
+          WHERE (c2.id::text = i.cluster_id OR c2.cluster_uid = i.cluster_id OR c2.name = i.cluster_id)
+            AND (c2.id::text = $${idx} OR c2.name = $${idx} OR c2.cluster_uid = $${idx})
+        )
+      )`);
+      values.push(params.cluster_id);
+      idx++;
+    }
+
+    if (params.status && params.status !== 'all') {
+      // Map Vietnamese or English statuses
+      const s = params.status.toUpperCase();
+      if (params.status.includes('hoàn tất') || s === 'RESOLVED') {
+        conditions.push(`i.status = 'RESOLVED'`);
+      } else if (params.status.includes('phục hồi') || s === 'INVESTIGATING' || s === 'RECOVERING') {
+        conditions.push(`i.status = 'INVESTIGATING'`);
+      } else if (params.status.includes('duyệt') || s === 'OPEN' || s === 'HITL') {
+        conditions.push(`i.status = 'OPEN'`);
+      } else {
+        conditions.push(`i.status ILIKE $${idx++}`);
+        values.push(`%${params.status}%`);
+      }
+    }
+
+    if (params.severity && params.severity !== 'all') {
       conditions.push(`i.severity = $${idx++}`);
-      values.push(params.severity);
+      values.push(params.severity.toUpperCase());
+    }
+
+    if (params.search && params.search.trim() !== '') {
+      conditions.push(`(
+        i.title ILIKE $${idx} OR 
+        i.description ILIKE $${idx} OR 
+        i.incident_type ILIKE $${idx} OR 
+        i.target_id ILIKE $${idx} OR
+        i.id::text ILIKE $${idx}
+      )`);
+      values.push(`%${params.search.trim()}%`);
+      idx++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

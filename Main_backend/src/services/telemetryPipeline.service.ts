@@ -1,6 +1,9 @@
 import { TelemetryAggregatorService } from './telemetryAggregator.service';
 import { MetricModel } from '../models/metric.model';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
+import { pool } from '../config/database';
+import { RCAResult } from './ai.service';
+import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 
 export class TelemetryPipelineService {
   private static isRunning = false;
@@ -83,7 +86,7 @@ export class TelemetryPipelineService {
         status: count >= 12 ? 'ready_for_gru' : 'accumulating',
         message:
           count >= 12
-            ? `Đã gom đủ lô 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...`
+            ? 'Đã gom đủ lô 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...'
             : `Đang gom 12 điểm mới: [${count}/12 điểm] (${count * 5}s / 60s)... Chờ gom đủ 12 điểm mới tinh.`,
       },
     });
@@ -148,9 +151,167 @@ export class TelemetryPipelineService {
             priority: result.rca_diagnosis.recommendation.priority,
           },
         });
+
+        // Evaluate active healing policies for Autonomous Self-Healing
+        await TelemetryPipelineService.evaluatePolicyAndTriggerAutonomousHealing(
+          result.rca_diagnosis,
+          serviceId
+        );
       }
     } catch (err: any) {
       console.error(`[TelemetryPipeline] Processing error on ${serviceId}:`, err?.message || err);
+    }
+  }
+
+  /**
+   * Evaluates active healing policies for the given RCA diagnosis.
+   * If an active policy with execution_mode = 'AUTO' matches and confidence threshold is met,
+   * automatically execute the remediation and dispatch command to K8s Agent!
+   */
+  public static async evaluatePolicyAndTriggerAutonomousHealing(
+    rca: RCAResult,
+    serviceId: string
+  ): Promise<void> {
+    try {
+      const recAction = rca.recommendation.action || 'Restart Pod';
+      const confidence = rca.root_cause.confidence || 0.85;
+
+      // 1. Query matching active policies
+      const query = `
+        SELECT 
+          p.id AS policy_id,
+          p.name AS policy_name,
+          p.execution_mode,
+          p.confidence_threshold,
+          p.requires_approval,
+          p.is_active,
+          p.environment_id,
+          act.id AS action_type_id,
+          act.code AS action_code,
+          act.name AS action_name
+        FROM healing_policies p
+        JOIN policy_actions pa ON pa.policy_id = p.id
+        JOIN healing_action_types act ON act.id = pa.action_type_id
+        WHERE p.is_active = true
+          AND p.deleted_at IS NULL
+          AND pa.is_enabled = true
+          AND (act.name ILIKE $1 OR act.code ILIKE $2 OR p.name ILIKE $3)
+        ORDER BY pa.priority ASC
+        LIMIT 1;
+      `;
+
+      const searchPattern = `%${recAction}%`;
+      const codePattern = `%${recAction.replace(/\s+/g, '_')}%`;
+      const polRes = await pool.query(query, [searchPattern, codePattern, searchPattern]);
+
+      if (polRes.rows.length === 0) {
+        console.log(`ℹ️ [PolicyEngine] No active policy matches action '${recAction}'. Kept in PROPOSED status for HITL approval.`);
+        return;
+      }
+
+      const policy = polRes.rows[0];
+      const threshold = policy.confidence_threshold !== null ? Number(policy.confidence_threshold) : 0.70;
+
+      // Check confidence threshold
+      if (confidence < threshold) {
+        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' matched, but AI confidence (${confidence.toFixed(2)}) < threshold (${threshold.toFixed(2)}). Waiting for HITL confirmation.`);
+        return;
+      }
+
+      // Check execution mode & approval requirement
+      const isAuto = (policy.execution_mode === 'AUTO' || policy.execution_mode === 'AUTONOMOUS');
+      if (!isAuto || policy.requires_approval) {
+        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires human approval (Execution Mode: ${policy.execution_mode}, Requires Approval: ${policy.requires_approval}). Kept in PROPOSED.`);
+        return;
+      }
+
+      // 2. AUTONOMOUS HEALING TRIGGERED!
+      console.log(`⚡ [AutonomousSelfHealing] Matched ACTIVE AUTO Policy '${policy.policy_name}'!`);
+      console.log(`   - Target Service: ${serviceId}`);
+      console.log(`   - Action: ${policy.action_name} (${policy.action_code})`);
+      console.log(`   - AI Confidence: ${(confidence * 100).toFixed(1)}% >= Threshold: ${(threshold * 100).toFixed(1)}%`);
+
+      let environmentId = rca.environment_id || policy.environment_id;
+      if (!environmentId) {
+        const envRes = await pool.query('SELECT id FROM environments LIMIT 1;');
+        environmentId = envRes.rows[0]?.id;
+      }
+
+      // Insert record into healing_actions with status 'RUNNING' and approval 'APPROVED'
+      const insertActQuery = `
+        INSERT INTO healing_actions (
+          incident_id,
+          recommendation_id,
+          policy_id,
+          environment_id,
+          action_type_id,
+          target_type,
+          target_name,
+          risk_level,
+          execution_mode,
+          approval_status,
+          execution_status,
+          requested_by,
+          requested_at,
+          started_at,
+          result
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          'WORKLOAD', $6, 'LOW'::risk_level, 'AUTO'::execution_mode, 'APPROVED'::approval_status,
+          'RUNNING'::execution_status, NULL, NOW(), NOW(),
+          $7::jsonb
+        ) RETURNING id;
+      `;
+
+      const initialResult = {
+        status: 'RUNNING',
+        policy_id: policy.policy_id,
+        policy_name: policy.policy_name,
+        action: policy.action_name,
+        target: serviceId,
+        triggered_by: 'Autonomous Policy Engine',
+        started_at: new Date().toISOString(),
+      };
+
+      const actInsert = await pool.query(insertActQuery, [
+        rca.incident_id,
+        rca.recommendation_id,
+        policy.policy_id,
+        environmentId,
+        policy.action_type_id,
+        serviceId,
+        JSON.stringify(initialResult),
+      ]);
+
+      const actionId = actInsert.rows[0].id;
+
+      // Broadcast real-time execution trigger to UI
+      broadcastTelemetryToUi({
+        type: 'healing_action_triggered',
+        data: {
+          action_id: actionId,
+          incident_id: rca.incident_id,
+          policy_name: policy.policy_name,
+          action_type: policy.action_name,
+          target: serviceId,
+          execution_mode: 'AUTO',
+          status: 'RUNNING',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // 3. Dispatch action over WebSocket to Kubernetes Agent!
+      const dispatchResult = await dispatchHealingActionToAgent({
+        action_id: actionId,
+        action_type: policy.action_code || 'RESTART_POD',
+        target_name: serviceId,
+        namespace: 'default',
+      });
+
+      console.log(`📡 [AutonomousSelfHealing] Action dispatched to agent: ${dispatchResult.dispatched ? 'SUCCESS' : 'NO AGENT (QUEUED)'}`);
+
+    } catch (err) {
+      console.error(`❌ [AutonomousSelfHealing] Error evaluating policy for ${serviceId}:`, err);
     }
   }
 

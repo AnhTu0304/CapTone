@@ -91,16 +91,21 @@ export interface RCAResult {
   rca_analysis_id: string;
   recommendation_id: string;
   service_id: string;
+  prediction?: AiBackendPredictionResponse | null;
   root_cause: RootCauseResult;
   evidence: string[];
   recommendation: RecommendationResult;
   explanation: string;
+  historical_context_used?: boolean;
+  similar_incident_ids?: string[];
   target?: TargetContext;
   environment_id: string;
   cluster_id?: string | null;
   workload_id?: string | null;
   prediction_id?: string | null;
   created_at: string;
+  previous_action?: string | null;
+  previous_action_result?: string | null;
 }
 
 const METRIC_UNITS: Record<keyof GRUMetricPoint, string> = {
@@ -122,6 +127,7 @@ const ACTION_NAME_MAP: Record<string, string> = {
   SCALE_REPLICAS: 'Scale Replicas',
   SCALE_UP: 'Scale Replicas',
   SCALE_DOWN: 'Scale Replicas',
+  SCALE_DOWN_CANDIDATE: 'Scale Replicas',
   ROLLBACK_DEPLOYMENT: 'Rollback Deployment',
   CLEANUP_STORAGE: 'Cleanup Temporary Files',
   TEMPORARY_IP_BLOCK: 'Temporary IP Block',
@@ -335,30 +341,104 @@ export class AiService {
   public static async analyzeRootCause(input: RCARequestInput): Promise<RCAResult> {
     const targetUrl = `${config.aiBackendUrl}/api/v1/rca`;
 
-    // 1. Call AI Backend RCA endpoint
+    // 1. Resolve previous healing action history for this service/workload if not explicitly provided
+    let prevAction: string | null = input.previous_action || null;
+    let prevActionResult: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'UNKNOWN' | null =
+      input.previous_action_result || null;
+    let prevActionResultSource: 'POST_ACTION_VERIFICATION' | null =
+      input.previous_action_result_source || null;
+    let prevRcaRootCause: string | null = input.previous_rca_root_cause || null;
+
+    if (!prevAction || !prevActionResult) {
+      try {
+        let targetWorkloadId: string | null = input.workload_id || null;
+        if (!targetWorkloadId) {
+          const wl = await WorkloadModel.findByName(input.service_id);
+          if (wl) {
+            targetWorkloadId = wl.id;
+          }
+        }
+
+        const prevActionQuery = `
+          SELECT 
+            h.execution_status,
+            act.code AS action_code,
+            act.name AS action_name,
+            rca.root_cause_type
+          FROM healing_actions h
+          LEFT JOIN healing_action_types act ON act.id = h.action_type_id
+          LEFT JOIN ai_recommendations rec ON rec.id = h.recommendation_id
+          LEFT JOIN rca_analyses rca ON rca.id = rec.rca_analysis_id
+          WHERE h.execution_status IN ('SUCCEEDED', 'FAILED')
+            AND (
+              h.target_name ILIKE $1 
+              OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR h.target_name = $2))
+            )
+          ORDER BY h.completed_at DESC NULLS LAST, h.started_at DESC NULLS LAST, h.created_at DESC
+          LIMIT 1;
+        `;
+        const searchPattern = `%${input.service_id}%`;
+        const historyRes = await pool.query(prevActionQuery, [searchPattern, targetWorkloadId]);
+
+        if (historyRes.rows.length > 0) {
+          const row = historyRes.rows[0];
+          let mappedCode = row.action_code;
+          if (mappedCode === 'CLEANUP_TEMP_FILES') mappedCode = 'CLEANUP_STORAGE';
+          if (mappedCode === 'BLOCK_IP_TEMP') mappedCode = 'TEMPORARY_IP_BLOCK';
+
+          let mappedStatus: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'UNKNOWN' | null = null;
+          if (row.execution_status === 'SUCCEEDED') mappedStatus = 'SUCCESS';
+          else if (row.execution_status === 'FAILED') mappedStatus = 'FAILED';
+
+          if (mappedCode && mappedStatus) {
+            prevAction = mappedCode;
+            prevActionResult = mappedStatus;
+            prevActionResultSource = 'POST_ACTION_VERIFICATION';
+            if (row.root_cause_type) {
+              prevRcaRootCause = row.root_cause_type;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[AiService] Failed to query previous healing action history:', err);
+      }
+    }
+
+    const rcaPayload: Record<string, any> = {
+      service_id: input.service_id,
+      risk_type: input.risk_type,
+      confidence: input.confidence,
+      pod_id: input.pod_id,
+      metrics: {
+        cpu: Number(input.metrics.cpu),
+        ram: Number(input.metrics.ram),
+        disk: Number(input.metrics.disk),
+        latency: Number(input.metrics.latency),
+        request_rate: Number(input.metrics.request_rate),
+        http_5xx_rate: Number(input.metrics.http_5xx_rate),
+        pod_restart_count: Number(input.metrics.pod_restart_count),
+        replica_count: Number(input.metrics.replica_count),
+      },
+      logs: input.logs,
+      kubernetes_events: input.kubernetes_events,
+    };
+
+    if (prevAction && prevActionResult) {
+      rcaPayload.previous_action = prevAction;
+      rcaPayload.previous_action_result = prevActionResult;
+      rcaPayload.previous_action_result_source = prevActionResultSource || 'POST_ACTION_VERIFICATION';
+      if (prevRcaRootCause) {
+        rcaPayload.previous_rca_root_cause = prevRcaRootCause;
+      }
+    }
+
+    // 2. Call AI Backend RCA endpoint
     let aiResponse: AiBackendRCAResponse;
     try {
       const response = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_id: input.service_id,
-          risk_type: input.risk_type,
-          confidence: input.confidence,
-          pod_id: input.pod_id,
-          metrics: {
-            cpu: Number(input.metrics.cpu),
-            ram: Number(input.metrics.ram),
-            disk: Number(input.metrics.disk),
-            latency: Number(input.metrics.latency),
-            request_rate: Number(input.metrics.request_rate),
-            http_5xx_rate: Number(input.metrics.http_5xx_rate),
-            pod_restart_count: Number(input.metrics.pod_restart_count),
-            replica_count: Number(input.metrics.replica_count),
-          },
-          logs: input.logs,
-          kubernetes_events: input.kubernetes_events,
-        }),
+        body: JSON.stringify(rcaPayload),
         signal: AbortSignal.timeout(8000),
       });
 
@@ -567,16 +647,21 @@ export class AiService {
         rca_analysis_id: rcaAnalysisId,
         recommendation_id: recommendationId,
         service_id: input.service_id,
+        prediction: aiResponse.prediction || null,
         root_cause: aiResponse.root_cause,
         evidence: aiResponse.evidence,
         recommendation: aiResponse.recommendation,
         explanation: aiResponse.explanation,
+        historical_context_used: aiResponse.historical_context_used ?? false,
+        similar_incident_ids: aiResponse.similar_incident_ids ?? [],
         target: aiResponse.target,
         environment_id: environmentId,
         cluster_id: clusterId,
         workload_id: workloadId,
         prediction_id: input.prediction_id || null,
         created_at: incidentCreatedAt,
+        previous_action: prevAction,
+        previous_action_result: prevActionResult,
       };
     } catch (dbError) {
       await client.query('ROLLBACK');

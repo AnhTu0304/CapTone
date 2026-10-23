@@ -14,7 +14,6 @@ import {
   Activity,
   Sparkles,
   AlertTriangle,
-  GitFork,
   Zap,
   History,
   ShieldAlert,
@@ -89,8 +88,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
       group: 'AI & SỰ CỐ',
       items: [
         { name: 'Dự báo rủi ro AI', path: '/dashboard/ai/predictions', icon: Sparkles, badge: '1', badgeType: 'mint' },
-        { name: 'Quản lý sự cố', path: '/dashboard/incidents', icon: AlertTriangle },
-        { name: 'Phân tích nguyên nhân (RCA)', path: '/dashboard/incidents/rca', icon: GitFork },
+        { name: 'Quản lý sự cố & RCA', path: '/dashboard/incidents', icon: AlertTriangle },
       ],
     },
     {

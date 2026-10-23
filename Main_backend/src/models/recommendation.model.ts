@@ -182,6 +182,8 @@ export class RecommendationModel {
           h.code AS action_code, h.name AS action_name,
           r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at,
           i.cluster_id,
+          COALESCE(i.target_id, 'sme-order-service') as target_id,
+          i.title as incident_title,
           ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status ORDER BY r.created_at DESC) as rn
         FROM ai_recommendations r
         LEFT JOIN healing_action_types h ON h.id = r.action_type_id
@@ -189,7 +191,7 @@ export class RecommendationModel {
         ${whereClause}
       )
       SELECT id, incident_id, rca_analysis_id, prediction_id, action_type_id,
-             action_code, action_name, recommendation, reasoning, risk_level, priority, status, created_at, cluster_id
+             action_code, action_name, recommendation, reasoning, risk_level, priority, status, created_at, cluster_id, target_id, incident_title
       FROM ranked_recs
       WHERE rn <= 2
       ORDER BY created_at DESC

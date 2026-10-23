@@ -47,6 +47,8 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         label = 'Cụm Kubernetes';
       } else if (parts[index - 1] === 'clusters') {
         label = 'Chi Tiết Cụm';
+      } else if (part === 'incidents') {
+        label = 'Quản Lý Sự Cố & RCA';
       }
 
       crumbs.push({
@@ -111,8 +113,8 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     if (path === '/dashboard/ai/predictions') {
       return <PredictionsPage />;
     }
-    if (path === '/dashboard/incidents' || path.startsWith('/dashboard/incidents/')) {
-      return <IncidentsPage initialRcaOpen={path.includes('/rca')} />;
+    if (path === '/dashboard/incidents' || path.startsWith('/dashboard/incidents')) {
+      return <IncidentsPage onNavigate={onNavigate} />;
     }
 
     // 6. Self-Healing
