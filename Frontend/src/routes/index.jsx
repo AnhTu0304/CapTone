@@ -193,7 +193,7 @@ export const RouteRenderer = ({
       return <DashboardPage currentPath="/dashboard" onNavigate={onNavigate} />;
     }
 
-    if (isSmeOwnerRole && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/'))) {
+    if (isSmeOwnerRole && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/') || path === '/admin/users' || path === '/admin/members')) {
       return (
         <AdminAccessDenied
           onNavigate={onNavigate}

@@ -1,27 +1,33 @@
 import { Router } from 'express';
 import { PodController } from '../controllers/pod.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
+import { requireOrgRole } from '../middlewares/orgAuth.middleware';
+import { requireRoles } from '../middlewares/rbac.middleware';
 
 const router = Router({ mergeParams: true });
 
 router.use(authenticateToken);
 
-/**
- * [GET] /api/v1/pods hoặc /api/v1/clusters/:clusterId/pods
- * Lấy danh sách Pods Kubernetes
- */
+router.use((req, res, next) => {
+  if (!req.params.clusterId && !req.params.orgId && !(req as any).orgMember) {
+    return requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN')(req, res, next);
+  }
+  next();
+});
+
 router.get('/', PodController.getPods);
 
-/**
- * [GET] /api/v1/pods/:podId
- * Lấy thông tin chi tiết một Pod
- */
 router.get('/:podId', PodController.getPodDetail);
 
-/**
- * [POST] /api/v1/pods/:podId/restart
- * Khởi động lại một Pod
- */
-router.post('/:podId/restart', PodController.restartPod);
+router.post(
+  '/:podId/restart',
+  (req, res, next) => {
+    if ((req as any).orgMember) {
+      return requireOrgRole('SME_OWNER', 'DEVOPS')(req, res, next);
+    }
+    return requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'DEVOPS', 'SME_OWNER')(req, res, next);
+  },
+  PodController.restartPod
+);
 
 export const podRoutes = router;

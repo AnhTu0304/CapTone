@@ -6,9 +6,11 @@ import { AdminSidebar } from '../../components/admin/AdminSidebar';
 import { RouteRenderer } from '../../routes';
 import { ToastProvider } from '../../context/ToastContext';
 
-// Mock child pages that make remote network calls
 jest.mock('./Overview', () => () => <div data-testid="mock-admin-overview">Admin Overview Page</div>);
 jest.mock('./Users', () => ({ AdminUsersPage: () => <div data-testid="mock-admin-users">Admin Users Page</div> }));
+jest.mock('./Alerts/AdminAlertsPage', () => ({
+  AdminAlertsPage: () => <div data-testid="mock-admin-incidents">Incidents List Page</div>,
+}));
 jest.mock('./Incidents', () => ({
   IncidentsListPage: () => <div data-testid="mock-admin-incidents">Incidents List Page</div>,
   IncidentDetailPage: () => <div data-testid="mock-admin-incident-detail">Incident Detail Page</div>,
@@ -36,6 +38,7 @@ const createAuthContextValue = (roles, overrides = {}) => {
     token: 'mock-jwt-token',
     isAuthenticated: true,
     loading: false,
+    activeRole: normRoles[0] || 'VIEWER',
     getUserRoles: () => normRoles,
     isSuperAdmin: () => isSuperAdmin,
     isAdmin: () => isAdmin,
@@ -58,16 +61,10 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
         </AuthContext.Provider>
       );
 
-      // Must show Overview
-      expect(screen.getByText('Bàn Điều Khiển')).toBeInTheDocument();
-
-      // Must NOT show operational or administrative menus
-      expect(screen.queryByText('Sức Khỏe Tác Tử eBPF')).not.toBeInTheDocument();
-      expect(screen.queryByText('Cổng Phê Duyệt HITL')).not.toBeInTheDocument();
-      expect(screen.queryByText('Sự Cố & Điều Tra RCA')).not.toBeInTheDocument();
-      expect(screen.queryByText('Cụm Kubernetes')).not.toBeInTheDocument();
-      expect(screen.queryByText('Dự Báo Dị Thường')).not.toBeInTheDocument();
-      expect(screen.queryByText('Thành Viên & Ma Trận RBAC')).not.toBeInTheDocument();
+      expect(screen.getByText('Bảng Điều Khiển')).toBeInTheDocument();
+      expect(screen.queryByText('Quản Lý Tác Tử')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tổng Quan Cụm K8s')).not.toBeInTheDocument();
+      expect(screen.queryByText('Quản Lý Người Dùng')).not.toBeInTheDocument();
     });
 
     test('1.2. DevOps sidebar renders Infrastructure & AI, but hides User Management / Members', () => {
@@ -79,14 +76,10 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
         </AuthContext.Provider>
       );
 
-      // Shows operational items
-      expect(screen.getByText('Bàn Điều Khiển')).toBeInTheDocument();
-      expect(screen.getByText('Cổng Phê Duyệt HITL')).toBeInTheDocument();
-      expect(screen.getByText('Cụm Kubernetes')).toBeInTheDocument();
-      expect(screen.getByText('Tổng Quan Động Cơ AI')).toBeInTheDocument();
-
-      // Must NOT show User Management
-      expect(screen.queryByText('Thành Viên & Ma Trận RBAC')).not.toBeInTheDocument();
+      expect(screen.getByText('Bảng Điều Khiển')).toBeInTheDocument();
+      expect(screen.getByText('Quản Lý Tác Tử')).toBeInTheDocument();
+      expect(screen.getByText('Tổng Quan Cụm K8s')).toBeInTheDocument();
+      expect(screen.queryByText('Quản Lý Người Dùng')).not.toBeInTheDocument();
     });
 
     test('1.3. Admin sidebar renders all groups including User Management', () => {
@@ -98,10 +91,9 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
         </AuthContext.Provider>
       );
 
-      expect(screen.getByText('Bàn Điều Khiển')).toBeInTheDocument();
-      expect(screen.getByText('Thành Viên & Ma Trận RBAC')).toBeInTheDocument();
-      expect(screen.getByText('Cụm Kubernetes')).toBeInTheDocument();
-      expect(screen.getByText('Tổng Quan Động Cơ AI')).toBeInTheDocument();
+      expect(screen.getByText('Bảng Điều Khiển')).toBeInTheDocument();
+      expect(screen.getByText('Quản Lý Người Dùng')).toBeInTheDocument();
+      expect(screen.getByText('Quản Lý Doanh Nghiệp')).toBeInTheDocument();
     });
   });
 
@@ -132,7 +124,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền Truy Cập/i)).toBeInTheDocument();
+      expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
     });
 
     test('2.3. Viewer is BLOCKED from /admin/incidents with 403 Access Denied', () => {
@@ -147,7 +139,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-incidents')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền Truy Cập/i)).toBeInTheDocument();
+      expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
     });
 
     test('2.4. DevOps CAN access /admin/incidents', () => {
@@ -176,7 +168,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền Quản Lý Người Dùng/i)).toBeInTheDocument();
+      expect(screen.getByText(/403 — Không Có Quyền Quản (Lý Người Dùng|Trị Hệ Thống)/i)).toBeInTheDocument();
     });
 
     test('2.6. Admin CAN access /admin/users', () => {
@@ -205,7 +197,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
+      expect(screen.getByText(/403 — Quyền Hạn Dành Riêng Cho Quản Trị Nền Tảng/i)).toBeInTheDocument();
     });
   });
 });

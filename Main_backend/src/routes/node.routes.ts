@@ -1,27 +1,33 @@
 import { Router } from 'express';
 import { NodeController } from '../controllers/node.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
+import { requireOrgRole } from '../middlewares/orgAuth.middleware';
+import { requireRoles } from '../middlewares/rbac.middleware';
 
 const router = Router({ mergeParams: true });
 
 router.use(authenticateToken);
 
-/**
- * [GET] /api/v1/nodes hoặc /api/v1/clusters/:clusterId/nodes
- * Lấy danh sách Node máy chủ Kubernetes
- */
+router.use((req, res, next) => {
+  if (!req.params.clusterId && !req.params.orgId && !(req as any).orgMember) {
+    return requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN')(req, res, next);
+  }
+  next();
+});
+
 router.get('/', NodeController.getNodes);
 
-/**
- * [GET] /api/v1/nodes/:nodeId
- * Lấy chi tiết Node máy chủ kèm Pods đang chạy
- */
 router.get('/:nodeId', NodeController.getNodeDetail);
 
-/**
- * [POST] /api/v1/nodes/:nodeId/drain
- * Tháo tải an toàn (Drain) cho Node
- */
-router.post('/:nodeId/drain', NodeController.drainNode);
+router.post(
+  '/:nodeId/drain',
+  (req, res, next) => {
+    if ((req as any).orgMember) {
+      return requireOrgRole('SME_OWNER', 'DEVOPS')(req, res, next);
+    }
+    return requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'DEVOPS', 'SME_OWNER')(req, res, next);
+  },
+  NodeController.drainNode
+);
 
 export const nodeRoutes = router;
