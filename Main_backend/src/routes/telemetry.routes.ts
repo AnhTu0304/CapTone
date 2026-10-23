@@ -25,7 +25,7 @@ telemetryRoutes.get(
 
 // Protect all following sensitive operations with JWT authentication + DEVOPS/ADMIN role
 telemetryRoutes.use(authenticateToken);
-telemetryRoutes.use(requireRoles('DEVOPS', 'ADMIN'));
+telemetryRoutes.use(requireRoles('VIEWER', 'USER', 'DEVOPS', 'ADMIN'));
 
 // GET /api/v1/telemetry/services/:serviceId/rca-context
 telemetryRoutes.get(

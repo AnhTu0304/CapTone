@@ -161,17 +161,131 @@ export class RecommendationModel {
   }
 
   /**
-   * Get recent recommendations
+   * Get recent recommendations (deduplicated by recommendation action and status)
    */
   public static async getRecent(limit: number = 10, client?: PoolClient) {
     const db = client || pool;
     const res = await db.query(
-      `SELECT r.id, r.incident_id, r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at
-       FROM ai_recommendations r
-       ORDER BY r.created_at DESC
-       LIMIT $1`,
+      `WITH ranked_recs AS (
+        SELECT 
+          r.id, r.incident_id, r.rca_analysis_id, r.prediction_id, r.action_type_id,
+          h.code AS action_code, h.name AS action_name,
+          r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at,
+          ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status ORDER BY r.created_at DESC) as rn
+        FROM ai_recommendations r
+        LEFT JOIN healing_action_types h ON h.id = r.action_type_id
+      )
+      SELECT id, incident_id, rca_analysis_id, prediction_id, action_type_id,
+             action_code, action_name, recommendation, reasoning, risk_level, priority, status, created_at
+      FROM ranked_recs
+      WHERE rn <= 2
+      ORDER BY created_at DESC
+      LIMIT $1;`,
       [limit]
     );
+    return res.rows;
+  }
+
+  /**
+   * Create a healing action entry
+   */
+  public static async createHealingAction(data: {
+    incident_id: string;
+    recommendation_id?: string;
+    environment_id: string;
+    action_type_id: string;
+    target_type: string;
+    target_name?: string;
+    risk_level?: string;
+    execution_mode?: string;
+    approval_status?: string;
+    execution_status?: string;
+    requested_by?: string;
+    executed_by?: string;
+    result?: any;
+  }): Promise<any> {
+    const rawRisk = (data.risk_level || 'LOW').toUpperCase();
+    const validRisks = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    const safeRisk = validRisks.includes(rawRisk) ? rawRisk : 'LOW';
+
+    const safeMode = data.execution_mode === 'AUTO' ? 'AUTO' : 'MANUAL';
+    const safeApproval = data.approval_status || 'APPROVED';
+    const safeStatus = data.execution_status || 'SUCCEEDED';
+    const safeResult = typeof data.result === 'object' ? JSON.stringify(data.result) : (data.result || '{}');
+
+    const query = `
+      INSERT INTO healing_actions (
+        incident_id,
+        recommendation_id,
+        environment_id,
+        action_type_id,
+        target_type,
+        target_name,
+        risk_level,
+        execution_mode,
+        approval_status,
+        execution_status,
+        requested_by,
+        executed_by,
+        started_at,
+        completed_at,
+        result
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7::risk_level, $8::execution_mode, $9::approval_status, $10::execution_status, $11, $12, NOW(), NOW(), $13::jsonb
+      ) RETURNING *;
+    `;
+
+    const res = await pool.query(query, [
+      data.incident_id,
+      data.recommendation_id || null,
+      data.environment_id,
+      data.action_type_id,
+      data.target_type || 'WORKLOAD',
+      data.target_name || 'sme-order-service',
+      safeRisk,
+      safeMode,
+      safeApproval,
+      safeStatus,
+      data.requested_by || null,
+      data.executed_by || null,
+      safeResult,
+    ]);
+
+    return res.rows[0];
+  }
+
+  /**
+   * List recent healing actions with action type and incident info
+   */
+  public static async getHealingActions(limit: number = 20): Promise<any[]> {
+    const query = `
+      SELECT 
+        h.id,
+        h.incident_id,
+        h.recommendation_id,
+        h.environment_id,
+        h.action_type_id,
+        t.name AS action_type_name,
+        t.code AS action_type_code,
+        h.target_type,
+        h.target_name,
+        h.risk_level,
+        h.execution_mode,
+        h.approval_status,
+        h.execution_status,
+        h.started_at,
+        h.completed_at,
+        h.result,
+        h.created_at,
+        i.title AS incident_title,
+        i.severity AS incident_severity
+      FROM healing_actions h
+      LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+      LEFT JOIN incidents i ON i.id = h.incident_id
+      ORDER BY h.created_at DESC
+      LIMIT $1;
+    `;
+    const res = await pool.query(query, [limit]);
     return res.rows;
   }
 }

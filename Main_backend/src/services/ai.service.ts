@@ -452,28 +452,70 @@ export class AiService {
         throw new ApiError(500, 'Cannot resolve organization_id or environment_id for incident creation');
       }
 
-      // 3. Delegate incident creation to IncidentModel
+      // 3. Delegate incident creation to IncidentModel (with deduplication)
       const incidentTitle = `[AI Alert] ${aiResponse.root_cause.cause} on ${input.service_id}`;
       const incidentSeverity = aiResponse.root_cause.severity || 'HIGH';
       const incidentType = input.risk_type || aiResponse.root_cause.cause || 'AI_ALERT';
       const targetType = aiResponse.target?.type || 'WORKLOAD';
 
-      const incRecord = await IncidentModel.create(client, {
-        organization_id: organizationId,
-        environment_id: environmentId,
-        cluster_id: clusterId,
-        prediction_id: input.prediction_id || null,
-        source_type: 'AI_PREDICTION',
-        target_type: targetType,
-        target_id: workloadId,
-        incident_type: incidentType,
-        title: incidentTitle,
-        description: aiResponse.explanation,
-        severity: incidentSeverity,
-        status: 'OPEN',
-      });
-      const incidentId = incRecord.id;
-      const incidentCreatedAt = new Date(incRecord.created_at).toISOString();
+      let incidentId: string;
+      let incidentCreatedAt: string;
+
+      const existingIncident = await IncidentModel.findOpenIncident(
+        client,
+        environmentId,
+        workloadId,
+        incidentType,
+        15
+      );
+
+      if (existingIncident) {
+        incidentId = existingIncident.id;
+        incidentCreatedAt = new Date(existingIncident.created_at).toISOString();
+
+        // Check if identical recommendation is already proposed for this incident
+        const existingRecs = await RecommendationModel.findByIncidentId(incidentId);
+        const duplicateRec = existingRecs.find(
+          (r: any) => r.recommendation === aiResponse.recommendation.action && r.status === 'PROPOSED'
+        );
+
+        if (duplicateRec) {
+          await client.query('COMMIT');
+          return {
+            incident_id: incidentId,
+            rca_analysis_id: duplicateRec.rca_analysis_id,
+            recommendation_id: duplicateRec.id,
+            service_id: input.service_id,
+            root_cause: aiResponse.root_cause,
+            evidence: aiResponse.evidence,
+            recommendation: aiResponse.recommendation,
+            explanation: aiResponse.explanation,
+            target: aiResponse.target,
+            environment_id: environmentId,
+            cluster_id: clusterId,
+            workload_id: workloadId,
+            prediction_id: input.prediction_id || null,
+            created_at: incidentCreatedAt,
+          };
+        }
+      } else {
+        const incRecord = await IncidentModel.create(client, {
+          organization_id: organizationId,
+          environment_id: environmentId,
+          cluster_id: clusterId,
+          prediction_id: input.prediction_id || null,
+          source_type: 'AI_PREDICTION',
+          target_type: targetType,
+          target_id: workloadId,
+          incident_type: incidentType,
+          title: incidentTitle,
+          description: aiResponse.explanation,
+          severity: incidentSeverity,
+          status: 'OPEN',
+        });
+        incidentId = incRecord.id;
+        incidentCreatedAt = new Date(incRecord.created_at).toISOString();
+      }
 
       // 4. Delegate RCA Analysis creation to RcaModel
       const rcaConfidence = Math.min(Math.max(aiResponse.root_cause.confidence, 0), 1);

@@ -79,24 +79,7 @@ export class LogModel {
       ORDER BY occurred_at ASC;
     `;
 
-    let res = await pool.query(query, [serviceId, windowMinutes, limit]);
-
-    // Fallback: fetch recent logs without time filter if empty
-    if (res.rows.length === 0) {
-      const fallbackQuery = `
-        SELECT level, message, occurred_at, metadata->>'pod_id' as pod_id
-        FROM logs
-        WHERE (
-          metadata->>'service_id' = $1 
-          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
-        )
-        ORDER BY occurred_at DESC
-        LIMIT $2;
-      `;
-      const fallbackRes = await pool.query(fallbackQuery, [serviceId, limit]);
-      res = { ...fallbackRes, rows: fallbackRes.rows.reverse() };
-    }
-
+    const res = await pool.query(query, [serviceId, windowMinutes, limit]);
     return res.rows;
   }
 

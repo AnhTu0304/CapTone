@@ -190,7 +190,7 @@ export class AiPredictionModel {
       FROM ai_predictions p
       LEFT JOIN ai_models m ON m.id = p.model_id
       LEFT JOIN environments e ON e.id = p.environment_id
-      LEFT JOIN clusters c ON c.id = p.cluster_id
+      LEFT JOIN clusters c ON (c.id::text = p.cluster_id OR c.name = p.cluster_id OR c.cluster_uid = p.cluster_id)
       LEFT JOIN workloads w ON w.id = p.workload_id
       ${whereClause}
       ORDER BY p.predicted_at DESC
@@ -230,7 +230,7 @@ export class AiPredictionModel {
       FROM ai_predictions p
       LEFT JOIN ai_models m ON m.id = p.model_id
       LEFT JOIN environments e ON e.id = p.environment_id
-      LEFT JOIN clusters c ON c.id = p.cluster_id
+      LEFT JOIN clusters c ON (c.id::text = p.cluster_id OR c.name = p.cluster_id OR c.cluster_uid = p.cluster_id)
       LEFT JOIN workloads w ON w.id = p.workload_id
       WHERE p.id = $1
       LIMIT 1;
