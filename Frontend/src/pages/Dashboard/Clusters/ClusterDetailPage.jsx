@@ -37,6 +37,7 @@ import {
   CheckCircle,
   Info,
   CheckCheck,
+  Sparkles,
 } from 'lucide-react';
 
 export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
@@ -83,8 +84,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   // Revoke Token Loading State
   const [isRevokingId, setIsRevokingId] = useState(null);
   const [isConnectingSim, setIsConnectingSim] = useState(false);
-  const [connectTab, setConnectTab] = useState('script'); // 'script' | 'helm' | 'uninstall'
-  const [scriptOs, setScriptOs] = useState('linux'); // 'linux' | 'windows'
+  const [connectTab, setConnectTab] = useState('quickstart'); // 'quickstart' | 'script' | 'helm' | 'uninstall'
+  const [quickstartEnv, setQuickstartEnv] = useState('local'); // 'local' | 'cloud'
+  const [scriptOs, setScriptOs] = useState('windows'); // 'windows' | 'linux'
 
   const fetchDetail = useCallback(async (isSilent = false) => {
     if (!clusterId) return;
@@ -829,6 +831,27 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div style={{ display: 'flex', gap: '6px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
                 <button
                   type="button"
+                  onClick={() => setConnectTab('quickstart')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    backgroundColor: connectTab === 'quickstart' ? '#FFFFFF' : 'transparent',
+                    color: connectTab === 'quickstart' ? 'var(--dash-primary)' : '#64748B',
+                    boxShadow: connectTab === 'quickstart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <Sparkles size={13} color={connectTab === 'quickstart' ? 'var(--dash-primary)' : '#64748B'} />
+                  Cho Người Mới (Quickstart)
+                </button>
+                <button
+                  type="button"
                   onClick={() => setConnectTab('script')}
                   style={{
                     padding: '6px 12px',
@@ -880,6 +903,209 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 </button>
               </div>
             </div>
+
+            {/* TAB 0: QUICKSTART GUIDE CHO NGƯỜI MỚI */}
+            {connectTab === 'quickstart' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Header Controls: OS & Cluster Type */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hệ điều hành của bạn:</span>
+                    <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px', border: '1px solid #CBD5E1', borderRadius: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setScriptOs('windows')}
+                        style={{
+                          padding: '4px 10px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          backgroundColor: scriptOs === 'windows' ? 'var(--dash-primary)' : 'transparent',
+                          color: scriptOs === 'windows' ? '#FFFFFF' : '#475569',
+                        }}
+                      >
+                        Windows (PowerShell)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScriptOs('linux')}
+                        style={{
+                          padding: '4px 10px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          backgroundColor: scriptOs === 'linux' ? 'var(--dash-primary)' : 'transparent',
+                          color: scriptOs === 'linux' ? '#FFFFFF' : '#475569',
+                        }}
+                      >
+                        Linux / macOS (Bash)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Loại cụm Kubernetes:</span>
+                    <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px', border: '1px solid #CBD5E1', borderRadius: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setQuickstartEnv('local')}
+                        style={{
+                          padding: '4px 10px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          backgroundColor: quickstartEnv === 'local' ? 'var(--dash-primary)' : 'transparent',
+                          color: quickstartEnv === 'local' ? '#FFFFFF' : '#475569',
+                        }}
+                      >
+                        Local (Minikube / Docker)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickstartEnv('cloud')}
+                        style={{
+                          padding: '4px 10px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          backgroundColor: quickstartEnv === 'cloud' ? 'var(--dash-primary)' : 'transparent',
+                          color: quickstartEnv === 'cloud' ? '#FFFFFF' : '#475569',
+                        }}
+                      >
+                        Cloud / Remote (K3s/EKS/GKE)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Steps Stepper List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* BƯỚC 1 */}
+                  <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>1</span>
+                        <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Mở Terminal & Chuyển vào thư mục dự án</strong>
+                      </div>
+                      <span style={{ fontSize: '0.6875rem', color: '#D97706', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Quan Trọng</span>
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
+                      Mở PowerShell / Terminal và chuyển vào thư mục gốc của dự án. <em>Tránh chạy tại thư mục cá nhân mặc định <code>C:\Users\...</code> để không bị lỗi thiếu đường dẫn thư mục <code>Agent</code>.</em>
+                    </p>
+                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      {scriptOs === 'windows' ? (
+                        <code>d: ; cd \AISelfHealing</code>
+                      ) : (
+                        <code>cd ~/AISelfHealing</code>
+                      )}
+                      <button
+                        onClick={() => handleCopy(scriptOs === 'windows' ? 'd:\ncd \\AISelfHealing' : 'cd ~/AISelfHealing', 'qs_step1')}
+                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        {copiedField === 'qs_step1' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* BƯỚC 2 (Local only) */}
+                  {quickstartEnv === 'local' && (
+                    <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>2</span>
+                          <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Build & Nạp Image vào cụm Minikube (Chỉ làm 1 lần)</strong>
+                        </div>
+                        <span style={{ fontSize: '0.6875rem', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Cụm Local</span>
+                      </div>
+                      <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
+                        Vì mã nguồn Agent nằm ở máy local, bạn cần build Docker image và nạp vào Minikube để Pod K8s có thể khởi chạy mà không bị lỗi <code>ErrImagePull</code>:
+                      </p>
+                      <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                        {scriptOs === 'windows' ? (
+                          <code>docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent ; minikube image load captone-agent:1.0.0</code>
+                        ) : (
+                          <code>docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent && minikube image load captone-agent:1.0.0</code>
+                        )}
+                        <button
+                          onClick={() => handleCopy(
+                            scriptOs === 'windows'
+                              ? 'docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent ; minikube image load captone-agent:1.0.0'
+                              : 'docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent && minikube image load captone-agent:1.0.0',
+                            'qs_step2'
+                          )}
+                          style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          {copiedField === 'qs_step2' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BƯỚC 3 */}
+                  <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>{quickstartEnv === 'local' ? '3' : '2'}</span>
+                        <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Chạy Script Cài Đặt Tự Động Với Token Cụm</strong>
+                      </div>
+                      <span style={{ fontSize: '0.6875rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Tự Động Kết Nối</span>
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
+                      Lệnh dưới đây đã tự động nhúng mã xác thực Token của cụm này. Script sẽ tự tạo namespace <code>selfheal-system</code>, cấu hình RBAC, Secret bảo mật và triển khai Agent Deployment:
+                    </p>
+                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      {scriptOs === 'windows' ? (
+                        <code>Set-ExecutionPolicy RemoteSigned -Scope Process; .\Agent\installer\install-agent.ps1 -Token "{tokenCopyValue}"</code>
+                      ) : (
+                        <code>chmod +x Agent/installer/install-agent.sh && ./Agent/installer/install-agent.sh --token "{tokenCopyValue}"</code>
+                      )}
+                      <button
+                        onClick={() => handleCopy(
+                          scriptOs === 'windows'
+                            ? `Set-ExecutionPolicy RemoteSigned -Scope Process; .\\Agent\\installer\\install-agent.ps1 -Token "${tokenCopyValue}"`
+                            : `chmod +x Agent/installer/install-agent.sh && ./Agent/installer/install-agent.sh --token "${tokenCopyValue}"`,
+                          'qs_step3'
+                        )}
+                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        {copiedField === 'qs_step3' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* BƯỚC 4 */}
+                  <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#10B981', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>{quickstartEnv === 'local' ? '4' : '3'}</span>
+                        <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Kiểm Tra Trạng Thái & Nhận Tín Hiệu Online</strong>
+                      </div>
+                      <span style={{ fontSize: '0.6875rem', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Hoàn Tất</span>
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
+                      Kiểm tra trạng thái Pod của Agent trong cụm. Khi thấy trạng thái <code>Running</code>, đèn giám sát phía trên sẽ lập tức chuyển sang <strong>Online</strong>:
+                    </p>
+                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      <code>kubectl get pods -n selfheal-system</code>
+                      <button
+                        onClick={() => handleCopy('kubectl get pods -n selfheal-system', 'qs_step4')}
+                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        {copiedField === 'qs_step4' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* TAB 1: ONE-LINER AUTOMATED SCRIPT */}
             {connectTab === 'script' && (
