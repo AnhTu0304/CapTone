@@ -9,6 +9,7 @@ export const GRUMetricPointSchema = z.object({
   http_5xx_rate: z.number().describe('HTTP 5xx error rate percentage'),
   pod_restart_count: z.number().int().min(0).describe('Total pod restarts in window'),
   replica_count: z.number().int().min(0).describe('Available replica count'),
+  time_bucket: z.string().optional().describe('ISO timestamp of bucket'),
 });
 
 export const PredictRequestSchema = z.object({

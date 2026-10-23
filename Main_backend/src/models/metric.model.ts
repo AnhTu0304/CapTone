@@ -83,6 +83,7 @@ export class MetricModel {
     const res = await pool.query(query, [serviceId, bucketSeconds, limit]);
 
     const points: GRUMetricPoint[] = res.rows.map((row) => ({
+      time_bucket: row.time_bucket ? new Date(row.time_bucket).toISOString() : undefined,
       cpu: Number(row.cpu),
       ram: Number(row.ram),
       disk: Number(row.disk),
@@ -156,6 +157,7 @@ export class MetricModel {
 
     const res = await pool.query(query, params);
     const points: GRUMetricPoint[] = res.rows.map((row) => ({
+      time_bucket: row.time_bucket ? new Date(row.time_bucket).toISOString() : undefined,
       cpu: Number(row.cpu),
       ram: Number(row.ram),
       disk: Number(row.disk),

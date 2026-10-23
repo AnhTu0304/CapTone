@@ -112,6 +112,7 @@ const METRIC_UNITS: Record<keyof GRUMetricPoint, string> = {
   http_5xx_rate: '%',
   pod_restart_count: 'count',
   replica_count: 'count',
+  time_bucket: '',
 };
 
 const ACTION_NAME_MAP: Record<string, string> = {
@@ -180,7 +181,16 @@ export class AiService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           service_id: input.service_id,
-          sequence: input.sequence,
+          sequence: input.sequence.map((pt) => ({
+            cpu: Number(pt.cpu),
+            ram: Number(pt.ram),
+            disk: Number(pt.disk),
+            request_rate: Number(pt.request_rate),
+            latency: Number(pt.latency),
+            http_5xx_rate: Number(pt.http_5xx_rate),
+            pod_restart_count: Number(pt.pod_restart_count),
+            replica_count: Number(pt.replica_count),
+          })),
         }),
         signal: AbortSignal.timeout(6000),
       });
@@ -336,7 +346,16 @@ export class AiService {
           risk_type: input.risk_type,
           confidence: input.confidence,
           pod_id: input.pod_id,
-          metrics: input.metrics,
+          metrics: {
+            cpu: Number(input.metrics.cpu),
+            ram: Number(input.metrics.ram),
+            disk: Number(input.metrics.disk),
+            latency: Number(input.metrics.latency),
+            request_rate: Number(input.metrics.request_rate),
+            http_5xx_rate: Number(input.metrics.http_5xx_rate),
+            pod_restart_count: Number(input.metrics.pod_restart_count),
+            replica_count: Number(input.metrics.replica_count),
+          },
           logs: input.logs,
           kubernetes_events: input.kubernetes_events,
         }),

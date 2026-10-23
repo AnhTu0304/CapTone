@@ -157,3 +157,51 @@ class PodsCollector:
         except Exception as err:
             logger.error("Unexpected error collecting pods: %s", err)
             return []
+
+    def list_pods_detail(self) -> list[dict]:
+        if not self.core_v1:
+            return []
+        results = []
+        try:
+            pod_list = self.core_v1.list_pod_for_all_namespaces()
+            for pod in pod_list.items:
+                metadata = pod.metadata
+                status = pod.status
+                spec = pod.spec
+                if not metadata or not metadata.name:
+                    continue
+                name = metadata.name
+                namespace = metadata.namespace or "default"
+                uid = metadata.uid or name
+                node_name = spec.node_name if spec else None
+                phase = status.phase if status else "Unknown"
+                
+                restarts = 0
+                image = ""
+                if status and status.container_statuses:
+                    for cs in status.container_statuses:
+                        restarts += cs.restart_count
+                        if not image and cs.image:
+                            image = cs.image
+                if not image and spec and spec.containers:
+                    image = spec.containers[0].image or ""
+                
+                started_at = None
+                if status and status.start_time:
+                    started_at = status.start_time.isoformat()
+
+                results.append({
+                    "name": name,
+                    "namespace": namespace,
+                    "node_name": node_name,
+                    "kubernetes_uid": uid,
+                    "status": phase,
+                    "phase": phase,
+                    "restart_count": restarts,
+                    "image": image,
+                    "labels": metadata.labels or {},
+                    "started_at": started_at,
+                })
+        except Exception as err:
+            logger.debug("Failed querying pods detail: %s", err)
+        return results

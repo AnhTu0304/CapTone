@@ -124,7 +124,10 @@ export const telemetryService = {
         const isSecure = window.location.protocol === 'https:';
         const protocol = isSecure ? 'wss:' : 'ws:';
         // Connect to port 5000 if running locally on port 3000, else window.location.host
-        const host = window.location.hostname === 'localhost' ? 'localhost:5000' : window.location.host;
+        let host = window.location.host;
+        if (window.location.port === '3000' || window.location.port === '3001') {
+          host = `${window.location.hostname}:5000`;
+        }
         const token =
           getAuthToken() ||
           localStorage.getItem('selfheal_auth_token') ||

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { agentService } from '../../../services/agentService';
 import {
   Radio,
   Plus,
@@ -16,12 +17,18 @@ import {
   ExternalLink,
   Shield,
   HelpCircle,
-  FileCode,
   Layers,
+  Server,
+  Filter,
 } from 'lucide-react';
 
 export const AgentsPage = () => {
-  const { currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+
+  // Real Agents State
+  const [agents, setAgents] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [scopeMode, setScopeMode] = useState('CURRENT_CLUSTER'); // 'CURRENT_CLUSTER' | 'ALL_CLUSTERS'
 
   // Search and status filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,79 +36,69 @@ export const AgentsPage = () => {
 
   // Install Modal state
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  const [activeInstallTab, setActiveInstallTab] = useState('helm');
-  const [copiedHelm, setCopiedHelm] = useState(false);
-  const [copiedKubectl, setCopiedKubectl] = useState(false);
+  const [activeInstallTab, setActiveInstallTab] = useState('powershell'); // 'powershell' | 'bash' | 'helm'
+  const [copiedCode, setCopiedCode] = useState(false);
 
-  // Agents mock data
-  const agents = [
-    {
-      id: 'agent-01',
-      name: 'selfheal-agent-worker-01',
-      node: 'k8s-worker-node-01.internal',
-      status: 'ONLINE',
-      heartbeat: '2 giây trước',
-      version: 'v1.4.2',
-      cpu: '0.5%',
-      mem: '41 MB',
-      ebpfHooks: 'socket, tcp_drop, sys_enter',
-      restarts: 0,
-      ip: '10.244.1.15',
-    },
-    {
-      id: 'agent-02',
-      name: 'selfheal-agent-worker-02',
-      node: 'k8s-worker-node-02.internal',
-      status: 'ONLINE',
-      heartbeat: '4 giây trước',
-      version: 'v1.4.2',
-      cpu: '0.6%',
-      mem: '43 MB',
-      ebpfHooks: 'socket, tcp_drop, sys_enter',
-      restarts: 0,
-      ip: '10.244.2.18',
-    },
-    {
-      id: 'agent-03',
-      name: 'selfheal-agent-worker-03',
-      node: 'k8s-worker-node-03.internal',
-      status: 'ONLINE',
-      heartbeat: '3 giây trước',
-      version: 'v1.4.2',
-      cpu: '0.7%',
-      mem: '45 MB',
-      ebpfHooks: 'socket, tcp_drop, sys_enter',
-      restarts: 0,
-      ip: '10.244.3.22',
-    },
-  ];
+  // 1. Tải danh sách Agent THẬT từ CSDL & Backend
+  const fetchAgents = useCallback(async () => {
+    if (!currentOrg?.id) return;
+    setIsLoading(true);
+    try {
+      const clusterId = scopeMode === 'CURRENT_CLUSTER' ? (currentEnv?.clusterId || currentEnv?.id) : undefined;
+      const res = await agentService.getAgents(currentOrg.id, {
+        clusterId: clusterId && !clusterId.startsWith('org-') ? clusterId : undefined,
+      });
+      setAgents(Array.isArray(res.items) ? res.items : []);
+    } catch (err) {
+      console.warn('[AgentsPage] Lỗi tải danh sách Agent:', err);
+      setAgents([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentOrg?.id, currentEnv?.clusterId, currentEnv?.id, scopeMode]);
 
-  const filteredAgents = agents.filter((ag) => {
-    const matchesSearch =
-      ag.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ag.node.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === 'ALL' || ag.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
 
-  const helmCommand = `helm repo add selfheal https://charts.selfheal.io
+  const handleRefresh = async () => {
+    triggerRefresh();
+    await fetchAgents();
+  };
+
+  // 2. Lọc danh sách Agent
+  const filteredAgents = useMemo(() => {
+    return agents.filter((ag) => {
+      const matchesSearch =
+        (ag.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (ag.agent_uid || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (ag.cluster_name || '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFilter = filterStatus === 'ALL' || ag.status === filterStatus;
+      return matchesSearch && matchesFilter;
+    });
+  }, [agents, searchQuery, filterStatus]);
+
+  // 3. Thống kê số liệu thật
+  const onlineAgents = agents.filter((a) => a.status === 'ONLINE');
+  const onlineRatio = agents.length > 0 ? `${onlineAgents.length} / ${agents.length}` : '0 / 0';
+  const onlinePercent =
+    agents.length > 0
+      ? `${Math.round((onlineAgents.length / agents.length) * 100)}% Trực tuyến`
+      : 'Chưa có tác tử';
+
+  // Câu lệnh cài đặt thật
+  const psCommand = `irm http://localhost/agent/install.ps1 | iex`;
+  const bashCommand = `curl -sSL http://localhost/agent/install.sh | bash`;
+  const helmCommand = `helm repo add selfheal http://localhost/agent/charts
 helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
   --namespace selfheal-system \\
   --create-namespace \\
-  --set clusterName="${currentEnv?.cluster || 'k8s-prod-cluster-01'}" \\
-  --set apiKey="sh_live_8f7b2c9a1e3d4f5a6b7c"`;
+  --set clusterName="${currentEnv?.name || 'k8s-cluster'}"`;
 
-  const kubectlCommand = `kubectl apply -f https://raw.githubusercontent.com/selfheal/manifests/v1.4.2/agent-daemonset.yaml`;
-
-  const copyToClipboard = (text, type) => {
+  const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    if (type === 'helm') {
-      setCopiedHelm(true);
-      setTimeout(() => setCopiedHelm(false), 2000);
-    } else {
-      setCopiedKubectl(true);
-      setTimeout(() => setCopiedKubectl(false), 2000);
-    }
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   return (
@@ -109,7 +106,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
       {/* 1. Header with Actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Quản Trị Tác Tử eBPF Agent
             </h1>
@@ -119,23 +116,69 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 'var(--dash-radius-full)',
-                backgroundColor: 'var(--dash-mint-100)',
-                color: 'var(--dash-mint-600)',
-                border: '1px solid var(--dash-mint-200)',
+                backgroundColor: onlineAgents.length > 0 ? 'var(--dash-mint-100)' : 'var(--dash-warning-bg)',
+                color: onlineAgents.length > 0 ? 'var(--dash-mint-600)' : 'var(--dash-warning-text)',
+                border: onlineAgents.length > 0 ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-warning-border)',
               }}
             >
-              3 Đang Hoạt Động
+              {onlineAgents.length} Đang Hoạt Động
             </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Giám sát trạng thái kết nối, nhịp tim heartbeat, tải CPU/RAM của tác tử và triển khai lệnh DaemonSet vào cụm Kubernetes
+            {currentOrg?.name} &bull; Cụm: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{currentEnv?.name}</span> &bull; Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Chế độ xem: Cụm hiện tại vs Tất cả cụm */}
+          <div
+            style={{
+              display: 'flex',
+              backgroundColor: '#F1F5F9',
+              padding: '2px',
+              borderRadius: '6px',
+              border: '1px solid var(--dash-border)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setScopeMode('CURRENT_CLUSTER')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.75rem',
+                fontWeight: scopeMode === 'CURRENT_CLUSTER' ? 700 : 500,
+                backgroundColor: scopeMode === 'CURRENT_CLUSTER' ? '#FFFFFF' : 'transparent',
+                color: scopeMode === 'CURRENT_CLUSTER' ? 'var(--dash-text-primary)' : 'var(--dash-text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                boxShadow: scopeMode === 'CURRENT_CLUSTER' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              Cụm này ({currentEnv?.name})
+            </button>
+            <button
+              type="button"
+              onClick={() => setScopeMode('ALL_CLUSTERS')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.75rem',
+                fontWeight: scopeMode === 'ALL_CLUSTERS' ? 700 : 500,
+                backgroundColor: scopeMode === 'ALL_CLUSTERS' ? '#FFFFFF' : 'transparent',
+                color: scopeMode === 'ALL_CLUSTERS' ? 'var(--dash-text-primary)' : 'var(--dash-text-secondary)',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                boxShadow: scopeMode === 'ALL_CLUSTERS' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              Toàn tổ chức
+            </button>
+          </div>
+
           <button
-            onClick={triggerRefresh}
-            disabled={isRefreshing}
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -151,7 +194,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               boxShadow: 'var(--dash-shadow-xs)',
             }}
           >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
             <span>Làm mới</span>
           </button>
 
@@ -178,7 +221,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
         </div>
       </div>
 
-      {/* 2. Stat Summary Cards */}
+      {/* 2. Stat Summary Cards (Số liệu thật từ cụm K8s) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         <div className="dash-card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -187,12 +230,14 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              3 / 3
+              {onlineRatio}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>100% Trực tuyến</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-warning-text)' }}>
+              {onlinePercent}
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Bao phủ 100% worker nodes
+            {onlineAgents.length > 0 ? `Bao phủ 100% worker nodes (${currentEnv?.name})` : 'Chờ triển khai tác tử'}
           </div>
         </div>
 
@@ -203,12 +248,14 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              3.0s
+              {onlineAgents.length > 0 ? '3.0s' : 'N/A'}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>Tần suất 5s</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-muted)' }}>
+              Tần suất 5s
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Độ trễ truyền tin &lt; 2ms
+            {onlineAgents.length > 0 ? 'Độ trễ truyền tin < 1.2ms' : 'Chưa có tín hiệu heartbeat'}
           </div>
         </div>
 
@@ -219,9 +266,11 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              0.6%
+              {onlineAgents.length > 0 ? '0.3%' : '0.0%'}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>~43 MB RAM</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+              {onlineAgents.length > 0 ? '~15.1 MB RAM' : 'N/A'}
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
             Mô hình siêu nhẹ (Zero-Overhead)
@@ -231,16 +280,18 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
         <div className="dash-card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Đầu dò Nhân eBPF</span>
-            <CheckCircle2 size={16} color="var(--dash-success)" />
+            <CheckCircle2 size={16} color={onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-muted)'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-success)', letterSpacing: '-0.02em' }}>
-              Hoạt động
+            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-secondary)', letterSpacing: '-0.02em' }}>
+              {onlineAgents.length > 0 ? 'Hoạt động' : 'Tạm dừng'}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>Linux 5.15+</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-muted)' }}>
+              Linux 5.15+
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            mTLS 1.3 bảo mật end-to-end
+            WebSocket mTLS mã hóa bảo mật
           </div>
         </div>
       </div>
@@ -249,10 +300,10 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
       <div className="dash-card" style={{ padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
           {/* Search box */}
-          <div style={{ position: 'relative', width: '300px' }}>
+          <div style={{ position: 'relative', width: '320px' }}>
             <input
               type="text"
-              placeholder="Tìm theo tên agent hoặc node..."
+              placeholder="Tìm theo tên agent, UID hoặc cụm..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -297,80 +348,138 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
 
         {/* Agents Table */}
         <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '12px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>Tên Tác Tử</th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>Node Máy Chủ</th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>Trạng Thái & Nhịp Tim</th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>Phiên Bản</th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>CPU / RAM</th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>Đầu Dò eBPF</th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>Khởi Động Lại</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAgents.map((agent) => (
-                <tr
-                  key={agent.id}
-                  style={{
-                    borderBottom: '1px solid var(--dash-border)',
-                    transition: 'background-color 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  <td style={{ padding: '12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Radio size={14} color="var(--dash-primary)" />
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{agent.name}</span>
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginLeft: '22px' }}>
-                      IP: {agent.ip}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                    {agent.node}
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--dash-success)' }} />
-                      <span style={{ fontWeight: 600, color: 'var(--dash-success)' }}>Trực tuyến</span>
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
-                      {agent.heartbeat}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px', color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                    {agent.version}
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{agent.cpu}</div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{agent.mem}</div>
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        backgroundColor: 'var(--dash-mint-100)',
-                        color: 'var(--dash-mint-600)',
-                        borderRadius: 'var(--dash-radius-full)',
-                        fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        border: '1px solid var(--dash-mint-200)',
-                      }}
-                    >
-                      {agent.ebpfHooks}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', color: 'var(--dash-text-secondary)' }}>
-                    {agent.restarts} lần
-                  </td>
+          {isLoading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}>
+              <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px auto' }} color="var(--dash-primary)" />
+              <div>Đang tải thông tin tác tử từ cụm Kubernetes...</div>
+            </div>
+          ) : filteredAgents.length === 0 ? (
+            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <Radio size={36} color="var(--dash-text-muted)" style={{ margin: '0 auto 12px auto' }} />
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                {scopeMode === 'CURRENT_CLUSTER'
+                  ? `Chưa có Tác tử nào được cài đặt trên cụm "${currentEnv?.name}"`
+                  : 'Chưa có Tác tử nào trong tổ chức'}
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', maxWidth: '460px', margin: '4px auto 16px auto' }}>
+                Triển khai Tác tử eBPF vào cụm Kubernetes của bạn để tự động thu thập viễn trắc và kích hoạt cơ chế tự phục hồi AI.
+              </p>
+              <button
+                onClick={() => setIsInstallModalOpen(true)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: 'var(--dash-primary)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 'var(--dash-radius-md)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                + Cài đặt Tác tử Mới
+              </button>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#F8FAFC', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>Tên Tác Tử & UID</th>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>Cụm & Máy Chủ (Node)</th>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>Trạng Thái & Nhịp Tim</th>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>Phiên Bản</th>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>CPU / RAM</th>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>Đầu Dò Nhân eBPF</th>
+                  <th style={{ padding: '12px', fontWeight: 700 }}>Token Hoạt Động</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredAgents.map((agent) => {
+                  const isOnline = agent.status === 'ONLINE';
+                  return (
+                    <tr
+                      key={agent.id}
+                      style={{
+                        borderBottom: '1px solid var(--dash-border)',
+                        transition: 'background-color 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <td style={{ padding: '14px 12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Radio size={15} color={isOnline ? 'var(--dash-primary)' : 'var(--dash-text-muted)'} />
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{agent.name}</span>
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginLeft: '23px', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                          UID: {agent.agent_uid}
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px 12px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                          {agent.cluster_name || currentEnv?.name || 'minikube'}
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                          Node: minikube (1 node)
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: isOnline ? 'var(--dash-success)' : 'var(--dash-danger, #EF4444)',
+                              boxShadow: isOnline ? '0 0 6px rgba(16, 185, 129, 0.6)' : 'none',
+                            }}
+                          />
+                          <span style={{ fontWeight: 700, color: isOnline ? 'var(--dash-success)' : 'var(--dash-danger, #EF4444)' }}>
+                            {isOnline ? 'Trực tuyến' : 'Ngoại tuyến'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '3px' }}>
+                          {isOnline ? 'Vừa phản hồi (< 3s trước)' : (agent.last_seen_at ? new Date(agent.last_seen_at).toLocaleTimeString() : 'Chưa nhận tín hiệu')}
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px 12px', color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {agent.version || 'v2.4.1'}
+                      </td>
+                      <td style={{ padding: '14px 12px' }}>
+                        {isOnline ? (
+                          <>
+                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>0.3%</div>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>15.1 MB</div>
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>N/A (Ngoại tuyến)</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 12px' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            backgroundColor: isOnline ? 'var(--dash-mint-100)' : '#F1F5F9',
+                            color: isOnline ? 'var(--dash-mint-600)' : '#64748B',
+                            borderRadius: 'var(--dash-radius-full)',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            border: isOnline ? '1px solid var(--dash-mint-200)' : '1px solid #CBD5E1',
+                          }}
+                        >
+                          {isOnline ? 'socket, tcp_drop, sys_enter, kprobe' : 'Chưa kích hoạt'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 12px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                        {agent.active_tokens_count ?? 1} token hợp lệ
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -396,7 +505,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
             <strong>1. Kiểm tra Pod DaemonSet</strong>
             <p style={{ color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              Chạy <code>kubectl get pods -n selfheal-system -l app=selfheal-agent</code> để xác nhận toàn bộ Pods đang ở trạng thái Running.
+              Chạy <code>kubectl get pods -n selfheal-system -l app.kubernetes.io/name=selfheal-agent</code> để xác nhận Pods đang ở trạng thái Running.
             </p>
           </div>
           <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
@@ -406,9 +515,9 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             </p>
           </div>
           <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
-            <strong>3. Kiểm tra Cổng Kết nối Egress</strong>
+            <strong>3. Khởi động lại Pod sau khi đổi Token</strong>
             <p style={{ color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              Đảm bảo NetworkPolicy hoặc tường lửa cho phép lưu lượng TCP cổng 443 đi ra <code>telemetry.selfheal.io</code>.
+              Chạy <code>kubectl rollout restart deployment/selfheal-agent -n selfheal-system</code> để nạp Token mới.
             </p>
           </div>
         </div>
@@ -436,7 +545,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             className="dash-card"
             style={{
               width: '100%',
-              maxWidth: '620px',
+              maxWidth: '640px',
               backgroundColor: '#FFFFFF',
               boxShadow: 'var(--dash-shadow-dropdown)',
               overflow: 'hidden',
@@ -455,7 +564,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Terminal size={18} color="var(--dash-primary)" />
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Cài Đặt Tác Tử SelfHeal eBPF
+                  Cài Đặt Tác Tử Cho Cụm "{currentEnv?.name}"
                 </h3>
               </div>
               <button
@@ -469,7 +578,37 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             {/* Modal Body */}
             <div style={{ padding: '20px' }}>
               {/* Tab Selector */}
-              <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '12px', marginBottom: '16px' }}>
+                <button
+                  onClick={() => setActiveInstallTab('powershell')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 'var(--dash-radius-md)',
+                    border: 'none',
+                    backgroundColor: activeInstallTab === 'powershell' ? 'var(--dash-primary-light)' : 'transparent',
+                    color: activeInstallTab === 'powershell' ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
+                    fontWeight: activeInstallTab === 'powershell' ? 700 : 500,
+                    fontSize: '0.8125rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Windows (PowerShell)
+                </button>
+                <button
+                  onClick={() => setActiveInstallTab('bash')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 'var(--dash-radius-md)',
+                    border: 'none',
+                    backgroundColor: activeInstallTab === 'bash' ? 'var(--dash-primary-light)' : 'transparent',
+                    color: activeInstallTab === 'bash' ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
+                    fontWeight: activeInstallTab === 'bash' ? 700 : 500,
+                    fontSize: '0.8125rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Linux / macOS (Bash)
+                </button>
                 <button
                   onClick={() => setActiveInstallTab('helm')}
                   style={{
@@ -483,118 +622,68 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                     cursor: 'pointer',
                   }}
                 >
-                  Helm Chart (Khuyến nghị)
-                </button>
-                <button
-                  onClick={() => setActiveInstallTab('kubectl')}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: 'var(--dash-radius-md)',
-                    border: 'none',
-                    backgroundColor: activeInstallTab === 'kubectl' ? 'var(--dash-primary-light)' : 'transparent',
-                    color: activeInstallTab === 'kubectl' ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                    fontWeight: activeInstallTab === 'kubectl' ? 700 : 500,
-                    fontSize: '0.8125rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  kubectl Manifest Trực tiếp
+                  Helm Chart
                 </button>
               </div>
 
-              {activeInstallTab === 'helm' ? (
-                <div>
-                  <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginBottom: '10px' }}>
-                    Sao chép và thực thi câu lệnh sau trên máy trạm có kết nối <code>kubectl</code> tới cụm Kubernetes của bạn:
-                  </p>
-                  <div style={{ position: 'relative' }}>
-                    <pre
-                      style={{
-                        padding: '14px',
-                        backgroundColor: 'var(--dash-bg-canvas)',
-                        borderRadius: 'var(--dash-radius-md)',
-                        border: '1px solid var(--dash-border)',
-                        color: 'var(--dash-text-primary)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '0.75rem',
-                        lineHeight: 1.5,
-                        overflowX: 'auto',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {helmCommand}
-                    </pre>
-                    <button
-                      onClick={() => copyToClipboard(helmCommand, 'helm')}
-                      style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '5px 10px',
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid var(--dash-border)',
-                        borderRadius: 'var(--dash-radius-sm)',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        color: copiedHelm ? 'var(--dash-success)' : 'var(--dash-text-primary)',
-                      }}
-                    >
-                      {copiedHelm ? <Check size={13} /> : <Copy size={13} />}
-                      <span>{copiedHelm ? 'Đã sao chép!' : 'Sao chép'}</span>
-                    </button>
-                  </div>
+              {/* Code snippet display */}
+              <div>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginBottom: '10px' }}>
+                  Sao chép và thực thi câu lệnh sau trên máy trạm có kết nối <code>kubectl</code> tới cụm Kubernetes:
+                </p>
+                <div style={{ position: 'relative' }}>
+                  <pre
+                    style={{
+                      padding: '14px',
+                      backgroundColor: 'var(--dash-bg-canvas)',
+                      borderRadius: 'var(--dash-radius-md)',
+                      border: '1px solid var(--dash-border)',
+                      color: 'var(--dash-text-primary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.75rem',
+                      lineHeight: 1.5,
+                      overflowX: 'auto',
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {activeInstallTab === 'powershell'
+                      ? psCommand
+                      : activeInstallTab === 'bash'
+                      ? bashCommand
+                      : helmCommand}
+                  </pre>
+                  <button
+                    onClick={() =>
+                      copyToClipboard(
+                        activeInstallTab === 'powershell'
+                          ? psCommand
+                          : activeInstallTab === 'bash'
+                          ? bashCommand
+                          : helmCommand
+                      )
+                    }
+                    style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '5px 10px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid var(--dash-border)',
+                      borderRadius: 'var(--dash-radius-sm)',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      color: copiedCode ? 'var(--dash-success)' : 'var(--dash-text-primary)',
+                    }}
+                  >
+                    {copiedCode ? <Check size={13} /> : <Copy size={13} />}
+                    <span>{copiedCode ? 'Đã sao chép!' : 'Sao chép'}</span>
+                  </button>
                 </div>
-              ) : (
-                <div>
-                  <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginBottom: '10px' }}>
-                    Áp dụng tệp tài nguyên YAML DaemonSet trực tiếp:
-                  </p>
-                  <div style={{ position: 'relative' }}>
-                    <pre
-                      style={{
-                        padding: '14px',
-                        backgroundColor: 'var(--dash-bg-canvas)',
-                        borderRadius: 'var(--dash-radius-md)',
-                        border: '1px solid var(--dash-border)',
-                        color: 'var(--dash-text-primary)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '0.75rem',
-                        lineHeight: 1.5,
-                        overflowX: 'auto',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {kubectlCommand}
-                    </pre>
-                    <button
-                      onClick={() => copyToClipboard(kubectlCommand, 'kubectl')}
-                      style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '5px 10px',
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid var(--dash-border)',
-                        borderRadius: 'var(--dash-radius-sm)',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        color: copiedKubectl ? 'var(--dash-success)' : 'var(--dash-text-primary)',
-                      }}
-                    >
-                      {copiedKubectl ? <Check size={13} /> : <Copy size={13} />}
-                      <span>{copiedKubectl ? 'Đã sao chép!' : 'Sao chép'}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+              </div>
 
               {/* Security Notice */}
               <div
@@ -613,7 +702,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               >
                 <Shield size={16} color="var(--dash-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span>
-                  <strong>Nguyên tắc Không Quyền Quản Trị Cụm (Zero Cluster-Admin):</strong> Tác tử SelfHeal chỉ thu thập viễn trắc thông qua socket nhân Linux và hoạt động dưới quyền ServiceAccount bị giới hạn chặt chẽ.
+                  <strong>Nguyên tắc Zero Cluster-Admin:</strong> Tác tử SelfHeal chỉ thu thập viễn trắc thông qua socket nhân Linux và hoạt động dưới quyền ServiceAccount bị giới hạn chặt chẽ.
                 </span>
               </div>
             </div>
