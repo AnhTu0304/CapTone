@@ -18,7 +18,9 @@
     "test:google": "tsx src/test/googleAuth.test.ts",
     "worker:email": "tsx src/workers/email.worker.ts",
     "test:invitation": "tsx src/test/organizationInvitation.test.ts",
-    "test:tenant": "tsx src/test/tenantIsolation.test.ts"
+    "test:tenant": "tsx src/test/tenantIsolation.test.ts",
+    "test:rbac": "tsx --test src/test/rbac.test.ts",
+    "test:rbac-matrix": "tsx --test src/test/rbacMatrix.test.ts"
   },
   "keywords": [
     "nodejs",

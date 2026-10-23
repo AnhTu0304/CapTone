@@ -2,16 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
+import { OrganizationMemberModel } from '../models/organizationMember.model';
 
 export class NodeController {
-  /**
-   * [GET] /api/v1/nodes
-   * [GET] /api/v1/clusters/:clusterId/nodes
-   * Lấy danh sách các máy chủ Nodes (theo cụm hoặc toàn hệ thống)
-   */
   public static async getNodes(req: Request, res: Response, next: NextFunction) {
     try {
       const clusterId = (req.params.clusterId || req.query.clusterId || req.query.cluster) as string | undefined;
+      const orgMember = (req as any).orgMember;
 
       let query = `
         SELECT 
@@ -33,14 +30,20 @@ export class NodeController {
           COUNT(p.id)::int AS pods_count
         FROM nodes n
         JOIN clusters c ON n.cluster_id = c.id
+        LEFT JOIN environments e ON c.environment_id = e.id
         LEFT JOIN pods p ON p.node_id = n.id AND p.deleted_at IS NULL
         WHERE c.deleted_at IS NULL
       `;
       const params: any[] = [];
 
+      if (orgMember && orgMember.roleCode !== 'SUPER_ADMIN') {
+        params.push(orgMember.organizationId);
+        query += ` AND e.organization_id = $${params.length}`;
+      }
+
       if (clusterId && !clusterId.startsWith('org-') && !clusterId.startsWith('sandbox-')) {
         params.push(clusterId);
-        query += ` AND (c.id::text = $1 OR c.name = $1)`;
+        query += ` AND (c.id::text = $${params.length} OR c.name = $${params.length})`;
       }
 
       query += ` GROUP BY n.id, c.name, c.status, c.provider ORDER BY c.name ASC, n.name ASC`;
@@ -52,19 +55,15 @@ export class NodeController {
     }
   }
 
-  /**
-   * [GET] /api/v1/nodes/:nodeId
-   * Lấy thông tin chi tiết một Node kèm danh sách Pods đang chạy trên Node
-   */
   public static async getNodeDetail(req: Request, res: Response, next: NextFunction) {
     try {
       const nodeId = req.params.nodeId || req.params.id;
       if (!nodeId) {
         throw new ApiError(400, 'Mã Node không hợp lệ');
       }
+      const orgMember = (req as any).orgMember;
 
-      const nodeRes = await pool.query(
-        `SELECT 
+      let query = `SELECT 
           n.id, 
           n.cluster_id,
           c.name AS cluster_name,
@@ -82,10 +81,17 @@ export class NodeController {
           n.updated_at
         FROM nodes n
         JOIN clusters c ON n.cluster_id = c.id
-        WHERE (n.id::text = $1 OR n.name = $1)
-        LIMIT 1`,
-        [nodeId]
-      );
+        LEFT JOIN environments e ON c.environment_id = e.id
+        WHERE (n.id::text = $1 OR n.name = $1) AND c.deleted_at IS NULL`;
+
+      const params: any[] = [nodeId];
+      if (orgMember && orgMember.roleCode !== 'SUPER_ADMIN') {
+        params.push(orgMember.organizationId);
+        query += ` AND e.organization_id = $${params.length}`;
+      }
+      query += ` LIMIT 1`;
+
+      const nodeRes = await pool.query(query, params);
 
       if (!nodeRes.rows[0]) {
         throw new ApiError(404, 'Không tìm thấy Node máy chủ');
@@ -93,7 +99,6 @@ export class NodeController {
 
       const node = nodeRes.rows[0];
 
-      // Lấy danh sách Pods trên Node
       const podsRes = await pool.query(
         `SELECT 
           p.id, 
@@ -128,21 +133,35 @@ export class NodeController {
     }
   }
 
-  /**
-   * [POST] /api/v1/nodes/:nodeId/drain
-   * Đề xuất / Thực thi tháo tải an toàn (Safe Drain) Node qua MAPE-K
-   */
   public static async drainNode(req: Request, res: Response, next: NextFunction) {
     try {
+      const user = (req as any).user;
       const nodeId = req.params.nodeId || req.params.id;
       const nodeRes = await pool.query(
-        `SELECT n.id, n.name, n.cluster_id, c.name as cluster_name FROM nodes n JOIN clusters c ON n.cluster_id = c.id WHERE n.id::text = $1 OR n.name = $1 LIMIT 1`,
+        `SELECT n.id, n.name, n.cluster_id, c.name as cluster_name, e.organization_id 
+         FROM nodes n 
+         JOIN clusters c ON n.cluster_id = c.id 
+         LEFT JOIN environments e ON c.environment_id = e.id 
+         WHERE (n.id::text = $1 OR n.name = $1) AND c.deleted_at IS NULL LIMIT 1`,
         [nodeId]
       );
       if (!nodeRes.rows[0]) {
         throw new ApiError(404, 'Không tìm thấy Node');
       }
       const node = nodeRes.rows[0];
+
+      const rawRoles: string[] = Array.isArray(user?.roles) ? user.roles : [user?.roles || ''];
+      const isPlatformAdmin = rawRoles.some((r: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+
+      if (!isPlatformAdmin) {
+        if (!node.organization_id) {
+          throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền thao tác trên Node này');
+        }
+        const member = await OrganizationMemberModel.findByOrgAndUser(node.organization_id, user.id);
+        if (!member || member.status !== 'ACTIVE' || !['SME_OWNER', 'DEVOPS'].includes(member.role_code.toUpperCase())) {
+          throw new ApiError(403, 'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức');
+        }
+      }
 
       return ApiResponse.success(
         res,

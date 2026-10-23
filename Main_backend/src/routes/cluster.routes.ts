@@ -63,8 +63,8 @@ router.delete(
   ClusterController.removeCluster
 );
 
-router.use('/:clusterId/nodes', nodeRoutes);
-router.use('/:clusterId/pods', podRoutes);
+router.use('/:clusterId/nodes', requireOrgMember, nodeRoutes);
+router.use('/:clusterId/pods', requireOrgMember, podRoutes);
 
 export const clusterRoutes = router;
 

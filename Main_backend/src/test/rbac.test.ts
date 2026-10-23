@@ -182,10 +182,16 @@ describe('RBAC Verification Suite (Admin, DevOps, Viewer)', () => {
       assert.match(res.data?.message, /Từ chối truy cập/i);
     });
 
-    test('1.4. Viewer is FORBIDDEN (403) from Detailed Telemetry Metrics Sequence', async () => {
-      const res = await requestApi('/api/v1/telemetry/services/svc-test/metrics-sequence', { token: viewerToken });
+    test('1.4. Viewer is FORBIDDEN (403) from Detailed Telemetry RCA Context', async () => {
+      const res = await requestApi('/api/v1/telemetry/services/svc-test/rca-context', { token: viewerToken });
       assert.strictEqual(res.status, 403);
       assert.match(res.data?.message, /Từ chối truy cập/i);
+    });
+
+    test('1.4b. Viewer CAN access Telemetry Metrics Sequence for Dashboard Charts (200 OK)', async () => {
+      const res = await requestApi('/api/v1/telemetry/services/svc-test/metrics-sequence', { token: viewerToken });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.data?.success, true);
     });
 
     test('1.5. Viewer is FORBIDDEN (403) from Rule Engine Thresholds & Configurations', async () => {
