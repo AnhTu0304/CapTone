@@ -26,6 +26,8 @@ describe('Tenant Data Isolation & Security Enforcement Suite [PB08 4.1]', () => 
 
   const clusterAId = 'f2000000-0000-0000-0000-000000000001';
   const clusterBId = 'f2000000-0000-0000-0000-000000000002';
+  const agentBId = 'a2000000-0000-0000-0000-000000000002';
+  const tokenBId = 'b2000000-0000-0000-0000-000000000002';
 
   let superAdminToken: string;
   let ownerAToken: string;
@@ -102,6 +104,20 @@ describe('Tenant Data Isolation & Security Enforcement Suite [PB08 4.1]', () => 
       [clusterAId, envAId, clusterBId, envBId]
     );
 
+    await pool.query(
+      `INSERT INTO agents (id, agent_uid, cluster_id, environment_id, name, status, created_at, updated_at)
+       VALUES ($1, 'uid-beta', $2, $3, 'agent-beta', 'ONLINE', NOW(), NOW())
+       ON CONFLICT (id) DO UPDATE SET cluster_id = EXCLUDED.cluster_id;`,
+      [agentBId, clusterBId, envBId]
+    );
+
+    await pool.query(
+      `INSERT INTO agent_tokens (id, agent_id, token_hash, token_prefix, created_at)
+       VALUES ($1, $2, 'hash_token_b', 'sh_live_sec_beta', NOW())
+       ON CONFLICT (id) DO NOTHING;`,
+      [tokenBId, agentBId]
+    );
+
     superAdminToken = jwt.sign(
       { id: superAdminId, email: 'superadmin.tenant@test.com', status: 'ACTIVE', roles: ['SUPER_ADMIN'] },
       config.jwt.secret,
@@ -145,6 +161,8 @@ describe('Tenant Data Isolation & Security Enforcement Suite [PB08 4.1]', () => 
     if (server) {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+    await pool.query(`DELETE FROM agent_tokens WHERE id = $1;`, [tokenBId]);
+    await pool.query(`DELETE FROM agents WHERE id = $1;`, [agentBId]);
     await pool.query(`DELETE FROM clusters WHERE id IN ($1, $2);`, [clusterAId, clusterBId]);
     await pool.query(`DELETE FROM environments WHERE id IN ($1, $2);`, [envAId, envBId]);
     await pool.query(`DELETE FROM organization_members WHERE organization_id IN ($1, $2);`, [orgAId, orgBId]);
@@ -312,5 +330,42 @@ describe('Tenant Data Isolation & Security Enforcement Suite [PB08 4.1]', () => 
       headers: { Authorization: `Bearer ${superAdminToken}` },
     });
     assert.strictEqual(resB.status, 200);
+  });
+
+  test('17. User A cannot create cluster in Org B environment (Returns 404/403 IDOR Prevention)', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/organizations/${orgAId}/clusters`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ownerAToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Malicious Cluster Across Tenants',
+        environment_id: envBId,
+      }),
+    });
+    assert.strictEqual(res.status, 404);
+
+    const checkRes = await pool.query(
+      `SELECT id FROM clusters WHERE name = 'Malicious Cluster Across Tenants'`
+    );
+    assert.strictEqual(checkRes.rowCount, 0);
+  });
+
+  test('18. User A cannot revoke Org B agent token via Org A cluster route (Returns 404 IDOR Prevention)', async () => {
+    const res = await fetch(
+      `${baseUrl}/api/v1/organizations/${orgAId}/clusters/${clusterAId}/tokens/${tokenBId}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ownerAToken}` },
+      }
+    );
+    assert.strictEqual(res.status, 404);
+
+    const checkRes = await pool.query(
+      `SELECT revoked_at FROM agent_tokens WHERE id = $1`,
+      [tokenBId]
+    );
+    assert.strictEqual(checkRes.rows[0].revoked_at, null);
   });
 });

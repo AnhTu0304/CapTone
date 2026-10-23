@@ -771,8 +771,15 @@ export class ClusterModel {
   ) {
     const db = client || pool;
     const res = await db.query(
-      `UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 RETURNING id`,
-      [tokenId]
+      `UPDATE agent_tokens
+       SET revoked_at = NOW()
+       WHERE id = $1
+         AND agent_id IN (
+           SELECT a.id FROM agents a
+           WHERE a.cluster_id IN (SELECT c.id FROM clusters c WHERE c.id::text = $2 OR c.name = $2)
+         )
+       RETURNING id`,
+      [tokenId, clusterId]
     );
     return (res.rowCount || 0) > 0;
   }

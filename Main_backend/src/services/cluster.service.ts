@@ -47,7 +47,11 @@ export class ClusterService {
     if (orgId) {
       await this.getClusterDetail(clusterId, orgId);
     }
-    return await ClusterModel.revokeAgentToken(clusterId, tokenId);
+    const revoked = await ClusterModel.revokeAgentToken(clusterId, tokenId);
+    if (!revoked) {
+      throw new ApiError(404, 'Không tìm thấy Token hoặc Token không thuộc cụm chỉ định');
+    }
+    return revoked;
   }
 
   public static async updateAgentConfig(clusterId: string, configData: any, orgId?: string) {
@@ -107,7 +111,12 @@ export class ClusterService {
 
     let envId = data.environment_id;
 
-    if (!envId) {
+    if (envId) {
+      const targetEnv = await EnvironmentModel.findById(envId);
+      if (!targetEnv || targetEnv.organization_id !== orgId) {
+        throw new ApiError(404, 'Môi trường không tồn tại hoặc không thuộc tổ chức');
+      }
+    } else {
       const activeEnv = await EnvironmentModel.findActiveByOrgId(orgId);
       if (activeEnv) {
         envId = activeEnv.id;
