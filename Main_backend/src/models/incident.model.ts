@@ -68,6 +68,31 @@ export class IncidentModel {
   }
 
   /**
+   * Find recent open incident for deduplication (prevents spamming duplicate incidents)
+   */
+  public static async findOpenIncident(
+    client: PoolClient,
+    environmentId: string,
+    targetId: string | null,
+    incidentType: string,
+    cooldownMinutes: number = 15
+  ): Promise<any | null> {
+    const query = `
+      SELECT id, status, created_at
+      FROM incidents
+      WHERE environment_id = $1
+        AND (target_id = $2 OR target_id IS NULL)
+        AND incident_type = $3
+        AND status IN ('OPEN', 'INVESTIGATING')
+        AND created_at >= NOW() - ($4 || ' minutes')::interval
+      ORDER BY created_at DESC
+      LIMIT 1;
+    `;
+    const res = await client.query(query, [environmentId, targetId, incidentType, cooldownMinutes]);
+    return res.rows[0] || null;
+  }
+
+  /**
    * List incidents with filtering and pagination
    */
   public static async findMany(params: {
@@ -115,12 +140,11 @@ export class IncidentModel {
         i.detected_at,
         i.started_at,
         i.resolved_at,
-        i.created_at,
-        i.updated_at
+        i.created_at
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON c.id = i.cluster_id
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
       ${whereClause}
       ORDER BY i.detected_at DESC
       LIMIT $${idx++} OFFSET $${idx++};
@@ -158,7 +182,6 @@ export class IncidentModel {
         i.started_at,
         i.resolved_at,
         i.created_at,
-        i.updated_at,
         r.id AS rca_id,
         r.root_cause_type,
         r.root_cause_description,
@@ -169,7 +192,7 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON c.id = i.cluster_id
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
       LEFT JOIN rca_analyses r ON r.incident_id = i.id
       WHERE i.id = $1
       LIMIT 1;
@@ -187,8 +210,7 @@ export class IncidentModel {
       UPDATE incidents
       SET 
         status = $1,
-        resolved_at = ${isResolved ? 'NOW()' : 'resolved_at'},
-        updated_at = NOW()
+        resolved_at = ${isResolved ? 'NOW()' : 'resolved_at'}
       WHERE id = $2
       RETURNING *;
     `;

@@ -18,27 +18,22 @@ interface AuthenticatedUiWebSocket extends WebSocket {
 const uiClients = new Set<AuthenticatedUiWebSocket>();
 
 const RESTRICTED_BROADCAST_TYPES = new Set([
-  'ai_prediction',
-  'incident',
-  'ai_recommendation',
   'log',
   'logs',
   'event',
   'events',
-  'raw_metric',
-  'raw_metrics',
 ]);
 
 function sanitizeSummaryForViewer(summary: any) {
   if (!summary) return summary;
   return {
     ...summary,
-    raw_metrics: [],
+    raw_metrics: summary.raw_metrics || [],
     logs: [],
     events: [],
-    incidents: [],
-    recommendations: [],
-    predictions: [],
+    incidents: summary.incidents || [],
+    recommendations: summary.recommendations || [],
+    predictions: summary.predictions || [],
   };
 }
 

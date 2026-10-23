@@ -7,6 +7,7 @@ import { broadcastTelemetryToUi } from './telemetryWebSocket';
 import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
 
 let activeAgentWss: WebSocketServer | null = null;
+const lastKnownRestartsByService: Record<string, number> = {};
 
 interface ExtWebSocket extends WebSocket {
   isAlive: boolean;
@@ -176,16 +177,21 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               }
             });
 
+            // Only trigger on pod restarts if restart count actually INCREASED
+            const prevRestarts = lastKnownRestartsByService[msg.data.service_id];
+            const hasNewRestart = prevRestarts !== undefined && msg.data.pod_restart_count > prevRestarts;
+            lastKnownRestartsByService[msg.data.service_id] = msg.data.pod_restart_count;
+
             // Trigger urgent AI diagnosis if metrics exceed anomaly thresholds
             if (
               msg.data.cpu >= 70 ||
               msg.data.http_5xx_rate >= 10 ||
-              msg.data.pod_restart_count > 0 ||
+              hasNewRestart ||
               msg.data.latency >= 1500
             ) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, Restarts: ${msg.data.pod_restart_count})`
+                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, New Restarts: +${hasNewRestart ? 1 : 0})`
               );
             }
 

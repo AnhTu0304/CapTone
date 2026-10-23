@@ -48,7 +48,7 @@ export class KubernetesEventModel {
   }
 
   /**
-   * Query Warning/Incident K8s events for RCA context
+   * Query Warning/Incident K8s events for RCA context (within active window)
    */
   public static async findWarningEventsByService(
     serviceId: string,
@@ -85,27 +85,8 @@ export class KubernetesEventModel {
       LIMIT $3;
     `;
 
-    let res = await pool.query(query, [serviceId, windowMinutes, limit]);
-
-    // Fallback: fetch recent events without time filter if empty
-    if (res.rows.length === 0) {
-      const fallbackQuery = `
-        SELECT 
-          event_type,
-          reason,
-          message,
-          first_seen_at,
-          last_seen_at,
-          count,
-          metadata->>'pod_name' as pod_name
-        FROM kubernetes_events
-        WHERE metadata->>'service_id' = $1
-        ORDER BY last_seen_at DESC
-        LIMIT $2;
-      `;
-      res = await pool.query(fallbackQuery, [serviceId, limit]);
-    }
-
+    const res = await pool.query(query, [serviceId, windowMinutes, limit]);
+    // Do NOT fall back to ancient events from past days; return [] if cluster is currently healthy!
     return res.rows;
   }
 
