@@ -83,6 +83,23 @@ export class AgentController {
   }
 
   /**
+   * [POST] /api/v1/organizations/:orgId/agents/:agentId/disconnect
+   * Ngắt kết nối Agent (chuyển sang OFFLINE và thu hồi token kết nối)
+   * Quyền: SME_OWNER, DEVOPS
+   */
+  public static async disconnect(req: Request, res: Response, next: NextFunction) {
+    try {
+      const orgId = req.params.orgId || req.params.id;
+      const agentId = req.params.agentId || req.params.id;
+      const userId = (req as any).user?.id;
+      const result = await AgentService.disconnectAgent(orgId, agentId, userId);
+      return ApiResponse.success(res, 'Ngắt kết nối Agent thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * [DELETE] /api/v1/organizations/:orgId/agents/:agentId
    * Xóa Agent khỏi hệ thống
    * Quyền: Chỉ duy nhất SME_OWNER
@@ -91,7 +108,9 @@ export class AgentController {
     try {
       const orgId = req.params.orgId || req.params.id;
       const agentId = req.params.agentId || req.params.id;
-      await AgentService.deleteAgent(orgId, agentId);
+      const userId = (req as any).user?.id;
+      const force = req.query.force === 'true' || req.body?.force === true;
+      await AgentService.deleteAgent(orgId, agentId, userId, force);
       return ApiResponse.success(res, 'Xóa Agent thành công', { id: agentId }, 200);
     } catch (error) {
       next(error);

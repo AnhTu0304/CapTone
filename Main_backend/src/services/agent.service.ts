@@ -398,14 +398,107 @@ export class AgentService {
   }
 
   /**
-   * Xóa Agent khỏi hệ thống
+   * Ngắt kết nối Agent (chuyển sang OFFLINE, thu hồi token hiện có, ngắt WebSocket)
    */
-  public static async deleteAgent(orgId: string, agentId: string) {
+  public static async disconnectAgent(orgId: string, agentId: string, userId?: string) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organization_id !== orgId) {
       throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
     }
 
+    if (agent.status === 'REVOKED') {
+      throw ApiError.badRequest('Không thể ngắt kết nối Agent đã bị thu hồi (REVOKED)');
+    }
+
+    // 1. Chuyển trạng thái sang OFFLINE
+    await pool.query(
+      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+      [agentId]
+    );
+
+    // 2. Thu hồi các token kết nối hiện thời để ngăn Agent tự kết nối lại trái phép
+    await AgentModel.revokeAllTokensByAgentId(agentId);
+
+    // 3. Ngắt phiên WebSocket đang mở
+    try {
+      const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+      disconnectAgentSession(agentId);
+    } catch {}
+
+    // 4. Ghi nhận audit log
+    try {
+      const { AuditService } = await import('./audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        user_id: userId || null,
+        actor_type: 'USER',
+        action: 'AGENT_DISCONNECTED',
+        reason_code: 'USER_DISCONNECTED',
+        resource_type: 'AGENT',
+        resource_id: agentId,
+        target_type: 'AGENT',
+        target_id: agentId,
+        description: `Người quản trị đã ngắt kết nối Agent [${agent.name}] và thu hồi token kết nối`,
+        status: 'SUCCESS',
+        before_data: { status: agent.status },
+        after_data: { status: 'OFFLINE' },
+      });
+    } catch (auditErr) {
+      console.warn('[AgentService] Failed to record disconnect audit log:', auditErr);
+    }
+
+    return {
+      id: agentId,
+      name: agent.name,
+      status: 'OFFLINE',
+      message: 'Ngắt kết nối Agent thành công (tất cả token hoạt động đã bị thu hồi)',
+    };
+  }
+
+  /**
+   * Xóa Agent khỏi hệ thống (kiểm tra an toàn nếu Agent đang ONLINE)
+   */
+  public static async deleteAgent(orgId: string, agentId: string, userId?: string, force?: boolean) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organization_id !== orgId) {
+      throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
+    }
+
+    // Bảo vệ: Chặn xóa Agent đang hoạt động ONLINE nếu không có xác nhận force=true
+    if (agent.status === 'ONLINE' && !force) {
+      throw ApiError.badRequest('Không thể xóa Agent khi đang hoạt động (ONLINE). Vui lòng ngắt kết nối Agent trước hoặc truyền cờ xác nhận force=true.');
+    }
+
+    // 1. Thu hồi toàn bộ token liên quan
+    await AgentModel.revokeAllTokensByAgentId(agentId);
+
+    // 2. Ngắt phiên WebSocket
+    try {
+      const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+      disconnectAgentSession(agentId);
+    } catch {}
+
+    // 3. Ghi audit log trước khi xóa
+    try {
+      const { AuditService } = await import('./audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        user_id: userId || null,
+        actor_type: 'USER',
+        action: 'AGENT_DELETED',
+        resource_type: 'AGENT',
+        resource_id: agentId,
+        target_type: 'AGENT',
+        target_id: agentId,
+        description: `Xóa Agent [${agent.name}] khỏi hệ thống`,
+        status: 'SUCCESS',
+        before_data: { status: agent.status, cluster_id: agent.cluster_id, environment_id: agent.environment_id },
+      });
+    } catch (auditErr) {
+      console.warn('[AgentService] Failed to record delete audit log:', auditErr);
+    }
+
+    // 4. Xóa Agent
     return await AgentModel.delete(agentId);
   }
 

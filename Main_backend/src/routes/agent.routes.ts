@@ -75,6 +75,19 @@ router.put(
 );
 
 /**
+ * [POST] /api/v1/organizations/:orgId/agents/:agentId/disconnect
+ * Ngắt kết nối Agent (chuyển sang OFFLINE và thu hồi token)
+ * Quyền: SME_OWNER, DEVOPS
+ */
+router.post(
+  '/:agentId/disconnect',
+  requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  validate(agentIdParamSchema),
+  AgentController.disconnect
+);
+
+/**
  * [POST] /api/v1/organizations/:orgId/agents/:agentId/revoke
  * Thu hồi Agent (chuyển sang REVOKED và vô hiệu hóa toàn bộ Token)
  * Quyền: SME_OWNER, DEVOPS
