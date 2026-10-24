@@ -159,7 +159,7 @@ export const AuditLogsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg.name} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv.name}</span> &bull; Bản ghi chuỗi khối SHA-256 chống chỉnh sửa theo chuẩn tuân thủ SOC2 và ISO 27001 cho SME
+            {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span> &bull; Bản ghi chuỗi khối SHA-256 chống chỉnh sửa theo chuẩn tuân thủ SOC2 và ISO 27001 cho SME
           </p>
         </div>
 

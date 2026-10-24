@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Layers,
   Search,
@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { useDebounce } from '../../../hooks/useDebounce';
+import { clusterService } from '../../../services/clusterService';
 
 const INITIAL_CLUSTERS = [
   {
@@ -120,6 +121,63 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
 
   const debouncedSearch = useDebounce(search, 250);
 
+  const fetchRealClusters = useCallback(async (showToast = false) => {
+    setIsRefreshing(true);
+    try {
+      const data = await clusterService.getAllClusters();
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map((c) => {
+          const agStatus = (c.agent_status || 'PENDING').toUpperCase();
+          const envRaw = (c.environment_type || c.environment_name || 'PRODUCTION').toUpperCase();
+          const environment = envRaw.includes('PROD')
+            ? 'Production'
+            : envRaw.includes('STAG')
+            ? 'Staging'
+            : 'Development';
+          const status =
+            agStatus === 'ONLINE'
+              ? 'READY'
+              : agStatus === 'PENDING' || agStatus === 'DEGRADED'
+              ? 'WARNING'
+              : 'CRITICAL';
+          return {
+            id: c.id,
+            name: c.name || 'k8s-cluster',
+            companyId: c.organization_id || 'org-default',
+            companyName: c.organization_name || 'Tổ chức Hệ thống',
+            environment,
+            region: c.provider ? `${c.provider} (${c.endpoint || 'Cluster API'})` : 'Kubernetes Cluster',
+            k8sVersion: c.kubernetes_version || 'v1.29.4',
+            status,
+            nodeCount: Number(c.nodes_count || 0),
+            podCount: Number(c.pods_count || 0),
+            agentStatus: agStatus,
+            agentVersion: c.agent_name || 'eBPF Daemon',
+            lastSync: c.last_heartbeat_at
+              ? new Date(c.last_heartbeat_at).toLocaleString('vi-VN')
+              : 'Chưa đồng bộ',
+          };
+        });
+        setClusters(mapped);
+        if (showToast) {
+          setToastMessage(`Đã đồng bộ trạng thái telemetry thực tế từ ${mapped.length} cụm Kubernetes!`);
+          setTimeout(() => setToastMessage(null), 3500);
+        }
+      } else if (showToast) {
+        setToastMessage(`Đã đồng bộ trạng thái telemetry từ ${clusters.length} cụm Kubernetes!`);
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } catch (err) {
+      console.warn('[AdminClusterOverviewPage] Lỗi đồng bộ cụm K8s:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [clusters.length]);
+
+  useEffect(() => {
+    fetchRealClusters(false);
+  }, [fetchRealClusters]);
+
   const filteredClusters = useMemo(() => {
     return clusters.filter((c) => {
       const matchSearch =
@@ -160,12 +218,7 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
   }, [clusters]);
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      setToastMessage('Đã đồng bộ trạng thái telemetry từ 34 cụm Kubernetes!');
-      setTimeout(() => setToastMessage(null), 3500);
-    }, 600);
+    fetchRealClusters(true);
   };
 
   return (

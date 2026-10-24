@@ -1,0 +1,43 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: selfheal-agent-role
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+    app.kubernetes.io/component: monitoring-agent
+rules:
+  # Least Privilege: Read-only access to Core resources for metrics & logs
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "namespaces", "events", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # Workload metadata
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Controlled Automated Remediation (used when ENABLE_HEALING_ACTIONS is true)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]
+  # Kubernetes Metrics Server access
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: selfheal-agent-rolebinding
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+    app.kubernetes.io/component: monitoring-agent
+subjects:
+  - kind: ServiceAccount
+    name: selfheal-agent-sa
+    namespace: selfheal-system
+roleRef:
+  kind: ClusterRole
+  name: selfheal-agent-role
+  apiGroup: rbac.authorization.k8s.io

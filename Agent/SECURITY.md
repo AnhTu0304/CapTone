@@ -8,9 +8,10 @@ Tài liệu này quy định các tiêu chuẩn an toàn thông tin và bảo m�
 
 SelfHeal Agent được thiết kế để giám sát và bảo vệ hạ tầng với mức quyền hạn thấp nhất có thể:
 
-- **KHÔNG cấp quyền `cluster-admin`**: Agent chỉ sử dụng ServiceAccount có quyền `get`, `list`, `watch` trên các tài nguyên cần thiết (`pods`, `pods/log`, `events`, `deployments`).
-- **Quyền Read-Only mặc định**: Bản phát hành tiêu chuẩn của Agent **chỉ đọc dữ liệu** (Metrics, Logs, Events) và tuyệt đối không có quyền sửa đổi hay xóa workload ứng dụng của công ty.
-- **Tự động phục hồi (Self-Healing Guard)**: Chức năng can thiệp tự động (`RESTART_POD`, `SCALE_REPLICAS`) **mặc định bị tắt (`ENABLE_HEALING_ACTIONS=false`)**. Doanh nghiệp chỉ kích hoạt khi đã kiểm duyệt và cấp quyền RoleBinding ghi cụ thể.
+- **KHÔNG cấp quyền `cluster-admin`**: Agent chỉ sử dụng ServiceAccount có quyền `get`, `list`, `watch` trên các tài nguyên cần thiết (`pods`, `pods/log`, `events`, `nodes`, `namespaces`, `services`, `deployments`, `replicasets`).
+- **Quyền Read-Only mặc định**: Bản phát hành tiêu chuẩn của Agent **chỉ đọc dữ liệu** (Metrics, Logs, Events) và tuyệt đối không có quyền sửa đổi hay xóa workload ứng dụng của doanh nghiệp.
+- **Tự động phục hồi có kiểm soát (Self-Healing Guard)**: Chức năng can thiệp tự động (`RESTART_POD`, `SCALE_REPLICAS`) **mặc định bị tắt (`ENABLE_HEALING_ACTIONS=false`)**. Doanh nghiệp chỉ kích hoạt khi đã kiểm duyệt và cấp quyền RoleBinding ghi (`patch`) cụ thể trên `apps/deployments` và `apps/deployments/scale`.
+- **Hỗ trợ Namespace-Scoped Role**: Cho phép triển khai qua Helm với `rbac.clusterScope=false` tạo `Role` và `RoleBinding` thu hẹp phạm vi trong 1 namespace duy nhất.
 
 ---
 
@@ -18,7 +19,7 @@ SelfHeal Agent được thiết kế để giám sát và bảo vệ hạ tầng
 
 - **Quản lý Token qua Kubernetes Secret**: `AGENT_TOKEN` được lưu trữ độc quyền trong Kubernetes Secret (`selfheal-agent-secret`) và inject vào Pod qua biến môi trường.
 - **Không lưu Token trong Image hoặc Git**: Dockerfile và Helm Chart không bao giờ chứa token mặc định. File `.dockerignore` và `.gitignore` chặn toàn bộ file `.env`.
-- **Tự động Redact trong Log**: Hệ thống ghi log (Pino Logger) được cấu hình tự động ẩn (`[REDACTED]`) các trường nhạy cảm (`token`, `password`, `secret`, `headers.x-agent-token`, `authorization`) trước khi ghi ra stdout.
+- **Tự động Redact trong Log**: Hệ thống ghi log được cấu hình tự động ẩn (`[REDACTED]`) các trường nhạy cảm (`token`, `password`, `secret`, `headers.x-agent-token`, `authorization`) trước khi ghi ra stdout.
 - **Không hiển thị Token trên Terminal**: Bộ cài đặt (`install-agent.sh` và `install-agent.ps1`) sử dụng cơ chế nhập mật khẩu ẩn (`stty -echo` / `SecureString`), đảm bảo token không bị lộ qua lịch sử Terminal (Bash history) hay danh sách tiến trình (`ps aux`).
 
 ---
@@ -33,9 +34,11 @@ SelfHeal Agent được thiết kế để giám sát và bảo vệ hạ tầng
 
 ## 4. Cô lập Tiến trình trong Container (Container Hardening)
 
-- **Chạy phi đặc quyền (Non-Root User)**: Container Agent chạy dưới người dùng `node` (UID 1000), không chạy bằng `root`.
-- **Chặn nâng quyền (Privilege Escalation)**: Thiết lập `allowPrivilegeEscalation: false` trong Kubernetes SecurityContext.
-- **Giới hạn tài nguyên (Resource Requests & Limits)**: Cấu hình mặc định CPU Limit 200m và Memory Limit 256Mi, ngăn chặn nguy cơ Agent chiếm dụng tài nguyên của ứng dụng nghiệp vụ khi cụm bị nghẽn.
+- **Chạy phi đặc quyền (Non-Root User)**: Container Agent chạy dưới người dùng `appuser` (UID 10001, GID 10001), không chạy bằng `root`.
+- **Hệ thống tệp chỉ đọc (Read-Only Root Filesystem)**: Kích hoạt `readOnlyRootFilesystem: true` cùng thư mục tạm `/tmp` mount qua `emptyDir`, ngăn chặn việc ghi đè mã nguồn hoặc cài cắm file thực thi độc hại.
+- **Loại bỏ đặc quyền Linux (Drop Capabilities)**: Cấu hình `capabilities.drop: ["ALL"]` và `allowPrivilegeEscalation: false` triệt tiêu mọi khả năng leo thang đặc quyền bên trong Pod.
+- **Hồ sơ Seccomp mặc định (RuntimeDefault Seccomp)**: Kích hoạt `seccompProfile.type: RuntimeDefault` tuân thủ chuẩn Kubernetes Pod Security Standards (PSS) cấp độ Restricted.
+- **Giới hạn tài nguyên (Resource Requests & Limits)**: Cấu hình mặc định CPU Request 50m / Limit 200m và Memory Request 64Mi / Limit 256Mi, ngăn chặn nguy cơ Agent chiếm dụng tài nguyên của ứng dụng nghiệp vụ khi cụm bị nghẽn.
 
 ---
 

@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
+import { ApiError } from '../utils/apiError';
 
 export type AgentStatus = 'PENDING' | 'ONLINE' | 'OFFLINE' | 'REVOKED';
 
@@ -23,8 +24,12 @@ export interface IAgentDetail extends IAgent {
   environment_code?: string;
   environment_type?: string;
   organization_id?: string;
+  organization_name?: string;
   cluster_name?: string | null;
   active_tokens_count?: number;
+  active_token_prefix?: string | null;
+  active_token_expires_at?: Date | null;
+  active_token_last_used_at?: Date | null;
   last_latency_ms?: number | null;
 }
 
@@ -79,24 +84,19 @@ export class AgentModel {
    */
   public static async findByTokenHash(tokenHash: string, rawToken: string) {
     const cleanToken = rawToken ? rawToken.trim() : '';
-    const tokenHex = cleanToken.startsWith('sh_live_sec_')
-      ? cleanToken.replace('sh_live_sec_', '').split('_')[0]
-      : cleanToken;
 
     const result = await pool.query(
-      `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id
+      `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id, e.organization_id
        FROM agent_tokens t
        JOIN agents a ON a.id = t.agent_id
-       WHERE (
-         t.token_hash = $1 
-         OR t.token_hash = $2 
-         OR (length($3) >= 12 AND t.token_hash LIKE $3 || '%')
-       )
+       LEFT JOIN environments e ON a.environment_id = e.id
+       WHERE (t.token_hash = $1 OR t.token_hash = $2)
          AND (t.expires_at IS NULL OR t.expires_at > NOW())
          AND t.revoked_at IS NULL
          AND a.revoked_at IS NULL
+         AND a.status != 'REVOKED'
        LIMIT 1`,
-      [tokenHash, cleanToken, tokenHex]
+      [tokenHash, cleanToken]
     );
     return result.rows[0] || null;
   }
@@ -124,7 +124,7 @@ export class AgentModel {
       const agentRes = await pool.query(
         `SELECT a.id, a.cluster_id, c.id AS actual_cluster_id, c.name AS cluster_name
          FROM agents a
-         LEFT JOIN clusters c ON (c.id::text = a.cluster_id OR c.cluster_uid = a.cluster_id)
+         LEFT JOIN clusters c ON (c.id::text = a.cluster_id::text OR c.cluster_uid = a.cluster_id::text)
          WHERE a.id = $1`,
         [agentId]
       );
@@ -242,12 +242,34 @@ export class AgentModel {
         e.code AS environment_code,
         e.environment_type AS environment_type,
         e.organization_id AS organization_id,
+        o.name AS organization_name,
         c.name AS cluster_name,
         (
           SELECT COUNT(*)::int 
           FROM agent_tokens t 
           WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
         ) AS active_tokens_count,
+        (
+          SELECT t.token_prefix 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_prefix,
+        (
+          SELECT t.expires_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_expires_at,
+        (
+          SELECT t.last_used_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_last_used_at,
         (
           SELECT h.latency_ms 
           FROM agent_heartbeats h 
@@ -257,7 +279,8 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
-      LEFT JOIN clusters c ON a.cluster_id = c.id::text
+      LEFT JOIN organizations o ON e.organization_id = o.id
+      LEFT JOIN clusters c ON a.cluster_id::text = c.id::text
       WHERE a.id = $1
       LIMIT 1;
     `;
@@ -337,12 +360,34 @@ export class AgentModel {
         e.code AS environment_code,
         e.environment_type AS environment_type,
         e.organization_id AS organization_id,
+        o.name AS organization_name,
         c.name AS cluster_name,
         (
           SELECT COUNT(*)::int 
           FROM agent_tokens t 
           WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
         ) AS active_tokens_count,
+        (
+          SELECT t.token_prefix 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_prefix,
+        (
+          SELECT t.expires_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_expires_at,
+        (
+          SELECT t.last_used_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_last_used_at,
         (
           SELECT h.latency_ms 
           FROM agent_heartbeats h 
@@ -352,7 +397,8 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
-      LEFT JOIN clusters c ON a.cluster_id = c.id::text
+      LEFT JOIN organizations o ON e.organization_id = o.id
+      LEFT JOIN clusters c ON a.cluster_id::text = c.id::text
       ${whereClause}
       ORDER BY 
         CASE 
@@ -464,14 +510,16 @@ export class AgentModel {
     const db = client || pool;
     const query = `
       INSERT INTO agent_tokens (
-        agent_id, token_hash, expires_at, created_at
+        agent_id, token_hash, token_prefix, created_by, expires_at, created_at
       ) VALUES (
-        $1, $2, $3, NOW()
+        $1, $2, $3, $4, $5, NOW()
       ) RETURNING *;
     `;
     const values = [
       data.agent_id,
       data.token_hash,
+      data.token_prefix || null,
+      data.created_by || null,
       data.expires_at || null,
     ];
     const res = await db.query<IAgentToken>(query, values);
@@ -485,7 +533,7 @@ export class AgentModel {
     const db = client || pool;
     const query = `
       SELECT 
-        id, agent_id, expires_at, last_used_at, revoked_at, created_at,
+        id, agent_id, token_prefix, expires_at, last_used_at, revoked_at, created_at,
         (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS is_active
       FROM agent_tokens
       WHERE agent_id = $1
@@ -540,6 +588,24 @@ export class AgentModel {
     client?: PoolClient
   ): Promise<IAgentHeartbeat> {
     const db = client || pool;
+
+    // 1. Cập nhật trạng thái Agent sang ONLINE, cập nhật version nếu có, và đảm bảo last_seen_at tăng đơn điệu
+    const updateRes = await db.query<IAgent>(
+      `UPDATE agents 
+       SET status = 'ONLINE', 
+           last_seen_at = GREATEST(COALESCE(last_seen_at, '1970-01-01'::timestamptz), NOW()),
+           version = COALESCE($2, version),
+           updated_at = NOW() 
+       WHERE id = $1 AND status != 'REVOKED'
+       RETURNING *;`,
+      [agentId, data.agent_version || null]
+    );
+
+    if (updateRes.rowCount === 0) {
+      throw ApiError.unauthorized('Agent không tồn tại hoặc đã bị thu hồi');
+    }
+
+    // 2. Ghi nhận Heartbeat chi tiết
     const query = `
       INSERT INTO agent_heartbeats (
         agent_id, status, agent_version, latency_ms, metadata, reported_at
@@ -555,14 +621,6 @@ export class AgentModel {
       data.metadata ? JSON.stringify(data.metadata) : null,
     ];
     const res = await db.query<IAgentHeartbeat>(query, values);
-
-    // Đồng thời cập nhật trạng thái Agent sang ONLINE & last_seen_at = NOW()
-    await db.query(
-      `UPDATE agents 
-       SET status = 'ONLINE', last_seen_at = NOW(), updated_at = NOW() 
-       WHERE id = $1 AND status != 'REVOKED';`,
-      [agentId]
-    );
 
     return res.rows[0];
   }
@@ -585,6 +643,35 @@ export class AgentModel {
       LIMIT $2;
     `;
     const res = await db.query<IAgentHeartbeat>(query, [agentId, safeLimit]);
+    return res.rows;
+  }
+
+  /**
+   * Đánh dấu các Agent quá hạn heartbeat chuyển từ ONLINE sang OFFLINE
+   * Hoạt động nguyên tử và trả về danh sách Agent thực sự bị chuyển trạng thái kèm organization_id
+   */
+  public static async markStaleAgentsOffline(
+    timeoutSeconds: number = 45,
+    client?: PoolClient
+  ): Promise<Array<IAgentDetail & { previous_status: string }>> {
+    const db = client || pool;
+    const safeTimeout = Math.max(1, timeoutSeconds);
+
+    const query = `
+      UPDATE agents a
+      SET status = 'OFFLINE',
+          updated_at = NOW()
+      WHERE a.status = 'ONLINE'
+        AND a.last_seen_at IS NOT NULL
+        AND a.last_seen_at < NOW() - ($1 || ' seconds')::INTERVAL
+      RETURNING 
+        a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, 
+        a.status, a.version, a.last_seen_at, a.updated_at,
+        'ONLINE'::VARCHAR AS previous_status,
+        (SELECT organization_id FROM environments WHERE id = a.environment_id) AS organization_id;
+    `;
+
+    const res = await db.query(query, [safeTimeout]);
     return res.rows;
   }
 }

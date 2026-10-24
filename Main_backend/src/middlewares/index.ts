@@ -6,4 +6,4 @@ export * from './notFound.middleware';
 export * from './orgAuth.middleware';
 export * from './rateLimit.middleware';
 export * from './tenant.middleware';
-
+export * from './agentAuth.middleware';

@@ -23,7 +23,14 @@
     "test:rbac-matrix": "tsx --test src/test/rbacMatrix.test.ts",
     "test:audit": "tsx --test src/test/auditLogging.test.ts",
     "worker:audit-retention": "tsx src/workers/auditRetention.worker.ts",
-    "test:retention": "tsx --test src/test/auditRetention.test.ts"
+    "test:retention": "tsx --test src/test/auditRetention.test.ts",
+    "test:agent-lifecycle": "tsx --test src/test/agentLifecycle.test.ts",
+    "test:agent-auth": "tsx --test src/test/agentAuth.test.ts",
+    "test:agent-heartbeat": "tsx --test src/test/agentHeartbeatApi.test.ts",
+    "worker:agent-timeout": "tsx src/workers/agentTimeout.worker.ts",
+    "test:agent-timeout": "tsx --test src/test/agentTimeoutStatus.test.ts",
+    "test:cluster": "tsx --test src/test/clusterManagement.test.ts",
+    "test:agent-disconnect": "tsx --test src/test/agentDisconnectDelete.test.ts"
   },
   "keywords": [
     "nodejs",

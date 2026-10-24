@@ -29,6 +29,7 @@ from selfheal_agent.telemetry.schemas import (
 from selfheal_agent.utils.logger import setup_logger
 from selfheal_agent.utils.redaction import mask_token
 from selfheal_agent.websocket_client import AgentWebSocketClient
+from selfheal_agent.heartbeat import AgentHeartbeatClient, HeartbeatState
 
 logger = logging.getLogger("selfheal_agent.main")
 
@@ -52,9 +53,10 @@ class AgentService:
         self.prom_collector = PrometheusCollector(config.PROMETHEUS_URL) if config.PROMETHEUS_URL else None
         self.metrics_manager = MetricsManager(self.custom_objects, self.prom_collector)
 
-        # WebSocket & Health Server
+        # WebSocket, Heartbeat & Health Server
         self.ws_client = AgentWebSocketClient(config)
         self.ws_client.add_message_handler(self._handle_incoming_ws_message)
+        self.heartbeat_client = AgentHeartbeatClient(config)
         self._init_health_server()
 
         self._tasks: list[asyncio.Task[None]] = []
@@ -94,9 +96,17 @@ class AgentService:
         return web.json_response({"status": "alive", "service": "selfheal-agent"})
 
     async def _handle_readiness(self, request: web.Request) -> web.Response:
-        if self.ws_client.is_authenticated:
-            return web.json_response({"status": "ready", "authenticated": True})
-        return web.json_response({"status": "not_ready", "authenticated": False}, status=503)
+        if self.ws_client.is_authenticated and self.heartbeat_client.state != HeartbeatState.UNAUTHORIZED:
+            return web.json_response({
+                "status": "ready",
+                "authenticated": True,
+                "heartbeat": self.heartbeat_client.state.value,
+            })
+        return web.json_response({
+            "status": "not_ready",
+            "authenticated": self.ws_client.is_authenticated,
+            "heartbeat": self.heartbeat_client.state.value,
+        }, status=503)
 
     async def start(self) -> None:
         """Start all services and background loops."""
@@ -109,8 +119,9 @@ class AgentService:
         await self._site.start()
         logger.info("🩺 Health probe server running on http://0.0.0.0:%d", self.config.HEALTH_PORT)
 
-        # Start WebSocket transport
+        # Start WebSocket transport and HTTP heartbeat scheduler
         await self.ws_client.start()
+        await self.heartbeat_client.start()
 
         # Start telemetry tasks
         self._tasks.append(asyncio.create_task(self._metrics_loop(), name="metrics_loop"))
@@ -134,6 +145,7 @@ class AgentService:
         if self.prom_collector:
             await self.prom_collector.close()
 
+        await self.heartbeat_client.stop()
         await self.ws_client.stop()
 
         if self._runner is not None:

@@ -104,6 +104,7 @@ export const agentHeartbeatSchema = z.object({
     latency_ms: z.coerce.number().int().min(0, 'Độ trễ latency không được âm').optional().nullable(),
     agent_version: z.string().trim().max(50).optional().nullable(),
     status: agentStatusEnum.optional().default('ONLINE'),
+    timestamp: z.string().datetime({ offset: true }).optional().nullable(),
     metadata: z.record(z.string(), z.any()).optional().nullable(),
   }),
 });

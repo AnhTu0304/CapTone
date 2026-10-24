@@ -12,6 +12,10 @@ class AgentConfig(BaseSettings):
         ...,
         description="SelfHeal Main Backend WebSocket URL (ws://... or wss://...)",
     )
+    AGENT_HTTP_URL: Optional[str] = Field(
+        default=None,
+        description="Explicit Backend HTTP base URL (e.g. http://backend:5000). If omitted, derived from AGENT_SERVER_URL.",
+    )
     AGENT_TOKEN: str = Field(
         ...,
         description="Pre-shared authentication token granted by SelfHeal",
@@ -27,6 +31,33 @@ class AgentConfig(BaseSettings):
     ENVIRONMENT_ID: Optional[str] = Field(
         default=None,
         description="Optional environment identifier",
+    )
+    HEARTBEAT_INTERVAL_SECONDS: float = Field(
+        default=15.0,
+        ge=1.0,
+        description="Heartbeat transmission interval in seconds (default: 15s)",
+    )
+    HEARTBEAT_TIMEOUT_SECONDS: float = Field(
+        default=5.0,
+        ge=0.5,
+        description="HTTP request timeout in seconds for heartbeat (default: 5s)",
+    )
+    HEARTBEAT_MAX_RETRIES: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Maximum retry attempts per heartbeat cycle upon transient error",
+    )
+    HEARTBEAT_BACKOFF_FACTOR: float = Field(
+        default=1.5,
+        ge=1.0,
+        le=5.0,
+        description="Exponential backoff factor for heartbeat retries",
+    )
+    HEARTBEAT_MAX_BACKOFF_SECONDS: float = Field(
+        default=10.0,
+        ge=1.0,
+        description="Maximum backoff wait time in seconds",
     )
     METRICS_INTERVAL_MS: int = Field(
         default=5000,

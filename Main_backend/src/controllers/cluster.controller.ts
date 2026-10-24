@@ -114,7 +114,8 @@ export class ClusterController {
     try {
       const clusterId = req.params.clusterId || req.params.id;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
-      await ClusterService.removeCluster(clusterId, orgId);
+      const force = req.query.force === 'true' || req.body?.force === true;
+      await ClusterService.removeCluster(clusterId, orgId, force);
       return ApiResponse.success(res, 'Xóa cụm Kubernetes thành công', { id: clusterId }, 200);
     } catch (error) {
       next(error);

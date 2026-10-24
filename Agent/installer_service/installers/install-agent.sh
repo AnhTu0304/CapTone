@@ -176,6 +176,12 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
@@ -216,6 +222,10 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: selfheal-agent
           image: captone-agent:1.0.0
@@ -237,6 +247,8 @@ spec:
               value: "5000"
             - name: LOG_LEVEL
               value: "INFO"
+            - name: ENABLE_HEALING_ACTIONS
+              value: "false"
             - name: HEALTH_PORT
               value: "8080"
             - name: PYTHONUNBUFFERED
@@ -269,6 +281,18 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 EOF
 fi
 
@@ -280,6 +304,7 @@ echo ""
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}--- Kiểm tra trạng thái Pod ---${NC}"
 echo -e "  Chờ Pod khởi động và sẵn sàng..."
+kubectl rollout restart deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" >/dev/null 2>&1 || true
 kubectl rollout status deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" --timeout=60s
 
 echo ""

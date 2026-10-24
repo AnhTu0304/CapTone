@@ -1,10 +1,11 @@
 {{- if .Values.rbac.create -}}
+{{- if .Values.rbac.clusterScope }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-role
+  name: {{ include "selfheal-agent.fullname" . }}-role
   labels:
-    app.kubernetes.io/name: selfheal-agent
+    {{- include "selfheal-agent.labels" . | nindent 4 }}
 rules:
   # Least Privilege: Read-only access to Core resources for metrics & logs
   - apiGroups: [""]
@@ -14,6 +15,15 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]
     verbs: ["get", "list", "watch"]
+  {{- if .Values.config.enableHealingActions }}
+  # Controlled Automated Remediation (when ENABLE_HEALING_ACTIONS is enabled)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]
+  {{- end }}
   # Kubernetes Metrics Server access
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
@@ -22,15 +32,62 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Release.Name }}-rolebinding
+  name: {{ include "selfheal-agent.fullname" . }}-rolebinding
   labels:
-    app.kubernetes.io/name: selfheal-agent
+    {{- include "selfheal-agent.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.serviceAccount.name }}
+    name: {{ include "selfheal-agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Release.Name }}-role
+  name: {{ include "selfheal-agent.fullname" . }}-role
   apiGroup: rbac.authorization.k8s.io
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "selfheal-agent.fullname" . }}-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "selfheal-agent.labels" . | nindent 4 }}
+rules:
+  # Least Privilege: Namespace-scoped read-only access for metrics & logs
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "events"]
+    verbs: ["get", "list", "watch"]
+  # Workload metadata
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  {{- if .Values.config.enableHealingActions }}
+  # Controlled Automated Remediation (when ENABLE_HEALING_ACTIONS is enabled)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]
+  {{- end }}
+  # Namespace-scoped Metrics Server access
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "selfheal-agent.fullname" . }}-rolebinding
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "selfheal-agent.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "selfheal-agent.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "selfheal-agent.fullname" . }}-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
 {{- end }}

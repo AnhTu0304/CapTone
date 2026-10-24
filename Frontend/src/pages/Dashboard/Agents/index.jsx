@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { agentService } from '../../../services/agentService';
 import {
   Radio,
@@ -20,6 +21,9 @@ import {
   Layers,
   Server,
   Filter,
+  Trash2,
+  PowerOff,
+  ShieldAlert
 } from 'lucide-react';
 
 export const AgentsPage = () => {
@@ -38,6 +42,13 @@ export const AgentsPage = () => {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [activeInstallTab, setActiveInstallTab] = useState('powershell'); // 'powershell' | 'bash' | 'helm'
   const [copiedCode, setCopiedCode] = useState(false);
+  const [disconnectingAgent, setDisconnectingAgent] = useState(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [deletingAgent, setDeletingAgent] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [forceDeleteAgent, setForceDeleteAgent] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const { can } = usePermissions();
 
   // 1. Tải danh sách Agent THẬT từ CSDL & Backend
   const fetchAgents = useCallback(async () => {
@@ -60,6 +71,37 @@ export const AgentsPage = () => {
   useEffect(() => {
     fetchAgents();
   }, [fetchAgents]);
+
+  const handleDisconnectAgent = async () => {
+    if (!disconnectingAgent || !currentOrg?.id) return;
+    setIsDisconnecting(true);
+    setActionError(null);
+    try {
+      await agentService.disconnectAgent(currentOrg.id, disconnectingAgent.id);
+      setDisconnectingAgent(null);
+      await fetchAgents();
+    } catch (err) {
+      setActionError(err.message || 'Lỗi ngắt kết nối Agent');
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  const handleDeleteAgent = async () => {
+    if (!deletingAgent || !currentOrg?.id) return;
+    setIsDeleting(true);
+    setActionError(null);
+    try {
+      await agentService.deleteAgent(currentOrg.id, deletingAgent.id, forceDeleteAgent);
+      setDeletingAgent(null);
+      setForceDeleteAgent(false);
+      await fetchAgents();
+    } catch (err) {
+      setActionError(err.message || 'Lỗi xóa Agent');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleRefresh = async () => {
     triggerRefresh();
@@ -391,6 +433,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   <th style={{ padding: '12px', fontWeight: 700 }}>CPU / RAM</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>Đầu Dò Nhân eBPF</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>Token Hoạt Động</th>
+                  <th style={{ padding: '12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -473,6 +516,58 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                       </td>
                       <td style={{ padding: '14px 12px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
                         {agent.active_tokens_count ?? 1} token hợp lệ
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                          {agent.status !== 'OFFLINE' && agent.status !== 'REVOKED' && can(PERMISSIONS.AGENT_MANAGE) && (
+                            <button
+                              type="button"
+                              data-testid={`disconnect-agent-btn-${agent.id}`}
+                              onClick={() => { setDisconnectingAgent(agent); setActionError(null); }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                backgroundColor: '#FEF2F2',
+                                color: '#DC2626',
+                                border: '1px solid #FCA5A5',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                              title="Ngắt kết nối Agent"
+                            >
+                              <PowerOff size={12} />
+                              <span>Ngắt</span>
+                            </button>
+                          )}
+                          {can(PERMISSIONS.AGENT_DELETE) && (
+                            <button
+                              type="button"
+                              data-testid={`delete-agent-btn-${agent.id}`}
+                              onClick={() => { setDeletingAgent(agent); setForceDeleteAgent(false); setActionError(null); }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                backgroundColor: '#FFFFFF',
+                                color: '#991B1B',
+                                border: '1px solid #CBD5E1',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                              title="Xóa Agent khỏi hệ thống"
+                            >
+                              <Trash2 size={12} />
+                              <span>Xóa</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -731,6 +826,171 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 }}
               >
                 Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal: Xác Nhận Ngắt Kết Nối Agent */}
+      {disconnectingAgent && (
+        <div
+          data-testid="disconnect-agent-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              width: '100%',
+              maxWidth: '460px',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '24px',
+              gap: '16px',
+              borderRadius: 'var(--dash-radius-lg)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#DC2626' }}>
+              <PowerOff size={22} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                Xác Nhận Ngắt Kết Nối Tác Tử
+              </h3>
+            </div>
+            {actionError && (
+              <div style={{ padding: '10px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', color: '#DC2626', fontSize: '0.8125rem' }}>
+                {actionError}
+              </div>
+            )}
+            <p style={{ margin: 0, fontSize: '0.8125rem', color: '#475569', lineHeight: '1.5' }}>
+              Bạn có chắc chắn muốn ngắt kết nối Tác tử <strong>{disconnectingAgent.name}</strong>? Tác tử sẽ chuyển sang trạng thái <strong>OFFLINE</strong>, phiên WebSocket sẽ bị đóng và toàn bộ token hoạt động sẽ bị thu hồi.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDisconnectingAgent(null)}
+                style={{ padding: '8px 14px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-disconnect-agent-btn"
+                disabled={isDisconnecting}
+                onClick={handleDisconnectAgent}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: isDisconnecting ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: '0.8125rem',
+                }}
+              >
+                {isDisconnecting ? 'Đang ngắt...' : 'Xác Nhận Ngắt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Xác Nhận Xóa Agent */}
+      {deletingAgent && (
+        <div
+          data-testid="delete-agent-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '24px',
+              gap: '16px',
+              borderRadius: 'var(--dash-radius-lg)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#991B1B' }}>
+              <ShieldAlert size={22} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                Xác Nhận Xóa Tác Tử Khỏi Hệ Thống
+              </h3>
+            </div>
+            {actionError && (
+              <div style={{ padding: '10px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', color: '#DC2626', fontSize: '0.8125rem' }}>
+                {actionError}
+              </div>
+            )}
+            <div style={{ padding: '12px', backgroundColor: '#FEF2F2', borderRadius: '6px', border: '1px solid #FECACA', fontSize: '0.8125rem', color: '#991B1B', lineHeight: '1.5' }}>
+              Thao tác này sẽ xóa vĩnh viễn Tác tử <strong>{deletingAgent.name}</strong> (UID: {deletingAgent.agent_uid}) và toàn bộ token liên quan.
+            </div>
+
+            {deletingAgent.status === 'ONLINE' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '6px' }}>
+                <input
+                  type="checkbox"
+                  id="forceDeleteAgent"
+                  data-testid="force-delete-agent-checkbox"
+                  checked={forceDeleteAgent}
+                  onChange={(e) => setForceDeleteAgent(e.target.checked)}
+                />
+                <label htmlFor="forceDeleteAgent" style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, cursor: 'pointer' }}>
+                  Tác tử đang ONLINE. Đánh dấu để xác nhận xóa bắt buộc (force=true) ngay lập tức.
+                </label>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDeletingAgent(null)}
+                style={{ padding: '8px 14px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-delete-agent-btn"
+                disabled={isDeleting}
+                onClick={handleDeleteAgent}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: '0.8125rem',
+                }}
+              >
+                {isDeleting ? 'Đang xóa...' : 'Xác Nhận Xóa'}
               </button>
             </div>
           </div>
