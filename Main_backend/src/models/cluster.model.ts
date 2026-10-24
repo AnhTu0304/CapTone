@@ -155,13 +155,9 @@ export class ClusterModel {
         COUNT(DISTINCT p.id)::int AS pods_count,
         a.id AS agent_id,
         a.name AS agent_name,
-        CASE 
-          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.id IS NOT NULL THEN 'OFFLINE'
-          ELSE 'PENDING'
-        END AS agent_status,
+        COALESCE(a.status, 'PENDING') AS agent_status,
         a.last_seen_at AS last_heartbeat_at,
-        (SELECT LEFT(token_hash, 16) FROM agent_tokens WHERE agent_id = a.id AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1) AS token_prefix
+        (SELECT COALESCE(token_prefix, LEFT(token_hash, 16)) FROM agent_tokens WHERE agent_id = a.id AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1) AS token_prefix
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
@@ -200,11 +196,7 @@ export class ClusterModel {
         COUNT(DISTINCT p.id)::int AS pods_count,
         a.id AS agent_id,
         a.name AS agent_name,
-        CASE 
-          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.id IS NOT NULL THEN 'OFFLINE'
-          ELSE 'PENDING'
-        END AS agent_status,
+        COALESCE(a.status, 'PENDING') AS agent_status,
         a.last_seen_at AS last_heartbeat_at
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
@@ -297,11 +289,7 @@ export class ClusterModel {
         a.id AS agent_id,
         a.name AS agent_name,
         a.agent_uid,
-        CASE 
-          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.id IS NOT NULL THEN 'OFFLINE'
-          ELSE 'PENDING'
-        END AS agent_status,
+        COALESCE(a.status, 'PENDING') AS agent_status,
         COALESCE(a.version, 'v2.4.1') AS agent_version,
         a.last_seen_at
       FROM clusters c
@@ -342,11 +330,7 @@ export class ClusterModel {
           a.id AS agent_id,
           a.name AS agent_name,
           a.agent_uid,
-          CASE 
-          WHEN a.last_seen_at IS NOT NULL AND a.last_seen_at >= NOW() - INTERVAL '30 seconds' THEN 'ONLINE'
-          WHEN a.id IS NOT NULL THEN 'OFFLINE'
-          ELSE 'PENDING'
-        END AS agent_status,
+          COALESCE(a.status, 'PENDING') AS agent_status,
           COALESCE(a.version, 'v2.4.1') AS agent_version,
           a.last_seen_at
         FROM clusters c
@@ -461,20 +445,6 @@ export class ClusterModel {
         [cluster.agent_id]
       );
       recentHeartbeats = hbRes.rows;
-
-      if (recentHeartbeats.length === 0 && cluster.agent_status === 'ONLINE') {
-        await db.query(
-          `INSERT INTO agent_heartbeats (agent_id, status, agent_version, latency_ms, reported_at, metadata)
-           VALUES ($1, 'ONLINE', 'v2.4.1', 1.2, NOW(), '{"ebpf_kernel": "6.5.0-generic", "kprobes_active": 4}')`,
-          [cluster.agent_id]
-        );
-        const reloadHb = await db.query(
-          `SELECT id, status, latency_ms, reported_at, agent_version, metadata
-           FROM agent_heartbeats WHERE agent_id = $1 ORDER BY reported_at DESC LIMIT 10`,
-          [cluster.agent_id]
-        );
-        recentHeartbeats = reloadHb.rows;
-      }
     }
 
     // 7. Lịch sử Nhật Ký Kết Nối (Connection Logs) từ bảng audit_logs & agent_heartbeats có sẵn
@@ -547,17 +517,24 @@ export class ClusterModel {
   public static async rotateAgentToken(
     clusterId: string,
     data: { expires_in_days?: number | null; revoke_previous?: boolean },
+    orgId?: string,
     client?: PoolClient
   ) {
     const db = client || pool;
-    const clusterRes = await db.query(
-      `SELECT c.id, c.name, c.environment_id, a.id AS agent_id
-       FROM clusters c
-       LEFT JOIN agents a ON a.cluster_id = c.id
-       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
-       LIMIT 1`,
-      [clusterId]
-    );
+    let clusterQuery = `
+      SELECT c.id, c.name, c.environment_id, e.organization_id, a.id AS agent_id
+      FROM clusters c
+      JOIN environments e ON c.environment_id = e.id
+      LEFT JOIN agents a ON a.cluster_id = c.id
+      WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
+    `;
+    const params: any[] = [clusterId];
+    if (orgId) {
+      clusterQuery += ` AND e.organization_id = $2`;
+      params.push(orgId);
+    }
+    clusterQuery += ` LIMIT 1`;
+    const clusterRes = await db.query(clusterQuery, params);
 
     if (!clusterRes.rows[0]) {
       throw new Error('Cluster not found');
@@ -766,10 +743,11 @@ export class ClusterModel {
   public static async removeCluster(
     clusterId: string,
     orgId?: string,
+    force?: boolean,
     client?: PoolClient
   ) {
     const db = client || pool;
-    let query = `SELECT c.id, c.name, a.id AS agent_id
+    let query = `SELECT c.id, c.name, e.organization_id, a.id AS agent_id, a.status AS agent_status
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
        LEFT JOIN agents a ON a.cluster_id = c.id
@@ -783,6 +761,13 @@ export class ClusterModel {
     const clusterRes = await db.query(query, params);
     if (!clusterRes.rows[0]) throw new Error('Cluster not found');
     const cluster = clusterRes.rows[0];
+
+    // Chặn xóa cụm khi Agent đang ONLINE nếu không có cờ force
+    if (cluster.agent_status === 'ONLINE' && !force) {
+      const err: any = new Error('CANNOT_DELETE_ONLINE_CLUSTER');
+      err.statusCode = 400;
+      throw err;
+    }
 
     await db.query(
       `UPDATE clusters SET deleted_at = NOW(), status = 'DELETED', updated_at = NOW() WHERE id::text = $1::text`,
@@ -799,10 +784,15 @@ export class ClusterModel {
         [cluster.agent_id]
       );
       try {
+        const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+        disconnectAgentSession(cluster.agent_id);
+      } catch (e) {}
+
+      try {
         await db.query(
-          `INSERT INTO audit_logs (actor_type, action, resource_type, resource_id, description, status, created_at)
-           VALUES ('USER', 'CLUSTER_REMOVED', 'CLUSTER', $1, 'Cụm Kubernetes đã bị xóa khỏi hệ thống bởi người quản trị.', 'ERROR', NOW())`,
-          [cluster.id]
+          `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
+           VALUES ($1, 'USER', 'CLUSTER_REMOVED', 'CLUSTER', $2, 'Cụm Kubernetes đã bị xóa khỏi hệ thống bởi người quản trị.', 'SUCCESS', NOW())`,
+          [cluster.organization_id || null, cluster.id]
         );
       } catch (e) {
         // ignore
@@ -818,29 +808,62 @@ export class ClusterModel {
   public static async revokeAgentToken(
     clusterId: string,
     tokenId: string,
+    orgId?: string,
     client?: PoolClient
   ) {
     const db = client || pool;
+    let clusterQuery = `
+      SELECT c.id, c.name, e.organization_id, a.id AS agent_id
+      FROM clusters c
+      JOIN environments e ON c.environment_id = e.id
+      LEFT JOIN agents a ON a.cluster_id = c.id
+      WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
+    `;
+    const clusterParams: any[] = [clusterId];
+    if (orgId) {
+      clusterQuery += ` AND e.organization_id = $2`;
+      clusterParams.push(orgId);
+    }
+    clusterQuery += ` LIMIT 1`;
+    const clusterRes = await db.query(clusterQuery, clusterParams);
+    if (!clusterRes.rows[0]) {
+      return false;
+    }
+    const cluster = clusterRes.rows[0];
+
     const res = await db.query(
       `UPDATE agent_tokens
        SET revoked_at = NOW()
        WHERE id::text = $1::text
-         AND agent_id IN (
-           SELECT a.id FROM agents a
-           WHERE a.cluster_id IN (SELECT c.id FROM clusters c WHERE c.id::text = $2 OR c.name = $2)
-         )
+         AND agent_id = $2
+         AND revoked_at IS NULL
        RETURNING id, agent_id`,
-      [tokenId, clusterId]
+      [tokenId, cluster.agent_id]
     );
     const row = res.rows[0];
     if (row?.agent_id) {
-      await db.query(
-        `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id::text = $1::text`,
+      const activeTokens = await db.query(
+        `SELECT id FROM agent_tokens
+         WHERE agent_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1`,
         [row.agent_id]
       );
+      if (activeTokens.rows.length === 0) {
+        await db.query(
+          `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id::text = $1::text`,
+          [row.agent_id]
+        );
+        try {
+          const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+          disconnectAgentSession(row.agent_id);
+        } catch (e) {}
+      }
+
       try {
-        const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
-        disconnectAgentSession(row.agent_id);
+        await db.query(
+          `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
+           VALUES ($1, 'USER', 'TOKEN_REVOKED', 'CLUSTER', $2, $3, 'SUCCESS', NOW())`,
+          [cluster.organization_id || null, cluster.id, `Mã Token Agent '${tokenId}' đã bị thu hồi.`]
+        );
       } catch (e) {}
     }
     return (res.rowCount || 0) > 0;

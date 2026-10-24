@@ -37,7 +37,7 @@ export class ClusterService {
     if (orgId) {
       await this.getClusterDetail(clusterId, orgId);
     }
-    return await ClusterModel.rotateAgentToken(clusterId, data);
+    return await ClusterModel.rotateAgentToken(clusterId, data, orgId);
   }
 
   public static async revokeAgentToken(clusterId: string, tokenId: string, orgId?: string) {
@@ -47,7 +47,7 @@ export class ClusterService {
     if (orgId) {
       await this.getClusterDetail(clusterId, orgId);
     }
-    const revoked = await ClusterModel.revokeAgentToken(clusterId, tokenId);
+    const revoked = await ClusterModel.revokeAgentToken(clusterId, tokenId, orgId);
     if (!revoked) {
       throw new ApiError(404, 'Không tìm thấy Token hoặc Token không thuộc cụm chỉ định');
     }
@@ -84,14 +84,21 @@ export class ClusterService {
     return await ClusterModel.disconnectAgent(clusterId);
   }
 
-  public static async removeCluster(clusterId: string, orgId?: string) {
+  public static async removeCluster(clusterId: string, orgId?: string, force?: boolean) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
     if (orgId) {
       await this.getClusterDetail(clusterId, orgId);
     }
-    return await ClusterModel.removeCluster(clusterId, orgId);
+    try {
+      return await ClusterModel.removeCluster(clusterId, orgId, force);
+    } catch (err: any) {
+      if (err.message === 'CANNOT_DELETE_ONLINE_CLUSTER') {
+        throw new ApiError(400, 'Không thể xóa Cụm Kubernetes khi Agent đang hoạt động (ONLINE). Vui lòng ngắt kết nối Agent hoặc xác nhận xóa bắt buộc.');
+      }
+      throw err;
+    }
   }
 
   public static async createCluster(

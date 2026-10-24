@@ -28,7 +28,8 @@
     "test:agent-auth": "tsx --test src/test/agentAuth.test.ts",
     "test:agent-heartbeat": "tsx --test src/test/agentHeartbeatApi.test.ts",
     "worker:agent-timeout": "tsx src/workers/agentTimeout.worker.ts",
-    "test:agent-timeout": "tsx --test src/test/agentTimeoutStatus.test.ts"
+    "test:agent-timeout": "tsx --test src/test/agentTimeoutStatus.test.ts",
+    "test:cluster": "tsx --test src/test/clusterManagement.test.ts"
   },
   "keywords": [
     "nodejs",
