@@ -275,8 +275,24 @@ export class AgentService {
     const tokenRecord = await AgentModel.createToken({
       agent_id: agent.id,
       token_hash: tokenHash,
+      token_prefix: tokenPrefix,
+      created_by: userId,
       expires_at: expiresAt,
     });
+
+    try {
+      const { AuditService } = await import('./audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        user_id: userId,
+        actor_type: 'USER',
+        action: 'AGENT_CREATED',
+        resource_type: 'AGENT',
+        resource_id: agent.id,
+        description: `Tạo mới Tác tử Agent [${agent.name}]`,
+        status: 'SUCCESS',
+      });
+    } catch {}
 
     return {
       agent,
@@ -357,6 +373,25 @@ export class AgentService {
 
     const revoked = await AgentModel.revoke(agentId);
     await AgentModel.revokeAllTokensByAgentId(agentId);
+
+    try {
+      const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+      disconnectAgentSession(agentId);
+    } catch {}
+
+    try {
+      const { AuditService } = await import('./audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        actor_type: 'USER',
+        action: 'AGENT_REVOKED',
+        resource_type: 'AGENT',
+        resource_id: agentId,
+        description: `Thu hồi toàn bộ Agent [${agent.name}] và vô hiệu hóa tất cả token`,
+        status: 'SUCCESS',
+      });
+    } catch {}
+
     return revoked;
   }
 
@@ -400,8 +435,26 @@ export class AgentService {
     const tokenRecord = await AgentModel.createToken({
       agent_id: agentId,
       token_hash: tokenHash,
+      token_prefix: tokenPrefix,
+      created_by: userId,
       expires_at: expiresAt,
     });
+
+    try {
+      const { AuditService } = await import('./audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        user_id: userId,
+        actor_type: 'USER',
+        action: 'AGENT_TOKEN_CREATED',
+        resource_type: 'AGENT',
+        resource_id: agentId,
+        target_type: 'TOKEN',
+        target_id: tokenRecord.id,
+        description: `Cấp phát mã Token mới cho Agent [${agent.name}] (Prefix: ${tokenPrefix})`,
+        status: 'SUCCESS',
+      });
+    } catch {}
 
     return {
       token_id: tokenRecord.id,
@@ -437,6 +490,33 @@ export class AgentService {
     if (!success) {
       throw ApiError.notFound('Token không tồn tại hoặc đã bị thu hồi trước đó');
     }
+
+    try {
+      const { disconnectAgentSession } = await import('../websocket/agentWebSocket');
+      disconnectAgentSession(agentId);
+    } catch {}
+
+    const remainingTokens = await AgentModel.findTokensByAgentId(agentId);
+    const hasActiveToken = remainingTokens.some((t) => t.is_active);
+    if (!hasActiveToken) {
+      await AgentModel.setOffline(agentId);
+    }
+
+    try {
+      const { AuditService } = await import('./audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        actor_type: 'USER',
+        action: 'AGENT_TOKEN_REVOKED',
+        resource_type: 'AGENT',
+        resource_id: agentId,
+        target_type: 'TOKEN',
+        target_id: tokenId,
+        description: `Thu hồi Token của Agent [${agent.name}]`,
+        status: 'SUCCESS',
+      });
+    } catch {}
+
     return { success: true, message: 'Thu hồi Token thành công' };
   }
 
@@ -461,6 +541,10 @@ export class AgentService {
 
     if (!agentRow) {
       throw ApiError.unauthorized('Token Agent không hợp lệ, đã hết hạn hoặc đã bị thu hồi');
+    }
+
+    if (agentRow.token_id) {
+      await pool.query('UPDATE agent_tokens SET last_used_at = NOW() WHERE id = $1', [agentRow.token_id]);
     }
 
     const heartbeat = await AgentModel.recordHeartbeatDetailed(agentRow.id, {

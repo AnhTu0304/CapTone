@@ -23,7 +23,8 @@
     "test:rbac-matrix": "tsx --test src/test/rbacMatrix.test.ts",
     "test:audit": "tsx --test src/test/auditLogging.test.ts",
     "worker:audit-retention": "tsx src/workers/auditRetention.worker.ts",
-    "test:retention": "tsx --test src/test/auditRetention.test.ts"
+    "test:retention": "tsx --test src/test/auditRetention.test.ts",
+    "test:agent-lifecycle": "tsx --test src/test/agentLifecycle.test.ts"
   },
   "keywords": [
     "nodejs",

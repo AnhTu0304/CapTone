@@ -79,24 +79,18 @@ export class AgentModel {
    */
   public static async findByTokenHash(tokenHash: string, rawToken: string) {
     const cleanToken = rawToken ? rawToken.trim() : '';
-    const tokenHex = cleanToken.startsWith('sh_live_sec_')
-      ? cleanToken.replace('sh_live_sec_', '').split('_')[0]
-      : cleanToken;
 
     const result = await pool.query(
       `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id
        FROM agent_tokens t
        JOIN agents a ON a.id = t.agent_id
-       WHERE (
-         t.token_hash = $1 
-         OR t.token_hash = $2 
-         OR (length($3) >= 12 AND t.token_hash LIKE $3 || '%')
-       )
+       WHERE (t.token_hash = $1 OR t.token_hash = $2)
          AND (t.expires_at IS NULL OR t.expires_at > NOW())
          AND t.revoked_at IS NULL
          AND a.revoked_at IS NULL
+         AND a.status != 'REVOKED'
        LIMIT 1`,
-      [tokenHash, cleanToken, tokenHex]
+      [tokenHash, cleanToken]
     );
     return result.rows[0] || null;
   }
@@ -124,7 +118,7 @@ export class AgentModel {
       const agentRes = await pool.query(
         `SELECT a.id, a.cluster_id, c.id AS actual_cluster_id, c.name AS cluster_name
          FROM agents a
-         LEFT JOIN clusters c ON (c.id::text = a.cluster_id OR c.cluster_uid = a.cluster_id)
+         LEFT JOIN clusters c ON (c.id::text = a.cluster_id::text OR c.cluster_uid = a.cluster_id::text)
          WHERE a.id = $1`,
         [agentId]
       );
@@ -257,7 +251,7 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
-      LEFT JOIN clusters c ON a.cluster_id = c.id::text
+      LEFT JOIN clusters c ON a.cluster_id::text = c.id::text
       WHERE a.id = $1
       LIMIT 1;
     `;
@@ -352,7 +346,7 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
-      LEFT JOIN clusters c ON a.cluster_id = c.id::text
+      LEFT JOIN clusters c ON a.cluster_id::text = c.id::text
       ${whereClause}
       ORDER BY 
         CASE 
@@ -464,14 +458,16 @@ export class AgentModel {
     const db = client || pool;
     const query = `
       INSERT INTO agent_tokens (
-        agent_id, token_hash, expires_at, created_at
+        agent_id, token_hash, token_prefix, created_by, expires_at, created_at
       ) VALUES (
-        $1, $2, $3, NOW()
+        $1, $2, $3, $4, $5, NOW()
       ) RETURNING *;
     `;
     const values = [
       data.agent_id,
       data.token_hash,
+      data.token_prefix || null,
+      data.created_by || null,
       data.expires_at || null,
     ];
     const res = await db.query<IAgentToken>(query, values);
@@ -485,7 +481,7 @@ export class AgentModel {
     const db = client || pool;
     const query = `
       SELECT 
-        id, agent_id, expires_at, last_used_at, revoked_at, created_at,
+        id, agent_id, token_prefix, expires_at, last_used_at, revoked_at, created_at,
         (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS is_active
       FROM agent_tokens
       WHERE agent_id = $1

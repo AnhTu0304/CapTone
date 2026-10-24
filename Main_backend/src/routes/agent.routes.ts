@@ -3,6 +3,7 @@ import { AgentController } from '../controllers/agent.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import { requireOrgMember, requireOrgRole } from '../middlewares/orgAuth.middleware';
+import { rateLimiter } from '../middlewares/rateLimit.middleware';
 import {
   createAgentSchema,
   updateAgentSchema,
@@ -172,6 +173,11 @@ const daemonRouter = Router();
  */
 daemonRouter.post(
   '/heartbeat',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: 120,
+    message: 'Quá nhiều yêu cầu nhịp tim từ địa chỉ này, vui lòng thử lại sau.',
+  }),
   validate(agentHeartbeatSchema),
   AgentController.recordHeartbeat
 );
