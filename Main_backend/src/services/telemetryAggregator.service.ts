@@ -147,6 +147,7 @@ export class TelemetryAggregatorService {
       forceRca?: boolean;
       autoTriggerRca?: boolean;
       providedSequence?: GRUMetricPoint[];
+      clusterId?: string;
     }
   ): Promise<ServiceEvaluationResult> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -192,6 +193,7 @@ export class TelemetryAggregatorService {
         service_id: serviceId,
         sequence,
         prediction_horizon_minutes: 15,
+        cluster_id: options?.clusterId,
       });
     } catch (error) {
       console.warn(`[TelemetryAggregator] AI Backend prediction failed for ${serviceId}:`, error);
@@ -261,6 +263,7 @@ export class TelemetryAggregatorService {
           logs: rcaContext.logs,
           kubernetes_events: rcaContext.kubernetes_events,
           prediction_id: gruPrediction?.prediction_id,
+          cluster_id: options?.clusterId,
         });
       } catch (error) {
         console.warn(`[TelemetryAggregator] AI Backend RCA failed for ${serviceId}:`, error);
@@ -287,7 +290,7 @@ export class TelemetryAggregatorService {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service') {
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string) {
     const agents = await AgentModel.listAll();
     const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
       bucketSeconds: 5,
@@ -298,7 +301,7 @@ export class TelemetryAggregatorService {
     const logs = await LogModel.getRecent(30);
     const events = await KubernetesEventModel.getRecent(20);
     const incidents = await IncidentModel.getRecent(10);
-    const recommendations = await RecommendationModel.getRecent(10);
+    const recommendations = await RecommendationModel.getRecent(10, clusterId);
     const predictions = await AiPredictionModel.getRecent(5);
     const latestPoint = sequence.length > 0 ? sequence[sequence.length - 1] : null;
 

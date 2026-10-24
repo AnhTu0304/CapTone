@@ -10,6 +10,7 @@ import {
   RcaModel,
   RecommendationModel,
 } from '../models';
+import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 
 export class AiController {
   /**
@@ -129,12 +130,14 @@ export class AiController {
       const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
       const status = req.query.status as string | undefined;
       const prediction_type = req.query.prediction_type as string | undefined;
+      const cluster_id = req.query.cluster_id as string | undefined;
 
       const result = await AiPredictionModel.findMany({
         limit,
         offset,
         status,
         prediction_type,
+        cluster_id,
       });
 
       return ApiResponse.success(res, 'Retrieved predictions list', result, 200);
@@ -149,7 +152,8 @@ export class AiController {
    */
   public static async getPredictionStats(req: Request, res: Response) {
     try {
-      const stats = await AiPredictionModel.getPredictionStats();
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const stats = await AiPredictionModel.getPredictionStats(cluster_id);
       return ApiResponse.success(res, 'Retrieved prediction statistics', stats, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);
@@ -198,16 +202,22 @@ export class AiController {
    */
   public static async getIncidents(req: Request, res: Response) {
     try {
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
       const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
       const status = req.query.status as string | undefined;
       const severity = req.query.severity as string | undefined;
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const organization_id = (req.query.organization_id as string | undefined) || (req as any).user?.organization_id;
+      const search = req.query.search as string | undefined;
 
       const result = await IncidentModel.findMany({
         limit,
         offset,
         status,
         severity,
+        cluster_id,
+        organization_id,
+        search,
       });
 
       return ApiResponse.success(res, 'Retrieved incidents list', result, 200);
@@ -301,7 +311,8 @@ export class AiController {
   public static async getRecommendations(req: Request, res: Response) {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-      const result = await RecommendationModel.getRecent(limit);
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const result = await RecommendationModel.getRecent(limit, cluster_id);
       return ApiResponse.success(res, 'Retrieved recommendations list', result, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);
@@ -333,7 +344,8 @@ export class AiController {
   public static async getHealingActions(req: Request, res: Response) {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-      const actions = await RecommendationModel.getHealingActions(limit);
+      const cluster_id = req.query.cluster_id as string | undefined;
+      const actions = await RecommendationModel.getHealingActions(limit, cluster_id);
       return ApiResponse.success(res, 'Retrieved executed healing actions', actions, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);
@@ -376,7 +388,11 @@ export class AiController {
       }
 
       const targetType = incident?.target_type || 'WORKLOAD';
-      const targetName = incident?.target_id || 'sme-order-service';
+      let targetName = 'sme-order-service';
+      if (incident?.target_id) {
+        const wlRes = await pool.query('SELECT name FROM workloads WHERE id = $1 LIMIT 1;', [incident.target_id]);
+        targetName = wlRes.rows[0]?.name || 'sme-order-service';
+      }
       const user = (req as any).user;
 
       // 2. Insert into healing_actions
@@ -410,6 +426,14 @@ export class AiController {
       if (rec.incident_id) {
         await IncidentModel.updateStatus(rec.incident_id, 'RESOLVED');
       }
+
+      // 5. Dispatch action to connected K8s Agent for real cluster remediation
+      dispatchHealingActionToAgent({
+        action_id: healingAction.id,
+        action_type: rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation,
+        target_name: targetName === 'sme-order-service' || !targetName ? 'sme-order-service' : targetName,
+        namespace: 'default',
+      }).catch((err) => console.warn('[AiController] Failed to dispatch action to agent:', err));
 
       return ApiResponse.success(
         res,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { healthRoutes } from './health.routes';
 import { aiRoutes } from './ai.routes';
+import { healingActionRoutes } from './healingAction.routes';
 import { ruleEngineRoutes } from './ruleEngine.routes';
 import { telemetryRoutes } from './telemetry.routes';
 import { authRoutes } from './auth.routes';
@@ -17,6 +18,7 @@ const apiRouter = Router();
 
 apiRouter.use('/health', healthRoutes);
 apiRouter.use('/ai', aiRoutes);
+apiRouter.use('/healing', healingActionRoutes);
 apiRouter.use('/rule-engine', ruleEngineRoutes);
 apiRouter.use('/telemetry', telemetryRoutes);
 apiRouter.use('/auth', authRoutes);

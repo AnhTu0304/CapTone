@@ -52,6 +52,7 @@ export const aiService = {
       if (params.offset) search.append('offset', params.offset);
       if (params.status) search.append('status', params.status);
       if (params.prediction_type) search.append('prediction_type', params.prediction_type);
+      if (params.cluster_id) search.append('cluster_id', params.cluster_id);
 
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/predictions${qs}`);
@@ -69,9 +70,12 @@ export const aiService = {
    * Lấy thống kê tổng quan các lượt dự báo
    * GET /api/v1/ai/predictions/stats
    */
-  async getPredictionStats() {
+  async getPredictionStats(params = {}) {
     try {
-      const res = await request('/ai/predictions/stats');
+      const search = new URLSearchParams();
+      if (params.cluster_id) search.append('cluster_id', params.cluster_id);
+      const qs = search.toString() ? `?${search.toString()}` : '';
+      const res = await request(`/ai/predictions/stats${qs}`);
       if (res?.success && res.data) return res.data;
       return { total: 0, by_type: {}, avg_confidence: 0 };
     } catch (err) {
@@ -144,6 +148,7 @@ export const aiService = {
       const search = new URLSearchParams();
       if (params.limit) search.append('limit', params.limit);
       if (params.status) search.append('status', params.status);
+      if (params.cluster_id) search.append('cluster_id', params.cluster_id);
 
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/recommendations${qs}`);
@@ -180,6 +185,7 @@ export const aiService = {
     try {
       const search = new URLSearchParams();
       if (params.limit) search.append('limit', params.limit);
+      if (params.cluster_id) search.append('cluster_id', params.cluster_id);
 
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/healing-actions${qs}`);
@@ -219,7 +225,10 @@ export const aiService = {
       if (params.limit) search.append('limit', params.limit);
       if (params.offset) search.append('offset', params.offset);
       if (params.status) search.append('status', params.status);
-      if (params.severity) search.append('severity', params.severity);
+      if (params.severity && params.severity !== 'all') search.append('severity', params.severity);
+      if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
+      if (params.search) search.append('search', params.search);
 
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/incidents${qs}`);
@@ -263,6 +272,21 @@ export const aiService = {
     } catch (err) {
       console.error('[aiService] updateIncidentStatus error:', err.message);
       throw err;
+    }
+  },
+
+  /**
+   * L?y chi ti?t s? c? k?m RCA
+   * GET /api/v1/ai/incidents/:id
+   */
+  async getIncidentDetail(id) {
+    if (!id) return null;
+    try {
+      const res = await request(`/ai/incidents/${id}`);
+      return res?.data || res || null;
+    } catch (err) {
+      console.warn(`[aiService] getIncidentDetail error for ${id}:`, err.message);
+      return null;
     }
   },
 };

@@ -20,6 +20,7 @@ export const errorHandler = (
   const errors = err instanceof ApiError ? err.errors : undefined;
 
   const stack = config.isDevelopment ? err.stack : undefined;
+  console.error('[ErrorMiddleware] Captured error:', err);
 
   return ApiResponse.error(res, message, statusCode, {
     ...(errors ? { details: errors } : {}),

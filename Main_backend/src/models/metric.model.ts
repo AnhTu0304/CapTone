@@ -108,7 +108,7 @@ export class MetricModel {
     bucketSeconds: number = 5,
     afterTimestamp?: Date | null,
     limit: number = 12
-  ): Promise<{ points: GRUMetricPoint[]; latestTimeBucket?: Date }> {
+  ): Promise<{ points: GRUMetricPoint[]; latestTimeBucket?: Date; clusterId?: string }> {
     let query: string;
     let params: any[];
 
@@ -123,7 +123,8 @@ export class MetricModel {
           ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
           ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
           COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
-          GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
+          GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count,
+          MAX(cluster_id) as cluster_id
         FROM agent_metrics
         WHERE service_id::text = $1 AND collected_at > $3
         GROUP BY time_bucket
@@ -143,7 +144,8 @@ export class MetricModel {
             ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
             ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
             COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
-            GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
+            GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count,
+          MAX(cluster_id) as cluster_id
           FROM agent_metrics
           WHERE service_id::text = $1
           GROUP BY time_bucket
@@ -171,7 +173,8 @@ export class MetricModel {
     const latestTimeBucket =
       res.rows.length > 0 ? new Date(res.rows[res.rows.length - 1].time_bucket) : undefined;
 
-    return { points, latestTimeBucket };
+    const clusterId = res.rows.length > 0 ? (res.rows[res.rows.length - 1].cluster_id || undefined) : undefined;
+    return { points, latestTimeBucket, clusterId };
   }
 
   /**

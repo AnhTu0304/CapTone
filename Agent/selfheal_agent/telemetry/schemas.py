@@ -90,7 +90,29 @@ class K8sInventoryMessage(BaseModel):
     data: AgentK8sInventoryData
 
 
-OutgoingEnvelope = Union[AuthMessage, MetricsMessage, LogMessage, K8sEventMessage, K8sInventoryMessage]
+class ActionResultData(BaseModel):
+    """Result of an executed self-healing action reported back to Backend."""
+    action_id: str
+    status: Literal["SUCCEEDED", "FAILED"]
+    message: Optional[str] = None
+    duration_ms: Optional[int] = 1000
+    details: Optional[dict[str, Any]] = None
+
+
+class ActionResultMessage(BaseModel):
+    """Action result envelope sent over WebSocket."""
+    type: Literal["action_result"] = "action_result"
+    data: ActionResultData
+
+
+OutgoingEnvelope = Union[
+    AuthMessage,
+    MetricsMessage,
+    LogMessage,
+    K8sEventMessage,
+    K8sInventoryMessage,
+    ActionResultMessage,
+]
 
 
 # ==========================================
@@ -118,4 +140,19 @@ class ErrorPayload(BaseModel):
     errors: Optional[Any] = None
 
 
-IncomingMessage = Union[AuthenticatedPayload, AckPayload, ErrorPayload]
+class ExecuteActionData(BaseModel):
+    """Payload instructing the Agent to execute a remediation action."""
+    action_id: str
+    action_type: str
+    target_name: str
+    namespace: Optional[str] = "default"
+    params: Optional[dict[str, Any]] = Field(default_factory=dict)
+
+
+class ExecuteActionPayload(BaseModel):
+    """Incoming command envelope to execute a self-healing action."""
+    type: Literal["execute_action"]
+    data: ExecuteActionData
+
+
+IncomingMessage = Union[AuthenticatedPayload, AckPayload, ErrorPayload, ExecuteActionPayload]

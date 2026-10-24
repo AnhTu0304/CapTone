@@ -223,8 +223,10 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     setOrgError(null);
     try {
       const token =
+        sessionStorage.getItem('admin_access_token') ||
+        localStorage.getItem('admin_access_token') ||
         localStorage.getItem('selfheal_auth_token') ||
-        sessionStorage.getItem('admin_access_token');
+        localStorage.getItem('token');
       if (!token) {
         setIsLoadingOrgs(false);
         return;

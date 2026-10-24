@@ -18,3 +18,4 @@ export * from './organization.model';
 export * from './organizationProfile.model';
 export * from './organizationRole.model';
 export * from './organizationMember.model';
+export * from './healingAction.model';

@@ -227,6 +227,16 @@ export const AgentWsMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('k8s_inventory'),
     data: AgentK8sInventoryPayloadSchema,
   }),
+  z.object({
+    type: z.literal('action_result'),
+    data: z.object({
+      action_id: z.string().trim().min(1),
+      status: z.enum(['SUCCEEDED', 'FAILED']),
+      message: z.string().optional().default('Action completed'),
+      duration_ms: z.number().nonnegative().optional().default(1000),
+      details: z.any().optional().default({}),
+    }),
+  }),
   AgentAuthPayloadSchema,
 ]);
 

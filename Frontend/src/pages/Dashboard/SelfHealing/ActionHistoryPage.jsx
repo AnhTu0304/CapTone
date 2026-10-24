@@ -1,11 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { selfHealingService } from '../../../services/selfHealingService';
 import SelfHealingTrendChart from '../../../components/dashboard/SelfHealingTrendChart';
 import {
   History,
   CheckCircle2,
   Search,
-  RefreshCw
+  RefreshCw,
+  Database,
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
 
 const HISTORY_RECORDS = [
@@ -67,11 +71,90 @@ const HISTORY_RECORDS = [
 ];
 
 export const ActionHistoryPage = () => {
-  const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const { currentOrg, currentEnv } = useDashboard();
   const [searchTerm, setSearchTerm] = useState('');
+  const [actions, setActions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const formatRelativeTime = (dateStr) => {
+    if (!dateStr) return 'Vừa xong';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Vừa xong';
+    if (mins < 60) return `${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    return `${days} ngày trước`;
+  };
+
+  const mapBackendActionToUI = useCallback((item) => {
+    const shortId = item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : item.id;
+    const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
+    const mttrSec = (durMs / 1000).toFixed(1);
+
+    let title = item.result?.message || `Thực thi ${item.action_type_name || item.action_type_code} trên ${item.target_name || 'workload'}`;
+    let policyName = item.policy_name || 'POL-DEFAULT-MAPE-K';
+    let verified = item.verification?.verification_type || 'SLO Health Probe';
+
+    return {
+      id: shortId,
+      rawId: item.id,
+      title,
+      target: `${item.target_type || 'Pod'}/${item.target_name || 'sme-order-service'}`,
+      namespace: 'production',
+      policy: policyName,
+      mttr: `${mttrSec} giây`,
+      result: item.execution_status === 'SUCCEEDED' ? 'Thành công (100%)' : item.execution_status,
+      timestamp: formatRelativeTime(item.completed_at || item.created_at),
+      verifiedBy: verified,
+      status: item.execution_status,
+    };
+  }, []);
+
+  const fetchActions = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster;
+      const activeOrgId = currentOrg?.id;
+
+      const res = await selfHealingService.getActions({
+        limit: 50,
+        cluster_id: activeClusterId,
+        organization_id: activeOrgId,
+      });
+
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      if (items.length > 0) {
+        setActions(items.map(mapBackendActionToUI));
+        setIsUsingLiveDb(true);
+      } else {
+        setActions(HISTORY_RECORDS);
+        setIsUsingLiveDb(false);
+      }
+    } catch (err) {
+      console.warn('[ActionHistoryPage] Lỗi tải lịch sử:', err.message);
+      setActions(HISTORY_RECORDS);
+      setIsUsingLiveDb(false);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, mapBackendActionToUI]);
+
+  useEffect(() => {
+    fetchActions();
+  }, [fetchActions, currentOrg?.id, currentEnv?.id, currentEnv?.cluster]);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchActions();
+  };
 
   const filteredHistory = useMemo(() => {
-    return HISTORY_RECORDS.filter((rec) => {
+    return actions.filter((rec) => {
       return (
         !searchTerm ||
         rec.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -79,7 +162,7 @@ export const ActionHistoryPage = () => {
         rec.target.toLowerCase().includes(searchTerm.toLowerCase())
       );
     });
-  }, [searchTerm]);
+  }, [actions, searchTerm]);
 
   return (
     <div className="dashboard-action-history-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -91,16 +174,35 @@ export const ActionHistoryPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Lịch Sử Tự Phục Hồi & Báo Cáo Hiệu Quả MTTR
             </h1>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '10px',
+                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
+                color: isUsingLiveDb ? '#15803D' : '#B45309',
+                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
+              }}
+            >
+              <Database size={10} />
+              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
+            </span>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg.name} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv.name}</span> &bull; Bản ghi bất biến về mọi hành động can thiệp tự động đã được kiểm chứng thành công
+          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
+            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'SME Retail Enterprise'}</strong> &bull; Cụm K8s:{' '}
+            <span style={{ fontWeight: 600, color: 'var(--dash-primary)' }}>{currentEnv?.cluster || 'sang-k8s'}</span> &bull; Lưu vết mọi hành động tự phục hồi đã thực thi
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={triggerRefresh}
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -114,7 +216,7 @@ export const ActionHistoryPage = () => {
               cursor: 'pointer',
             }}
           >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
             <span>Làm mới lịch sử</span>
           </button>
         </div>

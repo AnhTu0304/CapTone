@@ -57,17 +57,19 @@ export const usePermissions = () => {
   const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(user) : false;
 
   // Lấy vai trò trong Tổ chức đang kích hoạt
-  const activeRole = (
+  const rawRole = (
     dashboardContext?.currentOrg?.role_in_org ||
     dashboardContext?.currentOrg?.role ||
     dashboardContext?.currentUserRole ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('selfheal_active_org_role') : null) ||
     'SME_OWNER'
   ).toUpperCase();
+  const normalizedRole = rawRole.replace(/\s+/g, '_');
+  const activeRole = normalizedRole;
 
-  const isOwner = isSuperAdmin || isSystemAdmin || activeRole === 'SME_OWNER';
-  const isDevOps = (activeRole === 'DEVOPS' || (auth?.isDevOps && auth.isDevOps(user))) && !isOwner;
-  const isViewer = (activeRole === 'VIEWER' || (auth?.isViewer && auth.isViewer(user))) && !isOwner && !isDevOps;
+  const isOwner = isSuperAdmin || isSystemAdmin || normalizedRole === 'SME_OWNER' || normalizedRole === 'PLATFORM_ADMIN' || normalizedRole === 'OWNER' || normalizedRole === 'ADMIN';
+  const isDevOps = (normalizedRole === 'DEVOPS' || (auth?.isDevOps && auth.isDevOps(user))) && !isOwner;
+  const isViewer = (normalizedRole === 'VIEWER' || (auth?.isViewer && auth.isViewer(user))) && !isOwner && !isDevOps;
 
   /**
    * Kiểm tra quyền cụ thể

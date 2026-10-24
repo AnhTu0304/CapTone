@@ -1,12 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { selfHealingService } from '../../../services/selfHealingService';
 import {
   Zap,
-  RefreshCw
+  RefreshCw,
+  Database,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 
 export const HealingActionsPage = () => {
-  const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const { currentOrg, currentEnv } = useDashboard();
+  const [actions, setActions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 5 stages of the MAPE-K Autonomous Loop
   const mapekStages = [
@@ -17,42 +25,65 @@ export const HealingActionsPage = () => {
     { step: '5. KNOWLEDGE', name: 'Cập Nhật Tri Thức', desc: 'Ghi nhận MTTR và tối ưu hóa trọng số mô hình', active: true, color: '#0D9488' },
   ];
 
-  // Active executing actions in the cluster
-  const [actions] = useState([
-    {
-      id: 'ACT-9021',
-      title: 'Tự động Scale Replicas từ 2 lên 3 cho payment-service',
-      service: 'payment-service',
+  const mapBackendActionToUI = useCallback((item) => {
+    const shortId = item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : item.id;
+    const isCompleted = item.execution_status === 'SUCCEEDED';
+    const progress = isCompleted ? 100 : (item.execution_status === 'RUNNING' ? 65 : 25);
+    const stage = isCompleted ? '5. KNOWLEDGE' : (item.execution_status === 'RUNNING' ? '4. EXECUTE' : '3. PLAN');
+    const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
+
+    return {
+      id: shortId,
+      rawId: item.id,
+      title: item.result?.message || `Thực thi ${item.action_type_name || item.action_type_code} trên ${item.target_name || 'workload'}`,
+      service: item.target_name || 'sme-order-service',
       namespace: 'production',
-      stage: '4. EXECUTE',
-      progress: 85,
-      elapsed: '2.1s',
-      policy: 'POL-AUTO-SCALE-P90',
-      status: 'running',
-    },
-    {
-      id: 'ACT-9022',
-      title: 'Giải phóng cache kết nối tạm thời trên redis-cluster-leader-0',
-      service: 'redis-cluster-leader-0',
-      namespace: 'redis',
-      stage: '4. EXECUTE',
-      progress: 60,
-      elapsed: '1.2s',
-      policy: 'POL-FLUSH-CACHE-LAZY',
-      status: 'running',
-    },
-    {
-      id: 'ACT-9019',
-      title: 'Khởi động lại Pod crash do rò rỉ bộ nhớ (Rolling Patch)',
-      service: 'order-processor-66bf-aa18x',
-      namespace: 'production',
-      stage: '5. KNOWLEDGE',
-      progress: 100,
-      elapsed: '1.4s',
-      policy: 'POL-RESTART-OOM',
-      status: 'completed',
-    },
-  ]);
+      stage,
+      progress,
+      elapsed: `${(durMs / 1000).toFixed(1)}s`,
+      policy: item.policy_name || 'POL-DEFAULT-AUTO',
+      status: isCompleted ? 'completed' : 'running',
+    };
+  }, []);
+
+  const fetchActions = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster;
+      const activeOrgId = currentOrg?.id;
+
+      const res = await selfHealingService.getActions({
+        limit: 10,
+        cluster_id: activeClusterId,
+        organization_id: activeOrgId,
+      });
+
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      if (items.length > 0) {
+        setActions(items.map(mapBackendActionToUI));
+        setIsUsingLiveDb(true);
+      } else {
+        setActions([]);
+        setIsUsingLiveDb(true);
+      }
+    } catch (err) {
+      console.warn('[HealingActionsPage] Lỗi tải action:', err.message);
+      setActions([]);
+      setIsUsingLiveDb(false);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, mapBackendActionToUI]);
+
+  useEffect(() => {
+    fetchActions();
+  }, [fetchActions, currentOrg?.id, currentEnv?.id, currentEnv?.cluster]);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchActions();
+  };
 
   return (
     <div className="dashboard-healing-actions-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -64,16 +95,33 @@ export const HealingActionsPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Hành Động Tự Phục Hồi Đang Thực Thi (MAPE-K Closed Loop)
             </h1>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '10px',
+                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
+                color: isUsingLiveDb ? '#15803D' : '#B45309',
+                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
+              }}
+            >
+              <Database size={10} />
+              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
+            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg.name} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv.name}</span> &bull; Vòng lặp tự trị liên tục: Giám sát &rarr; Phân tích &rarr; Lập kế hoạch &rarr; Thực thi &rarr; Tri thức
+            {currentOrg?.name || 'SME Retail Enterprise'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}</span> &bull; Vòng lặp tự trị liên tục: Giám sát &rarr; Phân tích &rarr; Lập kế hoạch &rarr; Thực thi &rarr; Tri thức
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={triggerRefresh}
+            onClick={handleRefresh}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -167,72 +215,84 @@ export const HealingActionsPage = () => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {actions.map((act) => {
-            const isCompleted = act.status === 'completed';
-
-            return (
-              <div
-                key={act.id}
-                style={{
-                  padding: '16px 20px',
-                  backgroundColor: isCompleted ? 'rgba(5, 150, 105, 0.03)' : '#FFFFFF',
-                  border: isCompleted ? '1px solid #34D399' : '1px solid var(--dash-border)',
-                  borderLeft: isCompleted ? '4px solid #059669' : '4px solid #2563EB',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
-                        {act.id}
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                        &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '0.625rem',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          backgroundColor: isCompleted ? '#ECFDF5' : '#EFF6FF',
-                          color: isCompleted ? '#059669' : '#2563EB',
-                          border: `1px solid ${isCompleted ? '#A7F3D0' : '#BFDBFE'}`,
-                        }}
-                      >
-                        {act.stage}
-                      </span>
-                    </div>
-
-                    <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: '4px 0 0 0' }}>
-                      {act.title}
-                    </h4>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 800, color: isCompleted ? '#059669' : '#2563EB' }}>
-                      {isCompleted ? 'HOÀN THÀNH (100%)' : `TIẾN ĐỘ: ${act.progress}%`}
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                      Thời gian chạy: {act.elapsed} &bull; Chính sách: {act.policy}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${act.progress}%`,
-                      height: '100%',
-                      backgroundColor: isCompleted ? '#059669' : '#2563EB',
-                      transition: 'width 0.4s ease',
-                    }}
-                  />
-                </div>
+          {actions.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
+              <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
+              <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.9375rem' }}>
+                Cụm đang vận hành ổn định
               </div>
-            );
-          })}
+              <div style={{ fontSize: '0.8125rem' }}>
+                Không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm ({currentEnv?.cluster || 'Production Cluster'}). Toàn bộ tiến trình đang hoạt động an toàn.
+              </div>
+            </div>
+          ) : (
+            actions.map((act) => {
+              const isCompleted = act.status === 'completed';
+
+              return (
+                <div
+                  key={act.id}
+                  style={{
+                    padding: '16px 20px',
+                    backgroundColor: isCompleted ? 'rgba(5, 150, 105, 0.03)' : '#FFFFFF',
+                    border: isCompleted ? '1px solid #34D399' : '1px solid var(--dash-border)',
+                    borderLeft: isCompleted ? '4px solid #059669' : '4px solid #2563EB',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
+                          {act.id}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                          &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.625rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            backgroundColor: isCompleted ? '#ECFDF5' : '#EFF6FF',
+                            color: isCompleted ? '#059669' : '#2563EB',
+                            border: `1px solid ${isCompleted ? '#A7F3D0' : '#BFDBFE'}`,
+                          }}
+                        >
+                          {act.stage}
+                        </span>
+                      </div>
+
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: '4px 0 0 0' }}>
+                        {act.title}
+                      </h4>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 800, color: isCompleted ? '#059669' : '#2563EB' }}>
+                        {isCompleted ? 'HOÀN THÀNH (100%)' : `TIẾN ĐỘ: ${act.progress}%`}
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                        Thời gian chạy: {act.elapsed} &bull; Chính sách: {act.policy}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${act.progress}%`,
+                        height: '100%',
+                        backgroundColor: isCompleted ? '#059669' : '#2563EB',
+                        transition: 'width 0.4s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

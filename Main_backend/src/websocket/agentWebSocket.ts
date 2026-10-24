@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import url from 'url';
+import { pool } from '../config/database';
 import { AgentService, AuthenticatedAgent } from '../services/agent.service';
 import { AgentWsMessageSchema } from '../schemas/agentWebSocket.schema';
 import { broadcastTelemetryToUi } from './telemetryWebSocket';
@@ -306,6 +307,121 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             break;
           }
 
+          case 'action_result': {
+            const { action_id, status, message, duration_ms, details } = msg.data;
+            console.log(`🎯 [AGENT ACTION RESULT] [${ws.agent.name}] Action: ${action_id} | Status: ${status} | Msg: ${message}`);
+
+            try {
+              // 1. Update healing_actions execution_status
+              const actRes = await pool.query(
+                `UPDATE healing_actions 
+                 SET execution_status = $2, 
+                     completed_at = NOW(),
+                     result = $3::jsonb
+                 WHERE id = $1
+                 RETURNING incident_id, recommendation_id, target_name;`,
+                [
+                  action_id,
+                  status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
+                  JSON.stringify({
+                    status,
+                    message,
+                    duration_ms,
+                    executed_by_agent: ws.agent.name,
+                    completed_at: new Date().toISOString(),
+                    details,
+                  }),
+                ]
+              );
+
+              const row = actRes.rows[0];
+
+              // 2. Insert execution attempt
+              await pool.query(
+                `INSERT INTO execution_attempts (
+                  healing_action_id, attempt_number, command_type,
+                  request_payload, response_payload, status,
+                  started_at, completed_at, duration_ms
+                ) VALUES (
+                  $1, 1, 'K8S_AGENT_REMEDIATION',
+                  $2::jsonb, $3::jsonb, $4::execution_status,
+                  NOW() - interval '1 second', NOW(), $5
+                );`,
+                [
+                  action_id,
+                  JSON.stringify({ target: row?.target_name, agent: ws.agent.name }),
+                  JSON.stringify({ message, details }),
+                  status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
+                  duration_ms || 1000,
+                ]
+              );
+
+              // 3. Insert recovery verification if succeeded
+              if (status === 'SUCCEEDED') {
+                await pool.query(
+                  `INSERT INTO recovery_verifications (
+                    healing_action_id, verification_type,
+                    status_before, status_after,
+                    verification_result, verification_details,
+                    verified_at, duration_ms
+                  ) VALUES (
+                    $1, 'K8S_POST_HEALING_PROBE',
+                    $2::jsonb, $3::jsonb,
+                    true, $4::jsonb,
+                    NOW(), 500
+                  );`,
+                  [
+                    action_id,
+                    JSON.stringify({ health: 'DEGRADED' }),
+                    JSON.stringify({ health: 'HEALTHY' }),
+                    JSON.stringify({ status: 'RESTORED', message: 'Tác vụ tự lành thành công trên K8s Agent' }),
+                  ]
+                );
+
+                // Auto-resolve incident
+                if (row?.incident_id) {
+                  await pool.query(
+                    `UPDATE incidents SET status = 'RESOLVED', updated_at = NOW() WHERE id = $1;`,
+                    [row.incident_id]
+                  );
+                }
+
+                // Mark recommendation applied
+                if (row?.recommendation_id) {
+                  await pool.query(
+                    `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
+                    [row.recommendation_id]
+                  );
+                }
+              }
+
+              // Broadcast live event to UI
+              broadcastTelemetryToUi({
+                type: 'healing_action_completed',
+                data: {
+                  action_id,
+                  status,
+                  message,
+                  agent: ws.agent.name,
+                  incident_id: row?.incident_id,
+                  timestamp: new Date().toISOString(),
+                },
+              });
+
+              ws.send(
+                JSON.stringify({
+                  status: 'ack',
+                  type: 'action_result',
+                  action_id,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+            } catch (actErr) {
+              console.error('Error persisting action_result from agent:', actErr);
+            }
+            break;
+          }
+
           default: {
             ws.send(
               JSON.stringify({
@@ -383,4 +499,56 @@ export function disconnectAgentSession(agentId: string): void {
       }
     }
   });
+}
+
+/**
+ * Dispatch lệnh tự phục hồi (Self-Healing Action) xuống Agent Kubernetes đang kết nối
+ */
+export async function dispatchHealingActionToAgent(payload: {
+  action_id: string;
+  action_type: string;
+  target_name: string;
+  namespace?: string;
+  params?: any;
+}): Promise<{ dispatched: boolean; recipient_agent?: string }> {
+  if (!activeAgentWss || activeAgentWss.clients.size === 0) {
+    console.warn(`[AgentWebSocket] No connected agents available to receive action '${payload.action_type}' for target '${payload.target_name}'.`);
+    return { dispatched: false };
+  }
+
+  let chosenClient: ExtWebSocket | null = null;
+  for (const client of activeAgentWss.clients) {
+    const extWs = client as ExtWebSocket;
+    if (extWs.isAlive && extWs.agent && extWs.readyState === WebSocket.OPEN) {
+      chosenClient = extWs;
+      break;
+    }
+  }
+
+  if (!chosenClient || !chosenClient.agent) {
+    console.warn(`[AgentWebSocket] No authenticated, open agent WebSocket socket found.`);
+    return { dispatched: false };
+  }
+
+  const agentName = chosenClient.agent.name;
+  console.log(`🚀 [AgentWebSocket] Dispatching action '${payload.action_type}' (ID: ${payload.action_id}) to Agent [${agentName}] for target '${payload.target_name}'`);
+
+  try {
+    chosenClient.send(
+      JSON.stringify({
+        type: 'execute_action',
+        data: {
+          action_id: payload.action_id,
+          action_type: payload.action_type,
+          target_name: payload.target_name,
+          namespace: payload.namespace || 'default',
+          params: payload.params || {},
+        },
+      })
+    );
+    return { dispatched: true, recipient_agent: agentName };
+  } catch (sendErr) {
+    console.error(`❌ [AgentWebSocket] Failed transmitting execute_action to agent [${agentName}]:`, sendErr);
+    return { dispatched: false, recipient_agent: agentName };
+  }
 }

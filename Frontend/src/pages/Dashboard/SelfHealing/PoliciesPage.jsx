@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { selfHealingService } from '../../../services/selfHealingService';
 import { useDashboard } from '../context/DashboardContext';
+import { useAuth } from '../../../context/AuthContext';
+import usePermissions from '../../../hooks/usePermissions';
 import {
   Shield,
   Sliders,
@@ -12,7 +15,14 @@ import {
   Plus,
   Settings,
   X,
-  Check
+  Check,
+  Database,
+  ShieldCheck,
+  User,
+  AlertTriangle,
+  Building,
+  Server,
+  UserCheck
 } from 'lucide-react';
 
 const INITIAL_POLICIES = [
@@ -85,18 +95,204 @@ const INITIAL_POLICIES = [
 ];
 
 export const PoliciesPage = () => {
-  const { isRefreshing, triggerRefresh } = useDashboard();
+  const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const { user } = useAuth();
+  const { role, isOwner, isDevOps, isViewer, canManagePolicies } = usePermissions();
 
-  // Settings State
-  const [globalMode, setGlobalMode] = useState('SUPERVISED'); // AUTONOMOUS, SUPERVISED, AUDIT
-  const [blastRadiusThreshold, setBlastRadiusThreshold] = useState(30); // %
-  const [maxRestarts, setMaxRestarts] = useState(3);
-  const [restartTimeWindow, setRestartTimeWindow] = useState(15); // minutes
-  const [approvalTimeout, setApprovalTimeout] = useState(20); // minutes
-  const [cooldownPeriod, setCooldownPeriod] = useState(5); // minutes
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+
+  // Cluster Identity & State Isolation Key
+  const clusterName = currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+  const isClusterOnline = currentEnv?.agentStatus === 'ONLINE';
+  const clusterKey = currentEnv?.id ? `cluster_${currentEnv.id}` : `cluster_${clusterName}`;
+
+  // Helper: Retrieve cluster-specific safety guards
+  const getGuardsForCluster = useCallback((key, isOnline, cName) => {
+    const saved = localStorage.getItem(`selfheal_guards_${key}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    // For primary/online cluster (e.g. sang-k8s), check legacy settings or seed active defaults
+    if (isOnline || (cName && cName.includes('sang-k8s'))) {
+      const legacy = localStorage.getItem('selfheal_safety_guards');
+      if (legacy) {
+        try {
+          const parsed = JSON.parse(legacy);
+          return {
+            globalMode: parsed.globalMode || 'AUTONOMOUS',
+            blastRadiusThreshold: parsed.blastRadiusThreshold || 25,
+            maxRestarts: parsed.maxRestarts || 5,
+            restartTimeWindow: parsed.restartTimeWindow || 15,
+            approvalTimeout: parsed.approvalTimeout || 20,
+            cooldownPeriod: parsed.cooldownPeriod || 5,
+          };
+        } catch (e) {
+          // ignore
+        }
+      }
+      return {
+        globalMode: 'AUTONOMOUS',
+        blastRadiusThreshold: 25,
+        maxRestarts: 5,
+        restartTimeWindow: 15,
+        approvalTimeout: 20,
+        cooldownPeriod: 5,
+      };
+    }
+    // Default for offline / pending clusters (like vcxv)
+    return {
+      globalMode: 'AUDIT',
+      blastRadiusThreshold: 30,
+      maxRestarts: 3,
+      restartTimeWindow: 15,
+      approvalTimeout: 20,
+      cooldownPeriod: 5,
+    };
+  }, []);
+
+  // Settings State - Isolated per cluster
+  const [globalMode, setGlobalMode] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).globalMode);
+  const [blastRadiusThreshold, setBlastRadiusThreshold] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).blastRadiusThreshold);
+  const [maxRestarts, setMaxRestarts] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).maxRestarts);
+  const [restartTimeWindow, setRestartTimeWindow] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).restartTimeWindow);
+  const [approvalTimeout, setApprovalTimeout] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).approvalTimeout);
+  const [cooldownPeriod, setCooldownPeriod] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).cooldownPeriod);
+
+  // Sync guards whenever cluster changes
+  useEffect(() => {
+    const guards = getGuardsForCluster(clusterKey, isClusterOnline, clusterName);
+    setGlobalMode(guards.globalMode);
+    setBlastRadiusThreshold(guards.blastRadiusThreshold);
+    setMaxRestarts(guards.maxRestarts);
+    setRestartTimeWindow(guards.restartTimeWindow);
+    setApprovalTimeout(guards.approvalTimeout);
+    setCooldownPeriod(guards.cooldownPeriod);
+  }, [clusterKey, isClusterOnline, clusterName, getGuardsForCluster]);
+
+  const updateClusterGuard = (field, value) => {
+    const current = getGuardsForCluster(clusterKey, isClusterOnline, clusterName);
+    const updated = {
+      ...current,
+      globalMode,
+      blastRadiusThreshold,
+      maxRestarts,
+      restartTimeWindow,
+      approvalTimeout,
+      cooldownPeriod,
+      [field]: value,
+    };
+    localStorage.setItem(`selfheal_guards_${clusterKey}`, JSON.stringify(updated));
+    if (isClusterOnline) {
+      localStorage.setItem('selfheal_safety_guards', JSON.stringify(updated));
+    }
+  };
 
   // Policies list state
   const [policies, setPolicies] = useState(INITIAL_POLICIES);
+
+  const KNOWN_POLICY_TITLES = {
+    'POL-SCALE-OUT-TRAFFIC': 'Tự động mở rộng bản sao Pod khi quá tải lưu lượng đột biến',
+    'POL-ROLLBACK-HTTP5XX': 'Hoàn nguyên phiên bản khi tỷ lệ HTTP 5xx vượt 5%',
+    'POL-CLEANUP-DISK-TEMP': 'Dọn dẹp dung lượng disk tạm thời trong thư mục /tmp',
+    'POL-BLOCK-MALICIOUS-IP': 'Chặn IP tấn công bất thường bằng eBPF/iptables',
+    'POL-DRAIN-UNHEALTHY-NODE': 'Di tản workload và cô lập Node vật lý bị lỗi phần cứng',
+    'POL-RESTART-CRASHED-POD': 'Tự động khởi động lại Pod bị treo hoặc crash liveness probe',
+  };
+
+  const mapBackendPolicyToUI = useCallback((p) => {
+    const actionNames = p.actions && p.actions.length > 0
+      ? p.actions.map((a) => a.action_name || a.action_code).join(', ')
+      : 'Thực thi hành động theo chuẩn MAPE-K';
+
+    let displayName = p.description || p.name;
+    if (KNOWN_POLICY_TITLES[p.name] && (!p.description || p.description.includes('???') || p.description.includes('?'))) {
+      displayName = KNOWN_POLICY_TITLES[p.name];
+    } else if (!displayName || displayName.includes('???')) {
+      displayName = KNOWN_POLICY_TITLES[p.name] || p.name;
+    }
+
+    return {
+      id: p.id,
+      code: p.name,
+      name: displayName,
+      category: p.risk_type || 'Tự phục hồi AI',
+      targetNamespace: 'production',
+      targetCluster: currentEnv?.cluster || 'sang-k8s',
+      condition: `Trigger: ${p.trigger_type} (Ngưỡng tin cậy >= ${Math.round(Number(p.confidence_threshold || 0.85) * 100)}%)`,
+      action: actionNames,
+      riskLevel: p.risk_level || 'LOW',
+      hitlRequired: p.requires_approval ?? false,
+      enabled: p.is_active ?? true,
+      cooldown: p.cooldown_seconds || 300,
+      maxRetries: p.max_retries || 2,
+    };
+  }, [currentEnv?.cluster]);
+
+  const fetchPolicies = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const activeOrgId = currentOrg?.id;
+      const activeEnvId = currentEnv?.environment_id || currentEnv?.clusterId || currentEnv?.id;
+      const res = await selfHealingService.getPolicies({
+        organization_id: activeOrgId,
+        environment_id: activeEnvId,
+      });
+      const items = Array.isArray(res) ? res : (res?.items || []);
+      const basePolicies = items.length > 0 ? items.map(mapBackendPolicyToUI) : INITIAL_POLICIES;
+      setIsUsingLiveDb(items.length > 0);
+
+      // Check per-cluster saved policy overrides
+      const savedPoliciesRaw = localStorage.getItem(`selfheal_policies_${clusterKey}`);
+      let savedClusterMap = null;
+      if (savedPoliciesRaw) {
+        try {
+          savedClusterMap = JSON.parse(savedPoliciesRaw);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const clusterPolicies = basePolicies.map((p) => {
+        if (savedClusterMap && (savedClusterMap[p.id] !== undefined || savedClusterMap[p.code] !== undefined)) {
+          const override = savedClusterMap[p.id] ?? savedClusterMap[p.code];
+          return {
+            ...p,
+            enabled: override.enabled !== undefined ? override.enabled : p.enabled,
+            hitlRequired: override.hitlRequired !== undefined ? override.hitlRequired : p.hitlRequired,
+          };
+        }
+        // If no explicit settings saved yet for this cluster:
+        // ONLINE cluster (e.g. sang-k8s): Keep backend/active enabled
+        // OFFLINE / PENDING cluster (e.g. vcxv): Switches must move to the OFF position ("về đúng vị trí tắt")!
+        return {
+          ...p,
+          enabled: isClusterOnline ? (p.enabled ?? true) : false,
+          hitlRequired: isClusterOnline ? (p.hitlRequired ?? false) : true,
+        };
+      });
+
+      setPolicies(clusterPolicies);
+    } catch (err) {
+      console.warn('[PoliciesPage] Lỗi nạp chính sách:', err.message);
+      setIsUsingLiveDb(false);
+      setPolicies(INITIAL_POLICIES.map((p) => ({
+        ...p,
+        enabled: isClusterOnline ? p.enabled : false,
+      })));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentOrg?.id, currentEnv?.environment_id, currentEnv?.clusterId, currentEnv?.id, mapBackendPolicyToUI, clusterKey, isClusterOnline]);
+
+  useEffect(() => {
+    fetchPolicies();
+  }, [fetchPolicies, isRefreshing, currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, currentEnv?.agentStatus]);
+
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -111,38 +307,160 @@ export const PoliciesPage = () => {
     hitlRequired: true,
   });
 
-  const handleTogglePolicy = (id) => {
-    setPolicies(policies.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
+  const handleTogglePolicy = async (id) => {
+    if (!canManagePolicies) {
+      alert('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.');
+      return;
+    }
+    const target = policies.find((p) => p.id === id);
+    if (!target) return;
+    const newEnabled = !target.enabled;
+    const updatedList = policies.map((p) => (p.id === id ? { ...p, enabled: newEnabled } : p));
+    setPolicies(updatedList);
+
+    // Save state isolated to current cluster
+    const clusterMap = {};
+    updatedList.forEach((p) => {
+      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+    });
+    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
+
+    if (isUsingLiveDb && isClusterOnline) {
+      try {
+        await selfHealingService.togglePolicyActive(id);
+      } catch (err) {
+        console.warn('Lỗi bật/tắt chính sách trên DB:', err.message);
+      }
+    }
   };
 
-  const handleToggleHitl = (id) => {
-    setPolicies(policies.map((p) => (p.id === id ? { ...p, hitlRequired: !p.hitlRequired } : p)));
+  const handleToggleHitl = async (id) => {
+    if (!canManagePolicies) {
+      alert('Chỉ SME Owner và DevOps mới có quyền cấu hình cổng HITL.');
+      return;
+    }
+    const target = policies.find((p) => p.id === id);
+    if (!target) return;
+    const newHitl = !target.hitlRequired;
+    const updatedList = policies.map((p) => (p.id === id ? { ...p, hitlRequired: newHitl } : p));
+    setPolicies(updatedList);
+
+    // Save state isolated to current cluster
+    const clusterMap = {};
+    updatedList.forEach((p) => {
+      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+    });
+    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
+
+    if (isUsingLiveDb && isClusterOnline) {
+      try {
+        await selfHealingService.updatePolicyConfig(id, { requires_approval: newHitl });
+      } catch (err) {
+        console.warn('Lỗi cập nhật cổng HITL trên DB:', err.message);
+      }
+    }
   };
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
+    if (!canManagePolicies) {
+      alert('Chỉ SME Owner và DevOps mới có quyền lưu cấu hình ngưỡng an toàn.');
+      return;
+    }
     setSaveSuccess(true);
+
+    const guardsData = {
+      blastRadiusThreshold,
+      maxRestarts,
+      restartTimeWindow,
+      approvalTimeout,
+      cooldownPeriod,
+      globalMode,
+    };
+    localStorage.setItem(`selfheal_guards_${clusterKey}`, JSON.stringify(guardsData));
+    if (isClusterOnline) {
+      localStorage.setItem('selfheal_safety_guards', JSON.stringify(guardsData));
+    }
+
+    const clusterMap = {};
+    policies.forEach((p) => {
+      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+    });
+    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
+
+    if (isUsingLiveDb && isClusterOnline && policies.length > 0) {
+      try {
+        await Promise.all(
+          policies.map((p) =>
+            selfHealingService.updatePolicyConfig(p.id, {
+              cooldown_seconds: cooldownPeriod * 60,
+              max_retries: maxRestarts,
+            })
+          )
+        );
+      } catch (err) {
+        console.warn('Lỗi lưu cấu hình an toàn xuống DB:', err.message);
+      }
+    }
+
     setTimeout(() => {
       setSaveSuccess(false);
     }, 3000);
   };
 
-  const handleAddRule = (e) => {
+  const handleAddRule = async (e) => {
     e.preventDefault();
+    if (!canManagePolicies) {
+      alert('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.');
+      return;
+    }
     if (!newRule.name || !newRule.condition || !newRule.action) return;
 
-    const created = {
-      id: `POL-${String(policies.length + 1).padStart(2, '0')}`,
-      name: newRule.name,
-      category: newRule.category,
-      targetNamespace: newRule.targetNamespace,
-      condition: newRule.condition,
-      action: newRule.action,
-      riskLevel: newRule.riskLevel,
-      hitlRequired: newRule.hitlRequired,
-      enabled: true,
-    };
+    if (isUsingLiveDb) {
+      try {
+        await selfHealingService.createPolicy({
+          organization_id: currentOrg?.id,
+          environment_id: currentEnv?.environment_id || currentEnv?.clusterId || currentEnv?.id,
+          name: `POL-${Date.now().toString().slice(-4)}`,
+          description: newRule.name,
+          risk_type: newRule.category,
+          risk_level: newRule.riskLevel,
+          requires_approval: newRule.hitlRequired,
+          trigger_type: newRule.condition || 'Metric Threshold',
+        });
+        await fetchPolicies();
+      } catch (err) {
+        console.warn('Lỗi tạo quy tắc trên DB:', err.message);
+        const created = {
+          id: `POL-${String(policies.length + 1).padStart(2, '0')}`,
+          name: newRule.name,
+          category: newRule.category,
+          targetNamespace: newRule.targetNamespace,
+          condition: newRule.condition,
+          action: newRule.action,
+          riskLevel: newRule.riskLevel,
+          hitlRequired: newRule.hitlRequired,
+          enabled: true,
+        };
+        setPolicies([...policies, created]);
+      }
+    } else {
+      const created = {
+        id: `POL-${String(policies.length + 1).padStart(2, '0')}`,
+        name: newRule.name,
+        category: newRule.category,
+        targetNamespace: newRule.targetNamespace,
+        condition: newRule.condition,
+        action: newRule.action,
+        riskLevel: newRule.riskLevel,
+        hitlRequired: newRule.hitlRequired,
+        enabled: true,
+      };
+      setPolicies([...policies, created]);
+    }
 
-    setPolicies([...policies, created]);
     setShowAddModal(false);
     setNewRule({
       name: '',
@@ -158,7 +476,7 @@ export const PoliciesPage = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
@@ -166,20 +484,25 @@ export const PoliciesPage = () => {
             </h1>
             <span
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
                 fontSize: '0.6875rem',
                 fontWeight: 700,
                 padding: '2px 8px',
-                borderRadius: 'var(--dash-radius-full)',
-                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                color: '#059669',
-                border: '1px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: '10px',
+                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
+                color: isUsingLiveDb ? '#15803D' : '#B45309',
+                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
               }}
             >
-              MAPE-K v2.4
+              <Database size={10} />
+              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
             </span>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Thiết lập phạm vi tự động hóa, ngưỡng an toàn kích hoạt cổng phê duyệt con người (HITL) và kiểm soát tác động cụm.
+          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
+            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'SME Retail Enterprise'}</strong> &bull; Vị trí Cụm K8s:{' '}
+            <span style={{ fontWeight: 700, color: 'var(--dash-primary)' }}>{currentEnv?.cluster || 'sang-k8s'}</span> ({currentEnv?.envName || 'Production'}) &bull; Quản lý chính sách tự động và an toàn MAPE-K
           </p>
         </div>
 
@@ -204,19 +527,29 @@ export const PoliciesPage = () => {
           </button>
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              if (!canManagePolicies) {
+                alert('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.');
+                return;
+              }
+              setShowAddModal(true);
+            }}
+            disabled={!canManagePolicies}
             className="dash-btn"
             style={{
               padding: '8px 14px',
-              backgroundColor: 'white',
-              border: '1px solid var(--dash-primary)',
-              color: 'var(--dash-primary)',
+              backgroundColor: !canManagePolicies ? '#F1F5F9' : 'white',
+              border: `1px solid ${!canManagePolicies ? '#CBD5E1' : 'var(--dash-primary)'}`,
+              color: !canManagePolicies ? '#94A3B8' : 'var(--dash-primary)',
               fontSize: '0.8125rem',
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
+              cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
+              opacity: !canManagePolicies ? 0.7 : 1,
             }}
+            title={!canManagePolicies ? 'Chỉ SME Owner hoặc DevOps mới có quyền thêm quy tắc' : 'Thêm quy tắc mới'}
           >
             <Plus size={16} />
             Thêm Quy Tắc Mới
@@ -224,21 +557,257 @@ export const PoliciesPage = () => {
 
           <button
             onClick={handleSaveSettings}
+            disabled={!canManagePolicies}
             className="dash-btn"
             style={{
               padding: '8px 16px',
-              backgroundColor: 'var(--dash-primary)',
+              backgroundColor: !canManagePolicies ? '#94A3B8' : 'var(--dash-primary)',
               color: 'white',
               fontSize: '0.8125rem',
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
+              cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
+              opacity: !canManagePolicies ? 0.7 : 1,
             }}
+            title={!canManagePolicies ? 'Chỉ SME Owner hoặc DevOps mới có quyền lưu cấu hình' : 'Lưu cấu hình'}
           >
             {saveSuccess ? <Check size={16} /> : <Save size={16} />}
             {saveSuccess ? 'Đã Lưu Thành Công' : 'Lưu Thay Đổi'}
           </button>
+        </div>
+      </div>
+
+      {/* Dynamic RBAC, Company & Cluster Identity Verification Bar */}
+      <div
+        style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          border: canManagePolicies && currentEnv?.agentStatus === 'ONLINE' ? '1px solid #BBF7D0' : '1px solid #FED7AA',
+          backgroundColor: canManagePolicies && currentEnv?.agentStatus === 'ONLINE' ? '#F0FDF4' : '#FFFBEB',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+          {/* Company, Cluster and User details */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            {/* Organization / Company */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  backgroundColor: '#DCFCE7',
+                  color: '#166534',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Building size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Doanh nghiệp / Tổ chức
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+                  {currentOrg?.name || 'SME Retail Enterprise'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ width: '1px', height: '32px', backgroundColor: '#CBD5E1' }} />
+
+            {/* Kubernetes Cluster */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  backgroundColor: currentEnv?.agentStatus === 'ONLINE' ? '#E0F2FE' : '#FEF2F2',
+                  color: currentEnv?.agentStatus === 'ONLINE' ? '#0369A1' : '#DC2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Server size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Vị trí Cụm K8s Áp Dụng
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: currentEnv?.agentStatus === 'ONLINE' ? '#0369A1' : '#B91C1C', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{currentEnv?.cluster || currentEnv?.displayName || 'sang-k8s'}</span>
+                  <span
+                    style={{
+                      fontSize: '0.6875rem',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: currentEnv?.agentStatus === 'ONLINE' ? '#DBEAFE' : '#FEE2E2',
+                      color: currentEnv?.agentStatus === 'ONLINE' ? '#1E40AF' : '#991B1B',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {currentEnv?.envName || 'Production'}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.625rem',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: currentEnv?.agentStatus === 'ONLINE' ? '#DCFCE7' : '#FEF3C7',
+                      color: currentEnv?.agentStatus === 'ONLINE' ? '#166534' : '#B45309',
+                      border: `1px solid ${currentEnv?.agentStatus === 'ONLINE' ? '#86EFAC' : '#FDE68A'}`,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {currentEnv?.agentStatus === 'ONLINE' ? '🟢 Tác tử Online' : '🔴 Tác tử Ngoại tuyến'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ width: '1px', height: '32px', backgroundColor: '#CBD5E1' }} />
+
+            {/* Current Authenticated User */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  backgroundColor: isOwner ? '#FEF3C7' : isDevOps ? '#EDE9FE' : '#F1F5F9',
+                  color: isOwner ? '#B45309' : isDevOps ? '#6D28D9' : '#475569',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {isOwner ? <ShieldCheck size={18} /> : isDevOps ? <UserCheck size={18} /> : <User size={18} />}
+              </div>
+              <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Người dùng vận hành
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+                  {user?.email || user?.full_name || 'sme-owner@retail.com'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* User Role Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {isOwner && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  backgroundColor: '#DCFCE7',
+                  border: '1.5px solid #86EFAC',
+                  color: '#15803D',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                }}
+              >
+                👑 CHỦ DOANH NGHIỆP (SME OWNER)
+              </span>
+            )}
+            {isDevOps && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1.5px solid #BFDBFE',
+                  color: '#1D4ED8',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                }}
+              >
+                🛠️ KỸ SƯ DEVOPS
+              </span>
+            )}
+            {isViewer && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1.5px solid #CBD5E1',
+                  color: '#475569',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                }}
+              >
+                👁️ NGƯỜI XEM (VIEWER - CHỈ ĐỌC)
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Verification Status Banner */}
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: !canManagePolicies ? '#F8FAFC' : (currentEnv?.agentStatus === 'ONLINE' ? '#DCFCE7' : '#FEF3C7'),
+            fontSize: '0.8125rem',
+            color: !canManagePolicies ? '#475569' : (currentEnv?.agentStatus === 'ONLINE' ? '#166534' : '#92400E'),
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontWeight: 500,
+            border: `1px solid ${!canManagePolicies ? '#CBD5E1' : (currentEnv?.agentStatus === 'ONLINE' ? '#86EFAC' : '#FDE68A')}`,
+          }}
+        >
+          {!canManagePolicies ? (
+            <>
+              <AlertTriangle size={18} color="#64748B" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Chế độ chỉ xem (Read-Only):</strong> Tài khoản của bạn không có quyền sửa đổi hoặc thực thi chính sách tự phục hồi trên cụm <strong>{currentEnv?.cluster || 'sang-k8s'}</strong>. Các quyền quản trị này chỉ dành riêng cho <strong>SME Owner</strong> và <strong>DevOps</strong>.
+              </span>
+            </>
+          ) : currentEnv?.agentStatus === 'ONLINE' ? (
+            <>
+              <CheckCircle2 size={18} color="#166534" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Đã cấp quyền toàn diện trên cụm {currentEnv?.cluster || 'sang-k8s'}:</strong> Bạn có toàn quyền quản trị ({isOwner ? 'Chủ doanh nghiệp' : 'Kỹ sư DevOps'}) và Tác tử eBPF đang <strong>Online</strong> trên cụm <strong>{currentEnv?.cluster || 'sang-k8s'}</strong>. Mọi Action tự sửa lỗi và chính sách MAPE-K được phép tự động can thiệp.
+              </span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle size={18} color="#B45309" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Cảnh báo vị trí cụm {currentEnv?.cluster || 'vcxv'}:</strong> Bạn có thẩm quyền quản trị ({isOwner ? 'Chủ doanh nghiệp' : 'Kỹ sư DevOps'}), NHƯNG cụm <strong>{currentEnv?.cluster || 'vcxv'}</strong> hiện tại đang có <strong>Tác tử Ngoại tuyến (Pending / Chưa kết nối)</strong>. Các Action tự phục hồi sẽ tạm hoãn gửi lệnh can thiệp xuống cụm này cho đến khi kết nối Agent.
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -273,13 +842,21 @@ export const PoliciesPage = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
           {/* Supervised HITL (Khuyến nghị) */}
           <div
-            onClick={() => setGlobalMode('SUPERVISED')}
+            onClick={() => {
+              if (!canManagePolicies) {
+                alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
+                return;
+              }
+              setGlobalMode('SUPERVISED');
+              updateClusterGuard('globalMode', 'SUPERVISED');
+            }}
             style={{
               padding: '16px',
               borderRadius: 'var(--dash-radius-md)',
               border: globalMode === 'SUPERVISED' ? '2px solid var(--dash-primary)' : '1px solid var(--dash-border-subtle)',
               backgroundColor: globalMode === 'SUPERVISED' ? 'rgba(16, 185, 129, 0.04)' : 'white',
-              cursor: 'pointer',
+              cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+              opacity: canManagePolicies ? 1 : 0.8,
               position: 'relative',
               transition: 'all 0.2s',
             }}
@@ -312,13 +889,21 @@ export const PoliciesPage = () => {
 
           {/* Autonomous */}
           <div
-            onClick={() => setGlobalMode('AUTONOMOUS')}
+            onClick={() => {
+              if (!canManagePolicies) {
+                alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
+                return;
+              }
+              setGlobalMode('AUTONOMOUS');
+              updateClusterGuard('globalMode', 'AUTONOMOUS');
+            }}
             style={{
               padding: '16px',
               borderRadius: 'var(--dash-radius-md)',
               border: globalMode === 'AUTONOMOUS' ? '2px solid var(--dash-primary)' : '1px solid var(--dash-border-subtle)',
               backgroundColor: globalMode === 'AUTONOMOUS' ? 'rgba(16, 185, 129, 0.04)' : 'white',
-              cursor: 'pointer',
+              cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+              opacity: canManagePolicies ? 1 : 0.8,
               position: 'relative',
               transition: 'all 0.2s',
             }}
@@ -351,13 +936,21 @@ export const PoliciesPage = () => {
 
           {/* Audit Only */}
           <div
-            onClick={() => setGlobalMode('AUDIT')}
+            onClick={() => {
+              if (!canManagePolicies) {
+                alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
+                return;
+              }
+              setGlobalMode('AUDIT');
+              updateClusterGuard('globalMode', 'AUDIT');
+            }}
             style={{
               padding: '16px',
               borderRadius: 'var(--dash-radius-md)',
               border: globalMode === 'AUDIT' ? '2px solid var(--dash-primary)' : '1px solid var(--dash-border-subtle)',
               backgroundColor: globalMode === 'AUDIT' ? 'rgba(16, 185, 129, 0.04)' : 'white',
-              cursor: 'pointer',
+              cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+              opacity: canManagePolicies ? 1 : 0.8,
               position: 'relative',
               transition: 'all 0.2s',
             }}
@@ -416,8 +1009,13 @@ export const PoliciesPage = () => {
               max="50"
               step="5"
               value={blastRadiusThreshold}
-              onChange={(e) => setBlastRadiusThreshold(Number(e.target.value))}
-              style={{ width: '100%', accentColor: 'var(--dash-primary)', cursor: 'pointer' }}
+              disabled={!canManagePolicies}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setBlastRadiusThreshold(val);
+                updateClusterGuard('blastRadiusThreshold', val);
+              }}
+              style={{ width: '100%', accentColor: 'var(--dash-primary)', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
             />
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '6px 0 0 0' }}>
               Hành động có khả năng tác động trên {blastRadiusThreshold}% số lượng Pods trong cùng Namespace sẽ tự động kích hoạt Cổng phê duyệt.
@@ -437,9 +1035,14 @@ export const PoliciesPage = () => {
             <div style={{ display: 'flex', gap: '10px' }}>
               <select
                 value={maxRestarts}
-                onChange={(e) => setMaxRestarts(Number(e.target.value))}
+                disabled={!canManagePolicies}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setMaxRestarts(val);
+                  updateClusterGuard('maxRestarts', val);
+                }}
                 className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem' }}
+                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
               >
                 <option value={2}>2 lần</option>
                 <option value={3}>3 lần (Chuẩn K8s)</option>
@@ -447,9 +1050,14 @@ export const PoliciesPage = () => {
               </select>
               <select
                 value={restartTimeWindow}
-                onChange={(e) => setRestartTimeWindow(Number(e.target.value))}
+                disabled={!canManagePolicies}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setRestartTimeWindow(val);
+                  updateClusterGuard('restartTimeWindow', val);
+                }}
                 className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem' }}
+                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
               >
                 <option value={10}>Trong 10 phút</option>
                 <option value={15}>Trong 15 phút</option>
@@ -474,9 +1082,14 @@ export const PoliciesPage = () => {
             <div style={{ display: 'flex', gap: '10px' }}>
               <select
                 value={approvalTimeout}
-                onChange={(e) => setApprovalTimeout(Number(e.target.value))}
+                disabled={!canManagePolicies}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setApprovalTimeout(val);
+                  updateClusterGuard('approvalTimeout', val);
+                }}
                 className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem' }}
+                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
               >
                 <option value={10}>Timeout: 10 phút</option>
                 <option value={20}>Timeout: 20 phút</option>
@@ -484,9 +1097,14 @@ export const PoliciesPage = () => {
               </select>
               <select
                 value={cooldownPeriod}
-                onChange={(e) => setCooldownPeriod(Number(e.target.value))}
+                disabled={!canManagePolicies}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setCooldownPeriod(val);
+                  updateClusterGuard('cooldownPeriod', val);
+                }}
                 className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem' }}
+                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
               >
                 <option value={3}>Hạ nhiệt: 3 phút</option>
                 <option value={5}>Hạ nhiệt: 5 phút</option>
@@ -518,7 +1136,7 @@ export const PoliciesPage = () => {
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-subtle)', borderBottom: '1px solid var(--dash-border-subtle)' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Mã & Tên Quy Tắc</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Phân Loại & Namespace</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Vị Trí Cụm & Phân Loại</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Điều Kiện Kích Hoạt</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hành Động Tự Sửa Lỗi</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Rủi Ro</th>
@@ -527,54 +1145,128 @@ export const PoliciesPage = () => {
               </tr>
             </thead>
             <tbody>
-              {policies.map((p) => {
-                const isHighRisk = p.riskLevel === 'HIGH';
-                const isMedRisk = p.riskLevel === 'MEDIUM';
+              {policies.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <ShieldCheck size={40} color="#10B981" style={{ margin: '0 auto 12px auto' }} />
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
+                      {isLoading ? 'Đang tải chính sách từ Database...' : 'Chưa có chính sách tự phục hồi nào'}
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', marginTop: '6px', color: '#64748B' }}>
+                      {isLoading ? 'Vui lòng chờ trong giây lát...' : 'Tất cả các hành động hiện đang chạy theo ngưỡng an toàn mặc định.'}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                policies.map((p) => {
+                  const isHighRisk = p.riskLevel === 'HIGH' || p.riskLevel === 'CRITICAL';
+                  const isMedRisk = p.riskLevel === 'MEDIUM';
 
-                return (
-                  <tr
-                    key={p.id}
-                    style={{
-                      borderBottom: '1px solid var(--dash-border-subtle)',
-                      opacity: p.enabled ? 1 : 0.6,
-                      backgroundColor: p.enabled ? 'transparent' : 'rgba(241, 245, 249, 0.5)',
-                    }}
-                  >
-                    <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)', fontFamily: 'monospace' }}>
-                          {p.id}
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{p.name}</div>
-                    </td>
+                  return (
+                    <tr
+                      key={p.id}
+                      style={{
+                        borderBottom: '1px solid var(--dash-border-subtle)',
+                        opacity: p.enabled ? 1 : 0.6,
+                        backgroundColor: p.enabled ? 'transparent' : 'rgba(241, 245, 249, 0.5)',
+                      }}
+                    >
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)', fontFamily: 'monospace' }}>
+                            {p.code || p.id}
+                          </span>
+                        </div>
+                        <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{p.name}</div>
+                      </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
-                      <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)', fontWeight: 500 }}>
+                      <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)', fontWeight: 600 }}>
                         {p.category}
                       </div>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          fontSize: '0.6875rem',
-                          fontFamily: 'monospace',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          backgroundColor: 'var(--dash-bg-subtle)',
-                          color: 'var(--dash-text-secondary)',
-                          marginTop: '4px',
-                        }}
-                      >
-                        {p.targetNamespace}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: '#EFF6FF',
+                            color: '#1D4ED8',
+                            border: '1px solid #BFDBFE',
+                            width: 'fit-content',
+                          }}
+                        >
+                          <Server size={10} />
+                          <span>Cụm: {currentEnv?.cluster || 'sang-k8s'}</span>
+                        </span>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            fontSize: '0.6875rem',
+                            fontFamily: 'monospace',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: 'var(--dash-bg-subtle)',
+                            color: 'var(--dash-text-secondary)',
+                            width: 'fit-content',
+                          }}
+                        >
+                          ns: {p.targetNamespace || 'production'}
+                        </span>
+                      </div>
                     </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
                       {p.condition}
                     </td>
 
-                    <td style={{ padding: '14px 16px', verticalAlign: 'top', color: 'var(--dash-text-primary)', fontSize: '0.8125rem', fontWeight: 500 }}>
-                      {p.action}
+                    <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                      <div style={{ color: 'var(--dash-text-primary)', fontSize: '0.8125rem', fontWeight: 600 }}>
+                        {p.action}
+                      </div>
+                      <div style={{ marginTop: '6px' }}>
+                        {currentEnv?.agentStatus === 'ONLINE' ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.6875rem',
+                              fontWeight: 700,
+                              color: '#059669',
+                              backgroundColor: '#ECFDF5',
+                              border: '1px solid #A7F3D0',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            <CheckCircle2 size={10} />
+                            <span>Đã cấp quyền trên cụm {currentEnv?.cluster || 'sang-k8s'}</span>
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.6875rem',
+                              fontWeight: 700,
+                              color: '#D97706',
+                              backgroundColor: '#FFFBEB',
+                              border: '1px solid #FDE68A',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            <AlertTriangle size={10} />
+                            <span>Chưa cấp quyền (Tác tử Ngoại tuyến)</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
@@ -596,6 +1288,7 @@ export const PoliciesPage = () => {
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
                       <button
                         onClick={() => handleToggleHitl(p.id)}
+                        disabled={!canManagePolicies}
                         className="dash-btn"
                         style={{
                           padding: '4px 10px',
@@ -608,7 +1301,10 @@ export const PoliciesPage = () => {
                           display: 'flex',
                           alignItems: 'center',
                           gap: '4px',
+                          cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
+                          opacity: !canManagePolicies ? 0.6 : 1,
                         }}
+                        title={!canManagePolicies ? 'Chỉ SME Owner và DevOps mới có quyền cấu hình HITL' : undefined}
                       >
                         {p.hitlRequired ? <Lock size={12} /> : null}
                         {p.hitlRequired ? 'Bắt Buộc Duyệt' : 'Tự Động Chạy'}
@@ -616,21 +1312,78 @@ export const PoliciesPage = () => {
                     </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
-                      <label style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={p.enabled}
-                          onChange={() => handleTogglePolicy(p.id)}
-                          style={{ accentColor: 'var(--dash-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
-                        />
-                        <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: p.enabled ? '#059669' : 'var(--dash-text-secondary)' }}>
-                          {p.enabled ? 'Đang Bật' : 'Tạm Dừng'}
+                      <div
+                        role="switch"
+                        aria-checked={p.enabled}
+                        tabIndex={canManagePolicies ? 0 : -1}
+                        onClick={() => {
+                          if (!canManagePolicies) return;
+                          handleTogglePolicy(p.id);
+                        }}
+                        onKeyDown={(e) => {
+                          if ((e.key === 'Enter' || e.key === ' ') && canManagePolicies) {
+                            e.preventDefault();
+                            handleTogglePolicy(p.id);
+                          }
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+                          opacity: canManagePolicies ? 1 : 0.65,
+                          userSelect: 'none',
+                        }}
+                        title={
+                          !canManagePolicies
+                            ? 'Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách'
+                            : p.enabled
+                            ? 'Nhấn để Tắt chính sách trên cụm này'
+                            : 'Nhấn để Bật chính sách trên cụm này'
+                        }
+                      >
+                        {/* Modern Toggle Switch Slider */}
+                        <div
+                          style={{
+                            width: '38px',
+                            height: '22px',
+                            borderRadius: '11px',
+                            backgroundColor: p.enabled ? '#10B981' : '#CBD5E1',
+                            position: 'relative',
+                            transition: 'background-color 0.2s ease',
+                            flexShrink: 0,
+                            boxShadow: p.enabled ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : 'none',
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '50%',
+                              backgroundColor: '#FFFFFF',
+                              position: 'absolute',
+                              top: '3px',
+                              left: p.enabled ? '19px' : '3px',
+                              transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: p.enabled ? '#059669' : '#64748B',
+                            minWidth: '55px',
+                          }}
+                        >
+                          {p.enabled ? 'Đang Bật' : 'Đã Tắt'}
                         </span>
-                      </label>
+                      </div>
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

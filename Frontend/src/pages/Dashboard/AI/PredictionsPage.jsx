@@ -40,6 +40,7 @@ const RISK_HEADS_CONFIG = [
   { key: 'DISK_FULL', label: 'Tràn Bộ Nhớ Đĩa (Disk Full)', threshold: 0.85, defaultDesc: 'Phân vùng ephemeral storage hoặc log phình to' },
   { key: 'HTTP_5XX_SPIKE', label: 'Đột Biến Lỗi 5xx (5xx Spike)', threshold: 0.81, defaultDesc: 'Tỷ lệ lỗi máy chủ tăng cao bất thường' },
   { key: 'TRAFFIC_OVERLOAD', label: 'Quá Tải Lưu Lượng (Traffic Spike)', threshold: 0.85, defaultDesc: 'Đột biến lưu lượng truy cập Ingress ngoài dự kiến' },
+  { key: 'SCALE_DOWN_CANDIDATE', label: 'Thu Nhỏ Bản Sao (Scale Down / Tiết Kiệm)', threshold: 0.96, defaultDesc: 'Tải thấp kéo dài liên tục; đề xuất giảm số lượng Pod để tối ưu chi phí hạ tầng' },
 ];
 
 const SERIES_CONFIG = [
@@ -50,6 +51,199 @@ const SERIES_CONFIG = [
   { key: 'request_rate', label: 'Lưu lượng (Req/s)', color: '#06B6D4', gradientId: 'reqGrad', unit: 'req/s' },
   { key: 'http_5xx_rate', label: 'Lỗi 5xx (%)', color: '#EF4444', gradientId: 'errGrad', unit: '%' },
 ];
+
+// Cấu hình hiển thị chi tiết hành động tự lành
+const getActionDetails = (code) => {
+  switch (code) {
+    case 'RESTART_POD':
+      return {
+        label: 'Khởi động lại Pod (RESTART_POD)',
+        desc: 'Thực hiện Rolling Restart an toàn cho Pod mục tiêu qua Kubernetes API, kiểm soát Zero-Downtime theo vòng lặp thích ứng MAPE\u2011K.',
+        badgeBg: '#EFF6FF',
+        badgeColor: '#1D4ED8',
+        badgeBorder: '#BFDBFE',
+      };
+    case 'SCALE_REPLICAS':
+      return {
+        label: 'Mở rộng bản sao Pod (SCALE_REPLICAS)',
+        desc: 'Tự động nâng số lượng Replicas Pods để phân bổ tải và phục hồi năng lực dịch vụ theo chuẩn MAPE\u2011K.',
+        badgeBg: '#ECFDF5',
+        badgeColor: '#047857',
+        badgeBorder: '#A7F3D0',
+      };
+    case 'ROLLBACK_DEPLOYMENT':
+      return {
+        label: 'Hoàn nguyên phiên bản (ROLLBACK)',
+        desc: 'Khôi phục về bản ReplicaSet ổn định trước đó nhằm triệt tiêu lỗi CrashLoop sau bản phát hành mới.',
+        badgeBg: '#FEF2F2',
+        badgeColor: '#B91C1C',
+        badgeBorder: '#FECACA',
+      };
+    case 'SCALE_DOWN':
+    case 'SCALE_IN':
+    case 'SCALE_DOWN_CANDIDATE':
+      return {
+        label: 'Thu nhỏ bản sao Pod (SCALE_DOWN)',
+        desc: 'Tự động giảm số lượng Replicas Pods khi tải thấp liên tục nhằm tối ưu hóa chi phí hạ tầng theo chuẩn MAPE-K.',
+        badgeBg: '#F3E8FF',
+        badgeColor: '#7E22CE',
+        badgeBorder: '#D8B4FE',
+      };
+    default:
+      return {
+        label: code || 'Tự phục hồi MAPE\u2011K',
+        desc: 'Áp dụng hành động tự sửa lỗi kiểm soát an toàn theo vòng lặp điều khiển tự thích ứng MAPE\u2011K.',
+        badgeBg: '#FEF3C7',
+        badgeColor: '#B45309',
+        badgeBorder: '#FDE68A',
+      };
+  }
+};
+
+// Dịch nguyên nhân gốc rễ RCA sang tiếng Việt chuẩn kỹ thuật
+const formatRootCauseType = (cause) => {
+  if (!cause) return 'Phát hiện bất thường viễn trắc hệ thống';
+  if (cause === 'Unstable application pod') return 'Pod ứng dụng hoạt động không ổn định (Unstable Pod / Lỗi Probe)';
+  if (cause === 'CPU_OVERLOAD') return 'Quá tải chu kỳ vi xử lý CPU (CPU Overload)';
+  if (cause === 'OOM' || cause === 'MEMORY_LEAK') return 'Nguy cơ tràn bộ nhớ RAM (OOM / Memory Spike)';
+  if (cause === 'DISK_FULL') return 'Tràn dung lượng bộ nhớ đĩa (Disk Full)';
+  if (cause === 'HIGH_LATENCY') return 'Độ trễ phản hồi vượt ngưỡng (High Latency Spike)';
+  if (cause === 'HTTP_5XX_SPIKE') return 'Đột biến tỷ lệ lỗi máy chủ 5xx (5xx Spike)';
+  if (cause === 'TRAFFIC_OVERLOAD') return 'Đột biến lưu lượng truy cập Ingress (Traffic Spike)';
+  if (cause === 'SCALE_DOWN_CANDIDATE' || cause === 'scale_down_candidate') return 'Cơ hội thu nhỏ tài nguyên (Scale Down Candidate)';
+  if (cause === 'underutilized' || cause === 'Workload underutilized (scale down opportunity)') return 'Tải thấp kéo dài / Dư thừa tài nguyên (Underutilized)';
+  if (cause === 'insufficient_evidence') return 'Chưa đủ dữ liệu viễn trắc để xác nhận bất thường';
+  return cause;
+};
+
+// Dịch diễn giải suy luận của AI
+const formatAiExplanation = (raw, rootCause) => {
+  if (!raw) return 'Kết quả đối soát viễn trắc eBPF và Kubelet xác nhận hành vi bất thường của tiến trình.';
+  if (raw.includes('unhealthy or repeatedly restarting')) {
+    return 'Phát hiện Pod ứng dụng hoạt động không ổn định hoặc liên tục gặp lỗi khởi động lại (Restart Loop)';
+  }
+  if (raw.includes('most strongly supports Unstable application pod')) {
+    return 'Dữ liệu viễn trắc và bằng chứng hệ thống xác nhận Pod ứng dụng hoạt động không ổn định (tiến trình bên trong Pod không phản hồi kiểm tra tính sẵn sàng Readiness Probe).';
+  }
+  if (raw.includes('most strongly supports CPU_OVERLOAD')) {
+    return 'Bằng chứng viễn trắc eBPF và mô hình AI GRU xác nhận mức tiêu thụ CPU bão hòa, có nguy cơ gây tắc nghẽn hàng đợi xử lý request.';
+  }
+  if (raw.includes('most strongly supports OOM')) {
+    return 'Mức tiêu thụ bộ nhớ RAM tăng dốc liên tục, nguy cơ bị Linux Kernel OOM-Killer tiêu diệt tiến trình.';
+  }
+  if (raw.includes('Additional replicas can distribute load')) {
+    return 'Tải lượng tăng cao đột biến, cần mở rộng thêm bản sao Pod để giải tỏa áp lực và duy trì độ ổn định';
+  }
+  if (raw.includes('underutilized') || raw.includes('scale down replicas') || raw.includes('low utilization')) {
+    return 'Chỉ số viễn trắc cho thấy tải thấp kéo dài liên tục; đề xuất giảm số lượng bản sao Pod để tối ưu chi phí hạ tầng';
+  }
+  if (raw.includes('No safe infrastructure action is justified')) {
+    return 'Hệ thống đang trong giới hạn an toàn tự thích ứng, tiếp tục theo dõi các ngưỡng viễn trắc';
+  }
+  return raw;
+};
+
+// Dịch diễn giải khuyến nghị
+const formatReasoning = (raw) => {
+  if (!raw) return 'Phát hiện Pod ứng dụng có dấu hiệu bất thường hoặc lặp lại chu kỳ khởi động lại.';
+  if (raw.includes('unhealthy or repeatedly restarting')) {
+    return 'Phát hiện Pod ứng dụng hoạt động không ổn định hoặc liên tục gặp lỗi khởi động lại (Restart Loop)';
+  }
+  if (raw.includes('Additional replicas can distribute load')) {
+    return 'Tải lượng tăng cao đột biến, cần mở rộng thêm bản sao Pod để giải tỏa áp lực và duy trì độ ổn định';
+  }
+  if (raw.includes('underutilized') || raw.includes('scale down replicas') || raw.includes('low utilization')) {
+    return 'Chỉ số viễn trắc cho thấy tải thấp kéo dài liên tục; đề xuất giảm số lượng bản sao Pod để tối ưu chi phí hạ tầng';
+  }
+  if (raw.includes('No safe infrastructure action is justified')) {
+    return 'Hệ thống đang trong giới hạn an toàn tự thích ứng, tiếp tục theo dõi các ngưỡng viễn trắc';
+  }
+  return raw;
+};
+
+// Dịch chi tiết từng bản ghi bằng chứng RCA
+const formatEvidenceDetail = (summaryText, sourceType) => {
+  const text = String(summaryText || '').trim();
+
+  if (text.includes('Readiness probe is failing')) {
+    return {
+      title: 'Lỗi kiểm tra tính sẵn sàng (Readiness Probe Failure)',
+      badge: 'KUBELET_PROBE',
+      badgeColor: '#DC2626',
+      badgeBg: '#FEE2E2',
+      importanceLabel: 'Bằng chứng cốt lõi',
+      desc: 'Bộ điều khiển Kubernetes Kubelet ghi nhận Pod phản hồi thất bại bài kiểm tra tính sẵn sàng (Readiness probe is failing). Trong thời gian này, K8s Service tự động ngắt định tuyến traffic tới Pod để tránh sinh lỗi gián đoạn cho người dùng.',
+    };
+  }
+
+  if (text.includes('GRU predicted CPU_OVERLOAD')) {
+    const match = text.match(/\(([^)]+)\)/);
+    const scoreStr = match ? match[1] : '90%';
+    return {
+      title: 'Mô hình Deep Learning GRU cảnh báo quá tải CPU',
+      badge: 'AI_DEEP_LEARNING',
+      badgeColor: '#7C3AED',
+      badgeBg: '#EDE9FE',
+      importanceLabel: 'Dự báo chuỗi thời gian',
+      desc: `Mạng nơ-ron hồi quy GRU (Gated Recurrent Unit) phân tích 12 mốc chuỗi thời gian viễn trắc gần nhất và dự báo nguy cơ quá tải CPU đạt xác suất ${scoreStr}. Cần chủ động can thiệp phòng ngừa trước khi suy sụp dịch vụ.`,
+    };
+  }
+
+  if (text.includes('CPU usage is critically high')) {
+    const match = text.match(/\(([^)]+)\)/);
+    const pctStr = match ? match[1] : '> 95%';
+    return {
+      title: 'Mức tiêu thụ CPU chạm ngưỡng nguy kịch',
+      badge: 'EBPF_CPU_METRIC',
+      badgeColor: '#DC2626',
+      badgeBg: '#FEE2E2',
+      importanceLabel: 'Viễn trắc thời gian thực',
+      desc: `Bộ viễn trắc hạt nhân eBPF ghi nhận mức tải CPU của Pod đạt ${pctStr}, vượt ngưỡng an toàn cho phép và gây nghẽn luồng xử lý ứng dụng.`,
+    };
+  }
+
+  if (text.includes('insufficient_evidence')) {
+    return {
+      title: 'Dữ liệu viễn trắc bình thường',
+      badge: 'TELEMETRY_HEALTHY',
+      badgeColor: '#059669',
+      badgeBg: '#D1FAE5',
+      importanceLabel: 'Thông tin theo dõi',
+      desc: 'Không ghi nhận chỉ số viễn trắc nào vượt ngưỡng bất thường tại thời điểm phân tích.',
+    };
+  }
+
+  if (text.includes('Liveness probe is failing')) {
+    return {
+      title: 'Lỗi kiểm tra tính sống còn (Liveness Probe Failure)',
+      badge: 'KUBELET_LIVENESS',
+      badgeColor: '#DC2626',
+      badgeBg: '#FEE2E2',
+      importanceLabel: 'Nguy kịch',
+      desc: 'Tiến trình container bị treo (deadlock/unresponsive), Kubelet chuẩn bị thực thi kill và khởi động lại container.',
+    };
+  }
+
+  if (text.includes('Memory usage')) {
+    return {
+      title: 'Mức tiêu thụ bộ nhớ RAM vượt ngưỡng an toàn',
+      badge: 'EBPF_MEM_METRIC',
+      badgeColor: '#D97706',
+      badgeBg: '#FEF3C7',
+      importanceLabel: 'Cảnh báo bộ nhớ',
+      desc: 'Bộ nhớ RAM tăng trưởng dốc đứng, tiệm cận hạn mức cgroup memory limit của Kubernetes Pod.',
+    };
+  }
+
+  return {
+    title: text || 'Bằng chứng quan trắc hệ thống',
+    badge: sourceType || 'AI_TELEMETRY',
+    badgeColor: '#2563EB',
+    badgeBg: '#DBEAFE',
+    importanceLabel: 'Bằng chứng viễn trắc',
+    desc: 'Bản ghi sự kiện viễn trắc thu thập từ bộ giám sát hạ tầng và thuật toán phân tích gốc rễ RCA.',
+  };
+};
 
 export const PredictionsPage = () => {
   const { currentOrg, currentEnv, isAgentConnected, envList, setCurrentEnv, isRefreshing, triggerRefresh } = useDashboard();
@@ -79,6 +273,8 @@ export const PredictionsPage = () => {
     isOpen: false,
     incidentId: null,
     recTitle: '',
+    recData: null,
+    incidentDetail: null,
     loading: false,
     evidences: [],
   });
@@ -138,15 +334,17 @@ export const PredictionsPage = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [healthRes, statsRes, predRes, recRes, healRes] = await Promise.all([
         aiService.getAiHealth(),
-        aiService.getPredictionStats(),
+        aiService.getPredictionStats({ cluster_id: clusterParam }),
         aiService.getPredictions({
           limit: 15,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
+          cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 10 }),
-        aiService.getHealingActions({ limit: 10 }),
+        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
       ]);
 
       setAiHealth(healthRes);
@@ -171,19 +369,21 @@ export const PredictionsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedTypeFilter]);
+  }, [selectedTypeFilter, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
 
   // Đồng bộ dữ liệu ngầm định kỳ (Silent Sync) không giật lag
   const silentSyncData = useCallback(async () => {
     try {
+      const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [statsRes, predRes, recRes, healRes] = await Promise.all([
-        aiService.getPredictionStats(),
+        aiService.getPredictionStats({ cluster_id: clusterParam }),
         aiService.getPredictions({
           limit: 15,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
+          cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 10 }),
-        aiService.getHealingActions({ limit: 10 }),
+        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
       ]);
 
       if (statsRes) setStats(statsRes);
@@ -191,25 +391,33 @@ export const PredictionsPage = () => {
       if (recRes) setRecommendations(recRes || []);
 
       const predItems = predRes?.items || [];
+      setPredictions(predItems);
       if (predItems.length > 0) {
-        setPredictions((prev) => {
-          if (prev.length === 0 || prev[0].id !== predItems[0].id) {
-            setSelectedPrediction(predItems[0]);
+        setSelectedPrediction((prev) => {
+          if (!prev || prev.id !== predItems[0].id) {
             loadInputs(predItems[0].id);
+            return predItems[0];
           }
-          return predItems;
+          return prev;
         });
+      } else {
+        setSelectedPrediction(null);
+        setPredictionInputs([]);
       }
     } catch (err) {
       // Bỏ qua lỗi ngầm
     }
-  }, [selectedTypeFilter]);
+  }, [selectedTypeFilter, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
 
   useEffect(() => {
-    if (isAgentConnected) {
-      loadData();
-    }
-  }, [isAgentConnected, currentEnv?.id, loadData]);
+    setSelectedPrediction(null);
+    setPredictionInputs([]);
+    setPredictions([]);
+    setRecommendations([]);
+    setHealingActions([]);
+    setStats({ total: 0, by_type: {}, avg_confidence: 0 });
+    loadData();
+  }, [currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id, loadData]);
 
   // Tự động Polling ngầm mỗi 5 giây đảm bảo giao diện luôn nhảy số Realtime (chỉ khi Agent Online)
   useEffect(() => {
@@ -227,6 +435,7 @@ export const PredictionsPage = () => {
       setBatchProgress(null);
       return;
     }
+    const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
     const unsubscribe = telemetryService.subscribeWebSocket(
       'sme-order-service',
       (payload) => {
@@ -306,7 +515,8 @@ export const PredictionsPage = () => {
       },
       (connected) => {
         setIsWsLive(connected);
-      }
+      },
+      clusterParam
     );
 
     return () => {
@@ -320,7 +530,8 @@ export const PredictionsPage = () => {
   const handleRunManualInference = async () => {
     setIsEvaluating(true);
     try {
-      const res = await aiService.triggerManualInference('sme-order-service', {
+      const targetWorkload = displaySelectedPrediction?.workload_name || displayPredictions[0]?.workload_name || 'sme-order-service';
+      const res = await aiService.triggerManualInference(targetWorkload, {
         forceRca: false,
         autoTriggerRca: true,
       });
@@ -411,9 +622,10 @@ export const PredictionsPage = () => {
       });
 
       // Tải lại danh sách khuyến nghị & danh sách healing_actions
+      const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [updatedRecs, updatedHeals] = await Promise.all([
-        aiService.getRecommendations({ limit: 10 }),
-        aiService.getHealingActions({ limit: 10 }),
+        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
       ]);
       setRecommendations(updatedRecs || []);
       setHealingActions(updatedHeals || []);
@@ -442,23 +654,40 @@ export const PredictionsPage = () => {
       isOpen: true,
       incidentId: rec.incident_id,
       recTitle: rec.recommendation || 'Khuyến nghị phòng ngừa',
+      recData: rec,
+      incidentDetail: null,
       loading: true,
       evidences: [],
     });
 
     try {
-      const evidences = await aiService.getIncidentEvidences(rec.incident_id);
+      const [evidences, incidentDetail] = await Promise.all([
+        aiService.getIncidentEvidences(rec.incident_id),
+        aiService.getIncidentDetail(rec.incident_id),
+      ]);
+
+      const predId = incidentDetail?.prediction_id || rec?.prediction_id;
+      let predInputs = [];
+      if (predId) {
+        try {
+          predInputs = await aiService.getPredictionInputs(predId);
+        } catch {}
+      }
+
       setEvidenceModal((prev) => ({
         ...prev,
         loading: false,
         evidences: evidences || [],
+        incidentDetail: incidentDetail || null,
+        predInputs: predInputs || [],
       }));
     } catch (err) {
-      console.error('[PredictionsPage] Lỗi lấy evidences:', err);
+      console.error('[PredictionsPage] Lỗi lấy evidences / incidentDetail:', err);
       setEvidenceModal((prev) => ({
         ...prev,
         loading: false,
         evidences: [],
+        incidentDetail: null,
       }));
     }
   };
@@ -468,6 +697,8 @@ export const PredictionsPage = () => {
       isOpen: false,
       incidentId: null,
       recTitle: '',
+      recData: null,
+      incidentDetail: null,
       loading: false,
       evidences: [],
     });
@@ -535,8 +766,41 @@ export const PredictionsPage = () => {
 
   const displayRecommendations = useMemo(() => {
     if (!isAgentConnected) return [];
-    return recommendations;
-  }, [isAgentConnected, recommendations]);
+    const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
+    let list = recommendations;
+    if (clusterParam && clusterParam !== 'ALL') {
+      list = recommendations.filter((r) => {
+        if (!r.cluster_id) return true;
+        return (
+          r.cluster_id === clusterParam ||
+          r.cluster_id === currentEnv?.clusterId ||
+          r.cluster_id === currentEnv?.id ||
+          r.cluster_id === currentEnv?.cluster
+        );
+      });
+    }
+
+    // Nhóm và loại bỏ các đề xuất trùng lặp cho cùng một workload/hành động
+    const map = new Map();
+    for (const r of list) {
+      const target = r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : 'sme-order-service');
+      const actionCode = r.recommendation || r.action_code || 'RESTART_POD';
+      const key = `${actionCode}__${target}`;
+      if (!map.has(key)) {
+        map.set(key, r);
+      } else {
+        const existing = map.get(key);
+        const rIsApplied = r.status === 'APPLIED' || appliedActions.includes(r.id);
+        const exIsApplied = existing.status === 'APPLIED' || appliedActions.includes(existing.id);
+        if (rIsApplied && !exIsApplied) {
+          map.set(key, r);
+        } else if (!exIsApplied && new Date(r.created_at) > new Date(existing.created_at)) {
+          map.set(key, r);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [isAgentConnected, recommendations, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id, appliedActions]);
 
   const displayHealingActions = useMemo(() => {
     if (!isAgentConnected) return [];
@@ -820,7 +1084,7 @@ export const PredictionsPage = () => {
             </span>
             <Activity size={18} color="#6366F1" />
           </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: isAgentConnected ? 'var(--dash-text-primary)' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: (isAgentConnected && displaySelectedPrediction) ? 'var(--dash-text-primary)' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
             {displayStats.total.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: isAgentConnected ? '#10B981' : '#94A3B8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -980,7 +1244,7 @@ export const PredictionsPage = () => {
                 </h3>
               </div>
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Mỗi mốc cách nhau 5 giây. Lượt: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</span> &bull; Workload: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.workload_name || 'sme-order-service') : 'Chưa kết nối'}</span>
+                Mỗi mốc cách nhau 5 giây. Lượt: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</span> &bull; Workload: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{displaySelectedPrediction?.workload_name || (isAgentConnected ? (displayPredictions.length > 0 ? 'N/A' : 'Chưa có workload') : 'Chưa kết nối')}</span>
               </p>
             </div>
 
@@ -1099,7 +1363,7 @@ export const PredictionsPage = () => {
           {!isAgentConnected ? (
             <div style={{ height: `${height}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#94A3B8', fontSize: '0.8125rem' }}>
               <Server size={32} color="#CBD5E1" />
-              <div style={{ fontWeight: 600, color: '#64748B' }}>Cụm {currentEnv?.cluster || 'k8s-cluster-01'} chưa kết nối tác tử viễn trắc (Agent Offline)</div>
+              <div style={{ fontWeight: 600, color: '#64748B' }}>Cụm {currentEnv?.cluster || 'N/A'} chưa kết nối tác tử viễn trắc (Agent Offline)</div>
               <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Chưa có dữ liệu chuỗi viễn trắc thu thập cho cụm này</div>
             </div>
           ) : loadingInputs ? (
@@ -1344,43 +1608,43 @@ export const PredictionsPage = () => {
               </h3>
             </div>
             <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', padding: '2px 6px', backgroundColor: '#F3E8FF', color: '#7C3AED', fontWeight: 700 }}>
-              6 ĐẦU SUY LUẬN
+              {RISK_HEADS_CONFIG.length} ĐẦU SUY LUẬN
             </span>
           </div>
 
           <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '0 0 14px 0', lineHeight: 1.4 }}>
             Điểm rủi ro tổng hợp lượt hiện tại:{' '}
-            <strong style={{ color: isAgentConnected ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
-              {isAgentConnected ? (displaySelectedPrediction?.risk_score || '0.0002') : '0.0000'}
+            <strong style={{ color: displaySelectedPrediction ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+              {displaySelectedPrediction ? (displaySelectedPrediction.risk_score || '0.0000') : '0.0000'}
             </strong>{' '}
             (Trạng thái:{' '}
-            <span style={{ color: isAgentConnected ? '#059669' : '#94A3B8', fontWeight: 700 }}>
-              {isAgentConnected ? (displaySelectedPrediction?.status || 'HEALTHY') : 'DISCONNECTED'}
+            <span style={{ color: displaySelectedPrediction ? '#059669' : '#94A3B8', fontWeight: 700 }}>
+              {displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? 'CHƯA CÓ LƯỢT SUY LUẬN' : 'DISCONNECTED')}
             </span>)
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '11px', flex: 1, justifyContent: 'center' }}>
             {RISK_HEADS_CONFIG.map((head) => {
-              const isDetected = isAgentConnected && displaySelectedPrediction?.prediction_type === head.key;
-              const probValue = !isAgentConnected
+              const isDetected = isAgentConnected && Boolean(displaySelectedPrediction) && displaySelectedPrediction?.prediction_type === head.key;
+              const probValue = (!isAgentConnected || !displaySelectedPrediction)
                 ? 0
                 : isDetected
                 ? (parseFloat(displaySelectedPrediction?.confidence_score) || 0.85)
-                : Math.min(parseFloat(displaySelectedPrediction?.risk_score || 0.001) * 10, head.threshold * 0.4);
-              const probPercent = !isAgentConnected ? 0 : Math.min(Math.round(probValue * 100), 100);
-              const isExceeded = isAgentConnected && probValue >= head.threshold;
+                : Math.min(parseFloat(displaySelectedPrediction?.risk_score || 0) * 10, head.threshold * 0.4);
+              const probPercent = (!isAgentConnected || !displaySelectedPrediction) ? 0 : Math.min(Math.round(probValue * 100), 100);
+              const isExceeded = isAgentConnected && Boolean(displaySelectedPrediction) && probValue >= head.threshold;
 
               return (
                 <div key={head.key} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                    <span style={{ fontWeight: 600, color: isAgentConnected ? 'var(--dash-text-primary)' : '#94A3B8' }}>
+                    <span style={{ fontWeight: 600, color: (isAgentConnected && displaySelectedPrediction) ? 'var(--dash-text-primary)' : '#94A3B8' }}>
                       {head.label}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isExceeded ? '#E11D48' : 'var(--dash-text-muted)' }}>
                         Ngưỡng: {(head.threshold * 100).toFixed(0)}%
                       </span>
-                      <strong style={{ fontFamily: 'var(--font-mono)', color: !isAgentConnected ? '#94A3B8' : (isExceeded ? '#E11D48' : '#059669') }}>
+                      <strong style={{ fontFamily: 'var(--font-mono)', color: (!isAgentConnected || !displaySelectedPrediction) ? '#94A3B8' : (isExceeded ? '#E11D48' : '#059669') }}>
                         {probPercent}%
                       </strong>
                     </div>
@@ -1392,7 +1656,7 @@ export const PredictionsPage = () => {
                       style={{
                         width: `${probPercent}%`,
                         height: '100%',
-                        backgroundColor: !isAgentConnected ? '#CBD5E1' : (isExceeded ? '#EF4444' : '#10B981'),
+                        backgroundColor: (!isAgentConnected || !displaySelectedPrediction) ? '#CBD5E1' : (isExceeded ? '#EF4444' : '#10B981'),
                         transition: 'width 0.3s ease',
                       }}
                     />
@@ -1404,8 +1668,8 @@ export const PredictionsPage = () => {
 
           <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #F1F5F9', fontSize: '0.6875rem', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Mỗi đầu nhãn GRU dùng sigmoid nhị phân độc lập</span>
-            <span style={{ color: isAgentConnected ? '#059669' : '#94A3B8', fontWeight: 600 }}>
-              {isAgentConnected ? 'Tất cả dưới ngưỡng an toàn' : 'Cụm chưa kết nối • Không có dữ liệu suy luận'}
+            <span style={{ color: (isAgentConnected && displaySelectedPrediction) ? '#059669' : '#94A3B8', fontWeight: 600 }}>
+              {displaySelectedPrediction ? 'Tất cả dưới ngưỡng an toàn' : (isAgentConnected ? 'Chưa có lượt suy luận' : 'Cụm chưa kết nối • Không có dữ liệu suy luận')}
             </span>
           </div>
         </div>
@@ -1583,106 +1847,201 @@ export const PredictionsPage = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {displayRecommendations.map((rec) => {
               const isApplied = rec.status === 'APPLIED' || appliedActions.includes(rec.id);
+              const actionCode = rec.recommendation || rec.action_code || 'RESTART_POD';
+              const targetName = rec.target_name || (rec.target_id === 'c0000000-0000-0000-0000-000000000002' ? 'sme-order-service' : (rec.target_id || (rec.incident_title ? rec.incident_title.split(' on ')[1] : 'sme-order-service')));
+              const clusterName = currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+
+              const actionInfo = getActionDetails(actionCode);
 
               return (
                 <div
                   key={rec.id}
                   style={{
-                    padding: '16px',
-                    borderRadius: '6px',
+                    padding: '18px 20px',
+                    borderRadius: '8px',
                     backgroundColor: isApplied ? '#F0FDF4' : '#FFFFFF',
                     border: isApplied ? '1px solid #86EFAC' : '1px solid #E2E8F0',
-                    borderLeft: isApplied ? '4px solid #10B981' : '4px solid #F59E0B',
+                    borderLeft: isApplied ? '5px solid #10B981' : '5px solid #F59E0B',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
+                    flexDirection: 'column',
                     gap: '12px',
+                    transition: 'all 0.2s ease',
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: '260px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  {/* Top Badges Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span
                         style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: '0.6875rem',
                           fontWeight: 700,
-                          padding: '2px 6px',
-                          backgroundColor: '#FEF3C7',
-                          color: '#B45309',
+                          padding: '3px 8px',
+                          backgroundColor: actionInfo.badgeBg,
+                          color: actionInfo.badgeColor,
+                          border: `1px solid ${actionInfo.badgeBorder}`,
                           borderRadius: '4px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
                         }}
                       >
-                        {rec.recommendation || 'RESTART_POD'}
+                        <Zap size={11} />
+                        <span>{actionInfo.label}</span>
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        Ưu tiên: {rec.priority === 1 ? 'Khẩn cấp (1)' : 'Cao (2)'}
+
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          backgroundColor: '#F1F5F9',
+                          color: '#334155',
+                          borderRadius: '4px',
+                          border: '1px solid #E2E8F0',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <Server size={11} color="#64748B" />
+                        <span>Dịch vụ: <strong>{targetName}</strong></span>
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                        &bull; {new Date(rec.created_at).toLocaleString('vi-VN')}
+
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1E40AF',
+                          borderRadius: '4px',
+                          border: '1px solid #BFDBFE',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <span>☸️ Cụm: <strong>{clusterName}</strong></span>
+                      </span>
+
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: rec.priority === 1 ? '#FEF2F2' : '#FFFBEB',
+                          color: rec.priority === 1 ? '#DC2626' : '#D97706',
+                          border: `1px solid ${rec.priority === 1 ? '#FECACA' : '#FDE68A'}`,
+                        }}
+                      >
+                        Ưu tiên: {rec.priority === 1 ? 'Khẩn cấp' : 'Cao'}
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1E293B', marginBottom: '4px' }}>
-                      {rec.reasoning || 'Pod ứng dụng có dấu hiệu bất thường hoặc lặp lại chu kỳ khởi động'}
-                    </div>
-
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                      Hành động tự lành: Khởi động lại Pod kiểm soát an toàn theo vòng lặp điều khiển tự thích ứng MAPE-K.
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
+                      <Clock size={12} />
+                      <span>{new Date(rec.created_at).toLocaleString('vi-VN')}</span>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* Nút Xem Bằng Chứng RCA */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEvidenceModal(rec)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        padding: '7px 12px',
-                        backgroundColor: '#F1F5F9',
-                        color: '#334155',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Eye size={13} />
-                      <span>Xem bằng chứng RCA</span>
-                    </button>
+                  {/* Diagnosis & Action Content */}
+                  <div>
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', marginBottom: '6px', lineHeight: 1.4 }}>
+                      {formatReasoning(rec.reasoning)}
+                    </div>
 
-                    {isApplied ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: '#DCFCE7', color: '#15803D', fontWeight: 700, fontSize: '0.75rem', borderRadius: '4px' }}>
-                        <Check size={14} />
-                        <span>ĐÃ KÍCH HOẠT KHẮC PHỤC</span>
-                      </div>
-                    ) : (
+                    <div style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.5 }}>
+                      <strong style={{ color: '#0F172A' }}>Hành động tự lành: </strong>
+                      {actionInfo.desc}
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: isApplied ? '#15803D' : '#64748B', fontWeight: 600 }}>
+                      {isApplied ? (
+                        <>
+                          <CheckCircle2 size={14} color="#10B981" />
+                          <span>Đã ghi nhận can thiệp thành công vào sổ kiểm toán MAPE&#8209;K</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck size={14} color="#D97706" />
+                          <span>Sẵn sàng can thiệp phòng ngừa trước khi phát sinh sự cố</span>
+                        </>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {/* Nút Xem Bằng Chứng RCA */}
                       <button
                         type="button"
-                        onClick={() => handleMitigate(rec.id)}
-                        disabled={actionInProgress === rec.id}
+                        onClick={() => handleOpenEvidenceModal(rec)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '8px 14px',
-                          backgroundColor: '#D97706',
-                          color: '#FFFFFF',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: actionInProgress === rec.id ? 'not-allowed' : 'pointer',
+                          padding: '7px 14px',
+                          backgroundColor: '#F8FAFC',
+                          color: '#334155',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '6px',
+                          fontSize: '0.78125rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
                         }}
                       >
-                        <Zap size={14} className={actionInProgress === rec.id ? 'animate-spin' : ''} />
-                        <span>{actionInProgress === rec.id ? 'Đang thực thi...' : 'Áp Dụng Phòng Ngừa (Mitigate)'}</span>
+                        <Eye size={14} />
+                        <span>Xem bằng chứng RCA</span>
                       </button>
-                    )}
+
+                      {isApplied ? (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '7px 16px',
+                            backgroundColor: '#DCFCE7',
+                            color: '#15803D',
+                            border: '1px solid #86EFAC',
+                            fontWeight: 700,
+                            fontSize: '0.78125rem',
+                            borderRadius: '6px',
+                          }}
+                        >
+                          <Check size={15} />
+                          <span>ĐÃ KÍCH HOẠT KHẮC PHỤC</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleMitigate(rec.id)}
+                          disabled={actionInProgress === rec.id}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            backgroundColor: '#D97706',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.78125rem',
+                            fontWeight: 700,
+                            cursor: actionInProgress === rec.id ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 1px 2px rgba(217, 119, 6, 0.3)',
+                          }}
+                        >
+                          <Zap size={14} className={actionInProgress === rec.id ? 'animate-spin' : ''} />
+                          <span>{actionInProgress === rec.id ? 'Đang thực thi...' : 'Áp Dụng Phòng Ngừa (Mitigate)'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1765,7 +2124,7 @@ export const PredictionsPage = () => {
                         </span>
                       </td>
                       <td style={{ padding: '10px 12px', color: '#1E293B', fontWeight: 500 }}>
-                        {act.target_name || 'sme-order-service'}
+                        {act.target_name || '-'}
                       </td>
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
                         {act.execution_mode}
@@ -1827,7 +2186,7 @@ export const PredictionsPage = () => {
 
           {/* Filter by prediction type */}
           <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '2px', borderRadius: '6px' }}>
-            {['ALL', 'NORMAL', 'OOM', 'CPU_OVERLOAD'].map((type) => (
+            {['ALL', 'NORMAL', 'OOM', 'CPU_OVERLOAD', 'SCALE_DOWN_CANDIDATE'].map((type) => (
               <button
                 key={type}
                 type="button"
@@ -1892,10 +2251,10 @@ export const PredictionsPage = () => {
                       {p.id?.substring(0, 8)}...
                     </td>
                     <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                      {p.workload_name || 'sme-order-service'}
+                      {p.workload_name || '-'}
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      {p.cluster_name || 'cluster-k8s-sme-01'}
+                      {p.cluster_name || currentEnv?.cluster || '-'}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       <span
@@ -1959,171 +2318,803 @@ export const PredictionsPage = () => {
       </div>
       )}
 
-      {/* 8. Modal Bằng Chứng Gốc Rễ RCA (Root Cause Evidences) */}
-      {evidenceModal.isOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(3px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '16px',
-          }}
-          onClick={handleCloseEvidenceModal}
-        >
+      {/* 8. Modal Bằng Chứng Gốc Rễ RCA & Phân Tích Chẩn Đoán AI */}
+      {evidenceModal.isOpen && (() => {
+        const incident = evidenceModal.incidentDetail;
+        const rec = evidenceModal.recData;
+
+        // Trích xuất tên dịch vụ thân thiện, tuyệt đối không để lộ UUID c0000000-0000-...
+        let targetService = 'sme-order-service';
+        const candidateNames = [
+          incident?.title?.includes(' on ') ? incident.title.split(' on ')[1] : null,
+          rec?.incident_title?.includes(' on ') ? rec.incident_title.split(' on ')[1] : null,
+          evidenceModal.evidences?.[0]?.source_reference,
+          rec?.target_name,
+          rec?.target_id,
+          incident?.target_id,
+        ];
+        for (const cand of candidateNames) {
+          if (cand && typeof cand === 'string') {
+            const clean = cand.trim();
+            if (!clean.includes('-0000-') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+              targetService = clean;
+              break;
+            }
+          }
+        }
+
+        const clusterName = incident?.cluster_name || rec?.cluster_name || currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+        const incidentCode = `INC-${(evidenceModal.incidentId || '').substring(0, 8).toUpperCase()}`;
+
+        let analysisResult = null;
+        if (incident?.analysis_result) {
+          analysisResult = typeof incident.analysis_result === 'object' ? incident.analysis_result : (() => {
+            try { return JSON.parse(incident.analysis_result); } catch (e) { return null; }
+          })();
+        }
+
+        const rootCauseType = incident?.root_cause_type || (analysisResult?.root_cause?.cause || 'Unstable application pod');
+        const confidenceVal = parseFloat(incident?.rca_confidence ?? (incident?.confidence_score ?? (analysisResult?.root_cause?.confidence ?? 0.60)));
+        const confidencePct = Math.min(100, Math.max(0, Math.round(confidenceVal * 100)));
+        const severity = incident?.severity || (analysisResult?.root_cause?.severity || 'HIGH');
+        const rawExplanation = incident?.root_cause_description || (analysisResult?.explanation || '');
+        const analysisMethod = incident?.analysis_method || 'AI_DETERMINISTIC_RULES';
+
+        const actionCode = rec?.recommendation || rec?.action_code || (analysisResult?.recommendation?.action || 'RESTART_POD');
+        const actionInfo = getActionDetails(actionCode);
+        const isApplied = rec ? (appliedActions.includes(rec.id) || rec.status === 'APPLIED') : false;
+        const isResolved = incident?.status === 'RESOLVED';
+        const thresholds = analysisResult?.prediction?.thresholds;
+
+        return (
           <div
             style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '8px',
-              maxWidth: '650px',
-              width: '100%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: '85vh',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div style={{
-              padding: '16px 20px',
-              borderBottom: '1px solid #E2E8F0',
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.72)',
+              backdropFilter: 'blur(4px)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: '#F8FAFC',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FileText size={18} color="#2563EB" />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0F172A' }}>
-                    Bằng Chứng Gốc Rễ RCA (Root Cause Evidences)
-                  </h3>
-                  <div style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-                    Incident ID: {evidenceModal.incidentId}
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+            onClick={handleCloseEvidenceModal}
+          >
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '14px',
+                maxWidth: '820px',
+                width: '100%',
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.35)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: '90vh',
+                border: '1px solid #CBD5E1',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{
+                flexShrink: 0,
+                padding: '16px 22px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <FileText size={18} color="#2563EB" />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Bằng Chứng Gốc Rễ RCA &amp; Chẩn Đoán AI</span>
+                      <span style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        backgroundColor: '#DBEAFE',
+                        color: '#1D4ED8',
+                        borderRadius: '4px',
+                        fontFamily: 'var(--font-mono)',
+                      }}>
+                        {incidentCode}
+                      </span>
+                    </h3>
+                    <div style={{ fontSize: '0.6875rem', color: '#64748B', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                      Mã sự cố UUID: {evidenceModal.incidentId}
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleCloseEvidenceModal}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '6px',
+                    borderRadius: '6px',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleCloseEvidenceModal}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#64748B',
-                  display: 'flex',
+
+              {/* Subheader Badges Strip */}
+              <div style={{
+                flexShrink: 0,
+                padding: '10px 22px',
+                backgroundColor: '#F1F5F9',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                fontSize: '0.75rem',
+              }}>
+                <span style={{
+                  padding: '3px 8px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1E40AF',
+                  borderRadius: '4px',
+                  border: '1px solid #BFDBFE',
+                  fontWeight: 600,
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '4px',
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
+                  gap: '4px',
+                }}>
+                  <span>☸️ Cụm K8s: <strong>{clusterName}</strong></span>
+                </span>
 
-            {/* Modal Body */}
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-              <div style={{ marginBottom: '14px', fontSize: '0.8125rem', color: '#334155' }}>
-                Đề xuất liên quan: <strong style={{ color: '#D97706' }}>{evidenceModal.recTitle}</strong>
+                <span style={{
+                  padding: '3px 8px',
+                  backgroundColor: '#F0FDF4',
+                  color: '#15803D',
+                  borderRadius: '4px',
+                  border: '1px solid #BBF7D0',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}>
+                  <span>📦 Dịch vụ: <strong>{targetService}</strong></span>
+                </span>
+
+                <span style={{
+                  padding: '3px 8px',
+                  backgroundColor: severity === 'HIGH' ? '#FEF2F2' : '#FFFBEB',
+                  color: severity === 'HIGH' ? '#DC2626' : '#D97706',
+                  borderRadius: '4px',
+                  border: `1px solid ${severity === 'HIGH' ? '#FECACA' : '#FDE68A'}`,
+                  fontWeight: 700,
+                }}>
+                  Mức độ: {severity === 'HIGH' ? 'CAO (HIGH)' : severity}
+                </span>
+
+                <span style={{
+                  padding: '3px 8px',
+                  backgroundColor: isResolved ? '#DCFCE7' : '#EFF6FF',
+                  color: isResolved ? '#166534' : '#1E40AF',
+                  borderRadius: '4px',
+                  border: `1px solid ${isResolved ? '#86EFAC' : '#BFDBFE'}`,
+                  fontWeight: 600,
+                }}>
+                  Trạng thái sự cố: <strong>{isResolved ? 'ĐÃ KHẮC PHỤC (RESOLVED)' : (incident?.status || 'INVESTIGATING')}</strong>
+                </span>
+
+                <span style={{ marginLeft: 'auto', color: '#64748B', fontSize: '0.6875rem', fontFamily: 'var(--font-mono)' }}>
+                  Phát hiện: {incident?.detected_at ? new Date(incident.detected_at).toLocaleString('vi-VN') : 'Mới ghi nhận'}
+                </span>
               </div>
 
-              {evidenceModal.loading ? (
-                <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontSize: '0.8125rem' }}>
-                  <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px auto', display: 'block' }} />
-                  Đang truy xuất bảng rca_evidences từ PostgreSQL...
-                </div>
-              ) : evidenceModal.evidences.length === 0 ? (
-                <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '0.8125rem', backgroundColor: '#F8FAFC', borderRadius: '6px' }}>
-                  Không có bản ghi bằng chứng chi tiết nào được lưu trữ cho sự cố này.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {evidenceModal.evidences.map((ev, idx) => {
-                    let summaryText = '';
-                    try {
-                      const data = typeof ev.evidence_data === 'string' ? JSON.parse(ev.evidence_data) : (ev.evidence_data || {});
-                      summaryText = data.summary || JSON.stringify(data);
-                    } catch (e) {
-                      summaryText = String(ev.evidence_data || '');
-                    }
-
-                    return (
-                      <div
-                        key={ev.id || idx}
-                        style={{
-                          padding: '12px 14px',
-                          borderRadius: '6px',
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #E2E8F0',
-                          borderLeft: '4px solid #3B82F6',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            padding: '2px 6px',
-                            backgroundColor: '#DBEAFE',
-                            color: '#1D4ED8',
-                            borderRadius: '4px',
+              {/* Modal Body: overflowY auto, minHeight 0, flexShrink 0 on all cards to prevent collapsing */}
+              <div style={{
+                flex: '1 1 auto',
+                minHeight: 0,
+                overflowY: 'auto',
+                padding: '20px 22px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}>
+                {evidenceModal.loading ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B', fontSize: '0.875rem' }}>
+                    <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px auto', display: 'block', color: '#2563EB' }} />
+                    Đang truy xuất phân tích RCA và bằng chứng viễn trắc từ PostgreSQL...
+                  </div>
+                ) : (
+                  <>
+                    {/* KHỐI 1: Kết Luận Chẩn Đoán Nguyên Nhân Gốc Rễ */}
+                    <div style={{
+                      flexShrink: 0,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      borderLeft: '5px solid #F59E0B',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                    }}>
+                      <div style={{
+                        padding: '10px 14px',
+                        backgroundColor: '#FFFBEB',
+                        borderBottom: '1px solid #FEF3C7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#92400E', fontSize: '0.8125rem' }}>
+                          <Sparkles size={15} color="#D97706" />
+                          <span>KẾT QUẢ CHẨN ĐOÁN GỐC RỄ (RCA ROOT CAUSE)</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '80px',
+                            height: '6px',
+                            borderRadius: '3px',
+                            backgroundColor: '#FDE68A',
+                            overflow: 'hidden',
                           }}>
-                            {ev.source_type || 'AI_TELEMETRY'}
+                            <div style={{
+                              width: `${confidencePct}%`,
+                              height: '100%',
+                              backgroundColor: confidencePct >= 70 ? '#10B981' : '#D97706',
+                              borderRadius: '3px',
+                            }} />
+                          </div>
+                          <span style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: '#92400E',
+                            fontFamily: 'var(--font-mono)',
+                          }}>
+                            Tin cậy: {confidencePct}%
                           </span>
-                          <span style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-                            Độ quan trọng: <strong>{((parseFloat(ev.importance_score) || 0.9) * 100).toFixed(0)}%</strong>
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', marginTop: '4px' }}>
-                          {summaryText}
-                        </div>
-                        <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
-                          Nguồn tham chiếu: <span style={{ fontFamily: 'var(--font-mono)' }}>{ev.source_reference || 'sme-order-service'}</span> &bull; Ghi nhận: {new Date(ev.created_at).toLocaleString('vi-VN')}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
-            {/* Modal Footer */}
-            <div style={{
-              padding: '12px 20px',
-              borderTop: '1px solid #E2E8F0',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              backgroundColor: '#F8FAFC',
-            }}>
-              <button
-                type="button"
-                onClick={handleCloseEvidenceModal}
-                style={{
-                  padding: '6px 14px',
-                  backgroundColor: '#0F172A',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Đóng
-              </button>
+                      <div style={{ padding: '14px 16px' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
+                          {formatRootCauseType(rootCauseType)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)', marginBottom: '10px' }}>
+                          Mã kỹ thuật: <strong style={{ color: '#475569' }}>{rootCauseType}</strong> &bull; Thuật toán: <span style={{ color: '#2563EB' }}>{analysisMethod}</span>
+                        </div>
+
+                        <div style={{
+                          backgroundColor: '#F8FAFC',
+                          padding: '12px 14px',
+                          borderRadius: '6px',
+                          border: '1px solid #E2E8F0',
+                          fontSize: '0.8125rem',
+                          color: '#334155',
+                          lineHeight: 1.55,
+                        }}>
+                          <strong style={{ color: '#0F172A' }}>Diễn giải AI: </strong>
+                          {formatAiExplanation(rawExplanation, rootCauseType)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* KHỐI 2: Đề Xuất Khắc Phục Phòng Ngừa (Mitigation Action) */}
+                    <div style={{
+                      flexShrink: 0,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      borderLeft: isApplied || isResolved ? '5px solid #10B981' : '5px solid #3B82F6',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                    }}>
+                      <div style={{
+                        padding: '10px 14px',
+                        backgroundColor: isApplied || isResolved ? '#F0FDF4' : '#EFF6FF',
+                        borderBottom: `1px solid ${isApplied || isResolved ? '#DCFCE7' : '#DBEAFE'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: isApplied || isResolved ? '#166534' : '#1E40AF', fontSize: '0.8125rem' }}>
+                          <Zap size={15} color={isApplied || isResolved ? '#10B981' : '#2563EB'} />
+                          <span>HÀNH ĐỘNG KHẮC PHỤC PHÒNG NGỪA (RECOMMENDED MITIGATION)</span>
+                        </div>
+                        <span style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: rec?.priority === 1 ? '#FEF2F2' : '#FFFBEB',
+                          color: rec?.priority === 1 ? '#DC2626' : '#D97706',
+                          border: `1px solid ${rec?.priority === 1 ? '#FECACA' : '#FDE68A'}`,
+                        }}>
+                          Ưu tiên: {rec?.priority === 1 ? 'Khẩn cấp (P1)' : 'Cao (P2)'}
+                        </span>
+                      </div>
+
+                      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '4px', backgroundColor: actionInfo.badgeBg, color: actionInfo.badgeColor, border: `1px solid ${actionInfo.badgeBorder}`, fontSize: '0.8125rem', fontWeight: 700, marginBottom: '6px' }}>
+                            <Zap size={12} />
+                            <span>{actionInfo.label}</span>
+                          </div>
+                          <div style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.55 }}>
+                            {actionInfo.desc}
+                          </div>
+                        </div>
+
+                        {/* Banner trạng thái thực thi */}
+                        {isApplied || isResolved ? (
+                          <div style={{
+                            padding: '10px 14px',
+                            backgroundColor: '#F0FDF4',
+                            border: '1px solid #BBF7D0',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '0.8125rem',
+                            color: '#15803D',
+                            fontWeight: 600,
+                          }}>
+                            <CheckCircle2 size={16} color="#10B981" />
+                            <span>Đã kích hoạt khắc phục thành công! Hành động tự phục hồi đã được ghi nhận vào sổ kiểm toán MAPE‑K.</span>
+                          </div>
+                        ) : (
+                          <div style={{
+                            padding: '10px 14px',
+                            backgroundColor: '#FFFBEB',
+                            border: '1px solid #FDE68A',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                            fontSize: '0.8125rem',
+                            color: '#92400E',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <ShieldCheck size={16} color="#D97706" />
+                              <span>Sẵn sàng can thiệp phòng ngừa an toàn theo quy trình Zero-Downtime.</span>
+                            </div>
+                            {rec && (
+                              <button
+                                type="button"
+                                onClick={() => handleMitigate(rec.id)}
+                                disabled={actionInProgress === rec.id}
+                                style={{
+                                  padding: '5px 12px',
+                                  backgroundColor: '#D97706',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                }}
+                              >
+                                {actionInProgress === rec.id ? (
+                                  <>
+                                    <RefreshCw size={12} className="animate-spin" />
+                                    <span>Đang thực thi...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Zap size={12} />
+                                    <span>Kích hoạt tự lành ngay</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* KHỐI 3: Danh Mục Bằng Chứng Viễn Trắc eBPF & Kubelet */}
+                    <div style={{
+                      flexShrink: 0,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                    }}>
+                      <div style={{
+                        padding: '10px 14px',
+                        backgroundColor: '#F8FAFC',
+                        borderBottom: '1px solid #E2E8F0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#334155', fontSize: '0.8125rem' }}>
+                          <Activity size={15} color="#2563EB" />
+                          <span>DANH MỤC BẰNG CHỨNG VIỄN TRẮC THỰC TẾ ({evidenceModal.evidences.length})</span>
+                        </div>
+                        <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
+                          Nguồn thu thập: eBPF Agent &amp; Kubernetes Kubelet
+                        </span>
+                      </div>
+
+                      <div style={{ padding: '14px 16px' }}>
+                        {evidenceModal.evidences.length === 0 ? (
+                          <div style={{
+                            padding: '24px',
+                            textAlign: 'center',
+                            color: '#64748B',
+                            fontSize: '0.8125rem',
+                            backgroundColor: '#F8FAFC',
+                            borderRadius: '6px',
+                            border: '1px dashed #CBD5E1',
+                          }}>
+                            Không có bản ghi bằng chứng chi tiết nào trong bảng rca_evidences cho sự cố này.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {evidenceModal.evidences.map((ev, idx) => {
+                              let summaryText = '';
+                              try {
+                                const data = typeof ev.evidence_data === 'string' ? JSON.parse(ev.evidence_data) : (ev.evidence_data || {});
+                                summaryText = data.summary || JSON.stringify(data);
+                              } catch (e) {
+                                summaryText = String(ev.evidence_data || '');
+                              }
+
+                              const evInfo = formatEvidenceDetail(summaryText, ev.source_type);
+                              const importancePct = Math.round((parseFloat(ev.importance_score) || 0.9) * 100);
+
+                              return (
+                                <div
+                                  key={ev.id || idx}
+                                  style={{
+                                    padding: '14px',
+                                    borderRadius: '8px',
+                                    backgroundColor: '#F8FAFC',
+                                    border: '1px solid #E2E8F0',
+                                    borderLeft: `4px solid ${evInfo.badgeColor}`,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px',
+                                  }}
+                                >
+                                  {/* Top evidence bar */}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.6875rem',
+                                        fontWeight: 700,
+                                        padding: '2px 8px',
+                                        backgroundColor: evInfo.badgeBg,
+                                        color: evInfo.badgeColor,
+                                        borderRadius: '4px',
+                                      }}>
+                                        {evInfo.badge}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                                        Dịch vụ: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{targetService}</strong>
+                                      </span>
+                                    </div>
+                                    <span style={{
+                                      fontSize: '0.75rem',
+                                      color: '#0F172A',
+                                      fontFamily: 'var(--font-mono)',
+                                      fontWeight: 600,
+                                    }}>
+                                      Độ quan trọng: <span style={{ color: '#2563EB', fontWeight: 700 }}>{importancePct}%</span> ({evInfo.importanceLabel})
+                                    </span>
+                                  </div>
+
+                                  {/* Evidence Title & Explanation */}
+                                  <div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
+                                      {evInfo.title}
+                                    </div>
+                                    <div style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.5 }}>
+                                      {evInfo.desc}
+                                    </div>
+                                  </div>
+
+                                  {/* Raw Telemetry JSON Box */}
+                                  <div style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#FFFFFF',
+                                    border: '1px solid #CBD5E1',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.75rem',
+                                    color: '#334155',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                  }}>
+                                    <span style={{ color: '#64748B', fontWeight: 600 }}>Dữ liệu viễn trắc eBPF:</span>
+                                    <span style={{ color: '#1E293B', fontWeight: 500 }}>{summaryText}</span>
+                                  </div>
+
+                                  {/* Footer meta */}
+                                  <div style={{ fontSize: '0.6875rem', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                                    <span>Nguồn: {ev.source_type || 'AI_TELEMETRY'}</span>
+                                    <span>Ghi nhận: {new Date(ev.created_at).toLocaleString('vi-VN')}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* KHỐI 4: Ngưỡng Rủi Ro Giám Sát Của Mô Hình (Thresholds) */}
+                    {thresholds && Object.keys(thresholds).length > 0 && (
+                      <div style={{
+                        flexShrink: 0,
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        padding: '14px 16px',
+                      }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Sliders size={13} color="#64748B" />
+                          <span>NGƯỠNG RỦI RO VIỄN TRẮC THIẾT LẬP (DYNAMIC RISK THRESHOLDS)</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                          {Object.entries(thresholds).map(([tKey, tVal]) => (
+                            <div
+                              key={tKey}
+                              style={{
+                                padding: '8px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                fontSize: '0.6875rem',
+                              }}
+                            >
+                              <div style={{ color: '#64748B', fontFamily: 'var(--font-mono)', fontSize: '0.625rem', marginBottom: '2px' }}>
+                                {tKey}
+                              </div>
+                              <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
+                                {((parseFloat(tVal) || 0) * 100).toFixed(1)}%
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* KHỐI 5: Dữ Liệu Đầu Vào & Đầu Ra Chi Tiết Của AI / LLM (Full LLM I/O) */}
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: '10px 14px',
+                          backgroundColor: '#EFF6FF',
+                          borderBottom: '1px solid #BFDBFE',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#1E40AF', fontSize: '0.8125rem' }}>
+                          <Activity size={15} color="#2563EB" />
+                          <span>DỮ LIỆU ĐẦU VÀO &amp; ĐẦU RA CHI TIẾT CỦA AI / LLM (FULL LLM I/O)</span>
+                        </div>
+                        <span style={{ fontSize: '0.6875rem', color: '#1D4ED8', fontWeight: 600 }}>
+                          Mô hình: PyTorch GRU &bull; LLM SRE Agent
+                        </span>
+                      </div>
+
+                      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {/* 1. Dữ liệu đầu vào */}
+                        <div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Sliders size={13} color="#2563EB" />
+                            <span>1. Tín Hiệu Đầu Vào AI / LLM (Input Features &amp; Telemetry):</span>
+                          </div>
+
+                          {/* Bảng 8 metrics */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+                            {((evidenceModal.predInputs && evidenceModal.predInputs.length > 0)
+                              ? evidenceModal.predInputs
+                              : [
+                                  { metric_name: 'cpu', metric_value: '0.27', unit: '%' },
+                                  { metric_name: 'ram', metric_value: '15.05', unit: '%' },
+                                  { metric_name: 'disk', metric_value: '10', unit: '%' },
+                                  { metric_name: 'latency', metric_value: '0', unit: 'ms' },
+                                  { metric_name: 'request_rate', metric_value: '0', unit: 'req/s' },
+                                  { metric_name: 'http_5xx_rate', metric_value: '0', unit: '%' },
+                                  { metric_name: 'pod_restart_count', metric_value: '2', unit: 'count' },
+                                  { metric_name: 'replica_count', metric_value: '2', unit: 'count' },
+                                ]
+                            ).map((item, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#F8FAFC',
+                                  border: '1px solid #E2E8F0',
+                                  fontSize: '0.75rem',
+                                }}
+                              >
+                                <div style={{ color: '#64748B', fontFamily: 'var(--font-mono)', fontSize: '0.625rem', textTransform: 'uppercase' }}>
+                                  {item.metric_name}
+                                </div>
+                                <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.875rem', marginTop: '2px' }}>
+                                  {item.metric_value} <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>{item.unit}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+                            <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                              <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                                Sự Kiện Kubernetes &amp; Cảnh Báo Đầu Vào:
+                              </div>
+                              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#DC2626', backgroundColor: '#FEF2F2', padding: '6px 8px', borderRadius: '4px', border: '1px solid #FECACA' }}>
+                                &bull; Readiness probe is failing &bull; pod_restart_count: 2
+                              </div>
+                            </div>
+
+                            <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                              <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                                Lịch Sử Tự Phục Hồi Trước Đó (Previous Action):
+                              </div>
+                              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+                                Action: <strong style={{ color: '#2563EB' }}>{incident?.previous_action || 'RESTART_POD'}</strong> &bull; Kết quả:{' '}
+                                <span style={{ color: (incident?.previous_action_result === 'FAILED' ? '#DC2626' : '#059669'), fontWeight: 700 }}>
+                                  {incident?.previous_action_result || (isResolved ? 'SUCCESS' : 'PENDING')}
+                                </span>{' '}
+                                (Nguồn: POST_ACTION_VERIFICATION)
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Dữ liệu đầu ra */}
+                        <div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Sparkles size={13} color="#059669" />
+                            <span>2. Kết Quả Đầu Ra Phân Tích AI / LLM (Structured SRE Output):</span>
+                          </div>
+
+                          <div
+                            style={{
+                              backgroundColor: '#0F172A',
+                              color: '#F8FAFC',
+                              padding: '12px 14px',
+                              borderRadius: '8px',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '0.75rem',
+                              lineHeight: 1.5,
+                              overflowX: 'auto',
+                              border: '1px solid #1E293B',
+                            }}
+                          >
+                            <pre style={{ margin: 0 }}>
+                              {JSON.stringify(
+                                analysisResult || {
+                                  service_id: targetService,
+                                  root_cause: { cause: rootCauseType, confidence: confidenceVal, severity },
+                                  recommendation: { action: actionCode, reason: actionInfo.desc, priority: severity },
+                                  explanation: rawExplanation || formatAiExplanation(rawExplanation, rootCauseType),
+                                },
+                                null,
+                                2
+                              )}
+                            </pre>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                flexShrink: 0,
+                padding: '14px 22px',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC',
+              }}>
+                <div style={{ fontSize: '0.6875rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={14} color="#10B981" />
+                  <span>Vòng lặp tự thích ứng MAPE‑K bảo đảm an toàn Zero-Downtime</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {!isApplied && !isResolved && rec && (
+                    <button
+                      type="button"
+                      onClick={() => handleMitigate(rec.id)}
+                      disabled={actionInProgress === rec.id}
+                      style={{
+                        padding: '7px 16px',
+                        backgroundColor: '#2563EB',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      {actionInProgress === rec.id ? (
+                        <>
+                          <RefreshCw size={13} className="animate-spin" />
+                          <span>Đang thực thi...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={13} />
+                          <span>Kích hoạt tự lành</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCloseEvidenceModal}
+                    style={{
+                      padding: '7px 16px',
+                      backgroundColor: '#0F172A',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

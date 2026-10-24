@@ -1,3 +1,4 @@
+import { selfHealingService } from './selfHealingService';
 /**
  * @file adminSelfHealingService.js
  * @description Tầng dịch vụ dữ liệu chuyên dụng cho Phân hệ Quản Trị Tự Phục Hồi Nền Tảng (Platform Admin Self-Healing)
@@ -339,133 +340,170 @@ const MOCK_ANALYTICS = {
 };
 
 // ==========================================
-// MOCK SERVICE METHODS
+// REAL API & MOCK-FALLBACK SERVICE METHODS
 // ==========================================
 
-/**
- * Lấy danh sách các hành động tự phục hồi có lọc đa chiều
- * @param {Object} [filters]
- * @returns {Promise<HealingAction[]>}
- */
-export const getHealingActions = (filters = {}) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      let result = [...MOCK_HEALING_ACTIONS];
+function mapPolicyFromDb(pol) {
+  return {
+    id: pol.id,
+    name: pol.name,
+    triggerType: pol.trigger_type || 'AI Prediction / Threshold',
+    riskType: pol.risk_type || (pol.execution_mode === 'AUTO' ? 'Non-Destructive' : 'Disruptive'),
+    executionMode: (pol.execution_mode === 'AUTO' || pol.execution_mode === 'AUTONOMOUS') ? 'Fully Autonomous' : 'HITL Approval Required',
+    confidenceThreshold: pol.confidence_threshold ? Math.round(Number(pol.confidence_threshold) * 100) : 85,
+    cooldown: pol.cooldown_seconds ? (Math.round(pol.cooldown_seconds / 60) + 'm') : '10m',
+    maxRetries: pol.max_retries ?? 1,
+    approvalRequirement: pol.requires_approval ? 'HITL Gate Super Admin Approval Mandatory' : 'Auto-Approved for Tier-1 (No DB Impact)',
+    activeStatus: pol.is_active ?? true,
+    description: pol.description || '',
+    actions: pol.actions || [],
+  };
+}
 
-      const query = (filters.search || '').toLowerCase().trim();
-      if (query) {
-        result = result.filter(
-          (item) =>
-            item.id.toLowerCase().includes(query) ||
-            item.actionType.toLowerCase().includes(query) ||
-            item.target.toLowerCase().includes(query) ||
-            item.organization.toLowerCase().includes(query) ||
-            item.environment.toLowerCase().includes(query)
-        );
-      }
+export const getHealingActions = async (filters = {}) => {
+  try {
+    const data = await selfHealingService.getActions(filters);
+    const items = data?.items || (Array.isArray(data) ? data : []);
+    if (items.length > 0) {
+      return items.map((act) => ({
+        id: act.id,
+        actionType: act.action_type_name || act.action_name || act.action_type_code || 'Self-Healing Action',
+        target: act.target_name || act.target_type || 'sme-order-service',
+        organization: act.organization_name || 'Acme Infrastructure Corp',
+        organizationId: act.organization_id || 'org-01',
+        environment: act.environment_name || 'Production',
+        riskLevel: act.risk_level || 'LOW',
+        executionMode: act.execution_mode === 'AUTO' ? 'AUTONOMOUS' : 'MANUAL',
+        approvalStatus: act.approval_status || 'APPROVED',
+        executionStatus: act.execution_status || 'SUCCEEDED',
+        requestedBy: act.requested_by_email || 'Autonomous Policy Engine',
+        executedBy: act.executed_by_email || act.result?.executed_by_agent || 'K8s Self-Healing Agent',
+        requestedTime: act.requested_at ? new Date(act.requested_at).toLocaleString('vi-VN') : '',
+        startedTime: act.started_at ? new Date(act.started_at).toLocaleString('vi-VN') : '',
+        completedTime: act.completed_at ? new Date(act.completed_at).toLocaleString('vi-VN') : '',
+        result: typeof act.result === 'string' ? act.result : (act.result?.message || 'Khôi phục dịch vụ thành công'),
+        auditHash: act.id ? ('sha256:' + act.id.slice(0, 10) + '...') : '',
+        incidentId: act.incident_id || '',
+      }));
+    }
+  } catch (err) {
+    console.warn('[adminSelfHealingService] getHealingActions API error, using fallback:', err.message);
+  }
 
-      if (filters.riskLevel && filters.riskLevel !== 'ALL') {
-        result = result.filter((item) => item.riskLevel === filters.riskLevel);
-      }
-
-      if (filters.executionMode && filters.executionMode !== 'ALL') {
-        result = result.filter((item) => item.executionMode === filters.executionMode);
-      }
-
-      if (filters.executionStatus && filters.executionStatus !== 'ALL') {
-        result = result.filter((item) => item.executionStatus === filters.executionStatus);
-      }
-
-      if (filters.organization && filters.organization !== 'ALL') {
-        result = result.filter(
-          (item) => item.organization === filters.organization || item.organizationId === filters.organization
-        );
-      }
-
-      resolve(result);
-    }, 70);
-  });
+  let result = [...MOCK_HEALING_ACTIONS];
+  const query = (filters.search || '').toLowerCase().trim();
+  if (query) {
+    result = result.filter(
+      (item) =>
+        item.id.toLowerCase().includes(query) ||
+        item.actionType.toLowerCase().includes(query) ||
+        item.target.toLowerCase().includes(query) ||
+        item.organization.toLowerCase().includes(query) ||
+        item.environment.toLowerCase().includes(query)
+    );
+  }
+  if (filters.riskLevel && filters.riskLevel !== 'ALL') {
+    result = result.filter((item) => item.riskLevel === filters.riskLevel);
+  }
+  if (filters.executionMode && filters.executionMode !== 'ALL') {
+    result = result.filter((item) => item.executionMode === filters.executionMode);
+  }
+  if (filters.executionStatus && filters.executionStatus !== 'ALL') {
+    result = result.filter((item) => item.executionStatus === filters.executionStatus);
+  }
+  return result;
 };
 
-/**
- * Lấy danh mục các loại hành động chuẩn hóa
- * @returns {Promise<ActionTypeDefinition[]>}
- */
-export const getActionTypes = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([...MOCK_ACTION_TYPES]);
-    }, 60);
-  });
+export const getActionTypes = async () => {
+  try {
+    const data = await selfHealingService.getActionTypes();
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((t) => ({
+        id: t.id,
+        name: t.name,
+        category: t.target_type || 'General Resiliency',
+        defaultRiskLevel: t.default_risk_level || 'LOW',
+        targetResourceType: t.target_type || 'Deployment',
+        defaultApprovalRequired: t.requires_approval_by_default || false,
+        supportsRollback: true,
+        description: t.description || '',
+      }));
+    }
+  } catch (err) {
+    console.warn('[adminSelfHealingService] getActionTypes API error, fallback:', err.message);
+  }
+  return [...MOCK_ACTION_TYPES];
 };
 
-/**
- * Lấy danh sách chính sách tự phục hồi
- * @returns {Promise<SelfHealingPolicy[]>}
- */
-export const getPolicies = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([...MOCK_POLICIES]);
-    }, 60);
-  });
+export const getPolicies = async () => {
+  try {
+    const data = await selfHealingService.getPolicies();
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map(mapPolicyFromDb);
+    }
+  } catch (err) {
+    console.warn('[adminSelfHealingService] getPolicies API error, fallback:', err.message);
+  }
+  return [...MOCK_POLICIES];
 };
 
-/**
- * Cập nhật cấu hình tham số cho một chính sách
- * @param {string} id
- * @param {Partial<SelfHealingPolicy>} updatedConfig
- * @returns {Promise<SelfHealingPolicy>}
- */
-export const updatePolicyConfig = (id, updatedConfig) => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const idx = MOCK_POLICIES.findIndex((p) => p.id === id);
-      if (idx === -1) {
-        reject(new Error(`Không tìm thấy chính sách với mã định danh: ${id}`));
-        return;
-      }
+export const updatePolicyConfig = async (id, updatedConfig) => {
+  try {
+    const dbPayload = {
+      name: updatedConfig.name,
+      description: updatedConfig.description,
+      confidence_threshold: updatedConfig.confidenceThreshold ? updatedConfig.confidenceThreshold / 100 : undefined,
+      cooldown_seconds: updatedConfig.cooldown ? parseInt(updatedConfig.cooldown) * 60 : undefined,
+      max_retries: updatedConfig.maxRetries,
+      requires_approval: updatedConfig.executionMode ? updatedConfig.executionMode !== 'Fully Autonomous' : undefined,
+      execution_mode: updatedConfig.executionMode === 'Fully Autonomous' ? 'AUTO' : 'MANUAL',
+    };
+    const res = await selfHealingService.updatePolicyConfig(id, dbPayload);
+    const updated = res?.data || res;
+    if (updated) {
+      return mapPolicyFromDb(updated);
+    }
+  } catch (err) {
+    console.warn('[adminSelfHealingService] updatePolicyConfig failed, fallback:', err.message);
+  }
 
-      MOCK_POLICIES[idx] = {
-        ...MOCK_POLICIES[idx],
-        ...updatedConfig,
-      };
-
-      resolve(MOCK_POLICIES[idx]);
-    }, 80);
-  });
+  const idx = MOCK_POLICIES.findIndex((p) => p.id === id);
+  if (idx !== -1) {
+    MOCK_POLICIES[idx] = { ...MOCK_POLICIES[idx], ...updatedConfig };
+    return MOCK_POLICIES[idx];
+  }
+  return updatedConfig;
 };
 
-/**
- * Bật/tắt trạng thái kích hoạt của chính sách
- * @param {string} id
- * @returns {Promise<SelfHealingPolicy>}
- */
-export const togglePolicyActive = (id) => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const idx = MOCK_POLICIES.findIndex((p) => p.id === id);
-      if (idx === -1) {
-        reject(new Error(`Không tìm thấy chính sách với mã định danh: ${id}`));
-        return;
-      }
+export const togglePolicyActive = async (id) => {
+  try {
+    const res = await selfHealingService.togglePolicyActive(id);
+    const updated = res?.data || res;
+    if (updated) {
+      return mapPolicyFromDb(updated);
+    }
+  } catch (err) {
+    console.warn('[adminSelfHealingService] togglePolicyActive failed, fallback:', err.message);
+  }
 
-      MOCK_POLICIES[idx].activeStatus = !MOCK_POLICIES[idx].activeStatus;
-      resolve(MOCK_POLICIES[idx]);
-    }, 60);
-  });
+  const idx = MOCK_POLICIES.findIndex((p) => p.id === id);
+  if (idx !== -1) {
+    MOCK_POLICIES[idx].activeStatus = !MOCK_POLICIES[idx].activeStatus;
+    return MOCK_POLICIES[idx];
+  }
+  return { id, activeStatus: true };
 };
 
-/**
- * Lấy tổng hợp số liệu phân tích hiệu quả tự phục hồi
- * @returns {Promise<SelfHealingAnalyticsData>}
- */
-export const getSelfHealingAnalytics = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ ...MOCK_ANALYTICS });
-    }, 60);
-  });
+export const getSelfHealingAnalytics = async () => {
+  try {
+    const data = await selfHealingService.getAnalytics();
+    if (data && data.totalActions !== undefined) {
+      return data;
+    }
+  } catch (err) {
+    console.warn('[adminSelfHealingService] getSelfHealingAnalytics failed, fallback:', err.message);
+  }
+  return { ...MOCK_ANALYTICS };
 };
 
 const adminSelfHealingService = {

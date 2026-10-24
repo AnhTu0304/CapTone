@@ -20,6 +20,10 @@ export const PredictRequestSchema = z.object({
   environment_id: z.string().uuid().optional(),
   cluster_id: z.string().uuid().optional(),
   workload_id: z.string().uuid().optional(),
+  previous_action: z.string().optional().nullable(),
+  previous_action_result: z.enum(['SUCCESS', 'FAILED', 'PARTIAL', 'UNKNOWN']).optional().nullable(),
+  previous_action_result_source: z.literal('POST_ACTION_VERIFICATION').optional().nullable(),
+  previous_rca_root_cause: z.string().optional().nullable(),
   prediction_horizon_minutes: z.number().int().min(1).optional().default(15),
 });
 
@@ -54,6 +58,10 @@ export const RCARequestSchema = z.object({
   environment_id: z.string().uuid().optional(),
   cluster_id: z.string().uuid().optional(),
   workload_id: z.string().uuid().optional(),
+  previous_action: z.string().optional().nullable(),
+  previous_action_result: z.enum(['SUCCESS', 'FAILED', 'PARTIAL', 'UNKNOWN']).optional().nullable(),
+  previous_action_result_source: z.literal('POST_ACTION_VERIFICATION').optional().nullable(),
+  previous_rca_root_cause: z.string().optional().nullable(),
 });
 
 export type GRUMetricPoint = z.infer<typeof GRUMetricPointSchema>;

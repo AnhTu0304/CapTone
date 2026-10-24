@@ -25,6 +25,10 @@ export const CompleteStep = ({ onNavigate }) => {
         if (cluster?.cluster_name || cluster?.name) {
           localStorage.setItem('selfheal_active_cluster_name', cluster.cluster_name || cluster.name);
         }
+        const activeClusterId = cluster?.id || cluster?.clusterId;
+        if (activeClusterId) {
+          localStorage.setItem('selfheal_active_cluster_id', activeClusterId);
+        }
       } catch (e) {
         console.warn('Cannot set active org in localStorage:', e);
       }

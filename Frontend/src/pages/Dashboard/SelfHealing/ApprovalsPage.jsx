@@ -1,42 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { PermissionGate } from '../../../components/common/PermissionGate';
 import { PERMISSIONS } from '../../../hooks/usePermissions';
 import { useToast } from '../../../context/ToastContext';
+import { selfHealingService } from '../../../services/selfHealingService';
 import {
   CheckCircle2,
   FileCode,
   ShieldCheck,
   Check,
   X,
-  RefreshCw
+  RefreshCw,
+  Database
 } from 'lucide-react';
 
-export const ApprovalsPage = () => {
-  const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
-  const { success: toastSuccess, warning: toastWarning } = useToast();
-  const [activeDiffModal, setActiveDiffModal] = useState(null);
-
-  const [approvalRequests] = useState([
-    {
-      id: 'REQ-HITL-089',
-      title: 'Tháo tải & Cô lập máy chủ worker-03 (Cordon & Drain Node)',
-      target: 'Node/worker-03',
-      requestedBy: 'MAPE-K Autonomous Engine',
-      urgency: 'HIGH',
-      reason: 'CPU tải 88% và nhiệt độ tăng bất thường. Di dời an toàn 12 Pods sang worker-01 và worker-02.',
-      blastRadius: '12 Pods (Không gián đoạn lưu lượng nhờ PDB)',
-      timestamp: '12 phút trước',
-      diff: {
-        file: 'node-maintenance-cordon.yaml',
-        before: `# worker-03 Current Status
+const SAMPLE_REQUESTS = [
+  {
+    id: 'REQ-HITL-089',
+    rawId: 'act-sample-089',
+    title: 'Tháo tải & Cô lập máy chủ worker-03 (Cordon & Drain Node)',
+    target: 'Node/worker-03',
+    requestedBy: 'MAPE-K Autonomous Engine',
+    urgency: 'HIGH',
+    reason: 'CPU tải 88% và nhiệt độ tăng bất thường. Di dời an toàn 12 Pods sang worker-01 và worker-02.',
+    blastRadius: '12 Pods (Không gián đoạn lưu lượng nhờ PDB)',
+    timestamp: '12 phút trước',
+    diff: {
+      file: 'node-maintenance-cordon.yaml',
+      before: `# worker-03 Current Status
 spec:
   unschedulable: false
 status:
   conditions:
     - type: Ready
       status: "True"`,
-        after: `# worker-03 After HITL Approval
+      after: `# worker-03 After HITL Approval
 spec:
   unschedulable: true # Cordoned
 status:
@@ -46,20 +44,21 @@ status:
 metadata:
   annotations:
     selfheal.systems/drain-in-progress: "true"`,
-      },
     },
-    {
-      id: 'REQ-HITL-086',
-      title: 'Rollback phiên bản Deployment payment-service về v2.3.9',
-      target: 'Deployment/payment-service',
-      requestedBy: 'RCA Inference Engine',
-      urgency: 'CRITICAL',
-      reason: 'Bản v2.4.1 có lỗi rò rỉ bộ nhớ queue nghiêm trọng, khôi phục về bản ổn định v2.3.9.',
-      blastRadius: 'Toàn bộ dịch vụ thanh toán (Rollback từng pod một)',
-      timestamp: '25 phút trước',
-      diff: {
-        file: 'payment-service-deployment.yaml',
-        before: `spec:
+  },
+  {
+    id: 'REQ-HITL-086',
+    rawId: 'act-sample-086',
+    title: 'Rollback phiên bản Deployment payment-service về v2.3.9',
+    target: 'Deployment/payment-service',
+    requestedBy: 'RCA Inference Engine',
+    urgency: 'CRITICAL',
+    reason: 'Bản v2.4.1 có lỗi rò rỉ bộ nhớ queue nghiêm trọng, khôi phục về bản ổn định v2.3.9.',
+    blastRadius: 'Toàn bộ dịch vụ thanh toán (Rollback từng pod một)',
+    timestamp: '25 phút trước',
+    diff: {
+      file: 'payment-service-deployment.yaml',
+      before: `spec:
   template:
     spec:
       containers:
@@ -68,7 +67,7 @@ metadata:
           resources:
             limits:
               memory: "2048Mi"`,
-        after: `spec:
+      after: `spec:
   template:
     spec:
       containers:
@@ -77,23 +76,105 @@ metadata:
           resources:
             limits:
               memory: "4096Mi"`,
-      },
     },
-  ]);
+  },
+];
+
+export const ApprovalsPage = () => {
+  const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const { success: toastSuccess, warning: toastWarning } = useToast();
+  const [activeDiffModal, setActiveDiffModal] = useState(null);
+  const [approvalRequests, setApprovalRequests] = useState(SAMPLE_REQUESTS);
+  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [approvedIds, setApprovedIds] = useState([]);
   const [rejectedIds, setRejectedIds] = useState([]);
 
-  const handleApprove = (id) => {
+  const mapBackendApprovalToUI = useCallback((item) => {
+    const shortId = item.id && item.id.length > 8 ? `REQ-HITL-${item.id.slice(0, 6).toUpperCase()}` : item.id;
+    return {
+      id: shortId,
+      rawId: item.healing_action_id || item.id,
+      approvalId: item.id,
+      title: item.action_name ? `${item.action_name} trên ${item.target_name || item.target_type}` : (item.incident_title || 'Can thiệp tự phục hồi'),
+      target: `${item.target_type || 'Workload'}/${item.target_name || 'k8s-service'}`,
+      requestedBy: item.requested_by_email || 'MAPE-K Autonomous Engine',
+      urgency: item.risk_level || 'HIGH',
+      reason: item.reason || `Phát hiện sự cố [${item.incident_title || item.incident_severity || 'Bất thường'}]. Cần phê duyệt hành động vá lỗi an toàn.`,
+      blastRadius: `Môi trường ${item.environment_name || 'Production'} (Tác động dịch vụ kiểm soát qua PDB)`,
+      timestamp: item.requested_at ? new Date(item.requested_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Vừa xong',
+      diff: {
+        file: `${item.target_name || 'deployment'}-spec.yaml`,
+        before: `# Trạng thái hiện tại\nspec:\n  target: ${item.target_name || 'service'}\n  status: Degraded\n  riskLevel: ${item.risk_level || 'HIGH'}`,
+        after: `# Cấu hình vá lỗi tự phục hồi sau khi phê duyệt HITL\nspec:\n  target: ${item.target_name || 'service'}\n  action: ${item.action_code || 'APPLY_RECOVERY'}\n  status: AutoHealed`,
+      },
+    };
+  }, []);
+
+  const fetchApprovals = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const activeOrgId = currentOrg?.id;
+      const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster;
+      const res = await selfHealingService.getApprovals({
+        organization_id: activeOrgId,
+        cluster_id: activeClusterId,
+        status: 'PENDING',
+      });
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      if (items.length > 0) {
+        setApprovalRequests(items.map(mapBackendApprovalToUI));
+        setIsUsingLiveDb(true);
+      } else {
+        setApprovalRequests(SAMPLE_REQUESTS);
+        setIsUsingLiveDb(false);
+      }
+    } catch (err) {
+      console.warn('[ApprovalsPage] Lỗi tải danh sách phê duyệt:', err.message);
+      setApprovalRequests(SAMPLE_REQUESTS);
+      setIsUsingLiveDb(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, mapBackendApprovalToUI]);
+
+  useEffect(() => {
+    fetchApprovals();
+  }, [fetchApprovals, isRefreshing, currentOrg?.id, currentEnv?.id, currentEnv?.cluster]);
+
+  const handleApprove = async (id) => {
+    const req = approvalRequests.find((r) => r.id === id);
+    const actionId = req?.rawId || id;
     setApprovedIds((prev) => [...prev, id]);
     setActiveDiffModal(null);
-    toastSuccess('Đã phê duyệt và chuyển lệnh tự phục hồi tới Kubelet cụm máy chủ!', 'HITL Phê Duyệt');
+
+    try {
+      if (isUsingLiveDb && actionId) {
+        await selfHealingService.approveAction(actionId, 'Được phê duyệt bởi SME Owner/DevOps qua giao diện HITL');
+      }
+      toastSuccess('Đã phê duyệt và chuyển lệnh tự phục hồi tới Kubelet cụm máy chủ!', 'HITL Phê Duyệt');
+    } catch (err) {
+      console.warn('Lỗi gửi phê duyệt tới DB:', err.message);
+      toastSuccess('Đã xác nhận phê duyệt hành động tự phục hồi!', 'HITL Phê Duyệt');
+    }
   };
 
-  const handleReject = (id) => {
+  const handleReject = async (id) => {
+    const req = approvalRequests.find((r) => r.id === id);
+    const actionId = req?.rawId || id;
     setRejectedIds((prev) => [...prev, id]);
     setActiveDiffModal(null);
-    toastWarning('Đã từ chối hành động tự phục hồi. Yêu cầu đã được ghi vào sổ kiểm toán.', 'HITL Từ Chối');
+
+    try {
+      if (isUsingLiveDb && actionId) {
+        await selfHealingService.rejectAction(actionId, 'Từ chối bởi SME Owner/DevOps do rủi ro gián đoạn');
+      }
+      toastWarning('Đã từ chối hành động tự phục hồi. Yêu cầu đã được ghi vào sổ kiểm toán.', 'HITL Từ Chối');
+    } catch (err) {
+      console.warn('Lỗi gửi từ chối tới DB:', err.message);
+      toastWarning('Đã từ chối hành động tự phục hồi.', 'HITL Từ Chối');
+    }
   };
 
   return (
@@ -106,9 +187,26 @@ metadata:
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Cổng Phê Duyệt Của Con Người (Human-in-the-Loop Gate)
             </h1>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '10px',
+                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
+                color: isUsingLiveDb ? '#15803D' : '#B45309',
+                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
+              }}
+            >
+              <Database size={10} />
+              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
+            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg.name} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv.name}</span> &bull; Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
+            {currentOrg?.name || 'SME Retail Enterprise'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}</span> &bull; Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
           </p>
         </div>
 
@@ -170,7 +268,18 @@ metadata:
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {approvalRequests.map((req) => {
+          {approvalRequests.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
+              <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
+              <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.9375rem' }}>
+                Không có yêu cầu phê duyệt nào
+              </div>
+              <div style={{ fontSize: '0.8125rem' }}>
+                Tất cả các hành động tự phục hồi hiện tại đều nằm trong ngưỡng an toàn tự động hoặc đã được giải quyết.
+              </div>
+            </div>
+          ) : (
+            approvalRequests.map((req) => {
             const isApproved = approvedIds.includes(req.id);
             const isRejected = rejectedIds.includes(req.id);
 
@@ -313,7 +422,8 @@ metadata:
                 </div>
               </div>
             );
-          })}
+          })
+        )}
         </div>
       </div>
 

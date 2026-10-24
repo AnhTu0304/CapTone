@@ -15,7 +15,7 @@ aiRoutes.get('/health', AiController.getAiHealth);
 // ==========================================
 // 2. Roles middleware
 // ==========================================
-const devopsOrAdmin = [authenticateToken, requireRoles('DEVOPS', 'ADMIN')];
+const devopsOrAdmin = [authenticateToken, requireRoles('DEVOPS', 'ADMIN', 'SUPER_ADMIN', 'SME_OWNER')];
 const authenticated = [authenticateToken];
 
 // POST /api/v1/ai/predict - Run GRU risk prediction and persist to database
