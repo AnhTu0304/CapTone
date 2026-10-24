@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
+import { AuditService } from '../services/audit.service';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
 
 export class NodeController {
@@ -162,6 +163,20 @@ export class NodeController {
           throw new ApiError(403, 'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức');
         }
       }
+
+      await AuditService.recordFromRequest(req, {
+        organization_id: node.organization_id || null,
+        action: 'REMEDIATION_NODE_DRAINED',
+        status: 'SUCCESS',
+        resource_type: 'NODE',
+        resource_id: node.id,
+        description: `Thực hiện yêu cầu tháo tải (Drain) Node ${node.name}`,
+        metadata: {
+          node_name: node.name,
+          cluster_id: node.cluster_id,
+          cluster_name: node.cluster_name,
+        },
+      }).catch(() => {});
 
       return ApiResponse.success(
         res,

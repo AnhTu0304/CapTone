@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { OrganizationService } from '../services/organization.service';
 import { OrganizationRoleService } from '../services/organizationRole.service';
 import { ApiResponse } from '../utils/apiResponse';
+import { AuditService } from '../services/audit.service';
 
 export class OrganizationController {
   /**
@@ -12,6 +13,14 @@ export class OrganizationController {
     try {
       const userId = (req as any).user?.id;
       const result = await OrganizationService.create(userId, req.body);
+      AuditService.recordFromRequest(req, {
+        organization_id: result.id,
+        action: 'ORG_CREATED',
+        status: 'SUCCESS',
+        target_type: 'ORGANIZATION',
+        target_id: result.id,
+        description: `Tạo tổ chức mới: ${result.name}`,
+      }).catch(() => {});
       return ApiResponse.success(res, 'Tạo tổ chức thành công', result, 201);
     } catch (error) {
       next(error);
@@ -78,6 +87,16 @@ export class OrganizationController {
         status,
         reason
       );
+      AuditService.recordFromRequest(req, {
+        organization_id: orgId,
+        action: 'ORG_STATUS_CHANGED',
+        status: 'SUCCESS',
+        target_type: 'ORGANIZATION',
+        target_id: orgId,
+        description: `Cập nhật trạng thái tổ chức thành '${status}'`,
+        metadata: { status, reason },
+      }).catch(() => {});
+
       return ApiResponse.success(
         res,
         `Cập nhật trạng thái tổ chức thành '${status}' thành công`,
@@ -98,6 +117,14 @@ export class OrganizationController {
       const user = (req as any).user;
       const orgId = req.params.id;
       const result = await OrganizationService.delete(orgId, user.id, user.roles || []);
+      AuditService.recordFromRequest(req, {
+        organization_id: orgId,
+        action: 'ORG_DELETED',
+        status: 'SUCCESS',
+        target_type: 'ORGANIZATION',
+        target_id: orgId,
+        description: 'Xóa tổ chức (Soft delete)',
+      }).catch(() => {});
       return ApiResponse.success(res, 'Xóa tổ chức thành công', result, 200);
     } catch (error) {
       next(error);

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { SystemRoleService } from '../services/systemRole.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
+import { AuditService } from '../services/audit.service';
 
 export class SystemRoleController {
   /**
@@ -54,6 +55,14 @@ export class SystemRoleController {
       }
 
       await SystemRoleService.assignRole(userId, role, assignedBy);
+      AuditService.recordFromRequest(req, {
+        action: 'SYSTEM_ROLE_ASSIGNED',
+        status: 'SUCCESS',
+        target_type: 'USER',
+        target_id: userId,
+        description: `Cấp vai trò hệ thống [${role}] cho người dùng`,
+        metadata: { role, assigned_by: assignedBy },
+      }).catch(() => {});
       return ApiResponse.success(res, `Cấp vai trò [${role}] cho người dùng thành công`, { userId, role }, 201);
     } catch (error) {
       next(error);

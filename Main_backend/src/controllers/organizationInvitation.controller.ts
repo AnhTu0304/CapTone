@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrganizationInvitationService } from '../services/organizationInvitation.service';
 import { ApiResponse } from '../utils/apiResponse';
+import { AuditService } from '../services/audit.service';
 
 export class OrganizationInvitationController {
   /**
@@ -17,6 +18,15 @@ export class OrganizationInvitationController {
         user.roles || [],
         req.body
       );
+      AuditService.recordFromRequest(req, {
+        organization_id: orgId,
+        action: 'MEMBER_INVITED',
+        status: 'SUCCESS',
+        target_type: 'INVITATION',
+        target_id: result.invitation?.id,
+        description: `Mời thành viên ${result.invitation?.email || req.body?.email} vào tổ chức với vai trò ${result.invitation?.role?.code || req.body?.role_code}`,
+        metadata: { email: result.invitation?.email || req.body?.email, role_code: result.invitation?.role?.code || req.body?.role_code },
+      }).catch(() => {});
       return ApiResponse.success(res, 'Gửi lời mời tham gia tổ chức thành công', result, 201);
     } catch (error) {
       next(error);
@@ -52,6 +62,14 @@ export class OrganizationInvitationController {
       const user = (req as any).user;
       const { token } = req.body;
       const result = await OrganizationInvitationService.acceptInvitationByToken(token, user.id);
+      AuditService.recordFromRequest(req, {
+        organization_id: result.organization_id,
+        action: 'MEMBER_JOINED',
+        status: 'SUCCESS',
+        user_id: user.id,
+        description: 'Chấp nhận lời mời và gia nhập tổ chức thành công',
+        metadata: { organization_id: result.organization_id, role_code: result.role_code },
+      }).catch(() => {});
       return ApiResponse.success(res, result.message, result, 200);
     } catch (error) {
       next(error);
@@ -73,6 +91,14 @@ export class OrganizationInvitationController {
         user.id,
         user.roles || []
       );
+      AuditService.recordFromRequest(req, {
+        organization_id: orgId,
+        action: 'INVITATION_REVOKED',
+        status: 'SUCCESS',
+        target_type: 'INVITATION',
+        target_id: invitationId,
+        description: 'Thu hồi lời mời tham gia tổ chức thành công',
+      }).catch(() => {});
       return ApiResponse.success(res, result.message, null, 200);
     } catch (error) {
       next(error);

@@ -7,6 +7,7 @@ import {
   OrganizationMemberModel,
 } from '../models/organizationMember.model';
 import { OrganizationModel } from '../models/organization.model';
+import { AuditService } from './audit.service';
 import { OrganizationRoleModel } from '../models/organizationRole.model';
 import { IPaginatedResult } from '../models/user.model';
 import { EmailQueue } from './emailQueue.service';
@@ -288,6 +289,18 @@ export class OrganizationMemberService {
       throw new ApiError(404, 'Không thể tải thông tin thành viên sau khi cập nhật');
     }
 
+    AuditService.record({
+      organization_id: orgId,
+      user_id: currentUserId,
+      action: 'MEMBER_ROLE_CHANGED',
+      status: 'SUCCESS',
+      target_type: 'USER',
+      target_id: targetUserId,
+      description: 'Thay đổi vai trò thành viên trong tổ chức',
+      before_data: { role_code: currentMember.role_code, status: currentMember.status },
+      after_data: { role_code: dto.role_code || currentMember.role_code, status: dto.status || currentMember.status },
+    }).catch(() => {});
+
     return detail;
   }
 
@@ -331,6 +344,17 @@ export class OrganizationMemberService {
 
     // Thu hồi quyền / session của user trong tổ chức
     await SessionRevocationService.revokeUserOrgSessions(orgId, targetUserId);
+
+    AuditService.record({
+      organization_id: orgId,
+      user_id: currentUserId,
+      action: 'MEMBER_REMOVED',
+      status: 'SUCCESS',
+      target_type: 'USER',
+      target_id: targetUserId,
+      description: isSelfLeaving ? 'Thành viên tự rời khỏi tổ chức' : 'Loại bỏ thành viên khỏi tổ chức',
+      metadata: { is_self: isSelfLeaving },
+    }).catch(() => {});
 
     return {
       success: true,

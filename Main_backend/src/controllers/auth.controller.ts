@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/auth.service';
 import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { UserService } from '../services/user.service';
+import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 import { config } from '../config/env';
@@ -45,8 +46,22 @@ export class AuthController {
       }
 
       const result = await AuthService.login({ email, password });
+      await AuditService.recordFromRequest(req, {
+        action: 'AUTH_LOGIN_SUCCESS',
+        status: 'SUCCESS',
+        user_id: result.id,
+        description: 'Người dùng đăng nhập thành công',
+        metadata: { email: result.email, has_organization: result.has_organization },
+      }).catch(() => {});
       return ApiResponse.success(res, 'Đăng nhập thành công', result, 200);
     } catch (error) {
+      await AuditService.recordFromRequest(req, {
+        action: 'AUTH_LOGIN_FAILURE',
+        status: 'FAILURE',
+        reason_code: 'INVALID_CREDENTIALS',
+        description: 'Đăng nhập thất bại do thông tin không chính xác',
+        metadata: { email: (req.body?.email || '').toLowerCase().trim() },
+      }).catch(() => {});
       next(error);
     }
   }
@@ -94,6 +109,12 @@ export class AuthController {
       }
 
       await UserService.changePassword(userId, { old_password, new_password });
+      await AuditService.recordFromRequest(req, {
+        action: 'AUTH_PASSWORD_CHANGED',
+        status: 'SUCCESS',
+        user_id: userId,
+        description: 'Đổi mật khẩu tài khoản thành công',
+      }).catch(() => {});
       return ApiResponse.success(res, 'Đổi mật khẩu thành công', null, 200);
     } catch (error) {
       next(error);
@@ -384,6 +405,11 @@ export class AuthController {
         await SessionRevocationService.revokeToken(token, Math.max(60, expSeconds));
       }
 
+      await AuditService.recordFromRequest(req, {
+        action: 'AUTH_LOGOUT',
+        status: 'SUCCESS',
+        description: 'Đăng xuất khỏi hệ thống thành công',
+      }).catch(() => {});
       return ApiResponse.success(res, 'Đăng xuất thành công, phiên đăng nhập đã bị vô hiệu hóa', null, 200);
     } catch (error) {
       next(error);

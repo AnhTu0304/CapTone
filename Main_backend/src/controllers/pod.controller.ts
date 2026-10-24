@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
+import { AuditService } from '../services/audit.service';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
 
 export class PodController {
@@ -138,6 +139,21 @@ export class PodController {
           throw new ApiError(403, 'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức');
         }
       }
+
+      await AuditService.recordFromRequest(req, {
+        organization_id: pod.organization_id || null,
+        action: 'REMEDIATION_POD_RESTARTED',
+        status: 'SUCCESS',
+        resource_type: 'POD',
+        resource_id: pod.id,
+        description: `Yêu cầu khởi động lại Pod ${pod.name} (Namespace: ${pod.namespace})`,
+        metadata: {
+          pod_name: pod.name,
+          namespace: pod.namespace,
+          cluster_id: pod.cluster_id,
+          cluster_name: pod.cluster_name,
+        },
+      }).catch(() => {});
 
       return ApiResponse.success(
         res,

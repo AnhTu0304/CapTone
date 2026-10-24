@@ -3,6 +3,7 @@ import { ApiError } from '../utils/apiError';
 import { OrganizationMemberModel, MemberStatus } from '../models/organizationMember.model';
 import { OrganizationRoleCode } from '../models/organizationRole.model';
 import { OrganizationModel } from '../models/organization.model';
+import { AuditService } from '../services/audit.service';
 
 export interface IOrgMemberContext {
   organizationId: string;
@@ -61,6 +62,15 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
     // 2. Kiểm tra trực tiếp trạng thái thành viên trong CSDL qua OrganizationMemberModel
     const member = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
     if (!member || member.status !== 'ACTIVE') {
+      await AuditService.recordFromRequest(req, {
+        organization_id: orgId,
+        action: 'ACCESS_DENIED_TENANT',
+        status: 'DENIED',
+        reason_code: 'ORG_MEMBERSHIP_REQUIRED',
+        description: 'Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này',
+        metadata: { path: req.originalUrl || req.path, method: req.method },
+      }).catch(() => {});
+
       return next(
         new ApiError(
           403,
@@ -83,6 +93,15 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
         (req.originalUrl.endsWith(`/${orgId}`) || req.originalUrl.endsWith(`/${orgId}/`));
 
       if (!isGetOrgDetail) {
+        await AuditService.recordFromRequest(req, {
+          organization_id: orgId,
+          action: 'ACCESS_DENIED_TENANT',
+          status: 'DENIED',
+          reason_code: 'ORG_SUSPENDED',
+          description: `Tổ chức này đang trong trạng thái '${org.status}' (bị tạm khóa hoặc ngừng hoạt động)`,
+          metadata: { path: req.originalUrl || req.path, method: req.method, org_status: org.status },
+        }).catch(() => {});
+
         return next(
           new ApiError(
             403,
@@ -137,6 +156,20 @@ export const requireOrgRole = (...allowedRoles: OrganizationRoleCode[]) => {
 
       const normalizedAllowed = allowedRoles.map((r) => r.trim().toUpperCase());
       if (!normalizedAllowed.includes(orgMember.roleCode.toUpperCase())) {
+        await AuditService.recordFromRequest(req, {
+          organization_id: orgMember.organizationId,
+          action: 'ACCESS_DENIED_ROLE',
+          status: 'DENIED',
+          reason_code: 'ORG_ROLE_REQUIRED',
+          description: `Từ chối truy cập: Thao tác này yêu cầu vai trò tổ chức [${normalizedAllowed.join(', ')}]`,
+          metadata: {
+            path: req.originalUrl || req.path,
+            method: req.method,
+            required_roles: normalizedAllowed,
+            current_role: orgMember.roleCode,
+          },
+        }).catch(() => {});
+
         return next(
           new ApiError(
             403,

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { OrganizationController } from '../controllers/organization.controller';
+import { AuditController } from '../controllers/audit.controller';
 import { OrganizationModel } from '../models/organization.model';
 import { OrganizationMemberController } from '../controllers/organizationMember.controller';
 import { OrganizationInvitationController } from '../controllers/organizationInvitation.controller';
@@ -284,5 +285,18 @@ router.use('/:id/agents', agentRoutes);
 
 router.use('/:orgId/clusters', clusterRoutes);
 router.use('/:id/clusters', clusterRoutes);
+
+router.get(
+  '/:id/audit-logs',
+  requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  AuditController.getOrganizationAuditLogs
+);
+router.get(
+  '/:orgId/audit-logs',
+  requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  AuditController.getOrganizationAuditLogs
+);
 
 export const organizationRoutes = router;

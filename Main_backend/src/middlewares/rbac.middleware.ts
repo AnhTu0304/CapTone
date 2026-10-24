@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../utils/apiError';
 import { SystemRoleService } from '../services/systemRole.service';
+import { AuditService } from '../services/audit.service';
 
 /**
  * Mở rộng vai trò kế thừa (Role inheritance / expansion)
@@ -103,6 +104,19 @@ export const requireRoles = (...allowedRoles: string[]) => {
       }
 
       // 3. Nếu không có vai trò hợp lệ -> Trả về lỗi 403 Forbidden
+      await AuditService.recordFromRequest(req, {
+        action: 'ACCESS_DENIED_ROLE',
+        status: 'DENIED',
+        reason_code: 'ROLE_REQUIRED',
+        description: `Từ chối truy cập: Yêu cầu một trong các vai trò [${normalizedAllowed.join(', ')}]`,
+        metadata: {
+          path: req.originalUrl || req.path,
+          method: req.method,
+          required_roles: normalizedAllowed,
+          current_roles: effectiveTokenRoles,
+        },
+      }).catch(() => {});
+
       return next(
         new ApiError(
           403,
