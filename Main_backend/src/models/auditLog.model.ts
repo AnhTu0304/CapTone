@@ -35,7 +35,9 @@ export type AuditAction =
   | 'AGENT_DISCONNECTED'
   // Dangerous / Sensitive Remediation
   | 'REMEDIATION_NODE_DRAINED'
-  | 'REMEDIATION_POD_RESTARTED';
+  | 'REMEDIATION_POD_RESTARTED'
+  // Data Retention
+  | 'SYSTEM_AUDIT_PURGED';
 
 export type AuditReasonCode =
   | 'INVALID_CREDENTIALS'

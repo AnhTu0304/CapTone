@@ -21,7 +21,9 @@
     "test:tenant": "tsx src/test/tenantIsolation.test.ts",
     "test:rbac": "tsx --test src/test/rbac.test.ts",
     "test:rbac-matrix": "tsx --test src/test/rbacMatrix.test.ts",
-    "test:audit": "tsx --test src/test/auditLogging.test.ts"
+    "test:audit": "tsx --test src/test/auditLogging.test.ts",
+    "worker:audit-retention": "tsx src/workers/auditRetention.worker.ts",
+    "test:retention": "tsx --test src/test/auditRetention.test.ts"
   },
   "keywords": [
     "nodejs",

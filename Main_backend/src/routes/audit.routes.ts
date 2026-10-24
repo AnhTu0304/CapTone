@@ -12,3 +12,19 @@ auditRoutes.get(
   requireRoles('SUPER_ADMIN', 'ADMIN'),
   AuditController.getPlatformAuditLogs
 );
+
+// Retention Policy Stats: SUPER_ADMIN, ADMIN
+auditRoutes.get(
+  '/retention/stats',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'ADMIN'),
+  AuditController.getRetentionStats
+);
+
+// Retention Purge Action: Chỉ SUPER_ADMIN
+auditRoutes.post(
+  '/retention/purge',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN'),
+  AuditController.triggerRetentionPurge
+);

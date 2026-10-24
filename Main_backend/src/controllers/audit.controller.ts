@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuditService } from '../services/audit.service';
+import { AuditRetentionService } from '../services/auditRetention.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 
@@ -72,6 +73,44 @@ export class AuditController {
 
       const result = await AuditService.query(filter, { user, orgMember });
       return ApiResponse.success(res, 'Lấy danh sách nhật ký kiểm toán tổ chức thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [GET] /api/v1/audit-logs/retention/stats
+   * Thống kê tình trạng lưu trữ và số bản ghi quá hạn
+   */
+  public static async getRetentionStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
+      const stats = await AuditRetentionService.getRetentionStats(days);
+      return ApiResponse.success(res, 'Lấy thống kê lưu trữ nhật ký kiểm toán thành công', stats, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/audit-logs/retention/purge
+   * Kích hoạt dọn dẹp các bản ghi quá hạn (Yêu cầu SUPER_ADMIN)
+   */
+  public static async triggerRetentionPurge(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const days = req.body?.retentionDays ? parseInt(req.body.retentionDays, 10) : undefined;
+      const dryRun = Boolean(req.body?.dryRun);
+      const batchSize = req.body?.batchSize ? parseInt(req.body.batchSize, 10) : undefined;
+
+      const result = await AuditRetentionService.purgeOldLogs({
+        retentionDays: days,
+        dryRun,
+        batchSize,
+        executedByUserId: user?.id,
+      });
+
+      return ApiResponse.success(res, 'Thực thi dọn dẹp dữ liệu kiểm toán thành công', result, 200);
     } catch (error) {
       next(error);
     }

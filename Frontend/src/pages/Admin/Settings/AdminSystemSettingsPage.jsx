@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import AdminAuditLogsPage from '../AuditLogs/AdminAuditLogsPage';
+import { request } from '../../../services/apiClient';
 import {
   Settings,
   BrainCircuit,
@@ -60,6 +62,47 @@ export const AdminSystemSettingsPage = () => {
     enableAutoVacuum: true,
     maxDatabaseQuotaGB: 100,
   });
+
+
+  const [retentionStats, setRetentionStats] = useState(null);
+  const [isPurging, setIsPurging] = useState(false);
+
+  useEffect(() => {
+    // Tải thống kê retention khi vào trang
+    request('audit-logs/retention/stats')
+      .then((res) => {
+        if (res && res.success && res.data) {
+          setRetentionStats(res.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handlePurgeNow = async () => {
+    if (!window.confirm(`Bạn có chắc chắn muốn dọn dẹp các bản ghi kiểm toán cũ hơn ${dataConfig.auditLogRetentionDays} ngày?`)) {
+      return;
+    }
+    setIsPurging(true);
+    try {
+      const res = await request('audit-logs/retention/purge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retentionDays: dataConfig.auditLogRetentionDays }),
+      });
+      if (res && res.success) {
+        showToast(`Đã dọn dẹp thành công ${res.data?.purgedCount || 0} bản ghi audit logs!`);
+        // Refresh stats
+        const refreshed = await request('audit-logs/retention/stats');
+        if (refreshed && refreshed.success) setRetentionStats(refreshed.data);
+      } else {
+        showToast('Không có bản ghi nào quá hạn cần dọn dẹp.');
+      }
+    } catch (err) {
+      showToast(`Lỗi thực thi dọn dẹp: ${err.message || 'Không thể kết nối'}`);
+    } finally {
+      setIsPurging(false);
+    }
+  };
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -259,6 +302,29 @@ export const AdminSystemSettingsPage = () => {
           <Database size={16} />
           <span>Data Management & Storage</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('audit-logs')}
+          style={{
+            padding: '10px 18px',
+            borderRadius: '8px 8px 0 0',
+            border: 'none',
+            borderBottom: activeTab === 'audit-logs' ? '2px solid #059669' : '2px solid transparent',
+            backgroundColor: activeTab === 'audit-logs' ? '#ECFDF5' : 'transparent',
+            color: activeTab === 'audit-logs' ? '#065F46' : 'var(--dash-text-muted)',
+            fontWeight: 700,
+            fontSize: '0.8125rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <ShieldCheck size={16} />
+          <span>Nhật Ký Kiểm Toán (Audit Logs)</span>
+        </button>
       </div>
 
       {/* 3. Tab Contents */}
@@ -400,7 +466,44 @@ export const AdminSystemSettingsPage = () => {
             </label>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+          
+          {retentionStats && (
+            <div style={{ marginTop: '20px', padding: '16px', borderRadius: '10px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#166534' }}>
+                    Chính Sách Lưu Trữ Hiện Hành: ${retentionStats.retentionDays} Ngày
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#15803D', marginTop: '2px' }}>
+                    Tổng số bản ghi: ${retentionStats.totalLogs} | Bản ghi quá hạn lưu trữ: ${retentionStats.logsOlderThanRetention}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePurgeNow}
+                  disabled={isPurging}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid #059669',
+                    backgroundColor: '#FFFFFF',
+                    color: '#059669',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: isPurging ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <RefreshCw size={13} className={isPurging ? 'animate-spin' : ''} />
+                  <span>{isPurging ? 'Đang Dọn Dẹp...' : 'Dọn Dẹp Log Quá Hạn Ngay'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
             <button
               type="button"
               onClick={() => handleSaveSettings('AI Model & Configuration')}
@@ -821,6 +924,13 @@ export const AdminSystemSettingsPage = () => {
               <span>Lưu Cấu Hình Lưu Trữ</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* TAB 6: Audit Logs */}
+      {activeTab === 'audit-logs' && (
+        <div style={{ marginTop: '8px' }}>
+          <AdminAuditLogsPage />
         </div>
       )}
     </div>
