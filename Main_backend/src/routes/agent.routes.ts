@@ -3,6 +3,7 @@ import { AgentController } from '../controllers/agent.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import { requireOrgMember, requireOrgRole } from '../middlewares/orgAuth.middleware';
+import { requireRoles } from '../middlewares/rbac.middleware';
 import { rateLimiter } from '../middlewares/rateLimit.middleware';
 import { authenticateAgentToken } from '../middlewares/agentAuth.middleware';
 import {
@@ -195,6 +196,52 @@ daemonRouter.post(
   authenticateAgentToken,
   validate(agentHeartbeatSchema),
   AgentController.recordHeartbeat
+);
+
+/* ==========================================================================
+   5. GLOBAL ADMIN AGENT ROUTES (/api/v1/agents)
+   Quyền: SUPER_ADMIN, SYSTEM_ADMIN, ADMIN
+   ========================================================================== */
+daemonRouter.get(
+  '/',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'),
+  AgentController.getAllAdmin
+);
+
+daemonRouter.get(
+  '/:agentId',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'),
+  AgentController.getByIdAdmin
+);
+
+daemonRouter.post(
+  '/:agentId/disconnect',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'),
+  AgentController.disconnectAdmin
+);
+
+daemonRouter.post(
+  '/:agentId/revoke',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'),
+  AgentController.revokeAdmin
+);
+
+daemonRouter.post(
+  '/:agentId/tokens',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'),
+  AgentController.rotateTokenAdmin
+);
+
+daemonRouter.delete(
+  '/:agentId',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'),
+  AgentController.deleteAdmin
 );
 
 export const agentDaemonRoutes = daemonRouter;

@@ -151,7 +151,7 @@ export class OrganizationController {
   public static async getMyOrganizations(req: Request, res: Response, next: NextFunction) {
     try {
       const user = (req as any).user;
-      const result = await OrganizationService.getUserOrganizations(user.id);
+      const result = await OrganizationService.getUserOrganizations(user.id, user.roles || []);
       return ApiResponse.success(res, 'Lấy danh sách tổ chức của bạn thành công', result, 200);
     } catch (error) {
       next(error);

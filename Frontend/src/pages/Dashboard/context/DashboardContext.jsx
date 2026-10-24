@@ -234,7 +234,23 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
       const res = await request('/organizations/me/list');
       if (res && res.data) {
-        const list = res.data.map((o) => ({
+        let rawOrgs = Array.isArray(res.data) ? res.data : [];
+
+        // Nếu danh sách trống (VD: tài khoản System Admin chưa gán trực tiếp vào organization_members),
+        // thử tải danh sách tổ chức hệ thống làm fallback
+        if (rawOrgs.length === 0) {
+          try {
+            const allRes = await request('/organizations?limit=20');
+            const fallbackItems = allRes?.data?.items || (Array.isArray(allRes?.data) ? allRes.data : []);
+            if (fallbackItems.length > 0) {
+              rawOrgs = fallbackItems;
+            }
+          } catch {
+            // Bỏ qua nếu người dùng không có quyền xem toàn bộ tổ chức
+          }
+        }
+
+        const list = rawOrgs.map((o) => ({
           id: o.id,
           name: o.name,
           slug: o.slug,
@@ -270,7 +286,17 @@ export const DashboardProvider = ({ children, onNavigate }) => {
             setActiveOrganizationId(matched.id);
           }
         } else if (list.length === 0) {
-          setCurrentOrg(null);
+          setCurrentOrg({
+            id: 'org-empty',
+            name: 'Chưa có Tổ chức',
+            slug: 'no-org',
+            plan: 'Standard',
+            clusterCount: 0,
+            role_in_org: 'VIEWER',
+            role: 'VIEWER',
+            status: 'INACTIVE',
+            isEmpty: true,
+          });
           setCurrentUserRole('VIEWER');
           localStorage.removeItem('selfheal_active_org_id');
           localStorage.removeItem('selfheal_active_org_name');

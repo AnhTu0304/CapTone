@@ -94,7 +94,7 @@ export const ReportsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg.name} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv.name}</span> &bull; Đánh giá hiệu quả đầu tư tự phục hồi (ROI) và cam kết thời gian hoạt động hệ thống
+            {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span> &bull; Đánh giá hiệu quả đầu tư tự phục hồi (ROI) và cam kết thời gian hoạt động hệ thống
           </p>
         </div>
 

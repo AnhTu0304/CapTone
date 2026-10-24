@@ -24,8 +24,12 @@ export interface IAgentDetail extends IAgent {
   environment_code?: string;
   environment_type?: string;
   organization_id?: string;
+  organization_name?: string;
   cluster_name?: string | null;
   active_tokens_count?: number;
+  active_token_prefix?: string | null;
+  active_token_expires_at?: Date | null;
+  active_token_last_used_at?: Date | null;
   last_latency_ms?: number | null;
 }
 
@@ -238,12 +242,34 @@ export class AgentModel {
         e.code AS environment_code,
         e.environment_type AS environment_type,
         e.organization_id AS organization_id,
+        o.name AS organization_name,
         c.name AS cluster_name,
         (
           SELECT COUNT(*)::int 
           FROM agent_tokens t 
           WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
         ) AS active_tokens_count,
+        (
+          SELECT t.token_prefix 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_prefix,
+        (
+          SELECT t.expires_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_expires_at,
+        (
+          SELECT t.last_used_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_last_used_at,
         (
           SELECT h.latency_ms 
           FROM agent_heartbeats h 
@@ -253,6 +279,7 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
+      LEFT JOIN organizations o ON e.organization_id = o.id
       LEFT JOIN clusters c ON a.cluster_id::text = c.id::text
       WHERE a.id = $1
       LIMIT 1;
@@ -333,12 +360,34 @@ export class AgentModel {
         e.code AS environment_code,
         e.environment_type AS environment_type,
         e.organization_id AS organization_id,
+        o.name AS organization_name,
         c.name AS cluster_name,
         (
           SELECT COUNT(*)::int 
           FROM agent_tokens t 
           WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
         ) AS active_tokens_count,
+        (
+          SELECT t.token_prefix 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_prefix,
+        (
+          SELECT t.expires_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_expires_at,
+        (
+          SELECT t.last_used_at 
+          FROM agent_tokens t 
+          WHERE t.agent_id = a.id AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+          ORDER BY t.created_at DESC
+          LIMIT 1
+        ) AS active_token_last_used_at,
         (
           SELECT h.latency_ms 
           FROM agent_heartbeats h 
@@ -348,6 +397,7 @@ export class AgentModel {
         ) AS last_latency_ms
       FROM agents a
       JOIN environments e ON a.environment_id = e.id
+      LEFT JOIN organizations o ON e.organization_id = o.id
       LEFT JOIN clusters c ON a.cluster_id::text = c.id::text
       ${whereClause}
       ORDER BY 

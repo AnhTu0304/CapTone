@@ -98,6 +98,78 @@ export const agentService = {
     });
     return res?.data || res;
   },
+
+  /**
+   * [ADMIN] Lấy danh sách toàn bộ Agents trên hệ thống
+   */
+  async getAllAgentsAdmin(params = {}) {
+    try {
+      const query = new URLSearchParams();
+      if (params.organizationId) query.append('organization_id', params.organizationId);
+      if (params.clusterId) query.append('cluster_id', params.clusterId);
+      if (params.environmentId) query.append('environment_id', params.environmentId);
+      if (params.status && params.status !== 'ALL') query.append('status', params.status);
+      if (params.search) query.append('search', params.search);
+      if (params.page) query.append('page', params.page);
+      query.append('limit', params.limit || 100);
+
+      const qs = query.toString() ? `?${query.toString()}` : '';
+      const res = await request(`/agents${qs}`);
+      if (res?.success && res.data) {
+        return res.data;
+      }
+      return { items: [], total: 0 };
+    } catch (err) {
+      console.warn('[agentService] Lỗi tải danh sách Agent toàn hệ thống:', err.message);
+      return { items: [], total: 0 };
+    }
+  },
+
+  /**
+   * [ADMIN] Ngắt kết nối Agent toàn hệ thống
+   */
+  async disconnectAgentAdmin(agentId) {
+    if (!agentId) throw new Error('agentId là bắt buộc');
+    const res = await request(`/agents/${agentId}/disconnect`, {
+      method: 'POST',
+    });
+    return res?.data || res;
+  },
+
+  /**
+   * [ADMIN] Thu hồi Agent & toàn bộ token trên hệ thống
+   */
+  async revokeAgentAdmin(agentId) {
+    if (!agentId) throw new Error('agentId là bắt buộc');
+    const res = await request(`/agents/${agentId}/revoke`, {
+      method: 'POST',
+    });
+    return res?.data || res;
+  },
+
+  /**
+   * [ADMIN] Xoay vòng (Rotate) Token cho Agent trên hệ thống
+   */
+  async rotateAgentTokenAdmin(agentId, expiresInDays = 90) {
+    if (!agentId) throw new Error('agentId là bắt buộc');
+    const res = await request(`/agents/${agentId}/tokens`, {
+      method: 'POST',
+      body: JSON.stringify({ expires_in_days: expiresInDays }),
+    });
+    return res?.data || res;
+  },
+
+  /**
+   * [ADMIN] Xóa Agent trên hệ thống
+   */
+  async deleteAgentAdmin(agentId, force = false) {
+    if (!agentId) throw new Error('agentId là bắt buộc');
+    const query = force ? '?force=true' : '';
+    const res = await request(`/agents/${agentId}${query}`, {
+      method: 'DELETE',
+    });
+    return res?.data || res;
+  },
 };
 
 export default agentService;

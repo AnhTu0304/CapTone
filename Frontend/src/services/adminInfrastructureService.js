@@ -1,3 +1,15 @@
+import { clusterService } from './clusterService';
+import { agentService } from './agentService';
+
+const hasActiveAuthToken = () =>
+  Boolean(
+    typeof window !== 'undefined' &&
+      (sessionStorage.getItem('admin_access_token') ||
+        localStorage.getItem('admin_access_token') ||
+        localStorage.getItem('selfheal_auth_token') ||
+        localStorage.getItem('token'))
+  );
+
 /**
  * @file adminInfrastructureService.js
  * Platform Admin Infrastructure Service Layer
@@ -421,7 +433,32 @@ const MOCK_WORKLOADS = [
  * Lấy các chỉ số KPI hạ tầng tổng quan trên toàn nền tảng
  * @returns {Promise<Object>}
  */
-export const getInfrastructureKPIs = () => {
+export const getInfrastructureKPIs = async () => {
+  if (hasActiveAuthToken()) {
+    try {
+      const [realClusters, realAgentsRes] = await Promise.all([
+        clusterService.getAllClusters(),
+        agentService.getAllAgentsAdmin({ limit: 100 }),
+      ]);
+      const realAgents = realAgentsRes?.items || [];
+      if (Array.isArray(realClusters) && realClusters.length > 0) {
+        const totalNodes = realClusters.reduce((acc, c) => acc + Number(c.nodes_count || 0), 0);
+        const totalPods = realClusters.reduce((acc, c) => acc + Number(c.pods_count || 0), 0);
+        return {
+          totalClusters: realClusters.length,
+          readyClusters: realClusters.filter((c) => (c.agent_status || '').toUpperCase() === 'ONLINE').length,
+          totalNodes,
+          readyNodes: totalNodes,
+          totalAgents: realAgents.length,
+          onlineAgents: realAgents.filter((a) => (a.status || '').toUpperCase() === 'ONLINE').length,
+          totalWorkloads: totalPods,
+          healthyWorkloads: totalPods,
+        };
+      }
+    } catch {
+      // Fallback to mock KPIs
+    }
+  }
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
@@ -443,10 +480,46 @@ export const getInfrastructureKPIs = () => {
  * @param {Object} [filters]
  * @returns {Promise<InfrastructureCluster[]>}
  */
-export const getInfrastructureClusters = (filters = {}) => {
+export const getInfrastructureClusters = async (filters = {}) => {
+  let baseList = [...MOCK_CLUSTERS];
+  if (hasActiveAuthToken()) {
+    try {
+      const realClusters = await clusterService.getAllClusters();
+      if (Array.isArray(realClusters) && realClusters.length > 0) {
+        baseList = realClusters.map((c) => {
+          const agStatus = (c.agent_status || 'PENDING').toUpperCase();
+          const envRaw = (c.environment_type || c.environment_name || 'PRODUCTION').toUpperCase();
+          const environment = envRaw.includes('PROD')
+            ? 'Production'
+            : envRaw.includes('STAG')
+            ? 'Staging'
+            : 'Development';
+          return {
+            id: c.id,
+            name: c.name || 'k8s-cluster',
+            organizationId: c.organization_id || 'org-default',
+            organizationName: c.organization_name || 'Tổ chức Hệ thống',
+            environment,
+            k8sVersion: c.kubernetes_version || 'v1.29.4',
+            status: agStatus === 'ONLINE' ? 'READY' : agStatus === 'PENDING' ? 'WARNING' : 'CRITICAL',
+            nodeCount: Number(c.nodes_count || 0),
+            podCount: Number(c.pods_count || 0),
+            agentStatus: agStatus,
+            agentVersion: c.agent_name || 'eBPF Daemon',
+            lastSync: c.last_heartbeat_at
+              ? new Date(c.last_heartbeat_at).toLocaleString('vi-VN')
+              : 'Chưa đồng bộ',
+          };
+        });
+      }
+    } catch {
+      // Fallback to MOCK_CLUSTERS
+    }
+  }
+
   return new Promise((resolve) => {
     setTimeout(() => {
-      let result = [...MOCK_CLUSTERS];
+      let result = [...baseList];
 
       const query = (filters.search || filters.query || '').toLowerCase().trim();
       if (query) {
@@ -478,10 +551,44 @@ export const getInfrastructureClusters = (filters = {}) => {
  * @param {Object} [filters]
  * @returns {Promise<InfrastructureAgent[]>}
  */
-export const getInfrastructureAgents = (filters = {}) => {
+export const getInfrastructureAgents = async (filters = {}) => {
+  let baseList = [...MOCK_AGENTS];
+  if (hasActiveAuthToken()) {
+    try {
+      const realAgentsRes = await agentService.getAllAgentsAdmin({ limit: 100 });
+      if (realAgentsRes && Array.isArray(realAgentsRes.items) && realAgentsRes.items.length > 0) {
+        baseList = realAgentsRes.items.map((a) => {
+          const rawStatus = (a.status || 'OFFLINE').toUpperCase();
+          const status =
+            rawStatus === 'ONLINE'
+              ? 'ONLINE'
+              : rawStatus === 'PENDING' || rawStatus === 'DEGRADED'
+              ? 'DEGRADED'
+              : 'OFFLINE';
+          return {
+            id: a.id,
+            name: a.name || a.agent_uid || a.id,
+            organizationId: a.organization_id || 'org-default',
+            organizationName: a.organization_name || 'Tổ chức Hệ thống',
+            clusterId: a.cluster_id || '',
+            clusterName: a.cluster_name || a.environment_name || 'k8s-cluster',
+            version: a.version || 'v1.0.0-ebpf',
+            status,
+            lastHeartbeat: a.last_seen_at
+              ? new Date(a.last_seen_at).toLocaleString('vi-VN')
+              : 'Chưa kết nối',
+            latency: a.last_latency_ms != null ? `${a.last_latency_ms}ms` : status === 'ONLINE' ? '1.1ms' : 'N/A',
+          };
+        });
+      }
+    } catch {
+      // Fallback to MOCK_AGENTS
+    }
+  }
+
   return new Promise((resolve) => {
     setTimeout(() => {
-      let result = [...MOCK_AGENTS];
+      let result = [...baseList];
 
       const query = (filters.search || filters.query || '').toLowerCase().trim();
       if (query) {

@@ -322,6 +322,86 @@ export class AgentService {
   }
 
   /**
+   * Lấy danh sách toàn bộ Agent hệ thống (dành cho System Admin)
+   */
+  public static async getAllAgentsGlobal(filter: any = {}) {
+    return await AgentModel.findMany({
+      ...filter,
+      organizationId: filter.organizationId || filter.organization_id,
+      clusterId: filter.clusterId || filter.cluster_id,
+      environmentId: filter.environmentId || filter.environment_id,
+    });
+  }
+
+  /**
+   * Xem chi tiết Agent dành cho System Admin
+   */
+  public static async getAgentDetailGlobal(agentId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || !agent.organization_id) {
+      throw ApiError.notFound('Agent không tồn tại trên hệ thống');
+    }
+    return this.getAgentDetail(agent.organization_id, agentId);
+  }
+
+  /**
+   * Ngắt kết nối Agent dành cho System Admin
+   */
+  public static async disconnectAgentGlobal(agentId: string, userId?: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || !agent.organization_id) {
+      throw ApiError.notFound('Agent không tồn tại trên hệ thống');
+    }
+    return this.disconnectAgent(agent.organization_id, agentId, userId);
+  }
+
+  /**
+   * Thu hồi Agent dành cho System Admin
+   */
+  public static async revokeAgentGlobal(agentId: string) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || !agent.organization_id) {
+      throw ApiError.notFound('Agent không tồn tại trên hệ thống');
+    }
+    return this.revokeAgent(agent.organization_id, agentId);
+  }
+
+  /**
+   * Xoay vòng (Rotate) Token Agent dành cho System Admin
+   */
+  public static async rotateAgentTokenGlobal(
+    agentId: string,
+    userId: string,
+    expiresInDays?: number | null
+  ) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || !agent.organization_id) {
+      throw ApiError.notFound('Agent không tồn tại trên hệ thống');
+    }
+    // Nếu Agent đang ở trạng thái REVOKED, khôi phục về PENDING để có thể cấp token mới
+    if (agent.status === 'REVOKED') {
+      await pool.query(
+        `UPDATE agents SET status = 'PENDING', revoked_at = NULL, updated_at = NOW() WHERE id = $1`,
+        [agentId]
+      );
+    }
+    // Thu hồi các token cũ trước khi cấp phát token mới
+    await AgentModel.revokeAllTokensByAgentId(agentId);
+    return this.createAgentToken(agent.organization_id, agentId, userId, expiresInDays);
+  }
+
+  /**
+   * Xóa Agent dành cho System Admin
+   */
+  public static async deleteAgentGlobal(agentId: string, userId?: string, force?: boolean) {
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || !agent.organization_id) {
+      throw ApiError.notFound('Agent không tồn tại trên hệ thống');
+    }
+    return this.deleteAgent(agent.organization_id, agentId, userId, force);
+  }
+
+  /**
    * Xem chi tiết Agent (kèm tokens và lịch sử heartbeat)
    */
   public static async getAgentDetail(orgId: string, agentId: string) {

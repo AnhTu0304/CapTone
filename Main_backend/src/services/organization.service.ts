@@ -342,11 +342,33 @@ export class OrganizationService {
   /**
    * 6. Lấy danh sách các tổ chức mà người dùng đang tham gia (Workspace Context)
    */
-  public static async getUserOrganizations(userId: string): Promise<IOrganizationDetail[]> {
+  public static async getUserOrganizations(
+    userId: string,
+    userRoles: string[] = []
+  ): Promise<IOrganizationDetail[]> {
     if (!userId) {
       throw new ApiError(401, 'Yêu cầu đăng nhập trước khi xem danh sách tổ chức');
     }
-    return OrganizationModel.findOrganizationsByUserId(userId);
+    const orgs = await OrganizationModel.findOrganizationsByUserId(userId);
+    if (orgs.length === 0 && Array.isArray(userRoles) && userRoles.length > 0) {
+      const normalizedRoles = userRoles.map((r) => String(r).toUpperCase());
+      const isSystemAdmin = normalizedRoles.some((r) =>
+        ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(r)
+      );
+      if (isSystemAdmin) {
+        const allOrgs = await OrganizationModel.findManyWithDetails({
+          isSystemAdmin: true,
+          userId,
+          limit: 50,
+          offset: 0,
+        });
+        return allOrgs.map((o) => ({
+          ...o,
+          role_in_org: o.role_in_org || 'SME_OWNER',
+        }));
+      }
+    }
+    return orgs;
   }
 
   /**
