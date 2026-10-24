@@ -530,6 +530,7 @@ export class AgentService {
       latency_ms?: number | null;
       agent_version?: string | null;
       status?: any;
+      timestamp?: string | null;
       metadata?: Record<string, unknown> | null;
     }
   ) {
@@ -537,17 +538,24 @@ export class AgentService {
       throw ApiError.unauthorized('Agent chưa được xác thực');
     }
 
+    const metadata: Record<string, unknown> = { ...(data.metadata || {}) };
+    if (data.timestamp) {
+      metadata.client_timestamp = data.timestamp;
+    }
+
     const heartbeat = await AgentModel.recordHeartbeatDetailed(agent.id, {
       status: data.status || 'ONLINE',
-      agent_version: data.agent_version || 'v1.0.0',
+      agent_version: data.agent_version || null,
       latency_ms: data.latency_ms,
-      metadata: data.metadata,
+      metadata,
     });
 
     return {
       success: true,
       agent_id: agent.id,
       agent_name: agent.name,
+      agent_uid: agent.agent_uid,
+      cluster_id: agent.cluster_id,
       status: 'ONLINE',
       heartbeat_id: heartbeat.id,
       reported_at: heartbeat.reported_at,
@@ -560,6 +568,7 @@ export class AgentService {
       latency_ms?: number | null;
       agent_version?: string | null;
       status?: any;
+      timestamp?: string | null;
       metadata?: Record<string, unknown> | null;
     }
   ) {

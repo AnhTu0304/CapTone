@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
+import { ApiError } from '../utils/apiError';
 
 export type AgentStatus = 'PENDING' | 'ONLINE' | 'OFFLINE' | 'REVOKED';
 
@@ -537,6 +538,24 @@ export class AgentModel {
     client?: PoolClient
   ): Promise<IAgentHeartbeat> {
     const db = client || pool;
+
+    // 1. Cập nhật trạng thái Agent sang ONLINE, cập nhật version nếu có, và đảm bảo last_seen_at tăng đơn điệu
+    const updateRes = await db.query<IAgent>(
+      `UPDATE agents 
+       SET status = 'ONLINE', 
+           last_seen_at = GREATEST(COALESCE(last_seen_at, '1970-01-01'::timestamptz), NOW()),
+           version = COALESCE($2, version),
+           updated_at = NOW() 
+       WHERE id = $1 AND status != 'REVOKED'
+       RETURNING *;`,
+      [agentId, data.agent_version || null]
+    );
+
+    if (updateRes.rowCount === 0) {
+      throw ApiError.unauthorized('Agent không tồn tại hoặc đã bị thu hồi');
+    }
+
+    // 2. Ghi nhận Heartbeat chi tiết
     const query = `
       INSERT INTO agent_heartbeats (
         agent_id, status, agent_version, latency_ms, metadata, reported_at
@@ -552,14 +571,6 @@ export class AgentModel {
       data.metadata ? JSON.stringify(data.metadata) : null,
     ];
     const res = await db.query<IAgentHeartbeat>(query, values);
-
-    // Đồng thời cập nhật trạng thái Agent sang ONLINE & last_seen_at = NOW()
-    await db.query(
-      `UPDATE agents 
-       SET status = 'ONLINE', last_seen_at = NOW(), updated_at = NOW() 
-       WHERE id = $1 AND status != 'REVOKED';`,
-      [agentId]
-    );
 
     return res.rows[0];
   }

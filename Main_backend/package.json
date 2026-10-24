@@ -25,7 +25,8 @@
     "worker:audit-retention": "tsx src/workers/auditRetention.worker.ts",
     "test:retention": "tsx --test src/test/auditRetention.test.ts",
     "test:agent-lifecycle": "tsx --test src/test/agentLifecycle.test.ts",
-    "test:agent-auth": "tsx --test src/test/agentAuth.test.ts"
+    "test:agent-auth": "tsx --test src/test/agentAuth.test.ts",
+    "test:agent-heartbeat": "tsx --test src/test/agentHeartbeatApi.test.ts"
   },
   "keywords": [
     "nodejs",
