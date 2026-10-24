@@ -12,6 +12,7 @@ import { User, BrainCircuit, Activity, Key } from 'lucide-react';
  */
 export const ActorTypeBadge = ({ actorType }) => {
   switch (actorType) {
+    case 'SYSTEM':
     case 'SYSTEM_AI':
       return (
         <span
@@ -33,6 +34,7 @@ export const ActorTypeBadge = ({ actorType }) => {
           <span>SYSTEM_AI</span>
         </span>
       );
+    case 'AGENT':
     case 'EBPF_AGENT':
       return (
         <span

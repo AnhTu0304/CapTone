@@ -57,7 +57,10 @@ export type AuditReasonCode =
 export interface IAuditLog {
   id: string;
   organization_id?: string | null;
+  organization_name?: string | null;
   user_id?: string | null;
+  user_name?: string | null;
+  user_email?: string | null;
   actor_type: AuditActorType;
   action: AuditAction | string;
   resource_type?: string | null;
@@ -107,6 +110,7 @@ export interface IAuditLogFilter {
   reason_code?: string;
   start_date?: string;
   end_date?: string;
+  search?: string;
   page?: number;
   limit?: number;
 }

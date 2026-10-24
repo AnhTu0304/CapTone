@@ -27,6 +27,7 @@ export class AuditController {
         reason_code: req.query.reason_code as string,
         start_date: req.query.start_date as string,
         end_date: req.query.end_date as string,
+        search: req.query.search as string,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
       };
@@ -67,6 +68,7 @@ export class AuditController {
         reason_code: req.query.reason_code as string,
         start_date: req.query.start_date as string,
         end_date: req.query.end_date as string,
+        search: req.query.search as string,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
       };

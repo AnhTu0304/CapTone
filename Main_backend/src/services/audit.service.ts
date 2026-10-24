@@ -186,7 +186,7 @@ export class AuditService {
       user: { id: string; roles?: string[] };
       orgMember?: { organizationId: string; roleCode: string };
     }
-  ): Promise<{ data: IAuditLog[]; pagination: { total: number; page: number; limit: number; totalPages: number } }> {
+  ): Promise<{ data: IAuditLog[]; items?: IAuditLog[]; pagination: { total: number; page: number; limit: number; totalPages: number } }> {
     const rawRoles = Array.isArray(context.user.roles) ? context.user.roles : [];
     const isPlatformAdmin = rawRoles.some((r) => ['SUPER_ADMIN', 'ADMIN'].includes(r.trim().toUpperCase()));
 
@@ -218,87 +218,113 @@ export class AuditService {
     let paramIndex = 1;
 
     if (enforcedOrgId) {
-      conditions.push(`organization_id = $${paramIndex++}`);
+      conditions.push(`a.organization_id = $${paramIndex++}`);
       values.push(enforcedOrgId);
     }
 
     if (filter.user_id) {
-      conditions.push(`user_id = $${paramIndex++}`);
+      conditions.push(`a.user_id = $${paramIndex++}`);
       values.push(filter.user_id);
     }
 
     if (filter.action) {
-      conditions.push(`action = $${paramIndex++}`);
+      conditions.push(`a.action = $${paramIndex++}`);
       values.push(filter.action);
     }
 
     if (filter.status) {
-      conditions.push(`status = $${paramIndex++}`);
+      conditions.push(`a.status = $${paramIndex++}`);
       values.push(filter.status);
     }
 
     if (filter.resource_type) {
-      conditions.push(`resource_type = $${paramIndex++}`);
+      conditions.push(`a.resource_type = $${paramIndex++}`);
       values.push(filter.resource_type);
     }
 
     if (filter.resource_id) {
-      conditions.push(`resource_id = $${paramIndex++}`);
+      conditions.push(`a.resource_id = $${paramIndex++}`);
       values.push(filter.resource_id);
     }
 
     if (filter.request_id) {
-      conditions.push(`request_id = $${paramIndex++}`);
+      conditions.push(`a.request_id = $${paramIndex++}`);
       values.push(filter.request_id);
     }
 
     if (filter.reason_code) {
-      conditions.push(`reason_code = $${paramIndex++}`);
+      conditions.push(`a.reason_code = $${paramIndex++}`);
       values.push(filter.reason_code);
     }
 
     if (filter.start_date) {
-      conditions.push(`created_at >= $${paramIndex++}`);
+      conditions.push(`a.created_at >= $${paramIndex++}`);
       values.push(filter.start_date);
     }
 
     if (filter.end_date) {
-      conditions.push(`created_at <= $${paramIndex++}`);
+      conditions.push(`a.created_at <= $${paramIndex++}`);
       values.push(filter.end_date);
+    }
+
+    if (filter.search) {
+      conditions.push(`(
+        a.action ILIKE $${paramIndex} OR 
+        a.description ILIKE $${paramIndex} OR 
+        a.resource_type ILIKE $${paramIndex} OR 
+        a.resource_id::text ILIKE $${paramIndex} OR 
+        a.ip_address::text ILIKE $${paramIndex} OR
+        u.full_name ILIKE $${paramIndex} OR
+        u.email ILIKE $${paramIndex} OR
+        o.name ILIKE $${paramIndex}
+      )`);
+      values.push(`%${filter.search}%`);
+      paramIndex++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Đếm tổng số bản ghi
-    const countSql = `SELECT COUNT(*)::int AS total FROM audit_logs ${whereClause};`;
+    const countSql = `
+      SELECT COUNT(*)::int AS total 
+      FROM audit_logs a
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN organizations o ON a.organization_id = o.id
+      ${whereClause};
+    `;
     const countRes = await pool.query(countSql, values);
     const total = countRes.rows[0]?.total || 0;
 
     // Lấy dữ liệu trang
     const dataSql = `
       SELECT 
-        id,
-        organization_id,
-        user_id,
-        actor_type,
-        action,
-        resource_type,
-        resource_id,
-        target_type,
-        target_id,
-        description,
-        status,
-        reason_code,
-        request_id,
-        user_agent,
-        ip_address::text,
-        before_data,
-        after_data,
-        metadata,
-        created_at
-      FROM audit_logs
+        a.id,
+        a.organization_id,
+        o.name AS organization_name,
+        a.user_id,
+        u.full_name AS user_name,
+        u.email AS user_email,
+        a.actor_type,
+        a.action,
+        a.resource_type,
+        a.resource_id,
+        a.target_type,
+        a.target_id,
+        a.description,
+        a.status,
+        a.reason_code,
+        a.request_id,
+        a.user_agent,
+        a.ip_address::text,
+        a.before_data,
+        a.after_data,
+        a.metadata,
+        a.created_at
+      FROM audit_logs a
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN organizations o ON a.organization_id = o.id
       ${whereClause}
-      ORDER BY created_at DESC
+      ORDER BY a.created_at DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++};
     `;
 
@@ -306,6 +332,7 @@ export class AuditService {
 
     return {
       data: dataRes.rows as IAuditLog[],
+      items: dataRes.rows as IAuditLog[],
       pagination: {
         total,
         page,

@@ -6,6 +6,7 @@ import {
   getAuditLogs,
   getAuditLogById,
   getAuditSummaryKPIs,
+  mapBackendLogToEntry,
 } from '../../services/adminAuditLogsService';
 
 import ActorTypeBadge from '../../components/admin/audit-logs/ActorTypeBadge';
@@ -64,6 +65,31 @@ describe('Platform Admin Audit Logs Module', () => {
       expect(kpis).toHaveProperty('autonomousActions');
       expect(kpis).toHaveProperty('activeActorsCount');
     });
+
+    test('mapBackendLogToEntry correctly transforms backend rows to UI schema', () => {
+      const rawBackendRow = {
+        id: 42,
+        created_at: '2026-10-24T08:00:00.000Z',
+        user_id: '9b000000-0000-0000-0000-000000000001',
+        user_name: 'Nguyễn Văn A',
+        user_email: 'a.nguyen@aegisai.vn',
+        actor_type: 'SYSTEM',
+        action: 'ACCESS_DENIED_ROLE',
+        resource_type: 'Cluster',
+        resource_id: '8b000000-0000-0000-0000-000000000001',
+        organization_name: 'FinTech Hub',
+        status: 'DENIED',
+        ip_address: '10.0.0.1',
+        description: 'Truy cập tài nguyên bị từ chối do thiếu quyền',
+      };
+
+      const mapped = mapBackendLogToEntry(rawBackendRow);
+      expect(mapped.id).toBe('AUD-000042');
+      expect(mapped.actor).toBe('Nguyễn Văn A (a.nguyen@aegisai.vn)');
+      expect(mapped.actorType).toBe('SYSTEM_AI');
+      expect(mapped.status).toBe('BLOCKED');
+      expect(mapped.organization).toBe('FinTech Hub');
+    });
   });
 
   describe('UI Component Rendering', () => {
@@ -71,10 +97,16 @@ describe('Platform Admin Audit Logs Module', () => {
       const { rerender } = render(<ActorTypeBadge actorType="SYSTEM_AI" />);
       expect(screen.getByText('SYSTEM_AI')).toBeInTheDocument();
 
+      rerender(<ActorTypeBadge actorType="SYSTEM" />);
+      expect(screen.getByText('SYSTEM_AI')).toBeInTheDocument();
+
       rerender(<ActorTypeBadge actorType="USER" />);
       expect(screen.getByText('USER')).toBeInTheDocument();
 
       rerender(<ActorTypeBadge actorType="EBPF_AGENT" />);
+      expect(screen.getByText('EBPF_AGENT')).toBeInTheDocument();
+
+      rerender(<ActorTypeBadge actorType="AGENT" />);
       expect(screen.getByText('EBPF_AGENT')).toBeInTheDocument();
 
       rerender(<ActorTypeBadge actorType="API_KEY" />);
@@ -86,7 +118,11 @@ describe('Platform Admin Audit Logs Module', () => {
       rerender(<AuditStatusBadge status="BLOCKED" />);
       expect(screen.getByText(/Bị chặn/i)).toBeInTheDocument();
 
+      rerender(<AuditStatusBadge status="DENIED" />);
+      expect(screen.getByText(/Bị chặn/i)).toBeInTheDocument();
       rerender(<AuditStatusBadge status="FAILED" />);
+      expect(screen.getByText('Thất bại')).toBeInTheDocument();
+      rerender(<AuditStatusBadge status="FAILURE" />);
       expect(screen.getByText('Thất bại')).toBeInTheDocument();
     });
 

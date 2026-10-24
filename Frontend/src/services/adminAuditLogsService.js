@@ -391,29 +391,55 @@ const MOCK_AUDIT_LOGS = [
 /**
  * Chuyển đổi bản ghi từ Backend CSDL sang cấu trúc UI của Admin Dashboard
  */
-const mapBackendLogToEntry = (raw) => {
-  const dateObj = new Date(raw.created_at);
+export const mapBackendLogToEntry = (raw) => {
+  const dateObj = new Date(raw.created_at || raw.timestamp);
   const formattedDate = !isNaN(dateObj.getTime())
     ? `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()} ${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`
-    : raw.created_at;
+    : raw.created_at || raw.timestamp || '';
 
   const rawMeta = typeof raw.metadata === 'object' && raw.metadata !== null ? raw.metadata : {};
 
+  // Chuẩn hóa status cho badges
+  let status = raw.status || 'SUCCESS';
+  const upperStatus = String(status).toUpperCase();
+  if (['FAILURE', 'FAILED', 'ERROR'].includes(upperStatus)) status = 'FAILED';
+  else if (['DENIED', 'BLOCKED'].includes(upperStatus)) status = 'BLOCKED';
+  else if (['WARN', 'PENDING_VERIFY'].includes(upperStatus)) status = 'PENDING_VERIFY';
+  else if (upperStatus === 'SUCCESS') status = 'SUCCESS';
+
+  // Chuẩn hóa actor type
+  let actorType = raw.actor_type || raw.actorType || 'USER';
+  const upperActorType = String(actorType).toUpperCase();
+  if (['SYSTEM', 'SYSTEM_AI'].includes(upperActorType)) actorType = 'SYSTEM_AI';
+  else if (['AGENT', 'EBPF_AGENT'].includes(upperActorType)) actorType = 'EBPF_AGENT';
+  else if (['API_KEY', 'API'].includes(upperActorType)) actorType = 'API_KEY';
+  else actorType = 'USER';
+
+  const actorName = raw.user_name || raw.actor;
+  const actorEmail = raw.user_email;
+  const actorDisplay = actorName
+    ? (actorEmail ? `${actorName} (${actorEmail})` : actorName)
+    : (actorEmail || (raw.user_id ? `User (${String(raw.user_id).substring(0, 8)}...)` : 'Hệ Thống Tự Động (System)'));
+
+  const logId = typeof raw.id === 'string' && raw.id.startsWith('AUD-')
+    ? raw.id
+    : `AUD-${String(raw.id || '').padStart(6, '0')}`;
+
   return {
-    id: `AUD-${String(raw.id).padStart(6, '0')}`,
+    id: logId,
     rawId: raw.id,
     timestamp: formattedDate,
-    actor: raw.user_name ? `${raw.user_name} (${raw.user_email || ''})` : (raw.user_email || 'Hệ Thống Tự Động (System)'),
-    actorType: raw.actor_type || 'USER',
+    actor: actorDisplay,
+    actorType,
     action: raw.action,
-    resourceType: raw.resource_type || 'SYSTEM',
-    resourceId: raw.resource_id || '-',
-    organization: raw.organization_name || (raw.organization_id ? `Org: ${String(raw.organization_id).substring(0, 8)}` : 'Global Platform'),
-    status: raw.status || 'SUCCESS',
-    ipAddress: raw.ip_address || '127.0.0.1',
+    resourceType: raw.resource_type || raw.resourceType || 'SYSTEM',
+    resourceId: raw.resource_id || raw.resourceId || '-',
+    organization: raw.organization_name || raw.organization || (raw.organization_id ? `Org: ${String(raw.organization_id).substring(0, 8)}` : 'Global Platform'),
+    status,
+    ipAddress: raw.ip_address || raw.ipAddress || '127.0.0.1',
     description: raw.description || raw.action,
-    beforeData: rawMeta.beforeData || null,
-    afterData: rawMeta.afterData || null,
+    beforeData: raw.before_data || rawMeta.beforeData || null,
+    afterData: raw.after_data || rawMeta.afterData || null,
     metadata: {
       sha256: rawMeta.sha256 || '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
       sessionId: raw.request_id || rawMeta.sessionId || 'sys-session',
@@ -561,15 +587,34 @@ export const getAuditLogs = async (filters = {}, pagination = { page: 1, pageSiz
       if (filters.action && filters.action !== 'ALL') params.set('action', filters.action);
       if (filters.status && filters.status !== 'ALL') params.set('status', filters.status);
       if (filters.resourceType && filters.resourceType !== 'ALL') params.set('resource_type', filters.resourceType);
-      if (filters.search) params.set('action', filters.search);
+      if (filters.organization && filters.organization !== 'ALL') params.set('organization_id', filters.organization);
+      if (filters.search) params.set('search', filters.search);
+
+      if (filters.dateRange && filters.dateRange !== 'ALL') {
+        const now = new Date();
+        if (filters.dateRange === '24H') {
+          params.set('start_date', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString());
+        } else if (filters.dateRange === '7D') {
+          params.set('start_date', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString());
+        } else if (filters.dateRange === '30D') {
+          params.set('start_date', new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString());
+        }
+      }
 
       const res = await request(`audit-logs?${params.toString()}`);
       if (res && res.success && res.data) {
-        const rawItems = res.data.items || [];
+        // Hỗ trợ cả res.data.data (chuẩn backend), res.data.items, và res.data mảng trực tiếp
+        const rawItems = Array.isArray(res.data.data)
+          ? res.data.data
+          : Array.isArray(res.data.items)
+          ? res.data.items
+          : Array.isArray(res.data)
+          ? res.data
+          : [];
         const mapped = rawItems.map(mapBackendLogToEntry);
         return {
           data: mapped,
-          total: res.data.pagination?.total || mapped.length,
+          total: res.data.pagination?.total ?? (typeof res.data.total === 'number' ? res.data.total : mapped.length),
           page: res.data.pagination?.page || pagination.page,
           pageSize: res.data.pagination?.limit || pagination.pageSize,
         };

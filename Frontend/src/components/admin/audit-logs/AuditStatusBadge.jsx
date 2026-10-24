@@ -34,6 +34,8 @@ export const AuditStatusBadge = ({ status }) => {
         </span>
       );
     case 'FAILED':
+    case 'FAILURE':
+    case 'ERROR':
       return (
         <span
           style={{
@@ -55,6 +57,7 @@ export const AuditStatusBadge = ({ status }) => {
         </span>
       );
     case 'BLOCKED':
+    case 'DENIED':
       return (
         <span
           style={{
