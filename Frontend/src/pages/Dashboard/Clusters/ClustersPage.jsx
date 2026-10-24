@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
 import { ClusterDetailPage } from './ClusterDetailPage';
 import {
@@ -17,7 +18,9 @@ import {
   AlertCircle,
   ArrowRight,
   Building2,
-  Key
+  Key,
+  Copy,
+  Check
 } from 'lucide-react';
 
 const FALLBACK_CLUSTERS = [
@@ -52,6 +55,9 @@ export const ClustersPage = ({ onNavigate }) => {
   const [newClusterName, setNewClusterName] = useState('');
   const [newClusterEnv, setNewClusterEnv] = useState('PRODUCTION');
   const [newClusterRegion, setNewClusterRegion] = useState('MINIKUBE');
+  const [newlyCreatedClusterToken, setNewlyCreatedClusterToken] = useState(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const { can } = usePermissions();
 
   // Chuẩn hóa dữ liệu cụm 100% THẬT từ Database PostgreSQL
   const normalizeCluster = useCallback((c) => {
@@ -163,8 +169,16 @@ export const ClustersPage = ({ onNavigate }) => {
       setShowAddModal(false);
       setNewClusterName('');
 
-      // Tự động mở ngay trang chi tiết Cụm K8s vừa tạo để xem Token và hướng dẫn cài đặt Agent
-      if (createdCluster?.id) {
+      // Nếu Backend trả về token khởi tạo một lần duy nhất, hiển thị modal sao chép bảo mật
+      if (createdCluster?.token?.token) {
+        setNewlyCreatedClusterToken({
+          clusterId: createdCluster.cluster?.id || createdCluster.id,
+          clusterName: createdCluster.cluster?.name || newClusterName.trim(),
+          rawToken: createdCluster.token.token,
+          prefix: createdCluster.token.token_prefix,
+          expiresAt: createdCluster.token.expires_at,
+        });
+      } else if (createdCluster?.id) {
         handleOpenCluster(createdCluster.id);
       }
     } catch (err) {
@@ -248,27 +262,29 @@ export const ClustersPage = ({ onNavigate }) => {
             <span>{isRefreshing ? 'Đang đồng bộ...' : 'Đồng bộ cụm'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--dash-primary)',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
-              color: '#FFFFFF',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 2px 4px rgba(0, 168, 150, 0.25)',
-            }}
-          >
-            <Plus size={16} />
-            <span>Đăng Ký Cụm Mới</span>
-          </button>
+          {can(PERMISSIONS.ENV_MANAGE) && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                backgroundColor: 'var(--dash-primary)',
+                border: 'none',
+                borderRadius: 'var(--dash-radius-md)',
+                color: '#FFFFFF',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0, 168, 150, 0.25)',
+              }}
+            >
+              <Plus size={16} />
+              <span>Đăng Ký Cụm Mới</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -810,6 +826,140 @@ export const ClustersPage = ({ onNavigate }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Hiển Thị Raw Token 1 Lần Duy Nhất */}
+      {newlyCreatedClusterToken && (
+        <div
+          data-testid="token-display-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              width: '100%',
+              maxWidth: '560px',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              padding: '24px',
+              borderRadius: 'var(--dash-radius-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--dash-primary)' }}>
+                <Key size={22} />
+                <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                  Khởi Tạo Cụm & Cấp Token Tác Tử Thành Công
+                </h3>
+              </div>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                BẢO MẬT: CHỈ HIỂN THỊ 1 LẦN
+              </span>
+            </div>
+
+            <div style={{ padding: '12px 14px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '6px', fontSize: '0.8125rem', color: '#92400E', lineHeight: '1.5' }}>
+              ⚠️ Mã Token kết nối dưới đây được sinh tự động cho Cụm <strong>{newlyCreatedClusterToken.clusterName}</strong>. 
+              Vì lý do bảo mật, Backend không lưu trữ raw token và mã này sẽ <strong>không bao giờ hiển thị lại</strong> sau khi đóng cửa sổ này.
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                Mã Token Kết Nối (Secret Key)
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="text"
+                  readOnly
+                  data-testid="raw-token-input"
+                  value={newlyCreatedClusterToken.rawToken}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: '0.8125rem',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid var(--dash-border)',
+                    borderRadius: '6px',
+                    color: '#0F172A',
+                    fontWeight: 600,
+                  }}
+                />
+                <button
+                  type="button"
+                  data-testid="copy-raw-token-btn"
+                  onClick={() => {
+                    navigator.clipboard.writeText(newlyCreatedClusterToken.rawToken);
+                    setCopiedToken(true);
+                    setTimeout(() => setCopiedToken(false), 2000);
+                  }}
+                  style={{
+                    padding: '10px 14px',
+                    backgroundColor: copiedToken ? '#059669' : 'var(--dash-primary)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '0.8125rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  {copiedToken ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{copiedToken ? 'Đã chép' : 'Sao chép'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                Lệnh Cài Đặt Nhanh (Kubernetes Helm / Secret)
+              </label>
+              <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem', overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+{`kubectl create secret generic selfheal-agent-token \\
+  --namespace selfheal-system \\
+  --from-literal=token="${newlyCreatedClusterToken.rawToken}"`}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button
+                type="button"
+                data-testid="close-token-modal-btn"
+                onClick={() => {
+                  const targetId = newlyCreatedClusterToken.clusterId;
+                  setNewlyCreatedClusterToken(null);
+                  if (targetId) handleOpenCluster(targetId);
+                }}
+                style={{
+                  padding: '9px 18px',
+                  backgroundColor: 'var(--dash-primary)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Tôi Đã Lưu Token & Đi Đến Chi Tiết Cụm
+              </button>
+            </div>
           </div>
         </div>
       )}

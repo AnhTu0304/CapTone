@@ -176,11 +176,12 @@ export const clusterService = {
    * @param {string} [orgId] 
    * @returns {Promise<Object>}
    */
-  async removeCluster(clusterId, orgId) {
+  async removeCluster(clusterId, orgId, force = false) {
     if (!clusterId) throw new Error('clusterId is required');
+    const query = force ? '?force=true' : '';
     const path = orgId && !orgId.startsWith('org-')
-      ? `/organizations/${orgId}/clusters/${clusterId}`
-      : `/clusters/${clusterId}`;
+      ? `/organizations/${orgId}/clusters/${clusterId}${query}`
+      : `/clusters/${clusterId}${query}`;
     const res = await request(path, {
       method: 'DELETE',
     });

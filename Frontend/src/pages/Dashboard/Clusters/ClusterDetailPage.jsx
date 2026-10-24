@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
 import {
   Server,
@@ -80,6 +81,8 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [confirmClusterName, setConfirmClusterName] = useState('');
   const [isRemoving, setIsRemoving] = useState(false);
+  const [forceRemoveCluster, setForceRemoveCluster] = useState(false);
+  const { can } = usePermissions();
 
   // Revoke Token Loading State
   const [isRevokingId, setIsRevokingId] = useState(null);
@@ -140,7 +143,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   // 1. Chức năng Xoay Vòng / Đổi Token (Rotate Token) - 1 Cụm 1 Agent, thay thế token cũ bằng token mới
   const handleRotateToken = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setIsRotating(true);
     setActionError(null);
 
@@ -237,7 +240,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     }
     setIsRemoving(true);
     try {
-      await clusterService.removeCluster(clusterId, currentOrg?.id);
+      await clusterService.removeCluster(clusterId, currentOrg?.id, forceRemoveCluster);
       setShowRemoveModal(false);
       if (onNavigate) {
         onNavigate('/dashboard/clusters');
@@ -305,13 +308,13 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   // Active Token (1 cluster 1 active token)
   const activeToken = tokens.find((t) => t.is_active) || tokens[0] || null;
-  const hasRawToken = Boolean(rotatedTokenResult?.raw_token);
+  const hasRawToken = Boolean(rotatedTokenResult?.raw_token || rotatedTokenResult?.token);
   const activeTokenPrefix = activeToken?.token_prefix || '';
   const tokenDisplay = hasRawToken
-    ? rotatedTokenResult.raw_token
+    ? (rotatedTokenResult.raw_token || rotatedTokenResult.token)
     : (activeTokenPrefix ? `${activeTokenPrefix}••••••••••••` : '••••••••••••');
   const tokenCopyValue = hasRawToken
-    ? rotatedTokenResult.raw_token
+    ? (rotatedTokenResult.raw_token || rotatedTokenResult.token)
     : '<YOUR_AGENT_TOKEN>';
 
   // Trạng thái Agent chuẩn hóa: ONLINE | OFFLINE | CONNECTING | DEGRADED | PENDING
@@ -1838,7 +1841,8 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 </button>
               </div>
 
-              {/* Xóa Cấu Hình Cụm */}
+              {/* Xóa Cấu Hình Cụm (Chỉ SME_OWNER có quyền) */}
+              {can(PERMISSIONS.ENV_DELETE) && (
               <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #DC2626', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
                 <div>
                   <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#7F1D1D' }}>Xóa Cụm Kubernetes (Remove Cluster)</h4>
@@ -1868,6 +1872,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <span>Xóa Cụm Kubernetes</span>
                 </button>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -1949,7 +1954,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <input
                       type="text"
                       readOnly
-                      value={rotatedTokenResult.raw_token}
+                      value={rotatedTokenResult.raw_token || rotatedTokenResult.token}
                       style={{
                         flex: 1,
                         padding: '10px 12px',
@@ -1964,7 +1969,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     />
                     <button
                       type="button"
-                      onClick={() => handleCopy(rotatedTokenResult.raw_token, 'new_token')}
+                      onClick={() => handleCopy(rotatedTokenResult.raw_token || rotatedTokenResult.token, 'new_token')}
                       style={{
                         padding: '10px 14px',
                         backgroundColor: 'var(--dash-primary)',
@@ -2073,8 +2078,10 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     Hủy
                   </button>
                   <button
-                    type="submit"
-                    disabled={isRotating}
+                    type="button"
+                    onClick={handleRotateToken}
+disabled={isRotating}
+data-testid="confirm-rotate-token-btn"
                     style={{
                       padding: '9px 20px',
                       backgroundColor: 'var(--dash-primary)',
@@ -2208,6 +2215,21 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
               />
             </div>
+
+            {(isOnline || clusterData.agent_status === 'ONLINE' || clusterData.rawAgentStatus === 'ONLINE') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '6px' }}>
+                <input
+                  type="checkbox"
+                  id="forceRemoveCluster"
+                  data-testid="force-remove-cluster-checkbox"
+                  checked={forceRemoveCluster}
+                  onChange={(e) => setForceRemoveCluster(e.target.checked)}
+                />
+                <label htmlFor="forceRemoveCluster" style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, cursor: 'pointer' }}>
+                  Agent đang ONLINE. Đánh dấu để xác nhận xóa bắt buộc (force=true) và thu hồi Agent ngay lập tức.
+                </label>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
               <button
                 type="button"

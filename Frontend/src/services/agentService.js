@@ -68,6 +68,36 @@ export const agentService = {
       return false;
     }
   },
+
+  /**
+   * Ngắt kết nối Agent (chuyển sang OFFLINE và thu hồi token kết nối)
+   * @param {string} orgId 
+   * @param {string} agentId 
+   * @returns {Promise<Object>}
+   */
+  async disconnectAgent(orgId, agentId) {
+    if (!orgId || !agentId) throw new Error('orgId và agentId là bắt buộc');
+    const res = await request(`/organizations/${orgId}/agents/${agentId}/disconnect`, {
+      method: 'POST',
+    });
+    return res?.data || res;
+  },
+
+  /**
+   * Xóa Agent khỏi hệ thống (hỗ trợ cờ an toàn force khi đang ONLINE)
+   * @param {string} orgId 
+   * @param {string} agentId 
+   * @param {boolean} [force=false]
+   * @returns {Promise<Object>}
+   */
+  async deleteAgent(orgId, agentId, force = false) {
+    if (!orgId || !agentId) throw new Error('orgId và agentId là bắt buộc');
+    const query = force ? '?force=true' : '';
+    const res = await request(`/organizations/${orgId}/agents/${agentId}${query}`, {
+      method: 'DELETE',
+    });
+    return res?.data || res;
+  },
 };
 
 export default agentService;
