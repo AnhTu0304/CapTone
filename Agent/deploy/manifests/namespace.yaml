@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+    app.kubernetes.io/part-of: selfheal

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selfheal-agent-config
+  namespace: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+data:
+  AGENT_SERVER_URL: "wss://backend.captone.local/api/v1/agent/connect"
+  AGENT_UID: "selfheal-agent-cluster-01"
+  CLUSTER_ID: ""
+  ENVIRONMENT_ID: ""
+  METRICS_INTERVAL_MS: "5000"
+  LOG_COLLECTION_INTERVAL_MS: "5000"
+  K8S_NAMESPACE: "default"
+  MONITOR_ALL_NAMESPACES: "false"
+  LOG_LEVEL: "INFO"
+  ENABLE_HEALING_ACTIONS: "false"
+  HEALTH_PORT: "8080"
