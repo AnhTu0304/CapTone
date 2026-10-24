@@ -579,12 +579,32 @@ describe('Agent Enrollment, Token Lifecycle & Heartbeat Test Suite [PB09 5.3]', 
   });
 
   test('15. Invalid payload handling (negative latency or invalid status)', async () => {
+    // Insert a valid agent and token to test payload validation through authenticated middleware
+    const validAgentId = 'e3000000-0000-0000-0000-000000000055';
+    const validTokenId = 'f3000000-0000-0000-0000-000000000055';
+    const validRaw = 'ag_live_payload_valid_token_1234567890';
+    const validHash = crypto.createHash('sha256').update(validRaw).digest('hex');
+
+    await pool.query(
+      `INSERT INTO agents (id, agent_uid, cluster_id, environment_id, name, status, created_at, updated_at)
+       VALUES ($1, 'uid-valid-payload', $2, $3, 'agent-payload', 'ONLINE', NOW(), NOW())
+       ON CONFLICT (id) DO NOTHING;`,
+      [validAgentId, clusterAId, envAId]
+    );
+
+    await pool.query(
+      `INSERT INTO agent_tokens (id, agent_id, token_hash, token_prefix, created_at)
+       VALUES ($1, $2, $3, 'ag_live_payl', NOW())
+       ON CONFLICT (id) DO NOTHING;`,
+      [validTokenId, validAgentId, validHash]
+    );
+
     // Negative latency
     const resNegativeLatency = await fetch(`${baseUrl}/api/v1/agents/heartbeat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-agent-token': 'dummy_for_validation',
+        'x-agent-token': validRaw,
       },
       body: JSON.stringify({ latency_ms: -50 }),
     });
@@ -595,10 +615,13 @@ describe('Agent Enrollment, Token Lifecycle & Heartbeat Test Suite [PB09 5.3]', 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-agent-token': 'dummy_for_validation',
+        'x-agent-token': validRaw,
       },
       body: JSON.stringify({ status: 'HACKED_STATUS' }),
     });
     assert.strictEqual(resInvalidStatus.status, 400);
+
+    await pool.query(`DELETE FROM agent_tokens WHERE id = $1;`, [validTokenId]);
+    await pool.query(`DELETE FROM agents WHERE id = $1;`, [validAgentId]);
   });
 });

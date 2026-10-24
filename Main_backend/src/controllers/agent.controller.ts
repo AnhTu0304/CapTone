@@ -185,6 +185,10 @@ export class AgentController {
         }
       }
 
+      if ((req as any).agent) {
+        const result = await AgentService.recordHeartbeatForAgent((req as any).agent, req.body);
+        return ApiResponse.success(res, 'Ghi nhận nhịp tim Agent thành công', result, 200);
+      }
       const result = await AgentService.recordHeartbeatFromDaemon(rawToken, req.body);
       return ApiResponse.success(res, 'Ghi nhận nhịp tim Agent thành công', result, 200);
     } catch (error) {

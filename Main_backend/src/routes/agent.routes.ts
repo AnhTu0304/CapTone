@@ -4,6 +4,7 @@ import { authenticateToken } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import { requireOrgMember, requireOrgRole } from '../middlewares/orgAuth.middleware';
 import { rateLimiter } from '../middlewares/rateLimit.middleware';
+import { authenticateAgentToken } from '../middlewares/agentAuth.middleware';
 import {
   createAgentSchema,
   updateAgentSchema,
@@ -178,6 +179,7 @@ daemonRouter.post(
     max: 120,
     message: 'Quá nhiều yêu cầu nhịp tim từ địa chỉ này, vui lòng thử lại sau.',
   }),
+  authenticateAgentToken,
   validate(agentHeartbeatSchema),
   AgentController.recordHeartbeat
 );

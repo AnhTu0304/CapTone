@@ -24,6 +24,7 @@ export interface AuthenticatedAgent {
   agent_uid: string;
   cluster_id: string | null;
   environment_id: string;
+  organization_id?: string;
   status: string;
 }
 
@@ -523,6 +524,36 @@ export class AgentService {
   /**
    * Xử lý nhịp tim trực tiếp từ Agent daemon (qua HTTP POST /agents/heartbeat)
    */
+  public static async recordHeartbeatForAgent(
+    agent: AuthenticatedAgent,
+    data: {
+      latency_ms?: number | null;
+      agent_version?: string | null;
+      status?: any;
+      metadata?: Record<string, unknown> | null;
+    }
+  ) {
+    if (!agent || !agent.id) {
+      throw ApiError.unauthorized('Agent chưa được xác thực');
+    }
+
+    const heartbeat = await AgentModel.recordHeartbeatDetailed(agent.id, {
+      status: data.status || 'ONLINE',
+      agent_version: data.agent_version || 'v1.0.0',
+      latency_ms: data.latency_ms,
+      metadata: data.metadata,
+    });
+
+    return {
+      success: true,
+      agent_id: agent.id,
+      agent_name: agent.name,
+      status: 'ONLINE',
+      heartbeat_id: heartbeat.id,
+      reported_at: heartbeat.reported_at,
+    };
+  }
+
   public static async recordHeartbeatFromDaemon(
     rawToken: string,
     data: {
@@ -547,21 +578,18 @@ export class AgentService {
       await pool.query('UPDATE agent_tokens SET last_used_at = NOW() WHERE id = $1', [agentRow.token_id]);
     }
 
-    const heartbeat = await AgentModel.recordHeartbeatDetailed(agentRow.id, {
-      status: data.status || 'ONLINE',
-      agent_version: data.agent_version || 'v1.0.0',
-      latency_ms: data.latency_ms,
-      metadata: data.metadata,
-    });
-
-    return {
-      success: true,
-      agent_id: agentRow.id,
-      agent_name: agentRow.name,
-      status: 'ONLINE',
-      heartbeat_id: heartbeat.id,
-      reported_at: heartbeat.reported_at,
-    };
+    return this.recordHeartbeatForAgent(
+      {
+        id: agentRow.id,
+        name: agentRow.name,
+        agent_uid: agentRow.agent_uid,
+        cluster_id: agentRow.cluster_id,
+        environment_id: agentRow.environment_id,
+        organization_id: (agentRow as any).organization_id,
+        status: agentRow.status,
+      },
+      data
+    );
   }
 
   /**

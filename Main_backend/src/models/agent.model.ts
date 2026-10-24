@@ -81,9 +81,10 @@ export class AgentModel {
     const cleanToken = rawToken ? rawToken.trim() : '';
 
     const result = await pool.query(
-      `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id
+      `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id, e.organization_id
        FROM agent_tokens t
        JOIN agents a ON a.id = t.agent_id
+       LEFT JOIN environments e ON a.environment_id = e.id
        WHERE (t.token_hash = $1 OR t.token_hash = $2)
          AND (t.expires_at IS NULL OR t.expires_at > NOW())
          AND t.revoked_at IS NULL
