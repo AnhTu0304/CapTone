@@ -23,6 +23,19 @@ export const KubernetesStep = ({ onNavigate }) => {
 
   const [clusterName, setClusterName] = useState(cluster?.name || 'k8s-prod-east-01');
   const [error, setError] = useState('');
+  const [isGeneratingToken, setIsGeneratingToken] = useState(false);
+
+  const handleRegenerateToken = async () => {
+    setIsGeneratingToken(true);
+    setError('');
+    try {
+      await generateNewToken();
+    } catch (err) {
+      setError(err.message || 'Không thể cấp lại Token vào lúc này');
+    } finally {
+      setIsGeneratingToken(false);
+    }
+  };
 
   const handleBack = () => {
     setStep(2);
@@ -101,15 +114,17 @@ export const KubernetesStep = ({ onNavigate }) => {
 
       {/* 2. Generate Agent Token */}
       <AgentTokenCard
-        token={cluster?.token || 'sh_live_sec_default_token'}
+        token={cluster?.token || ''}
+        tokenPrefix={cluster?.tokenPrefix || ''}
         tokenGeneratedAt={cluster?.tokenGeneratedAt}
-        onRegenerate={generateNewToken}
+        onRegenerate={handleRegenerateToken}
+        isGenerating={isGeneratingToken}
       />
 
       {/* 3. Install SelfHeal Agent */}
       <InstallationCodeBlock
         clusterName={clusterName}
-        token={cluster?.token || 'sh_live_sec_default_token'}
+        token={cluster?.token || ''}
         environmentName={environment?.name || 'Staging'}
       />
 

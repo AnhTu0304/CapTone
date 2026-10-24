@@ -166,7 +166,7 @@ export class ClusterModel {
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
       LEFT JOIN pods p ON p.cluster_id = c.id
-      LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+      LEFT JOIN agents a ON a.cluster_id = c.id
       WHERE e.organization_id = $1 AND c.deleted_at IS NULL
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, a.id, a.name, a.status, a.last_seen_at
       ORDER BY c.created_at DESC`,
@@ -211,7 +211,7 @@ export class ClusterModel {
       LEFT JOIN organizations o ON e.organization_id = o.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
       LEFT JOIN pods p ON p.cluster_id = c.id
-      LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+      LEFT JOIN agents a ON a.cluster_id = c.id
       WHERE c.deleted_at IS NULL
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, o.name, a.id, a.name, a.status, a.last_seen_at
       ORDER BY c.created_at DESC`
@@ -307,7 +307,7 @@ export class ClusterModel {
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN organizations o ON e.organization_id = o.id
-      LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+      LEFT JOIN agents a ON a.cluster_id = c.id
       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL`;
 
     const params: any[] = [clusterId];
@@ -352,7 +352,7 @@ export class ClusterModel {
         FROM clusters c
         JOIN environments e ON c.environment_id = e.id
         LEFT JOIN organizations o ON e.organization_id = o.id
-        LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+        LEFT JOIN agents a ON a.cluster_id = c.id
         WHERE e.organization_id = $1 AND c.deleted_at IS NULL
         ORDER BY c.created_at DESC
         LIMIT 1`,
@@ -439,7 +439,7 @@ export class ClusterModel {
     if (cluster.agent_id) {
       const tokensRes = await db.query(
         `SELECT id, last_used_at, created_at, expires_at, revoked_at,
-                LEFT(token_hash, 16) AS token_prefix,
+                COALESCE(token_prefix, LEFT(token_hash, 16)) AS token_prefix,
                 (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS is_active
          FROM agent_tokens 
          WHERE agent_id = $1 
@@ -481,7 +481,7 @@ export class ClusterModel {
     const logsRes = await db.query(
       `SELECT id, action AS event_type, status AS severity, description AS message, COALESCE(ip_address::text, '10.244.0.12') AS source_ip, 'k8s-node-01' AS node_name, created_at
        FROM audit_logs
-       WHERE resource_id = $1 OR organization_id = $2
+       WHERE (resource_id::text = $1::text OR ($2::text IS NOT NULL AND organization_id::text = $2::text))
        ORDER BY created_at DESC
        LIMIT 15`,
       [cluster.id, cluster.organization_id]
@@ -553,7 +553,7 @@ export class ClusterModel {
     const clusterRes = await db.query(
       `SELECT c.id, c.name, c.environment_id, a.id AS agent_id
        FROM clusters c
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -588,7 +588,7 @@ export class ClusterModel {
 
     // Chuyển Agent sang OFFLINE vì token cũ đã bị thu hồi
     await db.query(
-      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id::text = $1::text`,
       [agentId]
     );
 
@@ -652,7 +652,7 @@ export class ClusterModel {
       `SELECT c.id, e.organization_id, a.id AS agent_id
        FROM clusters c
        LEFT JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -685,7 +685,7 @@ export class ClusterModel {
       `SELECT c.id, e.organization_id, a.id AS agent_id
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -695,7 +695,7 @@ export class ClusterModel {
     if (!cluster.agent_id) throw new Error('Agent not found for this cluster');
 
     await db.query(
-      `UPDATE agents SET status = 'ONLINE', last_seen_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      `UPDATE agents SET status = 'ONLINE', last_seen_at = NOW(), updated_at = NOW() WHERE id::text = $1::text`,
       [cluster.agent_id]
     );
     await db.query(
@@ -729,7 +729,7 @@ export class ClusterModel {
     const clusterRes = await db.query(
       `SELECT c.id, a.id AS agent_id
        FROM clusters c
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -739,7 +739,7 @@ export class ClusterModel {
     if (!cluster.agent_id) throw new Error('Agent not found for this cluster');
 
     await db.query(
-      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+      `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id::text = $1::text`,
       [cluster.agent_id]
     );
     await db.query(
@@ -772,7 +772,7 @@ export class ClusterModel {
     let query = `SELECT c.id, c.name, a.id AS agent_id
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON (a.cluster_id = c.id::text OR a.cluster_id = c.cluster_uid)
+       LEFT JOIN agents a ON a.cluster_id = c.id
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL`;
     const params: any[] = [clusterId];
     if (orgId) {
@@ -785,13 +785,13 @@ export class ClusterModel {
     const cluster = clusterRes.rows[0];
 
     await db.query(
-      `UPDATE clusters SET deleted_at = NOW(), status = 'DELETED', updated_at = NOW() WHERE id = $1`,
+      `UPDATE clusters SET deleted_at = NOW(), status = 'DELETED', updated_at = NOW() WHERE id::text = $1::text`,
       [cluster.id]
     );
 
     if (cluster.agent_id) {
       await db.query(
-        `UPDATE agents SET status = 'REVOKED', revoked_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        `UPDATE agents SET status = 'REVOKED', revoked_at = NOW(), updated_at = NOW() WHERE id::text = $1::text`,
         [cluster.agent_id]
       );
       await db.query(
@@ -824,10 +824,10 @@ export class ClusterModel {
     const res = await db.query(
       `UPDATE agent_tokens
        SET revoked_at = NOW()
-       WHERE id = $1
+       WHERE id::text = $1::text
          AND agent_id IN (
            SELECT a.id FROM agents a
-           WHERE a.cluster_id IN (SELECT c.id::text FROM clusters c WHERE c.id::text = $2 OR c.name = $2)
+           WHERE a.cluster_id IN (SELECT c.id FROM clusters c WHERE c.id::text = $2 OR c.name = $2)
          )
        RETURNING id, agent_id`,
       [tokenId, clusterId]
@@ -835,7 +835,7 @@ export class ClusterModel {
     const row = res.rows[0];
     if (row?.agent_id) {
       await db.query(
-        `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id = $1`,
+        `UPDATE agents SET status = 'OFFLINE', updated_at = NOW() WHERE id::text = $1::text`,
         [row.agent_id]
       );
       try {
@@ -923,7 +923,7 @@ export class ClusterModel {
 
     // 5. Ghi log kiểm toán audit_logs
     try {
-      const envRes = await db.query('SELECT organization_id FROM environments WHERE id = $1', [data.environment_id]);
+      const envRes = await db.query('SELECT organization_id FROM environments WHERE id::text = $1::text', [data.environment_id]);
       const orgId = envRes.rows[0]?.organization_id || null;
       await db.query(
         `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)

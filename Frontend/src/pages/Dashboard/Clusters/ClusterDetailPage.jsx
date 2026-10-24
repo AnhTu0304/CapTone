@@ -83,7 +83,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   // Revoke Token Loading State
   const [isRevokingId, setIsRevokingId] = useState(null);
-  const [isConnectingSim, setIsConnectingSim] = useState(false);
   const [connectTab, setConnectTab] = useState('quickstart'); // 'quickstart' | 'script' | 'helm' | 'uninstall'
   const [quickstartEnv, setQuickstartEnv] = useState('local'); // 'local' | 'cloud'
   const [scriptOs, setScriptOs] = useState('windows'); // 'windows' | 'linux'
@@ -218,16 +217,15 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     }
   };
 
-  // 4b. Chức năng Kích hoạt / Mô phỏng kết nối Agent (Connect Agent)
-  const handleSimulateConnect = async () => {
-    setIsConnectingSim(true);
+  // 4b. Chức năng Làm mới trạng thái kết nối Agent thực tế (Refresh Agent Status)
+  const handleRefreshStatus = async () => {
+    setIsRefreshing(true);
     try {
-      await clusterService.connectAgent(clusterId, currentOrg?.id);
       await fetchDetail(true);
     } catch (err) {
-      alert('Lỗi kích hoạt kết nối Agent: ' + (err.message || 'Lỗi hệ thống'));
+      alert('Lỗi làm mới trạng thái: ' + (err.message || 'Lỗi hệ thống'));
     } finally {
-      setIsConnectingSim(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -307,9 +305,14 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   // Active Token (1 cluster 1 active token)
   const activeToken = tokens.find((t) => t.is_active) || tokens[0] || null;
+  const hasRawToken = Boolean(rotatedTokenResult?.raw_token);
   const activeTokenPrefix = activeToken?.token_prefix || '';
-  const tokenDisplay = activeTokenPrefix ? `${activeTokenPrefix}••••••••••••` : 'sh_live_sec_••••••••••••';
-  const tokenCopyValue = activeTokenPrefix ? `sh_live_sec_${activeTokenPrefix}` : 'sh_live_sec_token';
+  const tokenDisplay = hasRawToken
+    ? rotatedTokenResult.raw_token
+    : (activeTokenPrefix ? `${activeTokenPrefix}••••••••••••` : '••••••••••••');
+  const tokenCopyValue = hasRawToken
+    ? rotatedTokenResult.raw_token
+    : '<YOUR_AGENT_TOKEN>';
 
   // Trạng thái Agent chuẩn hóa: ONLINE | OFFLINE | CONNECTING | DEGRADED | PENDING
   const rawStatus = (clusterData.agent_status || 'PENDING').toUpperCase();
@@ -772,7 +775,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <input
-                    type="password"
+                    type={hasRawToken ? 'text' : 'password'}
                     readOnly
                     value={tokenDisplay}
                     style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', backgroundColor: '#F8FAFC', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
@@ -785,6 +788,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <span>{copiedField === 'agent_token' ? 'Đã chép' : 'Sao chép'}</span>
                   </button>
                 </div>
+                {!hasRawToken && (
+                  <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#64748B' }}>
+                    Token gốc chỉ hiển thị một lần lúc khởi tạo và được lưu trữ dưới dạng SHA-256 hash trên server. Nếu chưa lưu mã token, vui lòng nhấn <strong>Rotate Token</strong> ở bên dưới để cấp phát mã mới.
+                  </p>
+                )}
               </div>
 
               {/* 2. Connect Agent: Lệnh Helm Triển Khai Nhanh */}
@@ -1334,25 +1342,25 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div>
                 <button
                   type="button"
-                  onClick={handleSimulateConnect}
-                  disabled={isConnectingSim || isOnline}
+                  onClick={handleRefreshStatus}
+                  disabled={isRefreshing}
                   style={{
                     padding: '8px 16px',
-                    backgroundColor: isOnline ? '#F0FDF4' : '#ECFDF5',
-                    border: `1px solid ${isOnline ? '#BBF7D0' : '#A7F3D0'}`,
+                    backgroundColor: isOnline ? '#F0FDF4' : '#F8FAFC',
+                    border: `1px solid ${isOnline ? '#BBF7D0' : '#CBD5E1'}`,
                     borderRadius: '6px',
-                    color: isOnline ? '#15803D' : '#059669',
+                    color: isOnline ? '#15803D' : '#334155',
                     fontSize: '0.75rem',
                     fontWeight: 700,
-                    cursor: isOnline || isConnectingSim ? 'default' : 'pointer',
+                    cursor: isRefreshing ? 'default' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
                     boxShadow: 'var(--dash-shadow-sm)',
                   }}
                 >
-                  <Zap size={14} color={isOnline ? '#16A34A' : '#059669'} />
-                  <span>{isOnline ? 'Tác Tử Đang Hoạt Động (Online)' : (isConnectingSim ? 'Đang kích hoạt...' : '⚡ Kích Hoạt Kết Nối (Mô Phỏng / Test Dev)')}</span>
+                  <RefreshCw size={14} color={isOnline ? '#16A34A' : '#64748B'} />
+                  <span>{isRefreshing ? 'Đang kiểm tra...' : (isOnline ? 'Làm Mới Trạng Thái (Online)' : 'Kiểm Tra Trạng Thái Kết Nối')}</span>
                 </button>
               </div>
             </div>

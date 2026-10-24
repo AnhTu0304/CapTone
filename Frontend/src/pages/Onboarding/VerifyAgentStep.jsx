@@ -39,9 +39,10 @@ export const VerifyAgentStep = ({ onNavigate }) => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  const token = cluster?.token || 'sh_live_sec_default_token';
+  const token = cluster?.token || '';
+  const tokenPrefix = cluster?.tokenPrefix || (token ? token.slice(0, 16) : '');
+  const effectiveToken = token || (tokenPrefix ? `${tokenPrefix}••••••••` : '<MÃ_TOKEN_DO_HỆ_THỐNG_CẤP>');
   const clusterName = cluster?.name || 'k8s-cluster-01';
-  const serverEndpoint = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
 
   // Tự động kiểm tra tín hiệu một lần khi mở trang (không chặn người dùng)
   useEffect(() => {
@@ -280,33 +281,32 @@ export const VerifyAgentStep = ({ onNavigate }) => {
 
   const isConnected = agentStatus?.state === 'connected';
 
-  // Câu lệnh Helm Chart
-  const helmCommand = `# 1. Thêm kho lưu trữ SelfHeal Helm repository
-helm repo add selfheal https://charts.selfheal.systems
-helm repo update
-
-# 2. Cài đặt Tác tử SelfHeal Agent vào cụm Kubernetes
-helm install selfheal-agent selfheal/agent \\
+  // Câu lệnh Helm Chart nội bộ
+  const helmCommand = `# 1. Cài đặt Agent vào cụm Kubernetes bằng Helm Chart dự án
+helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
   --namespace selfheal-system --create-namespace \\
-  --set agent.token="${token}" \\
-  --set agent.clusterName="${clusterName}" \\
-  --set server.endpoint="${serverEndpoint}"`;
+  --set secret.agentToken="${effectiveToken}" \\
+  --set config.clusterName="${clusterName}" \\
+  --set securityContext.runAsNonRoot=true`;
 
-  // Câu lệnh Kubectl Script một dòng
-  const kubectlCommand = `# Triển khai nhanh bằng kubectl một dòng lệnh
-curl -sSL https://raw.githubusercontent.com/selfheal/agent/main/deploy.sh | bash -s -- \\
-  --token "${token}" \\
-  --cluster "${clusterName}" \\
-  --endpoint "${serverEndpoint}"`;
+  // Câu lệnh Script cài đặt tự động (PowerShell & Bash)
+  const scriptCommand = `# Dành cho Windows (PowerShell):
+Set-ExecutionPolicy RemoteSigned -Scope Process -Force
+.\\Agent\\installer\\install-agent.ps1 -Token "${effectiveToken}"
 
-  // Câu lệnh Docker Container
-  const dockerCommand = `# Triển khai SelfHeal Agent dưới dạng Docker container
-docker run -d --name selfheal-agent --restart always \\
-  -e AGENT_TOKEN="${token}" \\
-  -e CLUSTER_NAME="${clusterName}" \\
-  -e SERVER_ENDPOINT="${serverEndpoint}" \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
-  selfheal/agent:latest`;
+# Dành cho Linux / macOS (Bash):
+chmod +x ./Agent/installer/install-agent.sh
+./Agent/installer/install-agent.sh --token "${effectiveToken}"`;
+
+  // Câu lệnh Kubectl Secret & Native Manifests
+  const kubectlCommand = `# 1. Tạo Namespace an toàn cho Tác tử
+kubectl create namespace selfheal-system --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. Tạo Secret bảo mật chứa Agent Token xác thực
+kubectl create secret generic selfheal-agent-secret \\
+  --namespace selfheal-system \\
+  --from-literal="AGENT_TOKEN=${effectiveToken}" \\
+  --dry-run=client -o yaml | kubectl apply -f -`;
 
   return (
     <div className="onboarding-step-verify-agent">
@@ -456,13 +456,13 @@ docker run -d --name selfheal-agent --restart always \\
                 style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.8125rem',
-                  color: 'var(--color-primary)',
+                  color: token ? 'var(--color-primary)' : 'var(--text-muted)',
                   wordBreak: 'break-all',
                 }}
               >
-                {token}
+                {token || (tokenPrefix ? `${tokenPrefix}••••••••••••••••` : 'Chưa có Token')}
               </span>
-              <CopyButton text={token} label="Sao chép Token" />
+              <CopyButton text={token} disabled={!token} label="Sao chép Token" />
             </div>
           </div>
         </div>
@@ -518,8 +518,8 @@ docker run -d --name selfheal-agent --restart always \\
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', borderBottom: '1px solid var(--border-default)', paddingBottom: '8px' }}>
             {[
               { id: 'helm', label: 'Helm Chart (Khuyên dùng)' },
-              { id: 'kubectl', label: 'Kubectl Apply' },
-              { id: 'docker', label: 'Docker Container' },
+              { id: 'script', label: 'Script Tự Động (PowerShell / Bash)' },
+              { id: 'kubectl', label: 'Kubectl Manifest' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -557,17 +557,17 @@ docker run -d --name selfheal-agent --restart always \\
               }}
             >
               {activeTab === 'helm' && helmCommand}
+              {activeTab === 'script' && scriptCommand}
               {activeTab === 'kubectl' && kubectlCommand}
-              {activeTab === 'docker' && dockerCommand}
             </pre>
             <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
               <CopyButton
                 text={
                   activeTab === 'helm'
                     ? helmCommand
-                    : activeTab === 'kubectl'
-                    ? kubectlCommand
-                    : dockerCommand
+                    : activeTab === 'script'
+                    ? scriptCommand
+                    : kubectlCommand
                 }
                 label="Sao chép lệnh"
               />

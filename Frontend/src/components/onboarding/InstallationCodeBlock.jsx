@@ -4,39 +4,43 @@ import CopyButton from './CopyButton';
 
 export const InstallationCodeBlock = ({
   clusterName = 'k8s-prod-east-01',
-  token = 'sh_live_sec_token',
+  token = '',
   environmentName = 'Staging',
   className = '',
 }) => {
-  const [method, setMethod] = useState('helm'); // 'helm' | 'kubectl'
+  const [method, setMethod] = useState('powershell'); // 'powershell' | 'bash' | 'helm'
 
-  const helmCode = `# 1. Add SelfHeal Helm Repository
-helm repo add selfheal https://charts.selfheal.systems
-helm repo update
+  const effectiveToken = token && typeof token === 'string' && token.length > 20
+    ? token
+    : '<MÃ_TOKEN_DO_HỆ_THỐNG_CẤP>';
 
-# 2. Install Agent DaemonSet with Least-Privilege RBAC
-helm install selfheal-agent selfheal/agent \\
+  const powershellCode = `# 1. Mở PowerShell với quyền Administrator tại thư mục dự án
+Set-ExecutionPolicy RemoteSigned -Scope Process -Force
+
+# 2. Chạy Script cài đặt SelfHeal Agent tự động với Token
+.\\Agent\\installer\\install-agent.ps1 -Token "${effectiveToken}"`;
+
+  const bashCode = `# 1. Cấp quyền thực thi cho script cài đặt
+chmod +x ./Agent/installer/install-agent.sh
+
+# 2. Thực thi cài đặt Agent vào cụm Kubernetes
+./Agent/installer/install-agent.sh --token "${effectiveToken}"`;
+
+  const helmCode = `# Cài đặt trực tiếp bằng Helm Chart nội bộ của dự án
+helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
   --namespace selfheal-system \\
   --create-namespace \\
-  --set cluster.name="${clusterName}" \\
-  --set cluster.environment="${environmentName.toLowerCase()}" \\
-  --set agent.token="${token}" \\
-  --set security.rbacLevel="standard-least-privilege"`;
+  --set secret.agentToken="${effectiveToken}" \\
+  --set config.clusterName="${clusterName}" \\
+  --set securityContext.runAsNonRoot=true`;
 
-  const kubectlCode = `# 1. Create Dedicated Namespace
-kubectl create namespace selfheal-system
+  const codeMap = {
+    powershell: powershellCode,
+    bash: bashCode,
+    helm: helmCode,
+  };
 
-# 2. Store Secure Agent Secret
-kubectl create secret generic selfheal-agent-secret \\
-  --namespace selfheal-system \\
-  --from-literal=token="${token}"
-
-# 3. Apply Scoped DaemonSet & ServiceAccount
-kubectl apply -f https://install.selfheal.systems/v1/agent.yaml \\
-  --namespace selfheal-system \\
-  --cluster="${clusterName}"`;
-
-  const currentCode = method === 'helm' ? helmCode : kubectlCode;
+  const currentCode = codeMap[method] || powershellCode;
 
   return (
     <div
@@ -87,7 +91,7 @@ kubectl apply -f https://install.selfheal.systems/v1/agent.yaml \\
                 margin: 0,
               }}
             >
-              Thực thi trong terminal cụm máy chủ của bạn thông qua Helm 3 (khuyên dùng) hoặc kubectl manifests trực tiếp.
+              Thực thi trong terminal máy chủ của bạn thông qua PowerShell (Windows), Bash (Linux/macOS) hoặc Helm 3.
             </p>
           </div>
         </div>
@@ -101,6 +105,40 @@ kubectl apply -f https://install.selfheal.systems/v1/agent.yaml \\
             border: '1px solid var(--border-default)',
           }}
         >
+          <button
+            type="button"
+            onClick={() => setMethod('powershell')}
+            style={{
+              padding: '4px 10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              backgroundColor: method === 'powershell' ? 'var(--color-primary)' : 'transparent',
+              color: method === 'powershell' ? '#FFFFFF' : 'var(--color-primary)',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            PowerShell
+          </button>
+          <button
+            type="button"
+            onClick={() => setMethod('bash')}
+            style={{
+              padding: '4px 10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              backgroundColor: method === 'bash' ? 'var(--color-primary)' : 'transparent',
+              color: method === 'bash' ? '#FFFFFF' : 'var(--color-primary)',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Bash (Linux)
+          </button>
           <button
             type="button"
             onClick={() => setMethod('helm')}
@@ -117,23 +155,6 @@ kubectl apply -f https://install.selfheal.systems/v1/agent.yaml \\
             }}
           >
             Helm 3
-          </button>
-          <button
-            type="button"
-            onClick={() => setMethod('kubectl')}
-            style={{
-              padding: '4px 10px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              backgroundColor: method === 'kubectl' ? 'var(--color-primary)' : 'transparent',
-              color: method === 'kubectl' ? '#FFFFFF' : 'var(--color-primary)',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            kubectl
           </button>
         </div>
       </div>
@@ -174,7 +195,13 @@ kubectl apply -f https://install.selfheal.systems/v1/agent.yaml \\
               }}
             >
               <Terminal size={12} />
-              <span>bash - {method === 'helm' ? 'helm-install.sh' : 'kubectl-deploy.sh'}</span>
+              <span>
+                {method === 'powershell'
+                  ? 'powershell - install-agent.ps1'
+                  : method === 'bash'
+                  ? 'bash - install-agent.sh'
+                  : 'helm - deploy/helm/selfheal-agent'}
+              </span>
             </span>
           </div>
 
@@ -197,6 +224,20 @@ kubectl apply -f https://install.selfheal.systems/v1/agent.yaml \\
         >
           <code>{currentCode}</code>
         </pre>
+      </div>
+
+      <div
+        style={{
+          marginTop: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '0.6875rem',
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)',
+        }}
+      >
+        <span>⚠️ Lệnh cài đặt chứa Token kết nối xác thực cụm. Tuyệt đối không chia sẻ trên các kênh thông tin công khai.</span>
       </div>
     </div>
   );

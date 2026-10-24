@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { onboardingService } from '../services/onboardingService';
+import { clusterService } from '../services/clusterService';
 import { useAuth } from './AuthContext';
 
 const initialDefaultState = {
@@ -19,23 +20,24 @@ const initialDefaultState = {
     id: null,
     agentId: null,
     name: 'k8s-cluster-01',
-    token: 'sh_live_sec_default_token',
-    tokenGeneratedAt: new Date().toISOString(),
+    token: null,
+    tokenPrefix: '',
+    tokenGeneratedAt: null,
     installCommand: '',
     isRegistered: false,
   },
   agentStatus: {
     state: 'waiting', // 'waiting' | 'connecting' | 'connected' | 'failed' | 'permission_denied' | 'token_expired' | 'offline'
-    lastHeartbeat: 'Chờ nhận tín hiệu đầu tiên...',
+    lastHeartbeat: null,
     latencyMs: null,
-    k8sVersion: 'v1.29.4',
-    nodeCount: 3,
-    podsMonitored: 12,
-    k8sAccess: true,
-    monitoringReady: true,
+    k8sVersion: null,
+    nodeCount: 0,
+    podsMonitored: 0,
+    k8sAccess: false,
+    monitoringReady: false,
     aiDataReadiness: 'calibrating', // 'calibrating' | 'ready'
-    telemetrySamples: 1420,
-    requiredSamples: 3000,
+    telemetrySamples: 0,
+    requiredSamples: 0,
   },
   currentStep: 1, // 1 to 5
 };
@@ -77,7 +79,8 @@ export const OnboardingProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(storageKey, JSON.stringify(state));
+      const sanitizedState = { ...state, cluster: { ...state.cluster, token: null } };
+      sessionStorage.setItem(storageKey, JSON.stringify(sanitizedState));
     } catch {
       // Ignore quota errors
     }
@@ -133,41 +136,40 @@ export const OnboardingProvider = ({ children }) => {
   const generateNewToken = async () => {
     const orgId = state.organization?.id;
     const agentId = state.cluster?.agentId;
+    const clusterId = state.cluster?.id || state.cluster?.clusterId;
 
     if (orgId && agentId) {
-      try {
-        const tokenData = await onboardingService.generateNewToken(orgId, agentId);
-        updateCluster({
-          token: tokenData.raw_token,
-          tokenGeneratedAt: tokenData.created_at || new Date().toISOString(),
-        });
-        return tokenData.raw_token;
-      } catch (err) {
-        console.warn('[Onboarding] Lỗi gọi API xoay vòng token, dùng fallback local:', err);
-      }
+      const tokenData = await onboardingService.generateNewToken(orgId, agentId);
+      updateCluster({
+        token: tokenData.raw_token,
+        tokenPrefix: tokenData.token_prefix,
+        tokenGeneratedAt: tokenData.created_at || new Date().toISOString(),
+      });
+      return tokenData.raw_token;
     }
 
-    // Fallback nếu chạy offline hoặc chưa có agentId
-    const randomHex = Array.from({ length: 24 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('');
-    const newToken = `ag_live_${randomHex}`;
-    updateCluster({
-      token: newToken,
-      tokenGeneratedAt: new Date().toISOString(),
-    });
-    return newToken;
+    if (clusterId) {
+      const tokenData = await clusterService.rotateClusterToken(clusterId, orgId);
+      updateCluster({
+        token: tokenData.raw_token,
+        tokenPrefix: tokenData.token_prefix,
+        tokenGeneratedAt: tokenData.created_at || new Date().toISOString(),
+      });
+      return tokenData.raw_token;
+    }
+
+    throw new Error('Chưa có thông tin cụm hoặc tác tử để khởi tạo Token');
   };
 
   /**
-   * Kiểm tra và xác thực trạng thái kết nối của Agent
-   * Kết nối với backend API để kiểm tra trạng thái thực tế
+   * Kiểm tra và xác thực trạng thái kết nối thực tế của Agent từ Backend
    */
   const retryAgentVerification = async () => {
     updateAgentStatus({ state: 'connecting' });
 
     const orgId = state.organization?.id;
     const agentId = state.cluster?.agentId;
+    const clusterId = state.cluster?.id || state.cluster?.clusterId;
 
     if (orgId && agentId) {
       try {
@@ -176,7 +178,7 @@ export const OnboardingProvider = ({ children }) => {
           updateAgentStatus({
             state: 'connected',
             lastHeartbeat: 'Vừa xong',
-            latencyMs: agentDetail.last_latency_ms || 18,
+            latencyMs: agentDetail.last_latency_ms || null,
             k8sAccess: true,
             monitoringReady: true,
           });
@@ -184,26 +186,55 @@ export const OnboardingProvider = ({ children }) => {
         } else {
           updateAgentStatus({
             state: 'waiting',
-            lastHeartbeat: 'Chờ tín hiệu từ Pod Agent trong Kubernetes...',
+            lastHeartbeat: agentDetail?.last_seen_at
+              ? `Lần cuối: ${new Date(agentDetail.last_seen_at).toLocaleTimeString()}`
+              : 'Chờ tín hiệu từ Pod Agent trong Kubernetes...',
             latencyMs: null,
+            k8sAccess: false,
+            monitoringReady: false,
           });
           return;
         }
       } catch (err) {
-        console.warn('[Onboarding] Không thể kiểm tra Agent qua backend API:', err.message);
+        console.warn('[Onboarding] Lỗi kiểm tra Agent qua API:', err.message);
+      }
+    } else if (clusterId) {
+      try {
+        const clusterDetail = await clusterService.getClusterDetail(clusterId, orgId);
+        if (clusterDetail?.agent_status === 'ONLINE') {
+          updateAgentStatus({
+            state: 'connected',
+            lastHeartbeat: 'Vừa xong',
+            latencyMs: null,
+            k8sAccess: true,
+            monitoringReady: true,
+          });
+          return;
+        } else {
+          updateAgentStatus({
+            state: 'waiting',
+            lastHeartbeat: clusterDetail?.last_heartbeat_at
+              ? `Lần cuối: ${new Date(clusterDetail.last_heartbeat_at).toLocaleTimeString()}`
+              : 'Chờ tín hiệu từ Pod Agent trong Kubernetes...',
+            latencyMs: null,
+            k8sAccess: false,
+            monitoringReady: false,
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('[Onboarding] Lỗi kiểm tra Cụm qua API:', err.message);
       }
     }
 
-    // Fallback mô phỏng cho môi trường sandbox dev
-    setTimeout(() => {
-      updateAgentStatus({
-        state: 'connected',
-        lastHeartbeat: 'Vừa xong (mô phỏng sandbox)',
-        latencyMs: 14,
-        k8sAccess: true,
-        monitoringReady: true,
-      });
-    }, 1000);
+    // Không fake trạng thái connected. Giữ waiting nếu chưa có tín hiệu từ cluster thật
+    updateAgentStatus({
+      state: 'waiting',
+      lastHeartbeat: 'Chờ nhận tín hiệu đầu tiên...',
+      latencyMs: null,
+      k8sAccess: false,
+      monitoringReady: false,
+    });
   };
 
   const resetOnboarding = useCallback(() => {
