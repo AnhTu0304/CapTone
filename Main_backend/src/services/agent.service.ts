@@ -11,6 +11,7 @@ import {
   ClusterModel,
 } from '../models';
 import { ApiError } from '../utils/apiError';
+import { AuditService } from './audit.service';
 import {
   AgentMetricsPayload,
   AgentLogPayload,
@@ -549,6 +550,28 @@ export class AgentService {
       latency_ms: data.latency_ms,
       metadata,
     });
+
+    // Nếu Agent trước đó đang OFFLINE, ghi nhận audit log chuyển trạng thái phục hồi
+    if (agent.status === 'OFFLINE') {
+      try {
+        await AuditService.record({
+          organization_id: agent.organization_id || null,
+          actor_type: 'AGENT',
+          action: 'AGENT_CONNECTED',
+          reason_code: 'HEARTBEAT_RECOVERED',
+          target_type: 'AGENT',
+          target_id: agent.id,
+          resource_type: 'AGENT',
+          resource_id: agent.id,
+          status: 'SUCCESS',
+          description: `Agent '${agent.name}' recovered connection via valid heartbeat. Status transitioned from OFFLINE to ONLINE.`,
+          before_data: { status: 'OFFLINE' },
+          after_data: { status: 'ONLINE', last_seen_at: heartbeat.reported_at },
+        });
+      } catch (auditErr) {
+        console.warn(`[AgentService] Non-fatal: Failed to record recovery audit log for agent ${agent.id}:`, auditErr);
+      }
+    }
 
     return {
       success: true,

@@ -595,4 +595,33 @@ export class AgentModel {
     const res = await db.query<IAgentHeartbeat>(query, [agentId, safeLimit]);
     return res.rows;
   }
+
+  /**
+   * Đánh dấu các Agent quá hạn heartbeat chuyển từ ONLINE sang OFFLINE
+   * Hoạt động nguyên tử và trả về danh sách Agent thực sự bị chuyển trạng thái kèm organization_id
+   */
+  public static async markStaleAgentsOffline(
+    timeoutSeconds: number = 45,
+    client?: PoolClient
+  ): Promise<Array<IAgentDetail & { previous_status: string }>> {
+    const db = client || pool;
+    const safeTimeout = Math.max(1, timeoutSeconds);
+
+    const query = `
+      UPDATE agents a
+      SET status = 'OFFLINE',
+          updated_at = NOW()
+      WHERE a.status = 'ONLINE'
+        AND a.last_seen_at IS NOT NULL
+        AND a.last_seen_at < NOW() - ($1 || ' seconds')::INTERVAL
+      RETURNING 
+        a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, 
+        a.status, a.version, a.last_seen_at, a.updated_at,
+        'ONLINE'::VARCHAR AS previous_status,
+        (SELECT organization_id FROM environments WHERE id = a.environment_id) AS organization_id;
+    `;
+
+    const res = await db.query(query, [safeTimeout]);
+    return res.rows;
+  }
 }
