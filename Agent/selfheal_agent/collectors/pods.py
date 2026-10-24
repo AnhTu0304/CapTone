@@ -7,6 +7,8 @@ from kubernetes.client.exceptions import ApiException
 
 logger = logging.getLogger("selfheal_agent.collectors.pods")
 
+EXCLUDED_NAMESPACES = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system"}
+
 
 def parse_cpu_to_millicores(cpu_str: Optional[str]) -> float:
     """Parse k8s CPU quantity string into millicores."""
@@ -75,6 +77,9 @@ class PodSummary:
         cpu_limit_millicores: float = 0.0,
         memory_limit_bytes: float = 0.0,
         node_name: Optional[str] = None,
+        pod_ip: Optional[str] = None,
+        port: int = 8080,
+        health_path: str = "/health",
     ) -> None:
         self.name = name
         self.namespace = namespace
@@ -85,6 +90,9 @@ class PodSummary:
         self.cpu_limit_millicores = cpu_limit_millicores
         self.memory_limit_bytes = memory_limit_bytes
         self.node_name = node_name
+        self.pod_ip = pod_ip
+        self.port = port
+        self.health_path = health_path
 
 
 class PodsCollector:
@@ -116,6 +124,8 @@ class PodsCollector:
 
                 pod_name = metadata.name
                 pod_ns = metadata.namespace or "default"
+                if monitor_all and pod_ns in EXCLUDED_NAMESPACES:
+                    continue
                 pod_uid = metadata.uid or pod_name
                 labels = metadata.labels or {}
                 service_id = extract_service_id(pod_name, labels)
@@ -128,13 +138,27 @@ class PodsCollector:
 
                 cpu_limit = 0.0
                 mem_limit = 0.0
+                port = 8080
+                health_path = "/health"
                 if spec and spec.containers:
                     for c in spec.containers:
                         if c.resources and c.resources.limits:
                             cpu_limit += parse_cpu_to_millicores(c.resources.limits.get("cpu"))
                             mem_limit += parse_memory_to_bytes(c.resources.limits.get("memory"))
+                        if c.ports and len(c.ports) > 0 and c.ports[0].container_port:
+                            port = c.ports[0].container_port
+                        for probe in (c.liveness_probe, c.readiness_probe):
+                            if probe and probe.http_get and probe.http_get.path:
+                                health_path = probe.http_get.path
+                                if probe.http_get.port:
+                                    try:
+                                        port = int(probe.http_get.port)
+                                    except (ValueError, TypeError):
+                                        pass
+                                break
 
                 node_name = spec.node_name if spec else None
+                pod_ip = status.pod_ip if status else None
 
                 results.append(
                     PodSummary(
@@ -147,6 +171,9 @@ class PodsCollector:
                         cpu_limit_millicores=cpu_limit,
                         memory_limit_bytes=mem_limit,
                         node_name=node_name,
+                        pod_ip=pod_ip,
+                        port=port,
+                        health_path=health_path,
                     )
                 )
 
@@ -190,9 +217,12 @@ class PodsCollector:
                 if status and status.start_time:
                     started_at = status.start_time.isoformat()
 
+                service_id = extract_service_id(name, metadata.labels)
+
                 results.append({
                     "name": name,
                     "namespace": namespace,
+                    "service_id": service_id,
                     "node_name": node_name,
                     "kubernetes_uid": uid,
                     "status": phase,

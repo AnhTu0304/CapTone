@@ -21,6 +21,25 @@ export interface IAgentMetric {
 
 export class MetricModel {
   /**
+   * Get distinct active service IDs from agent_metrics within recent time window
+   */
+  public static async getActiveServices(windowMinutes: number = 30): Promise<string[]> {
+    try {
+      const res = await pool.query(
+        `SELECT DISTINCT service_id 
+         FROM agent_metrics 
+         WHERE collected_at > NOW() - ($1 || ' minutes')::INTERVAL
+         ORDER BY service_id ASC`,
+        [windowMinutes]
+      );
+      return res.rows.map((r) => r.service_id).filter(Boolean);
+    } catch (err) {
+      console.warn('[MetricModel] Error fetching active services:', err);
+      return [];
+    }
+  }
+
+  /**
    * Insert raw pod metric record
    */
   public static async create(metric: IAgentMetric): Promise<{ id: string | number }> {

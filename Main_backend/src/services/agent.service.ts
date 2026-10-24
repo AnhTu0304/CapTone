@@ -92,6 +92,22 @@ export class AgentService {
     const serviceId = data.service_id.slice(0, 100);
     const podId = (data.pod_id || 'unknown-pod').slice(0, 100);
 
+    // Auto-link workload with namespace_id
+    const clusterId = agent.cluster_id ? agent.cluster_id.slice(0, 100) : null;
+    const namespaceName = (data.namespace || 'default').trim();
+    if (clusterId && serviceId) {
+      try {
+        const nsRes = await pool.query(
+          `SELECT id FROM namespaces WHERE (cluster_id = $1 OR cluster_id IN (SELECT name FROM clusters WHERE id::text = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
+          [clusterId, namespaceName]
+        );
+        const namespaceId = nsRes.rows[0]?.id || null;
+        await WorkloadModel.findOrCreateByName(serviceId, clusterId, undefined, namespaceId);
+      } catch {
+        // Non-blocking workload sync
+      }
+    }
+
     const result = await MetricModel.create({
       agent_id: agent.id.slice(0, 100),
       cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 100) : null,
@@ -696,6 +712,120 @@ export class AgentService {
         const stalePods = existingPodsRes.rows.filter((p) => !reportedPodNames.has(p.name));
         for (const stale of stalePods) {
           await client.query('DELETE FROM pods WHERE id = $1', [stale.id]);
+        }
+      }
+
+      // 4. Sync Services
+      let syncedServicesCount = 0;
+      if (Array.isArray(data.services) && data.services.length > 0) {
+        const existingSvcRes = await client.query(
+          'SELECT id, name, namespace_id FROM services WHERE cluster_id = $1',
+          [clusterId]
+        );
+        const svcMap: Record<string, string> = {};
+        for (const row of existingSvcRes.rows) {
+          svcMap[`${row.namespace_id}/${row.name}`] = row.id;
+        }
+
+        for (const svc of data.services) {
+          const nsId = namespaceMap[svc.namespace] || Object.values(namespaceMap)[0] || null;
+          if (!nsId) continue;
+          const key = `${nsId}/${svc.name}`;
+          const clusterIp = svc.cluster_ip && svc.cluster_ip !== 'None' ? svc.cluster_ip : null;
+
+          if (svcMap[key]) {
+            await client.query(
+              `UPDATE services
+               SET kubernetes_uid = COALESCE($1, kubernetes_uid),
+                   service_type = $2,
+                   cluster_ip = $3,
+                   ports = $4,
+                   selector = $5,
+                   status = $6,
+                   updated_at = NOW()
+               WHERE id = $7`,
+              [
+                svc.kubernetes_uid || null,
+                svc.service_type || 'ClusterIP',
+                clusterIp,
+                JSON.stringify(svc.ports || []),
+                JSON.stringify(svc.selector || {}),
+                svc.status || 'Active',
+                svcMap[key],
+              ]
+            );
+          } else {
+            const insSvc = await client.query(
+              `INSERT INTO services (cluster_id, namespace_id, name, kubernetes_uid, service_type, cluster_ip, ports, selector, status, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+               RETURNING id`,
+              [
+                clusterId,
+                nsId,
+                svc.name,
+                svc.kubernetes_uid || null,
+                svc.service_type || 'ClusterIP',
+                clusterIp,
+                JSON.stringify(svc.ports || []),
+                JSON.stringify(svc.selector || {}),
+                svc.status || 'Active',
+              ]
+            );
+            if (insSvc.rows[0]) {
+              svcMap[key] = insSvc.rows[0].id;
+            }
+          }
+          syncedServicesCount++;
+        }
+      }
+
+      // 5. Sync Workloads derived from pods and associate namespace_id
+      const existingWlRes = await client.query(
+        'SELECT id, name, namespace_id FROM workloads WHERE cluster_id = $1',
+        [clusterId]
+      );
+      const workloadMapByName: Record<string, { id: string; namespace_id: string | null }> = {};
+      for (const row of existingWlRes.rows) {
+        workloadMapByName[row.name] = { id: row.id, namespace_id: row.namespace_id };
+      }
+
+      for (const pod of data.pods) {
+        const nsId = namespaceMap[pod.namespace] || Object.values(namespaceMap)[0] || null;
+        const wlName =
+          pod.service_id ||
+          pod.labels?.app ||
+          pod.labels?.['app.kubernetes.io/name'] ||
+          pod.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, '');
+
+        if (!wlName) continue;
+
+        let wlInfo = workloadMapByName[wlName];
+        if (wlInfo) {
+          if (nsId && !wlInfo.namespace_id) {
+            await client.query(
+              'UPDATE workloads SET namespace_id = $1, updated_at = NOW() WHERE id = $2',
+              [nsId, wlInfo.id]
+            );
+            wlInfo.namespace_id = nsId;
+          }
+        } else {
+          const insWl = await client.query(
+            `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, created_at, updated_at)
+             VALUES ($1, $2, $3, 'Deployment', 'HEALTHY', $4, NOW(), NOW())
+             RETURNING id, namespace_id`,
+            [clusterId, nsId, wlName, JSON.stringify(pod.labels || {})]
+          );
+          if (insWl.rows[0]) {
+            wlInfo = { id: insWl.rows[0].id, namespace_id: insWl.rows[0].namespace_id };
+            workloadMapByName[wlName] = wlInfo;
+          }
+        }
+
+        if (wlInfo?.id) {
+          await client.query(
+            'UPDATE pods SET workload_id = $1 WHERE cluster_id = $2 AND name = $3',
+            [wlInfo.id, clusterId, pod.name]
+          );
         }
       }
 

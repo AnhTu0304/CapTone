@@ -50,7 +50,7 @@ class AgentService:
 
         # Telemetry
         self.prom_collector = PrometheusCollector(config.PROMETHEUS_URL) if config.PROMETHEUS_URL else None
-        self.metrics_manager = MetricsManager(self.custom_objects, self.prom_collector)
+        self.metrics_manager = MetricsManager(self.custom_objects, self.prom_collector, core_v1=self.core_v1)
 
         # WebSocket & Health Server
         self.ws_client = AgentWebSocketClient(config)
@@ -133,6 +133,8 @@ class AgentService:
 
         if self.prom_collector:
             await self.prom_collector.close()
+        if self.metrics_manager:
+            await self.metrics_manager.close()
 
         await self.ws_client.stop()
 
@@ -153,6 +155,27 @@ class AgentService:
         if (len(target_name) == 36 and "-" in target_name) or target_name.startswith("c0000"):
             target_name = "sme-order-service"
         namespace = cmd.namespace or "default"
+
+        # Auto-resolve actual namespace of deployment across cluster if needed
+        if self.apps_v1:
+            try:
+                self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
+            except Exception:
+                try:
+                    all_deps = self.apps_v1.list_deployment_for_all_namespaces()
+                    for dep in all_deps.items:
+                        if dep.metadata and dep.metadata.name == target_name:
+                            actual_ns = dep.metadata.namespace
+                            logger.info(
+                                "Auto-resolved namespace for '%s': '%s' -> '%s'",
+                                target_name,
+                                namespace,
+                                actual_ns,
+                            )
+                            namespace = actual_ns
+                            break
+                except Exception as scan_err:
+                    logger.debug("Failed scanning deployments for %s: %s", target_name, scan_err)
         logger.info(
             "🛠️ [SelfHealing Executor] Received action request: ID=%s, Type=%s, Target=%s, NS=%s",
             action_id,
@@ -252,8 +275,10 @@ class AgentService:
                 replicas = self.deployments_collector.get_replicas_map(
                     self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
                 )
+                nodes = self.nodes_collector.list_nodes()
                 metrics = await self.metrics_manager.aggregate_metrics(
-                    pods, replicas, self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                    pods, replicas, self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES,
+                    node_summaries=nodes
                 )
                 for m in metrics:
                     await self.ws_client.send(MetricsMessage(data=m))
@@ -318,11 +343,13 @@ class AgentService:
                 nodes = self.nodes_collector.list_nodes_detail()
                 namespaces = self.nodes_collector.list_namespaces()
                 pods = self.pods_collector.list_pods_detail()
-                if nodes or pods:
+                services = self.services_collector.list_services_detail()
+                if nodes or pods or services:
                     await self.ws_client.send(K8sInventoryMessage(data={
                         "nodes": nodes,
                         "namespaces": namespaces,
                         "pods": pods,
+                        "services": services,
                     }))
             except asyncio.CancelledError:
                 break

@@ -153,7 +153,8 @@ export class AiController {
   public static async getPredictionStats(req: Request, res: Response) {
     try {
       const cluster_id = req.query.cluster_id as string | undefined;
-      const stats = await AiPredictionModel.getPredictionStats(cluster_id);
+      const workload = (req.query.workload as string) || (req.query.service_id as string) || undefined;
+      const stats = await AiPredictionModel.getPredictionStats(cluster_id, workload);
       return ApiResponse.success(res, 'Retrieved prediction statistics', stats, 200);
     } catch (error) {
       return ApiResponse.error(res, (error as Error).message, 500);
@@ -427,12 +428,32 @@ export class AiController {
         await IncidentModel.updateStatus(rec.incident_id, 'RESOLVED');
       }
 
-      // 5. Dispatch action to connected K8s Agent for real cluster remediation
+      // 5. Resolve actual namespace from workload
+      let targetNamespace = 'default';
+      try {
+        const wlRes = await pool.query(
+          `SELECT n.name as namespace_name 
+           FROM workloads w 
+           LEFT JOIN namespaces n ON n.id = w.namespace_id 
+           WHERE w.name = $1 
+           LIMIT 1`,
+          [targetName]
+        );
+        if (wlRes.rows.length > 0 && wlRes.rows[0].namespace_name) {
+          targetNamespace = wlRes.rows[0].namespace_name;
+        } else if (targetName === 'selfheal-test-app') {
+          targetNamespace = 'test-lab';
+        }
+      } catch {
+        if (targetName === 'selfheal-test-app') targetNamespace = 'test-lab';
+      }
+
+      // 6. Dispatch action to connected K8s Agent for real cluster remediation
       dispatchHealingActionToAgent({
         action_id: healingAction.id,
         action_type: rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation,
         target_name: targetName === 'sme-order-service' || !targetName ? 'sme-order-service' : targetName,
-        namespace: 'default',
+        namespace: targetNamespace,
       }).catch((err) => console.warn('[AiController] Failed to dispatch action to agent:', err));
 
       return ApiResponse.success(
