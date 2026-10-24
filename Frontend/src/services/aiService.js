@@ -74,6 +74,8 @@ export const aiService = {
     try {
       const search = new URLSearchParams();
       if (params.cluster_id) search.append('cluster_id', params.cluster_id);
+      if (params.workload) search.append('workload', params.workload);
+      if (params.service_id) search.append('service_id', params.service_id);
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/predictions/stats${qs}`);
       if (res?.success && res.data) return res.data;

@@ -35,6 +35,7 @@ const SafeString = (maxLen: number) =>
  */
 export const AgentMetricsPayloadSchema = z.object({
   service_id: SafeString(100),
+  namespace: z.string().trim().max(100).optional().default('default'),
   pod_id: z
     .string()
     .trim()
@@ -85,6 +86,10 @@ export const AgentMetricsPayloadSchema = z.object({
     .min(0, 'replica_count cannot be negative')
     .max(1000, 'replica_count cannot exceed 1,000')
     .default(1),
+  node_cpu_percent: z.number().finite().min(0).max(100).optional().nullable(),
+  node_ram_percent: z.number().finite().min(0).max(100).optional().nullable(),
+  node_cpu_cores: z.number().finite().min(0).optional().nullable(),
+  node_ram_gb: z.number().finite().min(0).optional().nullable(),
 });
 
 /**
@@ -92,6 +97,7 @@ export const AgentMetricsPayloadSchema = z.object({
  */
 export const AgentLogPayloadSchema = z.object({
   service_id: SafeString(100),
+  namespace: z.string().trim().max(100).optional().default('default'),
   pod_id: z
     .string()
     .trim()
@@ -187,6 +193,7 @@ export const AgentK8sInventoryPayloadSchema = z.object({
   pods: z.array(z.object({
     name: z.string().trim().min(1).max(255),
     namespace: z.string().default('default'),
+    service_id: z.string().optional().nullable(),
     node_name: z.string().optional().nullable(),
     kubernetes_uid: z.string().optional().nullable(),
     status: z.string().default('Running'),
@@ -196,6 +203,16 @@ export const AgentK8sInventoryPayloadSchema = z.object({
     labels: z.record(z.string(), z.any()).optional().default({}),
     started_at: z.string().optional().nullable(),
   })).default([]),
+  services: z.array(z.object({
+    name: z.string().trim().min(1).max(255),
+    namespace: z.string().default('default'),
+    kubernetes_uid: z.string().optional().nullable(),
+    service_type: z.string().optional().default('ClusterIP'),
+    cluster_ip: z.string().optional().nullable(),
+    ports: z.any().optional().default([]),
+    selector: z.record(z.string(), z.any()).optional().default({}),
+    status: z.string().optional().default('Active'),
+  })).optional().default([]),
 });
 
 /**

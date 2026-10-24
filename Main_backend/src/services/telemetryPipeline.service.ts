@@ -11,6 +11,8 @@ export class TelemetryPipelineService {
   // Boundary tracking: only take time-buckets STRICTLY AFTER this timestamp
   private static lastEvaluatedBucketTimestamp: Record<string, Date | null> = {};
   private static pendingUrgentEval: Record<string, NodeJS.Timeout> = {};
+  private static isProcessingService: Record<string, boolean> = {};
+  private static serviceStepCounter: Record<string, number> = {};
 
   /**
    * Start the continuous background pipeline for Tumbling Batches (Lô 12 điểm mới tinh):
@@ -23,11 +25,15 @@ export class TelemetryPipelineService {
 
     this.intervalHandle = setInterval(async () => {
       try {
-        await this.processServiceBatch('sme-order-service');
+        const activeServices = await MetricModel.getActiveServices(30);
+        const servicesToProcess = activeServices.length > 0 ? activeServices : ['sme-order-service'];
+        for (const sId of servicesToProcess) {
+          await this.processServiceBatch(sId);
+        }
       } catch (err) {
         console.error('[TelemetryPipeline] Error in background cycle:', err);
       }
-    }, intervalSeconds * 1000);
+    }, 5000);
   }
 
   /**
@@ -63,44 +69,56 @@ export class TelemetryPipelineService {
    * 3. When 12 new points reached: Feed all 12 points into GRU, advance boundary, discard old 12 points!
    */
   public static async processServiceBatch(serviceId: string) {
-    const lastBucket = this.lastEvaluatedBucketTimestamp[serviceId];
-
-    // Fetch up to 12 points strictly newer than last evaluated batch
-    const freshBatch = await MetricModel.getFreshBatchByService(
-      serviceId,
-      5, // 5s bucket
-      lastBucket,
-      12 // batch size: 12 fresh points
-    );
-
-    const count = freshBatch.points.length;
-
-    // Broadcast batch progress to UI Dashboard
-    broadcastTelemetryToUi({
-      type: 'batch_accumulation',
-      data: {
-        service_id: serviceId,
-        collected: count,
-        target: 12,
-        percent: Math.round((count / 12) * 100),
-        status: count >= 12 ? 'ready_for_gru' : 'accumulating',
-        message:
-          count >= 12
-            ? 'Đã gom đủ lô 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...'
-            : `Đang gom 12 điểm mới: [${count}/12 điểm] (${count * 5}s / 60s)... Chờ gom đủ 12 điểm mới tinh.`,
-      },
-    });
-
-    // If not yet 12 brand-new points, wait for more points to arrive
-    if (count < 12) {
-      console.log(`⏳ [TelemetryPipeline] Đang gom đợt mới cho '${serviceId}': [${count}/12 điểm mới]. Đang chờ gom đủ 12 cái mới tinh...`);
-      return;
-    }
-
-    // EXACTLY 12 NEW POINTS ACCUMULATED!
-    console.log(`🎯 [TelemetryPipeline] ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Vứt bỏ các điểm cũ, đưa 12 điểm mới hoàn toàn vào GRU...`);
-
+    if (this.isProcessingService[serviceId]) return;
+    this.isProcessingService[serviceId] = true;
     try {
+      const lastBucket = this.lastEvaluatedBucketTimestamp[serviceId];
+
+      // 1. Luôn lấy 12 điểm viễn trắc gần nhất để sơ đồ UI luôn đầy đủ 12 mốc và chèn điểm mới liên tục từ Phải sang Trái
+      const displayPoints = await MetricModel.aggregateByService(serviceId, 5, 12);
+      if (displayPoints.length === 0) return;
+
+      // 2. Lấy số điểm MỚI TINH phát sinh sau mốc đánh giá gần nhất (Tumbling Batch)
+      const freshBatch = await MetricModel.getFreshBatchByService(
+        serviceId,
+        5, // 5s bucket
+        lastBucket,
+        12 // batch size: 12 điểm mới
+      );
+
+      const count = freshBatch.points.length;
+      const currentStep = count === 0 ? 1 : Math.min(count, 12);
+
+      // Broadcast trạng thái tới UI Dashboard:
+      // - points: Luôn gửi đủ 12 điểm gần nhất để sơ đồ vẽ liên tục, chèn điểm mới lên từ phải sang trái
+      // - active_step & collected: Báo nhịp gom [1/12] -> [12/12] cho vạch dọc
+      broadcastTelemetryToUi({
+        type: 'batch_accumulation',
+        data: {
+          service_id: serviceId,
+          collected: count,
+          target: 12,
+          active_step: currentStep,
+          percent: Math.round((count / 12) * 100),
+          status: count >= 12 ? 'ready_for_gru' : 'accumulating',
+          points: displayPoints,
+          latest_point: displayPoints[displayPoints.length - 1] || null,
+          message:
+            count >= 12
+              ? `Đã gom đủ 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...`
+              : `Đang gom 12 điểm mới: [${count}/12 điểm] (${count * 5}s / 60s)... Chờ đủ 12 điểm mới rồi mới gửi vào GRU.`,
+        },
+      });
+
+      // NẾU CHƯA ĐỦ 12 ĐIỂM MỚI: CHỜ TIẾP, TUYỆT ĐỐI CHƯA GỬI VÀO GRU!
+      if (count < 12) {
+        console.log(`⏳ [TelemetryPipeline] '${serviceId}': Đang gom [${count}/12 điểm mới]. Chưa đủ 12 điểm nên chưa gửi vào GRU...`);
+        return;
+      }
+
+      // ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12): Gửi toàn bộ 12 điểm mới vào GRU!
+      console.log(`🎯 [TelemetryPipeline] '${serviceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Gửi nguyên lô 12 điểm mới vào GRU dự đoán...`);
+
       const result = await TelemetryAggregatorService.evaluateAndDiagnoseService(serviceId, {
         bucketSeconds: 5,
         windowMinutes: 30,
@@ -110,23 +128,28 @@ export class TelemetryPipelineService {
         clusterId: freshBatch.clusterId,
       });
 
-      // Advance boundary: any point up to this timestamp is now part of the past!
+      // Cập nhật mốc chốt chặn: đợt sau chỉ gom các điểm MỚI SAU mốc này
       this.lastEvaluatedBucketTimestamp[serviceId] = freshBatch.latestTimeBucket || new Date();
 
-      // Broadcast AI Forecast
+      // Broadcast kết quả dự đoán GRU kèm chuỗi 12 điểm qua WebSocket
       if (result.gru_prediction) {
-        console.log(`🔮 [TelemetryPipeline] GRU Forecast hoàn tất cho lô 12 điểm mới: Primary Risk = ${result.gru_prediction.primary_risk} (Score: ${result.gru_prediction.confidence_score.toFixed(4)})`);
         broadcastTelemetryToUi({
           type: 'ai_prediction',
-          data: result.gru_prediction,
+          data: {
+            ...result.gru_prediction,
+            workload_name: serviceId,
+            service_id: serviceId,
+            active_step: 12,
+            sequence: displayPoints,
+            evaluated_at: new Date().toISOString(),
+            is_tumbling_batch: true,
+          },
         });
       }
 
-      // If RCA was triggered -> broadcast Incident & Recommendation to UI WebSocket
+      // Nếu phát hiện nguy cơ cao -> Kích hoạt RCA & đề xuất khắc phục
       if (result.rca_triggered && result.rca_diagnosis) {
-        console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS COMPLETED on '${serviceId}':`);
-        console.log(`   - Root Cause: ${result.rca_diagnosis.root_cause.cause} (${result.rca_diagnosis.root_cause.confidence})`);
-        console.log(`   - Action: ${result.rca_diagnosis.recommendation.action} [${result.rca_diagnosis.recommendation.priority}]`);
+        console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS on '${serviceId}': ${result.rca_diagnosis.root_cause.cause}`);
 
         broadcastTelemetryToUi({
           type: 'incident',
@@ -152,7 +175,6 @@ export class TelemetryPipelineService {
           },
         });
 
-        // Evaluate active healing policies for Autonomous Self-Healing
         await TelemetryPipelineService.evaluatePolicyAndTriggerAutonomousHealing(
           result.rca_diagnosis,
           serviceId
@@ -160,6 +182,8 @@ export class TelemetryPipelineService {
       }
     } catch (err: any) {
       console.error(`[TelemetryPipeline] Processing error on ${serviceId}:`, err?.message || err);
+    } finally {
+      this.isProcessingService[serviceId] = false;
     }
   }
 
@@ -301,11 +325,30 @@ export class TelemetryPipelineService {
       });
 
       // 3. Dispatch action over WebSocket to Kubernetes Agent!
+      let targetNamespace = 'default';
+      try {
+        const wlRes = await pool.query(
+          `SELECT n.name as namespace_name 
+           FROM workloads w 
+           LEFT JOIN namespaces n ON n.id = w.namespace_id 
+           WHERE w.name = $1 
+           LIMIT 1`,
+          [serviceId]
+        );
+        if (wlRes.rows.length > 0 && wlRes.rows[0].namespace_name) {
+          targetNamespace = wlRes.rows[0].namespace_name;
+        } else if (serviceId === 'selfheal-test-app') {
+          targetNamespace = 'test-lab';
+        }
+      } catch {
+        if (serviceId === 'selfheal-test-app') targetNamespace = 'test-lab';
+      }
+
       const dispatchResult = await dispatchHealingActionToAgent({
         action_id: actionId,
         action_type: policy.action_code || 'RESTART_POD',
         target_name: serviceId,
-        namespace: 'default',
+        namespace: targetNamespace,
       });
 
       console.log(`📡 [AutonomousSelfHealing] Action dispatched to agent: ${dispatchResult.dispatched ? 'SUCCESS' : 'NO AGENT (QUEUED)'}`);

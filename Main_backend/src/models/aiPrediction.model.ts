@@ -15,6 +15,7 @@ export interface IAiPrediction {
   status: string;
   predicted_at: Date;
   expires_at: Date;
+  risk_outputs?: Record<string, any> | null;
 }
 
 export class AiPredictionModel {
@@ -56,9 +57,10 @@ export class AiPredictionModel {
         prediction_horizon_minutes,
         status,
         predicted_at,
-        expires_at
+        expires_at,
+        risk_outputs
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
       ) RETURNING id, predicted_at, expires_at;
     `;
 
@@ -74,6 +76,7 @@ export class AiPredictionModel {
       prediction.status,
       prediction.predicted_at,
       prediction.expires_at,
+      prediction.risk_outputs ? JSON.stringify(prediction.risk_outputs) : null,
     ]);
 
     return res.rows[0];
@@ -192,7 +195,8 @@ export class AiPredictionModel {
         p.status,
         p.predicted_at,
         p.expires_at,
-        p.created_at
+        p.created_at,
+        p.risk_outputs
       FROM ai_predictions p
       LEFT JOIN ai_models m ON m.id = p.model_id
       LEFT JOIN environments e ON e.id = p.environment_id
@@ -232,7 +236,8 @@ export class AiPredictionModel {
         p.status,
         p.predicted_at,
         p.expires_at,
-        p.created_at
+        p.created_at,
+        p.risk_outputs
       FROM ai_predictions p
       LEFT JOIN ai_models m ON m.id = p.model_id
       LEFT JOIN environments e ON e.id = p.environment_id
@@ -269,23 +274,34 @@ export class AiPredictionModel {
   /**
    * Aggregated statistics of predictions
    */
-  public static async getPredictionStats(clusterId?: string): Promise<{
+  public static async getPredictionStats(clusterId?: string, workload?: string): Promise<{
     total: number;
     by_type: Record<string, number>;
     avg_confidence: number;
   }> {
-    let whereClause = '';
+    const conditions: string[] = [];
     const params: any[] = [];
+    let idx = 1;
+
     if (clusterId && clusterId !== 'ALL') {
-      whereClause = 'WHERE (cluster_id = $1 OR cluster_id IN (SELECT name FROM clusters WHERE id::text = $1 OR cluster_uid = $1) OR cluster_id IN (SELECT id::text FROM clusters WHERE name = $1))';
+      conditions.push(`(p.cluster_id = $${idx} OR p.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR p.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`);
       params.push(clusterId);
+      idx++;
     }
-    const totalRes = await pool.query(`SELECT count(*), AVG(confidence_score) as avg_conf FROM ai_predictions ${whereClause};`, params);
+
+    if (workload && workload !== 'ALL') {
+      conditions.push(`(p.workload_id IN (SELECT id FROM workloads WHERE name = $${idx}) OR p.workload_id::text = $${idx})`);
+      params.push(workload);
+      idx++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const totalRes = await pool.query(`SELECT count(*), AVG(p.confidence_score) as avg_conf FROM ai_predictions p ${whereClause};`, params);
     const byTypeRes = await pool.query(`
-      SELECT prediction_type, count(*) as count 
-      FROM ai_predictions 
+      SELECT p.prediction_type, count(*) as count 
+      FROM ai_predictions p 
       ${whereClause}
-      GROUP BY prediction_type 
+      GROUP BY p.prediction_type 
       ORDER BY count DESC;
     `, params);
 

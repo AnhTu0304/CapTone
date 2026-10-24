@@ -232,7 +232,19 @@ export class AiService {
       let environmentId: string | null = input.environment_id || null;
 
       if (!workloadId) {
-        const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
+        let namespaceId: string | null = null;
+        try {
+          const nsRes = await client.query(
+            `SELECT p.namespace_id FROM pods p 
+             WHERE (p.labels->>'app' = $1 OR p.name LIKE $2) AND p.namespace_id IS NOT NULL 
+             LIMIT 1`,
+            [input.service_id, `${input.service_id}%`]
+          );
+          if (nsRes.rows.length > 0 && nsRes.rows[0].namespace_id) {
+            namespaceId = nsRes.rows[0].namespace_id;
+          }
+        } catch {}
+        const workload = await WorkloadModel.findOrCreateByName(input.service_id, clusterId, client, namespaceId);
         if (workload) {
           workloadId = workload.id;
           if (!clusterId && workload.cluster_id) clusterId = workload.cluster_id;
@@ -295,6 +307,7 @@ export class AiService {
         status: predictionStatus,
         predicted_at: predictedAt,
         expires_at: expiresAt,
+        risk_outputs: aiResponse.risk_outputs,
       });
 
       const predictionId = predictionRecord.id;

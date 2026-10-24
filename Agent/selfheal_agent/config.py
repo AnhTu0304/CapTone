@@ -74,7 +74,7 @@ class AgentConfig(BaseSettings):
         description="Kubernetes namespace to monitor (if not monitoring all namespaces)",
     )
     MONITOR_ALL_NAMESPACES: bool = Field(
-        default=False,
+        default=True,
         description="Monitor all namespaces across the cluster",
     )
     PROMETHEUS_URL: Optional[str] = Field(

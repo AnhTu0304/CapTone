@@ -44,6 +44,9 @@ class EventsCollector:
 
             involved = getattr(item, "involved_object", None)
             kind = getattr(involved, "kind", "") if involved else ""
+            inv_ns = getattr(involved, "namespace", "") or ""
+            if monitor_all and inv_ns in {"kube-system", "kube-public", "kube-node-lease", "selfheal-system"}:
+                continue
             if kind not in ("Pod", "Deployment"):
                 continue
 
