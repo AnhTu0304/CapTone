@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ClusterService } from '../services/cluster.service';
+import { K8sStatusService } from '../services/k8sStatus.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 
@@ -38,6 +39,21 @@ export class ClusterController {
       const orgId = req.params.orgId || req.orgMember?.organizationId;
       const detail = await ClusterService.getClusterDetail(clusterId, orgId);
       return ApiResponse.success(res, 'Lấy chi tiết cụm Kubernetes thành công', detail, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async getClusterStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const summary = await K8sStatusService.getClusterStatusSummary({
+        user: (req as any).user,
+        orgMember: (req as any).orgMember,
+        orgId: req.params.orgId || req.params.id,
+        clusterId: req.params.clusterId || req.params.id,
+        query: req.query as Record<string, any>
+      });
+      return ApiResponse.success(res, 'Lấy tổng quan trạng thái cụm Kubernetes thành công', summary, 200);
     } catch (error) {
       next(error);
     }

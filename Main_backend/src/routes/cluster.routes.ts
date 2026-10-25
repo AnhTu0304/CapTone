@@ -5,6 +5,7 @@ import { requireOrgMember, requireOrgRole } from '../middlewares/orgAuth.middlew
 import { requireRoles } from '../middlewares/rbac.middleware';
 import { nodeRoutes } from './node.routes';
 import { podRoutes } from './pod.routes';
+import { deploymentRoutes } from './deployment.routes';
 
 const router = Router({ mergeParams: true });
 
@@ -13,6 +14,8 @@ router.use(authenticateToken);
 router.get('/', requireOrgMember, ClusterController.getByOrg);
 
 router.get('/:clusterId', requireOrgMember, ClusterController.getDetail);
+
+router.get('/:clusterId/status', requireOrgMember, ClusterController.getClusterStatus);
 
 router.post(
   '/',
@@ -65,6 +68,7 @@ router.delete(
 
 router.use('/:clusterId/nodes', requireOrgMember, nodeRoutes);
 router.use('/:clusterId/pods', requireOrgMember, podRoutes);
+router.use('/:clusterId/deployments', requireOrgMember, deploymentRoutes);
 
 export const clusterRoutes = router;
 
@@ -73,8 +77,10 @@ globalRouter.use(authenticateToken);
 globalRouter.use(requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'));
 globalRouter.get('/', ClusterController.getAll);
 globalRouter.get('/:clusterId', ClusterController.getDetail);
+globalRouter.get('/:clusterId/status', ClusterController.getClusterStatus);
 globalRouter.use('/:clusterId/nodes', nodeRoutes);
 globalRouter.use('/:clusterId/pods', podRoutes);
+globalRouter.use('/:clusterId/deployments', deploymentRoutes);
 globalRouter.post('/:clusterId/rotate-token', ClusterController.rotateToken);
 globalRouter.delete('/:clusterId/tokens/:tokenId', ClusterController.revokeToken);
 globalRouter.put('/:clusterId/agent-config', ClusterController.updateConfig);

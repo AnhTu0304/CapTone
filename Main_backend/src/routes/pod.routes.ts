@@ -19,6 +19,8 @@ router.get('/', PodController.getPods);
 
 router.get('/:podId', PodController.getPodDetail);
 
+router.get('/:podId/status', PodController.getPodDetail);
+
 router.post(
   '/:podId/restart',
   (req, res, next) => {

@@ -1330,17 +1330,20 @@ export class AgentService {
   }
 
   /**
-   * Synchronize Real Kubernetes Cluster Inventory (Namespaces, Nodes, Pods)
+   * Synchronize Real Kubernetes Cluster Inventory (Namespaces, Nodes, Pods, Services, Deployments)
    */
   public static async syncClusterInventory(
     agent: AuthenticatedAgent,
     data: AgentK8sInventoryPayload
-  ): Promise<{ synced_nodes: number; synced_pods: number }> {
+  ): Promise<{ synced_nodes: number; synced_pods: number; synced_deployments?: number }> {
     const clusterId = agent.cluster_id;
     if (!clusterId) {
       console.warn(`[AgentService] Agent ${agent.name} (${agent.id}) has no cluster_id to sync inventory.`);
-      return { synced_nodes: 0, synced_pods: 0 };
+      return { synced_nodes: 0, synced_pods: 0, synced_deployments: 0 };
     }
+
+    const { K8sStatusService } = await import('./k8sStatus.service');
+    await K8sStatusService.ensureStatusColumns();
 
     const client = await pool.connect();
     try {
@@ -1380,9 +1383,17 @@ export class AgentService {
         }
       }
 
-      // Also ensure namespaces of reported pods exist in namespaceMap
+      // Ensure namespaces of reported pods and deployments exist in namespaceMap
+      const extraNsNames = new Set<string>();
       for (const pod of data.pods) {
-        const pNs = pod.namespace || 'default';
+        extraNsNames.add(pod.namespace || 'default');
+      }
+      if (Array.isArray(data.deployments)) {
+        for (const dep of data.deployments) {
+          extraNsNames.add(dep.namespace || 'default');
+        }
+      }
+      for (const pNs of extraNsNames) {
         if (!namespaceMap[pNs]) {
           const insNs = await client.query(
             `INSERT INTO namespaces (cluster_id, name, status, created_at, updated_at)
@@ -1396,7 +1407,7 @@ export class AgentService {
         }
       }
 
-      // 2. Sync Nodes
+      // 2. Sync Nodes (with conditions, allocatable, observed_at)
       const nodeMap: Record<string, string> = {};
       const existingNodesRes = await client.query(
         'SELECT id, name FROM nodes WHERE cluster_id = $1',
@@ -1409,6 +1420,21 @@ export class AgentService {
       const reportedNodeNames = new Set(data.nodes.map((n) => n.name));
 
       for (const node of data.nodes) {
+        const nodeStatus = node.status || 'Unknown';
+        const nodeConditions = node.conditions && Object.keys(node.conditions).length > 0
+          ? node.conditions
+          : { Ready: nodeStatus === 'Ready' ? 'True' : nodeStatus === 'NotReady' ? 'False' : 'Unknown' };
+        const nodeAllocatable = {
+          cpu_millicores: node.cpu_allocatable_millicores ?? node.cpu_capacity_millicores ?? null,
+          memory_bytes: node.memory_allocatable_bytes ?? node.memory_capacity_bytes ?? null,
+          disk_bytes: node.disk_allocatable_bytes ?? node.disk_capacity_bytes ?? null,
+          pods_capacity: node.pods_capacity ?? null,
+          pods_allocatable: node.pods_allocatable ?? null,
+          active_pressures: node.active_pressures ?? [],
+          ready_reason: node.ready_reason ?? null,
+          ready_message: node.ready_message ?? null,
+        };
+
         if (nodeMap[node.name]) {
           await client.query(
             `UPDATE nodes
@@ -1420,36 +1446,48 @@ export class AgentService {
                  kubelet_version = $6,
                  roles = $7,
                  labels = $8,
+                 conditions = $9,
+                 allocatable = $10,
+                 observed_at = NOW(),
                  updated_at = NOW()
-             WHERE id = $9`,
+             WHERE id = $11`,
             [
               node.kubernetes_uid || null,
-              node.status || 'Ready',
+              nodeStatus,
               node.cpu_capacity_millicores || 4000,
               node.memory_capacity_bytes || 8589934592,
               node.disk_capacity_bytes || 53687091200,
-              node.kubelet_version || 'v1.37.0',
+              node.kubelet_version || 'v1.31.0',
               JSON.stringify(node.roles || ['worker']),
               JSON.stringify(node.labels || {}),
+              JSON.stringify(nodeConditions),
+              JSON.stringify(nodeAllocatable),
               nodeMap[node.name],
             ]
           );
         } else {
           const insNode = await client.query(
-            `INSERT INTO nodes (cluster_id, name, kubernetes_uid, status, cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes, kubelet_version, roles, labels, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+            `INSERT INTO nodes (
+               cluster_id, name, kubernetes_uid, status,
+               cpu_capacity_millicores, memory_capacity_bytes, disk_capacity_bytes,
+               kubelet_version, roles, labels, conditions, allocatable, observed_at,
+               created_at, updated_at
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
              RETURNING id, name`,
             [
               clusterId,
               node.name,
               node.kubernetes_uid || null,
-              node.status || 'Ready',
+              nodeStatus,
               node.cpu_capacity_millicores || 4000,
               node.memory_capacity_bytes || 8589934592,
               node.disk_capacity_bytes || 53687091200,
-              node.kubelet_version || 'v1.37.0',
+              node.kubelet_version || 'v1.31.0',
               JSON.stringify(node.roles || ['worker']),
               JSON.stringify(node.labels || {}),
+              JSON.stringify(nodeConditions),
+              JSON.stringify(nodeAllocatable),
             ]
           );
           if (insNode.rows[0]) {
@@ -1466,7 +1504,7 @@ export class AgentService {
         }
       }
 
-      // 3. Sync Pods
+      // 3. Sync Pods (with containers and observed_at)
       const existingPodsRes = await client.query(
         'SELECT id, name FROM pods WHERE cluster_id = $1',
         [clusterId]
@@ -1481,6 +1519,29 @@ export class AgentService {
       for (const pod of data.pods) {
         const nsId = namespaceMap[pod.namespace] || Object.values(namespaceMap)[0] || null;
         const nodeId = pod.node_name ? nodeMap[pod.node_name] || null : null;
+        const initContainers: Record<string, any>[] = Array.isArray(pod.init_containers)
+          ? pod.init_containers.map((c: Record<string, any>) => ({ ...c, is_init: true }))
+          : [];
+        const appContainers: Record<string, any>[] = Array.isArray(pod.containers)
+          ? pod.containers.map((c: Record<string, any>) => ({ ...c, is_init: Boolean(c.is_init) }))
+          : [];
+        const allContainers: Record<string, any>[] = [...initContainers, ...appContainers];
+
+        let effectivePodStatus = pod.status || 'Unknown';
+        for (const c of allContainers) {
+          if (c.waiting_reason === 'CrashLoopBackOff') {
+            effectivePodStatus = 'CrashLoopBackOff';
+            break;
+          }
+          if (
+            c.waiting_reason === 'ImagePullBackOff' ||
+            c.waiting_reason === 'ErrImagePull' ||
+            c.waiting_reason === 'CreateContainerConfigError'
+          ) {
+            effectivePodStatus = String(c.waiting_reason);
+            break;
+          }
+        }
 
         if (podMap[pod.name]) {
           await client.query(
@@ -1493,35 +1554,44 @@ export class AgentService {
                  restart_count = $6,
                  image = $7,
                  labels = $8,
+                 containers = $9,
+                 observed_at = NOW(),
+                 deleted_at = NULL,
                  updated_at = NOW()
-             WHERE id = $9`,
+             WHERE id = $10`,
             [
               nsId,
               nodeId,
               pod.kubernetes_uid || null,
-              pod.status || 'Running',
-              pod.phase || 'Running',
+              effectivePodStatus,
+              pod.phase || 'Unknown',
               pod.restart_count || 0,
               pod.image || '',
               JSON.stringify(pod.labels || {}),
+              JSON.stringify(allContainers),
               podMap[pod.name],
             ]
           );
         } else {
           await client.query(
-            `INSERT INTO pods (cluster_id, namespace_id, node_id, name, kubernetes_uid, status, phase, restart_count, image, labels, started_at, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+            `INSERT INTO pods (
+               cluster_id, namespace_id, node_id, name, kubernetes_uid,
+               status, phase, restart_count, image, labels, containers,
+               started_at, observed_at, created_at, updated_at
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())`,
             [
               clusterId,
               nsId,
               nodeId,
               pod.name,
               pod.kubernetes_uid || null,
-              pod.status || 'Running',
-              pod.phase || 'Running',
+              effectivePodStatus,
+              pod.phase || 'Unknown',
               pod.restart_count || 0,
               pod.image || '',
               JSON.stringify(pod.labels || {}),
+              JSON.stringify(allContainers),
               pod.started_at ? new Date(pod.started_at) : null,
             ]
           );
@@ -1610,34 +1680,88 @@ export class AgentService {
         workloadMapByName[row.name] = { id: row.id, namespace_id: row.namespace_id };
       }
 
+      const reportedDeploymentNames = new Set<string>();
       if (Array.isArray(data.deployments) && data.deployments.length > 0) {
         for (const dep of data.deployments) {
+          reportedDeploymentNames.add(dep.name);
           const nsId = namespaceMap[dep.namespace] || Object.values(namespaceMap)[0] || null;
-          const rawSt = String(dep.status || 'Healthy').toUpperCase();
-          const wlStatus =
-            rawSt === 'HEALTHY' || rawSt === 'SCALEDTOZERO'
+          const rolloutStatus = dep.status ?? null;
+          const rawSt = String(rolloutStatus || '').toUpperCase();
+          const wlStatus = !rolloutStatus
+            ? 'UNKNOWN'
+            : rawSt === 'HEALTHY' || rawSt === 'SCALEDTOZERO'
               ? 'HEALTHY'
               : rawSt === 'PROGRESSING'
                 ? 'PROGRESSING'
                 : 'DEGRADED';
+
           const existingWl = workloadMapByName[dep.name];
           if (existingWl) {
             await client.query(
               `UPDATE workloads
                SET namespace_id = COALESCE($1, namespace_id),
-                   status = $2,
-                   labels = $3,
+                   kubernetes_uid = COALESCE($2, kubernetes_uid),
+                   status = $3,
+                   rollout_status = $4,
+                   desired_replicas = $5,
+                   ready_replicas = $6,
+                   available_replicas = $7,
+                   updated_replicas = $8,
+                   unavailable_replicas = $9,
+                   generation = $10,
+                   observed_generation = $11,
+                   conditions = $12,
+                   labels = $13,
+                   observed_at = NOW(),
+                   deleted_at = NULL,
                    updated_at = NOW()
-               WHERE id = $4`,
-              [nsId, wlStatus, JSON.stringify(dep.labels || {}), existingWl.id]
+               WHERE id = $14`,
+              [
+                nsId,
+                dep.kubernetes_uid || null,
+                wlStatus,
+                rolloutStatus,
+                dep.desired_replicas ?? null,
+                dep.ready_replicas ?? null,
+                dep.available_replicas ?? null,
+                dep.updated_replicas ?? null,
+                dep.unavailable_replicas ?? null,
+                dep.generation ?? null,
+                dep.observed_generation ?? null,
+                JSON.stringify(dep.conditions || {}),
+                JSON.stringify(dep.labels || {}),
+                existingWl.id,
+              ]
             );
             if (nsId) existingWl.namespace_id = nsId;
           } else {
             const insDep = await client.query(
-              `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, created_at, updated_at)
-               VALUES ($1, $2, $3, 'Deployment', $4, $5, NOW(), NOW())
+              `INSERT INTO workloads (
+                 cluster_id, namespace_id, kubernetes_uid, name, workload_type,
+                 status, rollout_status,
+                 desired_replicas, ready_replicas, available_replicas, updated_replicas, unavailable_replicas,
+                 generation, observed_generation, conditions, labels,
+                 observed_at, created_at, updated_at
+               )
+               VALUES ($1, $2, $3, $4, 'Deployment', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW(), NOW())
                RETURNING id, namespace_id`,
-              [clusterId, nsId, dep.name, wlStatus, JSON.stringify(dep.labels || {})]
+              [
+                clusterId,
+                nsId,
+                dep.kubernetes_uid || null,
+                dep.name,
+                wlStatus,
+                rolloutStatus,
+                dep.desired_replicas ?? null,
+                dep.ready_replicas ?? null,
+                dep.available_replicas ?? null,
+                dep.updated_replicas ?? null,
+                dep.unavailable_replicas ?? null,
+                dep.generation ?? null,
+                dep.observed_generation ?? null,
+                JSON.stringify(dep.conditions || {}),
+                JSON.stringify(dep.labels || {}),
+              ]
             );
             if (insDep.rows[0]) {
               workloadMapByName[dep.name] = {
@@ -1645,6 +1769,14 @@ export class AgentService {
                 namespace_id: insDep.rows[0].namespace_id,
               };
             }
+          }
+        }
+
+        // Remove stale deployments that are no longer reported by the cluster
+        for (const row of existingWlRes.rows) {
+          if (!reportedDeploymentNames.has(row.name)) {
+            await client.query('DELETE FROM workloads WHERE id = $1', [row.id]);
+            delete workloadMapByName[row.name];
           }
         }
       }
@@ -1668,10 +1800,10 @@ export class AgentService {
             );
             wlInfo.namespace_id = nsId;
           }
-        } else {
+        } else if (!Array.isArray(data.deployments) || data.deployments.length === 0) {
           const insWl = await client.query(
             `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, created_at, updated_at)
-             VALUES ($1, $2, $3, 'Deployment', 'HEALTHY', $4, NOW(), NOW())
+             VALUES ($1, $2, $3, 'Deployment', 'UNKNOWN', $4, NOW(), NOW())
              RETURNING id, namespace_id`,
             [clusterId, nsId, wlName, JSON.stringify(pod.labels || {})]
           );
@@ -1689,12 +1821,19 @@ export class AgentService {
         }
       }
 
+      // 6. Touch cluster last_synced_at
+      await client.query(
+        'UPDATE clusters SET last_synced_at = NOW(), updated_at = NOW() WHERE id = $1',
+        [clusterId]
+      );
+
       await client.query('COMMIT');
-      console.log(`✅ [INVENTORY SYNC] Cluster ${clusterId}: Synced ${data.nodes.length} nodes, ${data.pods.length} pods, ${Object.keys(namespaceMap).length} namespaces.`);
+      console.log(`✅ [INVENTORY SYNC] Cluster ${clusterId}: Synced ${data.nodes.length} nodes, ${data.pods.length} pods, ${(data.deployments || []).length} deployments, ${Object.keys(namespaceMap).length} namespaces.`);
 
       return {
         synced_nodes: data.nodes.length,
         synced_pods: data.pods.length,
+        synced_deployments: Array.isArray(data.deployments) ? data.deployments.length : 0,
       };
     } catch (err) {
       await client.query('ROLLBACK');

@@ -21,6 +21,8 @@ router.get('/', NodeController.getNodes);
 
 router.get('/:nodeId', NodeController.getNodeDetail);
 
+router.get('/:nodeId/status', NodeController.getNodeDetail);
+
 router.post(
   '/:nodeId/drain',
   (req, res, next) => {
