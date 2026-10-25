@@ -162,6 +162,35 @@ export class AiController {
   }
 
   /**
+   * GET /api/v1/ai/workloads
+   * Retrieve list of workloads/services for a specific cluster or all clusters
+   */
+  public static async getWorkloads(req: Request, res: Response) {
+    try {
+      const cluster_id = req.query.cluster_id as string | undefined;
+      let query = `
+        SELECT DISTINCT w.name 
+        FROM workloads w
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+      let idx = 1;
+      if (cluster_id && cluster_id !== 'ALL') {
+        query += ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR w.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`;
+        params.push(cluster_id);
+        idx++;
+      }
+      query += ` AND w.name NOT IN ('coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-controller', 'storage-provisioner', 'kube-apiserver-minikube', 'kube-controller-manager-minikube', 'kube-scheduler-minikube', 'selfheal-agent', 'metrics-server')`;
+      query += ` ORDER BY w.name ASC`;
+      const result = await pool.query(query, params);
+      const workloads = result.rows.map((r: any) => r.name);
+      return ApiResponse.success(res, 'Retrieved cluster workloads', workloads, 200);
+    } catch (error) {
+      return ApiResponse.error(res, (error as Error).message, 500);
+    }
+  }
+
+  /**
    * GET /api/v1/ai/predictions/:id
    * Get prediction detail by ID
    */
@@ -389,10 +418,10 @@ export class AiController {
       }
 
       const targetType = incident?.target_type || 'WORKLOAD';
-      let targetName = 'sme-order-service';
+      let targetName = '';
       if (incident?.target_id) {
         const wlRes = await pool.query('SELECT name FROM workloads WHERE id = $1 LIMIT 1;', [incident.target_id]);
-        targetName = wlRes.rows[0]?.name || 'sme-order-service';
+        targetName = wlRes.rows[0]?.name || incident.target_id;
       }
       const user = (req as any).user;
 
@@ -452,7 +481,7 @@ export class AiController {
       dispatchHealingActionToAgent({
         action_id: healingAction.id,
         action_type: rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation,
-        target_name: targetName === 'sme-order-service' || !targetName ? 'sme-order-service' : targetName,
+        target_name: targetName,
         namespace: targetNamespace,
       }).catch((err) => console.warn('[AiController] Failed to dispatch action to agent:', err));
 

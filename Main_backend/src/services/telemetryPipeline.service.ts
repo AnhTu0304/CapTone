@@ -26,8 +26,8 @@ export class TelemetryPipelineService {
     this.intervalHandle = setInterval(async () => {
       try {
         const activeServices = await MetricModel.getActiveServices(30);
-        const servicesToProcess = activeServices.length > 0 ? activeServices : ['sme-order-service'];
-        for (const sId of servicesToProcess) {
+        if (!activeServices || activeServices.length === 0) return;
+        for (const sId of activeServices) {
           await this.processServiceBatch(sId);
         }
       } catch (err) {
@@ -197,7 +197,10 @@ export class TelemetryPipelineService {
     serviceId: string
   ): Promise<void> {
     try {
-      const recAction = rca.recommendation.action || 'Restart Pod';
+      let recAction = rca.recommendation.action || 'Restart Pod';
+      if (recAction === 'REPLACE_POD') recAction = 'RESTART_POD';
+      if (recAction === 'CLEANUP_STORAGE') recAction = 'CLEANUP_TEMP_FILES';
+      if (recAction === 'TEMPORARY_IP_BLOCK') recAction = 'BLOCK_IP_TEMP';
       const confidence = rca.root_cause.confidence || 0.85;
 
       // 1. Query matching active policies

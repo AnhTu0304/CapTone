@@ -202,7 +202,7 @@ class AgentService:
 
         try:
             start_t = asyncio.get_event_loop().time()
-            if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART POD"]:
+            if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART POD", "REPLACE_POD"]:
                 # Official Kubernetes zero-downtime rolling restart via AppsV1Api
                 if self.apps_v1:
                     now_str = datetime.now(timezone.utc).isoformat()

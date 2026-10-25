@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { request, setActiveOrganizationId, cancelPendingRequests } from '../../../services/apiClient';
-import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
+import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
+
 import { clusterService } from '../../../services/clusterService';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
@@ -161,12 +162,15 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   // Trigger manual refresh
   const triggerRefresh = useCallback(() => {
     setIsRefreshing(true);
+    if (currentOrg?.id) {
+      fetchOrgEnvironmentsAndClusters(currentOrg.id);
+    }
     setTimeout(() => {
       const now = new Date();
       setLastUpdated(now.toLocaleTimeString());
       setIsRefreshing(false);
     }, 400);
-  }, []);
+  }, [currentOrg?.id, fetchOrgEnvironmentsAndClusters]);
 
   // Chuyển đổi tổ chức có kiểm soát ngữ cảnh, xóa cache cũ và ngăn ngừa race conditions
   const switchOrganization = useCallback((orgOrId) => {
@@ -414,6 +418,11 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         currentEnv,
         setCurrentEnv,
         envList,
+        isLoadingEnvs,
+        fetchOrgEnvironmentsAndClusters,
+        refreshClusters: () => {
+          if (currentOrg?.id) fetchOrgEnvironmentsAndClusters(currentOrg.id);
+        },
         currentUserRole,
         setCurrentUserRole,
         isAgentConnected,

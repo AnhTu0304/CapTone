@@ -194,8 +194,20 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-      LEFT JOIN rca_analyses r ON r.incident_id = i.id
+      LEFT JOIN LATERAL (
+        SELECT c.id, c.name
+        FROM clusters c
+        WHERE (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+        ORDER BY (c.id::text = i.cluster_id) DESC, c.created_at DESC
+        LIMIT 1
+      ) c ON true
+      LEFT JOIN LATERAL (
+        SELECT r.id, r.root_cause_type, r.root_cause_description, r.confidence_score, r.analysis_result
+        FROM rca_analyses r
+        WHERE r.incident_id = i.id
+        ORDER BY r.analyzed_at DESC
+        LIMIT 1
+      ) r ON true
       ${whereClause}
       ORDER BY i.detected_at DESC
       LIMIT $${idx++} OFFSET $${idx++};
@@ -243,8 +255,20 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-      LEFT JOIN rca_analyses r ON r.incident_id = i.id
+      LEFT JOIN LATERAL (
+        SELECT c.id, c.name
+        FROM clusters c
+        WHERE (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+        ORDER BY (c.id::text = i.cluster_id) DESC, c.created_at DESC
+        LIMIT 1
+      ) c ON true
+      LEFT JOIN LATERAL (
+        SELECT r.id, r.root_cause_type, r.root_cause_description, r.confidence_score, r.analysis_method, r.analysis_result, r.analyzed_at
+        FROM rca_analyses r
+        WHERE r.incident_id = i.id
+        ORDER BY r.analyzed_at DESC
+        LIMIT 1
+      ) r ON true
       WHERE i.id = $1
       LIMIT 1;
     `;

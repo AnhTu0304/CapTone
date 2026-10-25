@@ -41,6 +41,9 @@ aiRoutes.get('/predictions', ...authenticated, AiController.getPredictions);
 // GET /api/v1/ai/predictions/stats - Statistics on prediction types & confidence
 aiRoutes.get('/predictions/stats', ...authenticated, AiController.getPredictionStats);
 
+// GET /api/v1/ai/workloads - List workloads/services for cluster
+aiRoutes.get('/workloads', ...authenticated, AiController.getWorkloads);
+
 // GET /api/v1/ai/predictions/:id - Get prediction detail
 aiRoutes.get('/predictions/:id', ...authenticated, AiController.getPredictionById);
 
