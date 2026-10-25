@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AgentNodeMetricsPayloadSchema } from '../schemas/agentWebSocket.schema';
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -133,4 +134,25 @@ export const agentIdParamSchema = z.object({
     agentId: z.string().regex(uuidRegex, 'Định danh ID Agent không hợp lệ').optional(),
     tokenId: z.string().regex(uuidRegex, 'Định danh ID Token không hợp lệ').optional(),
   }),
+});
+
+/**
+ * Validation schema tiếp nhận Node Metrics (đơn lẻ hoặc batch tối đa 100 mẫu) từ Agent Daemon (Task 4.3)
+ */
+export const ingestNodeMetricsSchema = z.object({
+  body: z.union([
+    AgentNodeMetricsPayloadSchema,
+    z.object({
+      metrics: z
+        .array(AgentNodeMetricsPayloadSchema)
+        .min(1, 'Danh sách metrics không được rỗng')
+        .max(100, 'Số lượng mẫu metrics trong một batch không được vượt quá 100'),
+    }),
+    z.object({
+      samples: z
+        .array(AgentNodeMetricsPayloadSchema)
+        .min(1, 'Danh sách samples không được rỗng')
+        .max(100, 'Số lượng mẫu samples trong một batch không được vượt quá 100'),
+    }),
+  ]),
 });

@@ -116,43 +116,371 @@ export class AgentService {
   }
 
   /**
-   * Store Host/Node Resource Metrics (Task 4.1) with boundary validation and sanitization
+   * Store Host/Node Resource Metrics (Task 4.1 & Task 4.3) with identity verification,
+   * node authorization, boundary validation, idempotent deduplication, and controlled DB error handling.
    */
   public static async storeNodeMetrics(
     agent: AuthenticatedAgent,
     data: AgentNodeMetricsPayload
-  ): Promise<{ id: number | string }> {
+  ): Promise<{ id: number | string; deduplicated: boolean; node_name: string; collected_at: string }> {
+    if (agent.status === 'REVOKED') {
+      throw ApiError.unauthorized('Agent đã bị thu hồi quyền kết nối');
+    }
+
+    // 1. Server-side Identity Verification: Never allow Agent A to report as Agent B or into another Org/Env/Cluster
+    if (data.agent_id && data.agent_id !== agent.id && data.agent_id !== agent.agent_uid) {
+      throw ApiError.forbidden('Từ chối truy cập: Agent không được phép ghi metrics dưới danh tính của Agent khác');
+    }
+    if (data.organization_id && agent.organization_id && data.organization_id !== agent.organization_id) {
+      throw ApiError.forbidden('Từ chối truy cập: Agent không được phép ghi metrics cho tổ chức khác');
+    }
+    if (data.environment_id && agent.environment_id && data.environment_id !== agent.environment_id) {
+      throw ApiError.forbidden('Từ chối truy cập: Agent không được phép ghi metrics cho môi trường khác');
+    }
+    if (data.cluster_id && agent.cluster_id && data.cluster_id !== agent.cluster_id) {
+      throw ApiError.forbidden('Từ chối truy cập: Agent không được phép ghi metrics cho cụm Kubernetes khác');
+    }
+
     const rawDate = new Date(data.timestamp);
-    const collectedAt = isNaN(rawDate.getTime()) ? new Date() : rawDate;
+    if (isNaN(rawDate.getTime())) {
+      throw ApiError.badRequest('Định dạng timestamp không hợp lệ');
+    }
+    const collectedAt = rawDate;
+    const safeNodeName = data.node_name.trim().slice(0, 255);
 
-    const result = await MetricModel.createNodeMetric({
-      agent_id: agent.id.slice(0, 100),
-      cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 100) : null,
-      node_name: data.node_name.slice(0, 255),
-      cpu_usage_percent: Number.isFinite(data.cpu_usage_percent) ? data.cpu_usage_percent : 0,
-      cpu_cores: Number.isInteger(data.cpu_cores) && data.cpu_cores > 0 ? data.cpu_cores : 1,
-      ram_total_bytes: Number.isFinite(data.ram_total_bytes) ? data.ram_total_bytes : 0,
-      ram_used_bytes: Number.isFinite(data.ram_used_bytes) ? data.ram_used_bytes : 0,
-      ram_available_bytes: Number.isFinite(data.ram_available_bytes) ? data.ram_available_bytes : 0,
-      ram_usage_percent: Number.isFinite(data.ram_usage_percent) ? data.ram_usage_percent : 0,
-      disk_total_bytes: Number.isFinite(data.disk_total_bytes) ? data.disk_total_bytes : 0,
-      disk_used_bytes: Number.isFinite(data.disk_used_bytes) ? data.disk_used_bytes : 0,
-      disk_available_bytes: Number.isFinite(data.disk_available_bytes) ? data.disk_available_bytes : 0,
-      disk_usage_percent: Number.isFinite(data.disk_usage_percent) ? data.disk_usage_percent : 0,
-      disk_filesystems: Array.isArray(data.disk_filesystems) ? data.disk_filesystems : [],
-      net_rx_bytes: Number.isFinite(data.net_rx_bytes) ? data.net_rx_bytes : 0,
-      net_tx_bytes: Number.isFinite(data.net_tx_bytes) ? data.net_tx_bytes : 0,
-      net_rx_bytes_per_sec: Number.isFinite(data.net_rx_bytes_per_sec) ? data.net_rx_bytes_per_sec : 0,
-      net_tx_bytes_per_sec: Number.isFinite(data.net_tx_bytes_per_sec) ? data.net_tx_bytes_per_sec : 0,
-      net_interfaces: Array.isArray(data.net_interfaces) ? data.net_interfaces : [],
-      collection_status: data.collection_status || 'OK',
-      collection_errors: data.collection_errors || {},
-      metadata: data.metadata || {},
-      collected_at: collectedAt,
+    try {
+      // 2. Verify Node Authorization against registered K8s Nodes
+      let resolvedNodeId: string | null = null;
+      if (data.node_id) {
+        const nodeByIdRes = await pool.query(
+          `SELECT id, name, cluster_id FROM nodes WHERE id::text = $1 LIMIT 1`,
+          [data.node_id]
+        );
+        if (!nodeByIdRes.rows[0]) {
+          throw ApiError.forbidden('Từ chối truy cập: Node đích không tồn tại hoặc không thuộc quyền quản lý của Agent');
+        }
+        if (agent.cluster_id && nodeByIdRes.rows[0].cluster_id !== agent.cluster_id) {
+          throw ApiError.forbidden('Từ chối truy cập: Agent không được phép báo cáo metrics cho Node thuộc cụm khác');
+        }
+        resolvedNodeId = nodeByIdRes.rows[0].id;
+      } else {
+        const nodeByNameRes = await pool.query(
+          `SELECT id, cluster_id FROM nodes WHERE name = $1`,
+          [safeNodeName]
+        );
+        if (nodeByNameRes.rows.length > 0) {
+          const matchingNode = nodeByNameRes.rows.find((r) => !agent.cluster_id || r.cluster_id === agent.cluster_id);
+          if (!matchingNode) {
+            throw ApiError.forbidden('Từ chối truy cập: Agent không được phép báo cáo metrics cho Node thuộc cụm hoặc tổ chức khác');
+          }
+          resolvedNodeId = matchingNode.id;
+        }
+      }
+
+      // Resolve organization_id if missing on AuthenticatedAgent context
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let resolvedOrgId = agent.organization_id && uuidRegex.test(agent.organization_id) ? agent.organization_id : null;
+      const resolvedEnvId =
+        agent.environment_id && uuidRegex.test(agent.environment_id) && agent.environment_id !== '00000000-0000-0000-0000-000000000000'
+          ? agent.environment_id
+          : null;
+
+      if (!resolvedOrgId && resolvedEnvId) {
+        const envRes = await pool.query(`SELECT organization_id FROM environments WHERE id = $1 LIMIT 1`, [resolvedEnvId]);
+        if (envRes.rows[0]?.organization_id) {
+          resolvedOrgId = envRes.rows[0].organization_id;
+        }
+      }
+
+      const result = await MetricModel.createNodeMetric({
+        organization_id: resolvedOrgId,
+        environment_id: resolvedEnvId,
+        agent_id: agent.id.slice(0, 100),
+        cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 100) : null,
+        node_id: resolvedNodeId,
+        node_name: safeNodeName,
+        cpu_usage_percent: Number.isFinite(data.cpu_usage_percent) ? data.cpu_usage_percent : 0,
+        cpu_cores: Number.isInteger(data.cpu_cores) && data.cpu_cores > 0 ? data.cpu_cores : 1,
+        ram_total_bytes: Number.isFinite(data.ram_total_bytes) ? data.ram_total_bytes : 0,
+        ram_used_bytes: Number.isFinite(data.ram_used_bytes) ? data.ram_used_bytes : 0,
+        ram_available_bytes: Number.isFinite(data.ram_available_bytes) ? data.ram_available_bytes : 0,
+        ram_usage_percent: Number.isFinite(data.ram_usage_percent) ? data.ram_usage_percent : 0,
+        disk_total_bytes: Number.isFinite(data.disk_total_bytes) ? data.disk_total_bytes : 0,
+        disk_used_bytes: Number.isFinite(data.disk_used_bytes) ? data.disk_used_bytes : 0,
+        disk_available_bytes: Number.isFinite(data.disk_available_bytes) ? data.disk_available_bytes : 0,
+        disk_usage_percent: Number.isFinite(data.disk_usage_percent) ? data.disk_usage_percent : 0,
+        disk_filesystems: Array.isArray(data.disk_filesystems) ? data.disk_filesystems : [],
+        net_rx_bytes: Number.isFinite(data.net_rx_bytes) ? data.net_rx_bytes : 0,
+        net_tx_bytes: Number.isFinite(data.net_tx_bytes) ? data.net_tx_bytes : 0,
+        net_rx_bytes_per_sec: Number.isFinite(data.net_rx_bytes_per_sec) ? data.net_rx_bytes_per_sec : 0,
+        net_tx_bytes_per_sec: Number.isFinite(data.net_tx_bytes_per_sec) ? data.net_tx_bytes_per_sec : 0,
+        net_interfaces: Array.isArray(data.net_interfaces) ? data.net_interfaces : [],
+        collection_status: data.collection_status || 'OK',
+        collection_errors: data.collection_errors || {},
+        metadata: data.metadata || {},
+        collected_at: collectedAt,
+      });
+
+      if (uuidRegex.test(agent.id)) {
+        await AgentModel.touchLastSeen(agent.id);
+      }
+
+      return {
+        id: result.id,
+        deduplicated: result.deduplicated,
+        node_name: safeNodeName,
+        collected_at: collectedAt.toISOString(),
+      };
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      console.error('[AgentService.storeNodeMetrics] Controlled DB error:', err?.message || err);
+      throw new ApiError(500, 'Lỗi cơ sở dữ liệu khi lưu trữ Node Metrics');
+    }
+  }
+
+  /**
+   * Ingest single or batch Node Metrics via HTTP REST endpoint (Task 4.3)
+   */
+  public static async ingestNodeMetricsFromDaemon(
+    agent: AuthenticatedAgent,
+    body: any
+  ) {
+    const samples: AgentNodeMetricsPayload[] = Array.isArray(body?.metrics)
+      ? body.metrics
+      : Array.isArray(body?.samples)
+      ? body.samples
+      : [body];
+
+    if (samples.length === 0 || samples.length > 100) {
+      throw ApiError.badRequest('Số lượng mẫu Node Metrics phải nằm trong khoảng từ 1 đến 100');
+    }
+
+    const records = [];
+    for (const sample of samples) {
+      const saved = await this.storeNodeMetrics(agent, sample);
+      records.push(saved);
+    }
+
+    return {
+      agent_id: agent.id,
+      cluster_id: agent.cluster_id,
+      ingested_count: records.length,
+      deduplicated_count: records.filter((r) => r.deduplicated).length,
+      records,
+    };
+  }
+
+  /**
+   * Query Node Metrics with strict query validation, pagination, and tenant isolation (Task 4.3)
+   */
+  public static async queryNodeMetricsScoped(params: {
+    user: any;
+    orgMember?: any;
+    orgId?: string;
+    clusterId?: string;
+    agentId?: string;
+    nodeId?: string;
+    query: Record<string, any>;
+  }) {
+    const { user, orgMember, query } = params;
+    const rawRoles: string[] = Array.isArray(user?.roles) ? user.roles : user?.roles ? [user.roles] : [];
+    const isPlatformAdmin =
+      orgMember?.roleCode === 'SUPER_ADMIN' ||
+      rawRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(String(r).toUpperCase()));
+
+    // 1. Validate time range (from/start_time and to/end_time)
+    const fromRaw = (query.from ?? query.start_time ?? query.startTime) as string | undefined;
+    const toRaw = (query.to ?? query.end_time ?? query.endTime) as string | undefined;
+
+    let startTime: Date | undefined;
+    let endTime: Date | undefined;
+
+    if (fromRaw !== undefined && String(fromRaw).trim() !== '') {
+      const d = new Date(String(fromRaw));
+      if (isNaN(d.getTime())) {
+        throw ApiError.badRequest('Định dạng thời gian bắt đầu (from/start_time) không hợp lệ');
+      }
+      startTime = d;
+    }
+
+    if (toRaw !== undefined && String(toRaw).trim() !== '') {
+      const d = new Date(String(toRaw));
+      if (isNaN(d.getTime())) {
+        throw ApiError.badRequest('Định dạng thời gian kết thúc (to/end_time) không hợp lệ');
+      }
+      endTime = d;
+    }
+
+    if (startTime && endTime && startTime.getTime() > endTime.getTime()) {
+      throw ApiError.badRequest('Khoảng thời gian không hợp lệ: thời gian bắt đầu (from) phải nhỏ hơn hoặc bằng thời gian kết thúc (to)');
+    }
+
+    // 2. Validate pagination parameters (limit, page, offset, order)
+    let limit = 50;
+    if (query.limit !== undefined && String(query.limit).trim() !== '') {
+      const parsedLimit = Number(query.limit);
+      if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 500) {
+        throw ApiError.badRequest('Tham số limit phải là số nguyên từ 1 đến 500');
+      }
+      limit = parsedLimit;
+    }
+
+    let page = 1;
+    if (query.page !== undefined && String(query.page).trim() !== '') {
+      const parsedPage = Number(query.page);
+      if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+        throw ApiError.badRequest('Tham số page phải là số nguyên dương (>= 1)');
+      }
+      page = parsedPage;
+    }
+
+    let offset: number | undefined;
+    if (query.offset !== undefined && String(query.offset).trim() !== '') {
+      const parsedOffset = Number(query.offset);
+      if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+        throw ApiError.badRequest('Tham số offset phải là số nguyên không âm (>= 0)');
+      }
+      offset = parsedOffset;
+    }
+
+    let order: 'asc' | 'desc' = 'desc';
+    if (query.order !== undefined && String(query.order).trim() !== '') {
+      const lowerOrder = String(query.order).trim().toLowerCase();
+      if (lowerOrder !== 'asc' && lowerOrder !== 'desc') {
+        throw ApiError.badRequest('Tham số order chỉ chấp nhận giá trị asc hoặc desc');
+      }
+      order = lowerOrder as 'asc' | 'desc';
+    }
+
+    // 3. Determine Tenant Scope (organizationId or organizationIds)
+    const requestedOrgId = params.orgId || (query.organization_id as string) || (query.orgId as string) || orgMember?.organizationId;
+    let allowedOrgIds: string[] = [];
+
+    if (!isPlatformAdmin) {
+      if (!user?.id) {
+        throw ApiError.unauthorized('Yêu cầu xác thực người dùng');
+      }
+      const memberRes = await pool.query(
+        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+        [user.id]
+      );
+      allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
+
+      if (requestedOrgId) {
+        if (!allowedOrgIds.includes(requestedOrgId)) {
+          throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền truy cập dữ liệu của tổ chức này');
+        }
+      } else if (allowedOrgIds.length === 0) {
+        throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+      }
+    }
+
+    const effectiveOrgId = requestedOrgId;
+    const agentId = params.agentId || (query.agent_id as string) || (query.agentId as string);
+    const clusterId = params.clusterId || (query.cluster_id as string) || (query.clusterId as string);
+    const nodeId = params.nodeId && params.nodeId !== 'all' ? params.nodeId : ((query.node_id as string) || (query.nodeId as string));
+    const nodeName = (query.node_name as string) || (query.nodeName as string);
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // 4. Verify Agent resource existence & tenant ownership if agentId is provided
+    if (agentId) {
+      const agentRow = uuidRegex.test(agentId)
+        ? await AgentModel.findById(agentId)
+        : await AgentModel.findByUid(agentId);
+
+      if (!agentRow) {
+        throw ApiError.notFound('Không tìm thấy Agent yêu cầu');
+      }
+      const agentOrgId = (agentRow as any).organization_id;
+      if (effectiveOrgId && agentOrgId && agentOrgId !== effectiveOrgId) {
+        throw ApiError.forbidden('Từ chối truy cập: Agent không thuộc tổ chức được yêu cầu');
+      }
+      if (!isPlatformAdmin && agentOrgId && !allowedOrgIds.includes(agentOrgId)) {
+        throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền xem metrics của Agent thuộc tổ chức khác');
+      }
+    }
+
+    // 5. Verify Cluster resource existence & tenant ownership if clusterId is provided
+    if (clusterId && !clusterId.startsWith('org-') && !clusterId.startsWith('sandbox-')) {
+      const clusterRes = await pool.query(
+        `SELECT c.id, e.organization_id
+         FROM clusters c
+         LEFT JOIN environments e ON c.environment_id = e.id
+         WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
+         LIMIT 1`,
+        [clusterId]
+      );
+      if (!clusterRes.rows[0]) {
+        throw ApiError.notFound('Không tìm thấy cụm Kubernetes yêu cầu');
+      }
+      const clusterOrgId = clusterRes.rows[0].organization_id;
+      if (effectiveOrgId && clusterOrgId && clusterOrgId !== effectiveOrgId) {
+        throw ApiError.forbidden('Từ chối truy cập: Cụm Kubernetes không thuộc tổ chức được yêu cầu');
+      }
+      if (!isPlatformAdmin && clusterOrgId && !allowedOrgIds.includes(clusterOrgId)) {
+        throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền xem metrics của cụm thuộc tổ chức khác');
+      }
+    }
+
+    // 6. Verify Node resource existence & tenant ownership if nodeId is provided
+    if (nodeId) {
+      const nodeRes = await pool.query(
+        `SELECT n.id, n.name, n.cluster_id, e.organization_id
+         FROM nodes n
+         JOIN clusters c ON n.cluster_id = c.id
+         LEFT JOIN environments e ON c.environment_id = e.id
+         WHERE (n.id::text = $1 OR n.name = $1) AND c.deleted_at IS NULL`,
+        [nodeId]
+      );
+
+      if (nodeRes.rows.length > 0) {
+        const matchingTenantNode = nodeRes.rows.find((row) => {
+          if (effectiveOrgId && row.organization_id && row.organization_id !== effectiveOrgId) return false;
+          if (!isPlatformAdmin && row.organization_id && !allowedOrgIds.includes(row.organization_id)) return false;
+          return true;
+        });
+
+        if (!matchingTenantNode) {
+          throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
+        }
+      } else {
+        // Check if node_name exists in node_metrics; if it is a UUID that doesn't exist in nodes at all -> 404
+        if (uuidRegex.test(nodeId)) {
+          throw ApiError.notFound('Không tìm thấy Node máy chủ yêu cầu');
+        }
+        const metricNodeCheck = await pool.query(
+          `SELECT organization_id FROM node_metrics WHERE node_name = $1 LIMIT 1`,
+          [nodeId]
+        );
+        if (metricNodeCheck.rows.length === 0) {
+          throw ApiError.notFound('Không tìm thấy Node máy chủ yêu cầu');
+        }
+        const metricOrgId = metricNodeCheck.rows[0].organization_id;
+        if (effectiveOrgId && metricOrgId && metricOrgId !== effectiveOrgId) {
+          throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
+        }
+        if (!isPlatformAdmin && metricOrgId && !allowedOrgIds.includes(metricOrgId)) {
+          throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
+        }
+      }
+    }
+
+    return await MetricModel.queryNodeMetricsPaginated({
+      organizationId: effectiveOrgId,
+      organizationIds: !isPlatformAdmin && !effectiveOrgId ? allowedOrgIds : undefined,
+      agentId,
+      clusterId,
+      nodeId,
+      nodeName,
+      startTime,
+      endTime,
+      limit,
+      page,
+      offset,
+      order,
     });
-
-    await AgentModel.touchLastSeen(agent.id);
-    return result;
   }
 
   /**

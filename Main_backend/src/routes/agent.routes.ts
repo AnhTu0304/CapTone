@@ -13,6 +13,7 @@ import {
   agentHeartbeatSchema,
   agentQuerySchema,
   agentIdParamSchema,
+  ingestNodeMetricsSchema,
 } from '../validations/agent.validation';
 
 /* ==========================================================================
@@ -173,10 +174,28 @@ router.get(
   AgentController.getHeartbeats
 );
 
+/**
+ * [GET] /api/v1/organizations/:orgId/agents/:agentId/metrics & /:agentId/node-metrics
+ * Truy vấn lịch sử Node Metrics của Agent (Task 4.3)
+ */
+router.get(
+  '/:agentId/metrics',
+  requireOrgMember,
+  validate(agentIdParamSchema),
+  AgentController.getAgentNodeMetrics
+);
+
+router.get(
+  '/:agentId/node-metrics',
+  requireOrgMember,
+  validate(agentIdParamSchema),
+  AgentController.getAgentNodeMetrics
+);
+
 export const agentRoutes = router;
 
 /* ==========================================================================
-   4. AGENT DAEMON HEARTBEAT ROUTE (DÀNH CHO AGENT POD GỬI TÍN HIỆU TỪ K8S)
+   4. AGENT DAEMON HEARTBEAT & METRICS ROUTES (DÀNH CHO AGENT POD GỬI TÍN HIỆU)
    Prefix: /api/v1/agents
    Xác thực: x-agent-token header hoặc Authorization: Bearer <agent_token>
    ========================================================================== */
@@ -196,6 +215,34 @@ daemonRouter.post(
   authenticateAgentToken,
   validate(agentHeartbeatSchema),
   AgentController.recordHeartbeat
+);
+
+/**
+ * [POST] /api/v1/agents/node-metrics & /api/v1/agents/metrics
+ * Tiếp nhận Node Resource Metrics (CPU, RAM, Disk, Network I/O) từ Daemon Agent (Task 4.3)
+ */
+daemonRouter.post(
+  '/node-metrics',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: 240,
+    message: 'Quá nhiều yêu cầu gửi Node Metrics từ địa chỉ này, vui lòng thử lại sau.',
+  }),
+  authenticateAgentToken,
+  validate(ingestNodeMetricsSchema),
+  AgentController.ingestNodeMetrics
+);
+
+daemonRouter.post(
+  '/metrics',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: 240,
+    message: 'Quá nhiều yêu cầu gửi Node Metrics từ địa chỉ này, vui lòng thử lại sau.',
+  }),
+  authenticateAgentToken,
+  validate(ingestNodeMetricsSchema),
+  AgentController.ingestNodeMetrics
 );
 
 /* ==========================================================================

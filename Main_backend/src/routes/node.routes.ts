@@ -8,6 +8,8 @@ const router = Router({ mergeParams: true });
 
 router.use(authenticateToken);
 
+router.get('/:nodeId/metrics', NodeController.getNodeMetrics);
+
 router.use((req, res, next) => {
   if (!req.params.clusterId && !req.params.orgId && !(req as any).orgMember) {
     return requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN')(req, res, next);
@@ -18,8 +20,6 @@ router.use((req, res, next) => {
 router.get('/', NodeController.getNodes);
 
 router.get('/:nodeId', NodeController.getNodeDetail);
-
-router.get('/:nodeId/metrics', NodeController.getNodeMetrics);
 
 router.post(
   '/:nodeId/drain',

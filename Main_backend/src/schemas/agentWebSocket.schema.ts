@@ -90,59 +90,75 @@ export const AgentMetricsPayloadSchema = z.object({
 /**
  * 1b. Validation Schema for Host/Node Resource Metrics stream (table: node_metrics)
  */
-export const AgentNodeMetricsPayloadSchema = z.object({
-  node_name: SafeString(255),
-  timestamp: IsoTimestampSchema,
-  cpu_usage_percent: z.number().finite().min(0).max(100).default(0),
-  cpu_cores: z.number().int().min(1).max(4096).default(1),
-  ram_total_bytes: z.number().finite().nonnegative().default(0),
-  ram_used_bytes: z.number().finite().nonnegative().default(0),
-  ram_available_bytes: z.number().finite().nonnegative().default(0),
-  ram_usage_percent: z.number().finite().min(0).max(100).default(0),
-  disk_total_bytes: z.number().finite().nonnegative().default(0),
-  disk_used_bytes: z.number().finite().nonnegative().default(0),
-  disk_available_bytes: z.number().finite().nonnegative().default(0),
-  disk_usage_percent: z.number().finite().min(0).max(100).default(0),
-  disk_filesystems: z
-    .array(
-      z.object({
-        device: z.string().max(255),
-        mount_point: z.string().max(255),
-        fs_type: z.string().max(100).optional().default('unknown'),
-        total_bytes: z.number().finite().nonnegative(),
-        used_bytes: z.number().finite().nonnegative(),
-        available_bytes: z.number().finite().nonnegative(),
-        usage_percent: z.number().finite().min(0).max(100),
-      })
-    )
-    .optional()
-    .default([]),
-  net_rx_bytes: z.number().finite().nonnegative().default(0),
-  net_tx_bytes: z.number().finite().nonnegative().default(0),
-  net_rx_bytes_per_sec: z.number().finite().nonnegative().default(0),
-  net_tx_bytes_per_sec: z.number().finite().nonnegative().default(0),
-  net_interfaces: z
-    .array(
-      z.object({
-        interface: z.string().max(100),
-        rx_bytes: z.number().finite().nonnegative(),
-        tx_bytes: z.number().finite().nonnegative(),
-        rx_packets: z.number().finite().nonnegative().optional().default(0),
-        tx_packets: z.number().finite().nonnegative().optional().default(0),
-        rx_errors: z.number().finite().nonnegative().optional().default(0),
-        tx_errors: z.number().finite().nonnegative().optional().default(0),
-        rx_bytes_per_sec: z.number().finite().nonnegative(),
-        tx_bytes_per_sec: z.number().finite().nonnegative(),
-        is_warmup: z.boolean().optional().default(false),
-        counter_reset: z.boolean().optional().default(false),
-      })
-    )
-    .optional()
-    .default([]),
-  collection_status: z.enum(['OK', 'WARMUP', 'PARTIAL', 'ERROR']).optional().default('OK'),
-  collection_errors: z.record(z.string(), z.string()).optional().default({}),
-  metadata: z.record(z.string(), z.any()).optional().default({}),
-});
+export const AgentNodeMetricsPayloadSchema = z
+  .object({
+    agent_id: z.string().trim().max(100).optional(),
+    cluster_id: z.string().trim().max(100).optional().nullable(),
+    environment_id: z.string().trim().max(100).optional().nullable(),
+    organization_id: z.string().trim().max(100).optional().nullable(),
+    node_id: z.string().trim().max(100).optional().nullable(),
+    node_name: SafeString(255),
+    timestamp: IsoTimestampSchema,
+    cpu_usage_percent: z.number().finite('cpu_usage_percent must be finite').min(0).max(100),
+    cpu_cores: z.number().int('cpu_cores must be an integer').min(1).max(4096),
+    ram_total_bytes: z.number().finite().nonnegative(),
+    ram_used_bytes: z.number().finite().nonnegative(),
+    ram_available_bytes: z.number().finite().nonnegative(),
+    ram_usage_percent: z.number().finite().min(0).max(100),
+    disk_total_bytes: z.number().finite().nonnegative(),
+    disk_used_bytes: z.number().finite().nonnegative(),
+    disk_available_bytes: z.number().finite().nonnegative(),
+    disk_usage_percent: z.number().finite().min(0).max(100),
+    disk_filesystems: z
+      .array(
+        z.object({
+          device: z.string().max(255),
+          mount_point: z.string().max(255),
+          fs_type: z.string().max(100).optional().default('unknown'),
+          total_bytes: z.number().finite().nonnegative(),
+          used_bytes: z.number().finite().nonnegative(),
+          available_bytes: z.number().finite().nonnegative(),
+          usage_percent: z.number().finite().min(0).max(100),
+        })
+      )
+      .max(128, 'disk_filesystems cannot exceed 128 mounts')
+      .optional()
+      .default([]),
+    net_rx_bytes: z.number().finite().nonnegative(),
+    net_tx_bytes: z.number().finite().nonnegative(),
+    net_rx_bytes_per_sec: z.number().finite().nonnegative(),
+    net_tx_bytes_per_sec: z.number().finite().nonnegative(),
+    net_interfaces: z
+      .array(
+        z.object({
+          interface: z.string().max(100),
+          rx_bytes: z.number().finite().nonnegative(),
+          tx_bytes: z.number().finite().nonnegative(),
+          rx_packets: z.number().finite().nonnegative().optional().default(0),
+          tx_packets: z.number().finite().nonnegative().optional().default(0),
+          rx_errors: z.number().finite().nonnegative().optional().default(0),
+          tx_errors: z.number().finite().nonnegative().optional().default(0),
+          rx_bytes_per_sec: z.number().finite().nonnegative(),
+          tx_bytes_per_sec: z.number().finite().nonnegative(),
+          is_warmup: z.boolean().optional().default(false),
+          counter_reset: z.boolean().optional().default(false),
+        })
+      )
+      .max(128, 'net_interfaces cannot exceed 128 interfaces')
+      .optional()
+      .default([]),
+    collection_status: z.enum(['OK', 'WARMUP', 'PARTIAL', 'ERROR']).optional().default('OK'),
+    collection_errors: z.record(z.string(), z.string()).optional().default({}),
+    metadata: z.record(z.string(), z.any()).optional().default({}),
+  })
+  .refine(
+    (d) => d.ram_total_bytes === 0 || (d.ram_used_bytes <= d.ram_total_bytes && d.ram_available_bytes <= d.ram_total_bytes),
+    { message: 'ram_used_bytes and ram_available_bytes cannot exceed ram_total_bytes' }
+  )
+  .refine(
+    (d) => d.disk_total_bytes === 0 || (d.disk_used_bytes <= d.disk_total_bytes && d.disk_available_bytes <= d.disk_total_bytes),
+    { message: 'disk_used_bytes and disk_available_bytes cannot exceed disk_total_bytes' }
+  );
 
 /**
  * 2. Validation Schema for Logs stream (table: logs)

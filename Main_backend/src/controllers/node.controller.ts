@@ -4,7 +4,7 @@ import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 import { AuditService } from '../services/audit.service';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
-import { MetricModel } from '../models/metric.model';
+import { AgentService } from '../services/agent.service';
 
 export class NodeController {
   public static async getNodes(req: Request, res: Response, next: NextFunction) {
@@ -137,23 +137,20 @@ export class NodeController {
 
   public static async getNodeMetrics(req: Request, res: Response, next: NextFunction) {
     try {
-      const nodeId = req.params.nodeId || req.params.id;
-      const agentId = (req.query.agent_id || req.query.agentId) as string | undefined;
-      const clusterId = (req.params.clusterId || req.query.cluster_id || req.query.clusterId) as string | undefined;
-      const startTimeRaw = (req.query.start_time || req.query.startTime) as string | undefined;
-      const endTimeRaw = (req.query.end_time || req.query.endTime) as string | undefined;
-      const limit = req.query.limit ? Number(req.query.limit) : 50;
+      const orgId = req.params.orgId || req.params.id;
+      const clusterId = req.params.clusterId;
+      const nodeId = req.params.nodeId;
 
-      const metrics = await MetricModel.queryNodeMetrics({
-        agentId,
+      const result = await AgentService.queryNodeMetricsScoped({
+        user: (req as any).user,
+        orgMember: (req as any).orgMember,
+        orgId,
         clusterId,
-        nodeId: nodeId && nodeId !== 'all' ? nodeId : undefined,
-        startTime: startTimeRaw ? new Date(startTimeRaw) : undefined,
-        endTime: endTimeRaw ? new Date(endTimeRaw) : undefined,
-        limit: Number.isFinite(limit) ? limit : 50,
+        nodeId,
+        query: req.query as Record<string, any>,
       });
 
-      return ApiResponse.success(res, 'Lấy chuỗi Node Metrics thành công', metrics, 200);
+      return ApiResponse.success(res, 'Lấy chuỗi Node Metrics thành công', result, 200);
     } catch (error) {
       next(error);
     }

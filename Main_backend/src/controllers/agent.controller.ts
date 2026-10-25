@@ -215,6 +215,44 @@ export class AgentController {
     }
   }
 
+  /**
+   * [POST] /api/v1/agents/node-metrics & /api/v1/agents/metrics
+   * Tiếp nhận dữ liệu tài nguyên Node (CPU, RAM, Disk, Network I/O) từ Agent Daemon (Task 4.3)
+   */
+  public static async ingestNodeMetrics(req: Request, res: Response, next: NextFunction) {
+    try {
+      const agent = (req as any).agent;
+      if (!agent) {
+        return ApiResponse.error(res, 'Thiếu thông tin xác thực Agent', 401);
+      }
+      const result = await AgentService.ingestNodeMetricsFromDaemon(agent, req.body);
+      return ApiResponse.success(res, 'Tiếp nhận và lưu trữ Node Metrics thành công', result, 201);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [GET] /api/v1/organizations/:orgId/agents/:agentId/metrics
+   * Truy vấn lịch sử Node Metrics của một Agent theo khoảng thời gian và phân trang (Task 4.3)
+   */
+  public static async getAgentNodeMetrics(req: Request, res: Response, next: NextFunction) {
+    try {
+      const orgId = req.params.orgId || req.params.id;
+      const agentId = req.params.agentId;
+      const result = await AgentService.queryNodeMetricsScoped({
+        user: (req as any).user,
+        orgMember: (req as any).orgMember,
+        orgId,
+        agentId,
+        query: req.query as Record<string, any>,
+      });
+      return ApiResponse.success(res, 'Lấy lịch sử Node Metrics của Agent thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /* =========================================================================
      GLOBAL ADMIN ENDPOINTS (/api/v1/agents)
      ========================================================================= */

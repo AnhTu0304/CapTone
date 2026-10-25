@@ -21,6 +21,8 @@ export interface IAgentMetric {
 
 export interface INodeMetric {
   id?: string | number;
+  organization_id?: string | null;
+  environment_id?: string | null;
   agent_id: string;
   cluster_id: string | null;
   node_id?: string | null;
@@ -48,6 +50,22 @@ export interface INodeMetric {
   created_at?: Date;
 }
 
+export interface INodeMetricQueryFilter {
+  organizationId?: string;
+  organizationIds?: string[];
+  environmentId?: string;
+  agentId?: string;
+  clusterId?: string;
+  nodeId?: string;
+  nodeName?: string;
+  startTime?: Date;
+  endTime?: Date;
+  limit?: number;
+  page?: number;
+  offset?: number;
+  order?: 'asc' | 'desc';
+}
+
 export class MetricModel {
   private static nodeTableEnsured = false;
 
@@ -56,6 +74,8 @@ export class MetricModel {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS node_metrics (
         id BIGSERIAL PRIMARY KEY,
+        organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+        environment_id UUID REFERENCES environments(id) ON DELETE SET NULL,
         agent_id VARCHAR(100) NOT NULL,
         cluster_id VARCHAR(100),
         node_id UUID REFERENCES nodes(id) ON DELETE SET NULL,
@@ -82,18 +102,26 @@ export class MetricModel {
         collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_node_metrics_agent_time ON node_metrics(agent_id, collected_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_node_metrics_node_time ON node_metrics(node_name, collected_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_node_metrics_cluster_time ON node_metrics(cluster_id, collected_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_node_metrics_collected_at ON node_metrics(collected_at DESC);
+      ALTER TABLE node_metrics
+        ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+        ADD COLUMN IF NOT EXISTS environment_id UUID REFERENCES environments(id) ON DELETE SET NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_node_metrics_dedup ON node_metrics(agent_id, node_name, collected_at);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_org_time ON node_metrics(organization_id, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_node_id_time ON node_metrics(node_id, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_agent_time ON node_metrics(agent_id, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_node_time ON node_metrics(node_name, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_cluster_time ON node_metrics(cluster_id, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_collected_at ON node_metrics(collected_at DESC, id DESC);
     `);
     this.nodeTableEnsured = true;
   }
 
   /**
-   * Insert host/node resource metric snapshot (Task 4.1)
+   * Insert or idempotently upsert host/node resource metric snapshot (Task 4.1 & Task 4.3)
    */
-  public static async createNodeMetric(metric: INodeMetric): Promise<{ id: string | number }> {
+  public static async createNodeMetric(
+    metric: INodeMetric
+  ): Promise<{ id: string | number; deduplicated: boolean }> {
     await this.ensureNodeMetricsTable();
 
     let resolvedNodeId = metric.node_id || null;
@@ -109,23 +137,50 @@ export class MetricModel {
 
     const query = `
       INSERT INTO node_metrics (
-        agent_id, cluster_id, node_id, node_name,
+        organization_id, environment_id, agent_id, cluster_id, node_id, node_name,
         cpu_usage_percent, cpu_cores,
         ram_total_bytes, ram_used_bytes, ram_available_bytes, ram_usage_percent,
         disk_total_bytes, disk_used_bytes, disk_available_bytes, disk_usage_percent, disk_filesystems,
         net_rx_bytes, net_tx_bytes, net_rx_bytes_per_sec, net_tx_bytes_per_sec, net_interfaces,
         collection_status, collection_errors, metadata, collected_at, created_at
       ) VALUES (
-        $1, $2, $3, $4,
-        $5, $6,
-        $7, $8, $9, $10,
-        $11, $12, $13, $14, $15::jsonb,
-        $16, $17, $18, $19, $20::jsonb,
-        $21, $22::jsonb, $23::jsonb, $24, NOW()
-      ) RETURNING id;
+        $1, $2, $3, $4, $5, $6,
+        $7, $8,
+        $9, $10, $11, $12,
+        $13, $14, $15, $16, $17::jsonb,
+        $18, $19, $20, $21, $22::jsonb,
+        $23, $24::jsonb, $25::jsonb, $26, NOW()
+      )
+      ON CONFLICT (agent_id, node_name, collected_at) DO UPDATE SET
+        organization_id = COALESCE(EXCLUDED.organization_id, node_metrics.organization_id),
+        environment_id = COALESCE(EXCLUDED.environment_id, node_metrics.environment_id),
+        cluster_id = COALESCE(EXCLUDED.cluster_id, node_metrics.cluster_id),
+        node_id = COALESCE(EXCLUDED.node_id, node_metrics.node_id),
+        cpu_usage_percent = EXCLUDED.cpu_usage_percent,
+        cpu_cores = EXCLUDED.cpu_cores,
+        ram_total_bytes = EXCLUDED.ram_total_bytes,
+        ram_used_bytes = EXCLUDED.ram_used_bytes,
+        ram_available_bytes = EXCLUDED.ram_available_bytes,
+        ram_usage_percent = EXCLUDED.ram_usage_percent,
+        disk_total_bytes = EXCLUDED.disk_total_bytes,
+        disk_used_bytes = EXCLUDED.disk_used_bytes,
+        disk_available_bytes = EXCLUDED.disk_available_bytes,
+        disk_usage_percent = EXCLUDED.disk_usage_percent,
+        disk_filesystems = EXCLUDED.disk_filesystems,
+        net_rx_bytes = EXCLUDED.net_rx_bytes,
+        net_tx_bytes = EXCLUDED.net_tx_bytes,
+        net_rx_bytes_per_sec = EXCLUDED.net_rx_bytes_per_sec,
+        net_tx_bytes_per_sec = EXCLUDED.net_tx_bytes_per_sec,
+        net_interfaces = EXCLUDED.net_interfaces,
+        collection_status = EXCLUDED.collection_status,
+        collection_errors = EXCLUDED.collection_errors,
+        metadata = EXCLUDED.metadata
+      RETURNING id, (xmax <> 0) AS deduplicated;
     `;
 
     const res = await pool.query(query, [
+      metric.organization_id || null,
+      metric.environment_id || null,
       metric.agent_id,
       metric.cluster_id,
       resolvedNodeId,
@@ -152,86 +207,161 @@ export class MetricModel {
       metric.collected_at,
     ]);
 
-    return { id: res.rows[0].id };
+    return {
+      id: res.rows[0].id,
+      deduplicated: Boolean(res.rows[0].deduplicated),
+    };
   }
 
-  /**
-   * Query node metrics by agent_id, cluster_id, node_name/node_id, and time range [startTime, endTime]
-   */
-  public static async queryNodeMetrics(filter: {
-    agentId?: string;
-    clusterId?: string;
-    nodeId?: string;
-    nodeName?: string;
-    startTime?: Date;
-    endTime?: Date;
-    limit?: number;
-  }) {
-    await this.ensureNodeMetricsTable();
-
+  private static buildNodeMetricsWhere(filter: INodeMetricQueryFilter): {
+    whereClause: string;
+    params: any[];
+  } {
     const conditions: string[] = ['1=1'];
     const params: any[] = [];
 
+    if (filter.organizationId) {
+      params.push(filter.organizationId);
+      conditions.push(
+        `(nm.organization_id = $${params.length}::uuid OR e.organization_id = $${params.length}::uuid)`
+      );
+    } else if (Array.isArray(filter.organizationIds)) {
+      if (filter.organizationIds.length === 0) {
+        conditions.push('1=0');
+      } else {
+        params.push(filter.organizationIds);
+        conditions.push(
+          `(nm.organization_id = ANY($${params.length}::uuid[]) OR e.organization_id = ANY($${params.length}::uuid[]))`
+        );
+      }
+    }
+
+    if (filter.environmentId) {
+      params.push(filter.environmentId);
+      conditions.push(`(nm.environment_id = $${params.length}::uuid OR a.environment_id = $${params.length}::uuid)`);
+    }
     if (filter.agentId) {
       params.push(filter.agentId);
-      conditions.push(`agent_id = $${params.length}`);
+      conditions.push(`(nm.agent_id = $${params.length} OR a.agent_uid = $${params.length})`);
     }
     if (filter.clusterId) {
       params.push(filter.clusterId);
-      conditions.push(`cluster_id = $${params.length}`);
+      conditions.push(`nm.cluster_id = $${params.length}`);
     }
     if (filter.nodeId) {
       params.push(filter.nodeId);
-      conditions.push(`(node_id::text = $${params.length} OR node_name = $${params.length})`);
+      conditions.push(`(nm.node_id::text = $${params.length} OR nm.node_name = $${params.length})`);
     }
     if (filter.nodeName) {
       params.push(filter.nodeName);
-      conditions.push(`node_name = $${params.length}`);
+      conditions.push(`nm.node_name = $${params.length}`);
     }
     if (filter.startTime && !isNaN(filter.startTime.getTime())) {
       params.push(filter.startTime);
-      conditions.push(`collected_at >= $${params.length}`);
+      conditions.push(`nm.collected_at >= $${params.length}`);
     }
     if (filter.endTime && !isNaN(filter.endTime.getTime())) {
       params.push(filter.endTime);
-      conditions.push(`collected_at <= $${params.length}`);
+      conditions.push(`nm.collected_at <= $${params.length}`);
     }
 
-    const safeLimit = Math.min(500, Math.max(1, filter.limit || 50));
-    params.push(safeLimit);
+    return {
+      whereClause: conditions.join(' AND '),
+      params,
+    };
+  }
 
-    const query = `
+  /**
+   * Query node metrics with pagination, total count, tenant isolation, and deterministic ordering (Task 4.3)
+   */
+  public static async queryNodeMetricsPaginated(filter: INodeMetricQueryFilter) {
+    await this.ensureNodeMetricsTable();
+
+    const { whereClause, params } = this.buildNodeMetricsWhere(filter);
+    const safeLimit = Math.min(500, Math.max(1, filter.limit || 50));
+    const safePage = Math.max(1, filter.page || 1);
+    const safeOffset =
+      filter.offset !== undefined && filter.offset >= 0
+        ? filter.offset
+        : (safePage - 1) * safeLimit;
+    const sortDir = filter.order === 'asc' ? 'ASC' : 'DESC';
+
+    const countQuery = `
+      SELECT COUNT(*)::int AS total
+      FROM node_metrics nm
+      LEFT JOIN agents a ON a.id::text = nm.agent_id
+      LEFT JOIN environments e ON e.id = COALESCE(nm.environment_id, a.environment_id)
+      WHERE ${whereClause};
+    `;
+    const countRes = await pool.query(countQuery, params);
+    const total = countRes.rows[0]?.total || 0;
+
+    const dataParams = [...params, safeLimit, safeOffset];
+    const limitIdx = dataParams.length - 1;
+    const offsetIdx = dataParams.length;
+
+    const dataQuery = `
       SELECT
-        id, agent_id, cluster_id, node_id, node_name,
-        cpu_usage_percent::float AS cpu_usage_percent,
-        cpu_cores::int AS cpu_cores,
-        ram_total_bytes::bigint AS ram_total_bytes,
-        ram_used_bytes::bigint AS ram_used_bytes,
-        ram_available_bytes::bigint AS ram_available_bytes,
-        ram_usage_percent::float AS ram_usage_percent,
-        disk_total_bytes::bigint AS disk_total_bytes,
-        disk_used_bytes::bigint AS disk_used_bytes,
-        disk_available_bytes::bigint AS disk_available_bytes,
-        disk_usage_percent::float AS disk_usage_percent,
-        disk_filesystems,
-        net_rx_bytes::bigint AS net_rx_bytes,
-        net_tx_bytes::bigint AS net_tx_bytes,
-        net_rx_bytes_per_sec::float AS net_rx_bytes_per_sec,
-        net_tx_bytes_per_sec::float AS net_tx_bytes_per_sec,
-        net_interfaces,
-        collection_status,
-        collection_errors,
-        metadata,
-        collected_at,
-        created_at
-      FROM node_metrics
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY collected_at DESC
-      LIMIT $${params.length};
+        nm.id,
+        COALESCE(nm.organization_id, e.organization_id) AS organization_id,
+        COALESCE(nm.environment_id, a.environment_id) AS environment_id,
+        nm.agent_id,
+        nm.cluster_id,
+        nm.node_id,
+        nm.node_name,
+        nm.cpu_usage_percent::float AS cpu_usage_percent,
+        nm.cpu_cores::int AS cpu_cores,
+        nm.ram_total_bytes::bigint AS ram_total_bytes,
+        nm.ram_used_bytes::bigint AS ram_used_bytes,
+        nm.ram_available_bytes::bigint AS ram_available_bytes,
+        nm.ram_usage_percent::float AS ram_usage_percent,
+        nm.disk_total_bytes::bigint AS disk_total_bytes,
+        nm.disk_used_bytes::bigint AS disk_used_bytes,
+        nm.disk_available_bytes::bigint AS disk_available_bytes,
+        nm.disk_usage_percent::float AS disk_usage_percent,
+        nm.disk_filesystems,
+        nm.net_rx_bytes::bigint AS net_rx_bytes,
+        nm.net_tx_bytes::bigint AS net_tx_bytes,
+        nm.net_rx_bytes_per_sec::float AS net_rx_bytes_per_sec,
+        nm.net_tx_bytes_per_sec::float AS net_tx_bytes_per_sec,
+        nm.net_interfaces,
+        nm.collection_status,
+        nm.collection_errors,
+        nm.metadata,
+        nm.collected_at,
+        nm.created_at
+      FROM node_metrics nm
+      LEFT JOIN agents a ON a.id::text = nm.agent_id
+      LEFT JOIN environments e ON e.id = COALESCE(nm.environment_id, a.environment_id)
+      WHERE ${whereClause}
+      ORDER BY nm.collected_at ${sortDir}, nm.id ${sortDir}
+      LIMIT $${limitIdx} OFFSET $${offsetIdx};
     `;
 
-    const res = await pool.query(query, params);
-    return res.rows;
+    const res = await pool.query(dataQuery, dataParams);
+    const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+
+    return {
+      items: res.rows,
+      metrics: res.rows,
+      count: res.rows.length,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        offset: safeOffset,
+        total,
+        total_pages: totalPages,
+        has_more: safeOffset + res.rows.length < total,
+      },
+    };
+  }
+
+  /**
+   * Query node metrics array (backward-compatible helper)
+   */
+  public static async queryNodeMetrics(filter: INodeMetricQueryFilter) {
+    const result = await this.queryNodeMetricsPaginated(filter);
+    return result.items;
   }
   /**
    * Insert raw pod metric record
