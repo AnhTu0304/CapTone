@@ -208,6 +208,35 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             break;
           }
 
+          case 'node_metrics': {
+            const saved = await AgentService.storeNodeMetrics(ws.agent, msg.data);
+            console.log(
+              `🖥️ [NODE METRICS] [${ws.agent.name}] Node: ${msg.data.node_name} | CPU: ${msg.data.cpu_usage_percent}% (${msg.data.cpu_cores} cores) | RAM: ${msg.data.ram_usage_percent}% | Disk: ${msg.data.disk_usage_percent}% | Net RX/TX: ${msg.data.net_rx_bytes_per_sec}/${msg.data.net_tx_bytes_per_sec} B/s`
+            );
+
+            broadcastTelemetryToUi({
+              type: 'node_metrics',
+              data: {
+                ...msg.data,
+                id: saved.id,
+                agent_id: ws.agent.id,
+                cluster_id: ws.agent.cluster_id,
+                timestamp: new Date().toISOString(),
+              },
+            });
+
+            ws.send(
+              JSON.stringify({
+                status: 'ack',
+                type: 'node_metrics',
+                record_id: saved.id,
+                node_name: msg.data.node_name,
+                timestamp: new Date().toISOString(),
+              })
+            );
+            break;
+          }
+
           case 'log': {
             const saved = await AgentService.storeLog(ws.agent, msg.data);
             console.log(`📝 [REALTIME LOG] [${ws.agent.name}] [${msg.data.level}] ${msg.data.message.slice(0, 110)}`);

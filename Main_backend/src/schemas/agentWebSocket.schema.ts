@@ -88,6 +88,63 @@ export const AgentMetricsPayloadSchema = z.object({
 });
 
 /**
+ * 1b. Validation Schema for Host/Node Resource Metrics stream (table: node_metrics)
+ */
+export const AgentNodeMetricsPayloadSchema = z.object({
+  node_name: SafeString(255),
+  timestamp: IsoTimestampSchema,
+  cpu_usage_percent: z.number().finite().min(0).max(100).default(0),
+  cpu_cores: z.number().int().min(1).max(4096).default(1),
+  ram_total_bytes: z.number().finite().nonnegative().default(0),
+  ram_used_bytes: z.number().finite().nonnegative().default(0),
+  ram_available_bytes: z.number().finite().nonnegative().default(0),
+  ram_usage_percent: z.number().finite().min(0).max(100).default(0),
+  disk_total_bytes: z.number().finite().nonnegative().default(0),
+  disk_used_bytes: z.number().finite().nonnegative().default(0),
+  disk_available_bytes: z.number().finite().nonnegative().default(0),
+  disk_usage_percent: z.number().finite().min(0).max(100).default(0),
+  disk_filesystems: z
+    .array(
+      z.object({
+        device: z.string().max(255),
+        mount_point: z.string().max(255),
+        fs_type: z.string().max(100).optional().default('unknown'),
+        total_bytes: z.number().finite().nonnegative(),
+        used_bytes: z.number().finite().nonnegative(),
+        available_bytes: z.number().finite().nonnegative(),
+        usage_percent: z.number().finite().min(0).max(100),
+      })
+    )
+    .optional()
+    .default([]),
+  net_rx_bytes: z.number().finite().nonnegative().default(0),
+  net_tx_bytes: z.number().finite().nonnegative().default(0),
+  net_rx_bytes_per_sec: z.number().finite().nonnegative().default(0),
+  net_tx_bytes_per_sec: z.number().finite().nonnegative().default(0),
+  net_interfaces: z
+    .array(
+      z.object({
+        interface: z.string().max(100),
+        rx_bytes: z.number().finite().nonnegative(),
+        tx_bytes: z.number().finite().nonnegative(),
+        rx_packets: z.number().finite().nonnegative().optional().default(0),
+        tx_packets: z.number().finite().nonnegative().optional().default(0),
+        rx_errors: z.number().finite().nonnegative().optional().default(0),
+        tx_errors: z.number().finite().nonnegative().optional().default(0),
+        rx_bytes_per_sec: z.number().finite().nonnegative(),
+        tx_bytes_per_sec: z.number().finite().nonnegative(),
+        is_warmup: z.boolean().optional().default(false),
+        counter_reset: z.boolean().optional().default(false),
+      })
+    )
+    .optional()
+    .default([]),
+  collection_status: z.enum(['OK', 'WARMUP', 'PARTIAL', 'ERROR']).optional().default('OK'),
+  collection_errors: z.record(z.string(), z.string()).optional().default({}),
+  metadata: z.record(z.string(), z.any()).optional().default({}),
+});
+
+/**
  * 2. Validation Schema for Logs stream (table: logs)
  */
 export const AgentLogPayloadSchema = z.object({
@@ -216,6 +273,10 @@ export const AgentWsMessageSchema = z.discriminatedUnion('type', [
     data: AgentMetricsPayloadSchema,
   }),
   z.object({
+    type: z.literal('node_metrics'),
+    data: AgentNodeMetricsPayloadSchema,
+  }),
+  z.object({
     type: z.literal('log'),
     data: AgentLogPayloadSchema,
   }),
@@ -241,6 +302,7 @@ export const AgentWsMessageSchema = z.discriminatedUnion('type', [
 ]);
 
 export type AgentMetricsPayload = z.infer<typeof AgentMetricsPayloadSchema>;
+export type AgentNodeMetricsPayload = z.infer<typeof AgentNodeMetricsPayloadSchema>;
 export type AgentLogPayload = z.infer<typeof AgentLogPayloadSchema>;
 export type AgentK8sEventPayload = z.infer<typeof AgentK8sEventPayloadSchema>;
 export type AgentK8sInventoryPayload = z.infer<typeof AgentK8sInventoryPayloadSchema>;

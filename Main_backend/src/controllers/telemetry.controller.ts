@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { TelemetryAggregatorService } from '../services/telemetryAggregator.service';
+import { MetricModel } from '../models/metric.model';
 import { ApiResponse } from '../utils/apiResponse';
 import { expandRoles } from '../middlewares/rbac.middleware';
 import {
@@ -173,6 +174,48 @@ export class TelemetryController {
           };
 
       return ApiResponse.success(res, 'Live telemetry summary fetched successfully', payload, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/telemetry/node-metrics
+   * Query host/node resource metrics by agent_id, cluster_id, node_name, and time range
+   */
+  public static async getNodeMetrics(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const agentId = (req.query.agent_id || req.query.agentId) as string | undefined;
+      const clusterId = (req.query.cluster_id || req.query.clusterId) as string | undefined;
+      const nodeName = (req.query.node_name || req.query.nodeName) as string | undefined;
+      const nodeId = (req.query.node_id || req.query.nodeId) as string | undefined;
+      const startTimeRaw = (req.query.start_time || req.query.startTime) as string | undefined;
+      const endTimeRaw = (req.query.end_time || req.query.endTime) as string | undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+      const rows = await MetricModel.queryNodeMetrics({
+        agentId,
+        clusterId,
+        nodeId,
+        nodeName,
+        startTime: startTimeRaw ? new Date(startTimeRaw) : undefined,
+        endTime: endTimeRaw ? new Date(endTimeRaw) : undefined,
+        limit: Number.isFinite(limit) ? limit : 50,
+      });
+
+      return ApiResponse.success(
+        res,
+        `Retrieved ${rows.length} node metric records`,
+        {
+          count: rows.length,
+          metrics: rows,
+        },
+        200
+      );
     } catch (error) {
       next(error);
     }

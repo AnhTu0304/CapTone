@@ -150,6 +150,7 @@ class MetricsManager:
         replicas_map: dict[str, int],
         namespace: Optional[str] = None,
         monitor_all: bool = False,
+        node_disk_percent: Optional[float] = None,
     ) -> list[AgentMetricsData]:
         """Construct AgentMetricsData for all monitored pods."""
         if not pods:
@@ -164,6 +165,11 @@ class MetricsManager:
 
         now_iso = datetime.now(timezone.utc).isoformat()
         results: list[AgentMetricsData] = []
+        disk_pct = (
+            round(max(0.0, min(100.0, float(node_disk_percent))), 2)
+            if node_disk_percent is not None and node_disk_percent > 0.0
+            else 10.0
+        )
 
         for pod in pods:
             usage = metrics_map.get(pod.name)
@@ -193,7 +199,7 @@ class MetricsManager:
                 timestamp=now_iso,
                 cpu=max(0.0, cpu_percent),
                 ram=max(0.0, ram_mb),
-                disk=10.0,
+                disk=disk_pct,
                 request_rate=max(0.0, http_stats.get("request_rate", 0.0)),
                 latency=max(0.0, http_stats.get("latency", 0.0)),
                 http_5xx_rate=max(0.0, http_stats.get("http_5xx_rate", 0.0)),

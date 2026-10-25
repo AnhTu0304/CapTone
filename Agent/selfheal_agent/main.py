@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 import logging
 import signal
 import sys
+from typing import Any, Optional
 from aiohttp import web
 from kubernetes import client, config as k8s_config
 
 from selfheal_agent.collectors.deployments import DeploymentsCollector
 from selfheal_agent.collectors.events import EventsCollector
 from selfheal_agent.collectors.logs import LogsCollector
+from selfheal_agent.collectors.node_resources import NodeResourceCollector
 from selfheal_agent.collectors.nodes import NodesCollector
 from selfheal_agent.collectors.pods import PodsCollector
 from selfheal_agent.collectors.services import ServicesCollector
@@ -25,6 +27,7 @@ from selfheal_agent.telemetry.schemas import (
     K8sInventoryMessage,
     LogMessage,
     MetricsMessage,
+    NodeMetricsMessage,
 )
 from selfheal_agent.utils.logger import setup_logger
 from selfheal_agent.utils.redaction import mask_token
@@ -46,6 +49,7 @@ class AgentService:
         self.deployments_collector = DeploymentsCollector(self.apps_v1)
         self.services_collector = ServicesCollector(self.core_v1)
         self.nodes_collector = NodesCollector(self.core_v1)
+        self.node_resource_collector = NodeResourceCollector()
         self.events_collector = EventsCollector(self.core_v1)
         self.logs_collector = LogsCollector(self.core_v1)
 
@@ -257,6 +261,16 @@ class AgentService:
         logger.info("Metrics collection loop active (interval: %.1fs)", interval_sec)
 
         while self._is_running:
+            node_disk_pct: Optional[float] = None
+            try:
+                node_snapshot = self.node_resource_collector.collect_snapshot()
+                node_disk_pct = node_snapshot.disk_usage_percent
+                await self.ws_client.send(NodeMetricsMessage(data=node_snapshot))
+            except asyncio.CancelledError:
+                break
+            except Exception as node_err:
+                logger.error("Error collecting/sending node resource metrics: %s", node_err)
+
             try:
                 pods = self.pods_collector.list_pods(
                     self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
@@ -265,7 +279,11 @@ class AgentService:
                     self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
                 )
                 metrics = await self.metrics_manager.aggregate_metrics(
-                    pods, replicas, self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                    pods,
+                    replicas,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
+                    node_disk_percent=node_disk_pct,
                 )
                 for m in metrics:
                     await self.ws_client.send(MetricsMessage(data=m))
@@ -320,7 +338,6 @@ class AgentService:
                 await asyncio.sleep(5.0)
             except asyncio.CancelledError:
                 break
-
 
     async def _inventory_loop(self) -> None:
         logger.info("Cluster inventory sync loop active (interval: 30.0s)")

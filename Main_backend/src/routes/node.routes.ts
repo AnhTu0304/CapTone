@@ -19,6 +19,8 @@ router.get('/', NodeController.getNodes);
 
 router.get('/:nodeId', NodeController.getNodeDetail);
 
+router.get('/:nodeId/metrics', NodeController.getNodeMetrics);
+
 router.post(
   '/:nodeId/drain',
   (req, res, next) => {

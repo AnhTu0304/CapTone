@@ -23,6 +23,57 @@ class AgentMetricsData(BaseModel):
     replica_count: int = Field(default=1, ge=0, description="Replicas count for the service")
 
 
+class DiskFilesystemMetric(BaseModel):
+    """Per-filesystem disk capacity and usage breakdown in bytes."""
+    device: str
+    mount_point: str
+    fs_type: str = "unknown"
+    total_bytes: int = Field(default=0, ge=0)
+    used_bytes: int = Field(default=0, ge=0)
+    available_bytes: int = Field(default=0, ge=0)
+    usage_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+
+
+class NetworkInterfaceMetric(BaseModel):
+    """Per-interface cumulative network counters and delta rates."""
+    interface: str
+    rx_bytes: int = Field(default=0, ge=0)
+    tx_bytes: int = Field(default=0, ge=0)
+    rx_packets: int = Field(default=0, ge=0)
+    tx_packets: int = Field(default=0, ge=0)
+    rx_errors: int = Field(default=0, ge=0)
+    tx_errors: int = Field(default=0, ge=0)
+    rx_bytes_per_sec: float = Field(default=0.0, ge=0.0)
+    tx_bytes_per_sec: float = Field(default=0.0, ge=0.0)
+    is_warmup: bool = False
+    counter_reset: bool = False
+
+
+class AgentNodeMetricsData(BaseModel):
+    """Host/Node level hardware resource telemetry payload (Task 4.1 & 4.2)."""
+    node_name: str
+    timestamp: str
+    cpu_usage_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+    cpu_cores: int = Field(default=1, ge=1)
+    ram_total_bytes: int = Field(default=0, ge=0)
+    ram_used_bytes: int = Field(default=0, ge=0)
+    ram_available_bytes: int = Field(default=0, ge=0)
+    ram_usage_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+    disk_total_bytes: int = Field(default=0, ge=0)
+    disk_used_bytes: int = Field(default=0, ge=0)
+    disk_available_bytes: int = Field(default=0, ge=0)
+    disk_usage_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+    disk_filesystems: list[DiskFilesystemMetric] = Field(default_factory=list)
+    net_rx_bytes: int = Field(default=0, ge=0)
+    net_tx_bytes: int = Field(default=0, ge=0)
+    net_rx_bytes_per_sec: float = Field(default=0.0, ge=0.0)
+    net_tx_bytes_per_sec: float = Field(default=0.0, ge=0.0)
+    net_interfaces: list[NetworkInterfaceMetric] = Field(default_factory=list)
+    collection_status: Literal["OK", "WARMUP", "PARTIAL", "ERROR"] = "OK"
+    collection_errors: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentLogData(BaseModel):
     """Log payload for pod container logs."""
     service_id: str
@@ -65,6 +116,12 @@ class MetricsMessage(BaseModel):
     data: AgentMetricsData
 
 
+class NodeMetricsMessage(BaseModel):
+    """Node/Host resource metrics envelope sent over WebSocket."""
+    type: Literal["node_metrics"] = "node_metrics"
+    data: AgentNodeMetricsData
+
+
 class LogMessage(BaseModel):
     """Log envelope sent over WebSocket."""
     type: Literal["log"] = "log"
@@ -93,6 +150,7 @@ class K8sInventoryMessage(BaseModel):
 class ActionResultData(BaseModel):
     """Result of an executed self-healing action reported back to Backend."""
     action_id: str
+    action_type: Optional[str] = None
     status: Literal["SUCCEEDED", "FAILED"]
     message: Optional[str] = None
     duration_ms: Optional[int] = 1000
@@ -108,6 +166,7 @@ class ActionResultMessage(BaseModel):
 OutgoingEnvelope = Union[
     AuthMessage,
     MetricsMessage,
+    NodeMetricsMessage,
     LogMessage,
     K8sEventMessage,
     K8sInventoryMessage,

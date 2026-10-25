@@ -14,6 +14,14 @@ telemetryRoutes.get(
   TelemetryController.getLiveSummary
 );
 
+// GET /api/v1/telemetry/node-metrics
+telemetryRoutes.get(
+  '/node-metrics',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getNodeMetrics
+);
+
 // GET /api/v1/telemetry/services/:serviceId/metrics-sequence
 // Cho phép tất cả người dùng hợp lệ xem chuỗi viễn trắc để vẽ biểu đồ
 telemetryRoutes.get(

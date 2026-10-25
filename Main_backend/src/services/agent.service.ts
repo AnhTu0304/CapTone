@@ -14,6 +14,7 @@ import { ApiError } from '../utils/apiError';
 import { AuditService } from './audit.service';
 import {
   AgentMetricsPayload,
+  AgentNodeMetricsPayload,
   AgentLogPayload,
   AgentK8sEventPayload,
   AgentK8sInventoryPayload,
@@ -107,6 +108,46 @@ export class AgentService {
       http_5xx_rate: Number.isFinite(data.http_5xx_rate) ? data.http_5xx_rate : 0,
       pod_restart_count: Number.isInteger(data.pod_restart_count) ? data.pod_restart_count : 0,
       replica_count: Number.isInteger(data.replica_count) && data.replica_count > 0 ? data.replica_count : 1,
+      collected_at: collectedAt,
+    });
+
+    await AgentModel.touchLastSeen(agent.id);
+    return result;
+  }
+
+  /**
+   * Store Host/Node Resource Metrics (Task 4.1) with boundary validation and sanitization
+   */
+  public static async storeNodeMetrics(
+    agent: AuthenticatedAgent,
+    data: AgentNodeMetricsPayload
+  ): Promise<{ id: number | string }> {
+    const rawDate = new Date(data.timestamp);
+    const collectedAt = isNaN(rawDate.getTime()) ? new Date() : rawDate;
+
+    const result = await MetricModel.createNodeMetric({
+      agent_id: agent.id.slice(0, 100),
+      cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 100) : null,
+      node_name: data.node_name.slice(0, 255),
+      cpu_usage_percent: Number.isFinite(data.cpu_usage_percent) ? data.cpu_usage_percent : 0,
+      cpu_cores: Number.isInteger(data.cpu_cores) && data.cpu_cores > 0 ? data.cpu_cores : 1,
+      ram_total_bytes: Number.isFinite(data.ram_total_bytes) ? data.ram_total_bytes : 0,
+      ram_used_bytes: Number.isFinite(data.ram_used_bytes) ? data.ram_used_bytes : 0,
+      ram_available_bytes: Number.isFinite(data.ram_available_bytes) ? data.ram_available_bytes : 0,
+      ram_usage_percent: Number.isFinite(data.ram_usage_percent) ? data.ram_usage_percent : 0,
+      disk_total_bytes: Number.isFinite(data.disk_total_bytes) ? data.disk_total_bytes : 0,
+      disk_used_bytes: Number.isFinite(data.disk_used_bytes) ? data.disk_used_bytes : 0,
+      disk_available_bytes: Number.isFinite(data.disk_available_bytes) ? data.disk_available_bytes : 0,
+      disk_usage_percent: Number.isFinite(data.disk_usage_percent) ? data.disk_usage_percent : 0,
+      disk_filesystems: Array.isArray(data.disk_filesystems) ? data.disk_filesystems : [],
+      net_rx_bytes: Number.isFinite(data.net_rx_bytes) ? data.net_rx_bytes : 0,
+      net_tx_bytes: Number.isFinite(data.net_tx_bytes) ? data.net_tx_bytes : 0,
+      net_rx_bytes_per_sec: Number.isFinite(data.net_rx_bytes_per_sec) ? data.net_rx_bytes_per_sec : 0,
+      net_tx_bytes_per_sec: Number.isFinite(data.net_tx_bytes_per_sec) ? data.net_tx_bytes_per_sec : 0,
+      net_interfaces: Array.isArray(data.net_interfaces) ? data.net_interfaces : [],
+      collection_status: data.collection_status || 'OK',
+      collection_errors: data.collection_errors || {},
+      metadata: data.metadata || {},
       collected_at: collectedAt,
     });
 
