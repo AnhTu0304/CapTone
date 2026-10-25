@@ -107,11 +107,21 @@ export class MetricModel {
         ADD COLUMN IF NOT EXISTS environment_id UUID REFERENCES environments(id) ON DELETE SET NULL;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_node_metrics_dedup ON node_metrics(agent_id, node_name, collected_at);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_org_time ON node_metrics(organization_id, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_org_node_time ON node_metrics(organization_id, node_name, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_cluster_node_time ON node_metrics(cluster_id, node_name, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_node_id_time ON node_metrics(node_id, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_agent_time ON node_metrics(agent_id, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_node_time ON node_metrics(node_name, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_cluster_time ON node_metrics(cluster_id, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_collected_at ON node_metrics(collected_at DESC, id DESC);
+      UPDATE node_metrics nm
+      SET
+        environment_id = COALESCE(nm.environment_id, a.environment_id),
+        organization_id = COALESCE(nm.organization_id, e.organization_id)
+      FROM agents a
+      LEFT JOIN environments e ON e.id = a.environment_id
+      WHERE (nm.organization_id IS NULL OR nm.environment_id IS NULL)
+        AND (a.id::text = nm.agent_id OR a.agent_uid = nm.agent_id);
     `);
     this.nodeTableEnsured = true;
   }
@@ -219,38 +229,40 @@ export class MetricModel {
   } {
     const conditions: string[] = ['1=1'];
     const params: any[] = [];
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     if (filter.organizationId) {
       params.push(filter.organizationId);
-      conditions.push(
-        `(nm.organization_id = $${params.length}::uuid OR e.organization_id = $${params.length}::uuid)`
-      );
+      conditions.push(`nm.organization_id = $${params.length}::uuid`);
     } else if (Array.isArray(filter.organizationIds)) {
       if (filter.organizationIds.length === 0) {
         conditions.push('1=0');
       } else {
         params.push(filter.organizationIds);
-        conditions.push(
-          `(nm.organization_id = ANY($${params.length}::uuid[]) OR e.organization_id = ANY($${params.length}::uuid[]))`
-        );
+        conditions.push(`nm.organization_id = ANY($${params.length}::uuid[])`);
       }
     }
 
     if (filter.environmentId) {
       params.push(filter.environmentId);
-      conditions.push(`(nm.environment_id = $${params.length}::uuid OR a.environment_id = $${params.length}::uuid)`);
+      conditions.push(`nm.environment_id = $${params.length}::uuid`);
     }
     if (filter.agentId) {
       params.push(filter.agentId);
-      conditions.push(`(nm.agent_id = $${params.length} OR a.agent_uid = $${params.length})`);
+      conditions.push(`nm.agent_id = $${params.length}`);
     }
     if (filter.clusterId) {
       params.push(filter.clusterId);
       conditions.push(`nm.cluster_id = $${params.length}`);
     }
     if (filter.nodeId) {
-      params.push(filter.nodeId);
-      conditions.push(`(nm.node_id::text = $${params.length} OR nm.node_name = $${params.length})`);
+      if (uuidRegex.test(filter.nodeId)) {
+        params.push(filter.nodeId);
+        conditions.push(`nm.node_id = $${params.length}::uuid`);
+      } else {
+        params.push(filter.nodeId);
+        conditions.push(`nm.node_name = $${params.length}`);
+      }
     }
     if (filter.nodeName) {
       params.push(filter.nodeName);
@@ -272,13 +284,13 @@ export class MetricModel {
   }
 
   /**
-   * Query node metrics with pagination, total count, tenant isolation, and deterministic ordering (Task 4.3)
+   * Query node metrics with pagination, total count, tenant isolation, and deterministic ordering (Task 4.3 & 4.4)
    */
   public static async queryNodeMetricsPaginated(filter: INodeMetricQueryFilter) {
     await this.ensureNodeMetricsTable();
 
     const { whereClause, params } = this.buildNodeMetricsWhere(filter);
-    const safeLimit = Math.min(500, Math.max(1, filter.limit || 50));
+    const safeLimit = Math.min(10000, Math.max(1, filter.limit || 50));
     const safePage = Math.max(1, filter.page || 1);
     const safeOffset =
       filter.offset !== undefined && filter.offset >= 0
@@ -289,12 +301,8 @@ export class MetricModel {
     const countQuery = `
       SELECT COUNT(*)::int AS total
       FROM node_metrics nm
-      LEFT JOIN agents a ON a.id::text = nm.agent_id
-      LEFT JOIN environments e ON e.id = COALESCE(nm.environment_id, a.environment_id)
       WHERE ${whereClause};
     `;
-    const countRes = await pool.query(countQuery, params);
-    const total = countRes.rows[0]?.total || 0;
 
     const dataParams = [...params, safeLimit, safeOffset];
     const limitIdx = dataParams.length - 1;
@@ -303,8 +311,8 @@ export class MetricModel {
     const dataQuery = `
       SELECT
         nm.id,
-        COALESCE(nm.organization_id, e.organization_id) AS organization_id,
-        COALESCE(nm.environment_id, a.environment_id) AS environment_id,
+        nm.organization_id,
+        nm.environment_id,
         nm.agent_id,
         nm.cluster_id,
         nm.node_id,
@@ -331,14 +339,16 @@ export class MetricModel {
         nm.collected_at,
         nm.created_at
       FROM node_metrics nm
-      LEFT JOIN agents a ON a.id::text = nm.agent_id
-      LEFT JOIN environments e ON e.id = COALESCE(nm.environment_id, a.environment_id)
       WHERE ${whereClause}
       ORDER BY nm.collected_at ${sortDir}, nm.id ${sortDir}
       LIMIT $${limitIdx} OFFSET $${offsetIdx};
     `;
 
-    const res = await pool.query(dataQuery, dataParams);
+    const [countRes, res] = await Promise.all([
+      pool.query(countQuery, params),
+      pool.query(dataQuery, dataParams),
+    ]);
+    const total = countRes.rows[0]?.total || 0;
     const totalPages = Math.max(1, Math.ceil(total / safeLimit));
 
     return {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
+import NodeMetricsChartsPanel from '../../../components/dashboard/NodeMetricsChartsPanel';
 import {
   Server,
   ArrowLeft,
@@ -1575,6 +1576,14 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               </div>
             </div>
           )}
+
+          {/* Biểu đồ Chuỗi Thời Gian Node Metrics (Lightweight Charts v5.2.1) */}
+          <NodeMetricsChartsPanel
+            orgId={clusterData.organization_id || currentOrg?.id}
+            clusterId={clusterData.id || clusterId}
+            agentId={clusterData.agent_id}
+            nodesOverride={nodes}
+          />
         </div>
       )}
 

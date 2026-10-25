@@ -31,7 +31,8 @@
     "test:agent-timeout": "tsx --test src/test/agentTimeoutStatus.test.ts",
     "test:cluster": "tsx --test src/test/clusterManagement.test.ts",
     "test:agent-disconnect": "tsx --test src/test/agentDisconnectDelete.test.ts",
-    "test:node-metrics": "tsx --test src/test/nodeMetricsApi.test.ts"
+    "test:node-metrics": "tsx --test src/test/nodeMetricsApi.test.ts",
+    "benchmark:node-metrics": "tsx src/scripts/benchmarkNodeMetricsTask44.ts"
   },
   "keywords": [
     "nodejs",

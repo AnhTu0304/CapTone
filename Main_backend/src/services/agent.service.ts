@@ -321,8 +321,8 @@ export class AgentService {
     let limit = 50;
     if (query.limit !== undefined && String(query.limit).trim() !== '') {
       const parsedLimit = Number(query.limit);
-      if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 500) {
-        throw ApiError.badRequest('Tham số limit phải là số nguyên từ 1 đến 500');
+      if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 10000) {
+        throw ApiError.badRequest('Tham số limit phải là số nguyên từ 1 đến 10000');
       }
       limit = parsedLimit;
     }
@@ -384,6 +384,7 @@ export class AgentService {
     const nodeName = (query.node_name as string) || (query.nodeName as string);
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+    let resolvedAgentId = agentId;
     // 4. Verify Agent resource existence & tenant ownership if agentId is provided
     if (agentId) {
       const agentRow = uuidRegex.test(agentId)
@@ -400,6 +401,7 @@ export class AgentService {
       if (!isPlatformAdmin && agentOrgId && !allowedOrgIds.includes(agentOrgId)) {
         throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền xem metrics của Agent thuộc tổ chức khác');
       }
+      resolvedAgentId = agentRow.id;
     }
 
     // 5. Verify Cluster resource existence & tenant ownership if clusterId is provided
@@ -470,7 +472,7 @@ export class AgentService {
     return await MetricModel.queryNodeMetricsPaginated({
       organizationId: effectiveOrgId,
       organizationIds: !isPlatformAdmin && !effectiveOrgId ? allowedOrgIds : undefined,
-      agentId,
+      agentId: resolvedAgentId,
       clusterId,
       nodeId,
       nodeName,

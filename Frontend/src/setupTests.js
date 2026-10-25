@@ -10,7 +10,40 @@ if (typeof window !== 'undefined') {
     window.HTMLCanvasElement.prototype.getContext = () => null;
   }
   window.scrollTo = jest.fn();
+  if (!window.ResizeObserver) {
+    window.ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  }
 }
+
+// Mock lightweight-charts v5 ESM package for Jest / jsdom environment
+jest.mock('lightweight-charts', () => ({
+  createChart: jest.fn(() => ({
+    addSeries: jest.fn(() => ({
+      setData: jest.fn(),
+      update: jest.fn(),
+    })),
+    applyOptions: jest.fn(),
+    remove: jest.fn(),
+    subscribeCrosshairMove: jest.fn(),
+    unsubscribeCrosshairMove: jest.fn(),
+    timeScale: () => ({
+      fitContent: jest.fn(),
+    }),
+  })),
+  AreaSeries: 'AreaSeriesDefinition',
+  LineSeries: 'LineSeriesDefinition',
+  HistogramSeries: 'HistogramSeriesDefinition',
+  CandlestickSeries: 'CandlestickSeriesDefinition',
+  BarSeries: 'BarSeriesDefinition',
+  BaselineSeries: 'BaselineSeriesDefinition',
+  ColorType: { Solid: 'solid', VerticalGradient: 'gradient' },
+  CrosshairMode: { Normal: 0, Magnet: 1 },
+  LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
+}));
 
 // Mock Three.js for Jest / jsdom environment
 jest.mock('three', () => {

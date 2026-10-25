@@ -4,7 +4,7 @@
  * Connects directly to Main Backend (/api/v1/telemetry) with automatic fallback.
  */
 
-import { getAuthToken } from './apiClient';
+import { getAuthToken, request } from './apiClient';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
 
@@ -27,6 +27,99 @@ const getHeaders = () => {
 };
 
 export const telemetryService = {
+  /**
+   * Query historical & real-time Node Metrics from Backend Task 4.3 API
+   * Supports tenant-scoped routes:
+   * - GET /api/v1/organizations/:orgId/clusters/:clusterId/nodes/:nodeId/metrics
+   * - GET /api/v1/organizations/:orgId/agents/:agentId/metrics
+   * - GET /api/v1/nodes/:nodeId/metrics
+   * - GET /api/v1/telemetry/node-metrics
+   */
+  async getNodeMetrics(params = {}, options = {}) {
+    const {
+      orgId,
+      clusterId,
+      agentId,
+      nodeId,
+      nodeName,
+      from,
+      to,
+      limit = 200,
+      page = 1,
+      order = 'asc',
+    } = params;
+
+    const validOrgId =
+      orgId &&
+      !orgId.startsWith('org-') &&
+      !orgId.startsWith('sandbox-') &&
+      orgId !== 'org-empty'
+        ? orgId
+        : null;
+    const validClusterId =
+      clusterId &&
+      !clusterId.startsWith('org-') &&
+      !clusterId.startsWith('sandbox-') &&
+      clusterId !== 'k8s-cluster-01'
+        ? clusterId
+        : null;
+    const validNodeId =
+      nodeId && nodeId !== 'ALL' && nodeId !== 'all' ? nodeId : null;
+
+    const queryParams = new URLSearchParams();
+    if (from) queryParams.set('from', from);
+    if (to) queryParams.set('to', to);
+    if (limit) queryParams.set('limit', String(limit));
+    if (page) queryParams.set('page', String(page));
+    if (order) queryParams.set('order', order);
+    if (nodeName && nodeName !== 'ALL' && nodeName !== 'all') {
+      queryParams.set('node_name', nodeName);
+    }
+
+    let endpoint = '/telemetry/node-metrics';
+    if (validOrgId && validClusterId && validNodeId) {
+      endpoint = `/organizations/${encodeURIComponent(validOrgId)}/clusters/${encodeURIComponent(validClusterId)}/nodes/${encodeURIComponent(validNodeId)}/metrics`;
+    } else if (validOrgId && agentId) {
+      endpoint = `/organizations/${encodeURIComponent(validOrgId)}/agents/${encodeURIComponent(agentId)}/metrics`;
+    } else if (validNodeId) {
+      endpoint = `/nodes/${encodeURIComponent(validNodeId)}/metrics`;
+      if (validClusterId) queryParams.set('cluster_id', validClusterId);
+      if (validOrgId) queryParams.set('organization_id', validOrgId);
+    } else {
+      if (validOrgId) queryParams.set('organization_id', validOrgId);
+      if (validClusterId) queryParams.set('cluster_id', validClusterId);
+      if (agentId) queryParams.set('agent_id', agentId);
+    }
+
+    const qs = queryParams.toString();
+    const fullEndpoint = qs ? `${endpoint}?${qs}` : endpoint;
+
+    const res = await request(fullEndpoint, {
+      method: 'GET',
+      signal: options.signal,
+    });
+
+    const data = res?.data || res || {};
+    const items = Array.isArray(data.items)
+      ? data.items
+      : Array.isArray(data.metrics)
+        ? data.metrics
+        : Array.isArray(data)
+          ? data
+          : [];
+
+    return {
+      items,
+      pagination: data.pagination || {
+        page: 1,
+        limit: items.length || limit,
+        total: items.length,
+        total_pages: 1,
+        has_more: false,
+      },
+    };
+  },
+
   /**
    * Fetch comprehensive real-time telemetry summary
    */
