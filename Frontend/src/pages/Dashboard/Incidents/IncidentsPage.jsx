@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { aiService } from '../../../services/aiService';
+import { clusterService } from '../../../services/clusterService';
 import RootCauseModal from './RootCauseModal';
 import {
   AlertTriangle,
@@ -13,7 +14,8 @@ import {
   PlayCircle,
   Eye,
   Database,
-  ShieldCheck
+  ShieldCheck,
+  Server
 } from 'lucide-react';
 
 const INITIAL_INCIDENTS = [];
@@ -39,9 +41,12 @@ const mapBackendIncidentToUI = (item) => {
   if (isResolved) statusLabel = 'Đã khắc phục hoàn tất';
   else if (isRecovering) statusLabel = 'Đang tự phục hồi';
 
-  let serviceName = item.target_id || 'sme-order-service';
-  if (item.title && item.title.includes(' on ')) {
+  let serviceName = item.target_id;
+  if (!serviceName && item.title && item.title.includes(' on ')) {
     serviceName = item.title.split(' on ')[1].trim();
+  }
+  if (!serviceName) {
+    serviceName = 'ứng dụng hệ thống';
   }
 
   // Phân tích kết quả RCA lưu trong DB (nếu có)
@@ -84,6 +89,10 @@ const mapBackendIncidentToUI = (item) => {
   return {
     id: shortId,
     rawId: item.id,
+    predictionId: item.prediction_id,
+    cluster: item.cluster_name || item.cluster_id,
+    clusterId: item.cluster_id,
+    clusterName: item.cluster_name,
     title: item.title,
     service: serviceName,
     namespace: 'production',
@@ -111,28 +120,55 @@ const mapBackendIncidentToUI = (item) => {
 };
 
 export const IncidentsPage = ({ onNavigate }) => {
-  const { currentOrg, currentEnv } = useDashboard();
+  const { currentOrg, currentEnv, envList } = useDashboard();
+  const [selectedCluster, setSelectedCluster] = useState('all'); // 'all' | clusterId
   const [selectedSeverity, setSelectedSeverity] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedService, setSelectedService] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
   const [incidents, setIncidents] = useState([]);
+  const [clusterList, setClusterList] = useState([]);
+  const [registeredWorkloads, setRegisteredWorkloads] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
   const [activeModalIncident, setActiveModalIncident] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Tải danh sách cụm K8s và Workloads đã đăng ký trong tổ chức
+  useEffect(() => {
+    let isMounted = true;
+    const loadAuxiliary = async () => {
+      try {
+        const workloads = await aiService.getWorkloads();
+        if (isMounted && Array.isArray(workloads)) {
+          setRegisteredWorkloads(workloads);
+        }
+      } catch (err) {}
+
+      try {
+        const orgId = currentOrg?.id;
+        if (orgId && !orgId.startsWith('sandbox-') && orgId !== 'org-acme') {
+          const clusters = await clusterService.getClustersByOrg(orgId);
+          if (isMounted && Array.isArray(clusters)) {
+            setClusterList(clusters);
+          }
+        }
+      } catch (err) {}
+    };
+    loadAuxiliary();
+    return () => { isMounted = false; };
+  }, [currentOrg?.id]);
+
   // Tải dữ liệu thật từ Main Backend API
   const fetchIncidents = useCallback(async () => {
     setIsLoading(true);
     try {
-      const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster;
       const activeOrgId = currentOrg?.id;
 
       const params = {
-        limit: 50,
-        cluster_id: activeClusterId,
+        limit: 150,
+        cluster_id: selectedCluster === 'all' ? undefined : selectedCluster,
         organization_id: activeOrgId,
         status: selectedStatus,
         severity: selectedSeverity,
@@ -152,7 +188,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, selectedStatus, selectedSeverity, searchQuery]);
+  }, [currentOrg?.id, selectedCluster, selectedStatus, selectedSeverity, searchQuery]);
 
   useEffect(() => {
     fetchIncidents();
@@ -233,11 +269,54 @@ export const IncidentsPage = ({ onNavigate }) => {
     setActiveModalIncident(newInc);
   };
 
-  // Danh sách service động từ các sự cố hiện có
+  // Danh sách Cụm K8s động kết hợp từ Context, Cluster API và Incidents
+  const availableClusters = useMemo(() => {
+    const map = new Map();
+    if (Array.isArray(envList)) {
+      envList.forEach((e) => {
+        const id = e.clusterId || e.id;
+        const name = e.cluster || e.name || id;
+        if (id && name) map.set(id, name);
+      });
+    }
+    if (Array.isArray(clusterList)) {
+      clusterList.forEach((c) => {
+        if (c.id && c.name) map.set(c.id, c.name);
+        if (c.name) map.set(c.name, c.name);
+      });
+    }
+    incidents.forEach((inc) => {
+      const id = inc.clusterId || inc.cluster;
+      const name = inc.clusterName || inc.cluster || id;
+      if (id && name && !map.has(id)) {
+        map.set(id, name);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [envList, clusterList, incidents]);
+
+  // Danh sách service động kèm số lượng sự cố thực tế
   const availableServices = useMemo(() => {
-    const set = new Set(incidents.map((i) => i.service).filter(Boolean));
-    return Array.from(set);
-  }, [incidents]);
+    const counts = {};
+    incidents.forEach((i) => {
+      if (i.service) {
+        counts[i.service] = (counts[i.service] || 0) + 1;
+      }
+    });
+
+    const allServiceNames = new Set([
+      ...Object.keys(counts),
+      ...(registeredWorkloads || []),
+    ]);
+
+    return Array.from(allServiceNames)
+      .filter((s) => s && s !== 'selfheal-agent' && !s.includes('-0000-'))
+      .map((name) => ({
+        name,
+        count: counts[name] || 0,
+      }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [incidents, registeredWorkloads]);
 
   // Thống kê nhanh
   const stats = useMemo(() => {
@@ -265,7 +344,8 @@ export const IncidentsPage = ({ onNavigate }) => {
         inc.service.toLowerCase().includes(searchQuery.toLowerCase()) ||
         inc.rootCause.toLowerCase().includes(searchQuery.toLowerCase());
 
-      return matchSeverity && matchStatus && matchService && matchSearch;
+      const matchCluster = selectedCluster === 'all' || inc.clusterId === selectedCluster || inc.cluster === selectedCluster || inc.clusterName === selectedCluster;
+      return matchCluster && matchSeverity && matchStatus && matchService && matchSearch;
     });
   }, [incidents, selectedSeverity, selectedStatus, selectedService, searchQuery]);
 
@@ -334,8 +414,8 @@ export const IncidentsPage = ({ onNavigate }) => {
               </div>
               <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '3px', margin: 0 }}>
                 Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'SME Retail Enterprise'}</strong> &bull; Cụm K8s:{' '}
-                <span style={{ fontWeight: 600, color: 'var(--dash-primary)' }}>
-                  {currentEnv?.cluster || 'cluster-k8s-sme-01'}
+                <span style={{ fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
+                  {selectedCluster === 'all' ? 'Tất cả cụm K8s (' + availableClusters.length + ' cụm)' : (availableClusters.find(c => c.id === selectedCluster)?.name || selectedCluster)}
                 </span>{' '}
                 &bull; Bảng tổng quan sự cố và suy diễn cây nguyên nhân nhân quả
               </p>
@@ -421,7 +501,7 @@ export const IncidentsPage = ({ onNavigate }) => {
             {stats.total}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
-            Cụm {currentEnv?.cluster || 'cluster-k8s-sme-01'}
+            {selectedCluster === 'all' ? 'Toàn bộ ' + availableClusters.length + ' cụm K8s' : 'Cụm ' + (availableClusters.find(c => c.id === selectedCluster)?.name || selectedCluster)}
           </div>
         </div>
 
@@ -534,6 +614,39 @@ export const IncidentsPage = ({ onNavigate }) => {
         }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+          {/* Cluster Select */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Server size={13} color="#2563EB" /> Cụm K8s:
+            </span>
+            <select
+              value={selectedCluster}
+              onChange={(e) => {
+                setSelectedCluster(e.target.value);
+                setSelectedService('all');
+              }}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                border: '1px solid #BFDBFE',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                color: '#1E40AF',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">Tất cả cụm K8s ({availableClusters.length})</option>
+              {availableClusters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Severity Select */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Mức độ:</span>
@@ -595,18 +708,19 @@ export const IncidentsPage = ({ onNavigate }) => {
                 height: '32px',
                 padding: '0 8px',
                 fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
+                fontWeight: 600,
+                border: '1px solid #BBF7D0',
                 borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                color: 'var(--dash-text-primary)',
+                backgroundColor: '#F0FDF4',
+                color: '#15803D',
                 outline: 'none',
                 cursor: 'pointer',
               }}
             >
-              <option value="all">Tất cả dịch vụ</option>
+              <option value="all">Tất cả dịch vụ ({availableServices.length})</option>
               {availableServices.map((svc) => (
-                <option key={svc} value={svc}>
-                  {svc}
+                <option key={svc.name} value={svc.name}>
+                  {svc.name} {svc.count > 0 ? '(' + svc.count + ')' : ''}
                 </option>
               ))}
             </select>

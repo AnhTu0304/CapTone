@@ -30,6 +30,7 @@ export const TopHeader = () => {
     setCurrentEnv,
     envList,
     isLoadingEnvs,
+    fetchOrgEnvironmentsAndClusters,
     isAgentConnected,
     setIsAgentConnected,
     isAutoRefresh,
@@ -341,7 +342,13 @@ export const TopHeader = () => {
         {/* Environment & K8s Cluster Selector Dropdown */}
         <div ref={envRef} style={{ position: 'relative' }}>
           <button
-            onClick={() => setIsEnvDropdownOpen(!isEnvDropdownOpen)}
+            onClick={() => {
+              const nextState = !isEnvDropdownOpen;
+              setIsEnvDropdownOpen(nextState);
+              if (nextState && currentOrg?.id && fetchOrgEnvironmentsAndClusters) {
+                fetchOrgEnvironmentsAndClusters(currentOrg.id);
+              }
+            }}
             title="Chọn Môi Trường & Cụm Kubernetes"
             style={{
               display: 'flex',
@@ -418,7 +425,30 @@ export const TopHeader = () => {
                 }}
               >
                 <span>Môi Trường & Cụm K8s</span>
-                <span style={{ fontSize: '0.625rem', color: 'var(--dash-primary)' }}>{envList.length} Cụm</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.625rem', color: 'var(--dash-primary)' }}>{envList.length} Cụm</span>
+                  <button
+                    type="button"
+                    title="Tải lại danh sách cụm K8s"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (currentOrg?.id && fetchOrgEnvironmentsAndClusters) {
+                        fetchOrgEnvironmentsAndClusters(currentOrg.id);
+                      }
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '2px',
+                      cursor: 'pointer',
+                      color: 'var(--dash-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <RefreshCw size={11} className={isLoadingEnvs ? 'dash-spin' : ''} />
+                  </button>
+                </div>
               </div>
 
               {isLoadingEnvs && envList.length === 0 && (
@@ -429,7 +459,27 @@ export const TopHeader = () => {
 
               {!isLoadingEnvs && envList.length === 0 && (
                 <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
-                  Chưa có cụm K8s nào trong tổ chức.
+                  <p style={{ margin: '0 0 8px 0' }}>Chưa có cụm K8s nào trong tổ chức.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentOrg?.id && fetchOrgEnvironmentsAndClusters) {
+                        fetchOrgEnvironmentsAndClusters(currentOrg.id);
+                      }
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      backgroundColor: '#EFF6FF',
+                      color: '#2563EB',
+                      border: '1px solid #BFDBFE',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Tải lại danh sách cụm
+                  </button>
                 </div>
               )}
 

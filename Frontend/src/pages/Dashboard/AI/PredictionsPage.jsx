@@ -285,6 +285,29 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
   };
 };
 
+export const normalizeServiceName = (val) => {
+  if (!val) return '';
+  const str = String(val).trim();
+  // Map specific legacy seed UUIDs to actual database workload names if a UUID was passed
+  if (str === 'd9d4f68b-ffd5-4d44-8de2-980fcd6087d7') return 'selfheal-test-app';
+  if (
+    str === 'c0000000-0000-0000-0000-000000000001' ||
+    str === 'c0000000-0000-0000-0000-000000000002' ||
+    str === '6341454b-b372-479f-8eac-e0b39ad715e1' ||
+    str === '446f1224-4c37-4a4c-89d3-611dc51a5cc9'
+  ) return 'sme-order-service';
+  if (str === 'fafbe6bc-d295-4f3b-aaa7-e5d3a3a16d2e' || str === '899b0ff5-c316-4ac3-9115-c802ad0bba7d') return 'chaos-testagent2';
+  if (str === '19765456-dfdd-4d87-b32a-67d3e7be74c1' || str === '8a1c09b8-0dda-4777-9a6f-7a7a723a7197') return 'ecommerce-store-app';
+  if (str === '6c8b57e0-6503-4249-802a-84e8751c01b9' || str === '58151d7d-b1fe-42cc-80de-594457c19c70') return 'attack-injector-app';
+
+  // If raw UUID without mapping, drop it
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return '';
+  }
+  // Otherwise return the real service name as-is
+  return str;
+};
+
 export const PredictionsPage = () => {
   const { currentOrg, currentEnv, isAgentConnected, envList, setCurrentEnv, isRefreshing, triggerRefresh } = useDashboard();
 
@@ -295,10 +318,40 @@ export const PredictionsPage = () => {
   const [predictions, setPredictions] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [healingActions, setHealingActions] = useState([]);
+  const [registeredWorkloads, setRegisteredWorkloads] = useState([]);
   const [selectedPrediction, setSelectedPrediction] = useState(null);
-  const [expandedPredictionId, setExpandedPredictionId] = useState(null);
+  const [gruModal, setGruModal] = useState({ isOpen: false, prediction: null, inputs: [], loading: false });
   const [predictionInputs, setPredictionInputs] = useState([]);
   const [loadingInputs, setLoadingInputs] = useState(false);
+
+  // Danh sách các dịch vụ hợp lệ của Cụm hiện tại (tải động từ telemetry & Backend)
+  const availableWorkloads = useMemo(() => {
+    if (!isAgentConnected) return [];
+    const set = new Set();
+    if (Array.isArray(registeredWorkloads)) {
+      registeredWorkloads.forEach((w) => {
+        const name = normalizeServiceName(w);
+        if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
+          set.add(name);
+        }
+      });
+    }
+    predictions.forEach((p) => {
+      const name = normalizeServiceName(p.workload_name || p.service_id);
+      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
+    });
+    recommendations.forEach((r) => {
+      const name = normalizeServiceName(
+        r.target_name || r.target_id || (r.incident_title?.includes(' on ') ? r.incident_title.split(' on ')[1] : null)
+      );
+      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
+    });
+    healingActions.forEach((a) => {
+      const name = normalizeServiceName(a.target_name || a.target_id);
+      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
+    });
+    return Array.from(set).filter(Boolean);
+  }, [isAgentConnected, registeredWorkloads, predictions, recommendations, healingActions]);
 
   // Trạng thái thao tác & WebSocket realtime
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -309,12 +362,13 @@ export const PredictionsPage = () => {
   const [activeStep, setActiveStep] = useState(1);
   const [batchProgress, setBatchProgress] = useState(null);
   const [batchProgressMap, setBatchProgressMap] = useState({});
-  const [pinnedService, setPinnedService] = useState('sme-order-service');
-  const pinnedServiceRef = useRef('sme-order-service');
+  const [pinnedService, setPinnedService] = useState('');
+  const pinnedServiceRef = useRef('');
   const [serviceInputsMap, setServiceInputsMap] = useState({});
   const [servicePredictionMap, setServicePredictionMap] = useState({});
   const [serviceStepMap, setServiceStepMap] = useState({});
   const [activeBottomTab, setActiveBottomTab] = useState('recommendations'); // 'recommendations' | 'healing_actions' | 'predictions'
+  const [bottomServiceFilter, setBottomServiceFilter] = useState('ALL');
 
   // Modal Bằng chứng RCA
   const [evidenceModal, setEvidenceModal] = useState({
@@ -346,8 +400,8 @@ export const PredictionsPage = () => {
 
   // Bộ lọc danh sách dự báo
   const [selectedTypeFilter, setSelectedTypeFilter] = useState('ALL');
-  const [selectedWorkload, setSelectedWorkload] = useState('sme-order-service');
-  const selectedWorkloadRef = useRef('sme-order-service');
+  const [selectedWorkload, setSelectedWorkload] = useState('ALL');
+  const selectedWorkloadRef = useRef('ALL');
   const selectedPredictionRef = useRef(null);
   const [logWorkloadFilter, setLogWorkloadFilter] = useState('ALL');
   const [lastWsSyncTime, setLastWsSyncTime] = useState(() => new Date().toLocaleTimeString('vi-VN'));
@@ -369,16 +423,21 @@ export const PredictionsPage = () => {
       if (statsRes) setStats(statsRes);
     });
 
-    const targetService = wl !== 'ALL' ? wl : (pinnedServiceRef.current || 'sme-order-service');
-    if (servicePredictionMap[targetService]) {
-      setSelectedPrediction(servicePredictionMap[targetService]);
-      selectedPredictionRef.current = servicePredictionMap[targetService];
-    } else if (predictions && predictions.length > 0) {
-      const target = predictions.find((p) => p.workload_name === targetService);
+    const targetService = wl !== 'ALL' ? wl : (pinnedServiceRef.current || availableWorkloads[0] || '');
+    if (targetService) {
+      const target = predictions.find(
+        (p) => normalizeServiceName(p.workload_name || p.service_id) === targetService
+      );
       if (target) {
         setSelectedPrediction(target);
         selectedPredictionRef.current = target;
         loadInputs(target.id, true, targetService);
+      } else if (servicePredictionMap[targetService]) {
+        setSelectedPrediction(servicePredictionMap[targetService]);
+        selectedPredictionRef.current = servicePredictionMap[targetService];
+        if (servicePredictionMap[targetService].id) {
+          loadInputs(servicePredictionMap[targetService].id, true, targetService);
+        }
       }
     }
   };
@@ -392,12 +451,10 @@ export const PredictionsPage = () => {
       if (Array.isArray(inputs) && inputs.length > 0) {
         setPredictionInputs(inputs);
         if (serviceId) {
-          setServiceInputsMap((prev) => {
-            if (!prev[serviceId] || prev[serviceId].length === 0) {
-              return { ...prev, [serviceId]: inputs };
-            }
-            return prev;
-          });
+          setServiceInputsMap((prev) => ({
+            ...prev,
+            [serviceId]: inputs,
+          }));
         }
       }
     } catch (err) {
@@ -413,7 +470,7 @@ export const PredictionsPage = () => {
     setLoading(true);
     try {
       const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
-      const [healthRes, statsRes, predRes, recRes, healRes] = await Promise.all([
+      const [healthRes, statsRes, predRes, recRes, healRes, workloadsRes] = await Promise.all([
         aiService.getAiHealth(),
         aiService.getPredictionStats({
           cluster_id: clusterParam,
@@ -422,14 +479,17 @@ export const PredictionsPage = () => {
         aiService.getPredictions({
           limit: 30,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
+          cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 50 }),
-        aiService.getHealingActions({ limit: 50 }),
+        aiService.getRecommendations({ limit: 50, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 50, cluster_id: clusterParam }),
+        aiService.getWorkloads(clusterParam),
       ]);
 
       setAiHealth(healthRes);
       setStats(statsRes);
       setHealingActions(healRes || []);
+      setRegisteredWorkloads(workloadsRes || []);
 
       const predItems = predRes?.items || [];
       setPredictions(predItems);
@@ -439,17 +499,18 @@ export const PredictionsPage = () => {
       if (predItems.length > 0) {
         const activeTarget = selectedWorkloadRef.current !== 'ALL'
           ? selectedWorkloadRef.current
-          : (pinnedServiceRef.current || 'sme-order-service');
+          : (pinnedServiceRef.current || normalizeServiceName(predItems[0]?.workload_name || predItems[0]?.service_id) || '');
 
-        const targetPred = predItems.find((p) => p.workload_name === activeTarget) || predItems[0];
+        const targetPred = predItems.find((p) => normalizeServiceName(p.workload_name || p.service_id) === activeTarget) || predItems[0];
         if (targetPred) {
+          const normName = normalizeServiceName(targetPred.workload_name || targetPred.service_id);
           setSelectedPrediction(targetPred);
           selectedPredictionRef.current = targetPred;
-          if (targetPred.workload_name) {
-            setPinnedService(targetPred.workload_name);
-            pinnedServiceRef.current = targetPred.workload_name;
+          if (normName) {
+            setPinnedService(normName);
+            pinnedServiceRef.current = normName;
           }
-          loadInputs(targetPred.id, false, targetPred.workload_name);
+          loadInputs(targetPred.id, false, normName);
         }
       } else {
         setSelectedPrediction(null);
@@ -474,28 +535,60 @@ export const PredictionsPage = () => {
         aiService.getPredictions({
           limit: 30,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
+          cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 50 }),
-        aiService.getHealingActions({ limit: 50 }),
+        aiService.getRecommendations({ limit: 50, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 50, cluster_id: clusterParam }),
       ]);
 
-      if (statsRes) setStats(statsRes);
-      if (healRes) setHealingActions(healRes || []);
-      if (recRes) setRecommendations(recRes || []);
+      if (statsRes) {
+        setStats((prev) => {
+          if (statsRes.total >= (prev.total || 0) || Math.abs((prev.total || 0) - statsRes.total) > 5) {
+            return statsRes;
+          }
+          return prev;
+        });
+      }
+
+      if (Array.isArray(healRes)) {
+        setHealingActions((prev) => {
+          if (prev.length === healRes.length && prev[0]?.id === healRes[0]?.id && prev[prev.length - 1]?.id === healRes[healRes.length - 1]?.id) {
+            return prev;
+          }
+          return healRes;
+        });
+      }
+
+      if (Array.isArray(recRes)) {
+        setRecommendations((prev) => {
+          if (prev.length === recRes.length && prev[0]?.id === recRes[0]?.id && prev[prev.length - 1]?.id === recRes[recRes.length - 1]?.id) {
+            return prev;
+          }
+          return recRes;
+        });
+      }
 
       const predItems = predRes?.items || [];
-      setPredictions(predItems);
+      if (Array.isArray(predItems) && predItems.length > 0) {
+        setPredictions((prev) => {
+          if (prev.length === predItems.length && prev[0]?.id === predItems[0]?.id && prev[prev.length - 1]?.id === predItems[predItems.length - 1]?.id) {
+            return prev;
+          }
+          return predItems;
+        });
+      }
       if (predItems.length > 0) {
         const activeTarget = selectedWorkloadRef.current !== 'ALL'
           ? selectedWorkloadRef.current
-          : (pinnedServiceRef.current || 'sme-order-service');
+          : (pinnedServiceRef.current || normalizeServiceName(predItems[0]?.workload_name || predItems[0]?.service_id) || '');
 
-        const target = predItems.find((p) => p.workload_name === activeTarget);
+        const target = predItems.find((p) => normalizeServiceName(p.workload_name || p.service_id) === activeTarget);
         if (target) {
+          const normName = normalizeServiceName(target.workload_name || target.service_id);
           setSelectedPrediction((prev) => {
             if (!prev || prev.id !== target.id) {
               selectedPredictionRef.current = target;
-              loadInputs(target.id, true, target.workload_name);
+              loadInputs(target.id, true, normName);
               return target;
             }
             return prev;
@@ -514,17 +607,26 @@ export const PredictionsPage = () => {
     setRecommendations([]);
     setHealingActions([]);
     setStats({ total: 0, by_type: {}, avg_confidence: 0 });
+    setSelectedWorkload('ALL');
+    selectedWorkloadRef.current = 'ALL';
+    setPinnedService('');
+    pinnedServiceRef.current = '';
+    setBottomServiceFilter('ALL');
+    setLogWorkloadFilter('ALL');
+    setRegisteredWorkloads([]);
     loadData();
   }, [currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id, loadData]);
 
-  // Tự động Polling ngầm mỗi 5 giây đảm bảo giao diện luôn nhảy số Realtime (chỉ khi Agent Online)
+  // Tự động Polling ngầm dự phòng (chỉ khi Agent Online)
+  // Khi WebSocket đã kết nối trực tiếp (isWsLive), giảm tần suất polling xuống 20s để triệt tiêu hiện tượng giật số
   useEffect(() => {
     if (!isAgentConnected) return;
+    const intervalMs = isWsLive ? 20000 : 5000;
     const timer = setInterval(() => {
       silentSyncData();
-    }, 5000);
+    }, intervalMs);
     return () => clearInterval(timer);
-  }, [isAgentConnected, silentSyncData]);
+  }, [isAgentConnected, isWsLive, silentSyncData]);
 
   // Kết nối WebSocket Realtime Stream (Push Protocol) (chỉ khi Agent Online)
   useEffect(() => {
@@ -534,7 +636,8 @@ export const PredictionsPage = () => {
       return;
     }
     const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
-    const targetService = selectedWorkload !== 'ALL' ? selectedWorkload : (pinnedService || 'sme-order-service');
+    const targetService = selectedWorkload !== 'ALL' ? selectedWorkload : (pinnedService || availableWorkloads[0] || '');
+    if (!targetService) return;
     const unsubscribe = telemetryService.subscribeWebSocket(
       targetService,
       (payload) => {
@@ -544,7 +647,7 @@ export const PredictionsPage = () => {
         if (payload.type === 'ai_prediction' && payload.data) {
           const newPred = payload.data;
           const predId = newPred.prediction_id || newPred.id;
-          const wlName = newPred.workload_name || newPred.service_id || newPred.target_name || 'sme-order-service';
+          const wlName = normalizeServiceName(newPred.workload_name || newPred.service_id || newPred.target_name);
           const evalTime = newPred.evaluated_at || newPred.predicted_at || new Date().toISOString();
           const timeStr = new Date(evalTime).toLocaleTimeString('vi-VN');
 
@@ -604,9 +707,9 @@ export const PredictionsPage = () => {
           // CHỈ cập nhật hiển thị chính nếu đúng là Service đang được người dùng theo dõi
           const currentTarget = selectedWorkloadRef.current !== 'ALL'
             ? selectedWorkloadRef.current
-            : (pinnedServiceRef.current || 'sme-order-service');
+            : (pinnedServiceRef.current || availableWorkloads[0] || '');
 
-          if (wlName === currentTarget) {
+          if (wlName && wlName === currentTarget) {
             setLastWsSyncTime(timeStr);
             setSelectedPrediction(formatted);
             selectedPredictionRef.current = formatted;
@@ -668,32 +771,24 @@ export const PredictionsPage = () => {
           // CHỈ cập nhật trạng thái hiển thị nếu đúng là Service đang được người dùng xem
           const currentTarget = selectedWorkloadRef.current !== 'ALL'
             ? selectedWorkloadRef.current
-            : (pinnedServiceRef.current || 'sme-order-service');
+            : (pinnedServiceRef.current || availableWorkloads[0] || '');
 
-          if (sId === currentTarget) {
+          if (sId && sId === currentTarget) {
             setBatchProgress(bp);
             if (bp.active_step) {
               setActiveStep(bp.active_step);
             }
-            setLastWsSyncTime(new Date().toLocaleTimeString('vi-VN'));
           }
         }
 
-        // 3. Gói tin Live Pulse định kỳ từ Backend
-        if ((payload.type === 'live_pulse' || payload.type === 'initial_state') && payload.data) {
+        // 3. Gói tin Khởi tạo ban đầu từ WebSocket (chỉ nạp khi danh sách chưa có)
+        if (payload.type === 'initial_state' && payload.data) {
           const summary = payload.data;
           if (Array.isArray(summary.predictions) && summary.predictions.length > 0) {
-            setPredictions((prev) => {
-              const existingIds = new Set(prev.map((p) => p.id));
-              const fresh = summary.predictions.filter((p) => !existingIds.has(p.id));
-              if (fresh.length > 0) {
-                return [...fresh, ...prev].slice(0, 15);
-              }
-              return prev;
-            });
+            setPredictions((prev) => (prev.length === 0 ? summary.predictions : prev));
           }
           if (Array.isArray(summary.recommendations) && summary.recommendations.length > 0) {
-            setRecommendations(summary.recommendations);
+            setRecommendations((prev) => (prev.length === 0 ? summary.recommendations : prev));
           }
         }
 
@@ -702,7 +797,7 @@ export const PredictionsPage = () => {
           const newRec = payload.data;
           setRecommendations((prev) => {
             if (!prev.some((r) => r.id === newRec.id)) {
-              return [newRec, ...prev.slice(0, 9)];
+              return [newRec, ...prev.slice(0, 49)];
             }
             return prev;
           });
@@ -725,7 +820,15 @@ export const PredictionsPage = () => {
   const handleRunManualInference = async () => {
     setIsEvaluating(true);
     try {
-      const targetWorkload = displaySelectedPrediction?.workload_name || displayPredictions[0]?.workload_name || 'sme-order-service';
+      const targetWorkload = displaySelectedPrediction?.workload_name || displayPredictions[0]?.workload_name || availableWorkloads[0];
+      if (!targetWorkload) {
+        setIsEvaluating(false);
+        setNoticeMessage({
+          type: 'warning',
+          text: 'Chưa có dịch vụ nào trên cụm này để thực hiện suy diễn.',
+        });
+        return;
+      }
       const res = await aiService.triggerManualInference(targetWorkload, {
         forceRca: false,
         autoTriggerRca: true,
@@ -770,13 +873,24 @@ export const PredictionsPage = () => {
     loadInputs(pred.id);
   };
 
-  const handleToggleExpandPrediction = (pred) => {
-    if (expandedPredictionId === pred.id) {
-      setExpandedPredictionId(null);
-    } else {
-      setExpandedPredictionId(pred.id);
-      handleSelectPrediction(pred);
+  const handleOpenGruModal = async (pred) => {
+    if (!pred) return;
+    setGruModal({ isOpen: true, prediction: pred, inputs: [], loading: true });
+    try {
+      const inputs = await aiService.getPredictionInputs(pred.id);
+      setGruModal((prev) => ({
+        ...prev,
+        inputs: Array.isArray(inputs) ? inputs : [],
+        loading: false,
+      }));
+    } catch (err) {
+      console.error('[PredictionsPage] Lỗi lấy chuỗi viễn trắc lịch sử GRU:', err);
+      setGruModal((prev) => ({ ...prev, inputs: [], loading: false }));
     }
+  };
+
+  const handleCloseGruModal = () => {
+    setGruModal({ isOpen: false, prediction: null, inputs: [], loading: false });
   };
 
   // Toggle ẩn/hiện một chuỗi viễn trắc
@@ -918,19 +1032,20 @@ export const PredictionsPage = () => {
     if (selectedWorkload && selectedWorkload !== 'ALL') {
       return selectedWorkload;
     }
-    return pinnedService || 'sme-order-service';
-  }, [selectedWorkload, pinnedService]);
+    return pinnedService || availableWorkloads[0] || '';
+  }, [selectedWorkload, pinnedService, availableWorkloads]);
 
   // Lấy 12 mốc viễn trắc độc lập của riêng dịch vụ đang xem
   const currentInputs = useMemo(() => {
     if (serviceInputsMap[currentServiceTarget] && serviceInputsMap[currentServiceTarget].length > 0) {
       return serviceInputsMap[currentServiceTarget];
     }
-    if (selectedPrediction?.workload_name === currentServiceTarget && predictionInputs.length > 0) {
+    const selNorm = normalizeServiceName(selectedPrediction?.workload_name || selectedPrediction?.service_id);
+    if (selNorm === currentServiceTarget && predictionInputs.length > 0) {
       return predictionInputs;
     }
     return [];
-  }, [serviceInputsMap, currentServiceTarget, predictionInputs, selectedPrediction?.workload_name]);
+  }, [serviceInputsMap, currentServiceTarget, predictionInputs, selectedPrediction]);
 
   // Tổ chức chuỗi 12 bước thời gian đồng bộ cho tất cả các metrics của riêng dịch vụ đang xem
   const timesteps = useMemo(() => {
@@ -978,6 +1093,52 @@ export const PredictionsPage = () => {
     }));
   }, [currentInputs]);
 
+  // Chuỗi 12 bước thời gian lịch sử cố định (Snapshot Audit) của riêng dự báo đang xem trong modal GRU
+  const modalTimesteps = useMemo(() => {
+    if (!gruModal.inputs || gruModal.inputs.length === 0) return [];
+
+    const map = new Map();
+    gruModal.inputs.forEach((item) => {
+      const key = item.collected_at ? new Date(item.collected_at).toISOString() : item.id;
+      if (!map.has(key)) {
+        const d = new Date(item.collected_at);
+        const timeLabel = isNaN(d.getTime())
+          ? ''
+          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        map.set(key, {
+          rawTime: item.collected_at,
+          timeLabel,
+          cpu: 0,
+          ram: 0,
+          disk: 0,
+          latency: 0,
+          request_rate: 0,
+          http_5xx_rate: 0,
+          pod_restart_count: 0,
+          replica_count: 0,
+        });
+      }
+      const entry = map.get(key);
+      const mName = item.metric_name?.toLowerCase();
+      const val = parseFloat(item.metric_value) || 0;
+      if (mName && entry[mName] !== undefined) {
+        entry[mName] = val;
+      }
+    });
+
+    const sorted = Array.from(map.values()).sort(
+      (a, b) => new Date(a.rawTime) - new Date(b.rawTime)
+    );
+
+    return sorted.map((item, idx) => ({
+      ...item,
+      step: idx + 1,
+      stepLabel: `T${idx + 1}`,
+      displayTime: item.timeLabel || `T${idx + 1}`,
+    }));
+  }, [gruModal.inputs]);
+
   // Dữ liệu hiển thị có điều kiện theo trạng thái kết nối Cụm K8s (isAgentConnected)
   // Khi cụm chưa kết nối (Agent Offline) -> đưa toàn bộ về 0 & không hiển thị dữ liệu
   const displayStats = useMemo(() => {
@@ -986,16 +1147,6 @@ export const PredictionsPage = () => {
     }
     return stats;
   }, [isAgentConnected, stats]);
-
-  const availableWorkloads = useMemo(() => {
-    const fixedList = ['sme-order-service', 'selfheal-test-app'];
-    predictions.forEach((p) => {
-      if (p.workload_name && !fixedList.includes(p.workload_name)) {
-        fixedList.push(p.workload_name);
-      }
-    });
-    return fixedList;
-  }, [predictions]);
 
   const displayPredictions = useMemo(() => {
     if (!isAgentConnected) return [];
@@ -1009,9 +1160,12 @@ export const PredictionsPage = () => {
         return conf >= 0.1;
       });
     }
-    if (!logWorkloadFilter || logWorkloadFilter === 'ALL') return list;
-    return list.filter((p) => p.workload_name === logWorkloadFilter);
-  }, [isAgentConnected, predictions, logWorkloadFilter, selectedTypeFilter]);
+    const effectiveFilter = bottomServiceFilter !== 'ALL' ? bottomServiceFilter : (logWorkloadFilter !== 'ALL' ? logWorkloadFilter : 'ALL');
+    if (effectiveFilter && effectiveFilter !== 'ALL') {
+      list = list.filter((p) => normalizeServiceName(p.workload_name || p.service_id) === effectiveFilter);
+    }
+    return list;
+  }, [isAgentConnected, predictions, logWorkloadFilter, selectedTypeFilter, bottomServiceFilter]);
 
   const displayRecommendations = useMemo(() => {
     if (!isAgentConnected) return [];
@@ -1020,7 +1174,7 @@ export const PredictionsPage = () => {
     // Nhóm và loại bỏ các đề xuất trùng lặp cho cùng một workload/hành động - hiển thị toàn bộ
     const map = new Map();
     for (const r of list) {
-      const target = r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : 'sme-order-service');
+      const target = normalizeServiceName(r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : ''));
       const actionCode = r.recommendation || r.action_code || 'RESTART_POD';
       const key = `${actionCode}__${target}`;
       if (!map.has(key)) {
@@ -1036,13 +1190,27 @@ export const PredictionsPage = () => {
         }
       }
     }
-    return Array.from(map.values());
-  }, [isAgentConnected, recommendations, appliedActions]);
+    let res = Array.from(map.values());
+    if (bottomServiceFilter && bottomServiceFilter !== 'ALL') {
+      res = res.filter((r) => {
+        const target = normalizeServiceName(r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : ''));
+        return target === bottomServiceFilter;
+      });
+    }
+    return res;
+  }, [isAgentConnected, recommendations, appliedActions, bottomServiceFilter]);
 
   const displayHealingActions = useMemo(() => {
     if (!isAgentConnected) return [];
-    return healingActions;
-  }, [isAgentConnected, healingActions]);
+    let list = healingActions;
+    if (bottomServiceFilter && bottomServiceFilter !== 'ALL') {
+      list = list.filter((a) => {
+        const target = normalizeServiceName(a.target_name || a.target_id);
+        return target === bottomServiceFilter;
+      });
+    }
+    return list;
+  }, [isAgentConnected, healingActions, bottomServiceFilter]);
 
   // Lấy dự báo GRU của riêng dịch vụ đang xem
   const displaySelectedPrediction = useMemo(() => {
@@ -1050,10 +1218,11 @@ export const PredictionsPage = () => {
     if (servicePredictionMap[currentServiceTarget]) {
       return servicePredictionMap[currentServiceTarget];
     }
-    if (selectedPrediction && selectedPrediction.workload_name === currentServiceTarget) {
+    const selNorm = normalizeServiceName(selectedPrediction?.workload_name || selectedPrediction?.service_id);
+    if (selectedPrediction && selNorm === currentServiceTarget) {
       return selectedPrediction;
     }
-    const found = predictions.find((p) => p.workload_name === currentServiceTarget);
+    const found = predictions.find((p) => normalizeServiceName(p.workload_name || p.service_id) === currentServiceTarget);
     return found || null;
   }, [isAgentConnected, servicePredictionMap, currentServiceTarget, selectedPrediction, predictions]);
 
@@ -1216,78 +1385,6 @@ export const PredictionsPage = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* WebSocket Pulse Badge */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 12px',
-            backgroundColor: isAgentConnected && isWsLive ? '#F0FDF4' : '#F8FAFC',
-            border: `1px solid ${isAgentConnected && isWsLive ? '#BBF7D0' : '#E2E8F0'}`,
-            borderRadius: '6px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: isAgentConnected && isWsLive ? '#15803D' : '#64748B',
-            fontFamily: 'var(--font-mono)',
-          }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: isAgentConnected && isWsLive ? '#22C55E' : '#94A3B8',
-              boxShadow: isAgentConnected && isWsLive ? '0 0 8px rgba(34, 197, 94, 0.6)' : 'none',
-            }} />
-            <span>{isAgentConnected && isWsLive ? 'LIVE WS TELEMETRY' : 'WS STANDBY'}</span>
-          </div>
-
-          {/* Trạng thái kết nối AI Engine */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 12px',
-            backgroundColor: !isAgentConnected ? '#F8FAFC' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#ECFDF5' : '#FEF2F2'),
-            border: `1px solid ${!isAgentConnected ? '#E2E8F0' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#A7F3D0' : '#FECACA')}`,
-            borderRadius: '6px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: !isAgentConnected ? '#64748B' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#065F46' : '#991B1B'),
-            fontFamily: 'var(--font-mono)',
-          }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: !isAgentConnected ? '#94A3B8' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#10B981' : '#EF4444'),
-            }} />
-            <span>AI ENGINE: {!isAgentConnected ? 'STANDBY' : (aiHealth?.model_loaded ? 'PYTORCH GRU ONLINE' : 'DISCONNECTED')}</span>
-          </div>
-
-          {/* Nút Chạy suy diễn On-Demand */}
-          <button
-            type="button"
-            onClick={handleRunManualInference}
-            disabled={!isAgentConnected || isEvaluating || loading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: !isAgentConnected ? '#94A3B8' : '#7C3AED',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: !isAgentConnected || isEvaluating || loading ? 'not-allowed' : 'pointer',
-              boxShadow: isAgentConnected ? '0 1px 3px rgba(124, 58, 237, 0.3)' : 'none',
-            }}
-            title={!isAgentConnected ? 'Cụm chưa kết nối tác tử viễn trắc' : ''}
-          >
-            <Zap size={14} className={isEvaluating ? 'animate-spin' : ''} />
-            <span>{isEvaluating ? 'Đang suy diễn GRU...' : 'Chạy suy diễn mới'}</span>
-          </button>
-
           {/* Nút Làm mới dữ liệu */}
           <button
             type="button"
@@ -1355,11 +1452,14 @@ export const PredictionsPage = () => {
               backgroundColor: isAgentConnected ? (isWsLive ? '#10B981' : '#F59E0B') : '#94A3B8',
               boxShadow: isAgentConnected && isWsLive ? '0 0 8px #10B981' : 'none',
             }} />
-            <span>
+            <span
+              style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}
+              title={isAgentConnected ? `Tiến trình gom mẻ viễn trắc: ${currentServiceBatchProgress?.collected !== undefined ? currentServiceBatchProgress.collected : 12}/${currentServiceBatchProgress?.target || 12} (${currentServiceTarget})` : 'Cụm chưa kết nối'}
+            >
               {isAgentConnected
                 ? (currentServiceBatchProgress?.collected !== undefined
-                    ? `Đang gom mẻ mới (${currentServiceTarget}): [${currentServiceBatchProgress.collected}/${currentServiceBatchProgress.target || 12} bước]`
-                    : `Đã gom mẻ viễn trắc 12 bước (${currentServiceTarget})`)
+                    ? `${currentServiceBatchProgress.collected}/${currentServiceBatchProgress.target || 12}`
+                    : '12/12')
                 : 'Cụm chưa kết nối tác tử viễn trắc'}
             </span>
           </div>
@@ -1445,43 +1545,73 @@ export const PredictionsPage = () => {
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>Lượt: <strong style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</strong></span>
                 <span>&bull;</span>
-                <span>Dịch vụ: <strong style={{ fontFamily: 'var(--font-mono)', color: '#2563EB' }}>{displaySelectedPrediction?.workload_name || 'sme-order-service'}</strong></span>
-                <span>&bull;</span>
-                <span style={{ color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, backgroundColor: '#ECFDF5', padding: '1px 6px', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
-                  Đồng bộ WebSocket: {lastWsSyncTime}
-                </span>
+                <span>Dịch vụ: <strong style={{ fontFamily: 'var(--font-mono)', color: '#2563EB' }}>{isAgentConnected ? (currentServiceTarget || 'Chưa có dữ liệu') : 'Chưa kết nối'}</strong></span>
               </p>
 
-              {/* Bộ chọn chuyển đổi Dịch vụ (Workload Switcher) trực tiếp tại Biểu Đồ */}
+              {/* Bộ chọn chuyển đổi Dịch vụ dạng Dropdown (Sổ xuống) trực tiếp tại Biểu Đồ */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Server size={13} color="#3B82F6" />
                   Dịch vụ:
                 </span>
-                <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                  {availableWorkloads.map((wl) => (
-                    <button
-                      key={wl}
-                      type="button"
-                      onClick={() => handleSelectWorkload(wl)}
+                {!isAgentConnected ? (
+                  <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    Agent chưa kết nối (Không có dữ liệu viễn trắc)
+                  </span>
+                ) : availableWorkloads.length === 0 ? (
+                  <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    Chưa có dịch vụ nào gửi telemetry trên cụm này
+                  </span>
+                ) : (
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <select
+                      id="workload-select-dropdown"
+                      value={currentServiceTarget || availableWorkloads[0] || ''}
+                      onChange={(e) => handleSelectWorkload(e.target.value)}
                       style={{
-                        padding: '3px 10px',
-                        fontSize: '0.6875rem',
+                        padding: '5px 30px 5px 12px',
+                        fontSize: '0.8125rem',
                         fontWeight: 700,
-                        borderRadius: '4px',
-                        border: 'none',
+                        color: '#1D4ED8',
+                        backgroundColor: '#EFF6FF',
+                        border: '1.5px solid #3B82F6',
+                        borderRadius: '6px',
+                        outline: 'none',
                         cursor: 'pointer',
+                        appearance: 'none',
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none',
                         transition: 'all 0.15s ease',
-                        backgroundColor: selectedWorkload === wl ? '#3B82F6' : 'transparent',
-                        color: selectedWorkload === wl ? '#FFFFFF' : '#475569',
-                        boxShadow: selectedWorkload === wl ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                        boxShadow: '0 1px 2px rgba(59, 130, 246, 0.12)',
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.backgroundColor = '#FFFFFF';
+                        e.target.style.borderColor = '#1E40AF';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.25)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.backgroundColor = '#EFF6FF';
+                        e.target.style.borderColor = '#3B82F6';
+                        e.target.style.boxShadow = '0 1px 2px rgba(59, 130, 246, 0.12)';
                       }}
                     >
-                      {wl}
-                    </button>
-                  ))}
-                </div>
+                      {availableWorkloads.map((wl) => (
+                        <option key={wl} value={wl} style={{ padding: '8px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', backgroundColor: '#FFFFFF' }}>
+                          {wl}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={14}
+                      color="#2563EB"
+                      style={{
+                        position: 'absolute',
+                        right: '9px',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1997,10 +2127,6 @@ export const PredictionsPage = () => {
                 ({displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? 'CHƯA CÓ LƯỢT SUY LUẬN' : 'DISCONNECTED')})
               </span>
             </div>
-            <div style={{ fontSize: '0.6875rem', color: '#7C3AED', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#F5F3FF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #DDD6FE' }}>
-              <Clock size={11} color="#7C3AED" />
-              <span>Suy luận mẻ: {lastWsSyncTime}</span>
-            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '11px', flex: 1, justifyContent: 'center' }}>
@@ -2078,6 +2204,95 @@ export const PredictionsPage = () => {
               {displaySelectedPrediction ? 'Tất cả dưới ngưỡng an toàn' : (isAgentConnected ? 'Chưa có lượt suy luận' : 'Cụm chưa kết nối • Không có dữ liệu suy luận')}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* 4.9 Thanh Lọc Dịch Vụ / Workload Cho Toàn Bộ 3 Phân Hệ Phía Dưới dạng Dropdown */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginTop: '18px',
+          marginBottom: '10px',
+          padding: '8px 14px',
+          backgroundColor: '#FFFFFF',
+          borderRadius: '8px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Filter size={14} color="#3B82F6" />
+            Lọc theo Dịch vụ:
+          </span>
+          {!isAgentConnected ? (
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+              Cụm chưa kết nối Agent (Không có dịch vụ)
+            </span>
+          ) : availableWorkloads.length === 0 ? (
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+              Chưa có dịch vụ nào trên cụm này
+            </span>
+          ) : (
+            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <select
+                id="bottom-workload-filter-dropdown"
+                value={bottomServiceFilter}
+                onChange={(e) => {
+                  setBottomServiceFilter(e.target.value);
+                  setLogWorkloadFilter(e.target.value);
+                }}
+                style={{
+                  padding: '5px 30px 5px 12px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  color: bottomServiceFilter === 'ALL' ? '#1E293B' : '#1D4ED8',
+                  backgroundColor: bottomServiceFilter === 'ALL' ? '#F8FAFC' : '#EFF6FF',
+                  border: bottomServiceFilter === 'ALL' ? '1.5px solid #CBD5E1' : '1.5px solid #3B82F6',
+                  borderRadius: '6px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+                }}
+                onFocus={(e) => {
+                  e.target.style.backgroundColor = '#FFFFFF';
+                  e.target.style.borderColor = '#1D4ED8';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.backgroundColor = bottomServiceFilter === 'ALL' ? '#F8FAFC' : '#EFF6FF';
+                  e.target.style.borderColor = bottomServiceFilter === 'ALL' ? '#CBD5E1' : '#3B82F6';
+                  e.target.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                }}
+              >
+                <option value="ALL" style={{ padding: '8px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', backgroundColor: '#FFFFFF' }}>
+                  Tất cả dịch vụ ({availableWorkloads.length})
+                </option>
+                {availableWorkloads.map((wl) => (
+                  <option key={wl} value={wl} style={{ padding: '8px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', backgroundColor: '#FFFFFF' }}>
+                    {wl}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                color={bottomServiceFilter === 'ALL' ? '#64748B' : '#2563EB'}
+                style={{
+                  position: 'absolute',
+                  right: '9px',
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -2254,8 +2469,8 @@ export const PredictionsPage = () => {
             {displayRecommendations.map((rec) => {
               const isApplied = rec.status === 'APPLIED' || appliedActions.includes(rec.id);
               const actionCode = rec.recommendation || rec.action_code || 'RESTART_POD';
-              const targetName = rec.target_name || (rec.target_id === 'c0000000-0000-0000-0000-000000000002' ? 'sme-order-service' : (rec.target_id || (rec.incident_title ? rec.incident_title.split(' on ')[1] : 'sme-order-service')));
-              const clusterName = currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+              const targetName = normalizeServiceName(rec.target_name || rec.target_id || (rec.incident_title ? rec.incident_title.split(' on ')[1] : ''));
+              const clusterName = currentEnv?.cluster || currentEnv?.name || 'cluster';
 
               const actionInfo = getActionDetails(actionCode);
 
@@ -2530,7 +2745,7 @@ export const PredictionsPage = () => {
                         </span>
                       </td>
                       <td style={{ padding: '10px 12px', color: '#1E293B', fontWeight: 500 }}>
-                        {act.target_name || '-'}
+                        {normalizeServiceName(act.target_name || act.target_id) || '-'}
                       </td>
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
                         {act.execution_mode}
@@ -2596,8 +2811,11 @@ export const PredictionsPage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Dịch vụ:</span>
                 <select
-                  value={logWorkloadFilter}
-                  onChange={(e) => setLogWorkloadFilter(e.target.value)}
+                  value={bottomServiceFilter !== 'ALL' ? bottomServiceFilter : logWorkloadFilter}
+                  onChange={(e) => {
+                    setBottomServiceFilter(e.target.value);
+                    setLogWorkloadFilter(e.target.value);
+                  }}
                   style={{
                     padding: '4px 8px',
                     fontSize: '0.75rem',
@@ -2666,372 +2884,139 @@ export const PredictionsPage = () => {
             <tbody>
               {displayPredictions.map((p) => {
                 const isSelected = selectedPrediction?.id === p.id;
-                const isExpanded = expandedPredictionId === p.id;
                 const isHealthy = p.status === 'HEALTHY' || p.prediction_type === 'NORMAL';
                 const activeRisks = getActiveRisks(p);
 
                 return (
-                  <React.Fragment key={p.id}>
-                    <tr
-                      onClick={() => handleToggleExpandPrediction(p)}
-                      style={{
-                        borderBottom: isExpanded ? 'none' : '1px solid #F1F5F9',
-                        backgroundColor: isExpanded ? '#EFF6FF' : isSelected ? '#F8FAFC' : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.1s ease',
-                      }}
-                    >
-                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {p.id?.substring(0, 8)}...
-                      </td>
-                      <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                        {p.workload_name || '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                        {p.cluster_name || currentEnv?.cluster || '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        {activeRisks.length === 0 ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.6875rem',
-                              fontWeight: 700,
-                              fontFamily: 'var(--font-mono)',
-                              backgroundColor: '#DCFCE7',
-                              color: '#15803D',
-                            }}
-                          >
-                            NORMAL (An toàn)
-                          </span>
-                        ) : (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                            {activeRisks.map((r) => (
-                              <span
-                                key={r.key}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontSize: '0.6875rem',
-                                  fontWeight: 700,
-                                  fontFamily: 'var(--font-mono)',
-                                  backgroundColor: r.meta.bg,
-                                  color: r.meta.color,
-                                  border: `1px solid ${r.meta.border}`,
-                                }}
-                                title={`${r.meta.label}: ${(r.confidence * 100).toFixed(2)}%`}
-                              >
-                                <span>{r.key}</span>
-                                <span style={{ fontSize: '0.625rem', opacity: 0.9 }}>({(r.confidence * 100).toFixed(1)}%)</span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {parseFloat(p.risk_score || 0).toFixed(4)}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isHealthy ? '#059669' : '#DC2626' }}>
-                          {p.status}
+                  <tr
+                    key={p.id}
+                    onClick={() => handleOpenGruModal(p)}
+                    style={{
+                      borderBottom: '1px solid #F1F5F9',
+                      backgroundColor: isSelected ? '#F8FAFC' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.1s ease',
+                    }}
+                  >
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
+                      {p.id?.substring(0, 8)}...
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                      {p.workload_name || '-'}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                      {p.cluster_name || currentEnv?.cluster || '-'}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {activeRisks.length === 0 ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-mono)',
+                            backgroundColor: '#DCFCE7',
+                            color: '#15803D',
+                          }}
+                        >
+                          NORMAL (An toàn)
                         </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                        {new Date(p.predicted_at || p.created_at).toLocaleTimeString('vi-VN')}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleExpandPrediction(p);
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '4px 8px',
-                              fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              backgroundColor: isExpanded ? '#4F46E5' : '#EEF2FF',
-                              color: isExpanded ? '#FFFFFF' : '#4338CA',
-                              border: '1px solid #C7D2FE',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                            }}
-                            title="Bấm để xem chi tiết bảng dữ liệu 12 điểm viễn trắc và 7 đầu rủi ro GRU"
-                          >
-                            <Table size={12} />
-                            <span>{isExpanded ? 'Đóng bảng' : 'Bảng GRU'}</span>
-                            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectPrediction(p);
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '4px 8px',
-                              fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              backgroundColor: isSelected ? '#3B82F6' : '#F1F5F9',
-                              color: isSelected ? '#FFFFFF' : 'var(--dash-text-primary)',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                            }}
-                            title="Nạp chuỗi 12 điểm viễn trắc lên biểu đồ phân tích ở trên"
-                          >
-                            <Eye size={12} />
-                            <span>{isSelected ? 'Đang soi' : 'Soi chuỗi'}</span>
-                          </button>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {activeRisks.map((r) => (
+                            <span
+                              key={r.key}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.6875rem',
+                                fontWeight: 700,
+                                fontFamily: 'var(--font-mono)',
+                                backgroundColor: r.meta.bg,
+                                color: r.meta.color,
+                                border: `1px solid ${r.meta.border}`,
+                              }}
+                              title={`${r.meta.label}: ${(r.confidence * 100).toFixed(2)}%`}
+                            >
+                              <span>{r.key}</span>
+                              <span style={{ fontSize: '0.625rem', opacity: 0.9 }}>({(r.confidence * 100).toFixed(1)}%)</span>
+                            </span>
+                          ))}
                         </div>
-                      </td>
-                    </tr>
-
-                    {/* EXPANDABLE ROW: CHI TIẾT BẢNG GỬI VÀO GRU [12x8] & ĐA RỦI RO */}
-                    {isExpanded && (
-                      <tr style={{ backgroundColor: '#F8FAFC' }}>
-                        <td colSpan={8} style={{ padding: '16px 20px', borderBottom: '2px solid #CBD5E1' }}>
-                          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                            {/* Header Info */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Table size={18} color="#4F46E5" />
-                                <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1E293B' }}>
-                                  Chi Tiết Dữ Liệu Đầu Vào Gửi Vào GRU & Suy Diễn Đa Rủi Ro
-                                </span>
-                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#6366F1', backgroundColor: '#EEF2FF', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                                  Mã #{p.id}
-                                </span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                                  Dịch vụ: <strong style={{ color: '#0F172A' }}>{p.workload_name || '-'}</strong> | Cụm: <strong style={{ color: '#0F172A' }}>{p.cluster_name || currentEnv?.cluster || '-'}</strong>
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedPredictionId(null)}
-                                  style={{
-                                    padding: '4px 10px',
-                                    fontSize: '0.6875rem',
-                                    fontWeight: 600,
-                                    backgroundColor: '#F1F5F9',
-                                    color: '#475569',
-                                    border: '1px solid #CBD5E1',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  Đóng chi tiết
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Phần 1: Bảng Ma Trận Đầu Vào GRU Tensor [12 x 8] */}
-                            <div style={{ marginBottom: '20px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
-                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  1. Bảng Ma Trận Đầu Vào GRU Tensor [12 × 8] (Toàn Bộ 12 Bước Viễn Trắc)
-                                </h4>
-                                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                                  Chuỗi 12 bước × 5s = 60 giây lịch sử gần nhất gửi trực tiếp vào mạng Nơ-ron GRU
-                                </span>
-                              </div>
-
-                              {loadingInputs && (!timesteps || timesteps.length === 0) ? (
-                                <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '0.8125rem' }}>
-                                  <RefreshCw size={16} className="animate-spin" style={{ display: 'inline', marginRight: '6px' }} />
-                                  Đang nạp 12 bước dữ liệu viễn trắc từ cơ sở dữ liệu...
-                                </div>
-                              ) : timesteps && timesteps.length > 0 ? (
-                                <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '6px' }}>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'center' }}>
-                                    <thead>
-                                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
-                                        <th style={{ padding: '8px 10px' }}>Bước</th>
-                                        <th style={{ padding: '8px 10px' }}>Thời Điểm</th>
-                                        <th style={{ padding: '8px 10px' }}>CPU (%)</th>
-                                        <th style={{ padding: '8px 10px' }}>RAM (%)</th>
-                                        <th style={{ padding: '8px 10px' }}>Disk (%)</th>
-                                        <th style={{ padding: '8px 10px' }}>Request Rate (req/s)</th>
-                                        <th style={{ padding: '8px 10px' }}>Độ Trễ Latency (ms)</th>
-                                        <th style={{ padding: '8px 10px' }}>HTTP 5xx (%)</th>
-                                        <th style={{ padding: '8px 10px' }}>Restarts</th>
-                                        <th style={{ padding: '8px 10px' }}>Replicas</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {timesteps.map((row, idx) => {
-                                        const isSpike5xx = row.http_5xx_rate > 0;
-                                        const isHighLatency = row.latency > 100;
-                                        const isHighCpu = row.cpu > 70;
-                                        const isHighTraffic = row.request_rate > 10;
-
-                                        return (
-                                          <tr
-                                            key={idx}
-                                            style={{
-                                              borderBottom: '1px solid #F1F5F9',
-                                              backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
-                                              fontFamily: 'var(--font-mono)',
-                                            }}
-                                          >
-                                            <td style={{ padding: '7px 10px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
-                                              {row.stepLabel || `T${idx + 1}`}
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: '#64748B' }}>
-                                              {row.displayTime || '-'}
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: isHighCpu ? '#DC2626' : '#0F172A', fontWeight: isHighCpu ? 700 : 500 }}>
-                                              {Number(row.cpu || 0).toFixed(2)}%
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: '#0F172A' }}>
-                                              {Number(row.ram || 0).toFixed(2)}%
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: '#64748B' }}>
-                                              {Number(row.disk || 0).toFixed(2)}%
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: isHighTraffic ? '#2563EB' : '#0F172A', fontWeight: isHighTraffic ? 700 : 500 }}>
-                                              {Number(row.request_rate || 0).toFixed(2)} req/s
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: isHighLatency ? '#D97706' : '#0F172A', fontWeight: isHighLatency ? 700 : 500 }}>
-                                              {Number(row.latency || 0).toFixed(2)} ms
-                                            </td>
-                                            <td style={{
-                                              padding: '7px 10px',
-                                              color: isSpike5xx ? '#DC2626' : '#64748B',
-                                              fontWeight: isSpike5xx ? 700 : 500,
-                                              backgroundColor: isSpike5xx ? '#FEE2E2' : 'transparent',
-                                            }}>
-                                              {Number(row.http_5xx_rate || 0).toFixed(2)}%
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>
-                                              {row.pod_restart_count || 0}
-                                            </td>
-                                            <td style={{ padding: '7px 10px', color: '#0F172A' }}>
-                                              {row.replica_count || 1}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <div style={{ padding: '16px', textAlign: 'center', color: '#94A3B8', fontSize: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: '6px' }}>
-                                  Chưa có chuỗi 12 điểm viễn trắc đầu vào cho lượt dự báo này.
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Phần 2: Bảng Phân Tích Đa Rủi Ro Của GRU (Toàn Bộ 7 Rủi Ro) */}
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
-                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                  2. Kết Quả Dự Báo Đa Rủi Ro GRU Multi-Head (Toàn Bộ 7 Loại Rủi Ro)
-                                </h4>
-                                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                                  Mỗi loại rủi ro được tính toán độc lập qua Sigmoid riêng từ 0.0% đến 100.0%
-                                </span>
-                              </div>
-
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
-                                {(() => {
-                                  const outputs = parseRiskOutputs(p.risk_outputs);
-                                  return RISK_HEADS_CONFIG.map((head) => {
-                                    const val = outputs[head.key];
-                                    const conf = typeof val === 'object' && val !== null ? Number(val.confidence || 0) : Number(val || 0);
-                                    const percent = Math.min(Math.max(conf * 100, 0), 100);
-                                    const isTriggered = conf >= head.threshold;
-                                    const isElevated = conf >= 0.10 && !isTriggered;
-
-                                    let badgeColor = '#059669';
-                                    let badgeBg = '#ECFDF5';
-                                    let badgeText = '✅ AN TOÀN';
-                                    let barColor = '#10B981';
-
-                                    if (isTriggered) {
-                                      badgeColor = '#DC2626';
-                                      badgeBg = '#FEE2E2';
-                                      badgeText = '⚠️ NGUY CƠ CAO';
-                                      barColor = '#EF4444';
-                                    } else if (isElevated) {
-                                      badgeColor = '#D97706';
-                                      badgeBg = '#FEF3C7';
-                                      badgeText = '⚡ ĐANG TĂNG';
-                                      barColor = '#F59E0B';
-                                    }
-
-                                    return (
-                                      <div
-                                        key={head.key}
-                                        style={{
-                                          border: isTriggered ? '1px solid #FCA5A5' : '1px solid #E2E8F0',
-                                          borderRadius: '6px',
-                                          padding: '10px 12px',
-                                          backgroundColor: isTriggered ? '#FEF2F2' : '#FFFFFF',
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B', fontFamily: 'var(--font-mono)' }}>
-                                            {head.key}
-                                          </span>
-                                          <span
-                                            style={{
-                                              fontSize: '0.625rem',
-                                              fontWeight: 700,
-                                              padding: '2px 6px',
-                                              borderRadius: '4px',
-                                              color: badgeColor,
-                                              backgroundColor: badgeBg,
-                                            }}
-                                          >
-                                            {badgeText}
-                                          </span>
-                                        </div>
-                                        <div style={{ fontSize: '0.6875rem', color: '#64748B', marginBottom: '8px', lineHeight: '1.2' }}>
-                                          {head.label}
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
-                                          <span style={{ color: '#475569' }}>Xác suất: <strong style={{ color: badgeColor, fontFamily: 'var(--font-mono)' }}>{percent.toFixed(2)}%</strong></span>
-                                          <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Ngưỡng: {(head.threshold * 100).toFixed(0)}%</span>
-                                        </div>
-                                        <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                                          <div
-                                            style={{
-                                              width: `${percent}%`,
-                                              height: '100%',
-                                              backgroundColor: barColor,
-                                              borderRadius: '3px',
-                                              transition: 'width 0.3s ease',
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  });
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
+                      {parseFloat(p.risk_score || 0).toFixed(4)}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isHealthy ? '#059669' : '#DC2626' }}>
+                        {p.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                      {new Date(p.predicted_at || p.created_at).toLocaleTimeString('vi-VN')}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenGruModal(p);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            backgroundColor: '#EEF2FF',
+                            color: '#4338CA',
+                            border: '1px solid #C7D2FE',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                          title="Bấm để mở cửa sổ chi tiết bảng dữ liệu 12 điểm viễn trắc và 7 đầu rủi ro GRU"
+                        >
+                          <Table size={12} />
+                          <span>Bảng GRU</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectPrediction(p);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            backgroundColor: isSelected ? '#3B82F6' : '#F1F5F9',
+                            color: isSelected ? '#FFFFFF' : 'var(--dash-text-primary)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                          title="Nạp chuỗi 12 điểm viễn trắc lên biểu đồ phân tích ở trên"
+                        >
+                          <Eye size={12} />
+                          <span>{isSelected ? 'Đang soi' : 'Soi chuỗi'}</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>
@@ -3041,13 +3026,391 @@ export const PredictionsPage = () => {
       </div>
       )}
 
+      {/* 7.5 Modal Chi Tiết Dữ Liệu Đầu Vào Gửi Vào GRU & Suy Diễn Đa Rủi Ro */}
+      {gruModal.isOpen && gruModal.prediction && (() => {
+        const p = gruModal.prediction;
+        const outputs = parseRiskOutputs(p.risk_outputs);
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.72)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+            onClick={handleCloseGruModal}
+          >
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '14px',
+                maxWidth: '1050px',
+                width: '100%',
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.35)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: '92vh',
+                border: '1px solid #CBD5E1',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: '16px 22px',
+                  borderBottom: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F8FAFC',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      backgroundColor: '#EEF2FF',
+                      border: '1px solid #C7D2FE',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Table size={18} color="#4F46E5" />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0F172A' }}>
+                        Chi Tiết Dữ Liệu Đầu Vào GRU &amp; Suy Diễn Đa Rủi Ro (Snapshot Lịch Sử)
+                      </h3>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.75rem',
+                          color: '#6366F1',
+                          backgroundColor: '#EEF2FF',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Mã #{p.id}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          color: '#059669',
+                          backgroundColor: '#ECFDF5',
+                          border: '1px solid #A7F3D0',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        BẢN GHI LỊCH SỬ (AUDIT RECORD)
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
+                      Dịch vụ: <strong style={{ color: '#0F172A' }}>{p.workload_name || '-'}</strong> | Cụm: <strong style={{ color: '#0F172A' }}>{p.cluster_name || currentEnv?.cluster || '-'}</strong> | Thời điểm dự báo: <strong style={{ color: '#0F172A' }}>{new Date(p.predicted_at || p.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ({new Date(p.predicted_at || p.created_at).toLocaleDateString('vi-VN')})</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCloseGruModal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#64748B',
+                    cursor: 'pointer',
+                  }}
+                  title="Đóng cửa sổ"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+                {/* Phần 1: Bảng Ma Trận Đầu Vào GRU Tensor [12 x 8] */}
+                <div style={{ marginBottom: '22px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      1. Bảng Ma Trận Đầu Vào GRU Tensor [12 × 8] (Bản Ghi Lịch Sử Lưu Trữ)
+                    </h4>
+                    <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
+                      Chuỗi 12 mốc viễn trắc lưu trữ tại thời điểm suy diễn trong CSDL làm bằng chứng kiểm toán (Cố định, không nhảy realtime)
+                    </span>
+                  </div>
+
+                  {gruModal.loading ? (
+                    <div style={{ padding: '32px', textAlign: 'center', color: '#64748B', fontSize: '0.8125rem', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                      <RefreshCw size={18} className="animate-spin" style={{ display: 'inline', marginRight: '8px' }} />
+                      Đang nạp 12 bước dữ liệu viễn trắc lịch sử từ cơ sở dữ liệu...
+                    </div>
+                  ) : modalTimesteps && modalTimesteps.length > 0 ? (
+                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'center' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
+                            <th style={{ padding: '9px 10px' }}>Bước</th>
+                            <th style={{ padding: '9px 10px' }}>Thời Điểm</th>
+                            <th style={{ padding: '9px 10px' }}>CPU (%)</th>
+                            <th style={{ padding: '9px 10px' }}>RAM (%)</th>
+                            <th style={{ padding: '9px 10px' }}>Disk (%)</th>
+                            <th style={{ padding: '9px 10px' }}>Request Rate (req/s)</th>
+                            <th style={{ padding: '9px 10px' }}>Độ Trễ Latency (ms)</th>
+                            <th style={{ padding: '9px 10px' }}>HTTP 5xx (%)</th>
+                            <th style={{ padding: '9px 10px' }}>Restarts</th>
+                            <th style={{ padding: '9px 10px' }}>Replicas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {modalTimesteps.map((row, idx) => {
+                            const isSpike5xx = row.http_5xx_rate > 0;
+                            const isHighLatency = row.latency > 100;
+                            const isHighCpu = row.cpu > 70;
+                            const isHighTraffic = row.request_rate > 10;
+
+                            return (
+                              <tr
+                                key={idx}
+                                style={{
+                                  borderBottom: '1px solid #F1F5F9',
+                                  backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                                  fontFamily: 'var(--font-mono)',
+                                }}
+                              >
+                                <td style={{ padding: '8px 10px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
+                                  {row.stepLabel || `T${idx + 1}`}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#64748B' }}>
+                                  {row.displayTime || '-'}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: isHighCpu ? '#DC2626' : '#0F172A', fontWeight: isHighCpu ? 700 : 500 }}>
+                                  {Number(row.cpu || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#0F172A' }}>
+                                  {Number(row.ram || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#64748B' }}>
+                                  {Number(row.disk || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: isHighTraffic ? '#2563EB' : '#0F172A', fontWeight: isHighTraffic ? 700 : 500 }}>
+                                  {Number(row.request_rate || 0).toFixed(2)} req/s
+                                </td>
+                                <td style={{ padding: '8px 10px', color: isHighLatency ? '#D97706' : '#0F172A', fontWeight: isHighLatency ? 700 : 500 }}>
+                                  {Number(row.latency || 0).toFixed(2)} ms
+                                </td>
+                                <td style={{
+                                  padding: '8px 10px',
+                                  color: isSpike5xx ? '#DC2626' : '#64748B',
+                                  fontWeight: isSpike5xx ? 700 : 500,
+                                  backgroundColor: isSpike5xx ? '#FEE2E2' : 'transparent',
+                                }}>
+                                  {Number(row.http_5xx_rate || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>
+                                  {row.pod_restart_count || 0}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#0F172A' }}>
+                                  {row.replica_count || 1}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                      Chưa có bản ghi chuỗi 12 điểm viễn trắc lưu trữ trong CSDL cho lượt dự báo này.
+                    </div>
+                  )}
+                </div>
+
+                {/* Phần 2: Bảng Phân Tích Đa Rủi Ro Của GRU (Toàn Bộ 7 Rủi Ro) */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2. Kết Quả Dự Báo Đa Rủi Ro GRU Multi-Head (Toàn Bộ 7 Loại Rủi Ro)
+                    </h4>
+                    <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
+                      Mỗi loại rủi ro được tính toán độc lập qua Sigmoid riêng từ 0.0% đến 100.0%
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                    {RISK_HEADS_CONFIG.map((head) => {
+                      const val = outputs[head.key];
+                      const conf = typeof val === 'object' && val !== null ? Number(val.confidence || 0) : Number(val || 0);
+                      const percent = Math.min(Math.max(conf * 100, 0), 100);
+                      const isTriggered = conf >= head.threshold;
+                      const isElevated = conf >= 0.10 && !isTriggered;
+
+                      let badgeColor = '#059669';
+                      let badgeBg = '#ECFDF5';
+                      let badgeText = '✅ AN TOÀN';
+                      let barColor = '#10B981';
+
+                      if (isTriggered) {
+                        badgeColor = '#DC2626';
+                        badgeBg = '#FEE2E2';
+                        badgeText = '⚠️ NGUY CƠ CAO';
+                        barColor = '#EF4444';
+                      } else if (isElevated) {
+                        badgeColor = '#D97706';
+                        badgeBg = '#FEF3C7';
+                        badgeText = '⚡ ĐANG TĂNG';
+                        barColor = '#F59E0B';
+                      }
+
+                      return (
+                        <div
+                          key={head.key}
+                          style={{
+                            border: isTriggered ? '1px solid #FCA5A5' : '1px solid #E2E8F0',
+                            borderRadius: '8px',
+                            padding: '12px 14px',
+                            backgroundColor: isTriggered ? '#FEF2F2' : '#FFFFFF',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B', fontFamily: 'var(--font-mono)' }}>
+                              {head.key}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '0.625rem',
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                color: badgeColor,
+                                backgroundColor: badgeBg,
+                              }}
+                            >
+                              {badgeText}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.6875rem', color: '#64748B', marginBottom: '8px', lineHeight: '1.3' }}>
+                            {head.label}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '6px' }}>
+                            <span style={{ color: '#475569' }}>Xác suất: <strong style={{ color: badgeColor, fontFamily: 'var(--font-mono)' }}>{percent.toFixed(2)}%</strong></span>
+                            <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Ngưỡng: {(head.threshold * 100).toFixed(0)}%</span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${percent}%`,
+                                height: '100%',
+                                backgroundColor: barColor,
+                                borderRadius: '3px',
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: '12px 20px',
+                  borderTop: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F8FAFC',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  Ma trận đầu vào [12 × 8] viễn trắc snapshot lịch sử ghi nhận tại thời điểm chạy mô hình GRU (Audit Record).
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelectPrediction(p);
+                      handleCloseGruModal();
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      backgroundColor: '#3B82F6',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Eye size={14} />
+                    <span>Soi trên Biểu đồ Viễn trắc</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseGruModal}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 8. Modal Bằng Chứng Gốc Rễ RCA & Phân Tích Chẩn Đoán AI */}
       {evidenceModal.isOpen && (() => {
         const incident = evidenceModal.incidentDetail;
         const rec = evidenceModal.recData;
 
         // Trích xuất tên dịch vụ thân thiện, tuyệt đối không để lộ UUID c0000000-0000-...
-        let targetService = 'sme-order-service';
+        let targetService = '';
         const candidateNames = [
           incident?.title?.includes(' on ') ? incident.title.split(' on ')[1] : null,
           rec?.incident_title?.includes(' on ') ? rec.incident_title.split(' on ')[1] : null,
@@ -3059,14 +3422,21 @@ export const PredictionsPage = () => {
         for (const cand of candidateNames) {
           if (cand && typeof cand === 'string') {
             const clean = cand.trim();
-            if (!clean.includes('-0000-') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+            const normalized = normalizeServiceName(clean);
+            if (normalized && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)) {
+              targetService = normalized;
+              break;
+            } else if (!clean.includes('-0000-') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
               targetService = clean;
               break;
             }
           }
         }
+        if (!targetService) {
+          targetService = displaySelectedPrediction?.workload_name || availableWorkloads[0] || 'workload';
+        }
 
-        const clusterName = incident?.cluster_name || rec?.cluster_name || currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+        const clusterName = incident?.cluster_name || rec?.cluster_name || currentEnv?.cluster || currentEnv?.name || 'cluster';
         const incidentCode = `INC-${(evidenceModal.incidentId || '').substring(0, 8).toUpperCase()}`;
 
         let analysisResult = null;
@@ -3667,40 +4037,34 @@ export const PredictionsPage = () => {
                             <span>1. Tín Hiệu Đầu Vào AI / LLM (Input Features &amp; Telemetry):</span>
                           </div>
 
-                          {/* Bảng 8 metrics */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
-                            {((evidenceModal.predInputs && evidenceModal.predInputs.length > 0)
-                              ? evidenceModal.predInputs
-                              : [
-                                  { metric_name: 'cpu', metric_value: '0.27', unit: '%' },
-                                  { metric_name: 'ram', metric_value: '15.05', unit: '%' },
-                                  { metric_name: 'disk', metric_value: '10', unit: '%' },
-                                  { metric_name: 'latency', metric_value: '0', unit: 'ms' },
-                                  { metric_name: 'request_rate', metric_value: '0', unit: 'req/s' },
-                                  { metric_name: 'http_5xx_rate', metric_value: '0', unit: '%' },
-                                  { metric_name: 'pod_restart_count', metric_value: '2', unit: 'count' },
-                                  { metric_name: 'replica_count', metric_value: '2', unit: 'count' },
-                                ]
-                            ).map((item, idx) => (
-                              <div
-                                key={idx}
-                                style={{
-                                  padding: '8px 10px',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#F8FAFC',
-                                  border: '1px solid #E2E8F0',
-                                  fontSize: '0.75rem',
-                                }}
-                              >
-                                <div style={{ color: '#64748B', fontFamily: 'var(--font-mono)', fontSize: '0.625rem', textTransform: 'uppercase' }}>
-                                  {item.metric_name}
+                          {/* Bảng metrics */}
+                          {evidenceModal.predInputs && evidenceModal.predInputs.length > 0 ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+                              {evidenceModal.predInputs.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#F8FAFC',
+                                    border: '1px solid #E2E8F0',
+                                    fontSize: '0.75rem',
+                                  }}
+                                >
+                                  <div style={{ color: '#64748B', fontFamily: 'var(--font-mono)', fontSize: '0.625rem', textTransform: 'uppercase' }}>
+                                    {item.metric_name}
+                                  </div>
+                                  <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.875rem', marginTop: '2px' }}>
+                                    {item.metric_value} <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>{item.unit}</span>
+                                  </div>
                                 </div>
-                                <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.875rem', marginTop: '2px' }}>
-                                  {item.metric_value} <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>{item.unit}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ padding: '12px 14px', textAlign: 'center', color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic', backgroundColor: '#F8FAFC', borderRadius: '6px', marginBottom: '10px' }}>
+                              Đang đồng bộ chuỗi viễn trắc đầu vào từ máy chủ...
+                            </div>
+                          )}
 
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
                             <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
@@ -3708,7 +4072,20 @@ export const PredictionsPage = () => {
                                 Sự Kiện Kubernetes &amp; Cảnh Báo Đầu Vào:
                               </div>
                               <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#DC2626', backgroundColor: '#FEF2F2', padding: '6px 8px', borderRadius: '4px', border: '1px solid #FECACA' }}>
-                                &bull; Readiness probe is failing &bull; pod_restart_count: 2
+                                {evidenceModal.evidences && evidenceModal.evidences.length > 0 ? (
+                                  evidenceModal.evidences.slice(0, 3).map((ev, i) => {
+                                    let sum = '';
+                                    try {
+                                      const d = typeof ev.evidence_data === 'string' ? JSON.parse(ev.evidence_data) : ev.evidence_data;
+                                      sum = d?.summary || JSON.stringify(d);
+                                    } catch {
+                                      sum = String(ev.evidence_data || ev.source_reference || '');
+                                    }
+                                    return <div key={i}>&bull; [{ev.source_type || 'K8S_EVENT'}] {sum}</div>;
+                                  })
+                                ) : (
+                                  <div>&bull; {incident?.description || incident?.title || 'Quan trắc viễn trắc hệ thống'}</div>
+                                )}
                               </div>
                             </div>
 

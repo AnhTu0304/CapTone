@@ -182,7 +182,7 @@ export class RecommendationModel {
           h.code AS action_code, h.name AS action_name,
           r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at,
           i.cluster_id,
-          COALESCE(i.target_id, 'sme-order-service') as target_id,
+          COALESCE(i.target_id, '') as target_id,
           i.title as incident_title,
           ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status ORDER BY r.created_at DESC) as rn
         FROM ai_recommendations r
@@ -256,7 +256,7 @@ export class RecommendationModel {
       data.environment_id,
       data.action_type_id,
       data.target_type || 'WORKLOAD',
-      data.target_name || 'sme-order-service',
+      data.target_name || '',
       safeRisk,
       safeMode,
       safeApproval,

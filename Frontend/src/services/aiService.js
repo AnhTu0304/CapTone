@@ -87,6 +87,22 @@ export const aiService = {
   },
 
   /**
+   * Lấy danh sách các dịch vụ / workload thực tế của cụm K8s
+   * GET /api/v1/ai/workloads
+   */
+  async getWorkloads(clusterId) {
+    try {
+      const qs = clusterId ? `?cluster_id=${encodeURIComponent(clusterId)}` : '';
+      const res = await request(`/ai/workloads${qs}`);
+      if (res?.success && Array.isArray(res.data)) return res.data;
+      return [];
+    } catch (err) {
+      console.warn('[aiService] getWorkloads error:', err.message);
+      return [];
+    }
+  },
+
+  /**
    * Lấy chi tiết một lượt dự báo
    * GET /api/v1/ai/predictions/:id
    */

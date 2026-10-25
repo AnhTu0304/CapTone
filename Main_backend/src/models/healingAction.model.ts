@@ -332,7 +332,7 @@ export class HealingActionModel {
       data.action_type_id,
       data.target_type || 'POD',
       data.target_id || null,
-      data.target_name || 'sme-order-service',
+      data.target_name || '',
       riskLevel,
       executionMode,
       approvalStatus,
