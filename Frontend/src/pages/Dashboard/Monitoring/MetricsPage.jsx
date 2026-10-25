@@ -26,12 +26,12 @@ export const MetricsPage = () => {
       return;
     }
     try {
-      const nodes = await nodeService.getNodesByCluster(activeClusterId);
+      const nodes = await nodeService.getNodesByCluster(activeClusterId, currentOrg?.id);
       setClusterNodes(Array.isArray(nodes) ? nodes : []);
     } catch (err) {
       console.warn('[MetricsPage] Không thể tải danh sách Nodes:', err.message);
     }
-  }, [activeClusterId]);
+  }, [activeClusterId, currentOrg?.id]);
 
   useEffect(() => {
     loadClusterNodes();

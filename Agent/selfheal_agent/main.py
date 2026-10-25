@@ -286,6 +286,9 @@ class AgentService:
         while self._is_running:
             node_disk_pct: Optional[float] = None
             try:
+                k8s_nodes = self.nodes_collector.list_nodes()
+                if k8s_nodes and self.node_resource_collector.node_name not in [n.name for n in k8s_nodes if getattr(n, "name", None)]:
+                    self.node_resource_collector.node_name = k8s_nodes[0].name
                 node_snapshot = self.node_resource_collector.collect_snapshot()
                 node_disk_pct = node_snapshot.disk_usage_percent
                 await self.ws_client.send(NodeMetricsMessage(data=node_snapshot))

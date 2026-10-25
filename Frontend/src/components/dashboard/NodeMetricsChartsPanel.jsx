@@ -283,6 +283,14 @@ export const NodeMetricsChartsPanel = ({
   useEffect(() => {
     if (Array.isArray(nodesOverride)) {
       setNodesList(nodesOverride);
+      if (nodesOverride.length > 0) {
+        setSelectedNodeKey((prev) => {
+          if (prev && nodesOverride.some((n) => n.name === prev || n.id === prev)) {
+            return prev;
+          }
+          return nodesOverride[0].name || nodesOverride[0].id || '';
+        });
+      }
     }
   }, [nodesOverride]);
 
@@ -297,7 +305,7 @@ export const NodeMetricsChartsPanel = ({
         return;
       }
       try {
-        const list = await nodeService.getNodesByCluster(clusterId);
+        const list = await nodeService.getNodesByCluster(clusterId, orgId);
         if (!cancelled && Array.isArray(list)) {
           setNodesList(list);
           if (list.length > 0) {
@@ -320,7 +328,7 @@ export const NodeMetricsChartsPanel = ({
     return () => {
       cancelled = true;
     };
-  }, [clusterId, nodesOverride]);
+  }, [clusterId, orgId, nodesOverride]);
 
   // 2. Fetch Node Metrics with AbortController & Sequence Guard
   const fetchMetrics = useCallback(

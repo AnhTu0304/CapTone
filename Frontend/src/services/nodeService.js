@@ -1,22 +1,64 @@
 import { request } from './apiClient';
 
+function resolveActiveOrgId(explicitOrgId) {
+  const candidate =
+    explicitOrgId ||
+    (typeof window !== 'undefined' && window.localStorage
+      ? window.localStorage.getItem('selfheal_active_org_id')
+      : null);
+  if (!candidate || candidate === 'org-acme' || String(candidate).startsWith('sandbox-')) {
+    return null;
+  }
+  return candidate;
+}
+
 /**
  * Service quản lý Node máy chủ Kubernetes kết nối trực tiếp Backend & CSDL
- * Tuyến đường độc lập theo Cụm K8s, KHÔNG gộp trong tổ chức
+ * Ưu tiên tuyến đường theo phạm vi Tổ chức (/organizations/:orgId/clusters/:clusterId/nodes)
+ * để hỗ trợ đầy đủ các vai trò SME_OWNER, DEVOPS, VIEWER, kèm fallback cho SUPER_ADMIN.
  */
 export const nodeService = {
   /**
    * Lấy danh sách Nodes của một Cụm Kubernetes cụ thể
    * @param {string} clusterId - ID hoặc UID của Cụm K8s
+   * @param {string} [orgId] - ID Tổ chức (tùy chọn, tự động lấy từ localStorage nếu bỏ trống)
    * @returns {Promise<Array>}
    */
-  async getNodesByCluster(clusterId) {
+  async getNodesByCluster(clusterId, orgId) {
     if (!clusterId || clusterId.startsWith('org-') || clusterId.startsWith('sandbox-')) {
       return [];
     }
 
+    const effectiveOrgId = resolveActiveOrgId(orgId);
+
+    // 1. Ưu tiên gọi qua route phân quyền theo Tổ chức (/organizations/:orgId/clusters/:clusterId/nodes)
+    if (effectiveOrgId) {
+      try {
+        const res = await request(
+          `/organizations/${encodeURIComponent(effectiveOrgId)}/clusters/${encodeURIComponent(clusterId)}/nodes`
+        );
+        if (res?.success && Array.isArray(res.data)) {
+          return res.data;
+        }
+        if (Array.isArray(res)) return res;
+      } catch (err) {
+        console.warn('[nodeService] /organizations/:orgId/clusters/:id/nodes thất bại:', err.message);
+      }
+
+      try {
+        const res = await request(
+          `/organizations/${encodeURIComponent(effectiveOrgId)}/clusters/${encodeURIComponent(clusterId)}`
+        );
+        if (res?.success && res.data && Array.isArray(res.data.nodes)) {
+          return res.data.nodes;
+        }
+      } catch (err) {
+        console.warn('[nodeService] /organizations/:orgId/clusters/:id detail thất bại:', err.message);
+      }
+    }
+
     try {
-      // 1. Thử qua router chuyên trách cụm /clusters/:clusterId/nodes
+      // 2. Thử qua router chuyên trách cụm /clusters/:clusterId/nodes (cho Platform Admin)
       const res = await request(`/clusters/${encodeURIComponent(clusterId)}/nodes`);
       if (res?.success && Array.isArray(res.data)) {
         return res.data;
@@ -27,7 +69,7 @@ export const nodeService = {
     }
 
     try {
-      // 2. Thử qua router /nodes?clusterId=...
+      // 3. Thử qua router /nodes?clusterId=...
       const res = await request(`/nodes?clusterId=${encodeURIComponent(clusterId)}`);
       if (res?.success && Array.isArray(res.data)) {
         return res.data;
@@ -37,7 +79,7 @@ export const nodeService = {
       console.warn('[nodeService] /nodes?clusterId thất bại:', err.message);
     }
 
-    // 3. Fallback: Lấy qua cluster detail nếu cả 2 endpoint trên gặp lỗi
+    // 4. Fallback: Lấy qua cluster detail nếu các endpoint trên gặp lỗi
     try {
       const res = await request(`/clusters/${encodeURIComponent(clusterId)}`);
       if (res?.success && res.data && Array.isArray(res.data.nodes)) {
@@ -52,11 +94,32 @@ export const nodeService = {
 
   /**
    * Lấy chi tiết một Node cụ thể kèm danh sách Pods chạy trên Node
-   * @param {string} nodeId 
+   * @param {string} nodeId
+   * @param {Object} [context] - { orgId, clusterId }
    * @returns {Promise<Object|null>}
    */
-  async getNodeDetail(nodeId) {
+  async getNodeDetail(nodeId, context = {}) {
     if (!nodeId) return null;
+    const effectiveOrgId = resolveActiveOrgId(context.orgId);
+    const clusterId =
+      context.clusterId ||
+      (typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem('selfheal_active_cluster_id')
+        : null);
+
+    if (effectiveOrgId && clusterId) {
+      try {
+        const res = await request(
+          `/organizations/${encodeURIComponent(effectiveOrgId)}/clusters/${encodeURIComponent(clusterId)}/nodes/${encodeURIComponent(nodeId)}`
+        );
+        if (res?.success && res.data) {
+          return res.data;
+        }
+      } catch (err) {
+        // Fallback to global route
+      }
+    }
+
     try {
       const res = await request(`/nodes/${encodeURIComponent(nodeId)}`);
       if (res?.success && res.data) {
@@ -71,11 +134,31 @@ export const nodeService = {
 
   /**
    * Yêu cầu tháo tải (Safe Drain) Node qua hệ thống MAPE-K
-   * @param {string} nodeId 
+   * @param {string} nodeId
+   * @param {Object} [context] - { orgId, clusterId }
    * @returns {Promise<Object>}
    */
-  async drainNode(nodeId) {
+  async drainNode(nodeId, context = {}) {
     if (!nodeId) throw new Error('nodeId là bắt buộc');
+    const effectiveOrgId = resolveActiveOrgId(context.orgId);
+    const clusterId =
+      context.clusterId ||
+      (typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem('selfheal_active_cluster_id')
+        : null);
+
+    if (effectiveOrgId && clusterId) {
+      try {
+        const res = await request(
+          `/organizations/${encodeURIComponent(effectiveOrgId)}/clusters/${encodeURIComponent(clusterId)}/nodes/${encodeURIComponent(nodeId)}/drain`,
+          { method: 'POST' }
+        );
+        return res?.data || res;
+      } catch (err) {
+        // Fallback to global route
+      }
+    }
+
     const res = await request(`/nodes/${encodeURIComponent(nodeId)}/drain`, {
       method: 'POST',
     });
