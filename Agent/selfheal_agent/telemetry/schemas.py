@@ -12,6 +12,7 @@ class AgentMetricsData(BaseModel):
     """Metrics payload for pod/workload telemetry matching Main Backend schema."""
     service_id: str
     pod_id: str = "unknown-pod"
+    namespace: Optional[str] = Field(default="default", description="Kubernetes namespace")
     timestamp: str
     cpu: float = Field(..., ge=0.0, description="CPU usage percentage")
     ram: float = Field(..., ge=0.0, description="RAM usage in MB")
@@ -21,6 +22,10 @@ class AgentMetricsData(BaseModel):
     http_5xx_rate: float = Field(default=0.0, ge=0.0, description="HTTP 5xx error rate percentage")
     pod_restart_count: int = Field(default=0, ge=0, description="Container restart count")
     replica_count: int = Field(default=1, ge=0, description="Replicas count for the service")
+    node_cpu_percent: Optional[float] = Field(default=None, description="Host/Node CPU usage percentage")
+    node_ram_percent: Optional[float] = Field(default=None, description="Host/Node RAM usage percentage")
+    node_cpu_cores: Optional[float] = Field(default=None, description="Host/Node CPU usage in cores")
+    node_ram_gb: Optional[float] = Field(default=None, description="Host/Node RAM usage in GB")
 
 
 class DiskFilesystemMetric(BaseModel):
@@ -78,6 +83,7 @@ class AgentLogData(BaseModel):
     """Log payload for pod container logs."""
     service_id: str
     pod_id: str = "unknown-pod"
+    namespace: Optional[str] = Field(default="default", description="Kubernetes namespace")
     timestamp: str
     level: Literal["error", "warn", "info"]
     message: str
@@ -139,6 +145,7 @@ class AgentK8sInventoryData(BaseModel):
     nodes: list[dict[str, Any]] = Field(default_factory=list)
     namespaces: list[dict[str, Any]] = Field(default_factory=list)
     pods: list[dict[str, Any]] = Field(default_factory=list)
+    services: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class K8sInventoryMessage(BaseModel):

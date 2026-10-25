@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   FileText,
   CheckCircle,
+  Table,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -51,6 +52,45 @@ const SERIES_CONFIG = [
   { key: 'request_rate', label: 'Lưu lượng (Req/s)', color: '#06B6D4', gradientId: 'reqGrad', unit: 'req/s' },
   { key: 'http_5xx_rate', label: 'Lỗi 5xx (%)', color: '#EF4444', gradientId: 'errGrad', unit: '%' },
 ];
+
+const parseRiskOutputs = (riskOutputs) => {
+  if (!riskOutputs) return {};
+  if (typeof riskOutputs === 'object') return riskOutputs;
+  try {
+    return JSON.parse(riskOutputs);
+  } catch {
+    return {};
+  }
+};
+
+const getActiveRisks = (p) => {
+  const outputs = parseRiskOutputs(p?.risk_outputs);
+  const items = [];
+
+  const RISK_META = {
+    HTTP_5XX_SPIKE: { label: 'HTTP 5xx Lỗi', color: '#DC2626', bg: '#FEE2E2', border: '#FCA5A5' },
+    HIGH_LATENCY: { label: 'Độ trễ cao', color: '#D97706', bg: '#FEF3C7', border: '#FCD34D' },
+    CPU_OVERLOAD: { label: 'Quá tải CPU', color: '#B91C1C', bg: '#FEE2E2', border: '#FCA5A5' },
+    OOM: { label: 'Tràn RAM (OOM)', color: '#7E22CE', bg: '#F3E8FF', border: '#D8B4FE' },
+    DISK_FULL: { label: 'Đầy ổ đĩa', color: '#B45309', bg: '#FEF3C7', border: '#FDE68A' },
+    TRAFFIC_OVERLOAD: { label: 'Quá tải lưu lượng', color: '#1D4ED8', bg: '#DBEAFE', border: '#93C5FD' },
+    SCALE_DOWN_CANDIDATE: { label: 'Dư thừa tài nguyên', color: '#475569', bg: '#F1F5F9', border: '#CBD5E1' },
+  };
+
+  Object.entries(outputs).forEach(([riskKey, val]) => {
+    const conf = typeof val === 'object' && val !== null ? Number(val.confidence || 0) : Number(val || 0);
+    if (conf >= 0.05) {
+      items.push({
+        key: riskKey,
+        confidence: conf,
+        meta: RISK_META[riskKey] || { label: riskKey, color: '#DC2626', bg: '#FEE2E2', border: '#FCA5A5' }
+      });
+    }
+  });
+
+  items.sort((a, b) => b.confidence - a.confidence);
+  return items;
+};
 
 // Cấu hình hiển thị chi tiết hành động tự lành
 const getActionDetails = (code) => {
@@ -245,6 +285,29 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
   };
 };
 
+export const normalizeServiceName = (val) => {
+  if (!val) return '';
+  const str = String(val).trim();
+  // Map specific legacy seed UUIDs to actual database workload names if a UUID was passed
+  if (str === 'd9d4f68b-ffd5-4d44-8de2-980fcd6087d7') return 'selfheal-test-app';
+  if (
+    str === 'c0000000-0000-0000-0000-000000000001' ||
+    str === 'c0000000-0000-0000-0000-000000000002' ||
+    str === '6341454b-b372-479f-8eac-e0b39ad715e1' ||
+    str === '446f1224-4c37-4a4c-89d3-611dc51a5cc9'
+  ) return 'sme-order-service';
+  if (str === 'fafbe6bc-d295-4f3b-aaa7-e5d3a3a16d2e' || str === '899b0ff5-c316-4ac3-9115-c802ad0bba7d') return 'chaos-testagent2';
+  if (str === '19765456-dfdd-4d87-b32a-67d3e7be74c1' || str === '8a1c09b8-0dda-4777-9a6f-7a7a723a7197') return 'ecommerce-store-app';
+  if (str === '6c8b57e0-6503-4249-802a-84e8751c01b9' || str === '58151d7d-b1fe-42cc-80de-594457c19c70') return 'attack-injector-app';
+
+  // If raw UUID without mapping, drop it
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return '';
+  }
+  // Otherwise return the real service name as-is
+  return str;
+};
+
 export const PredictionsPage = () => {
   const { currentOrg, currentEnv, isAgentConnected, envList, setCurrentEnv, isRefreshing, triggerRefresh } = useDashboard();
 
@@ -255,9 +318,40 @@ export const PredictionsPage = () => {
   const [predictions, setPredictions] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [healingActions, setHealingActions] = useState([]);
+  const [registeredWorkloads, setRegisteredWorkloads] = useState([]);
   const [selectedPrediction, setSelectedPrediction] = useState(null);
+  const [gruModal, setGruModal] = useState({ isOpen: false, prediction: null, inputs: [], loading: false });
   const [predictionInputs, setPredictionInputs] = useState([]);
   const [loadingInputs, setLoadingInputs] = useState(false);
+
+  // Danh sách các dịch vụ hợp lệ của Cụm hiện tại (tải động từ telemetry & Backend)
+  const availableWorkloads = useMemo(() => {
+    if (!isAgentConnected) return [];
+    const set = new Set();
+    if (Array.isArray(registeredWorkloads)) {
+      registeredWorkloads.forEach((w) => {
+        const name = normalizeServiceName(w);
+        if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
+          set.add(name);
+        }
+      });
+    }
+    predictions.forEach((p) => {
+      const name = normalizeServiceName(p.workload_name || p.service_id);
+      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
+    });
+    recommendations.forEach((r) => {
+      const name = normalizeServiceName(
+        r.target_name || r.target_id || (r.incident_title?.includes(' on ') ? r.incident_title.split(' on ')[1] : null)
+      );
+      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
+    });
+    healingActions.forEach((a) => {
+      const name = normalizeServiceName(a.target_name || a.target_id);
+      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
+    });
+    return Array.from(set).filter(Boolean);
+  }, [isAgentConnected, registeredWorkloads, predictions, recommendations, healingActions]);
 
   // Trạng thái thao tác & WebSocket realtime
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -265,8 +359,16 @@ export const PredictionsPage = () => {
   const [appliedActions, setAppliedActions] = useState([]);
   const [actionInProgress, setActionInProgress] = useState(null);
   const [noticeMessage, setNoticeMessage] = useState(null);
+  const [activeStep, setActiveStep] = useState(1);
   const [batchProgress, setBatchProgress] = useState(null);
+  const [batchProgressMap, setBatchProgressMap] = useState({});
+  const [pinnedService, setPinnedService] = useState('');
+  const pinnedServiceRef = useRef('');
+  const [serviceInputsMap, setServiceInputsMap] = useState({});
+  const [servicePredictionMap, setServicePredictionMap] = useState({});
+  const [serviceStepMap, setServiceStepMap] = useState({});
   const [activeBottomTab, setActiveBottomTab] = useState('recommendations'); // 'recommendations' | 'healing_actions' | 'predictions'
+  const [bottomServiceFilter, setBottomServiceFilter] = useState('ALL');
 
   // Modal Bằng chứng RCA
   const [evidenceModal, setEvidenceModal] = useState({
@@ -279,24 +381,8 @@ export const PredictionsPage = () => {
     evidences: [],
   });
 
-  // Bật / tắt ẩn hiện khối giải thích nguyên tắc Honest Telemetry
-  const [showHonestNotice, setShowHonestNotice] = useState(() => {
-    try {
-      return localStorage.getItem('selfheal_show_honest_notice') === 'true';
-    } catch (e) {
-      return false;
-    }
-  });
-
-  const toggleHonestNotice = () => {
-    setShowHonestNotice((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('selfheal_show_honest_notice', String(next));
-      } catch (e) {}
-      return next;
-    });
-  };
+  // Trạng thái hover mở popover thông tin Honest Telemetry ở góc phải biểu đồ
+  const [isHoverInfo, setIsHoverInfo] = useState(false);
 
   // Bộ lọc & điều khiển biểu đồ 12 bước
   const [activeSeries, setActiveSeries] = useState({
@@ -314,19 +400,68 @@ export const PredictionsPage = () => {
 
   // Bộ lọc danh sách dự báo
   const [selectedTypeFilter, setSelectedTypeFilter] = useState('ALL');
+  const [selectedWorkload, setSelectedWorkload] = useState('ALL');
+  const selectedWorkloadRef = useRef('ALL');
+  const selectedPredictionRef = useRef(null);
+  const [logWorkloadFilter, setLogWorkloadFilter] = useState('ALL');
+  const [lastWsSyncTime, setLastWsSyncTime] = useState(() => new Date().toLocaleTimeString('vi-VN'));
 
-  // Nạp 12 điểm viễn trắc của một dự báo
-  const loadInputs = async (predId) => {
+  // Chuyển đổi Dịch vụ (Workload Switcher) trực tiếp cho Biểu đồ & Hồ sơ Rủi ro
+  const handleSelectWorkload = (wl) => {
+    setSelectedWorkload(wl);
+    selectedWorkloadRef.current = wl;
+    if (wl !== 'ALL') {
+      setPinnedService(wl);
+      pinnedServiceRef.current = wl;
+    }
+
+    const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
+    aiService.getPredictionStats({
+      cluster_id: clusterParam,
+      workload: wl !== 'ALL' ? wl : undefined,
+    }).then((statsRes) => {
+      if (statsRes) setStats(statsRes);
+    });
+
+    const targetService = wl !== 'ALL' ? wl : (pinnedServiceRef.current || availableWorkloads[0] || '');
+    if (targetService) {
+      const target = predictions.find(
+        (p) => normalizeServiceName(p.workload_name || p.service_id) === targetService
+      );
+      if (target) {
+        setSelectedPrediction(target);
+        selectedPredictionRef.current = target;
+        loadInputs(target.id, true, targetService);
+      } else if (servicePredictionMap[targetService]) {
+        setSelectedPrediction(servicePredictionMap[targetService]);
+        selectedPredictionRef.current = servicePredictionMap[targetService];
+        if (servicePredictionMap[targetService].id) {
+          loadInputs(servicePredictionMap[targetService].id, true, targetService);
+        }
+      }
+    }
+  };
+
+  // Nạp 12 điểm viễn trắc của một dự báo (hỗ trợ chế độ ngầm isSilent không nhấp nháy màn hình)
+  const loadInputs = async (predId, isSilent = false, serviceId = null) => {
     if (!predId) return;
-    setLoadingInputs(true);
+    if (!isSilent) setLoadingInputs(true);
     try {
       const inputs = await aiService.getPredictionInputs(predId);
-      setPredictionInputs(inputs || []);
+      if (Array.isArray(inputs) && inputs.length > 0) {
+        setPredictionInputs(inputs);
+        if (serviceId) {
+          setServiceInputsMap((prev) => ({
+            ...prev,
+            [serviceId]: inputs,
+          }));
+        }
+      }
     } catch (err) {
       console.error('[PredictionsPage] Lỗi nạp prediction inputs:', err);
-      setPredictionInputs([]);
+      if (!isSilent) setPredictionInputs([]);
     } finally {
-      setLoadingInputs(false);
+      if (!isSilent) setLoadingInputs(false);
     }
   };
 
@@ -335,31 +470,48 @@ export const PredictionsPage = () => {
     setLoading(true);
     try {
       const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
-      const [healthRes, statsRes, predRes, recRes, healRes] = await Promise.all([
+      const [healthRes, statsRes, predRes, recRes, healRes, workloadsRes] = await Promise.all([
         aiService.getAiHealth(),
-        aiService.getPredictionStats({ cluster_id: clusterParam }),
+        aiService.getPredictionStats({
+          cluster_id: clusterParam,
+          workload: selectedWorkloadRef.current !== 'ALL' ? selectedWorkloadRef.current : undefined,
+        }),
         aiService.getPredictions({
-          limit: 15,
+          limit: 30,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
           cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
-        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
+        aiService.getRecommendations({ limit: 50, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 50, cluster_id: clusterParam }),
+        aiService.getWorkloads(clusterParam),
       ]);
 
       setAiHealth(healthRes);
       setStats(statsRes);
       setHealingActions(healRes || []);
+      setRegisteredWorkloads(workloadsRes || []);
 
       const predItems = predRes?.items || [];
       setPredictions(predItems);
       setRecommendations(recRes || []);
 
-      // Mặc định chọn dự báo mới nhất để nạp chuỗi 12 điểm viễn trắc đầu vào
+      // Mặc định chọn dự báo theo dịch vụ đang chọn
       if (predItems.length > 0) {
-        const topPred = predItems[0];
-        setSelectedPrediction(topPred);
-        loadInputs(topPred.id);
+        const activeTarget = selectedWorkloadRef.current !== 'ALL'
+          ? selectedWorkloadRef.current
+          : (pinnedServiceRef.current || normalizeServiceName(predItems[0]?.workload_name || predItems[0]?.service_id) || '');
+
+        const targetPred = predItems.find((p) => normalizeServiceName(p.workload_name || p.service_id) === activeTarget) || predItems[0];
+        if (targetPred) {
+          const normName = normalizeServiceName(targetPred.workload_name || targetPred.service_id);
+          setSelectedPrediction(targetPred);
+          selectedPredictionRef.current = targetPred;
+          if (normName) {
+            setPinnedService(normName);
+            pinnedServiceRef.current = normName;
+          }
+          loadInputs(targetPred.id, false, normName);
+        }
       } else {
         setSelectedPrediction(null);
         setPredictionInputs([]);
@@ -376,33 +528,72 @@ export const PredictionsPage = () => {
     try {
       const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
       const [statsRes, predRes, recRes, healRes] = await Promise.all([
-        aiService.getPredictionStats({ cluster_id: clusterParam }),
+        aiService.getPredictionStats({
+          cluster_id: clusterParam,
+          workload: selectedWorkloadRef.current !== 'ALL' ? selectedWorkloadRef.current : undefined,
+        }),
         aiService.getPredictions({
-          limit: 15,
+          limit: 30,
           prediction_type: selectedTypeFilter === 'ALL' ? undefined : selectedTypeFilter,
           cluster_id: clusterParam,
         }),
-        aiService.getRecommendations({ limit: 10, cluster_id: clusterParam }),
-        aiService.getHealingActions({ limit: 10, cluster_id: clusterParam }),
+        aiService.getRecommendations({ limit: 50, cluster_id: clusterParam }),
+        aiService.getHealingActions({ limit: 50, cluster_id: clusterParam }),
       ]);
 
-      if (statsRes) setStats(statsRes);
-      if (healRes) setHealingActions(healRes || []);
-      if (recRes) setRecommendations(recRes || []);
-
-      const predItems = predRes?.items || [];
-      setPredictions(predItems);
-      if (predItems.length > 0) {
-        setSelectedPrediction((prev) => {
-          if (!prev || prev.id !== predItems[0].id) {
-            loadInputs(predItems[0].id);
-            return predItems[0];
+      if (statsRes) {
+        setStats((prev) => {
+          if (statsRes.total >= (prev.total || 0) || Math.abs((prev.total || 0) - statsRes.total) > 5) {
+            return statsRes;
           }
           return prev;
         });
-      } else {
-        setSelectedPrediction(null);
-        setPredictionInputs([]);
+      }
+
+      if (Array.isArray(healRes)) {
+        setHealingActions((prev) => {
+          if (prev.length === healRes.length && prev[0]?.id === healRes[0]?.id && prev[prev.length - 1]?.id === healRes[healRes.length - 1]?.id) {
+            return prev;
+          }
+          return healRes;
+        });
+      }
+
+      if (Array.isArray(recRes)) {
+        setRecommendations((prev) => {
+          if (prev.length === recRes.length && prev[0]?.id === recRes[0]?.id && prev[prev.length - 1]?.id === recRes[recRes.length - 1]?.id) {
+            return prev;
+          }
+          return recRes;
+        });
+      }
+
+      const predItems = predRes?.items || [];
+      if (Array.isArray(predItems) && predItems.length > 0) {
+        setPredictions((prev) => {
+          if (prev.length === predItems.length && prev[0]?.id === predItems[0]?.id && prev[prev.length - 1]?.id === predItems[predItems.length - 1]?.id) {
+            return prev;
+          }
+          return predItems;
+        });
+      }
+      if (predItems.length > 0) {
+        const activeTarget = selectedWorkloadRef.current !== 'ALL'
+          ? selectedWorkloadRef.current
+          : (pinnedServiceRef.current || normalizeServiceName(predItems[0]?.workload_name || predItems[0]?.service_id) || '');
+
+        const target = predItems.find((p) => normalizeServiceName(p.workload_name || p.service_id) === activeTarget);
+        if (target) {
+          const normName = normalizeServiceName(target.workload_name || target.service_id);
+          setSelectedPrediction((prev) => {
+            if (!prev || prev.id !== target.id) {
+              selectedPredictionRef.current = target;
+              loadInputs(target.id, true, normName);
+              return target;
+            }
+            return prev;
+          });
+        }
       }
     } catch (err) {
       // Bỏ qua lỗi ngầm
@@ -416,17 +607,26 @@ export const PredictionsPage = () => {
     setRecommendations([]);
     setHealingActions([]);
     setStats({ total: 0, by_type: {}, avg_confidence: 0 });
+    setSelectedWorkload('ALL');
+    selectedWorkloadRef.current = 'ALL';
+    setPinnedService('');
+    pinnedServiceRef.current = '';
+    setBottomServiceFilter('ALL');
+    setLogWorkloadFilter('ALL');
+    setRegisteredWorkloads([]);
     loadData();
   }, [currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id, loadData]);
 
-  // Tự động Polling ngầm mỗi 5 giây đảm bảo giao diện luôn nhảy số Realtime (chỉ khi Agent Online)
+  // Tự động Polling ngầm dự phòng (chỉ khi Agent Online)
+  // Khi WebSocket đã kết nối trực tiếp (isWsLive), giảm tần suất polling xuống 20s để triệt tiêu hiện tượng giật số
   useEffect(() => {
     if (!isAgentConnected) return;
+    const intervalMs = isWsLive ? 20000 : 5000;
     const timer = setInterval(() => {
       silentSyncData();
-    }, 5000);
+    }, intervalMs);
     return () => clearInterval(timer);
-  }, [isAgentConnected, silentSyncData]);
+  }, [isAgentConnected, isWsLive, silentSyncData]);
 
   // Kết nối WebSocket Realtime Stream (Push Protocol) (chỉ khi Agent Online)
   useEffect(() => {
@@ -436,8 +636,10 @@ export const PredictionsPage = () => {
       return;
     }
     const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
+    const targetService = selectedWorkload !== 'ALL' ? selectedWorkload : (pinnedService || availableWorkloads[0] || '');
+    if (!targetService) return;
     const unsubscribe = telemetryService.subscribeWebSocket(
-      'sme-order-service',
+      targetService,
       (payload) => {
         if (!payload) return;
 
@@ -445,30 +647,77 @@ export const PredictionsPage = () => {
         if (payload.type === 'ai_prediction' && payload.data) {
           const newPred = payload.data;
           const predId = newPred.prediction_id || newPred.id;
+          const wlName = normalizeServiceName(newPred.workload_name || newPred.service_id || newPred.target_name);
+          const evalTime = newPred.evaluated_at || newPred.predicted_at || new Date().toISOString();
+          const timeStr = new Date(evalTime).toLocaleTimeString('vi-VN');
+
           const formatted = {
             id: predId,
+            workload_name: wlName,
+            service_id: wlName,
             status: newPred.status || 'HEALTHY',
             prediction_type: newPred.primary_risk || 'NORMAL',
             risk_score: newPred.overall_risk_score,
             confidence_score: newPred.confidence_score,
-            predicted_at: newPred.predicted_at || new Date().toISOString(),
+            predicted_at: evalTime,
             ...newPred,
           };
 
+          // Lưu dự báo độc lập theo từng Service
+          setServicePredictionMap((prev) => ({
+            ...prev,
+            [wlName]: formatted,
+          }));
+
+          if (newPred.active_step) {
+            setServiceStepMap((prev) => ({
+              ...prev,
+              [wlName]: newPred.active_step,
+            }));
+          }
+
+          // Lưu 12 điểm viễn trắc độc lập cho Service này
+          if (Array.isArray(newPred.sequence) && newPred.sequence.length >= 12) {
+            const directInputs = [];
+            newPred.sequence.forEach((pt, idx) => {
+              const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+              for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'pod_restart_count', 'replica_count']) {
+                directInputs.push({
+                  id: `ws-${predId}-${idx}-${mName}`,
+                  prediction_id: predId,
+                  metric_name: mName,
+                  metric_value: pt[mName] !== undefined ? pt[mName] : 0,
+                  collected_at: ts,
+                });
+              }
+            });
+            setServiceInputsMap((prev) => ({
+              ...prev,
+              [wlName]: directInputs,
+            }));
+          }
+
           setPredictions((prev) => {
             if (!prev.some((p) => p.id === predId)) {
-              return [formatted, ...prev.slice(0, 14)];
+              return [formatted, ...prev.slice(0, 29)];
             }
             return prev;
           });
 
-          // Tự động kích hoạt hiển thị 12 mốc viễn trắc của dự báo mới nhất
-          setSelectedPrediction(formatted);
-          if (predId) {
-            loadInputs(predId);
+          // CHỈ cập nhật hiển thị chính nếu đúng là Service đang được người dùng theo dõi
+          const currentTarget = selectedWorkloadRef.current !== 'ALL'
+            ? selectedWorkloadRef.current
+            : (pinnedServiceRef.current || availableWorkloads[0] || '');
+
+          if (wlName && wlName === currentTarget) {
+            setLastWsSyncTime(timeStr);
+            setSelectedPrediction(formatted);
+            selectedPredictionRef.current = formatted;
+            if (newPred.active_step) {
+              setActiveStep(newPred.active_step);
+            }
           }
 
-          // Cập nhật thống kê tổng số lượt suy luận
           setStats((prev) => ({
             ...prev,
             total: (prev.total || 0) + 1,
@@ -481,24 +730,65 @@ export const PredictionsPage = () => {
 
         // 2. Gói tin tiến độ gom 12 bước viễn trắc (batch_accumulation)
         if (payload.type === 'batch_accumulation' && payload.data) {
-          setBatchProgress(payload.data);
+          const bp = payload.data;
+          const sId = bp.service_id;
+          if (!sId) return;
+
+          // Lưu tiến độ và mốc quét độc lập của riêng Service này
+          setBatchProgressMap((prev) => ({
+            ...prev,
+            [sId]: bp,
+          }));
+
+          if (bp.active_step) {
+            setServiceStepMap((prev) => ({
+              ...prev,
+              [sId]: bp.active_step,
+            }));
+          }
+
+          // Lưu 12 điểm viễn trắc cuộn trượt của riêng Service này
+          if (Array.isArray(bp.points) && bp.points.length > 0) {
+            const directInputs = [];
+            bp.points.forEach((pt, idx) => {
+              const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+              for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'pod_restart_count', 'replica_count']) {
+                directInputs.push({
+                  id: `batch-${sId}-${idx}-${mName}`,
+                  prediction_id: `live-${sId}`,
+                  metric_name: mName,
+                  metric_value: pt[mName] !== undefined ? pt[mName] : 0,
+                  collected_at: ts,
+                });
+              }
+            });
+            setServiceInputsMap((prev) => ({
+              ...prev,
+              [sId]: directInputs,
+            }));
+          }
+
+          // CHỈ cập nhật trạng thái hiển thị nếu đúng là Service đang được người dùng xem
+          const currentTarget = selectedWorkloadRef.current !== 'ALL'
+            ? selectedWorkloadRef.current
+            : (pinnedServiceRef.current || availableWorkloads[0] || '');
+
+          if (sId && sId === currentTarget) {
+            setBatchProgress(bp);
+            if (bp.active_step) {
+              setActiveStep(bp.active_step);
+            }
+          }
         }
 
-        // 3. Gói tin Live Pulse định kỳ từ Backend
-        if ((payload.type === 'live_pulse' || payload.type === 'initial_state') && payload.data) {
+        // 3. Gói tin Khởi tạo ban đầu từ WebSocket (chỉ nạp khi danh sách chưa có)
+        if (payload.type === 'initial_state' && payload.data) {
           const summary = payload.data;
           if (Array.isArray(summary.predictions) && summary.predictions.length > 0) {
-            setPredictions((prev) => {
-              const existingIds = new Set(prev.map((p) => p.id));
-              const fresh = summary.predictions.filter((p) => !existingIds.has(p.id));
-              if (fresh.length > 0) {
-                return [...fresh, ...prev].slice(0, 15);
-              }
-              return prev;
-            });
+            setPredictions((prev) => (prev.length === 0 ? summary.predictions : prev));
           }
           if (Array.isArray(summary.recommendations) && summary.recommendations.length > 0) {
-            setRecommendations(summary.recommendations);
+            setRecommendations((prev) => (prev.length === 0 ? summary.recommendations : prev));
           }
         }
 
@@ -507,7 +797,7 @@ export const PredictionsPage = () => {
           const newRec = payload.data;
           setRecommendations((prev) => {
             if (!prev.some((r) => r.id === newRec.id)) {
-              return [newRec, ...prev.slice(0, 9)];
+              return [newRec, ...prev.slice(0, 49)];
             }
             return prev;
           });
@@ -524,13 +814,21 @@ export const PredictionsPage = () => {
         unsubscribe();
       }
     };
-  }, []);
+  }, [isAgentConnected, selectedWorkload, pinnedService, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
 
   // Kích hoạt suy diễn thủ công on-demand (Rule Engine -> GRU Model -> RCA)
   const handleRunManualInference = async () => {
     setIsEvaluating(true);
     try {
-      const targetWorkload = displaySelectedPrediction?.workload_name || displayPredictions[0]?.workload_name || 'sme-order-service';
+      const targetWorkload = displaySelectedPrediction?.workload_name || displayPredictions[0]?.workload_name || availableWorkloads[0];
+      if (!targetWorkload) {
+        setIsEvaluating(false);
+        setNoticeMessage({
+          type: 'warning',
+          text: 'Chưa có dịch vụ nào trên cụm này để thực hiện suy diễn.',
+        });
+        return;
+      }
       const res = await aiService.triggerManualInference(targetWorkload, {
         forceRca: false,
         autoTriggerRca: true,
@@ -567,7 +865,32 @@ export const PredictionsPage = () => {
   // Chọn một dự báo trong bảng để soi chuỗi viễn trắc
   const handleSelectPrediction = (pred) => {
     setSelectedPrediction(pred);
+    selectedPredictionRef.current = pred;
+    if (pred?.workload_name) {
+      setSelectedWorkload(pred.workload_name);
+      selectedWorkloadRef.current = pred.workload_name;
+    }
     loadInputs(pred.id);
+  };
+
+  const handleOpenGruModal = async (pred) => {
+    if (!pred) return;
+    setGruModal({ isOpen: true, prediction: pred, inputs: [], loading: true });
+    try {
+      const inputs = await aiService.getPredictionInputs(pred.id);
+      setGruModal((prev) => ({
+        ...prev,
+        inputs: Array.isArray(inputs) ? inputs : [],
+        loading: false,
+      }));
+    } catch (err) {
+      console.error('[PredictionsPage] Lỗi lấy chuỗi viễn trắc lịch sử GRU:', err);
+      setGruModal((prev) => ({ ...prev, inputs: [], loading: false }));
+    }
+  };
+
+  const handleCloseGruModal = () => {
+    setGruModal({ isOpen: false, prediction: null, inputs: [], loading: false });
   };
 
   // Toggle ẩn/hiện một chuỗi viễn trắc
@@ -704,12 +1027,32 @@ export const PredictionsPage = () => {
     });
   };
 
-  // Tổ chức chuỗi 12 bước thời gian đồng bộ cho tất cả các metrics
+  // Xác định dịch vụ mục tiêu đang hiển thị (cố định, không bị nhảy chéo)
+  const currentServiceTarget = useMemo(() => {
+    if (selectedWorkload && selectedWorkload !== 'ALL') {
+      return selectedWorkload;
+    }
+    return pinnedService || availableWorkloads[0] || '';
+  }, [selectedWorkload, pinnedService, availableWorkloads]);
+
+  // Lấy 12 mốc viễn trắc độc lập của riêng dịch vụ đang xem
+  const currentInputs = useMemo(() => {
+    if (serviceInputsMap[currentServiceTarget] && serviceInputsMap[currentServiceTarget].length > 0) {
+      return serviceInputsMap[currentServiceTarget];
+    }
+    const selNorm = normalizeServiceName(selectedPrediction?.workload_name || selectedPrediction?.service_id);
+    if (selNorm === currentServiceTarget && predictionInputs.length > 0) {
+      return predictionInputs;
+    }
+    return [];
+  }, [serviceInputsMap, currentServiceTarget, predictionInputs, selectedPrediction]);
+
+  // Tổ chức chuỗi 12 bước thời gian đồng bộ cho tất cả các metrics của riêng dịch vụ đang xem
   const timesteps = useMemo(() => {
-    if (!predictionInputs || predictionInputs.length === 0) return [];
+    if (!currentInputs || currentInputs.length === 0) return [];
 
     const map = new Map();
-    predictionInputs.forEach((item) => {
+    currentInputs.forEach((item) => {
       const key = item.collected_at ? new Date(item.collected_at).toISOString() : item.id;
       if (!map.has(key)) {
         const d = new Date(item.collected_at);
@@ -748,7 +1091,53 @@ export const PredictionsPage = () => {
       stepLabel: `T${idx + 1}`,
       displayTime: item.timeLabel || `T${idx + 1}`,
     }));
-  }, [predictionInputs]);
+  }, [currentInputs]);
+
+  // Chuỗi 12 bước thời gian lịch sử cố định (Snapshot Audit) của riêng dự báo đang xem trong modal GRU
+  const modalTimesteps = useMemo(() => {
+    if (!gruModal.inputs || gruModal.inputs.length === 0) return [];
+
+    const map = new Map();
+    gruModal.inputs.forEach((item) => {
+      const key = item.collected_at ? new Date(item.collected_at).toISOString() : item.id;
+      if (!map.has(key)) {
+        const d = new Date(item.collected_at);
+        const timeLabel = isNaN(d.getTime())
+          ? ''
+          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        map.set(key, {
+          rawTime: item.collected_at,
+          timeLabel,
+          cpu: 0,
+          ram: 0,
+          disk: 0,
+          latency: 0,
+          request_rate: 0,
+          http_5xx_rate: 0,
+          pod_restart_count: 0,
+          replica_count: 0,
+        });
+      }
+      const entry = map.get(key);
+      const mName = item.metric_name?.toLowerCase();
+      const val = parseFloat(item.metric_value) || 0;
+      if (mName && entry[mName] !== undefined) {
+        entry[mName] = val;
+      }
+    });
+
+    const sorted = Array.from(map.values()).sort(
+      (a, b) => new Date(a.rawTime) - new Date(b.rawTime)
+    );
+
+    return sorted.map((item, idx) => ({
+      ...item,
+      step: idx + 1,
+      stepLabel: `T${idx + 1}`,
+      displayTime: item.timeLabel || `T${idx + 1}`,
+    }));
+  }, [gruModal.inputs]);
 
   // Dữ liệu hiển thị có điều kiện theo trạng thái kết nối Cụm K8s (isAgentConnected)
   // Khi cụm chưa kết nối (Agent Offline) -> đưa toàn bộ về 0 & không hiển thị dữ liệu
@@ -761,29 +1150,31 @@ export const PredictionsPage = () => {
 
   const displayPredictions = useMemo(() => {
     if (!isAgentConnected) return [];
-    return predictions;
-  }, [isAgentConnected, predictions]);
+    let list = predictions;
+    if (selectedTypeFilter && selectedTypeFilter !== 'ALL') {
+      list = list.filter((p) => {
+        if (p.prediction_type === selectedTypeFilter) return true;
+        const outputs = parseRiskOutputs(p.risk_outputs);
+        const val = outputs[selectedTypeFilter];
+        const conf = typeof val === 'object' && val !== null ? Number(val.confidence || 0) : Number(val || 0);
+        return conf >= 0.1;
+      });
+    }
+    const effectiveFilter = bottomServiceFilter !== 'ALL' ? bottomServiceFilter : (logWorkloadFilter !== 'ALL' ? logWorkloadFilter : 'ALL');
+    if (effectiveFilter && effectiveFilter !== 'ALL') {
+      list = list.filter((p) => normalizeServiceName(p.workload_name || p.service_id) === effectiveFilter);
+    }
+    return list;
+  }, [isAgentConnected, predictions, logWorkloadFilter, selectedTypeFilter, bottomServiceFilter]);
 
   const displayRecommendations = useMemo(() => {
     if (!isAgentConnected) return [];
-    const clusterParam = currentEnv?.cluster || currentEnv?.clusterId || currentEnv?.id;
     let list = recommendations;
-    if (clusterParam && clusterParam !== 'ALL') {
-      list = recommendations.filter((r) => {
-        if (!r.cluster_id) return true;
-        return (
-          r.cluster_id === clusterParam ||
-          r.cluster_id === currentEnv?.clusterId ||
-          r.cluster_id === currentEnv?.id ||
-          r.cluster_id === currentEnv?.cluster
-        );
-      });
-    }
 
-    // Nhóm và loại bỏ các đề xuất trùng lặp cho cùng một workload/hành động
+    // Nhóm và loại bỏ các đề xuất trùng lặp cho cùng một workload/hành động - hiển thị toàn bộ
     const map = new Map();
     for (const r of list) {
-      const target = r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : 'sme-order-service');
+      const target = normalizeServiceName(r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : ''));
       const actionCode = r.recommendation || r.action_code || 'RESTART_POD';
       const key = `${actionCode}__${target}`;
       if (!map.has(key)) {
@@ -799,18 +1190,55 @@ export const PredictionsPage = () => {
         }
       }
     }
-    return Array.from(map.values());
-  }, [isAgentConnected, recommendations, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id, appliedActions]);
+    let res = Array.from(map.values());
+    if (bottomServiceFilter && bottomServiceFilter !== 'ALL') {
+      res = res.filter((r) => {
+        const target = normalizeServiceName(r.target_name || r.target_id || (r.incident_title ? r.incident_title.split(' on ')[1] : ''));
+        return target === bottomServiceFilter;
+      });
+    }
+    return res;
+  }, [isAgentConnected, recommendations, appliedActions, bottomServiceFilter]);
 
   const displayHealingActions = useMemo(() => {
     if (!isAgentConnected) return [];
-    return healingActions;
-  }, [isAgentConnected, healingActions]);
+    let list = healingActions;
+    if (bottomServiceFilter && bottomServiceFilter !== 'ALL') {
+      list = list.filter((a) => {
+        const target = normalizeServiceName(a.target_name || a.target_id);
+        return target === bottomServiceFilter;
+      });
+    }
+    return list;
+  }, [isAgentConnected, healingActions, bottomServiceFilter]);
 
+  // Lấy dự báo GRU của riêng dịch vụ đang xem
   const displaySelectedPrediction = useMemo(() => {
     if (!isAgentConnected) return null;
-    return selectedPrediction;
-  }, [isAgentConnected, selectedPrediction]);
+    if (servicePredictionMap[currentServiceTarget]) {
+      return servicePredictionMap[currentServiceTarget];
+    }
+    const selNorm = normalizeServiceName(selectedPrediction?.workload_name || selectedPrediction?.service_id);
+    if (selectedPrediction && selNorm === currentServiceTarget) {
+      return selectedPrediction;
+    }
+    const found = predictions.find((p) => normalizeServiceName(p.workload_name || p.service_id) === currentServiceTarget);
+    return found || null;
+  }, [isAgentConnected, servicePredictionMap, currentServiceTarget, selectedPrediction, predictions]);
+
+  const currentServiceBatchProgress = useMemo(() => {
+    if (!currentServiceTarget) return batchProgress;
+    return batchProgressMap[currentServiceTarget] || (batchProgress?.service_id === currentServiceTarget ? batchProgress : null);
+  }, [batchProgressMap, currentServiceTarget, batchProgress]);
+
+  const currentActiveStep = useMemo(() => {
+    return (
+      serviceStepMap[currentServiceTarget] ||
+      currentServiceBatchProgress?.active_step ||
+      activeStep ||
+      1
+    );
+  }, [serviceStepMap, currentServiceBatchProgress?.active_step, currentServiceTarget, activeStep]);
 
   const displayTimesteps = useMemo(() => {
     if (!isAgentConnected) return [];
@@ -957,78 +1385,6 @@ export const PredictionsPage = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* WebSocket Pulse Badge */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 12px',
-            backgroundColor: isAgentConnected && isWsLive ? '#F0FDF4' : '#F8FAFC',
-            border: `1px solid ${isAgentConnected && isWsLive ? '#BBF7D0' : '#E2E8F0'}`,
-            borderRadius: '6px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: isAgentConnected && isWsLive ? '#15803D' : '#64748B',
-            fontFamily: 'var(--font-mono)',
-          }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: isAgentConnected && isWsLive ? '#22C55E' : '#94A3B8',
-              boxShadow: isAgentConnected && isWsLive ? '0 0 8px rgba(34, 197, 94, 0.6)' : 'none',
-            }} />
-            <span>{isAgentConnected && isWsLive ? 'LIVE WS TELEMETRY' : 'WS STANDBY'}</span>
-          </div>
-
-          {/* Trạng thái kết nối AI Engine */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 12px',
-            backgroundColor: !isAgentConnected ? '#F8FAFC' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#ECFDF5' : '#FEF2F2'),
-            border: `1px solid ${!isAgentConnected ? '#E2E8F0' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#A7F3D0' : '#FECACA')}`,
-            borderRadius: '6px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: !isAgentConnected ? '#64748B' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#065F46' : '#991B1B'),
-            fontFamily: 'var(--font-mono)',
-          }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: !isAgentConnected ? '#94A3B8' : (aiHealth?.status === 'OK' || aiHealth?.model_loaded ? '#10B981' : '#EF4444'),
-            }} />
-            <span>AI ENGINE: {!isAgentConnected ? 'STANDBY' : (aiHealth?.model_loaded ? 'PYTORCH GRU ONLINE' : 'DISCONNECTED')}</span>
-          </div>
-
-          {/* Nút Chạy suy diễn On-Demand */}
-          <button
-            type="button"
-            onClick={handleRunManualInference}
-            disabled={!isAgentConnected || isEvaluating || loading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: !isAgentConnected ? '#94A3B8' : '#7C3AED',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: !isAgentConnected || isEvaluating || loading ? 'not-allowed' : 'pointer',
-              boxShadow: isAgentConnected ? '0 1px 3px rgba(124, 58, 237, 0.3)' : 'none',
-            }}
-            title={!isAgentConnected ? 'Cụm chưa kết nối tác tử viễn trắc' : ''}
-          >
-            <Zap size={14} className={isEvaluating ? 'animate-spin' : ''} />
-            <span>{isEvaluating ? 'Đang suy diễn GRU...' : 'Chạy suy diễn mới'}</span>
-          </button>
-
           {/* Nút Làm mới dữ liệu */}
           <button
             type="button"
@@ -1096,11 +1452,14 @@ export const PredictionsPage = () => {
               backgroundColor: isAgentConnected ? (isWsLive ? '#10B981' : '#F59E0B') : '#94A3B8',
               boxShadow: isAgentConnected && isWsLive ? '0 0 8px #10B981' : 'none',
             }} />
-            <span>
+            <span
+              style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}
+              title={isAgentConnected ? `Tiến trình gom mẻ viễn trắc: ${currentServiceBatchProgress?.collected !== undefined ? currentServiceBatchProgress.collected : 12}/${currentServiceBatchProgress?.target || 12} (${currentServiceTarget})` : 'Cụm chưa kết nối'}
+            >
               {isAgentConnected
-                ? (batchProgress?.collected !== undefined
-                    ? `Đang gom mẻ mới: [${batchProgress.collected}/${batchProgress.target || 12} bước] (${batchProgress.collected * 5}s/60s)`
-                    : 'Đã gom mẻ viễn trắc 12 bước liên tục')
+                ? (currentServiceBatchProgress?.collected !== undefined
+                    ? `${currentServiceBatchProgress.collected}/${currentServiceBatchProgress.target || 12}`
+                    : '12/12')
                 : 'Cụm chưa kết nối tác tử viễn trắc'}
             </span>
           </div>
@@ -1165,70 +1524,7 @@ export const PredictionsPage = () => {
         </div>
       </div>
 
-      {/* 3. Nguyên Tắc Minh Bạch Của AI (Honest Telemetry Notice) - Nút nhỏ gọn bên trái */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-        <button
-          type="button"
-          onClick={toggleHonestNotice}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '6px 14px',
-            backgroundColor: showHonestNotice ? '#EFF6FF' : '#F8FAFC',
-            border: '1px solid #BFDBFE',
-            borderLeft: '4px solid #2563EB',
-            borderRadius: showHonestNotice ? '6px 6px 0 0' : '6px',
-            cursor: 'pointer',
-            userSelect: 'none',
-            transition: 'all 0.15s ease',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div
-            style={{
-              width: '22px',
-              height: '22px',
-              borderRadius: '50%',
-              backgroundColor: showHonestNotice ? '#2563EB' : '#DBEAFE',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: showHonestNotice ? '#FFFFFF' : '#2563EB',
-              flexShrink: 0,
-            }}
-          >
-            <Info size={13} />
-          </div>
-          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E3A8A' }}>
-            Nguyên Tắc Minh Bạch Của AI (Honest Telemetry)
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '0.75rem', fontWeight: 600, color: '#2563EB', marginLeft: '6px' }}>
-            <span>{showHonestNotice ? 'Thu gọn' : 'Xem giải thích'}</span>
-            {showHonestNotice ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </span>
-        </button>
 
-        {showHonestNotice && (
-          <div
-            style={{
-              maxWidth: '720px',
-              padding: '12px 18px',
-              backgroundColor: '#F8FAFC',
-              border: '1px solid #BFDBFE',
-              borderTop: 'none',
-              borderLeft: '4px solid #2563EB',
-              borderRadius: '0 6px 6px 6px',
-              fontSize: '0.8125rem',
-              color: '#1E40AF',
-              lineHeight: 1.6,
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-            }}
-          >
-            <strong>Cơ chế phân loại rủi ro GRU đa nhãn:</strong> Mô hình học máy của hệ thống phân tích chuỗi thời gian gồm đúng <strong>12 bước quan sát viễn trắc (cửa sổ 60 giây)</strong> và tính toán độc lập xác suất cho 6 nguy cơ bão hòa: CPU, OOM, Disk Full, High Latency, 5xx Spikes, Traffic Overload. AI Backend <em>không sinh số liệu dự báo thời gian ảo</em>; biểu đồ bên dưới cho phép bạn <strong>bật/tắt ẩn hiện độc lập từng đường viễn trắc</strong> để soi từng biến số đầu vào.
-          </div>
-        )}
-      </div>
 
       {/* 4. Khối Trực Quan Hóa: Biểu Đồ 12 Bước Đa Chuỗi (Ẩn/Hiện) & Hồ Sơ Xác Suất Rủi Ro GRU */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: '20px' }}>
@@ -1237,15 +1533,86 @@ export const PredictionsPage = () => {
         <div className="dash-card" style={{ padding: '20px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', letterSpacing: '0.04em' }}>
+                  ĐẦU VÀO AI
+                </span>
                 <Layers size={18} color="#3B82F6" />
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Cửa Sổ 12 Mốc Viễn Trắc Đầu Vào Của GRU
+                  Chuỗi 12 Mốc Viễn Trắc Đầu Vào Của GRU (60 Giây)
                 </h3>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Mỗi mốc cách nhau 5 giây. Lượt: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</span> &bull; Workload: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{displaySelectedPrediction?.workload_name || (isAgentConnected ? (displayPredictions.length > 0 ? 'N/A' : 'Chưa có workload') : 'Chưa kết nối')}</span>
+              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span>Lượt: <strong style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</strong></span>
+                <span>&bull;</span>
+                <span>Dịch vụ: <strong style={{ fontFamily: 'var(--font-mono)', color: '#2563EB' }}>{isAgentConnected ? (currentServiceTarget || 'Chưa có dữ liệu') : 'Chưa kết nối'}</strong></span>
               </p>
+
+              {/* Bộ chọn chuyển đổi Dịch vụ dạng Dropdown (Sổ xuống) trực tiếp tại Biểu Đồ */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Server size={13} color="#3B82F6" />
+                  Dịch vụ:
+                </span>
+                {!isAgentConnected ? (
+                  <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    Agent chưa kết nối (Không có dữ liệu viễn trắc)
+                  </span>
+                ) : availableWorkloads.length === 0 ? (
+                  <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    Chưa có dịch vụ nào gửi telemetry trên cụm này
+                  </span>
+                ) : (
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <select
+                      id="workload-select-dropdown"
+                      value={currentServiceTarget || availableWorkloads[0] || ''}
+                      onChange={(e) => handleSelectWorkload(e.target.value)}
+                      style={{
+                        padding: '5px 30px 5px 12px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        color: '#1D4ED8',
+                        backgroundColor: '#EFF6FF',
+                        border: '1.5px solid #3B82F6',
+                        borderRadius: '6px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        appearance: 'none',
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none',
+                        transition: 'all 0.15s ease',
+                        boxShadow: '0 1px 2px rgba(59, 130, 246, 0.12)',
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.backgroundColor = '#FFFFFF';
+                        e.target.style.borderColor = '#1E40AF';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.25)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.backgroundColor = '#EFF6FF';
+                        e.target.style.borderColor = '#3B82F6';
+                        e.target.style.boxShadow = '0 1px 2px rgba(59, 130, 246, 0.12)';
+                      }}
+                    >
+                      {availableWorkloads.map((wl) => (
+                        <option key={wl} value={wl} style={{ padding: '8px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', backgroundColor: '#FFFFFF' }}>
+                          {wl}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={14}
+                      color="#2563EB"
+                      style={{
+                        position: 'absolute',
+                        right: '9px',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Quick Actions Strip */}
@@ -1305,6 +1672,72 @@ export const PredictionsPage = () => {
                 <Sliders size={11} />
                 <span>Thang: {scaleMode === 'auto' ? 'Tự co giãn' : '0 - 100%'}</span>
               </button>
+
+
+
+              {/* Nút Logo Thông Báo Minh Bạch (Honest Telemetry Hover Popover) */}
+              <div
+                style={{ position: 'relative' }}
+                onMouseEnter={() => setIsHoverInfo(true)}
+                onMouseLeave={() => setIsHoverInfo(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsHoverInfo((v) => !v)}
+                  aria-label="Nguyên tắc minh bạch của AI"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: isHoverInfo ? '#2563EB' : '#EFF6FF',
+                    color: isHoverInfo ? '#FFFFFF' : '#2563EB',
+                    border: '1px solid #BFDBFE',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: isHoverInfo ? '0 0 0 3px rgba(37,99,235,0.18)' : 'none',
+                  }}
+                  title="Nguyên tắc minh bạch của AI (Honest Telemetry)"
+                >
+                  <Info size={15} />
+                </button>
+
+                {isHoverInfo && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '34px',
+                      right: '0',
+                      width: '380px',
+                      maxWidth: '90vw',
+                      padding: '14px 16px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #BFDBFE',
+                      borderLeft: '4px solid #2563EB',
+                      borderRadius: '8px',
+                      boxShadow: '0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      zIndex: 60,
+                      pointerEvents: 'auto',
+                      fontSize: '0.8125rem',
+                      lineHeight: '1.55',
+                      color: '#1E293B',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', color: '#1E40AF', fontWeight: 700, fontSize: '0.8125rem' }}>
+                      <Info size={14} color="#2563EB" />
+                      <span>Nguyên Tắc Minh Bạch Của AI (Honest Telemetry)</span>
+                    </div>
+                    <div style={{ color: '#334155', fontSize: '0.78125rem' }}>
+                      <strong style={{ color: '#1E3A8A' }}>Cơ chế phân loại rủi ro GRU đa nhãn:</strong> Mô hình học máy của hệ thống phân tích chuỗi thời gian gồm đúng <strong style={{ color: '#1E3A8A' }}>12 bước quan sát viễn trắc (cửa sổ 60 giây)</strong> và tính toán độc lập xác suất cho 6 nguy cơ bão hòa: CPU, OOM, Disk Full, High Latency, 5xx Spikes, Traffic Overload.
+                    </div>
+                    <div style={{ marginTop: '8px', color: '#64748B', fontSize: '0.75rem', fontStyle: 'italic', borderTop: '1px dashed #E2E8F0', paddingTop: '6px' }}>
+                      AI Backend <strong>không sinh số liệu dự báo thời gian ảo</strong>; biểu đồ cho phép bạn bật/tắt độc lập từng đường viễn trắc để soi từng biến số đầu vào thực tế.
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1366,7 +1799,7 @@ export const PredictionsPage = () => {
               <div style={{ fontWeight: 600, color: '#64748B' }}>Cụm {currentEnv?.cluster || 'N/A'} chưa kết nối tác tử viễn trắc (Agent Offline)</div>
               <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Chưa có dữ liệu chuỗi viễn trắc thu thập cho cụm này</div>
             </div>
-          ) : loadingInputs ? (
+          ) : (loadingInputs && (!predictionInputs || predictionInputs.length === 0)) ? (
             <div style={{ height: `${height}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '0.8125rem' }}>
               <RefreshCw size={18} className="animate-spin" style={{ marginRight: '8px' }} />
               Đang tải chuỗi 12 điểm viễn trắc...
@@ -1471,16 +1904,18 @@ export const PredictionsPage = () => {
                         const cx = getCoordX(idx);
                         const cy = getCoordY(t[cfg.key] || 0);
                         const isHovered = hoverIndex === idx;
+                        const activeSweepIdx = (displayTimesteps.length - 1) - Math.min(Math.max((currentActiveStep || 1) - 1, 0), displayTimesteps.length - 1);
+                        const isActive = idx === activeSweepIdx;
 
                         return (
                           <circle
                             key={idx}
                             cx={cx}
                             cy={cy}
-                            r={isHovered ? 5.5 : 3.5}
-                            fill="#FFFFFF"
+                            r={isHovered ? 5.5 : isActive ? 4.2 : 3}
+                            fill={isHovered ? cfg.color : isActive ? cfg.color : '#FFFFFF'}
                             stroke={cfg.color}
-                            strokeWidth={isHovered ? 2.5 : 1.8}
+                            strokeWidth={isHovered ? 2.5 : isActive ? 2 : 1.8}
                           />
                         );
                       })}
@@ -1489,22 +1924,87 @@ export const PredictionsPage = () => {
                 })}
 
                 {/* X-Axis Step Labels (T1 ... T12) */}
-                {displayTimesteps.map((t, idx) => (
-                  <text
-                    key={idx}
-                    x={getCoordX(idx)}
-                    y={height - 10}
-                    textAnchor="middle"
-                    fontSize="9"
-                    fontWeight={hoverIndex === idx ? '700' : '500'}
-                    fill={hoverIndex === idx ? '#0F172A' : '#64748B'}
-                    fontFamily="monospace"
-                  >
-                    {t.stepLabel}
-                  </text>
-                ))}
+                {displayTimesteps.map((t, idx) => {
+                  const activeSweepIdx = (displayTimesteps.length - 1) - Math.min(Math.max((currentActiveStep || 1) - 1, 0), displayTimesteps.length - 1);
+                  const isActive = idx === activeSweepIdx;
+                  return (
+                    <text
+                      key={idx}
+                      x={getCoordX(idx)}
+                      y={height - 10}
+                      textAnchor="middle"
+                      fontSize={isActive ? "10" : "9"}
+                      fontWeight={hoverIndex === idx ? '800' : isActive ? '800' : '500'}
+                      fill={hoverIndex === idx ? '#2563EB' : isActive ? '#2563EB' : '#64748B'}
+                      fontFamily="monospace"
+                    >
+                      {t.stepLabel}
+                    </text>
+                  );
+                })}
 
-                {/* Crosshair Vertical Tracking Line */}
+                {/* Vạch Dọc & Điểm Xanh Quét Đồng Bộ Theo Dòng Chảy (T12 -> T11 ... -> T1) */}
+                {displayTimesteps.length > 0 && (
+                  <g>
+                    {(() => {
+                      const totalSteps = displayTimesteps.length;
+                      const activeSweepIdx = (totalSteps - 1) - Math.min(Math.max((currentActiveStep || 1) - 1, 0), totalSteps - 1);
+                      const targetX = getCoordX(activeSweepIdx);
+                      const currentStepLabel = displayTimesteps[activeSweepIdx]?.stepLabel || `T${activeSweepIdx + 1}`;
+                      const isWrapReset = activeSweepIdx === (totalSteps - 1);
+
+                      return (
+                        <g>
+                          {/* Vạch dọc nét đứt quét theo đầu gom mới từ Phải sang Trái */}
+                          <line
+                            x1={targetX}
+                            y1={padding.top}
+                            x2={targetX}
+                            y2={padding.top + chartH}
+                            stroke="#2563EB"
+                            strokeWidth="2"
+                            strokeDasharray="4 2"
+                            style={{ transition: isWrapReset ? 'none' : 'x1 0.4s ease-out, x2 0.4s ease-out' }}
+                          />
+                          {/* Vòng hào quang phát sáng nhẹ */}
+                          <circle
+                            cx={targetX}
+                            cy={padding.top}
+                            r={7.5}
+                            fill="#2563EB"
+                            fillOpacity="0.25"
+                            style={{ transition: isWrapReset ? 'none' : 'cx 0.4s ease-out' }}
+                          />
+                          {/* Chấm tròn xanh tại đầu mốc mới nhận */}
+                          <circle
+                            cx={targetX}
+                            cy={padding.top}
+                            r={4.5}
+                            fill="#2563EB"
+                            stroke="#FFFFFF"
+                            strokeWidth="1.8"
+                            style={{ transition: isWrapReset ? 'none' : 'cx 0.4s ease-out' }}
+                          />
+                          {/* Nhãn mốc gom mới */}
+                          <text
+                            x={targetX}
+                            y={padding.top - 7}
+                            textAnchor={activeSweepIdx >= 10 ? "end" : activeSweepIdx <= 1 ? "start" : "middle"}
+                            fontSize="9"
+                            fontWeight="800"
+                            fill="#2563EB"
+                            fontFamily="monospace"
+                            style={{ transition: isWrapReset ? 'none' : 'x 0.4s ease-out' }}
+                          >
+                            {currentStepLabel} ({activeSweepIdx === 0 ? 'Đủ 12 bước -> GRU' : 'Đầu gom mới'})
+                          </text>
+                        </g>
+                      );
+                    })()}
+                  </g>
+                )}
+
+                {/* Crosshair Vertical Tracking Line khi Hover */}
                 {hoverIndex !== null && displayTimesteps[hoverIndex] && (
                   <line
                     x1={getCoordX(hoverIndex)}
@@ -1600,39 +2100,71 @@ export const PredictionsPage = () => {
 
         {/* Hồ Sơ Xác Suất 6 Đầu Rủi Ro Của GRU (Multi-Risk Profile) */}
         <div className="dash-card" style={{ padding: '20px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.625rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', backgroundColor: '#FAF5FF', color: '#7E22CE', border: '1px solid #E9D5FF', letterSpacing: '0.04em' }}>
+                ĐẦU RA AI
+              </span>
               <BarChart2 size={18} color="#7C3AED" />
               <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
                 Hồ Sơ Xác Suất Rủi Ro GRU
               </h3>
             </div>
-            <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', padding: '2px 6px', backgroundColor: '#F3E8FF', color: '#7C3AED', fontWeight: 700 }}>
-              {RISK_HEADS_CONFIG.length} ĐẦU SUY LUẬN
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', padding: '2px 6px', backgroundColor: '#F3E8FF', color: '#7C3AED', fontWeight: 700, borderRadius: '4px' }}>
+                {RISK_HEADS_CONFIG.length} ĐẦU SUY LUẬN
+              </span>
+            </div>
           </div>
 
-          <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '0 0 14px 0', lineHeight: 1.4 }}>
-            Điểm rủi ro tổng hợp lượt hiện tại:{' '}
-            <strong style={{ color: displaySelectedPrediction ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
-              {displaySelectedPrediction ? (displaySelectedPrediction.risk_score || '0.0000') : '0.0000'}
-            </strong>{' '}
-            (Trạng thái:{' '}
-            <span style={{ color: displaySelectedPrediction ? '#059669' : '#94A3B8', fontWeight: 700 }}>
-              {displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? 'CHƯA CÓ LƯỢT SUY LUẬN' : 'DISCONNECTED')}
-            </span>)
-          </p>
+          <div style={{ padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0', marginBottom: '14px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+            <div>
+              <span style={{ color: '#64748B' }}>Điểm rủi ro tổng hợp: </span>
+              <strong style={{ color: displaySelectedPrediction ? (parseFloat(displaySelectedPrediction.risk_score) >= 0.7 ? '#E11D48' : '#059669') : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+                {displaySelectedPrediction ? (displaySelectedPrediction.risk_score || '0.0000') : '0.0000'}
+              </strong>
+              <span style={{ marginLeft: '6px', fontWeight: 700, color: displaySelectedPrediction ? (parseFloat(displaySelectedPrediction.risk_score) >= 0.7 ? '#E11D48' : '#059669') : '#94A3B8' }}>
+                ({displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? 'CHƯA CÓ LƯỢT SUY LUẬN' : 'DISCONNECTED')})
+              </span>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '11px', flex: 1, justifyContent: 'center' }}>
             {RISK_HEADS_CONFIG.map((head) => {
               const isDetected = isAgentConnected && Boolean(displaySelectedPrediction) && displaySelectedPrediction?.prediction_type === head.key;
-              const probValue = (!isAgentConnected || !displaySelectedPrediction)
-                ? 0
-                : isDetected
-                ? (parseFloat(displaySelectedPrediction?.confidence_score) || 0.85)
-                : Math.min(parseFloat(displaySelectedPrediction?.risk_score || 0) * 10, head.threshold * 0.4);
-              const probPercent = (!isAgentConnected || !displaySelectedPrediction) ? 0 : Math.min(Math.round(probValue * 100), 100);
-              const isExceeded = isAgentConnected && Boolean(displaySelectedPrediction) && probValue >= head.threshold;
+              
+              // 1. Lấy trực tiếp xác suất độc lập của đầu nhãn GRU (risk_outputs) từ AI Backend
+              const rawAiConf = displaySelectedPrediction?.risk_outputs?.[head.key]?.confidence;
+
+              let probValue = 0;
+              if (rawAiConf !== undefined && rawAiConf !== null) {
+                probValue = parseFloat(rawAiConf);
+              } else if (isDetected) {
+                probValue = parseFloat(displaySelectedPrediction?.confidence_score) || 0.85;
+              } else if (displaySelectedPrediction?.risk_score) {
+                const baseScore = parseFloat(displaySelectedPrediction.risk_score) || 0;
+                probValue = Math.min(baseScore * 10, head.threshold * 0.4);
+              }
+
+              const effectiveThreshold = displaySelectedPrediction?.thresholds?.[head.key] !== undefined
+                ? displaySelectedPrediction.thresholds[head.key]
+                : head.threshold;
+
+              const isExceeded = isAgentConnected && Boolean(displaySelectedPrediction) && probValue >= effectiveThreshold;
+              const percentVal = probValue * 100;
+              const probPercent = (!isAgentConnected || !displaySelectedPrediction) 
+                ? 0 
+                : Math.min(Math.round(percentVal), 100);
+
+              const displayPercentText = (!isAgentConnected || !displaySelectedPrediction)
+                ? '0%'
+                : percentVal >= 1
+                ? `${Math.round(percentVal)}%`
+                : percentVal >= 0.1
+                ? `${percentVal.toFixed(1)}%`
+                : percentVal > 0.01
+                ? '< 0.1%'
+                : '0%';
 
               return (
                 <div key={head.key} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -1642,10 +2174,10 @@ export const PredictionsPage = () => {
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isExceeded ? '#E11D48' : 'var(--dash-text-muted)' }}>
-                        Ngưỡng: {(head.threshold * 100).toFixed(0)}%
+                        Ngưỡng: {(effectiveThreshold * 100).toFixed(0)}%
                       </span>
                       <strong style={{ fontFamily: 'var(--font-mono)', color: (!isAgentConnected || !displaySelectedPrediction) ? '#94A3B8' : (isExceeded ? '#E11D48' : '#059669') }}>
-                        {probPercent}%
+                        {displayPercentText}
                       </strong>
                     </div>
                   </div>
@@ -1654,7 +2186,7 @@ export const PredictionsPage = () => {
                   <div style={{ width: '100%', height: '7px', backgroundColor: '#F1F5F9', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
                     <div
                       style={{
-                        width: `${probPercent}%`,
+                        width: isExceeded ? `${probPercent}%` : `${Math.max(probPercent, probValue > 0 ? 2 : 0)}%`,
                         height: '100%',
                         backgroundColor: (!isAgentConnected || !displaySelectedPrediction) ? '#CBD5E1' : (isExceeded ? '#EF4444' : '#10B981'),
                         transition: 'width 0.3s ease',
@@ -1672,6 +2204,95 @@ export const PredictionsPage = () => {
               {displaySelectedPrediction ? 'Tất cả dưới ngưỡng an toàn' : (isAgentConnected ? 'Chưa có lượt suy luận' : 'Cụm chưa kết nối • Không có dữ liệu suy luận')}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* 4.9 Thanh Lọc Dịch Vụ / Workload Cho Toàn Bộ 3 Phân Hệ Phía Dưới dạng Dropdown */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginTop: '18px',
+          marginBottom: '10px',
+          padding: '8px 14px',
+          backgroundColor: '#FFFFFF',
+          borderRadius: '8px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Filter size={14} color="#3B82F6" />
+            Lọc theo Dịch vụ:
+          </span>
+          {!isAgentConnected ? (
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+              Cụm chưa kết nối Agent (Không có dịch vụ)
+            </span>
+          ) : availableWorkloads.length === 0 ? (
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+              Chưa có dịch vụ nào trên cụm này
+            </span>
+          ) : (
+            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <select
+                id="bottom-workload-filter-dropdown"
+                value={bottomServiceFilter}
+                onChange={(e) => {
+                  setBottomServiceFilter(e.target.value);
+                  setLogWorkloadFilter(e.target.value);
+                }}
+                style={{
+                  padding: '5px 30px 5px 12px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  color: bottomServiceFilter === 'ALL' ? '#1E293B' : '#1D4ED8',
+                  backgroundColor: bottomServiceFilter === 'ALL' ? '#F8FAFC' : '#EFF6FF',
+                  border: bottomServiceFilter === 'ALL' ? '1.5px solid #CBD5E1' : '1.5px solid #3B82F6',
+                  borderRadius: '6px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+                }}
+                onFocus={(e) => {
+                  e.target.style.backgroundColor = '#FFFFFF';
+                  e.target.style.borderColor = '#1D4ED8';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.backgroundColor = bottomServiceFilter === 'ALL' ? '#F8FAFC' : '#EFF6FF';
+                  e.target.style.borderColor = bottomServiceFilter === 'ALL' ? '#CBD5E1' : '#3B82F6';
+                  e.target.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                }}
+              >
+                <option value="ALL" style={{ padding: '8px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', backgroundColor: '#FFFFFF' }}>
+                  Tất cả dịch vụ ({availableWorkloads.length})
+                </option>
+                {availableWorkloads.map((wl) => (
+                  <option key={wl} value={wl} style={{ padding: '8px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', backgroundColor: '#FFFFFF' }}>
+                    {wl}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                color={bottomServiceFilter === 'ALL' ? '#64748B' : '#2563EB'}
+                style={{
+                  position: 'absolute',
+                  right: '9px',
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -1848,8 +2469,8 @@ export const PredictionsPage = () => {
             {displayRecommendations.map((rec) => {
               const isApplied = rec.status === 'APPLIED' || appliedActions.includes(rec.id);
               const actionCode = rec.recommendation || rec.action_code || 'RESTART_POD';
-              const targetName = rec.target_name || (rec.target_id === 'c0000000-0000-0000-0000-000000000002' ? 'sme-order-service' : (rec.target_id || (rec.incident_title ? rec.incident_title.split(' on ')[1] : 'sme-order-service')));
-              const clusterName = currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+              const targetName = normalizeServiceName(rec.target_name || rec.target_id || (rec.incident_title ? rec.incident_title.split(' on ')[1] : ''));
+              const clusterName = currentEnv?.cluster || currentEnv?.name || 'cluster';
 
               const actionInfo = getActionDetails(actionCode);
 
@@ -2124,7 +2745,7 @@ export const PredictionsPage = () => {
                         </span>
                       </td>
                       <td style={{ padding: '10px 12px', color: '#1E293B', fontWeight: 500 }}>
-                        {act.target_name || '-'}
+                        {normalizeServiceName(act.target_name || act.target_id) || '-'}
                       </td>
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
                         {act.execution_mode}
@@ -2184,9 +2805,37 @@ export const PredictionsPage = () => {
             </p>
           </div>
 
-          {/* Filter by prediction type */}
-          <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '2px', borderRadius: '6px' }}>
-            {['ALL', 'NORMAL', 'OOM', 'CPU_OVERLOAD', 'SCALE_DOWN_CANDIDATE'].map((type) => (
+          {/* Filters: Workload & Type */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {availableWorkloads.length > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Dịch vụ:</span>
+                <select
+                  value={bottomServiceFilter !== 'ALL' ? bottomServiceFilter : logWorkloadFilter}
+                  onChange={(e) => {
+                    setBottomServiceFilter(e.target.value);
+                    setLogWorkloadFilter(e.target.value);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid var(--dash-border)',
+                    backgroundColor: '#FFFFFF',
+                    color: 'var(--dash-text-primary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="ALL">Tất cả dịch vụ ({availableWorkloads.length})</option>
+                  {availableWorkloads.map((wl) => (
+                    <option key={wl} value={wl}>{wl}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '2px', borderRadius: '6px', flexWrap: 'wrap', gap: '2px' }}>
+            {['ALL', 'NORMAL', 'HTTP_5XX_SPIKE', 'HIGH_LATENCY', 'CPU_OVERLOAD', 'OOM', 'SCALE_DOWN_CANDIDATE'].map((type) => (
               <button
                 key={type}
                 type="button"
@@ -2207,6 +2856,7 @@ export const PredictionsPage = () => {
                 {type}
               </button>
             ))}
+            </div>
           </div>
         </div>
 
@@ -2224,7 +2874,7 @@ export const PredictionsPage = () => {
                 <th style={{ padding: '10px 12px' }}>MÃ DỰ BÁO</th>
                 <th style={{ padding: '10px 12px' }}>WORKLOAD / DỊCH VỤ</th>
                 <th style={{ padding: '10px 12px' }}>CỤM MÁY CHỦ</th>
-                <th style={{ padding: '10px 12px' }}>KẾT LUẬN SUY DIỄN</th>
+                <th style={{ padding: '10px 12px' }}>KẾT LUẬN SUY DIỄN (ĐA RỦI RO)</th>
                 <th style={{ padding: '10px 12px' }}>ĐIỂM RỦI RO</th>
                 <th style={{ padding: '10px 12px' }}>TRẠNG THÁI</th>
                 <th style={{ padding: '10px 12px' }}>THỜI ĐIỂM GHI NHẬN</th>
@@ -2235,14 +2885,15 @@ export const PredictionsPage = () => {
               {displayPredictions.map((p) => {
                 const isSelected = selectedPrediction?.id === p.id;
                 const isHealthy = p.status === 'HEALTHY' || p.prediction_type === 'NORMAL';
+                const activeRisks = getActiveRisks(p);
 
                 return (
                   <tr
                     key={p.id}
-                    onClick={() => handleSelectPrediction(p)}
+                    onClick={() => handleOpenGruModal(p)}
                     style={{
                       borderBottom: '1px solid #F1F5F9',
-                      backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+                      backgroundColor: isSelected ? '#F8FAFC' : 'transparent',
                       cursor: 'pointer',
                       transition: 'background-color 0.1s ease',
                     }}
@@ -2257,22 +2908,51 @@ export const PredictionsPage = () => {
                       {p.cluster_name || currentEnv?.cluster || '-'}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.6875rem',
-                          fontWeight: 700,
-                          fontFamily: 'var(--font-mono)',
-                          backgroundColor: isHealthy ? '#DCFCE7' : '#FEE2E2',
-                          color: isHealthy ? '#15803D' : '#B91C1C',
-                        }}
-                      >
-                        {p.prediction_type}
-                      </span>
+                      {activeRisks.length === 0 ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-mono)',
+                            backgroundColor: '#DCFCE7',
+                            color: '#15803D',
+                          }}
+                        >
+                          NORMAL (An toàn)
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {activeRisks.map((r) => (
+                            <span
+                              key={r.key}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.6875rem',
+                                fontWeight: 700,
+                                fontFamily: 'var(--font-mono)',
+                                backgroundColor: r.meta.bg,
+                                color: r.meta.color,
+                                border: `1px solid ${r.meta.border}`,
+                              }}
+                              title={`${r.meta.label}: ${(r.confidence * 100).toFixed(2)}%`}
+                            >
+                              <span>{r.key}</span>
+                              <span style={{ fontSize: '0.625rem', opacity: 0.9 }}>({(r.confidence * 100).toFixed(1)}%)</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
-                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
                       {parseFloat(p.risk_score || 0).toFixed(4)}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
@@ -2284,29 +2964,57 @@ export const PredictionsPage = () => {
                       {new Date(p.predicted_at || p.created_at).toLocaleTimeString('vi-VN')}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectPrediction(p);
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '4px 8px',
-                          fontSize: '0.6875rem',
-                          fontWeight: 600,
-                          backgroundColor: isSelected ? '#3B82F6' : '#F1F5F9',
-                          color: isSelected ? '#FFFFFF' : 'var(--dash-text-primary)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Eye size={12} />
-                        <span>{isSelected ? 'Đang soi' : 'Soi chuỗi'}</span>
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenGruModal(p);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            backgroundColor: '#EEF2FF',
+                            color: '#4338CA',
+                            border: '1px solid #C7D2FE',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                          title="Bấm để mở cửa sổ chi tiết bảng dữ liệu 12 điểm viễn trắc và 7 đầu rủi ro GRU"
+                        >
+                          <Table size={12} />
+                          <span>Bảng GRU</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectPrediction(p);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            backgroundColor: isSelected ? '#3B82F6' : '#F1F5F9',
+                            color: isSelected ? '#FFFFFF' : 'var(--dash-text-primary)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                          title="Nạp chuỗi 12 điểm viễn trắc lên biểu đồ phân tích ở trên"
+                        >
+                          <Eye size={12} />
+                          <span>{isSelected ? 'Đang soi' : 'Soi chuỗi'}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -2318,13 +3026,391 @@ export const PredictionsPage = () => {
       </div>
       )}
 
+      {/* 7.5 Modal Chi Tiết Dữ Liệu Đầu Vào Gửi Vào GRU & Suy Diễn Đa Rủi Ro */}
+      {gruModal.isOpen && gruModal.prediction && (() => {
+        const p = gruModal.prediction;
+        const outputs = parseRiskOutputs(p.risk_outputs);
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.72)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '16px',
+            }}
+            onClick={handleCloseGruModal}
+          >
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '14px',
+                maxWidth: '1050px',
+                width: '100%',
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.35)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: '92vh',
+                border: '1px solid #CBD5E1',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: '16px 22px',
+                  borderBottom: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F8FAFC',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      backgroundColor: '#EEF2FF',
+                      border: '1px solid #C7D2FE',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Table size={18} color="#4F46E5" />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0F172A' }}>
+                        Chi Tiết Dữ Liệu Đầu Vào GRU &amp; Suy Diễn Đa Rủi Ro (Snapshot Lịch Sử)
+                      </h3>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.75rem',
+                          color: '#6366F1',
+                          backgroundColor: '#EEF2FF',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Mã #{p.id}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          color: '#059669',
+                          backgroundColor: '#ECFDF5',
+                          border: '1px solid #A7F3D0',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        BẢN GHI LỊCH SỬ (AUDIT RECORD)
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
+                      Dịch vụ: <strong style={{ color: '#0F172A' }}>{p.workload_name || '-'}</strong> | Cụm: <strong style={{ color: '#0F172A' }}>{p.cluster_name || currentEnv?.cluster || '-'}</strong> | Thời điểm dự báo: <strong style={{ color: '#0F172A' }}>{new Date(p.predicted_at || p.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ({new Date(p.predicted_at || p.created_at).toLocaleDateString('vi-VN')})</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCloseGruModal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#64748B',
+                    cursor: 'pointer',
+                  }}
+                  title="Đóng cửa sổ"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+                {/* Phần 1: Bảng Ma Trận Đầu Vào GRU Tensor [12 x 8] */}
+                <div style={{ marginBottom: '22px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      1. Bảng Ma Trận Đầu Vào GRU Tensor [12 × 8] (Bản Ghi Lịch Sử Lưu Trữ)
+                    </h4>
+                    <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
+                      Chuỗi 12 mốc viễn trắc lưu trữ tại thời điểm suy diễn trong CSDL làm bằng chứng kiểm toán (Cố định, không nhảy realtime)
+                    </span>
+                  </div>
+
+                  {gruModal.loading ? (
+                    <div style={{ padding: '32px', textAlign: 'center', color: '#64748B', fontSize: '0.8125rem', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                      <RefreshCw size={18} className="animate-spin" style={{ display: 'inline', marginRight: '8px' }} />
+                      Đang nạp 12 bước dữ liệu viễn trắc lịch sử từ cơ sở dữ liệu...
+                    </div>
+                  ) : modalTimesteps && modalTimesteps.length > 0 ? (
+                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'center' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
+                            <th style={{ padding: '9px 10px' }}>Bước</th>
+                            <th style={{ padding: '9px 10px' }}>Thời Điểm</th>
+                            <th style={{ padding: '9px 10px' }}>CPU (%)</th>
+                            <th style={{ padding: '9px 10px' }}>RAM (%)</th>
+                            <th style={{ padding: '9px 10px' }}>Disk (%)</th>
+                            <th style={{ padding: '9px 10px' }}>Request Rate (req/s)</th>
+                            <th style={{ padding: '9px 10px' }}>Độ Trễ Latency (ms)</th>
+                            <th style={{ padding: '9px 10px' }}>HTTP 5xx (%)</th>
+                            <th style={{ padding: '9px 10px' }}>Restarts</th>
+                            <th style={{ padding: '9px 10px' }}>Replicas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {modalTimesteps.map((row, idx) => {
+                            const isSpike5xx = row.http_5xx_rate > 0;
+                            const isHighLatency = row.latency > 100;
+                            const isHighCpu = row.cpu > 70;
+                            const isHighTraffic = row.request_rate > 10;
+
+                            return (
+                              <tr
+                                key={idx}
+                                style={{
+                                  borderBottom: '1px solid #F1F5F9',
+                                  backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                                  fontFamily: 'var(--font-mono)',
+                                }}
+                              >
+                                <td style={{ padding: '8px 10px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
+                                  {row.stepLabel || `T${idx + 1}`}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#64748B' }}>
+                                  {row.displayTime || '-'}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: isHighCpu ? '#DC2626' : '#0F172A', fontWeight: isHighCpu ? 700 : 500 }}>
+                                  {Number(row.cpu || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#0F172A' }}>
+                                  {Number(row.ram || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#64748B' }}>
+                                  {Number(row.disk || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: isHighTraffic ? '#2563EB' : '#0F172A', fontWeight: isHighTraffic ? 700 : 500 }}>
+                                  {Number(row.request_rate || 0).toFixed(2)} req/s
+                                </td>
+                                <td style={{ padding: '8px 10px', color: isHighLatency ? '#D97706' : '#0F172A', fontWeight: isHighLatency ? 700 : 500 }}>
+                                  {Number(row.latency || 0).toFixed(2)} ms
+                                </td>
+                                <td style={{
+                                  padding: '8px 10px',
+                                  color: isSpike5xx ? '#DC2626' : '#64748B',
+                                  fontWeight: isSpike5xx ? 700 : 500,
+                                  backgroundColor: isSpike5xx ? '#FEE2E2' : 'transparent',
+                                }}>
+                                  {Number(row.http_5xx_rate || 0).toFixed(2)}%
+                                </td>
+                                <td style={{ padding: '8px 10px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>
+                                  {row.pod_restart_count || 0}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: '#0F172A' }}>
+                                  {row.replica_count || 1}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '0.75rem', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                      Chưa có bản ghi chuỗi 12 điểm viễn trắc lưu trữ trong CSDL cho lượt dự báo này.
+                    </div>
+                  )}
+                </div>
+
+                {/* Phần 2: Bảng Phân Tích Đa Rủi Ro Của GRU (Toàn Bộ 7 Rủi Ro) */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2. Kết Quả Dự Báo Đa Rủi Ro GRU Multi-Head (Toàn Bộ 7 Loại Rủi Ro)
+                    </h4>
+                    <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
+                      Mỗi loại rủi ro được tính toán độc lập qua Sigmoid riêng từ 0.0% đến 100.0%
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                    {RISK_HEADS_CONFIG.map((head) => {
+                      const val = outputs[head.key];
+                      const conf = typeof val === 'object' && val !== null ? Number(val.confidence || 0) : Number(val || 0);
+                      const percent = Math.min(Math.max(conf * 100, 0), 100);
+                      const isTriggered = conf >= head.threshold;
+                      const isElevated = conf >= 0.10 && !isTriggered;
+
+                      let badgeColor = '#059669';
+                      let badgeBg = '#ECFDF5';
+                      let badgeText = '✅ AN TOÀN';
+                      let barColor = '#10B981';
+
+                      if (isTriggered) {
+                        badgeColor = '#DC2626';
+                        badgeBg = '#FEE2E2';
+                        badgeText = '⚠️ NGUY CƠ CAO';
+                        barColor = '#EF4444';
+                      } else if (isElevated) {
+                        badgeColor = '#D97706';
+                        badgeBg = '#FEF3C7';
+                        badgeText = '⚡ ĐANG TĂNG';
+                        barColor = '#F59E0B';
+                      }
+
+                      return (
+                        <div
+                          key={head.key}
+                          style={{
+                            border: isTriggered ? '1px solid #FCA5A5' : '1px solid #E2E8F0',
+                            borderRadius: '8px',
+                            padding: '12px 14px',
+                            backgroundColor: isTriggered ? '#FEF2F2' : '#FFFFFF',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B', fontFamily: 'var(--font-mono)' }}>
+                              {head.key}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '0.625rem',
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                color: badgeColor,
+                                backgroundColor: badgeBg,
+                              }}
+                            >
+                              {badgeText}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.6875rem', color: '#64748B', marginBottom: '8px', lineHeight: '1.3' }}>
+                            {head.label}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '6px' }}>
+                            <span style={{ color: '#475569' }}>Xác suất: <strong style={{ color: badgeColor, fontFamily: 'var(--font-mono)' }}>{percent.toFixed(2)}%</strong></span>
+                            <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Ngưỡng: {(head.threshold * 100).toFixed(0)}%</span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${percent}%`,
+                                height: '100%',
+                                backgroundColor: barColor,
+                                borderRadius: '3px',
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: '12px 20px',
+                  borderTop: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F8FAFC',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  Ma trận đầu vào [12 × 8] viễn trắc snapshot lịch sử ghi nhận tại thời điểm chạy mô hình GRU (Audit Record).
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelectPrediction(p);
+                      handleCloseGruModal();
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      backgroundColor: '#3B82F6',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Eye size={14} />
+                    <span>Soi trên Biểu đồ Viễn trắc</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseGruModal}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 8. Modal Bằng Chứng Gốc Rễ RCA & Phân Tích Chẩn Đoán AI */}
       {evidenceModal.isOpen && (() => {
         const incident = evidenceModal.incidentDetail;
         const rec = evidenceModal.recData;
 
         // Trích xuất tên dịch vụ thân thiện, tuyệt đối không để lộ UUID c0000000-0000-...
-        let targetService = 'sme-order-service';
+        let targetService = '';
         const candidateNames = [
           incident?.title?.includes(' on ') ? incident.title.split(' on ')[1] : null,
           rec?.incident_title?.includes(' on ') ? rec.incident_title.split(' on ')[1] : null,
@@ -2336,14 +3422,21 @@ export const PredictionsPage = () => {
         for (const cand of candidateNames) {
           if (cand && typeof cand === 'string') {
             const clean = cand.trim();
-            if (!clean.includes('-0000-') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+            const normalized = normalizeServiceName(clean);
+            if (normalized && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)) {
+              targetService = normalized;
+              break;
+            } else if (!clean.includes('-0000-') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
               targetService = clean;
               break;
             }
           }
         }
+        if (!targetService) {
+          targetService = displaySelectedPrediction?.workload_name || availableWorkloads[0] || 'workload';
+        }
 
-        const clusterName = incident?.cluster_name || rec?.cluster_name || currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+        const clusterName = incident?.cluster_name || rec?.cluster_name || currentEnv?.cluster || currentEnv?.name || 'cluster';
         const incidentCode = `INC-${(evidenceModal.incidentId || '').substring(0, 8).toUpperCase()}`;
 
         let analysisResult = null;
@@ -2944,40 +4037,34 @@ export const PredictionsPage = () => {
                             <span>1. Tín Hiệu Đầu Vào AI / LLM (Input Features &amp; Telemetry):</span>
                           </div>
 
-                          {/* Bảng 8 metrics */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
-                            {((evidenceModal.predInputs && evidenceModal.predInputs.length > 0)
-                              ? evidenceModal.predInputs
-                              : [
-                                  { metric_name: 'cpu', metric_value: '0.27', unit: '%' },
-                                  { metric_name: 'ram', metric_value: '15.05', unit: '%' },
-                                  { metric_name: 'disk', metric_value: '10', unit: '%' },
-                                  { metric_name: 'latency', metric_value: '0', unit: 'ms' },
-                                  { metric_name: 'request_rate', metric_value: '0', unit: 'req/s' },
-                                  { metric_name: 'http_5xx_rate', metric_value: '0', unit: '%' },
-                                  { metric_name: 'pod_restart_count', metric_value: '2', unit: 'count' },
-                                  { metric_name: 'replica_count', metric_value: '2', unit: 'count' },
-                                ]
-                            ).map((item, idx) => (
-                              <div
-                                key={idx}
-                                style={{
-                                  padding: '8px 10px',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#F8FAFC',
-                                  border: '1px solid #E2E8F0',
-                                  fontSize: '0.75rem',
-                                }}
-                              >
-                                <div style={{ color: '#64748B', fontFamily: 'var(--font-mono)', fontSize: '0.625rem', textTransform: 'uppercase' }}>
-                                  {item.metric_name}
+                          {/* Bảng metrics */}
+                          {evidenceModal.predInputs && evidenceModal.predInputs.length > 0 ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+                              {evidenceModal.predInputs.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#F8FAFC',
+                                    border: '1px solid #E2E8F0',
+                                    fontSize: '0.75rem',
+                                  }}
+                                >
+                                  <div style={{ color: '#64748B', fontFamily: 'var(--font-mono)', fontSize: '0.625rem', textTransform: 'uppercase' }}>
+                                    {item.metric_name}
+                                  </div>
+                                  <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.875rem', marginTop: '2px' }}>
+                                    {item.metric_value} <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>{item.unit}</span>
+                                  </div>
                                 </div>
-                                <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.875rem', marginTop: '2px' }}>
-                                  {item.metric_value} <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>{item.unit}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ padding: '12px 14px', textAlign: 'center', color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic', backgroundColor: '#F8FAFC', borderRadius: '6px', marginBottom: '10px' }}>
+                              Đang đồng bộ chuỗi viễn trắc đầu vào từ máy chủ...
+                            </div>
+                          )}
 
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
                             <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
@@ -2985,7 +4072,20 @@ export const PredictionsPage = () => {
                                 Sự Kiện Kubernetes &amp; Cảnh Báo Đầu Vào:
                               </div>
                               <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#DC2626', backgroundColor: '#FEF2F2', padding: '6px 8px', borderRadius: '4px', border: '1px solid #FECACA' }}>
-                                &bull; Readiness probe is failing &bull; pod_restart_count: 2
+                                {evidenceModal.evidences && evidenceModal.evidences.length > 0 ? (
+                                  evidenceModal.evidences.slice(0, 3).map((ev, i) => {
+                                    let sum = '';
+                                    try {
+                                      const d = typeof ev.evidence_data === 'string' ? JSON.parse(ev.evidence_data) : ev.evidence_data;
+                                      sum = d?.summary || JSON.stringify(d);
+                                    } catch {
+                                      sum = String(ev.evidence_data || ev.source_reference || '');
+                                    }
+                                    return <div key={i}>&bull; [{ev.source_type || 'K8S_EVENT'}] {sum}</div>;
+                                  })
+                                ) : (
+                                  <div>&bull; {incident?.description || incident?.title || 'Quan trắc viễn trắc hệ thống'}</div>
+                                )}
                               </div>
                             </div>
 

@@ -178,6 +178,11 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               }
             });
 
+            // GOM CÁI NÀO GỬI CÁI ĐÓ LUÔN: Ngay khi có 1 metric mới của service này, gom và phát ngay lập tức (không đợi service khác)
+            TelemetryPipelineService.processServiceBatch(msg.data.service_id).catch((err) => {
+              console.error(`[agentWebSocket] Error processing batch on metric for ${msg.data.service_id}:`, err);
+            });
+
             // Only trigger on pod restarts if restart count actually INCREASED
             const prevRestarts = lastKnownRestartsByService[msg.data.service_id];
             const hasNewRestart = prevRestarts !== undefined && msg.data.pod_restart_count > prevRestarts;

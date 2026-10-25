@@ -74,6 +74,8 @@ export const aiService = {
     try {
       const search = new URLSearchParams();
       if (params.cluster_id) search.append('cluster_id', params.cluster_id);
+      if (params.workload) search.append('workload', params.workload);
+      if (params.service_id) search.append('service_id', params.service_id);
       const qs = search.toString() ? `?${search.toString()}` : '';
       const res = await request(`/ai/predictions/stats${qs}`);
       if (res?.success && res.data) return res.data;
@@ -81,6 +83,22 @@ export const aiService = {
     } catch (err) {
       console.warn('[aiService] getPredictionStats error:', err.message);
       return { total: 0, by_type: {}, avg_confidence: 0 };
+    }
+  },
+
+  /**
+   * Lấy danh sách các dịch vụ / workload thực tế của cụm K8s
+   * GET /api/v1/ai/workloads
+   */
+  async getWorkloads(clusterId) {
+    try {
+      const qs = clusterId ? `?cluster_id=${encodeURIComponent(clusterId)}` : '';
+      const res = await request(`/ai/workloads${qs}`);
+      if (res?.success && Array.isArray(res.data)) return res.data;
+      return [];
+    } catch (err) {
+      console.warn('[aiService] getWorkloads error:', err.message);
+      return [];
     }
   },
 

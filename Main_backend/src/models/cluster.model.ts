@@ -162,7 +162,15 @@ export class ClusterModel {
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
       LEFT JOIN pods p ON p.cluster_id = c.id
-      LEFT JOIN agents a ON a.cluster_id = c.id
+      LEFT JOIN LATERAL (
+        SELECT id, name, status, last_seen_at
+        FROM agents
+        WHERE cluster_id = c.id OR cluster_id::text = c.id::text OR cluster_id::text = c.name
+        ORDER BY 
+          CASE WHEN status = 'ONLINE' THEN 1 ELSE 2 END,
+          last_seen_at DESC NULLS LAST
+        LIMIT 1
+      ) a ON true
       WHERE e.organization_id = $1 AND c.deleted_at IS NULL
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, a.id, a.name, a.status, a.last_seen_at
       ORDER BY c.created_at DESC`,
@@ -203,7 +211,15 @@ export class ClusterModel {
       LEFT JOIN organizations o ON e.organization_id = o.id
       LEFT JOIN nodes n ON n.cluster_id = c.id
       LEFT JOIN pods p ON p.cluster_id = c.id
-      LEFT JOIN agents a ON a.cluster_id = c.id
+      LEFT JOIN LATERAL (
+        SELECT id, name, status, last_seen_at
+        FROM agents
+        WHERE cluster_id = c.id OR cluster_id::text = c.id::text OR cluster_id::text = c.name
+        ORDER BY 
+          CASE WHEN status = 'ONLINE' THEN 1 ELSE 2 END,
+          last_seen_at DESC NULLS LAST
+        LIMIT 1
+      ) a ON true
       WHERE c.deleted_at IS NULL
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, o.name, a.id, a.name, a.status, a.last_seen_at
       ORDER BY c.created_at DESC`
@@ -295,7 +311,7 @@ export class ClusterModel {
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
       LEFT JOIN organizations o ON e.organization_id = o.id
-      LEFT JOIN agents a ON a.cluster_id = c.id
+      LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL`;
 
     const params: any[] = [clusterId];
@@ -336,7 +352,7 @@ export class ClusterModel {
         FROM clusters c
         JOIN environments e ON c.environment_id = e.id
         LEFT JOIN organizations o ON e.organization_id = o.id
-        LEFT JOIN agents a ON a.cluster_id = c.id
+        LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
         WHERE e.organization_id = $1 AND c.deleted_at IS NULL
         ORDER BY c.created_at DESC
         LIMIT 1`,
@@ -525,7 +541,7 @@ export class ClusterModel {
       SELECT c.id, c.name, c.environment_id, e.organization_id, a.id AS agent_id
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
-      LEFT JOIN agents a ON a.cluster_id = c.id
+      LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
     `;
     const params: any[] = [clusterId];
@@ -629,7 +645,7 @@ export class ClusterModel {
       `SELECT c.id, e.organization_id, a.id AS agent_id
        FROM clusters c
        LEFT JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON a.cluster_id = c.id
+       LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -662,7 +678,7 @@ export class ClusterModel {
       `SELECT c.id, e.organization_id, a.id AS agent_id
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON a.cluster_id = c.id
+       LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -706,7 +722,7 @@ export class ClusterModel {
     const clusterRes = await db.query(
       `SELECT c.id, a.id AS agent_id
        FROM clusters c
-       LEFT JOIN agents a ON a.cluster_id = c.id
+       LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
       [clusterId]
@@ -750,7 +766,7 @@ export class ClusterModel {
     let query = `SELECT c.id, c.name, e.organization_id, a.id AS agent_id, a.status AS agent_status
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN agents a ON a.cluster_id = c.id
+       LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL`;
     const params: any[] = [clusterId];
     if (orgId) {
@@ -816,7 +832,7 @@ export class ClusterModel {
       SELECT c.id, c.name, e.organization_id, a.id AS agent_id
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
-      LEFT JOIN agents a ON a.cluster_id = c.id
+      LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
       WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
     `;
     const clusterParams: any[] = [clusterId];

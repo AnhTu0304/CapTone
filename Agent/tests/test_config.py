@@ -18,7 +18,7 @@ def test_valid_config() -> None:
     assert cfg.METRICS_INTERVAL_MS == 5000
     assert cfg.LOG_COLLECTION_INTERVAL_MS == 5000
     assert cfg.K8S_NAMESPACE == "default"
-    assert cfg.MONITOR_ALL_NAMESPACES is False
+    assert cfg.MONITOR_ALL_NAMESPACES is True
     assert cfg.ENABLE_HEALING_ACTIONS is False
     assert cfg.HEALTH_PORT == 8080
 
