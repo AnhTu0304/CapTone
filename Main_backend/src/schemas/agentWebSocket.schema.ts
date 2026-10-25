@@ -286,6 +286,21 @@ export const AgentK8sInventoryPayloadSchema = z.object({
     selector: z.record(z.string(), z.any()).optional().default({}),
     status: z.string().optional().default('Active'),
   })).optional().default([]),
+  deployments: z.array(z.object({
+    name: z.string().trim().min(1).max(255),
+    namespace: z.string().default('default'),
+    kubernetes_uid: z.string().optional().nullable(),
+    status: z.string().optional().default('Healthy'),
+    is_healthy: z.boolean().optional().default(true),
+    desired_replicas: z.number().int().nonnegative().optional().default(1),
+    ready_replicas: z.number().int().nonnegative().optional().default(0),
+    available_replicas: z.number().int().nonnegative().optional().default(0),
+    updated_replicas: z.number().int().nonnegative().optional().default(0),
+    unavailable_replicas: z.number().int().nonnegative().optional().default(0),
+    generation: z.number().int().nonnegative().optional().default(1),
+    observed_generation: z.number().int().nonnegative().optional().default(1),
+    labels: z.record(z.string(), z.any()).optional().default({}),
+  })).optional().default([]),
 });
 
 /**

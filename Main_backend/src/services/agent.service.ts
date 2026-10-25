@@ -1600,7 +1600,7 @@ export class AgentService {
         }
       }
 
-      // 5. Sync Workloads derived from pods and associate namespace_id
+      // 5. Sync Workloads from explicit deployments (if reported) and pods
       const existingWlRes = await client.query(
         'SELECT id, name, namespace_id FROM workloads WHERE cluster_id = $1',
         [clusterId]
@@ -1608,6 +1608,45 @@ export class AgentService {
       const workloadMapByName: Record<string, { id: string; namespace_id: string | null }> = {};
       for (const row of existingWlRes.rows) {
         workloadMapByName[row.name] = { id: row.id, namespace_id: row.namespace_id };
+      }
+
+      if (Array.isArray(data.deployments) && data.deployments.length > 0) {
+        for (const dep of data.deployments) {
+          const nsId = namespaceMap[dep.namespace] || Object.values(namespaceMap)[0] || null;
+          const rawSt = String(dep.status || 'Healthy').toUpperCase();
+          const wlStatus =
+            rawSt === 'HEALTHY' || rawSt === 'SCALEDTOZERO'
+              ? 'HEALTHY'
+              : rawSt === 'PROGRESSING'
+                ? 'PROGRESSING'
+                : 'DEGRADED';
+          const existingWl = workloadMapByName[dep.name];
+          if (existingWl) {
+            await client.query(
+              `UPDATE workloads
+               SET namespace_id = COALESCE($1, namespace_id),
+                   status = $2,
+                   labels = $3,
+                   updated_at = NOW()
+               WHERE id = $4`,
+              [nsId, wlStatus, JSON.stringify(dep.labels || {}), existingWl.id]
+            );
+            if (nsId) existingWl.namespace_id = nsId;
+          } else {
+            const insDep = await client.query(
+              `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, created_at, updated_at)
+               VALUES ($1, $2, $3, 'Deployment', $4, $5, NOW(), NOW())
+               RETURNING id, namespace_id`,
+              [clusterId, nsId, dep.name, wlStatus, JSON.stringify(dep.labels || {})]
+            );
+            if (insDep.rows[0]) {
+              workloadMapByName[dep.name] = {
+                id: insDep.rows[0].id,
+                namespace_id: insDep.rows[0].namespace_id,
+              };
+            }
+          }
+        }
       }
 
       for (const pod of data.pods) {
