@@ -34,6 +34,24 @@ if (-not $currentContext) {
     exit 1
 }
 
+# Kiem tra ket noi thuc te den Kubernetes API Server
+$clusterCheck = (kubectl cluster-info --request-timeout=4s 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Khong the ket noi den Kubernetes API Server (Context: $currentContext)!" -ForegroundColor Red
+    Write-Host "  Nguyen nhan: Cum Kubernetes hien tai dang bi dung (Stopped) hoac endpoint bi lech cong." -ForegroundColor Yellow
+    Write-Host "  Chi tiet: $(($clusterCheck | Out-String).Trim())" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "--- HUONG DAN KHAC PHUC NHANH ---" -ForegroundColor Cyan
+    Write-Host "1. Neu dung Minikube, hay khoi dong lai cum bang lenh:" -ForegroundColor White
+    Write-Host "   minikube start" -ForegroundColor Green
+    Write-Host "   minikube update-context" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "2. Hoac chay truc tiep Agent bang Python tren may Host (khong can K8s):" -ForegroundColor White
+    Write-Host "   cd d:\\AISelfHealing\\Agent; .\\venv\\Scripts\\Activate.ps1" -ForegroundColor Green
+    Write-Host "   python -m selfheal_agent.main" -ForegroundColor Green
+    exit 1
+}
+
 $helmCmd = Get-Command helm -ErrorAction SilentlyContinue
 $scriptDir = $null
 try {
