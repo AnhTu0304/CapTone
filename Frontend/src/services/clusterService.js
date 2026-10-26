@@ -67,6 +67,36 @@ export const clusterService = {
   },
 
   /**
+   * Lấy tổng quan trạng thái Cụm Kubernetes (Nodes, Pods, Deployments, Freshness)
+   * Tuyến đường Task 5.2: /organizations/:orgId/clusters/:clusterId/status
+   * @param {string} clusterId 
+   * @param {string} [orgId] 
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<Object|null>}
+   */
+  async getClusterStatusSummary(clusterId, orgId, signal) {
+    if (!clusterId) return null;
+    try {
+      if (orgId && !orgId.startsWith('org-')) {
+        try {
+          const res = await request(`/organizations/${orgId}/clusters/${clusterId}/status`, { signal });
+          if (res?.success && res.data) return res.data;
+        } catch (orgErr) {
+          if (orgErr.name === 'AbortError') throw orgErr;
+          console.warn(`[clusterService] Org route cluster status summary failed:`, orgErr.message);
+        }
+      }
+      const res = await request(`/clusters/${clusterId}/status`, { signal });
+      if (res?.success && res.data) return res.data;
+      return null;
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      console.warn(`[clusterService] Lỗi tải status summary cụm ${clusterId}:`, err.message);
+      return null;
+    }
+  },
+
+  /**
    * Đăng ký cụm Kubernetes mới cho tổ chức
    * @param {string} orgId 
    * @param {Object} data 

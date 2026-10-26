@@ -3,6 +3,11 @@ import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
 import NodeMetricsChartsPanel from '../../../components/dashboard/NodeMetricsChartsPanel';
+import { deploymentService } from '../../../services/deploymentService';
+import { useK8sResourcePolling } from '../../../hooks/useK8sResourcePolling';
+import K8sFreshnessBadge from '../../../components/dashboard/K8sFreshnessBadge';
+import K8sDeploymentsPanel from '../../../components/dashboard/K8sDeploymentsPanel';
+import K8sResourceDetailModal from '../../../components/dashboard/K8sResourceDetailModal';
 import {
   Server,
   ArrowLeft,
@@ -38,6 +43,7 @@ import {
   Zap,
   CheckCircle,
   Info,
+  HelpCircle,
   CheckCheck,
   Sparkles,
 } from 'lucide-react';
@@ -53,6 +59,27 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   // Pods search & filter
   const [podSearch, setPodSearch] = useState('');
   const [selectedNamespace, setSelectedNamespace] = useState('ALL');
+  const [selectedPodPhase, setSelectedPodPhase] = useState('ALL');
+  const [crashLoopOnly, setCrashLoopOnly] = useState(false);
+  const [selectedDetailModal, setSelectedDetailModal] = useState(null);
+
+  const {
+    summary: liveSummary,
+    nodes: liveNodes,
+    pods: livePods,
+    deployments: liveDeployments,
+    freshness: liveFreshness,
+    isLoading: isPollingLoading,
+    isRefreshing: isPollingRefreshing,
+    error: pollingError,
+    lastUpdated,
+    refresh: refreshPolling,
+  } = useK8sResourcePolling({
+    clusterId,
+    orgId: currentOrg?.id,
+    intervalMs: 20000,
+    enabled: Boolean(clusterId),
+  });
 
   // Token Rotation Modal State (1 Cluster 1 Agent, Xoay vòng thay thế token cũ)
   const [showRotateModal, setShowRotateModal] = useState(false);
@@ -124,7 +151,8 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchDetail(true);
+    await Promise.allSettled([fetchDetail(true), refreshPolling()]);
+    setIsRefreshing(false);
   };
 
   const handleCopy = (text, fieldName) => {
@@ -294,8 +322,15 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     );
   }
 
-  const nodes = clusterData.nodes || [];
-  const pods = clusterData.pods || [];
+  const nodes = liveNodes && liveNodes.length > 0 ? liveNodes : (clusterData.nodes || []);
+  const pods = livePods && livePods.length > 0 ? livePods : (clusterData.pods || []);
+  const deployments = liveDeployments && liveDeployments.length > 0 ? liveDeployments : (clusterData.deployments || []);
+
+  const readyNodesCount = nodes.filter((n) => n.ready === true || n.status === 'Ready').length;
+  const crashLoopPodsCount = pods.filter((p) => p.status === 'CrashLoopBackOff' || p.has_crash_loop).length;
+  const runningPodsCount = pods.filter((p) => p.phase === 'Running' || p.status === 'Running').length;
+  const healthyDeploymentsCount = deployments.filter((d) => d.status === 'Healthy' || d.status === 'ScaledToZero').length;
+  const degradedDeploymentsCount = deployments.filter((d) => ['Degraded', 'ProgressDeadlineExceeded', 'ReplicaFailure'].includes(d.status)).length;
   const tokens = clusterData.tokens && clusterData.tokens.length > 0
     ? clusterData.tokens
     : (clusterData.token ? [clusterData.token] : []);
@@ -342,12 +377,16 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   // Chỉ hiển thị độ trễ thực tế khi Agent đã Online thật
   const latestLatency = isOnline && heartbeats[0] ? (heartbeats[0]?.latency_ms ?? 1.2) : null;
 
-  // Filter pods
+  // Filter pods with phase and crashLoopOnly support
   const filteredPods = pods.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(podSearch.toLowerCase()) ||
-                          (p.image && p.image.toLowerCase().includes(podSearch.toLowerCase()));
+    const matchesSearch =
+      p.name.toLowerCase().includes(podSearch.toLowerCase()) ||
+      (p.image && p.image.toLowerCase().includes(podSearch.toLowerCase()));
     const matchesNs = selectedNamespace === 'ALL' || p.namespace === selectedNamespace;
-    return matchesSearch && matchesNs;
+    const matchesPhase =
+      selectedPodPhase === 'ALL' || (p.phase || '').toUpperCase() === selectedPodPhase.toUpperCase();
+    const matchesCrash = !crashLoopOnly || p.has_crash_loop || p.status === 'CrashLoopBackOff';
+    return matchesSearch && matchesNs && matchesPhase && matchesCrash;
   });
 
   return (
@@ -554,14 +593,76 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
           </div>
         </div>
 
-        {/* 4 Quick KPI Summary Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', paddingTop: '10px', borderTop: '1px solid var(--dash-border)' }}>
+        {/* Polling Error Banner */}
+        {pollingError && (
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '8px',
+              color: '#991B1B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '0.8125rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={16} />
+              <span>
+                Kh?ng th? l?m m?i tr?ng th?i t?i nguy?n t? ??ng ({pollingError.message}). D? li?u ?ang hi?n th? t? l?n quan s?t tr??c.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => refreshPolling()}
+              style={{
+                background: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.75rem',
+              }}
+            >
+              Th? L?i
+            </button>
+          </div>
+        )}
+
+        {/* Stale Data Warning Banner */}
+        {liveFreshness && (liveFreshness.state === 'STALE' || !liveFreshness.agent_connected) && (
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: '8px',
+              color: '#92400E',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.8125rem',
+            }}
+          >
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>
+              {liveFreshness.warning || 'Dữ liệu quan sát đã cũ hoặc Agent mất kết nối. Trạng thái hiện tại chưa thể xác minh.'}
+            </span>
+          </div>
+        )}
+
+        {/* 5 Quick KPI Summary Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', paddingTop: '10px', borderTop: '1px solid var(--dash-border)' }}>
           <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Activity size={14} color="#059669" /> Control Plane Health:
+              <Activity size={14} color="#059669" /> Control Plane:
             </span>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle2 size={16} /> {clusterData.status === 'CONNECTED' ? 'Healthy (100%)' : 'Sẵn sàng'}
+              <CheckCircle2 size={16} /> {clusterData.status === 'CONNECTED' ? 'Healthy (100%)' : 'S?n s?ng'}
             </div>
           </div>
 
@@ -572,7 +673,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: statusColor, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusDot }} />
               <span>
-                {isOnline ? `Online (${latestLatency || 1.2} ms)` : (isConnecting ? 'Chờ kết nối...' : 'Offline')}
+                {isOnline ? `Online (${latestLatency || 1.2} ms)` : (isConnecting ? 'Ch? k?t n?i...' : 'Offline')}
               </span>
             </div>
           </div>
@@ -583,7 +684,12 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             </span>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
               {nodes.length > 0 ? (
-                <>{nodes.length} Nodes &bull; <span style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700 }}>100% Ready</span></>
+                <>
+                  {nodes.length} Nodes &bull;{' '}
+                  <span style={{ fontSize: '0.8125rem', color: readyNodesCount === nodes.length ? '#059669' : '#DC2626', fontWeight: 700 }}>
+                    {readyNodesCount}/{nodes.length} Ready
+                  </span>
+                </>
               ) : (
                 <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Nodes &bull; Chờ kết nối...</span>
               )}
@@ -596,9 +702,44 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             </span>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
               {pods.length > 0 ? (
-                <>{pods.length} Pods &bull; <span style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700 }}>Đang chạy</span></>
+                <>
+                  {pods.length} Pods &bull;{' '}
+                  <span
+                    style={{
+                      fontSize: '0.8125rem',
+                      color: crashLoopPodsCount > 0 ? '#DC2626' : '#059669',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {crashLoopPodsCount > 0 ? `${crashLoopPodsCount} CrashLoop` : `${runningPodsCount} Running`}
+                  </span>
+                </>
               ) : (
                 <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Pods &bull; Chưa có dữ liệu</span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Layers size={14} color="#059669" /> Deployments & Replicas:
+            </span>
+            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+              {deployments.length > 0 ? (
+                <>
+                  {deployments.length} Deps &bull;{' '}
+                  <span
+                    style={{
+                      fontSize: '0.8125rem',
+                      color: degradedDeploymentsCount > 0 ? '#DC2626' : '#059669',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {healthyDeploymentsCount} Healthy {degradedDeploymentsCount > 0 ? `(${degradedDeploymentsCount} Degraded)` : ''}
+                  </span>
+                </>
+              ) : (
+                <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Deployments</span>
               )}
             </div>
           </div>
@@ -611,6 +752,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
           { id: 'agent', label: 'Quản Lý & Kết Nối Agent', icon: Radio, count: null },
           { id: 'nodes', label: 'Máy Chủ Nodes', icon: Cpu, count: nodes.length },
           { id: 'pods', label: 'Tài Nguyên Pods Đang Chạy', icon: Box, count: pods.length },
+          { id: 'deployments', label: 'Deployments & Replicas', icon: Layers, count: deployments.length },
           { id: 'logs', label: 'Nhật Ký Kết Nối (Connection Logs)', icon: FileText, count: connectionLogs.length },
           { id: 'config', label: 'Cấu Hình & Vùng Thao Tác', icon: Settings, count: null },
         ].map((tab) => {
@@ -1511,12 +1653,17 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             </div>
           ) : (
             <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', flexWrap: 'wrap', gap: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Cpu size={18} color="var(--dash-primary)" />
                   <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>Danh Sách Máy Chủ Nodes Thực Tế Trong Database ({nodes.length} Nodes)</h3>
                 </div>
-                <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>● 100% Sẵn Sàng (Ready)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '0.75rem', color: readyNodesCount === nodes.length ? '#059669' : '#DC2626', fontWeight: 700 }}>
+                    ● {readyNodesCount}/{nodes.length} Sẵn Sàng (Ready)
+                  </span>
+                  <K8sFreshnessBadge freshness={liveFreshness} />
+                </div>
               </div>
 
               <div style={{ overflowX: 'auto' }}>
@@ -1524,24 +1671,27 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
                       <th style={{ padding: '12px 18px' }}>Tên Node</th>
-                      <th style={{ padding: '12px 18px' }}>Vai Trò (Role)</th>
-                      <th style={{ padding: '12px 18px' }}>Trạng Thái</th>
-                      <th style={{ padding: '12px 18px' }}>CPU Cores</th>
-                      <th style={{ padding: '12px 18px' }}>Bộ Nhớ RAM</th>
-                      <th style={{ padding: '12px 18px' }}>Dung Lượng Ổ Cứng</th>
-                      <th style={{ padding: '12px 18px' }}>Phiên Bản Kubelet</th>
+                      <th style={{ padding: '12px 18px' }}>Vai Trò</th>
+                      <th style={{ padding: '12px 18px' }}>Trạng Thái K8s</th>
+                      <th style={{ padding: '12px 18px' }}>Cảnh Báo Áp Lực</th>
+                      <th style={{ padding: '12px 18px' }}>CPU (Alloc / Cap)</th>
+                      <th style={{ padding: '12px 18px' }}>RAM (Alloc / Cap)</th>
+                      <th style={{ padding: '12px 18px' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
                     {nodes.map((node, index) => {
-                      const ramGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : '8.0';
-                      const diskGb = node.disk_capacity_bytes ? (node.disk_capacity_bytes / (1024 ** 3)).toFixed(0) : '50';
-                      const cpuCores = node.cpu_capacity_millicores ? (node.cpu_capacity_millicores / 1000).toFixed(0) : '4';
+                      const ramCapGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : (node.memory_capacity || '8.0Gi');
+                      const ramAllocGb = node.memory_allocatable_bytes ? (node.memory_allocatable_bytes / (1024 ** 3)).toFixed(1) : (node.memory_allocatable || '-');
+                      const cpuCap = node.cpu_capacity_millicores ? `${(node.cpu_capacity_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_capacity || '4');
+                      const cpuAlloc = node.cpu_allocatable_millicores ? `${(node.cpu_allocatable_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_allocatable || '-');
                       const rolesArr = typeof node.roles === 'string' ? JSON.parse(node.roles || '[]') : (node.roles || []);
                       const roleLabel = rolesArr.includes('control-plane') ? 'control-plane' : 'worker';
+                      const effectiveStatus = node.effective_status || (node.ready ? 'Ready' : (node.status || 'Unknown'));
+                      const pressures = Array.isArray(node.active_pressures) ? node.active_pressures : [];
 
                       return (
-                        <tr key={node.id || index} style={{ borderBottom: '1px solid var(--dash-border)' }}>
+                        <tr key={node.id || node.name || index} style={{ borderBottom: '1px solid var(--dash-border)' }}>
                           <td style={{ padding: '14px 18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
                             {node.name}
                           </td>
@@ -1560,14 +1710,64 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                             </span>
                           </td>
                           <td style={{ padding: '14px 18px' }}>
-                            <span style={{ color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle2 size={14} /> Ready
-                            </span>
+                            {effectiveStatus === 'Ready' && (
+                              <span style={{ color: '#059669', backgroundColor: '#ECFDF5', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
+                                <CheckCircle2 size={13} /> Ready
+                              </span>
+                            )}
+                            {effectiveStatus === 'NotReady' && (
+                              <span style={{ color: '#DC2626', backgroundColor: '#FEF2F2', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
+                                <AlertTriangle size={13} /> NotReady
+                              </span>
+                            )}
+                            {effectiveStatus === 'Unknown' && (
+                              <span style={{ color: '#D97706', backgroundColor: '#FFFBEB', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
+                                <HelpCircle size={13} /> Unknown
+                              </span>
+                            )}
+                            {effectiveStatus === 'Unverified' && (
+                              <span style={{ color: '#64748B', backgroundColor: '#F1F5F9', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
+                                Unverified
+                              </span>
+                            )}
                           </td>
-                          <td style={{ padding: '14px 18px' }}>{cpuCores} vCPU</td>
-                          <td style={{ padding: '14px 18px' }}>{ramGb} GB</td>
-                          <td style={{ padding: '14px 18px' }}>{diskGb} GB</td>
-                          <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)' }}>{node.kubelet_version || 'v1.29.4'}</td>
+                          <td style={{ padding: '14px 18px' }}>
+                            {pressures.length > 0 ? (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                {pressures.map((press) => (
+                                  <span key={press} style={{ fontSize: '0.6875rem', backgroundColor: '#FEF3C7', color: '#B45309', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                    {press}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>Bình thường</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '14px 18px', fontSize: '0.75rem' }}>
+                            {cpuAlloc} / {cpuCap}
+                          </td>
+                          <td style={{ padding: '14px 18px', fontSize: '0.75rem' }}>
+                            {ramAllocGb} / {ramCapGb} GB
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDetailModal({ resource: node, type: 'NODE' })}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '0.75rem',
+                                border: '1px solid var(--dash-border)',
+                                borderRadius: '4px',
+                                backgroundColor: '#FFFFFF',
+                                color: 'var(--dash-primary)',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Chi Tiết
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1587,9 +1787,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 3: TÀI NGUYÊN PODS ĐANG CHẠY                               */}
-      {/* ============================================================== */}
       {activeTab === 'pods' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {pods.length === 0 ? (
@@ -1611,6 +1808,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>
                     Danh Sách Pods Đang Vận Hành ({filteredPods.length}/{pods.length} Pods)
                   </h3>
+                  <K8sFreshnessBadge freshness={liveFreshness} />
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -1621,7 +1819,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                       placeholder="Tìm kiếm Pod hoặc Image..."
                       value={podSearch}
                       onChange={(e) => setPodSearch(e.target.value)}
-                      style={{ padding: '7px 12px 7px 30px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem', width: '220px' }}
+                      style={{ padding: '7px 12px 7px 30px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem', width: '200px' }}
                     />
                   </div>
 
@@ -1640,6 +1838,31 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                       );
                     })}
                   </select>
+
+                  <select
+                    value={selectedPodPhase}
+                    onChange={(e) => setSelectedPodPhase(e.target.value)}
+                    style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
+                  >
+                    <option value="ALL">Tất cả Phase</option>
+                    <option value="Running">Running</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Failed">Failed</option>
+                    <option value="Succeeded">Succeeded</option>
+                    <option value="Unknown">Unknown</option>
+                  </select>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={crashLoopOnly}
+                      onChange={(e) => setCrashLoopOnly(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ color: crashLoopPodsCount > 0 ? '#DC2626' : '#64748B', fontWeight: crashLoopOnly ? 700 : 500 }}>
+                      Chỉ CrashLoop ({crashLoopPodsCount})
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -1650,38 +1873,95 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
                       <th style={{ padding: '12px 18px' }}>Tên Pod</th>
                       <th style={{ padding: '12px 18px' }}>Namespace</th>
+                      <th style={{ padding: '12px 18px' }}>Phase & Trạng Thái</th>
+                      <th style={{ padding: '12px 18px' }}>Lý Do Chờ / Lỗi Container</th>
                       <th style={{ padding: '12px 18px' }}>Máy Chủ Node</th>
-                      <th style={{ padding: '12px 18px' }}>Trạng Thái</th>
-                      <th style={{ padding: '12px 18px' }}>Khởi Động Lại (Restarts)</th>
-                      <th style={{ padding: '12px 18px' }}>Container Image</th>
+                      <th style={{ padding: '12px 18px' }}>Khởi Động Lại</th>
+                      <th style={{ padding: '12px 18px' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPods.map((pod, idx) => (
-                      <tr key={pod.id || idx} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                        <td style={{ padding: '12px 18px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
-                          {pod.name}
-                        </td>
-                        <td style={{ padding: '12px 18px' }}>
-                          <span style={{ fontSize: '0.6875rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600 }}>
-                            {pod.namespace || 'default'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-                          {pod.node_name || 'k8s-node'}
-                        </td>
-                        <td style={{ padding: '12px 18px' }}>
-                          <span style={{ color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-                            {pod.status || 'Running'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 18px' }}>{pod.restart_count ?? 0}</td>
-                        <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {pod.image}
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredPods.map((pod, idx) => {
+                      const isCrash = pod.status === 'CrashLoopBackOff' || pod.has_crash_loop || pod.waiting_reason === 'CrashLoopBackOff';
+                      const isOOM = pod.waiting_reason === 'OOMKilled' || pod.last_termination_reason === 'OOMKilled';
+                      const hasWaiting = Boolean(pod.waiting_reason);
+
+                      return (
+                        <tr key={pod.id || pod.name || idx} style={{ borderBottom: '1px solid var(--dash-border)' }}>
+                          <td style={{ padding: '12px 18px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
+                            {pod.name}
+                          </td>
+                          <td style={{ padding: '12px 18px' }}>
+                            <span style={{ fontSize: '0.6875rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600 }}>
+                              {pod.namespace || 'default'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 18px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
+                                Phase: {pod.phase || 'Unknown'}
+                              </span>
+                              {isCrash ? (
+                                <span style={{ color: '#DC2626', backgroundColor: '#FEF2F2', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', width: 'fit-content' }}>
+                                  <AlertTriangle size={12} /> CrashLoopBackOff
+                                </span>
+                              ) : pod.status === 'Running' || pod.phase === 'Running' ? (
+                                <span style={{ color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', width: 'fit-content' }}>
+                                  <CheckCircle2 size={12} /> Running
+                                </span>
+                              ) : (
+                                <span style={{ color: '#D97706', backgroundColor: '#FFFBEB', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', width: 'fit-content' }}>
+                                  {pod.status || pod.phase}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 18px' }}>
+                            {isCrash || isOOM || hasWaiting ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ color: '#DC2626', fontWeight: 700, fontSize: '0.75rem' }}>
+                                  {pod.waiting_reason || (isCrash ? 'CrashLoopBackOff' : 'Error')}
+                                  {pod.exit_code !== undefined && pod.exit_code !== null ? ` (Exit ${pod.exit_code})` : ''}
+                                </span>
+                                {pod.waiting_message && (
+                                  <span style={{ fontSize: '0.6875rem', color: '#64748B', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pod.waiting_message}>
+                                    {pod.waiting_message}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94A3B8', fontSize: '0.75rem' }}>-</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
+                            {pod.node_name || '-'}
+                          </td>
+                          <td style={{ padding: '12px 18px' }}>
+                            <span style={{ fontWeight: (pod.restart_count || 0) > 0 ? 700 : 500, color: (pod.restart_count || 0) > 0 ? '#DC2626' : 'var(--dash-text-primary)' }}>
+                              {pod.restart_count ?? 0}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 18px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDetailModal({ resource: pod, type: 'POD' })}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '0.75rem',
+                                border: '1px solid var(--dash-border)',
+                                borderRadius: '4px',
+                                backgroundColor: '#FFFFFF',
+                                color: 'var(--dash-primary)',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Chi Tiết
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1690,9 +1970,16 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 4: 5. CONNECTION LOGS (Nhật ký kết nối & xác thực)          */}
-      {/* ============================================================== */}
+      {activeTab === 'deployments' && (
+        <K8sDeploymentsPanel
+          deployments={deployments}
+          namespaces={namespaces}
+          isLoading={isPollingLoading || isRefreshing}
+          freshness={liveFreshness}
+          onSelectDeployment={(dep) => setSelectedDetailModal({ resource: dep, type: 'DEPLOYMENT' })}
+        />
+      )}
+
       {activeTab === 'logs' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
@@ -2267,6 +2554,15 @@ data-testid="confirm-rotate-token-btn"
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Xem Chi Tiết Trạng Thái Tài Nguyên K8s (Node, Pod, Deployment) */}
+      {selectedDetailModal && (
+        <K8sResourceDetailModal
+          resource={selectedDetailModal.resource}
+          type={selectedDetailModal.type}
+          onClose={() => setSelectedDetailModal(null)}
+        />
       )}
     </div>
   );
