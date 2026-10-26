@@ -644,11 +644,21 @@ export class AgentService {
     const rawDate = new Date(data.timestamp);
     const occurredAt = isNaN(rawDate.getTime()) ? new Date() : rawDate;
 
-    // Resolve workload_id by service_id if exists
+    // Resolve workload_id and verify if service_id exists in services table (foreign key constraint)
     let workloadId: string | null = null;
     const workload = await WorkloadModel.findByName(data.service_id);
     if (workload) {
       workloadId = workload.id;
+    }
+
+    let serviceFk: string | null = null;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(data.service_id)) {
+      const sRes = await pool.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [data.service_id]);
+      if (sRes.rows[0]) serviceFk = sRes.rows[0].id;
+    } else {
+      const sRes = await pool.query('SELECT id FROM services WHERE name = $1 LIMIT 1', [data.service_id]);
+      if (sRes.rows[0]) serviceFk = sRes.rows[0].id;
     }
 
     const safeLevel = (data.level || 'INFO').toUpperCase().slice(0, 50);
@@ -656,7 +666,7 @@ export class AgentService {
 
     const result = await LogModel.create({
       cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 255) : null,
-      service_id: workloadId,
+      service_id: serviceFk,
       level: safeLevel,
       message: safeMessage,
       source: 'k8s-agent',
