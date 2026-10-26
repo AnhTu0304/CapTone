@@ -455,5 +455,96 @@ describe('Task [S4][PB15] 1.1 – APM Monitoring Layout, Charts & Utilities Suit
       const availabilityCard = screen.getByTestId('kpi-card-availability');
       expect(availabilityCard).toHaveTextContent('--');
     });
+
+    test('3.9. Changing time range to 24h and 7d calls API with correct bucketSeconds, limit and range', async () => {
+      render(
+        <DashboardProvider>
+          <ApmPage />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-range-24h')).toBeInTheDocument();
+        expect(screen.getByTestId('apm-range-7d')).toBeInTheDocument();
+      });
+
+      // Click 24h
+      act(() => {
+        fireEvent.click(screen.getByTestId('apm-range-24h'));
+      });
+
+      await waitFor(() => {
+        expect(telemetryService.getMetricsSequence).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ limit: 288, bucket_seconds: 300, range: '24h' })
+        );
+      });
+
+      // Click 7d
+      act(() => {
+        fireEvent.click(screen.getByTestId('apm-range-7d'));
+      });
+
+      await waitFor(() => {
+        expect(telemetryService.getMetricsSequence).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ limit: 336, bucket_seconds: 1800, range: '7d' })
+        );
+      });
+    });
+
+    test('3.10. Range buttons have accessible aria-pressed state and respond to keyboard Enter', async () => {
+      render(
+        <DashboardProvider>
+          <ApmPage />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-range-15m')).toBeInTheDocument();
+      });
+
+      const btn15m = screen.getByTestId('apm-range-15m');
+      const btn24h = screen.getByTestId('apm-range-24h');
+
+      expect(btn15m).toHaveAttribute('aria-pressed', 'true');
+      expect(btn24h).toHaveAttribute('aria-pressed', 'false');
+
+      // KeyDown Enter on 24h
+      act(() => {
+        fireEvent.keyDown(btn24h, { key: 'Enter', code: 'Enter' });
+      });
+
+      await waitFor(() => {
+        expect(btn24h).toHaveAttribute('aria-pressed', 'true');
+        expect(btn15m).toHaveAttribute('aria-pressed', 'false');
+      });
+    });
+
+    test('3.11. Error panel displays message and retry button re-triggers API fetch', async () => {
+      telemetryService.getMetricsSequence.mockRejectedValueOnce(new Error('Connection timeout to APM backend'));
+
+      render(
+        <DashboardProvider>
+          <ApmPage />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-retry-btn')).toBeInTheDocument();
+        expect(screen.getByText(/Connection timeout to APM backend/i)).toBeInTheDocument();
+      });
+
+      // Reset mock to success and click retry
+      telemetryService.getMetricsSequence.mockResolvedValueOnce(sampleSequence);
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('apm-retry-btn'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-panel-latency')).toBeInTheDocument();
+      });
+    });
   });
 });

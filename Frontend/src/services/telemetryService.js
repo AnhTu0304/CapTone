@@ -169,10 +169,12 @@ export const telemetryService = {
     try {
       const limit = typeof options === 'number' ? options : options?.limit || 60;
       const bucketSeconds = typeof options === 'object' && options?.bucket_seconds ? options.bucket_seconds : 5;
+      const range = typeof options === 'object' && options?.range ? options.range : undefined;
       const signal = typeof options === 'object' ? options?.signal : undefined;
+      const rangeParam = range ? `&range=${encodeURIComponent(range)}` : '';
 
       const res = await fetch(
-        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}`,
+        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}${rangeParam}`,
         {
           method: 'GET',
           headers: getHeaders(),
@@ -226,6 +228,61 @@ export const telemetryService = {
     } catch (err) {
       console.warn('[telemetryService] evaluateService fallback:', err.message);
       return null;
+    }
+  },
+
+  /**
+   * Fetch historical APM metrics with range (1h, 24h, 7d), pagination, and cursor (Task [S4][PB16] 2.3)
+   */
+  async getMetricsHistory(params = {}, options = {}) {
+    try {
+      const {
+        serviceId,
+        podId,
+        clusterId,
+        range,
+        startTime,
+        endTime,
+        page = 1,
+        limit = 50,
+        cursor,
+        order = 'desc',
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (range) queryParams.set('range', range);
+      if (startTime) queryParams.set('start_time', startTime);
+      if (endTime) queryParams.set('end_time', endTime);
+      if (page) queryParams.set('page', String(page));
+      if (limit) queryParams.set('limit', String(limit));
+      if (cursor) queryParams.set('cursor', cursor);
+      if (order) queryParams.set('order', order);
+      if (podId) queryParams.set('pod_id', podId);
+      if (clusterId) queryParams.set('cluster_id', clusterId);
+
+      let endpoint = `${API_BASE_URL}/telemetry/metrics-history`;
+      if (serviceId) {
+        endpoint = `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-history`;
+      }
+
+      const qs = queryParams.toString();
+      const url = qs ? `${endpoint}?${qs}` : endpoint;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      return json.data;
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getMetricsHistory fallback:', err.message);
+      throw err;
     }
   },
 

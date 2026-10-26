@@ -95,6 +95,7 @@ export const ApmPage = ({ onNavigate }) => {
         const sequence = await telemetryService.getMetricsSequence(selectedService, {
           limit: preset.limit,
           bucket_seconds: preset.bucketSeconds,
+          range: preset.id,
           signal: controller.signal,
         });
 
@@ -437,8 +438,18 @@ export const ApmPage = ({ onNavigate }) => {
                 <button
                   key={preset.id}
                   type="button"
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  aria-label={`Chọn khoảng thời gian ${preset.label}`}
                   data-testid={`apm-range-${preset.id}`}
                   onClick={() => setTimeRange(preset.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setTimeRange(preset.id);
+                    }
+                  }}
                   style={{
                     padding: '4px 10px',
                     fontFamily: 'var(--font-mono, monospace)',
@@ -450,6 +461,7 @@ export const ApmPage = ({ onNavigate }) => {
                     borderRadius: '6px',
                     boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
                     cursor: 'pointer',
+                    outline: 'none',
                   }}
                 >
                   {preset.label}

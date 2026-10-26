@@ -9,8 +9,8 @@ export const APM_TIME_RANGE_PRESETS = [
   { id: '5m', label: '5 phút', durationMs: 5 * 60 * 1000, bucketSeconds: 5, limit: 60, maxChartPoints: 60 },
   { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, bucketSeconds: 5, limit: 180, maxChartPoints: 180 },
   { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, bucketSeconds: 15, limit: 240, maxChartPoints: 240 },
-  { id: '6h', label: '6 giờ', durationMs: 6 * 60 * 60 * 1000, bucketSeconds: 60, limit: 360, maxChartPoints: 360 },
   { id: '24h', label: '24 giờ', durationMs: 24 * 60 * 60 * 1000, bucketSeconds: 300, limit: 288, maxChartPoints: 288 },
+  { id: '7d', label: '7 ngày', durationMs: 7 * 24 * 60 * 60 * 1000, bucketSeconds: 1800, limit: 336, maxChartPoints: 336 },
 ];
 
 export const APM_STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
