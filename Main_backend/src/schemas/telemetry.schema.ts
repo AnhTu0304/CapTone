@@ -126,3 +126,19 @@ export const GetLogsQuerySchema = z
   );
 
 export type GetLogsQuery = z.infer<typeof GetLogsQuerySchema>;
+
+export const StreamLogsQuerySchema = z.object({
+  service_id: z.string().trim().max(100).optional(),
+  namespace: z.string().trim().max(255).optional(),
+  namespace_id: z.string().trim().max(255).optional(),
+  deployment: z.string().trim().max(255).optional(),
+  deployment_id: z.string().trim().max(255).optional(),
+  pod: z.string().trim().max(255).optional(),
+  pod_id: z.string().trim().max(255).optional(),
+  level: z.string().trim().max(50).optional(),
+  cluster_id: z.string().trim().max(100).optional(),
+  tail: z.coerce.number().int().min(0).max(100).default(20).optional(),
+  token: z.string().optional(),
+});
+
+export type StreamLogsQuery = z.infer<typeof StreamLogsQuerySchema>;

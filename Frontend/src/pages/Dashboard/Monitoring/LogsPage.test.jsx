@@ -581,4 +581,103 @@ describe('Task [S4][PB17] 3.1 – Centralized Logs Viewer, Filters & Details Sui
       expect(screen.getByTestId('logs-pod-select').value).toBe('ALL');
     });
   });
+
+  describe('8. Task [S4][PB17] 3.3 – Real-Time SSE Log Streaming & Load Limits', () => {
+    let mockUnsubscribe;
+    let streamCallback;
+
+    beforeEach(() => {
+      mockUnsubscribe = jest.fn();
+      telemetryService.streamLogs = jest.fn().mockImplementation((params, onEvent, onError) => {
+        streamCallback = onEvent;
+        return mockUnsubscribe;
+      });
+    });
+
+    test('8.1. Toggling Live Stream initiates real-time SSE stream via telemetryService.streamLogs', async () => {
+      render(<LogsPage />);
+
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      expect(telemetryService.streamLogs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tail: 20,
+        }),
+        expect.any(Function),
+        expect.any(Function)
+      );
+    });
+
+    test('8.2. Streams incoming log entries incrementally into terminal window', async () => {
+      render(<LogsPage />);
+
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      expect(telemetryService.streamLogs).toHaveBeenCalled();
+
+      // Simulate incoming live log
+      act(() => {
+        streamCallback('log', {
+          id: 'live-stream-row-999',
+          service_id: 'order-service',
+          level: 'WARN',
+          message: 'Realtime SSE event arrived in terminal',
+          occurred_at: '2026-10-26T23:59:59.000Z',
+          metadata: { service_id: 'order-service' },
+        });
+      });
+
+      expect(screen.getByText(/Realtime SSE event arrived in terminal/i)).toBeInTheDocument();
+    });
+
+    test('8.3. Displays overflow notice when backpressure notification is received', async () => {
+      render(<LogsPage />);
+
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      act(() => {
+        streamCallback('overflow', { dropped: 15 });
+      });
+
+      expect(screen.getByTestId('logs-overflow-notice')).toBeInTheDocument();
+      expect(screen.getByText(/Đã giảm tải: bỏ qua 15 log/i)).toBeInTheDocument();
+    });
+
+    test('8.4. Filter changes cancel previous stream and reconnect with updated filters', async () => {
+      render(<LogsPage />);
+
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      expect(telemetryService.streamLogs).toHaveBeenCalledTimes(1);
+
+      // Change severity filter
+      const levelSelect = screen.getByTestId('logs-level-select');
+      fireEvent.change(levelSelect, { target: { value: 'ERROR' } });
+
+      // Previous stream unsubscribed and new stream initiated with ERROR
+      expect(mockUnsubscribe).toHaveBeenCalled();
+      expect(telemetryService.streamLogs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'ERROR',
+        }),
+        expect.any(Function),
+        expect.any(Function)
+      );
+    });
+
+    test('8.5. Unmounting the LogsPage cancels and cleans up the active stream', async () => {
+      const { unmount } = render(<LogsPage />);
+
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      unmount();
+
+      expect(mockUnsubscribe).toHaveBeenCalled();
+    });
+  });
 });

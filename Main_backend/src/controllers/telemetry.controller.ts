@@ -9,9 +9,11 @@ import {
   EvaluateServiceBodySchema,
   GetMetricsHistoryQuerySchema,
   GetLogsQuerySchema,
+  StreamLogsQuerySchema,
 } from '../schemas/telemetry.schema';
 import { MetricModel } from '../models/metric.model';
 import { LogModel } from '../models/log.model';
+import { LogStreamService, ILogStreamFilters } from '../services/logStream.service';
 
 export class TelemetryController {
   /**
@@ -439,6 +441,58 @@ export class TelemetryController {
       });
 
       return ApiResponse.success(res, `Retrieved ${result.logs.length} logs successfully`, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/telemetry/logs/stream
+   * Stream live logs using Server-Sent Events (SSE) with backpressure & load limits
+   * Task [S4][PB17] 3.3
+   */
+  public static async streamLogs(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const parsedQuery = StreamLogsQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return ApiResponse.error(
+          res,
+          'Validation failed: Invalid query parameters for logs stream',
+          400,
+          parsedQuery.error.format()
+        );
+      }
+
+      const userId = (req as any).user?.id || 'anonymous';
+
+      const {
+        service_id,
+        namespace,
+        namespace_id,
+        deployment,
+        deployment_id,
+        pod,
+        pod_id,
+        level,
+        cluster_id,
+        tail,
+      } = parsedQuery.data;
+
+      const filters: ILogStreamFilters = {
+        service_id,
+        namespace: namespace || namespace_id,
+        deployment: deployment || deployment_id,
+        pod: pod || pod_id,
+        level,
+        cluster_id,
+        tail,
+      };
+
+      await LogStreamService.handleStream(req, res, filters, userId);
     } catch (error) {
       next(error);
     }

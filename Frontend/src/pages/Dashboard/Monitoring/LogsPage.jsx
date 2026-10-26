@@ -51,6 +51,7 @@ export const LogsPage = () => {
 
   // UX & Live Streaming Controls
   const [isLive, setIsLive] = useState(false);
+  const [streamNotice, setStreamNotice] = useState(null);
   const [autoScroll, setAutoScroll] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
@@ -98,7 +99,10 @@ export const LogsPage = () => {
       try {
         const ns = await Promise.resolve(clusterService?.getClusterNamespaces?.(clusterId, currentOrg?.id)).catch(() => []);
         if (isMounted && Array.isArray(ns) && ns.length > 0) {
-          setNamespacesList(ns.map((n) => (typeof n === 'string' ? n : n.name || n.id)));
+          const names = Array.from(
+            new Set(ns.map((n) => (typeof n === 'string' ? n : n.name || n.id)).filter(Boolean))
+          );
+          setNamespacesList(names);
         } else if (isMounted) {
           setNamespacesList(['default', 'kube-system', 'production', 'staging']);
         }
@@ -135,8 +139,18 @@ export const LogsPage = () => {
           ).catch(() => []),
         ]);
         if (isMounted) {
-          if (Array.isArray(deps)) setDeploymentsList(deps);
-          if (Array.isArray(pods)) setPodsList(pods);
+          if (Array.isArray(deps)) {
+            const uniqueDeps = Array.from(
+              new Map(deps.map((d) => [d.name || d.id, d])).values()
+            );
+            setDeploymentsList(uniqueDeps);
+          }
+          if (Array.isArray(pods)) {
+            const uniquePods = Array.from(
+              new Map(pods.map((p) => [p.name || p.id, p])).values()
+            );
+            setPodsList(uniquePods);
+          }
         }
       } catch (err) {
         console.warn('[LogsPage] Could not load K8s resources:', err.message);
@@ -239,16 +253,70 @@ export const LogsPage = () => {
     };
   }, [fetchLogs]);
 
-  // Live polling ticker (every 8s)
+  // Real-time SSE Logs Stream [S4][PB17] 3.3
   useEffect(() => {
-    if (!isLive) return;
+    if (!isLive) {
+      setStreamNotice(null);
+      return;
+    }
 
-    const interval = setInterval(() => {
-      fetchLogs(true);
-    }, 8000);
+    let unsubscribe = null;
+    let fallbackTicker = null;
 
-    return () => clearInterval(interval);
-  }, [isLive, fetchLogs]);
+    if (typeof telemetryService?.streamLogs === 'function') {
+      try {
+        unsubscribe = telemetryService.streamLogs(
+          {
+            serviceId: selectedService,
+            namespace: selectedNamespace !== 'ALL' ? selectedNamespace : undefined,
+            deployment: selectedDeployment !== 'ALL' ? selectedDeployment : undefined,
+            pod: selectedPod !== 'ALL' ? selectedPod : undefined,
+            level: selectedLevel !== 'ALL' ? selectedLevel : undefined,
+            clusterId: currentEnv?.clusterId || currentEnv?.id,
+            tail: 20,
+          },
+          (eventType, data) => {
+            if (eventType === 'log' && data) {
+              setLogs((prev) => {
+                if (prev.some((item) => item.id === data.id)) return prev;
+                const nextLogs = [data, ...prev];
+                return nextLogs.length > 500 ? nextLogs.slice(0, 500) : nextLogs;
+              });
+            } else if (eventType === 'overflow' && data) {
+              setStreamNotice(`Đã giảm tải: bỏ qua ${data.dropped} log do backpressure`);
+            }
+          },
+          (err) => {
+            console.warn('[LogsPage] Realtime stream disconnected:', err.message);
+          }
+        );
+      } catch (err) {
+        console.warn('[LogsPage] Could not start streamLogs, falling back to interval:', err.message);
+      }
+    }
+
+    // Safety fallback ticker for mock environments
+    if (!unsubscribe) {
+      fallbackTicker = setInterval(() => {
+        fetchLogs(true);
+      }, 8000);
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (fallbackTicker) clearInterval(fallbackTicker);
+    };
+  }, [
+    isLive,
+    selectedService,
+    selectedNamespace,
+    selectedDeployment,
+    selectedPod,
+    selectedLevel,
+    currentEnv?.clusterId,
+    currentEnv?.id,
+    fetchLogs,
+  ]);
 
   // Auto-scroll to bottom if enabled
   useEffect(() => {
@@ -782,11 +850,18 @@ export const LogsPage = () => {
             </span>
           </div>
 
-          <div
-            data-testid="logs-live-status-indicator"
-            style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isLive ? '#34D399' : '#94A3B8' }}
-          >
-            {isLive ? '● ĐANG TRUYỀN DỮ LIỆU TRỰC TIẾP' : '○ TẠM DỪNG'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {streamNotice && (
+              <span data-testid="logs-overflow-notice" style={{ fontSize: '0.6875rem', color: '#FBBF24', fontFamily: 'var(--font-mono)' }}>
+                ⚠️ {streamNotice}
+              </span>
+            )}
+            <div
+              data-testid="logs-live-status-indicator"
+              style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isLive ? '#34D399' : '#94A3B8' }}
+            >
+              {isLive ? '● ĐANG TRUYỀN DỮ LIỆU TRỰC TIẾP' : '○ TẠM DỪNG'}
+            </div>
           </div>
         </div>
 

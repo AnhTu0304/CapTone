@@ -1,3 +1,4 @@
+import { LogStreamService } from './logStream.service';
 import crypto from 'crypto';
 
 import { pool } from '../config/database';
@@ -754,9 +755,61 @@ export class AgentService {
     const safeLevel = (data.level || 'INFO').toUpperCase().slice(0, 50);
     const safeMessage = data.message.slice(0, 65535);
 
+    // Resolve namespace and pod
+    let namespaceId: string | null = null;
+    let namespaceName: string | null = data.namespace || null;
+    let podFk: string | null = null;
+    let podName: string | null = null;
+
+    if (data.pod_id && data.pod_id !== 'unknown-pod') {
+      try {
+        const pRes = await pool.query(
+          "SELECT p.id, p.name, p.namespace_id, ns.name as namespace_name FROM pods p LEFT JOIN namespaces ns ON p.namespace_id = ns.id WHERE p.kubernetes_uid = $1 OR p.name = $1 OR p.id::text = $1 LIMIT 1",
+          [data.pod_id]
+        );
+        if (pRes.rows[0]) {
+          podFk = pRes.rows[0].id;
+          podName = pRes.rows[0].name;
+          if (pRes.rows[0].namespace_id) {
+            namespaceId = pRes.rows[0].namespace_id;
+            namespaceName = pRes.rows[0].namespace_name || namespaceName;
+          }
+        }
+      } catch {}
+    }
+
+    if (!namespaceId && serviceFk) {
+      try {
+        const sRes = await pool.query(
+          "SELECT s.namespace_id, ns.name as namespace_name FROM services s LEFT JOIN namespaces ns ON s.namespace_id = ns.id WHERE s.id = $1 LIMIT 1",
+          [serviceFk]
+        );
+        if (sRes.rows[0]?.namespace_id) {
+          namespaceId = sRes.rows[0].namespace_id;
+          namespaceName = sRes.rows[0].namespace_name || namespaceName;
+        }
+      } catch {}
+    }
+
+    if (!namespaceId && agent.cluster_id) {
+      try {
+        const nsTarget = namespaceName || 'default';
+        const nsRes = await pool.query(
+          "SELECT id, name FROM namespaces WHERE (cluster_id = $1::uuid OR cluster_id IS NULL) AND name = $2 LIMIT 1",
+          [agent.cluster_id, nsTarget]
+        );
+        if (nsRes.rows[0]) {
+          namespaceId = nsRes.rows[0].id;
+          namespaceName = nsRes.rows[0].name;
+        }
+      } catch {}
+    }
+
     const result = await LogModel.create({
       cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 255) : null,
+      namespace_id: namespaceId,
       service_id: serviceFk,
+      pod_id: podFk,
       level: safeLevel,
       message: safeMessage,
       source: 'k8s-agent',
@@ -764,9 +817,37 @@ export class AgentService {
       metadata: {
         service_id: data.service_id.slice(0, 100),
         pod_id: (data.pod_id || 'unknown-pod').slice(0, 100),
+        pod_name: podName || (data.pod_id || 'unknown-pod').slice(0, 100),
+        namespace: namespaceName || data.namespace || 'default',
+        deployment: workload?.name || undefined,
         agent_id: agent.id,
       },
     });
+
+    try {
+      LogStreamService.emitLog({
+        id: result.id,
+        cluster_id: agent.cluster_id || null,
+        namespace_id: namespaceId,
+        namespace: namespaceName || data.namespace || 'default',
+        service_id: serviceFk,
+        service_name: data.service_id,
+        pod_id: podFk,
+        pod_name: podName || data.pod_id,
+        level: safeLevel,
+        message: safeMessage,
+        source: 'k8s-agent',
+        occurred_at: occurredAt.toISOString(),
+        metadata: {
+          service_id: data.service_id.slice(0, 100),
+          pod_id: (data.pod_id || 'unknown-pod').slice(0, 100),
+          pod_name: podName || (data.pod_id || 'unknown-pod').slice(0, 100),
+          namespace: namespaceName || data.namespace || 'default',
+          deployment: workload?.name || undefined,
+          agent_id: agent.id,
+        },
+      });
+    } catch {}
 
     await AgentModel.touchLastSeen(agent.id);
     return result;

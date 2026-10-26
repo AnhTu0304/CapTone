@@ -58,6 +58,23 @@ telemetryRoutes.get(
   TelemetryController.getLogs
 );
 
+// GET /api/v1/telemetry/logs/stream
+// Real-time Server-Sent Events (SSE) log streaming with load limits (Task [S4][PB17] 3.3)
+telemetryRoutes.get(
+  '/logs/stream',
+  (req, res, next) => {
+    // If token passed in query parameter (e.g. EventSource client), populate Authorization header
+    const authHeader = req.headers['authorization'];
+    if (!authHeader && typeof req.query.token === 'string') {
+      req.headers['authorization'] = `Bearer ${req.query.token}`;
+    }
+    next();
+  },
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.streamLogs
+);
+
 // GET /api/v1/telemetry/services/:serviceId/metrics-history
 telemetryRoutes.get(
   '/services/:serviceId/metrics-history',

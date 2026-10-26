@@ -291,6 +291,115 @@ export const telemetryService = {
     }
   },
 
+  /**
+   * Connect to Real-time SSE Logs Stream [S4][PB17] 3.3
+   * @param {Object} params - Query filters (serviceId, namespace, deployment, pod, level, clusterId, tail)
+   * @param {Function} onEvent - Callback for SSE events: (eventType, data) => void
+   * @param {Function} onError - Callback for stream errors: (err) => void
+   * @param {Object} [options] - Stream options (signal)
+   * @returns {Function} unsubscribe - Function to close the stream
+   */
+  streamLogs(params = {}, onEvent, onError, options = {}) {
+    const {
+      serviceId,
+      namespace,
+      deployment,
+      pod,
+      level,
+      clusterId,
+      tail = 20,
+    } = params;
+
+    const queryParams = new URLSearchParams();
+    if (serviceId && serviceId !== 'all' && serviceId !== 'ALL') queryParams.set('service_id', serviceId);
+    if (namespace && namespace !== 'all' && namespace !== 'ALL') queryParams.set('namespace', namespace);
+    if (deployment && deployment !== 'all' && deployment !== 'ALL') queryParams.set('deployment', deployment);
+    if (pod && pod !== 'all' && pod !== 'ALL') queryParams.set('pod', pod);
+    if (level && level !== 'all' && level !== 'ALL') queryParams.set('level', level);
+    if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
+    if (tail !== undefined && tail !== null) queryParams.set('tail', String(tail));
+
+    const qs = queryParams.toString();
+    const url = `${API_BASE_URL}/telemetry/logs/stream${qs ? `?${qs}` : ''}`;
+    const controller = new AbortController();
+
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => controller.abort());
+    }
+
+    let isClosed = false;
+
+    (async () => {
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: getHeaders(),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const errMsg = errJson?.message || `HTTP ${res.status} ${res.statusText}`;
+          throw new Error(errMsg);
+        }
+
+        if (!res.body) {
+          throw new Error('Response body is not a ReadableStream');
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (!isClosed) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const block of parts) {
+            if (!block.trim()) continue;
+            let eventType = 'message';
+            let dataStr = '';
+
+            const lines = block.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                eventType = line.slice(6).trim();
+              } else if (line.startsWith('data:')) {
+                dataStr += line.slice(5).trim();
+              }
+            }
+
+            try {
+              const parsedData = dataStr ? JSON.parse(dataStr) : null;
+              if (typeof onEvent === 'function') {
+                onEvent(eventType, parsedData);
+              }
+            } catch {
+              if (typeof onEvent === 'function') {
+                onEvent(eventType, dataStr);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name === 'AbortError' || isClosed) return;
+        console.warn('[telemetryService] streamLogs connection error:', err.message);
+        if (typeof onError === 'function') {
+          onError(err);
+        }
+      }
+    })();
+
+    return () => {
+      isClosed = true;
+      controller.abort();
+    };
+  },
+
   async getMetricsHistory(params = {}, options = {}) {
     try {
       const {

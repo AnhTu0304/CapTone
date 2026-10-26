@@ -34,7 +34,8 @@
     "test:node-metrics": "tsx --test src/test/nodeMetricsApi.test.ts",
     "test:k8s-status": "tsx --test src/test/k8sStatusApi.test.ts",
     "benchmark:node-metrics": "tsx src/scripts/benchmarkNodeMetricsTask44.ts",
-    "test:logs": "tsx --test src/test/logsApi.test.ts"
+    "test:logs": "tsx --test src/test/logsApi.test.ts",
+    "test:logs-stream": "tsx --test src/test/logStreamApi.test.ts"
   },
   "keywords": [
     "nodejs",
