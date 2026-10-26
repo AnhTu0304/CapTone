@@ -22,6 +22,15 @@ telemetryRoutes.get(
   TelemetryController.getNodeMetrics
 );
 
+// GET /api/v1/telemetry/services
+// Danh sách các dịch vụ đang được giám sát APM kèm tổng hợp chỉ số
+telemetryRoutes.get(
+  '/services',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getApmServices
+);
+
 // GET /api/v1/telemetry/services/:serviceId/metrics-sequence
 // Cho phép tất cả người dùng hợp lệ xem chuỗi viễn trắc để vẽ biểu đồ
 telemetryRoutes.get(

@@ -205,4 +205,28 @@ export class TelemetryController {
       next(error);
     }
   }
+
+  /**
+   * GET /api/v1/telemetry/services
+   * Returns distinct microservices monitored by APM with summary KPIs
+   */
+  public static async getApmServices(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const windowMinutes = Math.min(1440, Math.max(5, Number(req.query.window_minutes) || 60));
+      const services = await TelemetryAggregatorService.getApmServicesSummary(windowMinutes);
+
+      return ApiResponse.success(
+        res,
+        `Retrieved ${services.length} APM microservices`,
+        services,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
 }

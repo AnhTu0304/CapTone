@@ -361,7 +361,7 @@ export const NodeMetricsChartsPanel = ({
             from: bounds.from,
             to: bounds.to,
             limit: bounds.limit,
-            order: 'asc',
+            order: 'desc',
           },
           { signal: controller.signal }
         );

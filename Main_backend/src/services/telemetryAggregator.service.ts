@@ -397,4 +397,63 @@ export class TelemetryAggregatorService {
       timestamp: new Date().toISOString(),
     };
   }
+
+  /**
+   * Summary of APM-monitored microservices with aggregated latency, throughput, error rate and health
+   */
+  public static async getApmServicesSummary(windowMinutes: number = 60) {
+    const query = `
+      WITH recent_metrics AS (
+        SELECT 
+          am.service_id,
+          ROUND(AVG(am.latency)::numeric, 1)::float as avg_latency_ms,
+          ROUND(MAX(am.latency)::numeric, 1)::float as max_latency_ms,
+          ROUND(AVG(am.request_rate)::numeric, 1)::float as avg_request_rate,
+          ROUND(AVG(am.http_5xx_rate)::numeric, 2)::float as avg_error_rate,
+          MAX(am.collected_at) as last_collected_at,
+          GREATEST(1, COUNT(DISTINCT am.pod_id))::int as replica_count,
+          SUM(am.pod_restart_count)::int as total_restarts
+        FROM agent_metrics am
+        WHERE am.collected_at > NOW() - ($1 || ' minutes')::INTERVAL
+        GROUP BY am.service_id
+      )
+      SELECT 
+        rm.service_id,
+        COALESCE(s.name, rm.service_id) as service_name,
+        COALESCE(s.service_type, 'ClusterIP') as service_type,
+        rm.avg_latency_ms,
+        rm.max_latency_ms,
+        rm.avg_request_rate,
+        rm.avg_error_rate,
+        rm.last_collected_at,
+        rm.replica_count,
+        rm.total_restarts
+      FROM recent_metrics rm
+      LEFT JOIN services s ON s.id::text = rm.service_id OR s.name = rm.service_id
+      ORDER BY rm.service_id ASC;
+    `;
+    const res = await pool.query(query, [windowMinutes]);
+    if (res.rows.length > 0) {
+      return res.rows;
+    }
+
+    // Fallback if no recent metrics: return known services with 0 metrics
+    const fallbackRes = await pool.query(`
+      SELECT 
+        s.name as service_id,
+        s.name as service_name,
+        COALESCE(s.service_type, 'ClusterIP') as service_type,
+        0.0::float as avg_latency_ms,
+        0.0::float as max_latency_ms,
+        0.0::float as avg_request_rate,
+        0.0::float as avg_error_rate,
+        NULL::timestamptz as last_collected_at,
+        1::int as replica_count,
+        0::int as total_restarts
+      FROM services s
+      ORDER BY s.name ASC
+      LIMIT 20;
+    `);
+    return fallbackRes.rows;
+  }
 }

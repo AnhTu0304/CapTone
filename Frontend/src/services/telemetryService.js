@@ -139,21 +139,51 @@ export const telemetryService = {
   },
 
   /**
-   * Fetch metrics sequence for Chart
+   * Fetch list of APM-monitored services with summary KPIs
    */
-  async getMetricsSequence(serviceId = 'sme-order-service', limit = 20) {
+  async getApmServices(windowMinutes = 60, options = {}) {
     try {
       const res = await fetch(
-        `${API_BASE_URL}/telemetry/services/${serviceId}/metrics-sequence?limit=${limit}&bucket_seconds=5`,
+        `${API_BASE_URL}/telemetry/services?window_minutes=${windowMinutes}`,
         {
           method: 'GET',
           headers: getHeaders(),
+          signal: options?.signal,
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      return Array.isArray(json?.data) ? json.data : [];
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getApmServices fallback:', err.message);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch metrics sequence for APM Chart
+   * Supports options object: { limit, bucket_seconds, signal } or legacy limit number
+   */
+  async getMetricsSequence(serviceId = 'sme-order-service', options = 20) {
+    try {
+      const limit = typeof options === 'number' ? options : options?.limit || 60;
+      const bucketSeconds = typeof options === 'object' && options?.bucket_seconds ? options.bucket_seconds : 5;
+      const signal = typeof options === 'object' ? options?.signal : undefined;
+
+      const res = await fetch(
+        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}`,
+        {
+          method: 'GET',
+          headers: getHeaders(),
+          signal,
         }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.data?.sequence || [];
     } catch (err) {
+      if (err?.name === 'AbortError') throw err;
       console.warn('[telemetryService] getMetricsSequence fallback:', err.message);
       return [];
     }
