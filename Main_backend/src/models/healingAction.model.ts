@@ -14,6 +14,165 @@ export interface IHealingActionFilter {
 
 export class HealingActionModel {
   /**
+   * Kiểm tra cụm Kubernetes có tồn tại và thuộc quyền quản lý của tổ chức hay không
+   */
+  public static async validateClusterBelongsToOrg(clusterId: string, organizationId?: string): Promise<{
+    id: string;
+    name: string;
+    environment_id: string;
+    organization_id: string;
+  } | null> {
+    if (!clusterId || clusterId === 'ALL') return null;
+    const query = `
+      SELECT c.id, c.name, c.environment_id, e.organization_id
+      FROM clusters c
+      JOIN environments e ON c.environment_id = e.id
+      WHERE (c.id::text = $1 OR c.name = $1 OR c.cluster_uid = $1)
+        AND ($2::text IS NULL OR e.organization_id::text = $2)
+      LIMIT 1;
+    `;
+    const res = await pool.query(query, [clusterId, organizationId || null]);
+    return res.rows[0] || null;
+  }
+
+  /**
+   * 1b. Lấy danh sách các hành động đang thực thi (RUNNING / PENDING / QUEUED)
+   * Kèm tính toán thời gian thực tế và phân loại tiến trình MAPE-K
+   */
+  public static async findRunningActions(filters: {
+    organization_id?: string;
+    cluster_id?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{ items: any[]; total: number }> {
+    const limit = filters.limit ?? 50;
+    const offset = filters.offset ?? 0;
+    const conditions: string[] = ["h.execution_status IN ('RUNNING', 'PENDING', 'QUEUED')"];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (filters.organization_id && filters.organization_id !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
+      conditions.push(`(
+        env.organization_id = $${idx} OR 
+        i.organization_id = $${idx} OR 
+        p.organization_id = $${idx}
+      )`);
+      values.push(filters.organization_id);
+      idx++;
+    }
+
+    if (filters.cluster_id && filters.cluster_id !== 'ALL') {
+      conditions.push(`(
+        i.cluster_id = $${idx} OR 
+        EXISTS (
+          SELECT 1 FROM clusters c 
+          WHERE (c.id::text = i.cluster_id OR c.cluster_uid = i.cluster_id OR c.name = i.cluster_id)
+            AND (c.id::text = $${idx} OR c.name = $${idx} OR c.cluster_uid = $${idx})
+        )
+      )`);
+      values.push(filters.cluster_id);
+      idx++;
+    }
+
+    if (filters.search && filters.search.trim() !== '') {
+      conditions.push(`(
+        h.target_name ILIKE $${idx} OR 
+        t.name ILIKE $${idx} OR 
+        t.code ILIKE $${idx} OR 
+        i.title ILIKE $${idx} OR
+        h.id::text ILIKE $${idx}
+      )`);
+      values.push(`%${filters.search.trim()}%`);
+      idx++;
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    const countSql = `
+      SELECT count(*) 
+      FROM healing_actions h
+      LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+      LEFT JOIN incidents i ON i.id = h.incident_id
+      LEFT JOIN environments env ON env.id = h.environment_id
+      LEFT JOIN healing_policies p ON p.id = h.policy_id
+      ${whereClause};
+    `;
+    const countRes = await pool.query(countSql, values);
+    const total = parseInt(countRes.rows[0].count, 10);
+
+    const query = `
+      SELECT 
+        h.id,
+        h.incident_id,
+        i.title AS incident_title,
+        i.severity AS incident_severity,
+        i.cluster_id,
+        cl.name AS cluster_name,
+        h.recommendation_id,
+        h.policy_id,
+        p.name AS policy_name,
+        h.environment_id,
+        env.name AS environment_name,
+        env.organization_id,
+        org.name AS organization_name,
+        h.action_type_id,
+        t.code AS action_type_code,
+        t.name AS action_type_name,
+        h.target_type,
+        h.target_id,
+        h.target_name,
+        h.risk_level,
+        h.execution_mode,
+        h.approval_status,
+        h.execution_status,
+        h.requested_by,
+        u_req.email AS requested_by_email,
+        h.executed_by,
+        u_exec.email AS executed_by_email,
+        h.requested_at,
+        h.started_at,
+        h.completed_at,
+        ROUND(EXTRACT(EPOCH FROM (COALESCE(h.completed_at, NOW()) - COALESCE(h.started_at, h.requested_at, h.created_at)))::numeric, 1) AS elapsed_seconds,
+        h.error_message,
+        h.result,
+        h.created_at,
+        (
+          SELECT json_agg(json_build_object(
+            'id', ea.id,
+            'attempt_number', ea.attempt_number,
+            'command_type', ea.command_type,
+            'status', ea.status,
+            'duration_ms', ea.duration_ms,
+            'error_message', ea.error_message,
+            'started_at', ea.started_at,
+            'completed_at', ea.completed_at
+          ) ORDER BY ea.attempt_number DESC)
+          FROM execution_attempts ea
+          WHERE ea.healing_action_id = h.id
+        ) AS attempts
+      FROM healing_actions h
+      LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+      LEFT JOIN incidents i ON i.id = h.incident_id
+      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN environments env ON env.id = h.environment_id
+      LEFT JOIN organizations org ON org.id = env.organization_id
+      LEFT JOIN healing_policies p ON p.id = h.policy_id
+      LEFT JOIN users u_req ON u_req.id = h.requested_by
+      LEFT JOIN users u_exec ON u_exec.id = h.executed_by
+      ${whereClause}
+      ORDER BY 
+        CASE WHEN h.execution_status = 'RUNNING' THEN 1 WHEN h.execution_status = 'PENDING' THEN 2 ELSE 3 END,
+        h.created_at DESC
+      LIMIT $${idx++} OFFSET $${idx++};
+    `;
+
+    values.push(limit, offset);
+    const res = await pool.query(query, values);
+    return { items: res.rows, total };
+  }
+
+  /**
    * 1. List healing actions with filtering and pagination
    */
   public static async findManyActions(filters: IHealingActionFilter = {}): Promise<{ items: any[]; total: number }> {
@@ -461,6 +620,85 @@ export class HealingActionModel {
   }
 
   /**
+   * 4b. Hủy bỏ (Abort / Cancel) một hành động đang thực thi hoặc đang chờ duyệt
+   */
+  public static async abortAction(
+    actionId: string,
+    abortedBy?: string | null,
+    reason?: string
+  ): Promise<any> {
+    const action = await this.findActionById(actionId);
+    if (!action) throw new Error('Không tìm thấy hành động tự phục hồi để hủy bỏ');
+
+    const completedStatuses = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+    if (completedStatuses.includes(action.execution_status)) {
+      throw new Error(`Hành động đã kết thúc với trạng thái ${action.execution_status}, không thể hủy bỏ`);
+    }
+
+    const abortReason = reason || 'Hành động bị hủy bỏ thủ công bởi quản trị viên qua bảng điều khiển';
+
+    // 1. Update action status to CANCELLED
+    const updateRes = await pool.query(
+      `UPDATE healing_actions 
+       SET execution_status = 'CANCELLED'::execution_status,
+           completed_at = NOW(),
+           error_message = $2,
+           result = jsonb_set(
+             COALESCE(result, '{}'::jsonb),
+             '{aborted}',
+             $3::jsonb
+           )
+       WHERE id = $1
+       RETURNING *;`,
+      [
+        actionId,
+        abortReason,
+        JSON.stringify({
+          aborted_by: abortedBy || null,
+          reason: abortReason,
+          aborted_at: new Date().toISOString(),
+        }),
+      ]
+    );
+
+    // 2. Reject pending approvals if any
+    await pool.query(
+      `UPDATE approvals 
+       SET status = 'REJECTED', decided_at = NOW(), reason = $2
+       WHERE healing_action_id = $1 AND status = 'PENDING';`,
+      [actionId, `Hủy bỏ do hành động bị dừng khẩn cấp: ${abortReason}`]
+    );
+
+    // 3. Record attempt record
+    const countAttempt = await pool.query(
+      'SELECT count(*) FROM execution_attempts WHERE healing_action_id = $1;',
+      [actionId]
+    );
+    const attemptNum = parseInt(countAttempt.rows[0].count, 10) + 1;
+
+    await pool.query(
+      `INSERT INTO execution_attempts (
+        healing_action_id, attempt_number, command_type,
+        request_payload, response_payload, status,
+        started_at, completed_at, duration_ms, error_message
+      ) VALUES (
+        $1, $2, 'ABORT_HEALING_ACTION',
+        $3::jsonb, $4::jsonb, 'CANCELLED'::execution_status,
+        NOW(), NOW(), 0, $5
+      );`,
+      [
+        actionId,
+        attemptNum,
+        JSON.stringify({ action_id: actionId, target: action.target_name }),
+        JSON.stringify({ status: 'ABORTED', reason: abortReason }),
+        abortReason,
+      ]
+    );
+
+    return updateRes.rows[0];
+  }
+
+  /**
    * 5. Update action status
    */
   public static async updateStatus(
@@ -583,7 +821,7 @@ export class HealingActionModel {
     }
 
     if (filters.environment_id && filters.environment_id !== 'ALL') {
-      conditions.push(`(p.environment_id = $${idx} OR p.environment_id IN (SELECT environment_id FROM clusters WHERE id::text = $${idx}) OR p.environment_id IS NULL)`);
+      conditions.push(`(p.environment_id::text = $${idx} OR p.environment_id IN (SELECT environment_id FROM clusters WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}) OR p.environment_id IS NULL)`);
       values.push(filters.environment_id);
       idx++;
     }

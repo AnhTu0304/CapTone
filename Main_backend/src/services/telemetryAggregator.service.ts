@@ -1,3 +1,4 @@
+import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
 import { GRUMetricPoint } from '../schemas/ai.schema';
 import { RuleEngineService } from './ruleEngine.service';
@@ -15,6 +16,11 @@ import {
 
 export interface RcaContext {
   service_id: string;
+  pod_id?: string;
+  pod_status?: string;
+  restart_count?: number;
+  desired_replicas?: number;
+  available_replicas?: number;
   logs: string[];
   kubernetes_events: string[];
   latest_metrics?: GRUMetricPoint;
@@ -24,6 +30,11 @@ export interface RcaContext {
 
 export interface ServiceEvaluationResult {
   service_id: string;
+  pod_id?: string;
+  pod_status?: string;
+  restart_count?: number;
+  desired_replicas?: number;
+  available_replicas?: number;
   evaluated_at: string;
   metrics_sequence: GRUMetricPoint[];
   latest_metrics: GRUMetricPoint;
@@ -124,8 +135,57 @@ export class TelemetryAggregatorService {
     });
     const latestMetrics = recentMetrics.length > 0 ? recentMetrics[0] : undefined;
 
+    // 2.4 Query actual target Pod info (pod name, status, restart_count)
+    let podId: string | undefined = undefined;
+    let podStatus: string = 'Running';
+    let restartCount = 0;
+    try {
+      const podRes = await pool.query(
+        `SELECT p.name, p.status, p.phase, p.restart_count 
+         FROM pods p 
+         LEFT JOIN workloads w ON w.id = p.workload_id 
+         WHERE (w.name = $1 OR p.name LIKE $2 OR p.labels->>'app' = $1)
+           AND p.deleted_at IS NULL 
+         ORDER BY p.restart_count DESC, p.created_at DESC 
+         LIMIT 1`,
+        [serviceId, `${serviceId}%`]
+      );
+      if (podRes.rows.length > 0) {
+        podId = podRes.rows[0].name;
+        podStatus = podRes.rows[0].status || podRes.rows[0].phase || 'Running';
+        restartCount = Number(podRes.rows[0].restart_count || 0);
+      }
+    } catch (e) {
+      console.warn('[TelemetryAggregator] Could not query pod info:', e);
+    }
+
+    // 2.5 Query Deployment replicas info
+    let desiredReplicas: number | undefined = undefined;
+    let availableReplicas: number | undefined = undefined;
+    try {
+      const deplRes = await pool.query(
+        `SELECT d.desired_replicas, d.available_replicas 
+         FROM deployments d 
+         JOIN workloads w ON w.id = d.workload_id 
+         WHERE w.name = $1 
+         LIMIT 1`,
+        [serviceId]
+      );
+      if (deplRes.rows.length > 0) {
+        desiredReplicas = deplRes.rows[0].desired_replicas;
+        availableReplicas = deplRes.rows[0].available_replicas;
+      }
+    } catch (e) {
+      console.warn('[TelemetryAggregator] Could not query deployment replicas:', e);
+    }
+
     return {
       service_id: serviceId,
+      pod_id: podId,
+      pod_status: podStatus,
+      restart_count: restartCount,
+      desired_replicas: desiredReplicas,
+      available_replicas: availableReplicas,
       logs: formattedLogs,
       kubernetes_events: formattedEvents,
       latest_metrics: latestMetrics,
@@ -259,6 +319,24 @@ export class TelemetryAggregatorService {
           service_id: serviceId,
           risk_type: riskType,
           confidence,
+          pod_id: rcaContext.pod_id,
+          kubernetes: {
+            pod_status: rcaContext.pod_status || 'Running',
+            container_status: 'Running',
+            restart_count: rcaContext.restart_count || latestMetrics.pod_restart_count || 0,
+            events: rcaContext.kubernetes_events,
+            desired_replicas: rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1,
+            available_replicas: rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1,
+          },
+          prediction: gruPrediction
+            ? {
+                service_id: serviceId,
+                threshold: gruPrediction.threshold,
+                thresholds: gruPrediction.thresholds || {},
+                detected_risks: gruPrediction.detected_risks || [],
+                risk_outputs: gruPrediction.risk_outputs || {},
+              }
+            : undefined,
           metrics: latestMetrics,
           logs: rcaContext.logs,
           kubernetes_events: rcaContext.kubernetes_events,

@@ -3,6 +3,7 @@ import { selfHealingService } from '../../../services/selfHealingService';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
 import usePermissions from '../../../hooks/usePermissions';
+import NewPolicyModal from './NewPolicyModal';
 import {
   Shield,
   Sliders,
@@ -16,7 +17,6 @@ import {
   Settings,
   X,
   Check,
-  Database,
   ShieldCheck,
   User,
   AlertTriangle,
@@ -24,75 +24,6 @@ import {
   Server,
   UserCheck
 } from 'lucide-react';
-
-const INITIAL_POLICIES = [
-  {
-    id: 'POL-01',
-    name: 'Tự động mở rộng RAM khi phát hiện rò rỉ (OOMKilled Guard)',
-    category: 'Tài nguyên & Cấu hình',
-    targetNamespace: 'production',
-    condition: 'Memory Usage > 90% kéo dài trên 3 phút hoặc 1 lần OOMKilled',
-    action: 'Tăng memory.limit thêm 25% (tối đa không vượt quá 4Gi)',
-    riskLevel: 'LOW',
-    hitlRequired: false,
-    enabled: true,
-  },
-  {
-    id: 'POL-02',
-    name: 'Tháo tải & Cô lập máy chủ suy yếu (Cordon & Drain Node)',
-    category: 'Hạ tầng Vật lý & Máy chủ',
-    targetNamespace: 'Toàn cụm (All Nodes)',
-    condition: 'Tỷ lệ lỗi Kubelet > 15% hoặc I/O Disk Stall > 45 giây',
-    action: 'Cordon node, kiểm tra PDB và Evict từng Pod an toàn',
-    riskLevel: 'HIGH',
-    hitlRequired: true,
-    enabled: true,
-  },
-  {
-    id: 'POL-03',
-    name: 'Tự động Rollback khi Deployment phát sinh lỗi CrashLoop',
-    category: 'Phiên bản & Triển khai',
-    targetNamespace: 'production',
-    condition: 'Tỷ lệ Pod Restart > 3 lần trong vòng 5 phút sau release mới',
-    action: 'Khôi phục về bản ReplicaSet ổn định trước đó (Rollback v-1)',
-    riskLevel: 'HIGH',
-    hitlRequired: true,
-    enabled: true,
-  },
-  {
-    id: 'POL-04',
-    name: 'Khởi động lại Pods bị Deadlock Thread / Unresponsive',
-    category: 'Tiến trình Ứng dụng',
-    targetNamespace: 'backend, payments',
-    condition: 'Liveness Probe thất bại 3 lần liên tiếp, HTTP 504 Gateway',
-    action: 'Thu thập Thread Dump, sau đó Rolling Restart Pod',
-    riskLevel: 'MEDIUM',
-    hitlRequired: false,
-    enabled: true,
-  },
-  {
-    id: 'POL-05',
-    name: 'Tự động mở rộng đĩa lưu trữ PVC (Storage Auto-Expander)',
-    category: 'Lưu trữ & Dữ liệu',
-    targetNamespace: 'database, logging',
-    condition: 'Dung lượng đĩa khả dụng < 15% tổng dung lượng PVC',
-    action: 'Gửi yêu cầu Resize CSI StorageClass thêm 20% dung lượng',
-    riskLevel: 'MEDIUM',
-    hitlRequired: false,
-    enabled: true,
-  },
-  {
-    id: 'POL-06',
-    name: 'Tự kích hoạt HPA dự báo tải đột biến (Predictive Auto-Scale)',
-    category: 'Khả năng Co giãn',
-    targetNamespace: 'production, frontend',
-    condition: 'AI dự báo tải lượng truy cập tăng gấp 2 lần trong 15 phút tới',
-    action: 'Nâng trước số lượng Replicas tối thiểu từ 3 lên 6 Pods',
-    riskLevel: 'LOW',
-    hitlRequired: false,
-    enabled: true,
-  },
-];
 
 export const PoliciesPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
@@ -103,7 +34,7 @@ export const PoliciesPage = () => {
   const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
 
   // Cluster Identity & State Isolation Key
-  const clusterName = currentEnv?.cluster || currentEnv?.name || 'sang-k8s';
+  const clusterName = currentEnv?.cluster || currentEnv?.name || currentEnv?.id || 'all-clusters';
   const isClusterOnline = currentEnv?.agentStatus === 'ONLINE';
   const clusterKey = currentEnv?.id ? `cluster_${currentEnv.id}` : `cluster_${clusterName}`;
 
@@ -117,8 +48,8 @@ export const PoliciesPage = () => {
         // ignore
       }
     }
-    // For primary/online cluster (e.g. sang-k8s), check legacy settings or seed active defaults
-    if (isOnline || (cName && cName.includes('sang-k8s'))) {
+    // For primary/online cluster, check legacy settings or seed active defaults
+    if (isOnline) {
       const legacy = localStorage.getItem('selfheal_safety_guards');
       if (legacy) {
         try {
@@ -193,7 +124,7 @@ export const PoliciesPage = () => {
   };
 
   // Policies list state
-  const [policies, setPolicies] = useState(INITIAL_POLICIES);
+  const [policies, setPolicies] = useState([]);
 
   const KNOWN_POLICY_TITLES = {
     'POL-SCALE-OUT-TRAFFIC': 'Tự động mở rộng bản sao Pod khi quá tải lưu lượng đột biến',
@@ -222,7 +153,7 @@ export const PoliciesPage = () => {
       name: displayName,
       category: p.risk_type || 'Tự phục hồi AI',
       targetNamespace: 'production',
-      targetCluster: currentEnv?.cluster || 'sang-k8s',
+      targetCluster: currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm',
       condition: `Trigger: ${p.trigger_type} (Ngưỡng tin cậy >= ${Math.round(Number(p.confidence_threshold || 0.85) * 100)}%)`,
       action: actionNames,
       riskLevel: p.risk_level || 'LOW',
@@ -243,8 +174,8 @@ export const PoliciesPage = () => {
         environment_id: activeEnvId,
       });
       const items = Array.isArray(res) ? res : (res?.items || []);
-      const basePolicies = items.length > 0 ? items.map(mapBackendPolicyToUI) : INITIAL_POLICIES;
-      setIsUsingLiveDb(items.length > 0);
+      const basePolicies = items.map(mapBackendPolicyToUI);
+      setIsUsingLiveDb(true);
 
       // Check per-cluster saved policy overrides
       const savedPoliciesRaw = localStorage.getItem(`selfheal_policies_${clusterKey}`);
@@ -267,7 +198,7 @@ export const PoliciesPage = () => {
           };
         }
         // If no explicit settings saved yet for this cluster:
-        // ONLINE cluster (e.g. sang-k8s): Keep backend/active enabled
+        // ONLINE cluster: Keep backend/active enabled
         // OFFLINE / PENDING cluster (e.g. vcxv): Switches must move to the OFF position ("về đúng vị trí tắt")!
         return {
           ...p,
@@ -279,11 +210,8 @@ export const PoliciesPage = () => {
       setPolicies(clusterPolicies);
     } catch (err) {
       console.warn('[PoliciesPage] Lỗi nạp chính sách:', err.message);
-      setIsUsingLiveDb(false);
-      setPolicies(INITIAL_POLICIES.map((p) => ({
-        ...p,
-        enabled: isClusterOnline ? p.enabled : false,
-      })));
+      setIsUsingLiveDb(true);
+      setPolicies([]);
     } finally {
       setIsLoading(false);
     }
@@ -482,27 +410,10 @@ export const PoliciesPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Ma Trận Chính Sách Tự Phục Hồi
             </h1>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '10px',
-                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
-                color: isUsingLiveDb ? '#15803D' : '#B45309',
-                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
-              }}
-            >
-              <Database size={10} />
-              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
-            </span>
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'SME Retail Enterprise'}</strong> &bull; Vị trí Cụm K8s:{' '}
-            <span style={{ fontWeight: 700, color: 'var(--dash-primary)' }}>{currentEnv?.cluster || 'sang-k8s'}</span> ({currentEnv?.envName || 'Production'}) &bull; Quản lý chính sách tự động và an toàn MAPE-K
+            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Vị trí Cụm K8s:{' '}
+            <span style={{ fontWeight: 700, color: 'var(--dash-primary)' }}>{currentEnv?.cluster || currentEnv?.name || 'Tất cả cụm'}</span> ({currentEnv?.envName || 'Môi trường hiện tại'}) &bull; Quản lý chính sách tự động và an toàn MAPE-K
           </p>
         </div>
 
@@ -579,237 +490,7 @@ export const PoliciesPage = () => {
         </div>
       </div>
 
-      {/* Dynamic RBAC, Company & Cluster Identity Verification Bar */}
-      <div
-        style={{
-          padding: '16px 20px',
-          borderRadius: '12px',
-          border: canManagePolicies && currentEnv?.agentStatus === 'ONLINE' ? '1px solid #BBF7D0' : '1px solid #FED7AA',
-          backgroundColor: canManagePolicies && currentEnv?.agentStatus === 'ONLINE' ? '#F0FDF4' : '#FFFBEB',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-          {/* Company, Cluster and User details */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-            {/* Organization / Company */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  backgroundColor: '#DCFCE7',
-                  color: '#166534',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Building size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Doanh nghiệp / Tổ chức
-                </div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                  {currentOrg?.name || 'SME Retail Enterprise'}
-                </div>
-              </div>
-            </div>
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: '#CBD5E1' }} />
-
-            {/* Kubernetes Cluster */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  backgroundColor: currentEnv?.agentStatus === 'ONLINE' ? '#E0F2FE' : '#FEF2F2',
-                  color: currentEnv?.agentStatus === 'ONLINE' ? '#0369A1' : '#DC2626',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Server size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Vị trí Cụm K8s Áp Dụng
-                </div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: currentEnv?.agentStatus === 'ONLINE' ? '#0369A1' : '#B91C1C', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>{currentEnv?.cluster || currentEnv?.displayName || 'sang-k8s'}</span>
-                  <span
-                    style={{
-                      fontSize: '0.6875rem',
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: currentEnv?.agentStatus === 'ONLINE' ? '#DBEAFE' : '#FEE2E2',
-                      color: currentEnv?.agentStatus === 'ONLINE' ? '#1E40AF' : '#991B1B',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {currentEnv?.envName || 'Production'}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '0.625rem',
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: currentEnv?.agentStatus === 'ONLINE' ? '#DCFCE7' : '#FEF3C7',
-                      color: currentEnv?.agentStatus === 'ONLINE' ? '#166534' : '#B45309',
-                      border: `1px solid ${currentEnv?.agentStatus === 'ONLINE' ? '#86EFAC' : '#FDE68A'}`,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {currentEnv?.agentStatus === 'ONLINE' ? '🟢 Tác tử Online' : '🔴 Tác tử Ngoại tuyến'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ width: '1px', height: '32px', backgroundColor: '#CBD5E1' }} />
-
-            {/* Current Authenticated User */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  backgroundColor: isOwner ? '#FEF3C7' : isDevOps ? '#EDE9FE' : '#F1F5F9',
-                  color: isOwner ? '#B45309' : isDevOps ? '#6D28D9' : '#475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                {isOwner ? <ShieldCheck size={18} /> : isDevOps ? <UserCheck size={18} /> : <User size={18} />}
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Người dùng vận hành
-                </div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                  {user?.email || user?.full_name || 'sme-owner@retail.com'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* User Role Badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {isOwner && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  backgroundColor: '#DCFCE7',
-                  border: '1.5px solid #86EFAC',
-                  color: '#15803D',
-                  fontSize: '0.75rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.03em',
-                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                }}
-              >
-                👑 CHỦ DOANH NGHIỆP (SME OWNER)
-              </span>
-            )}
-            {isDevOps && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  backgroundColor: '#EFF6FF',
-                  border: '1.5px solid #BFDBFE',
-                  color: '#1D4ED8',
-                  fontSize: '0.75rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.03em',
-                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                }}
-              >
-                🛠️ KỸ SƯ DEVOPS
-              </span>
-            )}
-            {isViewer && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1.5px solid #CBD5E1',
-                  color: '#475569',
-                  fontSize: '0.75rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.03em',
-                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                }}
-              >
-                👁️ NGƯỜI XEM (VIEWER - CHỈ ĐỌC)
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Verification Status Banner */}
-        <div
-          style={{
-            padding: '12px 16px',
-            borderRadius: '8px',
-            backgroundColor: !canManagePolicies ? '#F8FAFC' : (currentEnv?.agentStatus === 'ONLINE' ? '#DCFCE7' : '#FEF3C7'),
-            fontSize: '0.8125rem',
-            color: !canManagePolicies ? '#475569' : (currentEnv?.agentStatus === 'ONLINE' ? '#166534' : '#92400E'),
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontWeight: 500,
-            border: `1px solid ${!canManagePolicies ? '#CBD5E1' : (currentEnv?.agentStatus === 'ONLINE' ? '#86EFAC' : '#FDE68A')}`,
-          }}
-        >
-          {!canManagePolicies ? (
-            <>
-              <AlertTriangle size={18} color="#64748B" style={{ flexShrink: 0 }} />
-              <span>
-                <strong>Chế độ chỉ xem (Read-Only):</strong> Tài khoản của bạn không có quyền sửa đổi hoặc thực thi chính sách tự phục hồi trên cụm <strong>{currentEnv?.cluster || 'sang-k8s'}</strong>. Các quyền quản trị này chỉ dành riêng cho <strong>SME Owner</strong> và <strong>DevOps</strong>.
-              </span>
-            </>
-          ) : currentEnv?.agentStatus === 'ONLINE' ? (
-            <>
-              <CheckCircle2 size={18} color="#166534" style={{ flexShrink: 0 }} />
-              <span>
-                <strong>Đã cấp quyền toàn diện trên cụm {currentEnv?.cluster || 'sang-k8s'}:</strong> Bạn có toàn quyền quản trị ({isOwner ? 'Chủ doanh nghiệp' : 'Kỹ sư DevOps'}) và Tác tử eBPF đang <strong>Online</strong> trên cụm <strong>{currentEnv?.cluster || 'sang-k8s'}</strong>. Mọi Action tự sửa lỗi và chính sách MAPE-K được phép tự động can thiệp.
-              </span>
-            </>
-          ) : (
-            <>
-              <AlertTriangle size={18} color="#B45309" style={{ flexShrink: 0 }} />
-              <span>
-                <strong>Cảnh báo vị trí cụm {currentEnv?.cluster || 'vcxv'}:</strong> Bạn có thẩm quyền quản trị ({isOwner ? 'Chủ doanh nghiệp' : 'Kỹ sư DevOps'}), NHƯNG cụm <strong>{currentEnv?.cluster || 'vcxv'}</strong> hiện tại đang có <strong>Tác tử Ngoại tuyến (Pending / Chưa kết nối)</strong>. Các Action tự phục hồi sẽ tạm hoãn gửi lệnh can thiệp xuống cụm này cho đến khi kết nối Agent.
-              </span>
-            </>
-          )}
-        </div>
-      </div>
 
       {saveSuccess && (
         <div
@@ -1201,7 +882,7 @@ export const PoliciesPage = () => {
                           }}
                         >
                           <Server size={10} />
-                          <span>Cụm: {currentEnv?.cluster || 'sang-k8s'}</span>
+                          <span>Cụm: {currentEnv?.cluster || currentEnv?.name || 'Tất cả cụm'}</span>
                         </span>
                         <span
                           style={{
@@ -1245,7 +926,7 @@ export const PoliciesPage = () => {
                             }}
                           >
                             <CheckCircle2 size={10} />
-                            <span>Đã cấp quyền trên cụm {currentEnv?.cluster || 'sang-k8s'}</span>
+                            <span>Đã cấp quyền trên cụm {currentEnv?.cluster || currentEnv?.name || 'Tất cả cụm'}</span>
                           </span>
                         ) : (
                           <span
@@ -1389,207 +1070,14 @@ export const PoliciesPage = () => {
         </div>
       </div>
 
-      {/* Modal Thêm Quy Tắc Mới */}
-      {showAddModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
-          }}
-        >
-          <div
-            className="dash-card"
-            style={{
-              width: '100%',
-              maxWidth: '560px',
-              backgroundColor: 'white',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '0',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid var(--dash-border-subtle)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={18} color="var(--dash-primary)" />
-                <h3 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  Thêm Quy Tắc Tự Phục Hồi Mới
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="dash-btn"
-                style={{
-                  padding: '4px',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  color: 'var(--dash-text-secondary)',
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddRule} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Tên Quy Tắc
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: Tự động điều chỉnh dung lượng JVM heap..."
-                  value={newRule.name}
-                  onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-                  className="dash-input"
-                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.875rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                    Phân Loại
-                  </label>
-                  <select
-                    value={newRule.category}
-                    onChange={(e) => setNewRule({ ...newRule, category: e.target.value })}
-                    className="dash-input"
-                    style={{ width: '100%', padding: '8px 12px', fontSize: '0.875rem' }}
-                  >
-                    <option value="Tài nguyên & Cấu hình">Tài nguyên & Cấu hình</option>
-                    <option value="Hạ tầng Vật lý & Máy chủ">Hạ tầng Vật lý & Máy chủ</option>
-                    <option value="Phiên bản & Triển khai">Phiên bản & Triển khai</option>
-                    <option value="Tiến trình Ứng dụng">Tiến trình Ứng dụng</option>
-                    <option value="Lưu trữ & Dữ liệu">Lưu trữ & Dữ liệu</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                    Namespace Mục Tiêu
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="production, default hoặc all"
-                    value={newRule.targetNamespace}
-                    onChange={(e) => setNewRule({ ...newRule, targetNamespace: e.target.value })}
-                    className="dash-input"
-                    style={{ width: '100%', padding: '8px 12px', fontSize: '0.875rem' }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Điều Kiện Viễn Trắc Kích Hoạt (Condition)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: HTTP 503 > 5% trong 2 phút liên tiếp..."
-                  value={newRule.condition}
-                  onChange={(e) => setNewRule({ ...newRule, condition: e.target.value })}
-                  className="dash-input"
-                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.875rem' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Hành Động Sửa Lỗi Tự Động (MAPE-K Action)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: Kích hoạt HPA Scale up thêm 2 pods hoặc Restart Service..."
-                  value={newRule.action}
-                  onChange={(e) => setNewRule({ ...newRule, action: e.target.value })}
-                  className="dash-input"
-                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.875rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'center' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                    Mức Độ Rủi Ro
-                  </label>
-                  <select
-                    value={newRule.riskLevel}
-                    onChange={(e) => setNewRule({ ...newRule, riskLevel: e.target.value })}
-                    className="dash-input"
-                    style={{ width: '100%', padding: '8px 12px', fontSize: '0.875rem' }}
-                  >
-                    <option value="LOW">Thấp (LOW)</option>
-                    <option value="MEDIUM">Vừa (MEDIUM)</option>
-                    <option value="HIGH">Cao (HIGH)</option>
-                  </select>
-                </div>
-
-                <div style={{ paddingTop: '20px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>
-                    <input
-                      type="checkbox"
-                      checked={newRule.hitlRequired}
-                      onChange={(e) => setNewRule({ ...newRule, hitlRequired: e.target.checked })}
-                      style={{ accentColor: 'var(--dash-primary)', width: '16px', height: '16px' }}
-                    />
-                    Bắt buộc duyệt HITL
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="dash-btn"
-                  style={{
-                    padding: '8px 14px',
-                    backgroundColor: 'white',
-                    border: '1px solid var(--dash-border-subtle)',
-                    color: 'var(--dash-text-secondary)',
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="dash-btn"
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: 'var(--dash-primary)',
-                    color: 'white',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  Thêm Quy Tắc
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            {/* Modal Thêm Quy Tắc Mới (Structured Dropdown Builder) */}
+      <NewPolicyModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onCreated={fetchPolicies}
+        currentOrg={currentOrg}
+        currentEnv={currentEnv}
+      />
     </div>
   );
 };

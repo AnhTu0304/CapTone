@@ -60,7 +60,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 type: ev.source_type || 'AI_TELEMETRY',
                 ref: ev.source_reference || incident?.service,
                 summary: summary || 'Ghi nhận bất thường qua viễn trắc',
-                score: `${Math.round((Number(ev.importance_score || 0.95) - idx * 0.02) * 100)}%`,
+                score: (() => {
+                const rawScore = ev.importance_score !== undefined && ev.importance_score !== null ? Number(ev.importance_score) : 0.95;
+                return `${Math.round(rawScore <= 1 ? rawScore * 100 : rawScore)}%`;
+              })(),
               };
             });
             setEvidenceList(mapped);
@@ -106,6 +109,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
   const isResolved = (incidentDetail?.status || incident?.status || '').toLowerCase().includes('resolve') ||
     (incident?.status && incident?.status.includes('hoàn tất'));
 
+  const serviceDisplayName = useMemo(() => {
+    let s = incident?.service;
+    if (!s || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+      if (incidentDetail?.title && incidentDetail.title.includes(' on ')) {
+        s = incidentDetail.title.split(' on ')[1].trim();
+      } else if (incidentDetail?.target_name) {
+        s = incidentDetail.target_name;
+      } else if (incidentDetail?.target_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incidentDetail.target_id)) {
+        s = incidentDetail.target_id;
+      }
+    }
+    return s || incident?.service || 'ecommerce-store-app';
+  }, [incident?.service, incidentDetail]);
+
   const rawConfidence = incidentDetail?.rca_confidence ?? incident?.confidence ?? parsedAnalysis?.root_cause?.confidence ?? 0.60;
   const confidence = Math.round(Number(rawConfidence) <= 1 ? Number(rawConfidence) * 100 : Number(rawConfidence));
 
@@ -118,8 +135,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
 
   const handleCopyLogs = () => {
     const logText = evidenceList && evidenceList.length > 0
-      ? evidenceList.map((e) => `[${e.type}] (${e.ref}) ${e.summary}`).join('\n')
-      : `kernel: readiness probe failing on ${incident?.service}`;
+      ? evidenceList.map((e) => `[${e.type}] (${e.ref || serviceDisplayName}) ${e.summary}`).join('\n')
+      : `kernel: readiness probe failing on ${serviceDisplayName}`;
     navigator.clipboard?.writeText(logText);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
@@ -221,7 +238,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
       return [
         {
           step: '1. Đột biến mã lỗi HTTP 5xx',
-          desc: `Tác tử eBPF & Ingress ghi nhận tỷ lệ lỗi HTTP 5xx leo thang chạm đỉnh ${spike5xx} trên dịch vụ ${incident?.service}.`,
+          desc: `Tác tử eBPF & Ingress ghi nhận tỷ lệ lỗi HTTP 5xx leo thang chạm đỉnh ${spike5xx} trên dịch vụ ${serviceDisplayName}.`,
         },
         {
           step: '2. Suy giảm chất lượng dịch vụ SLA',
@@ -244,7 +261,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
       return [
         {
           step: '1. Đột biến tải lưu lượng',
-          desc: `Lưu lượng yêu cầu xử lý tăng vọt đột biến trên dịch vụ ${incident?.service}.`,
+          desc: `Lưu lượng yêu cầu xử lý tăng vọt đột biến trên dịch vụ ${serviceDisplayName}.`,
         },
         {
           step: '2. Bão hòa tài nguyên CPU',
@@ -267,7 +284,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
       return [
         {
           step: '1. Gia tăng độ trễ mạng/xử lý',
-          desc: `Độ trễ phản hồi (latency) tăng cao chạm mốc ${maxLat} trên ${incident?.service}.`,
+          desc: `Độ trễ phản hồi (latency) tăng cao chạm mốc ${maxLat} trên ${serviceDisplayName}.`,
         },
         {
           step: '2. Nghẽn luồng truy vấn (I/O Bottleneck)',
@@ -290,11 +307,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
       return [
         {
           step: '1. Kiểm tra Liveness/Readiness',
-          desc: `Kubelet Probe ghi nhận Pod ${incident?.service} không phản hồi endpoint kiểm tra sẵn sàng.`,
+          desc: `Kubelet Probe ghi nhận Pod ${serviceDisplayName} không phản hồi endpoint kiểm tra sẵn sàng.`,
         },
         {
           step: '2. Tích tụ lỗi tiến trình',
-          desc: `Tiến trình bên trong container gặp ngoại lệ, số lần khởi động lại tăng lên ${restarts} lần.`,
+          desc: restarts > 0
+            ? `Tiến trình bên trong container gặp ngoại lệ, đã ghi nhận ${restarts} lần khởi động lại.`
+            : `Tiến trình bên trong container bị nghẽn hoặc lỗi xử lý, chưa thể vượt qua kiểm tra readiness để nhận tải.`,
         },
         {
           step: '3. Cách ly & Suy diễn hạ tầng',
@@ -307,13 +326,35 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
       ];
     }
 
+    // 5. Viễn trắc bình thường / Chưa đủ bằng chứng can thiệp (UNKNOWN / NO_ACTION)
+    if (rc.includes('unknown') || rc.includes('insufficient') || (recAction || '').includes('NO_ACTION')) {
+      return [
+        {
+          step: '1. Giám sát viễn trắc eBPF',
+          desc: `Tác tử eBPF và Kubelet theo dõi liên tục các chỉ số tài nguyên và trạng thái tiến trình trên ${serviceDisplayName}.`,
+        },
+        {
+          step: '2. Đối soát ngưỡng an toàn',
+          desc: 'Các chỉ số CPU, RAM, Latency và HTTP 5xx đều dao động trong biên độ cho phép, không phát hiện rò rỉ hay lỗi lặp lại.',
+        },
+        {
+          step: '3. Đánh giá kiểm soát rủi ro',
+          desc: 'Mô hình AI xác định chưa đủ bằng chứng để chỉ định nguyên nhân gốc rễ cụ thể, duy trì mức cảnh báo thận trọng.',
+        },
+        {
+          step: '4. Duy trì trạng thái an toàn (MAPE-K)',
+          desc: 'Hệ thống tự động quyết định không can thiệp (NO_ACTION) để tránh gây gián đoạn không cần thiết cho dịch vụ.',
+        },
+      ];
+    }
+
     return incident?.causalSteps || [
-      { step: '1. Tín hiệu sơ cấp', desc: `Phát hiện dị thường viễn trắc từ eBPF Kernel Probe trên ${incident?.service}.` },
+      { step: '1. Tín hiệu sơ cấp', desc: `Phát hiện dị thường viễn trắc từ eBPF Kernel Probe trên ${serviceDisplayName}.` },
       { step: '2. Tích tụ tài nguyên', desc: 'Mô hình AI dự báo xu hướng suy giảm hiệu năng vượt ngưỡng cảnh báo.' },
       { step: '3. Đánh giá chuỗi lan truyền', desc: 'Kubelet ghi nhận cảnh báo bất thường, kích hoạt chẩn đoán nguyên nhân gốc rễ.' },
       { step: '4. Tự lành & Khôi phục', desc: `MAPE-K thực thi ${recAction} nhằm bảo toàn SLA dịch vụ.` },
     ];
-  }, [rootCauseType, incident?.service, recAction, confidence, metricSummary, incidentDetail, incident?.causalSteps]);
+  }, [rootCauseType, serviceDisplayName, recAction, confidence, metricSummary, incidentDetail, incident?.causalSteps]);
 
   const previousActionInfo = parsedAnalysis?.previous_action || incidentDetail?.previous_action || 'RESTART_POD';
   const previousActionResult = parsedAnalysis?.previous_action_result || incidentDetail?.previous_action_result || (isResolved ? 'SUCCESS' : 'PENDING');
@@ -395,7 +436,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 </span>
               </div>
               <div style={{ fontSize: '0.75rem', color: '#D1FAE5', marginTop: '2px', fontWeight: 500 }}>
-                Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{incident?.service}</strong> &bull; Cụm K8s:{' '}
+                Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{serviceDisplayName}</strong> &bull; Cụm K8s:{' '}
                 <strong style={{ color: '#FFFFFF' }}>{incidentDetail?.cluster_name || incident.cluster || 'k8s-cluster'}</strong> &bull; Tin cậy AI:{' '}
                 <span
                   style={{
@@ -406,7 +447,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                     fontWeight: 700,
                   }}
                 >
-                  {confidence}% Multi-Agent
+                  {confidence}% {incidentDetail?.analysis_method ? (incidentDetail.analysis_method === 'AI_DETERMINISTIC_RULES' ? 'Rule Engine' : (incidentDetail.analysis_method === 'MULTI_AGENT_RCA' ? 'Multi-Agent' : incidentDetail.analysis_method)) : 'RCA Agent'}
                 </span>
               </div>
             </div>
@@ -584,7 +625,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                     Rủi ro: {incident.primaryRisk || 'CPU_OVERLOAD / UNSTABLE_POD'}
                   </span>
                   <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    &bull; Thuật toán: <span style={{ color: '#2563EB', fontWeight: 600 }}>{incidentDetail?.analysis_method || 'AI_DETERMINISTIC_RULES'}</span> &bull; Trạng thái: <strong style={{ color: isResolved ? '#10B981' : '#DC2626' }}>{isResolved ? 'ĐÃ KHẮC PHỤC' : 'ĐANG XỬ LÝ'}</strong>
+                    &bull; Thuật toán: <span style={{ color: '#2563EB', fontWeight: 600 }}>{incidentDetail?.analysis_method || 'AI_DETERMINISTIC_RULES'}</span> &bull; Trạng thái: <strong style={{ color: isResolved ? '#10B981' : (recAction === 'NO_ACTION' ? '#059669' : '#DC2626') }}>{isResolved ? 'ĐÃ KHẮC PHỤC' : (recAction === 'NO_ACTION' ? 'TỰ ĐỘNG AN TOÀN (NO_ACTION)' : 'ĐANG XỬ LÝ')}</strong>
                   </span>
                 </div>
               </div>
@@ -615,7 +656,52 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                     </div>
                   </div>
 
-                  {!isResolved ? (
+                  {recAction === 'NO_ACTION' ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          backgroundColor: '#DCFCE7',
+                          color: '#15803D',
+                          borderRadius: '8px',
+                          fontWeight: 700,
+                          fontSize: '0.78125rem',
+                          border: '1px solid #86EFAC',
+                        }}
+                      >
+                        <ShieldCheck size={16} />
+                        <span>Hệ Thống An Toàn (Đã Tự Động Áp Dụng NO_ACTION)</span>
+                      </div>
+                      {!isResolved && (
+                        <button
+                          type="button"
+                          onClick={handleExecuteRemediation}
+                          disabled={isExecuting}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '8px 14px',
+                            backgroundColor: '#FFFFFF',
+                            color: '#065F46',
+                            border: '1px solid #059669',
+                            borderRadius: '8px',
+                            fontSize: '0.78125rem',
+                            fontWeight: 700,
+                            cursor: isExecuting ? 'not-allowed' : 'pointer',
+                            boxShadow: 'var(--dash-shadow-xs)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <Check size={14} />
+                          <span>{isExecuting ? 'Đang lưu...' : 'Xác Nhận & Đóng Sự Cố'}</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : !isResolved ? (
                     <button
                       type="button"
                       onClick={handleExecuteRemediation}
@@ -739,7 +825,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   }}
                 >
                   <div style={{ color: '#94A3B8', marginBottom: '6px', borderBottom: '1px solid #1E293B', paddingBottom: '4px' }}>
-                    # eBPF Kernel Probe &amp; K8s Event Inspector &bull; Service: {incident?.service} &bull; RCA ID: {incidentDetail?.rca_id ? incidentDetail.rca_id.slice(0, 8) : (incident?.rawId ? incident?.rawId.slice(0, 8) : 'N/A')}
+                    # eBPF Kernel Probe &amp; K8s Event Inspector &bull; Service: {serviceDisplayName} &bull; RCA ID: {incidentDetail?.rca_id ? incidentDetail.rca_id.slice(0, 8) : (incident?.rawId ? incident?.rawId.slice(0, 8) : 'N/A')}
                   </div>
 
                   {evidenceList && evidenceList.length > 0 ? (
@@ -1032,11 +1118,19 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         Lịch Sử Tự Phục Hồi Trước Đó (Previous Action):
                       </div>
                       <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-                        Action: <strong style={{ color: '#2563EB' }}>{previousActionInfo}</strong> &bull; Kết quả:{' '}
-                        <span style={{ color: previousActionResult === 'SUCCESS' ? '#059669' : (previousActionResult === 'FAILED' ? '#DC2626' : '#D97706'), fontWeight: 700 }}>
-                          {previousActionResult}
-                        </span>{' '}
-                        (Nguồn: MAPE-K Self-Healing Engine)
+                        {(parsedAnalysis?.previous_action || incidentDetail?.previous_action) ? (
+                          <>
+                            Action: <strong style={{ color: '#2563EB' }}>{previousActionInfo}</strong> &bull; Kết quả:{' '}
+                            <span style={{ color: previousActionResult === 'SUCCESS' ? '#059669' : (previousActionResult === 'FAILED' ? '#DC2626' : '#D97706'), fontWeight: 700 }}>
+                              {previousActionResult}
+                            </span>{' '}
+                            (Nguồn: MAPE-K Self-Healing Engine)
+                          </>
+                        ) : (
+                          <span style={{ color: '#64748B', fontStyle: 'italic' }}>
+                            Chưa có hành động tự lành trước đó (Sự cố mới phát sinh từ AI Alert)
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1145,7 +1239,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
           }}
         >
           <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-            Thời điểm ghi nhận: {new Date(incidentDetail?.detected_at || incident.detectedAt || Date.now()).toLocaleString('vi-VN')}
+            Thời điểm ghi nhận: {(() => {
+              const rawDate = incidentDetail?.detected_at || incidentDetail?.created_at || incident?.detectedAt || incident?.created_at;
+              if (!rawDate) return new Date().toLocaleString('vi-VN');
+              const d = new Date(rawDate);
+              return isNaN(d.getTime()) ? String(rawDate) : d.toLocaleString('vi-VN');
+            })()}
           </div>
 
           <button

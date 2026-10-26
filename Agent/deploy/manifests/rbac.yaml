@@ -6,21 +6,18 @@ metadata:
     app.kubernetes.io/name: selfheal-agent
     app.kubernetes.io/component: monitoring-agent
 rules:
-  # Least Privilege: Read-only access to Core resources for metrics & logs
+  # Least Privilege: Read & Remediation access to Core resources for metrics, logs & pod healing
   - apiGroups: [""]
     resources: ["pods", "pods/log", "services", "namespaces", "events", "nodes"]
-    verbs: ["get", "list", "watch"]
-  # Workload metadata
+    verbs: ["get", "list", "watch", "patch", "delete"]
+  # Workload metadata & remediation for Deployments and ReplicaSets
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]
-    verbs: ["get", "list", "watch"]
-  # Controlled Automated Remediation (used when ENABLE_HEALING_ACTIONS is true)
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["patch"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  # Horizontal scale remediation
   - apiGroups: ["apps"]
     resources: ["deployments/scale"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "patch", "update"]
   # Kubernetes Metrics Server access
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]

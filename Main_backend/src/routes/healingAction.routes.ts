@@ -13,6 +13,9 @@ const devopsOrAdmin = requireRoles('DEVOPS', 'ADMIN', 'SUPER_ADMIN', 'SME_OWNER'
 // ==========================================
 // 1. Healing Actions Management
 // ==========================================
+// GET /api/v1/healing/actions/running - List running/in-flight actions (placed before :id)
+healingActionRoutes.get('/actions/running', HealingActionController.getRunningActions);
+
 // GET /api/v1/healing/actions - List actions with filters
 healingActionRoutes.get('/actions', HealingActionController.getActions);
 
@@ -24,6 +27,9 @@ healingActionRoutes.post('/actions', devopsOrAdmin, HealingActionController.crea
 
 // POST /api/v1/healing/actions/:id/execute - Execute/retry action
 healingActionRoutes.post('/actions/:id/execute', devopsOrAdmin, HealingActionController.executeAction);
+
+// POST /api/v1/healing/actions/:id/abort - Abort/Cancel in-flight action
+healingActionRoutes.post('/actions/:id/abort', devopsOrAdmin, HealingActionController.abortAction);
 
 // PATCH /api/v1/healing/actions/:id/status - Update action status
 healingActionRoutes.patch('/actions/:id/status', devopsOrAdmin, HealingActionController.updateActionStatus);
