@@ -11,11 +11,14 @@ import {
   RefreshCw,
   Zap,
   Layers,
-  PlayCircle,
   Eye,
   Database,
   ShieldCheck,
-  Server
+  Server,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 
 const INITIAL_INCIDENTS = [];
@@ -37,10 +40,6 @@ const mapBackendIncidentToUI = (item) => {
   const isResolved = item.status === 'RESOLVED';
   const isRecovering = item.status === 'INVESTIGATING';
 
-  let statusLabel = 'Chờ phê duyệt HITL';
-  if (isResolved) statusLabel = 'Đã khắc phục hoàn tất';
-  else if (isRecovering) statusLabel = 'Đang tự phục hồi';
-
   let serviceName = item.target_id;
   if (!serviceName && item.title && item.title.includes(' on ')) {
     serviceName = item.title.split(' on ')[1].trim();
@@ -59,7 +58,13 @@ const mapBackendIncidentToUI = (item) => {
     }
   }
 
-  const recAction = rcaParsed?.recommendation?.action || 'RESTART_POD & RESCALE';
+  const recAction = rcaParsed?.recommendation?.action || item.recommendation || (item.title?.includes('UNKNOWN') ? 'NO_ACTION' : 'RESTART_POD & RESCALE');
+  const isNoAction = recAction === 'NO_ACTION' || (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
+
+  let statusLabel = 'Chờ phê duyệt HITL';
+  if (isResolved) statusLabel = 'Đã khắc phục hoàn tất';
+  else if (isNoAction) statusLabel = 'Tự động an toàn (NO_ACTION)';
+  else if (isRecovering) statusLabel = 'Đang tự phục hồi';
   const recReason = rcaParsed?.recommendation?.reason || 'Tự động giải phóng tiến trình và điều chỉnh ngưỡng tài nguyên an toàn theo MAPE-K';
 
   let evidencesList = [
@@ -95,8 +100,8 @@ const mapBackendIncidentToUI = (item) => {
     clusterName: item.cluster_name,
     title: item.title,
     service: serviceName,
-    namespace: 'production',
-    node: item.cluster_name ? `${item.cluster_name}-node-1` : (item.cluster_id || 'worker-01'),
+    namespace: item.namespace || 'default',
+    node: item.node_name || (item.cluster_name ? `${item.cluster_name}-node-1` : (item.cluster_id || 'worker-01')),
     severity: (item.severity || 'HIGH').toUpperCase(),
     status: statusLabel,
     time: formatRelativeTime(item.detected_at || item.created_at),
@@ -120,13 +125,45 @@ const mapBackendIncidentToUI = (item) => {
 };
 
 export const IncidentsPage = ({ onNavigate }) => {
-  const { currentOrg, currentEnv, envList } = useDashboard();
-  const [selectedCluster, setSelectedCluster] = useState('all'); // 'all' | clusterId
+  const { currentOrg, currentEnv, envList, setCurrentEnv } = useDashboard();
+  const [selectedCluster, setSelectedCluster] = useState(() => currentEnv?.cluster || 'all'); // 'all' | clusterId
+
+  // Tự động đồng bộ bộ lọc khi người dùng chuyển Cụm K8s trên Header Top Navbar
+  useEffect(() => {
+    if (currentEnv?.cluster && currentEnv.cluster !== selectedCluster) {
+      setSelectedCluster(currentEnv.cluster);
+      setSelectedService('all');
+    }
+  }, [currentEnv?.cluster, currentEnv?.clusterId]);
+
+  // Xử lý khi người dùng chọn cụm trên bộ lọc trong trang (đồng bộ ngược lên Header)
+  const handleSelectCluster = (clusterNameOrId) => {
+    setSelectedCluster(clusterNameOrId);
+    setSelectedService('all');
+    setIncidents([]);
+    if (clusterNameOrId !== 'all') {
+      const match = envList?.find(
+        (e) => e.cluster === clusterNameOrId || e.id === clusterNameOrId || e.clusterId === clusterNameOrId
+      );
+      if (match && setCurrentEnv) {
+        setCurrentEnv(match);
+      }
+    }
+  };
   const [selectedSeverity, setSelectedSeverity] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedService, setSelectedService] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Trạng thái phân trang (Pagination)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Tự động chuyển về trang 1 khi thay đổi bất kỳ bộ lọc nào
+  useEffect(() => {
+    setPage(1);
+  }, [selectedCluster, selectedSeverity, selectedStatus, selectedService, searchQuery]);
+
   const [incidents, setIncidents] = useState([]);
   const [clusterList, setClusterList] = useState([]);
   const [registeredWorkloads, setRegisteredWorkloads] = useState([]);
@@ -167,7 +204,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       const activeOrgId = currentOrg?.id;
 
       const params = {
-        limit: 150,
+        limit: 50,
         cluster_id: selectedCluster === 'all' ? undefined : selectedCluster,
         organization_id: activeOrgId,
         status: selectedStatus,
@@ -234,71 +271,53 @@ export const IncidentsPage = ({ onNavigate }) => {
     }
   };
 
-  // Giả lập kích hoạt sự cố mẫu (Chaos Drill)
-  const handleSimulateDrill = () => {
-    const newInc = {
-      id: `INC-2026-0${Math.floor(Math.random() * 80) + 82}`,
-      rawId: null,
-      title: 'Pod sme-order-service phát hiện rò rỉ bộ nhớ qua eBPF probe',
-      service: 'sme-order-service',
-      namespace: 'production',
-      node: 'worker-01',
-      severity: 'HIGH',
-      status: 'Đang tự phục hồi',
-      time: 'Vừa xong',
-      detectedAt: new Date().toISOString(),
-      impact: 'Bộ nhớ heap tăng 88%, latency tăng 12%',
-      rootCause: 'Tác tử eBPF ghi nhận luồng goroutine bị nghẽn làm heap RAM tăng 4.8MB/s liên tục.',
-      rootCauseType: 'Memory Heap Growth Anomaly',
-      confidence: 95,
-      primaryRisk: 'OOM (95%)',
-      mttr: 'Đang chạy (0.8s)',
-      recommendationAction: 'RESTART_POD',
-      recommendationReason: 'Kích hoạt vòng lặp MAPE-K tái tạo Pod mới để thu hồi tài nguyên',
-      evidences: [
-        { type: 'EBPF_PROBE', ref: 'sme-order-service', summary: 'eBPF kprobe: sys_enter_mmap memory growth rate abnormal', score: '97%' }
-      ],
-      causalSteps: [
-        { step: '1. Tín hiệu sơ cấp', desc: 'eBPF probe phát hiện tốc độ cấp phát mmap tăng đột biến' },
-        { step: '2. Tích tụ tài nguyên', desc: 'Heap memory goroutine tăng liên tục 4.8MB/s' },
-        { step: '3. Hệ quả hạ tầng', desc: 'Dự báo chạm ngưỡng OOM trong 3 phút tới' },
-        { step: '4. Tác động & Tự lành', desc: 'MAPE-K chủ động kích hoạt tự tái sinh Pod phòng ngừa' }
-      ]
-    };
-    setIncidents((prev) => [newInc, ...prev]);
-    setActiveModalIncident(newInc);
-  };
-
-  // Danh sách Cụm K8s động kết hợp từ Context, Cluster API và Incidents
+  // Danh sách Cụm K8s chuẩn xác của tổ chức (khử trùng lặp tuyệt đối theo Tên cụm)
   const availableClusters = useMemo(() => {
-    const map = new Map();
-    if (Array.isArray(envList)) {
-      envList.forEach((e) => {
-        const id = e.clusterId || e.id;
-        const name = e.cluster || e.name || id;
-        if (id && name) map.set(id, name);
-      });
-    }
+    const clusterMap = new Map();
+
+    // 1. Lấy danh sách cụm thuộc tổ chức hiện tại từ Cluster API
     if (Array.isArray(clusterList)) {
       clusterList.forEach((c) => {
-        if (c.id && c.name) map.set(c.id, c.name);
-        if (c.name) map.set(c.name, c.name);
+        const name = c.name?.trim();
+        const id = c.id || name;
+        if (name && !clusterMap.has(name)) {
+          clusterMap.set(name, { id, name });
+        }
       });
     }
+
+    // 2. Lấy từ danh sách môi trường K8s (envList)
+    if (Array.isArray(envList)) {
+      envList.forEach((e) => {
+        const name = (e.cluster || e.name)?.trim();
+        const id = e.clusterId || e.id || name;
+        if (name && !clusterMap.has(name)) {
+          clusterMap.set(name, { id, name });
+        }
+      });
+    }
+
+    // 3. Dự phòng từ danh sách sự cố thực tế của tổ chức
     incidents.forEach((inc) => {
-      const id = inc.clusterId || inc.cluster;
-      const name = inc.clusterName || inc.cluster || id;
-      if (id && name && !map.has(id)) {
-        map.set(id, name);
+      const name = (inc.clusterName || inc.cluster)?.trim();
+      const id = inc.clusterId || inc.cluster || name;
+      if (name && !clusterMap.has(name)) {
+        clusterMap.set(name, { id, name });
       }
     });
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+
+    return Array.from(clusterMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [envList, clusterList, incidents]);
 
   // Danh sách service động kèm số lượng sự cố thực tế
   const availableServices = useMemo(() => {
     const counts = {};
-    incidents.forEach((i) => {
+    const clusterIncidents = incidents.filter((inc) => {
+      if (selectedCluster === 'all') return true;
+      return inc.clusterId === selectedCluster || inc.cluster === selectedCluster || inc.clusterName === selectedCluster;
+    });
+
+    clusterIncidents.forEach((i) => {
       if (i.service) {
         counts[i.service] = (counts[i.service] || 0) + 1;
       }
@@ -310,20 +329,20 @@ export const IncidentsPage = ({ onNavigate }) => {
     ]);
 
     return Array.from(allServiceNames)
-      .filter((s) => s && s !== 'selfheal-agent' && !s.includes('-0000-'))
+      .filter((s) => s && s !== 'selfheal-agent' && !s.includes('-0000-') && s !== 'order-service')
       .map((name) => ({
         name,
         count: counts[name] || 0,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [incidents, registeredWorkloads]);
+  }, [incidents, registeredWorkloads, selectedCluster]);
 
   // Thống kê nhanh
   const stats = useMemo(() => {
     const total = incidents.length;
     const critical = incidents.filter((i) => i.severity === 'CRITICAL' || i.severity === 'HIGH').length;
     const recovering = incidents.filter((i) => i.status.includes('phục hồi') || i.status.includes('duyệt')).length;
-    const resolved = incidents.filter((i) => i.status.includes('hoàn tất')).length;
+    const resolved = incidents.filter((i) => i.status.includes('hoàn tất') || i.status.includes('an toàn')).length;
     return { total, critical, recovering, resolved };
   }, [incidents]);
 
@@ -335,6 +354,7 @@ export const IncidentsPage = ({ onNavigate }) => {
         selectedStatus === 'all' ||
         (selectedStatus === 'RECOVERING' && inc.status.includes('phục hồi')) ||
         (selectedStatus === 'HITL' && inc.status.includes('duyệt')) ||
+        (selectedStatus === 'NO_ACTION' && (inc.status.includes('NO_ACTION') || inc.status.includes('an toàn'))) ||
         (selectedStatus === 'RESOLVED' && inc.status.includes('hoàn tất'));
       const matchService = selectedService === 'all' || inc.service === selectedService;
       const matchSearch =
@@ -344,10 +364,26 @@ export const IncidentsPage = ({ onNavigate }) => {
         inc.service.toLowerCase().includes(searchQuery.toLowerCase()) ||
         inc.rootCause.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchCluster = selectedCluster === 'all' || inc.clusterId === selectedCluster || inc.cluster === selectedCluster || inc.clusterName === selectedCluster;
+      const matchCluster =
+        selectedCluster === 'all' ||
+        inc.clusterId === selectedCluster ||
+        inc.cluster === selectedCluster ||
+        inc.clusterName === selectedCluster ||
+        (inc.clusterName && selectedCluster && inc.clusterName.toLowerCase() === selectedCluster.toLowerCase()) ||
+        (inc.clusterId && selectedCluster && inc.clusterId.toLowerCase() === selectedCluster.toLowerCase());
       return matchCluster && matchSeverity && matchStatus && matchService && matchSearch;
     });
-  }, [incidents, selectedSeverity, selectedStatus, selectedService, searchQuery]);
+  }, [incidents, selectedSeverity, selectedStatus, selectedService, searchQuery, selectedCluster]);
+
+  // Tính toán phân trang (Pagination calculations)
+  const totalFiltered = filteredIncidents.length;
+  const totalPages = Math.ceil(totalFiltered / pageSize) || 1;
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalFiltered);
+  const paginatedIncidents = useMemo(() => {
+    return filteredIncidents.slice(startIndex, endIndex);
+  }, [filteredIncidents, startIndex, endIndex]);
 
   return (
     <div className="dashboard-incidents-page" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -358,112 +394,60 @@ export const IncidentsPage = ({ onNavigate }) => {
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '16px',
-          padding: '18px 22px',
-          backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
-          border: '1px solid var(--dash-border)',
-          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+          gap: '12px',
         }}
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
                 backgroundColor: 'rgba(5, 150, 105, 0.1)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <AlertTriangle size={22} color="var(--dash-primary)" />
+              <AlertTriangle size={20} color="var(--dash-primary)" />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h1
-                  style={{
-                    fontSize: '1.4rem',
-                    fontWeight: 800,
-                    color: 'var(--dash-text-primary)',
-                    letterSpacing: '-0.02em',
-                    margin: 0,
-                  }}
-                >
-                  Quản Lý Sự Cố & Phân Tích Nguyên Nhân Gốc Rễ (RCA)
-                </h1>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
-                    color: isUsingLiveDb ? '#15803D' : '#B45309',
-                    border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
-                  }}
-                >
-                  <Database size={10} />
-                  <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
-                </span>
-              </div>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '3px', margin: 0 }}>
-                Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'SME Retail Enterprise'}</strong> &bull; Cụm K8s:{' '}
-                <span style={{ fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
-                  {selectedCluster === 'all' ? 'Tất cả cụm K8s (' + availableClusters.length + ' cụm)' : (availableClusters.find(c => c.id === selectedCluster)?.name || selectedCluster)}
-                </span>{' '}
-                &bull; Bảng tổng quan sự cố và suy diễn cây nguyên nhân nhân quả
+              <h1
+                style={{
+                  fontSize: '1.45rem',
+                  fontWeight: 800,
+                  color: 'var(--dash-text-primary)',
+                  letterSpacing: '-0.02em',
+                  margin: 0,
+                }}
+              >
+                Quản Lý Sự Cố & Phân Tích Nguyên Nhân Gốc Rễ (RCA)
+              </h1>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+                Bảng tổng quan sự cố và suy diễn cây nguyên nhân nhân quả
               </p>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={handleSimulateDrill}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#F0FDF4',
-              border: '1px solid #A7F3D0',
-              borderRadius: '8px',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              color: '#065F46',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <PlayCircle size={15} color="#059669" />
-            <span>Mô phỏng sự cố</span>
-          </button>
-
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
             style={{
-              display: 'inline-flex',
+              display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '8px 14px',
               backgroundColor: '#FFFFFF',
               border: '1px solid var(--dash-border)',
-              borderRadius: '8px',
+              borderRadius: 'var(--dash-radius-md)',
               fontSize: '0.8125rem',
               fontWeight: 600,
+              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
               color: 'var(--dash-text-primary)',
-              cursor: 'pointer',
-              boxShadow: 'var(--dash-shadow-xs)',
-              transition: 'all 0.15s ease',
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
@@ -473,128 +457,123 @@ export const IncidentsPage = ({ onNavigate }) => {
       </div>
 
       {/* 4 Stat Overview Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
-        <div
-          className="dash-card"
-          style={{
-            padding: '16px 20px',
-            borderLeft: '4px solid #6366F1',
-            borderRadius: '12px',
-            backgroundColor: '#FFFFFF',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        {/* Card 1: Tổng Sự Cố */}
+        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Tổng Sự Cố
             </span>
             <Layers size={18} color="#6366F1" />
           </div>
-          <div
-            style={{
-              fontSize: '1.65rem',
-              fontWeight: 800,
-              color: '#0F172A',
-              marginTop: '6px',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {stats.total}
+          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {stats.total.toLocaleString()}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
-            {selectedCluster === 'all' ? 'Toàn bộ ' + availableClusters.length + ' cụm K8s' : 'Cụm ' + (availableClusters.find(c => c.id === selectedCluster)?.name || selectedCluster)}
+          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: '#6366F1',
+              }}
+            />
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+              {selectedCluster === 'all'
+                ? 'Toàn bộ cụm K8s'
+                : (availableClusters.find(c => c.id === selectedCluster)?.name || selectedCluster)}
+            </span>
           </div>
         </div>
 
-        <div
-          className="dash-card"
-          style={{
-            padding: '16px 20px',
-            borderLeft: '4px solid #EF4444',
-            borderRadius: '12px',
-            backgroundColor: '#FFFFFF',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991B1B', textTransform: 'uppercase' }}>
+        {/* Card 2: Nguy Cấp (Critical) */}
+        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Nguy Cấp (Critical)
             </span>
-            <AlertTriangle size={18} color="#EF4444" />
+            <AlertTriangle size={18} color={stats.critical > 0 ? '#DC2626' : '#94A3B8'} />
           </div>
           <div
             style={{
               fontSize: '1.65rem',
               fontWeight: 800,
-              color: '#EF4444',
-              marginTop: '6px',
+              color: stats.critical > 0 ? '#DC2626' : '#059669',
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {stats.critical}
+            {stats.critical.toLocaleString()}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '2px' }}>
-            Ưu tiên tự phục hồi
+          <div style={{ fontSize: '0.75rem', color: stats.critical > 0 ? '#DC2626' : 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: stats.critical > 0 ? '#DC2626' : '#10B981',
+                boxShadow: stats.critical > 0 ? '0 0 8px #DC2626' : 'none',
+              }}
+            />
+            <span>{stats.critical > 0 ? 'Ưu tiên tự phục hồi khẩn cấp' : 'Không có sự cố nguy cấp'}</span>
           </div>
         </div>
 
-        <div
-          className="dash-card"
-          style={{
-            padding: '16px 20px',
-            borderLeft: '4px solid #F59E0B',
-            borderRadius: '12px',
-            backgroundColor: '#FFFFFF',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase' }}>
+        {/* Card 3: Đang Tự Phục Hồi */}
+        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Đang Tự Phục Hồi
             </span>
-            <Zap size={18} color="#F59E0B" />
+            <Zap size={18} color={stats.recovering > 0 ? '#D97706' : '#059669'} />
           </div>
           <div
             style={{
               fontSize: '1.65rem',
               fontWeight: 800,
-              color: '#D97706',
-              marginTop: '6px',
+              color: stats.recovering > 0 ? '#D97706' : '#059669',
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {stats.recovering}
+            {stats.recovering.toLocaleString()}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#B45309', marginTop: '2px' }}>
-            Vòng lặp MAPE-K xử lý
+          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: stats.recovering > 0 ? '#D97706' : '#10B981',
+                boxShadow: stats.recovering > 0 ? '0 0 8px #D97706' : 'none',
+              }}
+            />
+            <span>{stats.recovering > 0 ? 'Vòng lặp MAPE-K đang xử lý' : 'Hệ thống vận hành ổn định'}</span>
           </div>
         </div>
 
-        <div
-          className="dash-card"
-          style={{
-            padding: '16px 20px',
-            borderLeft: '4px solid #10B981',
-            borderRadius: '12px',
-            backgroundColor: '#FFFFFF',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065F46', textTransform: 'uppercase' }}>
+        {/* Card 4: Đã Khắc Phục */}
+        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Đã Khắc Phục
             </span>
-            <CheckCircle2 size={18} color="#10B981" />
+            <CheckCircle2 size={18} color="#059669" />
           </div>
           <div
             style={{
               fontSize: '1.65rem',
               fontWeight: 800,
               color: '#059669',
-              marginTop: '6px',
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {stats.resolved}
+            {stats.resolved.toLocaleString()}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '2px' }}>
-            Khôi phục SLA 99.9%
+          <div style={{ fontSize: '0.75rem', color: '#10B981', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <CheckCircle2 size={13} />
+            <span>Khôi phục SLA 99.9%</span>
           </div>
         </div>
       </div>
@@ -621,10 +600,7 @@ export const IncidentsPage = ({ onNavigate }) => {
             </span>
             <select
               value={selectedCluster}
-              onChange={(e) => {
-                setSelectedCluster(e.target.value);
-                setSelectedService('all');
-              }}
+              onChange={(e) => handleSelectCluster(e.target.value)}
               style={{
                 height: '32px',
                 padding: '0 8px',
@@ -640,7 +616,7 @@ export const IncidentsPage = ({ onNavigate }) => {
             >
               <option value="all">Tất cả cụm K8s ({availableClusters.length})</option>
               {availableClusters.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.name} value={c.name}>
                   {c.name}
                 </option>
               ))}
@@ -694,6 +670,7 @@ export const IncidentsPage = ({ onNavigate }) => {
               <option value="all">Tất cả trạng thái</option>
               <option value="RECOVERING">Đang tự phục hồi</option>
               <option value="HITL">Chờ phê duyệt HITL</option>
+              <option value="NO_ACTION">Tự động an toàn (NO_ACTION)</option>
               <option value="RESOLVED">Đã khắc phục hoàn tất</option>
             </select>
           </div>
@@ -749,7 +726,7 @@ export const IncidentsPage = ({ onNavigate }) => {
         </div>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-          Hiển thị <strong>{filteredIncidents.length}</strong> / <strong>{incidents.length}</strong> sự cố
+          Hiển thị <strong>{totalFiltered > 0 ? startIndex + 1 : 0} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố (tổng <strong>{incidents.length}</strong>)
         </div>
       </div>
 
@@ -796,33 +773,44 @@ export const IncidentsPage = ({ onNavigate }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredIncidents.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '54px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'rgba(5, 150, 105, 0.08)', margin: '0 auto 12px auto' }}>
+                      <RefreshCw size={20} className="animate-spin" color="var(--dash-primary)" />
+                    </div>
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
+                      Đang đồng bộ danh sách sự cố...
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', marginTop: '6px', color: '#64748B' }}>
+                      Đang phân tích dữ liệu viễn trắc và chuỗi nguyên nhân gốc rễ
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredIncidents.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
                     <ShieldCheck size={42} color="#10B981" style={{ margin: '0 auto 12px auto' }} />
                     <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                      {isLoading
-                        ? 'Đang tải dữ liệu sự cố từ Database...'
-                        : (incidents.length === 0
-                            ? `Cụm ${currentEnv?.cluster || 'K8s'} không có sự cố nào`
-                            : 'Không tìm thấy sự cố nào phù hợp với bộ lọc')}
+                      {incidents.length === 0
+                        ? `Cụm ${currentEnv?.cluster || 'K8s'} không ghi nhận sự cố nào`
+                        : 'Không tìm thấy sự cố nào phù hợp với bộ lọc'}
                     </div>
                     <div style={{ fontSize: '0.8125rem', marginTop: '6px', color: '#64748B' }}>
-                      {isLoading
-                        ? 'Vui lòng chờ trong giây lát...'
-                        : (incidents.length === 0
-                            ? 'Toàn bộ các dịch vụ và node trên cụm đang hoạt động ổn định và an toàn theo thời gian thực.'
-                            : 'Thử điều chỉnh lại mức độ, trạng thái hoặc từ khóa tìm kiếm.')}
+                      {incidents.length === 0
+                        ? 'Toàn bộ các dịch vụ và node trên cụm đang hoạt động an toàn theo thời gian thực.'
+                        : 'Thử điều chỉnh lại mức độ, trạng thái hoặc từ khóa tìm kiếm.'}
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredIncidents.map((item, index) => {
+                paginatedIncidents.map((item, index) => {
                   const isCrit = item.severity === 'CRITICAL';
                   const isHigh = item.severity === 'HIGH';
                   const isMed = item.severity === 'MEDIUM';
 
                   const isDone = item.status.includes('hoàn tất');
+                  const isSafeNoAction = item.status.includes('NO_ACTION') || item.status.includes('an toàn');
                   const isWait = item.status.includes('duyệt');
 
                   return (
@@ -916,12 +904,20 @@ export const IncidentsPage = ({ onNavigate }) => {
                             borderRadius: '12px',
                             fontSize: '0.75rem',
                             fontWeight: 700,
-                            backgroundColor: isDone ? '#DCFCE7' : isWait ? '#FEF3C7' : '#EFF6FF',
-                            color: isDone ? '#15803D' : isWait ? '#B45309' : '#1D4ED8',
-                            border: `1px solid ${isDone ? '#86EFAC' : isWait ? '#FDE68A' : '#BFDBFE'}`,
+                            backgroundColor: isDone ? '#DCFCE7' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : '#EFF6FF',
+                            color: isDone ? '#15803D' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : '#1D4ED8',
+                            border: `1px solid ${isDone ? '#86EFAC' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : '#BFDBFE'}`,
                           }}
                         >
-                          {isDone ? <CheckCircle2 size={13} /> : isWait ? <Clock size={13} /> : <Zap size={13} />}
+                          {isDone ? (
+                            <CheckCircle2 size={13} />
+                          ) : isSafeNoAction ? (
+                            <ShieldCheck size={13} />
+                          ) : isWait ? (
+                            <Clock size={13} />
+                          ) : (
+                            <Zap size={13} />
+                          )}
                           <span>{item.status}</span>
                         </span>
                       </td>
@@ -975,6 +971,207 @@ export const IncidentsPage = ({ onNavigate }) => {
             </tbody>
           </table>
         </div>
+
+        {/* Thanh Phân Trang (Pagination Controls) */}
+        {totalFiltered > 0 && (
+          <div
+            style={{
+              padding: '12px 20px',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              backgroundColor: '#F8FAFC',
+              fontSize: '0.8125rem',
+            }}
+          >
+            {/* Chọn số bản ghi / trang & Tóm tắt */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 500 }}>Số dòng mỗi trang:</span>
+                <select
+                  aria-label="Số bản ghi mỗi trang"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#0F172A',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value={10}>10 sự cố</option>
+                  <option value={20}>20 sự cố</option>
+                  <option value={50}>50 sự cố</option>
+                </select>
+              </div>
+
+              <span style={{ color: '#CBD5E1' }}>|</span>
+
+              <span style={{ color: '#64748B', fontSize: '0.75rem' }}>
+                Đang hiển thị <strong>{startIndex + 1} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố
+              </span>
+            </div>
+
+            {/* Các nút bấm chuyển trang */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#64748B', fontSize: '0.75rem', marginRight: '4px' }}>
+                Trang <strong>{safePage}</strong> / <strong>{totalPages}</strong>
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {/* Về trang đầu */}
+                <button
+                  type="button"
+                  title="Trang đầu"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage(1)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: safePage <= 1 ? '#CBD5E1' : '#334155',
+                    cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <ChevronsLeft size={15} />
+                </button>
+
+                {/* Trang trước */}
+                <button
+                  type="button"
+                  title="Trang trước"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: safePage <= 1 ? '#CBD5E1' : '#334155',
+                    cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <ChevronLeft size={15} />
+                </button>
+
+                {/* Các nút số trang */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) {
+                      acc.push('ellipsis-' + p);
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item) => {
+                    if (typeof item === 'string' && item.startsWith('ellipsis-')) {
+                      return (
+                        <span key={item} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.75rem' }}>
+                          ...
+                        </span>
+                      );
+                    }
+                    const isCurrent = item === safePage;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setPage(item)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minWidth: '30px',
+                          height: '30px',
+                          padding: '0 6px',
+                          borderRadius: '6px',
+                          border: isCurrent ? 'none' : '1px solid #CBD5E1',
+                          background: isCurrent ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : '#FFFFFF',
+                          color: isCurrent ? '#FFFFFF' : '#334155',
+                          fontSize: '0.75rem',
+                          fontWeight: isCurrent ? 700 : 500,
+                          cursor: 'pointer',
+                          boxShadow: isCurrent ? '0 2px 4px rgba(5, 150, 105, 0.25)' : 'none',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+
+                {/* Trang sau */}
+                <button
+                  type="button"
+                  title="Trang tiếp theo"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: safePage >= totalPages ? '#CBD5E1' : '#334155',
+                    cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <ChevronRight size={15} />
+                </button>
+
+                {/* Đến trang cuối */}
+                <button
+                  type="button"
+                  title="Trang cuối"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage(totalPages)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: safePage >= totalPages ? '#CBD5E1' : '#334155',
+                    cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <ChevronsRight size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KHUNG CỬA SỔ NHỎ HIỆN LÊN KHI BẤM "XEM CHI TIẾT" */}

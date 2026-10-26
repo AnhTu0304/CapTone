@@ -11,80 +11,13 @@ import {
   Check,
   X,
   RefreshCw,
-  Database
 } from 'lucide-react';
-
-const SAMPLE_REQUESTS = [
-  {
-    id: 'REQ-HITL-089',
-    rawId: 'act-sample-089',
-    title: 'Tháo tải & Cô lập máy chủ worker-03 (Cordon & Drain Node)',
-    target: 'Node/worker-03',
-    requestedBy: 'MAPE-K Autonomous Engine',
-    urgency: 'HIGH',
-    reason: 'CPU tải 88% và nhiệt độ tăng bất thường. Di dời an toàn 12 Pods sang worker-01 và worker-02.',
-    blastRadius: '12 Pods (Không gián đoạn lưu lượng nhờ PDB)',
-    timestamp: '12 phút trước',
-    diff: {
-      file: 'node-maintenance-cordon.yaml',
-      before: `# worker-03 Current Status
-spec:
-  unschedulable: false
-status:
-  conditions:
-    - type: Ready
-      status: "True"`,
-      after: `# worker-03 After HITL Approval
-spec:
-  unschedulable: true # Cordoned
-status:
-  conditions:
-    - type: Ready
-      status: "True"
-metadata:
-  annotations:
-    selfheal.systems/drain-in-progress: "true"`,
-    },
-  },
-  {
-    id: 'REQ-HITL-086',
-    rawId: 'act-sample-086',
-    title: 'Rollback phiên bản Deployment payment-service về v2.3.9',
-    target: 'Deployment/payment-service',
-    requestedBy: 'RCA Inference Engine',
-    urgency: 'CRITICAL',
-    reason: 'Bản v2.4.1 có lỗi rò rỉ bộ nhớ queue nghiêm trọng, khôi phục về bản ổn định v2.3.9.',
-    blastRadius: 'Toàn bộ dịch vụ thanh toán (Rollback từng pod một)',
-    timestamp: '25 phút trước',
-    diff: {
-      file: 'payment-service-deployment.yaml',
-      before: `spec:
-  template:
-    spec:
-      containers:
-        - name: payment-service
-          image: registry.selfheal.io/payment:v2.4.1 # Buggy
-          resources:
-            limits:
-              memory: "2048Mi"`,
-      after: `spec:
-  template:
-    spec:
-      containers:
-        - name: payment-service
-          image: registry.selfheal.io/payment:v2.3.9 # Stable rollback
-          resources:
-            limits:
-              memory: "4096Mi"`,
-    },
-  },
-];
 
 export const ApprovalsPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
   const { success: toastSuccess, warning: toastWarning } = useToast();
   const [activeDiffModal, setActiveDiffModal] = useState(null);
-  const [approvalRequests, setApprovalRequests] = useState(SAMPLE_REQUESTS);
+  const [approvalRequests, setApprovalRequests] = useState([]);
   const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -123,17 +56,12 @@ export const ApprovalsPage = () => {
         status: 'PENDING',
       });
       const items = res?.items || (Array.isArray(res) ? res : []);
-      if (items.length > 0) {
-        setApprovalRequests(items.map(mapBackendApprovalToUI));
-        setIsUsingLiveDb(true);
-      } else {
-        setApprovalRequests(SAMPLE_REQUESTS);
-        setIsUsingLiveDb(false);
-      }
+      setApprovalRequests(items.map(mapBackendApprovalToUI));
+      setIsUsingLiveDb(true);
     } catch (err) {
       console.warn('[ApprovalsPage] Lỗi tải danh sách phê duyệt:', err.message);
-      setApprovalRequests(SAMPLE_REQUESTS);
-      setIsUsingLiveDb(false);
+      setApprovalRequests([]);
+      setIsUsingLiveDb(true);
     } finally {
       setIsLoading(false);
     }
@@ -150,7 +78,7 @@ export const ApprovalsPage = () => {
     setActiveDiffModal(null);
 
     try {
-      if (isUsingLiveDb && actionId) {
+      if (actionId) {
         await selfHealingService.approveAction(actionId, 'Được phê duyệt bởi SME Owner/DevOps qua giao diện HITL');
       }
       toastSuccess('Đã phê duyệt và chuyển lệnh tự phục hồi tới Kubelet cụm máy chủ!', 'HITL Phê Duyệt');
@@ -167,7 +95,7 @@ export const ApprovalsPage = () => {
     setActiveDiffModal(null);
 
     try {
-      if (isUsingLiveDb && actionId) {
+      if (actionId) {
         await selfHealingService.rejectAction(actionId, 'Từ chối bởi SME Owner/DevOps do rủi ro gián đoạn');
       }
       toastWarning('Đã từ chối hành động tự phục hồi. Yêu cầu đã được ghi vào sổ kiểm toán.', 'HITL Từ Chối');
@@ -187,26 +115,9 @@ export const ApprovalsPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Cổng Phê Duyệt Của Con Người (Human-in-the-Loop Gate)
             </h1>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '10px',
-                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
-                color: isUsingLiveDb ? '#15803D' : '#B45309',
-                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
-              }}
-            >
-              <Database size={10} />
-              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
-            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'SME Retail Enterprise'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}</span> &bull; Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
+            {currentOrg?.name || 'Tổ chức hiện tại'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm'}</span> &bull; Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
           </p>
         </div>
 

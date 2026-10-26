@@ -1,7 +1,7 @@
 /**
  * @file selfHealingService.js
  * @description Frontend Service kết nối trực tiếp với Main Backend API phân hệ Self-Healing (/api/v1/healing)
- * Quản lý Actions, Action Types, Policies, Approvals (HITL), và Analytics thời gian thực.
+ * Quản lý Actions, Running Actions, Action Types, Policies, Approvals (HITL), và Analytics thời gian thực.
  */
 
 import { request } from './apiClient';
@@ -34,6 +34,28 @@ export const selfHealingService = {
   },
 
   /**
+   * 1b. Lấy danh sách hành động tự phục hồi đang chạy ngầm (RUNNING / PENDING)
+   * GET /api/v1/healing/actions/running
+   */
+  async getRunningActions(params = {}) {
+    try {
+      const search = new URLSearchParams();
+      if (params.limit) search.append('limit', String(params.limit));
+      if (params.offset) search.append('offset', String(params.offset));
+      if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
+      if (params.search) search.append('search', params.search);
+
+      const qs = search.toString();
+      const res = await request(`/healing/actions/running${qs ? `?${qs}` : ''}`);
+      return res?.data || { items: [], total: 0 };
+    } catch (err) {
+      console.warn('[selfHealingService] getRunningActions error:', err.message);
+      return { items: [], total: 0 };
+    }
+  },
+
+  /**
    * 2. Lấy chi tiết 1 hành động kèm attempts và verification
    * GET /api/v1/healing/actions/:id
    */
@@ -54,6 +76,17 @@ export const selfHealingService = {
   async executeAction(id) {
     return await request(`/healing/actions/${id}/execute`, {
       method: 'POST',
+    });
+  },
+
+  /**
+   * 3b. Hủy bỏ (Abort / Cancel) một hành động đang thực thi hoặc đang chờ
+   * POST /api/v1/healing/actions/:id/abort
+   */
+  async abortAction(id, reason = '') {
+    return await request(`/healing/actions/${id}/abort`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     });
   },
 

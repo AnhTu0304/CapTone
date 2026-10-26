@@ -17,12 +17,15 @@ rules:
     verbs: ["get", "list", "watch"]
   {{- if .Values.config.enableHealingActions }}
   # Controlled Automated Remediation (when ENABLE_HEALING_ACTIONS is enabled)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["patch", "delete"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["patch"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["patch", "update"]
   - apiGroups: ["apps"]
     resources: ["deployments/scale"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "patch", "update"]
   {{- end }}
   # Kubernetes Metrics Server access
   - apiGroups: ["metrics.k8s.io"]
@@ -62,12 +65,15 @@ rules:
     verbs: ["get", "list", "watch"]
   {{- if .Values.config.enableHealingActions }}
   # Controlled Automated Remediation (when ENABLE_HEALING_ACTIONS is enabled)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["patch", "delete"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["patch"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["patch", "update"]
   - apiGroups: ["apps"]
     resources: ["deployments/scale"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "patch", "update"]
   {{- end }}
   # Namespace-scoped Metrics Server access
   - apiGroups: ["metrics.k8s.io"]

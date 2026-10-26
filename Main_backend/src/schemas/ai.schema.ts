@@ -53,6 +53,19 @@ export const RCARequestSchema = z.object({
     replica_count: z.number().int().min(0),
   }),
   logs: z.array(z.string()).max(1000).optional().default([]),
+  kubernetes: z
+    .object({
+      pod_status: z.string().nullable().optional(),
+      container_status: z.string().nullable().optional(),
+      restart_count: z.number().int().min(0).optional().default(0),
+      events: z.array(z.string()).optional().default([]),
+      desired_replicas: z.number().int().nullable().optional(),
+      available_replicas: z.number().int().nullable().optional(),
+      readiness_probe: z.union([z.string(), z.boolean()]).nullable().optional(),
+      liveness_probe: z.union([z.string(), z.boolean()]).nullable().optional(),
+    })
+    .optional(),
+  prediction: z.any().optional(),
   kubernetes_events: z.array(z.string()).max(500).optional().default([]),
   prediction_id: z.string().uuid().optional(),
   environment_id: z.string().uuid().optional(),

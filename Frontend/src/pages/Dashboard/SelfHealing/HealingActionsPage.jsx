@@ -1,92 +1,292 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
 import {
   Zap,
   RefreshCw,
-  Database,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
+  Activity,
+  Layers,
+  ChevronRight
 } from 'lucide-react';
 
 export const HealingActionsPage = () => {
   const { currentOrg, currentEnv } = useDashboard();
-  const [actions, setActions] = useState([]);
+  const [runningActions, setRunningActions] = useState([]);
+  const [historyActions, setHistoryActions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+  const [isUsingLiveDb, setIsUsingLiveDb] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [operatingActionId, setOperatingActionId] = useState(null);
+  const [feedbackMessage, setFeedbackMessage] = useState(null);
 
-  // 5 stages of the MAPE-K Autonomous Loop
-  const mapekStages = [
-    { step: '1. MONITOR', name: 'Giám Sát Viễn Trắc', desc: 'Thu thập tín hiệu eBPF và Kubelet mỗi 500ms', active: true, color: '#0284C7' },
-    { step: '2. ANALYZE', name: 'Phân Tích Bất Thường', desc: 'AI lọc nhiễu và đối chiếu đường cơ sở 30 ngày', active: true, color: '#2563EB' },
-    { step: '3. PLAN', name: 'Lập Kế Hoạch Vá Lỗi', desc: 'Kiểm tra dung lượng node và tính toán blast radius', active: true, color: '#7C3AED' },
-    { step: '4. EXECUTE', name: 'Thực Thi Tự Động', desc: 'Điều phối API Kubernetes qua ServiceAccount an toàn', active: true, color: '#059669' },
-    { step: '5. KNOWLEDGE', name: 'Cập Nhật Tri Thức', desc: 'Ghi nhận MTTR và tối ưu hóa trọng số mô hình', active: true, color: '#0D9488' },
-  ];
+  const activeClusterId = useMemo(() => {
+    return currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster || '';
+  }, [currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster]);
+
+  const activeOrgId = useMemo(() => {
+    return currentOrg?.id || '';
+  }, [currentOrg?.id]);
 
   const mapBackendActionToUI = useCallback((item) => {
-    const shortId = item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : item.id;
+    const shortId = item.id && item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : (item.id || 'N/A');
     const isCompleted = item.execution_status === 'SUCCEEDED';
-    const progress = isCompleted ? 100 : (item.execution_status === 'RUNNING' ? 65 : 25);
-    const stage = isCompleted ? '5. KNOWLEDGE' : (item.execution_status === 'RUNNING' ? '4. EXECUTE' : '3. PLAN');
+    const isCancelled = item.execution_status === 'CANCELLED';
+    const isFailed = item.execution_status === 'FAILED';
+    const isRunning = item.execution_status === 'RUNNING' || item.execution_status === 'PENDING' || item.execution_status === 'QUEUED';
+
+    let progress = 100;
+    let stage = '5. KNOWLEDGE';
+    let status = 'completed';
+
+    if (isRunning) {
+      status = 'running';
+      progress = item.execution_status === 'RUNNING' ? 70 : 30;
+      stage = item.execution_status === 'RUNNING' ? '4. EXECUTE' : '3. PLAN';
+    } else if (isCancelled) {
+      status = 'cancelled';
+      progress = 100;
+      stage = 'ĐÃ HỦY BỎ (ABORTED)';
+    } else if (isFailed) {
+      status = 'failed';
+      progress = 100;
+      stage = 'THẤT BẠI (FAILED)';
+    }
+
     const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
+    const elapsedSec = item.elapsed_seconds !== undefined && item.elapsed_seconds !== null
+      ? `${item.elapsed_seconds}s`
+      : `${(durMs / 1000).toFixed(1)}s`;
+
+    const targetName = item.target_name || item.target_id || 'Chưa xác định';
+    const actionTypeName = item.action_type_name || item.action_type_code || 'Tự phục hồi';
+    const clusterName = item.cluster_name || currentEnv?.name || currentEnv?.cluster || 'Mặc định';
+    const orgName = item.organization_name || currentOrg?.name || 'Tổ chức hiện tại';
+    const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
 
     return {
       id: shortId,
       rawId: item.id,
-      title: item.result?.message || `Thực thi ${item.action_type_name || item.action_type_code} trên ${item.target_name || 'workload'}`,
-      service: item.target_name || 'sme-order-service',
-      namespace: 'production',
+      title: item.result?.message || `Thực thi ${actionTypeName} trên ${targetName}`,
+      service: targetName,
+      clusterName,
+      orgName,
+      namespace: item.namespace || 'default',
       stage,
       progress,
-      elapsed: `${(durMs / 1000).toFixed(1)}s`,
-      policy: item.policy_name || 'POL-DEFAULT-AUTO',
-      status: isCompleted ? 'completed' : 'running',
+      elapsed: elapsedSec,
+      policy: policyName,
+      status,
+      executionStatus: item.execution_status || 'UNKNOWN',
+      riskLevel: item.risk_level || 'LOW',
+      executionMode: item.execution_mode || 'AUTO',
+      approvalStatus: item.approval_status || 'NOT_REQUIRED',
+      errorMessage: item.error_message || null,
+      rawItem: item,
     };
-  }, []);
+  }, [currentEnv?.cluster, currentEnv?.name, currentOrg?.name]);
+
+  // Dynamic 5-stage MAPE-K Autonomous Loop
+  const mapekStages = useMemo(() => {
+    const hasRunning = runningActions.some((a) => a.executionStatus === 'RUNNING');
+    const hasPlanning = runningActions.some((a) => a.executionStatus === 'PENDING' || a.executionStatus === 'QUEUED');
+    const hasRecentCompleted = historyActions.some((a) => {
+      if (a.status !== 'completed' || !a.rawItem?.completed_at) return false;
+      return Date.now() - new Date(a.rawItem.completed_at).getTime() < 120000;
+    });
+
+    return [
+      {
+        step: '1. MONITOR',
+        name: 'Giám Sát Viễn Trắc',
+        desc: 'Thu thập tín hiệu eBPF và Kubelet telemetry liên tục mỗi 500ms',
+        active: true,
+        color: '#0284C7',
+      },
+      {
+        step: '2. ANALYZE',
+        name: 'Phân Tích Bất Thường',
+        desc: 'Mô hình AI đối chiếu baseline và nhận diện chỉ số suy biến',
+        active: hasPlanning || hasRunning,
+        color: '#2563EB',
+      },
+      {
+        step: '3. PLAN',
+        name: 'Lập Kế Hoạch Vá Lỗi',
+        desc: 'Tính toán blast radius, kiểm tra PDB và chuẩn bị payload',
+        active: hasPlanning,
+        color: '#7C3AED',
+      },
+      {
+        step: '4. EXECUTE',
+        name: 'Thực Thi Tự Động',
+        desc: 'Điều phối API Kubernetes qua K8s Agent kết nối trực tiếp',
+        active: hasRunning,
+        color: '#059669',
+      },
+      {
+        step: '5. KNOWLEDGE',
+        name: 'Cập Nhật Tri Thức',
+        desc: 'Lưu vết MTTR và cập nhật trọng số chính sách vào cơ sở dữ liệu',
+        active: hasRecentCompleted,
+        color: '#0D9488',
+      },
+    ];
+  }, [runningActions, historyActions]);
 
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
     try {
-      const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster;
-      const activeOrgId = currentOrg?.id;
-
-      const res = await selfHealingService.getActions({
-        limit: 10,
+      // 1. Fetch currently running actions from Main Backend
+      const runningRes = await selfHealingService.getRunningActions({
         cluster_id: activeClusterId,
         organization_id: activeOrgId,
       });
 
-      const items = res?.items || (Array.isArray(res) ? res : []);
-      if (items.length > 0) {
-        setActions(items.map(mapBackendActionToUI));
-        setIsUsingLiveDb(true);
-      } else {
-        setActions([]);
-        setIsUsingLiveDb(true);
-      }
+      // 2. Fetch history actions from Main Backend
+      const historyRes = await selfHealingService.getActions({
+        limit: 15,
+        cluster_id: activeClusterId,
+        organization_id: activeOrgId,
+      });
+
+      const runningItems = runningRes?.items || (Array.isArray(runningRes) ? runningRes : []);
+      const historyItems = historyRes?.items || (Array.isArray(historyRes) ? historyRes : []);
+
+      setRunningActions(runningItems.map(mapBackendActionToUI));
+      setHistoryActions(historyItems.map(mapBackendActionToUI));
+      setIsUsingLiveDb(true);
     } catch (err) {
       console.warn('[HealingActionsPage] Lỗi tải action:', err.message);
-      setActions([]);
-      setIsUsingLiveDb(false);
+      setRunningActions([]);
+      setHistoryActions([]);
+      setIsUsingLiveDb(true);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, mapBackendActionToUI]);
+  }, [activeClusterId, activeOrgId, mapBackendActionToUI]);
 
   useEffect(() => {
     fetchActions();
-  }, [fetchActions, currentOrg?.id, currentEnv?.id, currentEnv?.cluster]);
+  }, [fetchActions]);
+
+  // WebSocket Subscription for Realtime Updates from Main Backend
+  useEffect(() => {
+    let ws = null;
+    try {
+      const isSecure = window.location.protocol === 'https:';
+      const protocol = isSecure ? 'wss:' : 'ws:';
+      let host = window.location.host;
+      if (window.location.port === '3000' || window.location.port === '3001') {
+        host = `${window.location.hostname}:5000`;
+      }
+      const token =
+        localStorage.getItem('selfheal_auth_token') ||
+        localStorage.getItem('token');
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+      const clusterParam = activeClusterId ? `&cluster_id=${encodeURIComponent(activeClusterId)}` : '';
+      const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?${tokenParam}${clusterParam}`;
+
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (
+            payload.type === 'healing_action_started' ||
+            payload.type === 'healing_action_completed' ||
+            payload.type === 'healing_action_aborted' ||
+            payload.type === 'healing_action_updated'
+          ) {
+            console.log('[HealingActionsPage] Live WebSocket notification received:', payload.type);
+            fetchActions();
+          }
+        } catch (e) {
+          // ignore non-json
+        }
+      };
+    } catch (wsErr) {
+      console.warn('[HealingActionsPage] WebSocket connection failed:', wsErr);
+    }
+
+    return () => {
+      if (ws) {
+        try {
+          ws.close();
+        } catch {}
+      }
+    };
+  }, [activeClusterId, fetchActions]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
     fetchActions();
   };
 
+  const handleAbortAction = async (actionId) => {
+    const reason = window.prompt(
+      'Nhập lý do dừng khẩn cấp hành động tự phục hồi:',
+      'Dừng can thiệp thủ công để kiểm tra sự cố'
+    );
+    if (reason === null) return;
+
+    setOperatingActionId(actionId);
+    try {
+      await selfHealingService.abortAction(actionId, reason || 'Dừng can thiệp bởi quản trị viên');
+      setFeedbackMessage({ type: 'success', text: 'Đã gửi lệnh dừng khẩn cấp hành động thành công!' });
+      await fetchActions();
+    } catch (err) {
+      setFeedbackMessage({ type: 'error', text: `Không thể hủy hành động: ${err.message}` });
+    } finally {
+      setOperatingActionId(null);
+      setTimeout(() => setFeedbackMessage(null), 5000);
+    }
+  };
+
+  const handleExecuteAction = async (actionId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn kích hoạt chạy lại hành động tự phục hồi này?')) return;
+
+    setOperatingActionId(actionId);
+    try {
+      await selfHealingService.executeAction(actionId);
+      setFeedbackMessage({ type: 'success', text: 'Đã kích hoạt thực thi hành động thành công qua Agent K8s!' });
+      await fetchActions();
+    } catch (err) {
+      setFeedbackMessage({ type: 'error', text: `Lỗi kích hoạt hành động: ${err.message}` });
+    } finally {
+      setOperatingActionId(null);
+      setTimeout(() => setFeedbackMessage(null), 5000);
+    }
+  };
+
   return (
     <div className="dashboard-healing-actions-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Feedback Toast */}
+      {feedbackMessage && (
+        <div
+          style={{
+            padding: '12px 18px',
+            borderRadius: 'var(--dash-radius-md)',
+            backgroundColor: feedbackMessage.type === 'success' ? '#DCFCE7' : '#FEE2E2',
+            color: feedbackMessage.type === 'success' ? '#15803D' : '#B91C1C',
+            border: `1px solid ${feedbackMessage.type === 'success' ? '#86EFAC' : '#FCA5A5'}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+          }}
+        >
+          {feedbackMessage.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+          <span>{feedbackMessage.text}</span>
+        </div>
+      )}
+
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -95,26 +295,9 @@ export const HealingActionsPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Hành Động Tự Phục Hồi Đang Thực Thi (MAPE-K Closed Loop)
             </h1>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '10px',
-                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
-                color: isUsingLiveDb ? '#15803D' : '#B45309',
-                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
-              }}
-            >
-              <Database size={10} />
-              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
-            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'SME Retail Enterprise'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}</span> &bull; Vòng lặp tự trị liên tục: Giám sát &rarr; Phân tích &rarr; Lập kế hoạch &rarr; Thực thi &rarr; Tri thức
+            Tổ chức: <strong>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Cụm K8s: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm'}</span> &bull; Phân quyền Multi-tenant cách ly nghiêm ngặt
           </p>
         </div>
 
@@ -122,6 +305,7 @@ export const HealingActionsPage = () => {
           <button
             type="button"
             onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -132,10 +316,10 @@ export const HealingActionsPage = () => {
               borderRadius: 'var(--dash-radius-md)',
               fontSize: '0.8125rem',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
             }}
           >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
             <span>Đồng bộ tiến trình</span>
           </button>
         </div>
@@ -179,16 +363,30 @@ export const HealingActionsPage = () => {
               key={idx}
               style={{
                 padding: '14px',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid var(--dash-border)',
+                backgroundColor: st.active ? 'rgba(37, 99, 235, 0.03)' : '#FFFFFF',
+                border: st.active ? `1px solid ${st.color}` : '1px solid var(--dash-border)',
                 borderTop: `3px solid ${st.color}`,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '4px',
+                boxShadow: st.active ? '0 2px 8px rgba(37, 99, 235, 0.08)' : 'none',
               }}
             >
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: st.color }}>
-                {st.step}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: st.color }}>
+                  {st.step}
+                </span>
+                {st.active && (
+                  <span
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      backgroundColor: st.color,
+                      display: 'inline-block',
+                    }}
+                  />
+                )}
               </div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
                 {st.name}
@@ -201,93 +399,260 @@ export const HealingActionsPage = () => {
         </div>
       </div>
 
-      {/* Currently Running Actions List */}
+      {/* SECTION 1: Currently Running Actions */}
       <div className="dash-card" style={{ padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Hành Động Đang Chạy Trong Cụm ({actions.filter((a) => a.status === 'running').length} Đang thực thi)
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Activity size={18} color="#2563EB" />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
+                Hành Động Đang Chạy Ngầm Trong Cụm ({runningActions.length} Đang thực thi)
+              </h3>
+            </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-              Các can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubelet API
+              Các can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubelet API của cụm
             </p>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {actions.length === 0 ? (
+          {runningActions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
               <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
               <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.9375rem' }}>
                 Cụm đang vận hành ổn định
               </div>
               <div style={{ fontSize: '0.8125rem' }}>
-                Không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm ({currentEnv?.cluster || 'Production Cluster'}). Toàn bộ tiến trình đang hoạt động an toàn.
+                Không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm ({currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}). Toàn bộ tiến trình đang an toàn.
               </div>
             </div>
           ) : (
-            actions.map((act) => {
-              const isCompleted = act.status === 'completed';
-
-              return (
-                <div
-                  key={act.id}
-                  style={{
-                    padding: '16px 20px',
-                    backgroundColor: isCompleted ? 'rgba(5, 150, 105, 0.03)' : '#FFFFFF',
-                    border: isCompleted ? '1px solid #34D399' : '1px solid var(--dash-border)',
-                    borderLeft: isCompleted ? '4px solid #059669' : '4px solid #2563EB',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
-                          {act.id}
-                        </span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                          &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.625rem',
-                            fontWeight: 700,
-                            padding: '1px 6px',
-                            backgroundColor: isCompleted ? '#ECFDF5' : '#EFF6FF',
-                            color: isCompleted ? '#059669' : '#2563EB',
-                            border: `1px solid ${isCompleted ? '#A7F3D0' : '#BFDBFE'}`,
-                          }}
-                        >
-                          {act.stage}
-                        </span>
-                      </div>
-
-                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: '4px 0 0 0' }}>
-                        {act.title}
-                      </h4>
+            runningActions.map((act) => (
+              <div
+                key={act.id}
+                style={{
+                  padding: '16px 20px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid var(--dash-border)',
+                  borderLeft: '4px solid #2563EB',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
+                        {act.id}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                        &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.625rem',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#2563EB',
+                          border: '1px solid #BFDBFE',
+                        }}
+                      >
+                        {act.stage}
+                      </span>
                     </div>
 
+                    <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: '4px 0 0 0' }}>
+                      {act.title}
+                    </h4>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 800, color: isCompleted ? '#059669' : '#2563EB' }}>
-                        {isCompleted ? 'HOÀN THÀNH (100%)' : `TIẾN ĐỘ: ${act.progress}%`}
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 800, color: '#2563EB' }}>
+                        TIẾN ĐỘ: {act.progress}%
                       </div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
                         Thời gian chạy: {act.elapsed} &bull; Chính sách: {act.policy}
                       </div>
                     </div>
+
+                    {/* Abort button */}
+                    <button
+                      type="button"
+                      disabled={operatingActionId === act.rawId}
+                      onClick={() => handleAbortAction(act.rawId)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#FEE2E2',
+                        border: '1px solid #FCA5A5',
+                        color: '#B91C1C',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
+                      }}
+                      title="Dừng khẩn cấp can thiệp tự phục hồi"
+                    >
+                      <XCircle size={14} />
+                      <span>{operatingActionId === act.rawId ? 'Đang dừng...' : 'Dừng can thiệp'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${act.progress}%`,
+                      height: '100%',
+                      backgroundColor: '#2563EB',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* SECTION 2: Recent Healing Actions History */}
+      <div className="dash-card" style={{ padding: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock size={18} color="var(--dash-text-primary)" />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
+                Lịch Sử Các Hành Động Vừa Thực Thi Trong Cụm ({historyActions.length})
+              </h3>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+              Ghi nhận đầy đủ kiểm toán kết quả khôi phục, thời gian hoàn tất và chính sách tự phục hồi
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {historyActions.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px 20px', color: 'var(--dash-text-muted)', fontSize: '0.8125rem' }}>
+              Chưa có lịch sử can thiệp tự phục hồi nào được ghi nhận cho cụm này.
+            </div>
+          ) : (
+            historyActions.map((act) => {
+              const isCompleted = act.status === 'completed';
+              const isCancelled = act.status === 'cancelled';
+              const isFailed = act.status === 'failed';
+
+              let borderColor = 'var(--dash-border)';
+              let leftColor = '#64748B';
+              let badgeBg = '#F1F5F9';
+              let badgeColor = '#475569';
+              let badgeBorder = '#CBD5E1';
+
+              if (isCompleted) {
+                borderColor = '#34D399';
+                leftColor = '#059669';
+                badgeBg = '#ECFDF5';
+                badgeColor = '#059669';
+                badgeBorder = '#A7F3D0';
+              } else if (isCancelled) {
+                borderColor = '#FCD34D';
+                leftColor = '#D97706';
+                badgeBg = '#FEF3C7';
+                badgeColor = '#B45309';
+                badgeBorder = '#FDE68A';
+              } else if (isFailed) {
+                borderColor = '#FCA5A5';
+                leftColor = '#DC2626';
+                badgeBg = '#FEE2E2';
+                badgeColor = '#DC2626';
+                badgeBorder = '#FCA5A5';
+              }
+
+              return (
+                <div
+                  key={act.id}
+                  style={{
+                    padding: '14px 18px',
+                    backgroundColor: isCompleted ? 'rgba(5, 150, 105, 0.02)' : '#FFFFFF',
+                    border: `1px solid ${borderColor}`,
+                    borderLeft: `4px solid ${leftColor}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
+                        {act.id}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                        &bull; Workload: <strong>{act.service}</strong>
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.625rem',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          backgroundColor: badgeBg,
+                          color: badgeColor,
+                          border: `1px solid ${badgeBorder}`,
+                        }}
+                      >
+                        {act.stage}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+                      {act.title}
+                    </div>
+                    {act.errorMessage && (
+                      <div style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '2px' }}>
+                        Lỗi / Lý do: {act.errorMessage}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Progress Bar */}
-                  <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: leftColor }}>
+                        {act.executionStatus}
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                        Thời lượng: {act.elapsed} &bull; {act.policy}
+                      </div>
+                    </div>
+
+                    {/* Retry button */}
+                    <button
+                      type="button"
+                      disabled={operatingActionId === act.rawId}
+                      onClick={() => handleExecuteAction(act.rawId)}
                       style={{
-                        width: `${act.progress}%`,
-                        height: '100%',
-                        backgroundColor: isCompleted ? '#059669' : '#2563EB',
-                        transition: 'width 0.4s ease',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#2563EB',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
                       }}
-                    />
+                      title="Kích hoạt chạy lại hành động tự phục hồi này"
+                    >
+                      <RotateCcw size={13} />
+                      <span>{operatingActionId === act.rawId ? 'Đang chạy...' : 'Kích hoạt lại'}</span>
+                    </button>
                   </div>
                 </div>
               );
