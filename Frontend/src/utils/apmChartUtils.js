@@ -67,7 +67,9 @@ export function formatUnixTime(unixSec, includeDate = false) {
  * Format latency / response time in ms or seconds
  */
 export function formatLatency(ms, decimals = 1) {
-  const val = sanitizeNumber(ms, 0, 0);
+  if (ms === null || ms === undefined || ms === '') return '--';
+  const val = sanitizeNumber(ms, null, 0);
+  if (val === null) return '--';
   if (val >= 1000) {
     return `${(val / 1000).toFixed(decimals)} s`;
   }
@@ -78,7 +80,9 @@ export function formatLatency(ms, decimals = 1) {
  * Format throughput (RPS - Requests per second)
  */
 export function formatRps(rps, decimals = 1) {
-  const val = sanitizeNumber(rps, 0, 0);
+  if (rps === null || rps === undefined || rps === '') return '--';
+  const val = sanitizeNumber(rps, null, 0);
+  if (val === null) return '--';
   if (val >= 1000000) {
     return `${(val / 1000000).toFixed(decimals)}M req/s`;
   }
@@ -92,7 +96,9 @@ export function formatRps(rps, decimals = 1) {
  * Format error rate percentage
  */
 export function formatErrorRate(rate, decimals = 2) {
-  const val = sanitizeNumber(rate, 0, 0, 100);
+  if (rate === null || rate === undefined || rate === '') return '--';
+  const val = sanitizeNumber(rate, null, 0, 100);
+  if (val === null) return '--';
   return `${val.toFixed(decimals)}%`;
 }
 
@@ -100,7 +106,9 @@ export function formatErrorRate(rate, decimals = 2) {
  * Format availability percentage (SLO)
  */
 export function formatAvailability(avail, decimals = 2) {
-  const val = sanitizeNumber(avail, 100, 0, 100);
+  if (avail === null || avail === undefined || avail === '') return '--';
+  const val = sanitizeNumber(avail, null, 0, 100);
+  if (val === null) return '--';
   return `${val.toFixed(decimals)}%`;
 }
 
@@ -108,12 +116,12 @@ export function formatAvailability(avail, decimals = 2) {
  * Calculate percentile value from an array of numbers using linear interpolation
  * @param {Array<number>} values - Array of numeric samples
  * @param {number} p - Percentile between 0 and 100 (e.g. 50, 95, 99)
- * @returns {number}
+ * @returns {number|null}
  */
 export function calculatePercentile(values, p = 95) {
-  if (!Array.isArray(values) || values.length === 0) return 0;
+  if (!Array.isArray(values) || values.length === 0) return null;
   const sorted = [...values].filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-  if (sorted.length === 0) return 0;
+  if (sorted.length === 0) return null;
   if (sorted.length === 1) return sorted[0];
 
   const index = (p / 100) * (sorted.length - 1);
@@ -128,7 +136,21 @@ export function calculatePercentile(values, p = 95) {
 /**
  * Health status classifier based on APM SLO metrics
  */
-export function getServiceHealthStatus(errorRate = 0, avgLatency = 0) {
+export function getServiceHealthStatus(errorRate, avgLatency) {
+  if (
+    errorRate === null ||
+    errorRate === undefined ||
+    avgLatency === null ||
+    avgLatency === undefined
+  ) {
+    return {
+      status: 'UNKNOWN',
+      label: 'Chưa có dữ liệu',
+      color: '#64748B',
+      bg: '#F8FAFC',
+      border: '#CBD5E1',
+    };
+  }
   if (errorRate >= 5 || avgLatency >= 2000) {
     return {
       status: 'CRITICAL',
@@ -231,13 +253,13 @@ export function transformApmMetricsForCharts(sequence = [], options = {}) {
         rawCount: 0,
         plottedCount: 0,
         isStale: false,
-        latency: { current: 0, avg: 0, max: 0, p50: 0, p95: 0, p99: 0 },
-        throughput: { current: 0, avg: 0, max: 0 },
-        errorRate: { current: 0, avg: 0, max: 0 },
-        availability: 100,
-        replicas: 1,
-        restarts: 0,
-        health: getServiceHealthStatus(0, 0),
+        latency: { current: null, avg: null, max: null, p50: null, p95: null, p99: null },
+        throughput: { current: null, avg: null, max: null },
+        errorRate: { current: null, avg: null, max: null },
+        availability: null,
+        replicas: null,
+        restarts: null,
+        health: getServiceHealthStatus(null, null),
       },
     };
   }
@@ -338,6 +360,10 @@ export function transformApmMetricsForCharts(sequence = [], options = {}) {
   const avgError = count > 0 ? Math.round((errorRateSum / count) * 100) / 100 : 0;
   const availability = Math.max(0, Math.min(100, Math.round((100 - avgError) * 100) / 100));
 
+  const p50 = calculatePercentile(latencyValues, 50);
+  const p95 = calculatePercentile(latencyValues, 95);
+  const p99 = calculatePercentile(latencyValues, 99);
+
   return {
     latencySeries,
     throughputSeries,
@@ -352,26 +378,26 @@ export function transformApmMetricsForCharts(sequence = [], options = {}) {
       plottedCount: latencySeries.length,
       isStale,
       latency: {
-        current: latestSample ? latestSample.latency : 0,
+        current: latestSample ? latestSample.latency : null,
         avg: avgLat,
-        max: Math.round(latencyMax * 10) / 10,
-        p50: Math.round(calculatePercentile(latencyValues, 50) * 10) / 10,
-        p95: Math.round(calculatePercentile(latencyValues, 95) * 10) / 10,
-        p99: Math.round(calculatePercentile(latencyValues, 99) * 10) / 10,
+        max: count > 0 ? Math.round(latencyMax * 10) / 10 : null,
+        p50: p50 !== null ? Math.round(p50 * 10) / 10 : null,
+        p95: p95 !== null ? Math.round(p95 * 10) / 10 : null,
+        p99: p99 !== null ? Math.round(p99 * 10) / 10 : null,
       },
       throughput: {
-        current: latestSample ? latestSample.request_rate : 0,
+        current: latestSample ? latestSample.request_rate : null,
         avg: avgThroughput,
-        max: Math.round(throughputMax * 10) / 10,
+        max: count > 0 ? Math.round(throughputMax * 10) / 10 : null,
       },
       errorRate: {
-        current: latestSample ? latestSample.http_5xx_rate : 0,
+        current: latestSample ? latestSample.http_5xx_rate : null,
         avg: avgError,
-        max: Math.round(errorRateMax * 100) / 100,
+        max: count > 0 ? Math.round(errorRateMax * 100) / 100 : null,
       },
       availability,
-      replicas: latestSample ? latestSample.replica_count : 1,
-      restarts: totalRestarts,
+      replicas: latestSample ? latestSample.replica_count : null,
+      restarts: count > 0 ? totalRestarts : null,
       health: getServiceHealthStatus(avgError, avgLat),
     },
   };

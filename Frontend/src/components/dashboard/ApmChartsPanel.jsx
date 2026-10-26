@@ -393,7 +393,7 @@ export const ApmChartsPanel = ({
                 Thời Gian Phản Hồi (Response Time)
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span
                 style={{
                   fontSize: '0.75rem',
@@ -406,6 +406,19 @@ export const ApmChartsPanel = ({
                 }}
               >
                 p95: {formatLatency(summary?.latency?.p95)}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  fontFamily: 'monospace',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  backgroundColor: '#FAF5FF',
+                  color: '#7C3AED',
+                  fontWeight: 700,
+                }}
+              >
+                p99: {formatLatency(summary?.latency?.p99)}
               </span>
               <span
                 style={{

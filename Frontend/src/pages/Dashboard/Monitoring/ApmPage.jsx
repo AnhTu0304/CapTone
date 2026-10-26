@@ -38,7 +38,11 @@ export const ApmPage = ({ onNavigate }) => {
   const [rawSequence, setRawSequence] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [refreshWarning, setRefreshWarning] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [sortField, setSortField] = useState('service_name');
+  const [sortDirection, setSortDirection] = useState('asc');
   const [lastRefreshedAt, setLastRefreshedAt] = useState(new Date());
 
   const abortControllerRef = useRef(null);
@@ -100,6 +104,7 @@ export const ApmPage = ({ onNavigate }) => {
 
         setRawSequence(Array.isArray(sequence) ? sequence : []);
         setLastRefreshedAt(new Date());
+        setRefreshWarning(null);
       } catch (err) {
         if (err?.name === 'AbortError' || controller.signal.aborted) {
           return;
@@ -107,15 +112,21 @@ export const ApmPage = ({ onNavigate }) => {
         if (currentSeq !== requestSeqRef.current) {
           return;
         }
-        setErrorMessage(err.message || 'Không thể tải chuỗi dữ liệu APM từ máy chủ');
-        setRawSequence([]);
+        if (silent && rawSequence.length > 0) {
+          setRefreshWarning(
+            `Lần làm mới nền gần nhất không thành công (${err.message || 'Lỗi mạng'}). Đang hiển thị số liệu đã lưu trong bộ nhớ tạm.`
+          );
+        } else {
+          setErrorMessage(err.message || 'Không thể tải chuỗi dữ liệu APM từ máy chủ');
+          setRawSequence([]);
+        }
       } finally {
         if (currentSeq === requestSeqRef.current && !controller.signal.aborted) {
           setIsLoading(false);
         }
       }
     },
-    [selectedService, timeRange]
+    [selectedService, timeRange, rawSequence.length]
   );
 
   useEffect(() => {
@@ -154,16 +165,62 @@ export const ApmPage = ({ onNavigate }) => {
 
   const { summary } = chartModel;
 
-  // Filtered services table
-  const filteredServices = useMemo(() => {
-    if (!searchTerm.trim()) return servicesList;
-    const term = searchTerm.toLowerCase();
-    return servicesList.filter(
-      (s) =>
-        (s.service_name || '').toLowerCase().includes(term) ||
-        (s.service_id || '').toLowerCase().includes(term)
-    );
-  }, [servicesList, searchTerm]);
+  // Filtered & Sorted services table
+  const filteredAndSortedServices = useMemo(() => {
+    let result = [...servicesList];
+
+    // 1. Text Search
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (s) =>
+          (s.service_name || '').toLowerCase().includes(term) ||
+          (s.service_id || '').toLowerCase().includes(term)
+      );
+    }
+
+    // 2. Status Filter
+    if (statusFilter !== 'ALL') {
+      result = result.filter((s) => {
+        const health = getServiceHealthStatus(s.avg_error_rate, s.avg_latency_ms);
+        return health.status === statusFilter;
+      });
+    }
+
+    // 3. Sorting
+    result.sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      if (sortField === 'service_name') {
+        valA = (valA || a.service_id || '').toLowerCase();
+        valB = (valB || b.service_id || '').toLowerCase();
+        return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+
+      if (sortField === 'status') {
+        const order = { CRITICAL: 3, WARNING: 2, HEALTHY: 1, UNKNOWN: 0 };
+        valA = order[getServiceHealthStatus(a.avg_error_rate, a.avg_latency_ms).status] || 0;
+        valB = order[getServiceHealthStatus(b.avg_error_rate, b.avg_latency_ms).status] || 0;
+      } else {
+        valA = typeof valA === 'number' ? valA : 0;
+        valB = typeof valB === 'number' ? valB : 0;
+      }
+
+      return sortDirection === 'asc' ? valA - valB : valB - valA;
+    });
+
+    return result;
+  }, [servicesList, searchTerm, statusFilter, sortField, sortDirection]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   return (
     <div
@@ -460,6 +517,27 @@ export const ApmPage = ({ onNavigate }) => {
         </div>
       </div>
 
+      {/* 2.5 Non-destructive Refresh Warning Banner if background auto-refresh fails */}
+      {refreshWarning && (
+        <div
+          data-testid="apm-refresh-warning-banner"
+          style={{
+            padding: '10px 16px',
+            backgroundColor: '#FEF3C7',
+            border: '1px solid #FCD34D',
+            borderRadius: '8px',
+            color: '#92400E',
+            fontSize: '0.8125rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <AlertTriangle size={16} color="#D97706" />
+          <span>{refreshWarning}</span>
+        </div>
+      )}
+
       {/* 3. Four Core APM KPI Summary Cards */}
       <div
         style={{
@@ -488,14 +566,25 @@ export const ApmPage = ({ onNavigate }) => {
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0F172A', marginTop: '6px', fontFamily: 'monospace' }}>
             {formatLatency(summary?.latency?.avg)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             <span>
-              p95: <strong style={{ color: '#0369A1' }}>{formatLatency(summary?.latency?.p95)}</strong>
+              p50: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.p50)}</strong>
             </span>
             <span>&bull;</span>
             <span>
-              Đỉnh: <strong>{formatLatency(summary?.latency?.max)}</strong>
+              p95: <strong style={{ color: '#0369A1', fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.p95)}</strong>
             </span>
+            <span>&bull;</span>
+            <span>
+              p99: <strong style={{ color: '#7C3AED', fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.p99)}</strong>
+            </span>
+            <span>&bull;</span>
+            <span>
+              Đỉnh: <strong style={{ fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.max)}</strong>
+            </span>
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
+            Cửa sổ đo: <strong>{presetConfig.label}</strong>
           </div>
         </div>
 
@@ -519,11 +608,20 @@ export const ApmPage = ({ onNavigate }) => {
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0F172A', marginTop: '6px', fontFamily: 'monospace' }}>
             {formatRps(summary?.throughput?.avg)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>
-            Đỉnh lưu lượng:{' '}
-            <strong style={{ color: '#4F46E5', fontFamily: 'monospace' }}>
-              {formatRps(summary?.throughput?.max)}
-            </strong>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
+            <span>
+              Hiện tại: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{formatRps(summary?.throughput?.current)}</strong>
+            </span>
+            <span>&bull;</span>
+            <span>
+              Đỉnh:{' '}
+              <strong style={{ color: '#4F46E5', fontFamily: 'monospace' }}>
+                {formatRps(summary?.throughput?.max)}
+              </strong>
+            </span>
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
+            Cửa sổ đo: <strong>{presetConfig.label}</strong>
           </div>
         </div>
 
@@ -555,11 +653,20 @@ export const ApmPage = ({ onNavigate }) => {
           >
             {formatErrorRate(summary?.errorRate?.avg)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>
-            Đỉnh lỗi:{' '}
-            <strong style={{ color: summary?.errorRate?.max > 0 ? '#DC2626' : '#64748B', fontFamily: 'monospace' }}>
-              {formatErrorRate(summary?.errorRate?.max)}
-            </strong>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
+            <span>
+              Hiện tại: <strong style={{ fontFamily: 'monospace' }}>{formatErrorRate(summary?.errorRate?.current)}</strong>
+            </span>
+            <span>&bull;</span>
+            <span>
+              Đỉnh:{' '}
+              <strong style={{ color: summary?.errorRate?.max > 0 ? '#DC2626' : '#64748B', fontFamily: 'monospace' }}>
+                {formatErrorRate(summary?.errorRate?.max)}
+              </strong>
+            </span>
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
+            Cửa sổ đo: <strong>{presetConfig.label}</strong>
           </div>
         </div>
 
@@ -585,12 +692,15 @@ export const ApmPage = ({ onNavigate }) => {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
             <span>
-              Replicas: <strong>{summary?.replicas || 1}</strong>
+              Replicas: <strong>{summary?.replicas ?? '--'}</strong>
             </span>
             <span>&bull;</span>
             <span>
-              Restarts: <strong>{summary?.restarts || 0}</strong>
+              Restarts: <strong>{summary?.restarts ?? '--'}</strong>
             </span>
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
+            Cửa sổ đo: <strong>{presetConfig.label}</strong>
           </div>
         </div>
       </div>
@@ -634,7 +744,47 @@ export const ApmPage = ({ onNavigate }) => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Status Filter */}
+            <div
+              role="group"
+              aria-label="Lọc trạng thái dịch vụ"
+              style={{
+                display: 'flex',
+                backgroundColor: '#F1F5F9',
+                padding: '2px',
+                borderRadius: '6px',
+                border: '1px solid #E2E8F0',
+              }}
+            >
+              {[
+                { id: 'ALL', label: 'Tất cả' },
+                { id: 'HEALTHY', label: 'Khỏe mạnh' },
+                { id: 'WARNING', label: 'Cảnh báo' },
+                { id: 'CRITICAL', label: 'Nguy hiểm' },
+              ].map((btn) => (
+                <button
+                  key={btn.id}
+                  type="button"
+                  data-testid={`apm-filter-${btn.id.toLowerCase()}`}
+                  onClick={() => setStatusFilter(btn.id)}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    backgroundColor: statusFilter === btn.id ? '#FFFFFF' : 'transparent',
+                    color: statusFilter === btn.id ? '#059669' : '#64748B',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    boxShadow: statusFilter === btn.id ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                  }}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
             <div
               style={{
                 display: 'flex',
@@ -678,26 +828,61 @@ export const ApmPage = ({ onNavigate }) => {
           >
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Tên Dịch Vụ</th>
+                <th
+                  onClick={() => handleSort('service_name')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Tên Dịch Vụ {sortField === 'service_name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
                 <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Loại</th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Lưu Lượng</th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Độ Trễ (Avg)</th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Đỉnh Trễ (Max)</th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Tỷ Lệ Lỗi</th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Bản Sao</th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Trạng Thái</th>
+                <th
+                  onClick={() => handleSort('avg_request_rate')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Lưu Lượng {sortField === 'avg_request_rate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
+                <th
+                  onClick={() => handleSort('avg_latency_ms')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Độ Trễ (Avg) {sortField === 'avg_latency_ms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
+                <th
+                  onClick={() => handleSort('max_latency_ms')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Đỉnh Trễ (Max) {sortField === 'max_latency_ms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
+                <th
+                  onClick={() => handleSort('avg_error_rate')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Tỷ Lệ Lỗi {sortField === 'avg_error_rate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
+                <th
+                  onClick={() => handleSort('replica_count')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Bản Sao {sortField === 'replica_count' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
+                <th
+                  onClick={() => handleSort('status')}
+                  style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                >
+                  Trạng Thái {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </th>
                 <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Hành Động</th>
               </tr>
             </thead>
             <tbody>
-              {filteredServices.length === 0 ? (
+              {filteredAndSortedServices.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
                     Không tìm thấy dịch vụ nào phù hợp với tìm kiếm
                   </td>
                 </tr>
               ) : (
-                filteredServices.map((svc) => {
+                filteredAndSortedServices.map((svc) => {
                   const isSelected = svc.service_id === selectedService;
                   const health = getServiceHealthStatus(svc.avg_error_rate, svc.avg_latency_ms);
 

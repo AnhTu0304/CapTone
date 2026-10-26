@@ -145,6 +145,13 @@ describe('Task [S4][PB15] 1.1 – APM Monitoring Layout, Charts & Utilities Suit
       expect(formatRps(12500)).toBe('12.5k req/s');
       expect(formatErrorRate(0.05)).toBe('0.05%');
       expect(formatAvailability(99.954)).toBe('99.95%');
+
+      // Edge cases: null / undefined / empty string safely format to '--' without fabricating 0
+      expect(formatLatency(null)).toBe('--');
+      expect(formatLatency(undefined)).toBe('--');
+      expect(formatRps(null)).toBe('--');
+      expect(formatErrorRate(null)).toBe('--');
+      expect(formatAvailability(null)).toBe('--');
     });
 
     test('1.2. Computes p50, p95, and p99 percentiles correctly from distribution', () => {
@@ -156,14 +163,22 @@ describe('Task [S4][PB15] 1.1 – APM Monitoring Layout, Charts & Utilities Suit
       expect(p50).toBeCloseTo(55, 0);
       expect(p95).toBeCloseTo(95.5, 0);
       expect(p99).toBeCloseTo(99.1, 0);
+
+      // Edge cases: empty or null returns null instead of fake 0
+      expect(calculatePercentile([])).toBeNull();
+      expect(calculatePercentile(null)).toBeNull();
     });
 
-    test('1.3. Classifies service health status based on SLO thresholds', () => {
+    test('1.3. Classifies service health status based on SLO thresholds and handles unknown safely', () => {
       expect(getServiceHealthStatus(0.0, 50).status).toBe('HEALTHY');
       expect(getServiceHealthStatus(1.5, 50).status).toBe('WARNING');
       expect(getServiceHealthStatus(0.0, 900).status).toBe('WARNING');
       expect(getServiceHealthStatus(6.0, 50).status).toBe('CRITICAL');
       expect(getServiceHealthStatus(0.0, 2500).status).toBe('CRITICAL');
+
+      // Missing or null data returns UNKNOWN with informative label
+      expect(getServiceHealthStatus(null, null).status).toBe('UNKNOWN');
+      expect(getServiceHealthStatus(null, null).label).toBe('Chưa có dữ liệu');
     });
 
     test('1.4. Transforms raw backend sequence into sorted lightweight-charts points and KPI summaries', () => {
@@ -198,6 +213,17 @@ describe('Task [S4][PB15] 1.1 – APM Monitoring Layout, Charts & Utilities Suit
       expect(downsampled[0].time).toBe(points[0].time);
       expect(downsampled[downsampled.length - 1].time).toBe(points[points.length - 1].time);
       expect(downsampled.some((p) => p.value === 999.0)).toBe(true);
+    });
+
+    test('1.7. Empty sequence transforms to summary with null metrics instead of misleading 0', () => {
+      const emptyModel = transformApmMetricsForCharts([]);
+      expect(emptyModel.samples).toHaveLength(0);
+      expect(emptyModel.summary.latency.avg).toBeNull();
+      expect(emptyModel.summary.latency.p95).toBeNull();
+      expect(emptyModel.summary.throughput.avg).toBeNull();
+      expect(emptyModel.summary.errorRate.avg).toBeNull();
+      expect(emptyModel.summary.availability).toBeNull();
+      expect(emptyModel.summary.health.status).toBe('UNKNOWN');
     });
   });
 
@@ -348,6 +374,86 @@ describe('Task [S4][PB15] 1.1 – APM Monitoring Layout, Charts & Utilities Suit
 
       unmount();
       expect(mockRemove).toHaveBeenCalled();
+    });
+
+    test('3.6. Filters services list by status (ALL, HEALTHY, WARNING, CRITICAL)', async () => {
+      render(
+        <DashboardProvider>
+          <ApmPage />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-service-row-hello-minikube')).toBeInTheDocument();
+      });
+
+      // Filter by WARNING
+      act(() => {
+        fireEvent.click(screen.getByTestId('apm-filter-warning'));
+      });
+
+      // Since both hello-minikube (0.02%) and scraper (0%) are healthy (< 1%), neither is warning
+      await waitFor(() => {
+        expect(screen.getByText(/Không tìm thấy dịch vụ nào phù hợp/i)).toBeInTheDocument();
+      });
+
+      // Switch back to HEALTHY
+      act(() => {
+        fireEvent.click(screen.getByTestId('apm-filter-healthy'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-service-row-hello-minikube')).toBeInTheDocument();
+      });
+    });
+
+    test('3.7. Filters services list by search keyword', async () => {
+      render(
+        <DashboardProvider>
+          <ApmPage />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-search-input')).toBeInTheDocument();
+      });
+
+      act(() => {
+        fireEvent.change(screen.getByTestId('apm-search-input'), {
+          target: { value: 'scraper' },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apm-service-row-dashboard-metrics-scraper')).toBeInTheDocument();
+        expect(screen.queryByTestId('apm-service-row-hello-minikube')).not.toBeInTheDocument();
+      });
+    });
+
+    test('3.8. Displays "--" in KPI cards when summary metrics are empty instead of fabricating 0', async () => {
+      telemetryService.getMetricsSequence.mockResolvedValueOnce([]);
+
+      render(
+        <DashboardProvider>
+          <ApmPage />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('kpi-card-response-time')).toBeInTheDocument();
+      });
+
+      const responseTimeCard = screen.getByTestId('kpi-card-response-time');
+      expect(responseTimeCard).toHaveTextContent('--');
+
+      const throughputCard = screen.getByTestId('kpi-card-throughput');
+      expect(throughputCard).toHaveTextContent('--');
+
+      const errorRateCard = screen.getByTestId('kpi-card-error-rate');
+      expect(errorRateCard).toHaveTextContent('--');
+
+      const availabilityCard = screen.getByTestId('kpi-card-availability');
+      expect(availabilityCard).toHaveTextContent('--');
     });
   });
 });
