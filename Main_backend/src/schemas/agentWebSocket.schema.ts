@@ -206,6 +206,9 @@ export const AgentLogPayloadSchema = z.object({
  */
 export const AgentK8sEventPayloadSchema = z.object({
   service_id: SafeString(100),
+  namespace: z.string().trim().max(100).optional().default('default'),
+  event_uid: z.string().trim().max(255).optional().nullable(),
+  resource_type: z.string().trim().max(100).optional().default('Pod'),
   pod_id: z
     .string()
     .trim()
@@ -226,8 +229,16 @@ export const AgentK8sEventPayloadSchema = z.object({
     .max(50)
     .default('Running')
     .transform((str) => str.replace(/\0/g, '')),
+  count: z.number().int().min(1).optional().default(1),
+  first_seen_at: IsoTimestampSchema.optional().nullable(),
+  last_seen_at: IsoTimestampSchema.optional().nullable(),
+  source_component: z.string().trim().max(100).optional().default('k8s-agent'),
+  reporting_controller: z.string().trim().max(100).optional().nullable(),
+  action: z.string().trim().max(100).optional().nullable(),
   timestamp: IsoTimestampSchema,
   event: z.object({
+    uid: z.string().trim().max(255).optional().nullable(),
+    event_uid: z.string().trim().max(255).optional().nullable(),
     type: z
       .string()
       .trim()
@@ -245,6 +256,12 @@ export const AgentK8sEventPayloadSchema = z.object({
       .max(10000, 'event.message cannot exceed 10,000 characters')
       .default('')
       .transform((str) => str.replace(/\0/g, '')),
+    count: z.number().int().min(1).optional(),
+    source_component: z.string().trim().max(100).optional(),
+    reporting_controller: z.string().trim().max(100).optional(),
+    action: z.string().trim().max(100).optional(),
+    first_timestamp: IsoTimestampSchema.optional().nullable(),
+    last_timestamp: IsoTimestampSchema.optional().nullable(),
   }),
 });
 

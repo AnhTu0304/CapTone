@@ -143,3 +143,45 @@ export const StreamLogsQuerySchema = z.object({
 });
 
 export type StreamLogsQuery = z.infer<typeof StreamLogsQuerySchema>;
+
+export const GetKubernetesEventsQuerySchema = z
+  .object({
+    cluster_id: z.string().trim().max(100).optional(),
+    clusterId: z.string().trim().max(100).optional(),
+    namespace: z.string().trim().max(255).optional(),
+    namespace_id: z.string().trim().max(255).optional(),
+    event_type: z.string().trim().max(50).optional(),
+    type: z.string().trim().max(50).optional(),
+    reason: z.string().trim().max(100).optional(),
+    resource_type: z.string().trim().max(100).optional(),
+    resource_uid: z.string().trim().max(255).optional(),
+    pod: z.string().trim().max(255).optional(),
+    pod_id: z.string().trim().max(255).optional(),
+    search: z.string().trim().max(255).optional(),
+    range: z.enum(['15m', '1h', '6h', '24h', '7d', 'all', 'ALL']).optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+    start_time: z.string().optional(),
+    end_time: z.string().optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(200, 'Kích thước trang tối đa là 200 bản ghi').default(50),
+    organization_id: z.string().trim().optional(),
+    orgId: z.string().trim().optional(),
+  })
+  .refine(
+    (data) => {
+      const startTime = data.start_time || data.from;
+      const endTime = data.end_time || data.to;
+      if (startTime && endTime) {
+        return new Date(startTime).getTime() <= new Date(endTime).getTime();
+      }
+      return true;
+    },
+    {
+      message: 'Thời gian bắt đầu (start_time/from) không được lớn hơn thời gian kết thúc (end_time/to)',
+      path: ['start_time'],
+    }
+  );
+
+export type GetKubernetesEventsQuery = z.infer<typeof GetKubernetesEventsQuerySchema>;
+

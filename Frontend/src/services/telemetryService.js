@@ -292,6 +292,67 @@ export const telemetryService = {
   },
 
   /**
+   * Fetch centralized Kubernetes Events with filters and pagination [S4][PB18] 4.1 & 4.2
+   */
+  async getKubernetesEvents(params = {}, options = {}) {
+    try {
+      const {
+        clusterId,
+        namespace,
+        eventType,
+        type,
+        reason,
+        resourceType,
+        resourceUid,
+        pod,
+        search,
+        range,
+        startTime,
+        endTime,
+        page = 1,
+        limit = 50,
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
+      if (namespace && namespace !== 'all' && namespace !== 'ALL') queryParams.set('namespace', namespace);
+      const effectiveType = eventType || type;
+      if (effectiveType && effectiveType !== 'all' && effectiveType !== 'ALL') queryParams.set('type', effectiveType);
+      if (reason && reason !== 'all' && reason !== 'ALL') queryParams.set('reason', reason);
+      if (resourceType && resourceType !== 'all' && resourceType !== 'ALL') queryParams.set('resource_type', resourceType);
+      const effectivePod = resourceUid || pod;
+      if (effectivePod && effectivePod !== 'all' && effectivePod !== 'ALL') queryParams.set('resource_uid', effectivePod);
+      if (search && search.trim()) queryParams.set('search', search.trim());
+      if (range && range !== 'all' && range !== 'ALL') queryParams.set('range', range);
+      if (startTime) queryParams.set('start_time', startTime);
+      if (endTime) queryParams.set('end_time', endTime);
+      if (page) queryParams.set('page', String(page));
+      if (limit) queryParams.set('limit', String(limit));
+
+      const qs = queryParams.toString();
+      const url = `${API_BASE_URL}/telemetry/events${qs ? `?${qs}` : ''}`;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      return json.data || { events: [], pagination: { total: 0, page: 1, limit, totalPages: 1 } };
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getKubernetesEvents error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
    * Connect to Real-time SSE Logs Stream [S4][PB17] 3.3
    * @param {Object} params - Query filters (serviceId, namespace, deployment, pod, level, clusterId, tail)
    * @param {Function} onEvent - Callback for SSE events: (eventType, data) => void
@@ -530,3 +591,5 @@ export const telemetryService = {
     };
   },
 };
+
+export default telemetryService;
