@@ -24,6 +24,7 @@ export interface ILogQueryOptions {
   startTime?: Date | null;
   endTime?: Date | null;
   clusterId?: string | null;
+  allowedOrgIds?: string[] | null;
   limit?: number;
   offset?: number;
 }
@@ -290,6 +291,27 @@ export class LogModel {
     if (options.clusterId) {
       conditions.push(`l.cluster_id::text = $${paramIdx++}`);
       params.push(options.clusterId);
+    }
+
+    // Tenant Isolation Scope [S4][PB17] 3.5
+    if (Array.isArray(options.allowedOrgIds) && options.allowedOrgIds.length > 0) {
+      conditions.push(`(
+        l.cluster_id IN (
+          SELECT c.id FROM clusters c 
+          JOIN environments env ON c.environment_id = env.id 
+          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
+        )
+        OR l.service_id IN (
+          SELECT s.id FROM services s 
+          JOIN clusters c ON s.cluster_id = c.id
+          JOIN environments env ON c.environment_id = env.id 
+          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
+        )
+        OR (l.metadata->>'organization_id') = ANY($${paramIdx}::text[])
+        OR (l.metadata->>'org_id') = ANY($${paramIdx}::text[])
+      )`);
+      params.push(options.allowedOrgIds);
+      paramIdx++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

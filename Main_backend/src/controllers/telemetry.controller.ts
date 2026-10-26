@@ -14,6 +14,7 @@ import {
 import { MetricModel } from '../models/metric.model';
 import { LogModel } from '../models/log.model';
 import { LogStreamService, ILogStreamFilters } from '../services/logStream.service';
+import { pool } from '../config/database';
 
 export class TelemetryController {
   /**
@@ -426,6 +427,61 @@ export class TelemetryController {
 
       const offset = (page - 1) * limit;
 
+      // Tenant Isolation Scope [S4][PB17] 3.5
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+
+      let allowedOrgIds: string[] | undefined = undefined;
+
+      if (!isGlobalAdmin) {
+        if (!user?.id) {
+          return ApiResponse.error(res, 'Yêu cầu đăng nhập để truy vấn nhật ký', 401);
+        }
+
+        const memberRes = await pool.query(
+          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+          [user.id]
+        );
+        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
+
+        const tokenOrgId = user?.organization_id || user?.organizationId;
+        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
+          allowedOrgIds.push(tokenOrgId);
+        }
+
+        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
+        if (requestedOrg && allowedOrgIds.length > 0 && !allowedOrgIds.includes(requestedOrg)) {
+          return ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem nhật ký của tổ chức này', 403);
+        }
+
+        // Validate cluster ownership if cluster_id is specified
+        if (cluster_id && cluster_id.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
+          const clusterRes = await pool.query(
+            `SELECT c.id FROM clusters c
+             JOIN environments env ON c.environment_id = env.id
+             WHERE (c.id::text = $1 OR c.name = $1)
+               AND env.organization_id = ANY($2::uuid[])`,
+            [cluster_id, allowedOrgIds]
+          );
+
+          if (clusterRes.rows.length === 0) {
+            const anyCluster = await pool.query(
+              `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
+              [cluster_id]
+            );
+            if (anyCluster.rows.length > 0) {
+              return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
+            }
+          }
+        }
+      } else {
+        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
+        if (requestedOrg) {
+          allowedOrgIds = [requestedOrg];
+        }
+      }
+
       const result = await LogModel.queryLogs({
         serviceId: service_id,
         namespace: effectiveNamespace,
@@ -436,6 +492,7 @@ export class TelemetryController {
         startTime: computedStartTime,
         endTime: computedEndTime,
         clusterId: cluster_id,
+        allowedOrgIds,
         limit,
         offset,
       });
@@ -468,6 +525,11 @@ export class TelemetryController {
       }
 
       const userId = (req as any).user?.id || 'anonymous';
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+
+      let allowedOrgIds: string[] | undefined = undefined;
 
       const {
         service_id,
@@ -483,6 +545,54 @@ export class TelemetryController {
         tail,
       } = parsedQuery.data;
 
+      if (!isGlobalAdmin) {
+        if (!user?.id) {
+          return ApiResponse.error(res, 'Yêu cầu đăng nhập để mở luồng nhật ký', 401);
+        }
+
+        const memberRes = await pool.query(
+          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+          [user.id]
+        );
+        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
+
+        const tokenOrgId = user?.organization_id || user?.organizationId;
+        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
+          allowedOrgIds.push(tokenOrgId);
+        }
+
+        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
+        if (requestedOrg && allowedOrgIds.length > 0 && !allowedOrgIds.includes(requestedOrg)) {
+          return ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem nhật ký của tổ chức này', 403);
+        }
+
+        // Validate cluster ownership if cluster_id is specified
+        if (cluster_id && cluster_id.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
+          const clusterRes = await pool.query(
+            `SELECT c.id FROM clusters c
+             JOIN environments env ON c.environment_id = env.id
+             WHERE (c.id::text = $1 OR c.name = $1)
+               AND env.organization_id = ANY($2::uuid[])`,
+            [cluster_id, allowedOrgIds]
+          );
+
+          if (clusterRes.rows.length === 0) {
+            const anyCluster = await pool.query(
+              `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
+              [cluster_id]
+            );
+            if (anyCluster.rows.length > 0) {
+              return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
+            }
+          }
+        }
+      } else {
+        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
+        if (requestedOrg) {
+          allowedOrgIds = [requestedOrg];
+        }
+      }
+
       const filters: ILogStreamFilters = {
         service_id,
         namespace: namespace || namespace_id,
@@ -491,6 +601,7 @@ export class TelemetryController {
         level,
         search,
         cluster_id,
+        allowedOrgIds,
         tail,
       };
 

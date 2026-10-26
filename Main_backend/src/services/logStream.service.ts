@@ -11,6 +11,7 @@ export interface ILogStreamFilters {
   search?: string;
   cluster_id?: string;
   tail?: number;
+  allowedOrgIds?: string[];
 }
 
 export interface IStreamLimitsConfig {
@@ -192,6 +193,14 @@ class LogStreamManager extends EventEmitter {
       }
     }
 
+    // 8. Tenant Isolation check: if stream is scoped to allowedOrgIds [S4][PB17] 3.5
+    if (Array.isArray(filters.allowedOrgIds) && filters.allowedOrgIds.length > 0) {
+      const logOrgId = log.organization_id || log.org_id || log.metadata?.organization_id || log.metadata?.org_id;
+      if (logOrgId && !filters.allowedOrgIds.includes(String(logOrgId))) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -315,6 +324,7 @@ class LogStreamManager extends EventEmitter {
           level: filters.level,
           search: filters.search,
           clusterId: filters.cluster_id,
+          allowedOrgIds: filters.allowedOrgIds,
           limit: tailLimit,
           offset: 0,
         });
