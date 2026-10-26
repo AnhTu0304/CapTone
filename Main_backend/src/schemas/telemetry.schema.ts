@@ -57,6 +57,7 @@ export const GetMetricsHistoryQuerySchema = z
     page: z.coerce.number().int().min(1).default(1).optional(),
     limit: z.coerce.number().int().min(1).max(1000).default(50).optional(),
     order: z.enum(['asc', 'desc']).default('desc').optional(),
+    cursor: z.string().trim().max(500).optional(),
   })
   .refine(
     (data) => {

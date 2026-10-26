@@ -332,6 +332,7 @@ export class TelemetryController {
         page: query.page,
         limit: query.limit,
         order: query.order,
+        cursor: query.cursor || undefined,
       });
 
       return ApiResponse.success(

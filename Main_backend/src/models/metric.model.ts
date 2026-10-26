@@ -1,3 +1,4 @@
+import { ApiError } from '../utils/apiError';
 import { pool } from '../config/database';
 import { GRUMetricPoint } from '../schemas/ai.schema';
 
@@ -23,6 +24,34 @@ export interface IAgentMetric {
   created_at?: Date;
 }
 
+export interface IMetricsCursorPayload {
+  t: string;
+  id: string;
+}
+
+export function encodeMetricsCursor(record: { collected_at: Date | string; id: string }): string {
+  const t = record.collected_at instanceof Date ? record.collected_at.toISOString() : new Date(record.collected_at).toISOString();
+  const payload: IMetricsCursorPayload = { t, id: String(record.id) };
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+export function decodeMetricsCursor(cursor: string): IMetricsCursorPayload | null {
+  try {
+    const raw = Buffer.from(cursor, 'base64url').toString('utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.t !== 'string' || typeof parsed.id !== 'string') {
+      return null;
+    }
+    const date = new Date(parsed.t);
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    return { t: parsed.t, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
 export interface IMetricsHistoryQueryFilter {
   serviceId?: string;
   podId?: string;
@@ -36,6 +65,7 @@ export interface IMetricsHistoryQueryFilter {
   limit?: number;
   page?: number;
   offset?: number;
+  cursor?: string;
   order?: 'asc' | 'desc';
 }
 
@@ -728,6 +758,8 @@ export class MetricModel {
     page: number;
     limit: number;
     total_pages: number;
+    has_more: boolean;
+    next_cursor: string | null;
     records: any[];
   }> {
     await this.ensureAgentMetricsSchema();
@@ -747,7 +779,8 @@ export class MetricModel {
 
     const page = Math.max(1, filter.page || 1);
     const limit = Math.min(1000, Math.max(1, filter.limit || 50));
-    const offset = filter.offset ?? (page - 1) * limit;
+    const isCursorPagination = Boolean(filter.cursor);
+    const offset = isCursorPagination ? 0 : (filter.offset ?? (page - 1) * limit);
     const orderDirection = filter.order?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
     const conditions: string[] = [];
@@ -794,6 +827,22 @@ export class MetricModel {
       paramIndex++;
     }
 
+    // Keyset cursor evaluation
+    if (filter.cursor) {
+      const decoded = decodeMetricsCursor(filter.cursor);
+      if (!decoded) {
+        throw ApiError.badRequest('Cursor không hợp lệ hoặc sai định dạng');
+      }
+      const cursorDate = new Date(decoded.t);
+      if (orderDirection === 'ASC') {
+        conditions.push(`(am.collected_at > $${paramIndex}::timestamptz OR (am.collected_at = $${paramIndex}::timestamptz AND am.id > $${paramIndex + 1}))`);
+      } else {
+        conditions.push(`(am.collected_at < $${paramIndex}::timestamptz OR (am.collected_at = $${paramIndex}::timestamptz AND am.id < $${paramIndex + 1}))`);
+      }
+      values.push(cursorDate, decoded.id);
+      paramIndex += 2;
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countQuery = `
@@ -809,6 +858,8 @@ export class MetricModel {
 
     const limitP = `$${paramIndex}`;
     const offsetP = `$${paramIndex + 1}`;
+    // Fetch limit + 1 records to determine has_more
+    const queryLimit = limit + 1;
 
     const dataQuery = `
       SELECT 
@@ -839,14 +890,21 @@ export class MetricModel {
       LIMIT ${limitP} OFFSET ${offsetP};
     `;
 
-    const dataRes = await pool.query(dataQuery, [...values, limit, offset]);
+    const dataRes = await pool.query(dataQuery, [...values, queryLimit, offset]);
+    const hasMore = dataRes.rows.length > limit;
+    const records = hasMore ? dataRes.rows.slice(0, limit) : dataRes.rows;
+    const nextCursor = (hasMore && records.length > 0)
+      ? encodeMetricsCursor(records[records.length - 1])
+      : null;
 
     return {
       total,
       page,
       limit,
       total_pages: Math.ceil(total / limit) || (total === 0 ? 0 : 1),
-      records: dataRes.rows,
+      has_more: hasMore,
+      next_cursor: nextCursor,
+      records,
     };
   }
 }
