@@ -371,6 +371,12 @@ export class TelemetryController {
 
       const {
         service_id,
+        namespace,
+        namespace_id,
+        deployment,
+        deployment_id,
+        pod,
+        pod_id,
         level,
         search,
         range,
@@ -382,6 +388,10 @@ export class TelemetryController {
         page = 1,
         limit = 50,
       } = parsedQuery.data;
+
+      const effectiveNamespace = namespace || namespace_id;
+      const effectiveDeployment = deployment || deployment_id;
+      const effectivePod = pod || pod_id;
 
       let computedStartTime: Date | undefined;
       let computedEndTime: Date | undefined;
@@ -416,6 +426,9 @@ export class TelemetryController {
 
       const result = await LogModel.queryLogs({
         serviceId: service_id,
+        namespace: effectiveNamespace,
+        deployment: effectiveDeployment,
+        pod: effectivePod,
         level,
         search,
         startTime: computedStartTime,

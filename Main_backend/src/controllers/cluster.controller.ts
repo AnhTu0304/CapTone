@@ -44,6 +44,17 @@ export class ClusterController {
     }
   }
 
+  public static async getNamespaces(req: Request, res: Response, next: NextFunction) {
+    try {
+      const clusterId = req.params.clusterId || req.params.id;
+      const orgId = req.params.orgId || req.orgMember?.organizationId;
+      const detail = await ClusterService.getClusterDetail(clusterId, orgId);
+      return ApiResponse.success(res, 'Lấy danh sách Namespaces thành công', detail.namespaces || [], 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async getClusterStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const summary = await K8sStatusService.getClusterStatusSummary({

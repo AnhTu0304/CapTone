@@ -235,12 +235,15 @@ export const telemetryService = {
    * Fetch historical APM metrics with range (1h, 24h, 7d), pagination, and cursor (Task [S4][PB16] 2.3)
    */
   /**
-   * Fetch centralized logs with filters (level, serviceId, search, time range) and pagination (Task [S4][PB17] 3.1)
+   * Fetch centralized logs with K8s filters (namespace, deployment, pod, level, serviceId, search, time range) and pagination (Task [S4][PB17] 3.1 & 3.2 / [4.36])
    */
   async getLogs(params = {}, options = {}) {
     try {
       const {
         serviceId,
+        namespace,
+        deployment,
+        pod,
         level,
         search,
         range,
@@ -252,13 +255,16 @@ export const telemetryService = {
       } = params;
 
       const queryParams = new URLSearchParams();
-      if (serviceId && serviceId !== 'all') queryParams.set('service_id', serviceId);
-      if (level && level !== 'all') queryParams.set('level', level);
+      if (serviceId && serviceId !== 'all' && serviceId !== 'ALL') queryParams.set('service_id', serviceId);
+      if (namespace && namespace !== 'all' && namespace !== 'ALL') queryParams.set('namespace', namespace);
+      if (deployment && deployment !== 'all' && deployment !== 'ALL') queryParams.set('deployment', deployment);
+      if (pod && pod !== 'all' && pod !== 'ALL') queryParams.set('pod', pod);
+      if (level && level !== 'all' && level !== 'ALL') queryParams.set('level', level);
       if (search && search.trim()) queryParams.set('search', search.trim());
-      if (range && range !== 'all') queryParams.set('range', range);
+      if (range && range !== 'all' && range !== 'ALL') queryParams.set('range', range);
       if (startTime) queryParams.set('start_time', startTime);
       if (endTime) queryParams.set('end_time', endTime);
-      if (clusterId) queryParams.set('cluster_id', clusterId);
+      if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
       if (page) queryParams.set('page', String(page));
       if (limit) queryParams.set('limit', String(limit));
 

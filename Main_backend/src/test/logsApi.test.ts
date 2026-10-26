@@ -75,7 +75,7 @@ describe('Centralized Logs API Suite [S4][PB17 3.1]', () => {
       { expiresIn: '1h' }
     );
 
-    // Seed test logs with diverse severity and keywords
+    // Seed test logs with diverse severity, K8s namespaces, deployments and pods
     const seedLogs = [
       {
         cluster_id: testClusterId,
@@ -84,7 +84,13 @@ describe('Centralized Logs API Suite [S4][PB17 3.1]', () => {
         message: 'Order created successfully with ID ord-101',
         source: 'k8s-agent',
         occurred_at: new Date(Date.now() - 5 * 60 * 1000), // 5m ago
-        metadata: { pod_id: 'pod-order-01', service_id: 'test-order-service' },
+        metadata: {
+          pod_id: 'pod-order-01',
+          pod_name: 'pod-order-01',
+          service_id: 'test-order-service',
+          deployment: 'test-order-service',
+          namespace: 'production',
+        },
       },
       {
         cluster_id: testClusterId,
@@ -93,7 +99,13 @@ describe('Centralized Logs API Suite [S4][PB17 3.1]', () => {
         message: 'Payment gateway latency elevated (1200ms)',
         source: 'k8s-agent',
         occurred_at: new Date(Date.now() - 3 * 60 * 1000), // 3m ago
-        metadata: { pod_id: 'pod-order-01', service_id: 'test-order-service' },
+        metadata: {
+          pod_id: 'pod-order-01',
+          pod_name: 'pod-order-01',
+          service_id: 'test-order-service',
+          deployment: 'test-order-service',
+          namespace: 'production',
+        },
       },
       {
         cluster_id: testClusterId,
@@ -102,7 +114,13 @@ describe('Centralized Logs API Suite [S4][PB17 3.1]', () => {
         message: 'Database connection failed: timeout connecting to PostgreSQL replica',
         source: 'k8s-agent',
         occurred_at: new Date(Date.now() - 1 * 60 * 1000), // 1m ago
-        metadata: { pod_id: 'pod-order-02', service_id: 'test-order-service' },
+        metadata: {
+          pod_id: 'pod-order-02',
+          pod_name: 'pod-order-02',
+          service_id: 'test-order-service',
+          deployment: 'test-order-service',
+          namespace: 'production',
+        },
       },
       {
         cluster_id: testClusterId,
@@ -111,7 +129,13 @@ describe('Centralized Logs API Suite [S4][PB17 3.1]', () => {
         message: 'Stock reservation committed for SKU-999',
         source: 'k8s-agent',
         occurred_at: new Date(Date.now() - 2 * 60 * 1000), // 2m ago
-        metadata: { pod_id: 'pod-inv-01', service_id: 'test-inventory-service' },
+        metadata: {
+          pod_id: 'pod-inv-01',
+          pod_name: 'pod-inv-01',
+          service_id: 'test-inventory-service',
+          deployment: 'test-inventory-service',
+          namespace: 'staging',
+        },
       },
     ];
 
@@ -220,5 +244,67 @@ describe('Centralized Logs API Suite [S4][PB17 3.1]', () => {
     );
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.success, false);
+  });
+
+  test('9. Filter logs by Kubernetes namespace (namespace=production)', async () => {
+    const res = await requestJson('/api/v1/telemetry/logs?namespace=production', {
+      token: validUserToken,
+    });
+    assert.strictEqual(res.status, 200);
+    const { logs } = res.body.data;
+    assert.ok(logs.length >= 3);
+    for (const log of logs) {
+      assert.strictEqual(log.namespace, 'production');
+    }
+  });
+
+  test('10. Filter logs by Kubernetes deployment (deployment=test-order-service)', async () => {
+    const res = await requestJson('/api/v1/telemetry/logs?deployment=test-order-service', {
+      token: validUserToken,
+    });
+    assert.strictEqual(res.status, 200);
+    const { logs } = res.body.data;
+    assert.ok(logs.length >= 3);
+    for (const log of logs) {
+      assert.strictEqual(log.service_name, 'test-order-service');
+    }
+  });
+
+  test('11. Filter logs by Kubernetes pod (pod=pod-order-01)', async () => {
+    const res = await requestJson('/api/v1/telemetry/logs?pod=pod-order-01', {
+      token: validUserToken,
+    });
+    assert.strictEqual(res.status, 200);
+    const { logs } = res.body.data;
+    assert.ok(logs.length >= 2);
+    for (const log of logs) {
+      assert.strictEqual(log.pod_name, 'pod-order-01');
+    }
+  });
+
+  test('12. Filter logs by combined Kubernetes filters (namespace + pod + level + time range)', async () => {
+    const res = await requestJson(
+      '/api/v1/telemetry/logs?namespace=production&pod=pod-order-01&level=WARN&range=1h',
+      {
+        token: validUserToken,
+      }
+    );
+    assert.strictEqual(res.status, 200);
+    const { logs } = res.body.data;
+    assert.strictEqual(logs.length, 1);
+    assert.strictEqual(logs[0].level, 'WARN');
+    assert.strictEqual(logs[0].namespace, 'production');
+    assert.strictEqual(logs[0].pod_name, 'pod-order-01');
+  });
+
+  test('13. Response records project namespace and pod_name attributes', async () => {
+    const res = await requestJson('/api/v1/telemetry/logs?pod=pod-inv-01', {
+      token: validUserToken,
+    });
+    assert.strictEqual(res.status, 200);
+    const { logs } = res.body.data;
+    assert.ok(logs.length >= 1);
+    assert.strictEqual(logs[0].namespace, 'staging');
+    assert.strictEqual(logs[0].pod_name, 'pod-inv-01');
   });
 });

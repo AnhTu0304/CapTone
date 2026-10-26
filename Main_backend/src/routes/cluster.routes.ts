@@ -15,6 +15,8 @@ router.get('/', requireOrgMember, ClusterController.getByOrg);
 
 router.get('/:clusterId', requireOrgMember, ClusterController.getDetail);
 
+router.get('/:clusterId/namespaces', requireOrgMember, ClusterController.getNamespaces);
+
 router.get('/:clusterId/status', requireOrgMember, ClusterController.getClusterStatus);
 
 router.post(
@@ -77,6 +79,7 @@ globalRouter.use(authenticateToken);
 globalRouter.use(requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'));
 globalRouter.get('/', ClusterController.getAll);
 globalRouter.get('/:clusterId', ClusterController.getDetail);
+globalRouter.get('/:clusterId/namespaces', ClusterController.getNamespaces);
 globalRouter.get('/:clusterId/status', ClusterController.getClusterStatus);
 globalRouter.use('/:clusterId/nodes', nodeRoutes);
 globalRouter.use('/:clusterId/pods', podRoutes);

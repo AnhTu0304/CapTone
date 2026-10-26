@@ -2,6 +2,9 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { LogsPage } from './LogsPage';
 import { telemetryService } from '../../../services/telemetryService';
+import { clusterService } from '../../../services/clusterService';
+import { deploymentService } from '../../../services/deploymentService';
+import { podService } from '../../../services/podService';
 import { maskSensitiveData, formatLogTimestamp, getLogLevelBadgeStyle } from '../../../components/dashboard/LogDetailModal';
 
 // Mock Dashboard Context
@@ -17,6 +20,32 @@ jest.mock('../../../services/telemetryService', () => ({
   telemetryService: {
     getLogs: jest.fn(),
     getApmServices: jest.fn(),
+  },
+}));
+
+// Mock K8s services
+jest.mock('../../../services/clusterService', () => ({
+  clusterService: {
+    getClusterNamespaces: jest.fn().mockResolvedValue(['default', 'kube-system', 'production']),
+    getClusterDetail: jest.fn().mockResolvedValue({ namespaces: [{ name: 'default' }, { name: 'production' }] }),
+  },
+}));
+
+jest.mock('../../../services/deploymentService', () => ({
+  deploymentService: {
+    getDeploymentsByCluster: jest.fn().mockResolvedValue([
+      { id: 'dep-order', name: 'order-service' },
+      { id: 'dep-payment', name: 'payment-service' },
+    ]),
+  },
+}));
+
+jest.mock('../../../services/podService', () => ({
+  podService: {
+    getPodsByCluster: jest.fn().mockResolvedValue([
+      { id: 'pod-1', name: 'order-service-7f89d-11', workload_name: 'order-service' },
+      { id: 'pod-2', name: 'payment-service-5a41c-22', workload_name: 'payment-service' },
+    ]),
   },
 }));
 
@@ -89,6 +118,16 @@ describe('Task [S4][PB17] 3.1 – Centralized Logs Viewer, Filters & Details Sui
       logs: sampleLogs,
       pagination: samplePagination,
     });
+    clusterService.getClusterNamespaces.mockResolvedValue(['default', 'kube-system', 'production', 'staging']);
+    clusterService.getClusterDetail.mockResolvedValue({ namespaces: [{ name: 'default' }, { name: 'production' }] });
+    deploymentService.getDeploymentsByCluster.mockResolvedValue([
+      { id: 'dep-order', name: 'order-service' },
+      { id: 'dep-payment', name: 'payment-service' },
+    ]);
+    podService.getPodsByCluster.mockResolvedValue([
+      { id: 'pod-1', name: 'order-service-7f89d-11', workload_name: 'order-service' },
+      { id: 'pod-2', name: 'payment-service-5a41c-22', workload_name: 'payment-service' },
+    ]);
   });
 
   describe('1. Log Security & Formatter Utilities', () => {
@@ -424,6 +463,122 @@ describe('Task [S4][PB17] 3.1 – Centralized Logs Viewer, Filters & Details Sui
 
       expect(navigator.clipboard.writeText).toHaveBeenCalled();
       expect(screen.getByText(/Đã sao chép!/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('7. Task [4.36] / [S4][PB17] 3.2 – Kubernetes Resource Filters (Namespace, Deployment, Pod, Time Range)', () => {
+    test('7.1. Renders Namespace, Deployment, and Pod dropdowns in filter toolbar', async () => {
+      render(<LogsPage />);
+
+      expect(screen.getByTestId('logs-namespace-select')).toBeInTheDocument();
+      expect(screen.getByTestId('logs-deployment-select')).toBeInTheDocument();
+      expect(screen.getByTestId('logs-pod-select')).toBeInTheDocument();
+    });
+
+    test('7.2. Changing namespace filter triggers API call and resets page to 1', async () => {
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(telemetryService.getLogs).toHaveBeenCalled();
+      });
+
+      const nsSelect = screen.getByTestId('logs-namespace-select');
+      fireEvent.change(nsSelect, { target: { value: 'production' } });
+
+      await waitFor(() => {
+        expect(telemetryService.getLogs).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            namespace: 'production',
+            deployment: undefined,
+            pod: undefined,
+            page: 1,
+          }),
+          expect.anything()
+        );
+      });
+    });
+
+    test('7.3. Changing deployment filter triggers API call with deployment param', async () => {
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('order-service')).toBeInTheDocument();
+      });
+
+      const depSelect = screen.getByTestId('logs-deployment-select');
+      fireEvent.change(depSelect, { target: { value: 'order-service' } });
+
+      await waitFor(() => {
+        expect(telemetryService.getLogs).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            deployment: 'order-service',
+            pod: undefined,
+            page: 1,
+          }),
+          expect.anything()
+        );
+      });
+    });
+
+    test('7.4. Changing pod filter triggers API call with pod param', async () => {
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/order-service-7f89d-11/i)).toBeInTheDocument();
+      });
+
+      const podSelect = screen.getByTestId('logs-pod-select');
+      fireEvent.change(podSelect, { target: { value: 'order-service-7f89d-11' } });
+
+      await waitFor(() => {
+        expect(telemetryService.getLogs).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            pod: 'order-service-7f89d-11',
+            page: 1,
+          }),
+          expect.anything()
+        );
+      });
+    });
+
+    test('7.5. Cascading reset: changing namespace resets deployment and pod selection', async () => {
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('order-service')).toBeInTheDocument();
+      });
+
+      // Select deployment first
+      const depSelect = screen.getByTestId('logs-deployment-select');
+      fireEvent.change(depSelect, { target: { value: 'order-service' } });
+      expect(depSelect.value).toBe('order-service');
+
+      // Now change namespace -> should reset deployment to ALL
+      const nsSelect = screen.getByTestId('logs-namespace-select');
+      fireEvent.change(nsSelect, { target: { value: 'production' } });
+
+      expect(nsSelect.value).toBe('production');
+      expect(screen.getByTestId('logs-deployment-select').value).toBe('ALL');
+      expect(screen.getByTestId('logs-pod-select').value).toBe('ALL');
+    });
+
+    test('7.6. Reset button restores Namespace, Deployment, and Pod to ALL', async () => {
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(telemetryService.getLogs).toHaveBeenCalled();
+      });
+
+      const nsSelect = screen.getByTestId('logs-namespace-select');
+      fireEvent.change(nsSelect, { target: { value: 'production' } });
+      expect(nsSelect.value).toBe('production');
+
+      const resetBtn = screen.getByTestId('logs-reset-filters-btn');
+      fireEvent.click(resetBtn);
+
+      expect(screen.getByTestId('logs-namespace-select').value).toBe('ALL');
+      expect(screen.getByTestId('logs-deployment-select').value).toBe('ALL');
+      expect(screen.getByTestId('logs-pod-select').value).toBe('ALL');
     });
   });
 });

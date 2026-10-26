@@ -84,11 +84,17 @@ export type EvaluateServiceBody = z.infer<typeof EvaluateServiceBodySchema>;
 export type GetMetricsHistoryQuery = z.infer<typeof GetMetricsHistoryQuerySchema>;
 
 /**
- * Validation schema cho API truy vấn logs tập trung (Task [S4][PB17] 3.1)
+ * Validation schema cho API truy vấn logs tập trung & K8s filters (Task [S4][PB17] 3.1 & 3.2 / [4.36])
  */
 export const GetLogsQuerySchema = z
   .object({
     service_id: z.string().trim().max(100).optional(),
+    namespace: z.string().trim().max(255).optional(),
+    namespace_id: z.string().trim().max(255).optional(),
+    deployment: z.string().trim().max(255).optional(),
+    deployment_id: z.string().trim().max(255).optional(),
+    pod: z.string().trim().max(255).optional(),
+    pod_id: z.string().trim().max(255).optional(),
     level: z.string().trim().max(50).optional(),
     search: z.string().trim().max(255).optional(),
     range: z.enum(['15m', '1h', '24h', '7d']).optional(),

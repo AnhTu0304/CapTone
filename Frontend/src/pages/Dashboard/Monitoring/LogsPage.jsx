@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { telemetryService } from '../../../services/telemetryService';
+import { clusterService } from '../../../services/clusterService';
+import { deploymentService } from '../../../services/deploymentService';
+import { podService } from '../../../services/podService';
 import { LogDetailModal, getLogLevelBadgeStyle, formatLogTimestamp, maskSensitiveData } from '../../../components/dashboard/LogDetailModal';
 import {
   Terminal,
@@ -25,6 +28,9 @@ export const LogsPage = () => {
   // Filter States
   const [selectedLevel, setSelectedLevel] = useState('all');
   const [selectedService, setSelectedService] = useState('all');
+  const [selectedNamespace, setSelectedNamespace] = useState('ALL');
+  const [selectedDeployment, setSelectedDeployment] = useState('ALL');
+  const [selectedPod, setSelectedPod] = useState('ALL');
   const [selectedRange, setSelectedRange] = useState('1h');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -37,6 +43,11 @@ export const LogsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const [servicesList, setServicesList] = useState([]);
+
+  // K8s Resources States
+  const [namespacesList, setNamespacesList] = useState(['default', 'kube-system', 'production', 'staging']);
+  const [deploymentsList, setDeploymentsList] = useState([]);
+  const [podsList, setPodsList] = useState([]);
 
   // UX & Live Streaming Controls
   const [isLive, setIsLive] = useState(false);
@@ -75,6 +86,77 @@ export const LogsPage = () => {
     };
   }, []);
 
+  // [4.36] Load Cluster Namespaces
+  useEffect(() => {
+    let isMounted = true;
+    const clusterId = currentEnv?.clusterId || currentEnv?.id;
+    if (!clusterId || clusterId === 'k8s-cluster-01') {
+      setNamespacesList(['default', 'kube-system', 'production', 'staging']);
+      return;
+    }
+    (async () => {
+      try {
+        const ns = await Promise.resolve(clusterService?.getClusterNamespaces?.(clusterId, currentOrg?.id)).catch(() => []);
+        if (isMounted && Array.isArray(ns) && ns.length > 0) {
+          setNamespacesList(ns.map((n) => (typeof n === 'string' ? n : n.name || n.id)));
+        } else if (isMounted) {
+          setNamespacesList(['default', 'kube-system', 'production', 'staging']);
+        }
+      } catch (err) {
+        console.warn('[LogsPage] Could not load namespaces:', err.message);
+        if (isMounted) setNamespacesList(['default', 'kube-system', 'production', 'staging']);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentOrg?.id, currentEnv?.clusterId, currentEnv?.id]);
+
+  // [4.36] Load Deployments & Pods based on selected Namespace
+  useEffect(() => {
+    let isMounted = true;
+    const clusterId = currentEnv?.clusterId || currentEnv?.id;
+    if (!clusterId || clusterId === 'k8s-cluster-01') return;
+
+    (async () => {
+      try {
+        const [deps, pods] = await Promise.all([
+          Promise.resolve(
+            deploymentService?.getDeploymentsByCluster?.(clusterId, {
+              orgId: currentOrg?.id,
+              namespace: selectedNamespace !== 'ALL' ? selectedNamespace : undefined,
+            })
+          ).catch(() => []),
+          Promise.resolve(
+            podService?.getPodsByCluster?.(clusterId, {
+              orgId: currentOrg?.id,
+              namespace: selectedNamespace !== 'ALL' ? selectedNamespace : undefined,
+            })
+          ).catch(() => []),
+        ]);
+        if (isMounted) {
+          if (Array.isArray(deps)) setDeploymentsList(deps);
+          if (Array.isArray(pods)) setPodsList(pods);
+        }
+      } catch (err) {
+        console.warn('[LogsPage] Could not load K8s resources:', err.message);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentOrg?.id, currentEnv?.clusterId, currentEnv?.id, selectedNamespace]);
+
+  // [4.36] Filter pods by selected deployment
+  const filteredPodsList = useMemo(() => {
+    if (selectedDeployment === 'ALL') return podsList;
+    return podsList.filter((p) => {
+      const pName = p.name || '';
+      const wName = p.workload_name || p.workload || p.deployment_name || '';
+      return wName === selectedDeployment || pName.startsWith(selectedDeployment);
+    });
+  }, [podsList, selectedDeployment]);
+
   // Fetch logs with race condition prevention
   const fetchLogs = useCallback(
     async (silent = false) => {
@@ -95,8 +177,12 @@ export const LogsPage = () => {
           {
             level: selectedLevel,
             serviceId: selectedService,
+            namespace: selectedNamespace !== 'ALL' ? selectedNamespace : undefined,
+            deployment: selectedDeployment !== 'ALL' ? selectedDeployment : undefined,
+            pod: selectedPod !== 'ALL' ? selectedPod : undefined,
             range: selectedRange,
             search: debouncedSearch,
+            clusterId: currentEnv?.clusterId || currentEnv?.id,
             page,
             limit,
           },
@@ -128,7 +214,19 @@ export const LogsPage = () => {
         }
       }
     },
-    [selectedLevel, selectedService, selectedRange, debouncedSearch, page, limit]
+    [
+      selectedLevel,
+      selectedService,
+      selectedNamespace,
+      selectedDeployment,
+      selectedPod,
+      selectedRange,
+      debouncedSearch,
+      page,
+      limit,
+      currentEnv?.clusterId,
+      currentEnv?.id,
+    ]
   );
 
   // Trigger fetch when filters or pagination change
@@ -169,6 +267,24 @@ export const LogsPage = () => {
     setPage(1);
   };
 
+  const handleNamespaceChange = (e) => {
+    setSelectedNamespace(e.target.value);
+    setSelectedDeployment('ALL');
+    setSelectedPod('ALL');
+    setPage(1);
+  };
+
+  const handleDeploymentChange = (e) => {
+    setSelectedDeployment(e.target.value);
+    setSelectedPod('ALL');
+    setPage(1);
+  };
+
+  const handlePodChange = (e) => {
+    setSelectedPod(e.target.value);
+    setPage(1);
+  };
+
   const handleRangeChange = (e) => {
     setSelectedRange(e.target.value);
     setPage(1);
@@ -177,6 +293,9 @@ export const LogsPage = () => {
   const handleResetFilters = () => {
     setSelectedLevel('all');
     setSelectedService('all');
+    setSelectedNamespace('ALL');
+    setSelectedDeployment('ALL');
+    setSelectedPod('ALL');
     setSelectedRange('1h');
     setSearchQuery('');
     setDebouncedSearch('');
@@ -214,6 +333,9 @@ export const LogsPage = () => {
   const hasActiveFilters =
     selectedLevel !== 'all' ||
     selectedService !== 'all' ||
+    selectedNamespace !== 'ALL' ||
+    selectedDeployment !== 'ALL' ||
+    selectedPod !== 'ALL' ||
     selectedRange !== '1h' ||
     searchQuery.trim().length > 0;
 
@@ -344,6 +466,95 @@ export const LogsPage = () => {
         }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+          {/* Namespace Filter [4.36] */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Namespace:</span>
+            <select
+              data-testid="logs-namespace-select"
+              value={selectedNamespace}
+              onChange={handleNamespaceChange}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-sm)',
+                backgroundColor: '#FFFFFF',
+                color: 'var(--dash-text-primary)',
+              }}
+            >
+              <option value="ALL">Tất cả Namespaces</option>
+              {namespacesList.map((ns) => {
+                const name = typeof ns === 'string' ? ns : ns.name || ns.id;
+                return (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Deployment Filter [4.36] */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Deployment:</span>
+            <select
+              data-testid="logs-deployment-select"
+              value={selectedDeployment}
+              onChange={handleDeploymentChange}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-sm)',
+                backgroundColor: '#FFFFFF',
+                color: 'var(--dash-text-primary)',
+                maxWidth: '180px',
+              }}
+            >
+              <option value="ALL">Tất cả Deployments</option>
+              {deploymentsList.map((dep) => {
+                const name = dep.name || dep.id;
+                return (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Pod Filter [4.36] */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Pod:</span>
+            <select
+              data-testid="logs-pod-select"
+              value={selectedPod}
+              onChange={handlePodChange}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-sm)',
+                backgroundColor: '#FFFFFF',
+                color: 'var(--dash-text-primary)',
+                maxWidth: '180px',
+              }}
+            >
+              <option value="ALL">Tất cả Pods ({filteredPodsList.length})</option>
+              {filteredPodsList.map((pod) => {
+                const name = pod.name || pod.id;
+                return (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
           {/* Level Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Cấp độ:</span>
@@ -701,7 +912,7 @@ export const LogsPage = () => {
                     {item.level || 'INFO'}
                   </span>
                   <span style={{ color: '#38BDF8', flexShrink: 0 }}>
-                    [{svcName}/{podName}]
+                    [{item.namespace ? `${item.namespace}/` : ''}{svcName}/{item.pod_name || podName}]
                   </span>
                   <span
                     style={{

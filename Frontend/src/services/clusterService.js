@@ -67,6 +67,31 @@ export const clusterService = {
   },
 
   /**
+   * Lấy danh sách Namespaces của cụm Kubernetes (Task [S4][PB17] 3.2 / [4.36])
+   * @param {string} clusterId 
+   * @param {string} [orgId] 
+   * @returns {Promise<Array>}
+   */
+  async getClusterNamespaces(clusterId, orgId) {
+    if (!clusterId) return [];
+    try {
+      if (orgId && !orgId.startsWith('org-')) {
+        try {
+          const res = await request(`/organizations/${orgId}/clusters/${clusterId}/namespaces`);
+          if (res?.success && Array.isArray(res.data)) return res.data;
+        } catch (_) {}
+      }
+      const res = await request(`/clusters/${clusterId}/namespaces`);
+      if (res?.success && Array.isArray(res.data)) return res.data;
+      const detail = await this.getClusterDetail(clusterId, orgId);
+      return detail?.namespaces || [];
+    } catch (err) {
+      console.warn(`[clusterService] Lỗi lấy danh sách namespaces của cụm ${clusterId}:`, err.message);
+      return [];
+    }
+  },
+
+  /**
    * Lấy tổng quan trạng thái Cụm Kubernetes (Nodes, Pods, Deployments, Freshness)
    * Tuyến đường Task 5.2: /organizations/:orgId/clusters/:clusterId/status
    * @param {string} clusterId 

@@ -16,6 +16,9 @@ export interface ILog {
 
 export interface ILogQueryOptions {
   serviceId?: string | null;
+  namespace?: string | null;
+  deployment?: string | null;
+  pod?: string | null;
   level?: string | null;
   search?: string | null;
   startTime?: Date | null;
@@ -28,9 +31,11 @@ export interface ILogQueryOptions {
 export interface ILogItem {
   id: string | number;
   cluster_id: string | null;
+  namespace?: string | null;
   service_id: string | null;
   service_name: string | null;
   pod_id: string | null;
+  pod_name?: string | null;
   trace_id: string | null;
   level: string;
   message: string;
@@ -56,15 +61,22 @@ export class LogModel {
   public static async create(log: ILog): Promise<{ id: string | number }> {
     const query = `
       INSERT INTO logs (
-        cluster_id, service_id, level, message, source, occurred_at, metadata
+        cluster_id, namespace_id, service_id, pod_id, level, message, source, occurred_at, metadata
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7
+        $1, $2, $3, $4, $5, $6, $7, $8, $9
       ) RETURNING id;
     `;
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let validClusterUuid: string | null = null;
     let validServiceUuid: string | null = null;
+    let validNamespaceUuid: string | null = null;
+    let validPodUuid: string | null = null;
     let metadataObj = log.metadata || {};
+
+    if (log.cluster_id && uuidRegex.test(log.cluster_id)) {
+      validClusterUuid = log.cluster_id;
+    }
 
     if (log.service_id) {
       if (uuidRegex.test(log.service_id)) {
@@ -74,9 +86,27 @@ export class LogModel {
       }
     }
 
+    if (log.namespace_id) {
+      if (uuidRegex.test(log.namespace_id)) {
+        validNamespaceUuid = log.namespace_id;
+      } else if (!metadataObj.namespace) {
+        metadataObj = { ...metadataObj, namespace: log.namespace_id };
+      }
+    }
+
+    if (log.pod_id) {
+      if (uuidRegex.test(log.pod_id)) {
+        validPodUuid = log.pod_id;
+      } else if (!metadataObj.pod_id && !metadataObj.pod_name) {
+        metadataObj = { ...metadataObj, pod_id: log.pod_id, pod_name: log.pod_id };
+      }
+    }
+
     const res = await pool.query(query, [
-      log.cluster_id,
+      validClusterUuid,
+      validNamespaceUuid,
       validServiceUuid,
+      validPodUuid,
       log.level.toUpperCase(),
       log.message,
       log.source || 'k8s-agent',
@@ -113,7 +143,7 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
+          OR service_id::text = $1 OR service_id IN (SELECT id FROM workloads WHERE name = $1)
         )
         AND occurred_at >= NOW() - ($2 || ' minutes')::interval
       )
@@ -141,6 +171,7 @@ export class LogModel {
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     if (options.level && options.level.toUpperCase() !== 'ALL') {
       conditions.push(`l.level = $${paramIdx++}`);
@@ -148,7 +179,7 @@ export class LogModel {
     }
 
     if (options.serviceId && options.serviceId !== 'all') {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.serviceId);
+      const isUuid = uuidRegex.test(options.serviceId);
       if (isUuid) {
         conditions.push(`(
           l.service_id = $${paramIdx} 
@@ -165,11 +196,80 @@ export class LogModel {
       paramIdx++;
     }
 
+    // [4.36] Filter by Namespace
+    if (options.namespace && options.namespace.toUpperCase() !== 'ALL') {
+      const ns = options.namespace.trim();
+      const isUuid = uuidRegex.test(ns);
+      if (isUuid) {
+        conditions.push(`(
+          l.namespace_id = $${paramIdx}
+          OR l.metadata->>'namespace' = $${paramIdx}
+          OR l.metadata->>'namespace_id' = $${paramIdx}
+          OR l.pod_id IN (SELECT id FROM pods WHERE namespace_id = $${paramIdx})
+        )`);
+      } else {
+        conditions.push(`(
+          l.namespace_id IN (SELECT id FROM namespaces WHERE name = $${paramIdx})
+          OR l.metadata->>'namespace' = $${paramIdx}
+          OR l.metadata->>'namespace_id' = $${paramIdx}
+          OR l.pod_id IN (SELECT p.id FROM pods p JOIN namespaces ns ON p.namespace_id = ns.id WHERE ns.name = $${paramIdx})
+        )`);
+      }
+      params.push(ns);
+      paramIdx++;
+    }
+
+    // [4.36] Filter by Deployment (Workload)
+    if (options.deployment && options.deployment.toUpperCase() !== 'ALL') {
+      const dep = options.deployment.trim();
+      const isUuid = uuidRegex.test(dep);
+      if (isUuid) {
+        conditions.push(`(
+          l.service_id = $${paramIdx}
+          OR l.metadata->>'service_id' = $${paramIdx}
+          OR l.metadata->>'deployment' = $${paramIdx}
+          OR l.pod_id IN (SELECT id FROM pods WHERE workload_id = $${paramIdx})
+        )`);
+      } else {
+        conditions.push(`(
+          l.metadata->>'service_id' = $${paramIdx}
+          OR l.metadata->>'deployment' = $${paramIdx}
+          OR l.metadata->>'workload' = $${paramIdx}
+          OR l.service_id IN (SELECT id FROM workloads WHERE name = $${paramIdx})
+          OR l.pod_id IN (SELECT p.id FROM pods p JOIN workloads w ON p.workload_id = w.id WHERE w.name = $${paramIdx})
+        )`);
+      }
+      params.push(dep);
+      paramIdx++;
+    }
+
+    // [4.36] Filter by Pod
+    if (options.pod && options.pod.toUpperCase() !== 'ALL') {
+      const pod = options.pod.trim();
+      const isUuid = uuidRegex.test(pod);
+      if (isUuid) {
+        conditions.push(`(
+          l.pod_id = $${paramIdx}
+          OR l.metadata->>'pod_id' = $${paramIdx}
+          OR l.metadata->>'pod_name' = $${paramIdx}
+        )`);
+      } else {
+        conditions.push(`(
+          l.metadata->>'pod_id' = $${paramIdx}
+          OR l.metadata->>'pod_name' = $${paramIdx}
+          OR l.pod_id IN (SELECT id FROM pods WHERE name = $${paramIdx})
+        )`);
+      }
+      params.push(pod);
+      paramIdx++;
+    }
+
     if (options.search && options.search.trim()) {
       const term = `%${options.search.trim()}%`;
       conditions.push(`(
         l.message ILIKE $${paramIdx} 
         OR l.metadata->>'pod_id' ILIKE $${paramIdx}
+        OR l.metadata->>'pod_name' ILIKE $${paramIdx}
         OR l.metadata->>'service_id' ILIKE $${paramIdx}
         OR l.source ILIKE $${paramIdx}
       )`);
@@ -188,7 +288,7 @@ export class LogModel {
     }
 
     if (options.clusterId) {
-      conditions.push(`l.cluster_id = $${paramIdx++}`);
+      conditions.push(`l.cluster_id::text = $${paramIdx++}`);
       params.push(options.clusterId);
     }
 
@@ -203,15 +303,18 @@ export class LogModel {
     const countRes = await pool.query(countQuery, params);
     const total = Number(countRes.rows[0]?.total || 0);
 
-    // 2. Fetch paginated records with readable service_name
+    // 2. Fetch paginated records with readable service_name, pod_name, and namespace
     const dataParams = [...params, limit, offset];
     const dataQuery = `
       SELECT 
         l.id,
         l.cluster_id,
+        l.namespace_id,
+        COALESCE(ns.name, l.metadata->>'namespace', 'default') as namespace,
         l.service_id,
         COALESCE(s.name, w.name, l.metadata->>'service_id', l.service_id::text) as service_name,
         COALESCE(l.pod_id::text, l.metadata->>'pod_id') as pod_id,
+        COALESCE(p.name, l.metadata->>'pod_name', l.pod_id::text, 'unknown-pod') as pod_name,
         l.trace_id,
         l.level,
         l.message,
@@ -221,6 +324,8 @@ export class LogModel {
       FROM logs l
       LEFT JOIN services s ON l.service_id = s.id
       LEFT JOIN workloads w ON l.service_id = w.id
+      LEFT JOIN namespaces ns ON l.namespace_id = ns.id
+      LEFT JOIN pods p ON l.pod_id = p.id
       ${whereClause}
       ORDER BY l.occurred_at DESC, l.id DESC
       LIMIT $${paramIdx++} OFFSET $${paramIdx++};
@@ -229,10 +334,12 @@ export class LogModel {
     const dataRes = await pool.query(dataQuery, dataParams);
     const logs: ILogItem[] = dataRes.rows.map((row) => ({
       id: String(row.id),
-      cluster_id: row.cluster_id,
-      service_id: row.service_id,
+      cluster_id: row.cluster_id ? String(row.cluster_id) : null,
+      namespace: row.namespace || 'default',
+      service_id: row.service_id ? String(row.service_id) : null,
       service_name: row.service_name || row.service_id || 'unknown',
       pod_id: row.pod_id,
+      pod_name: row.pod_name || row.pod_id || 'unknown-pod',
       trace_id: row.trace_id,
       level: row.level,
       message: row.message,

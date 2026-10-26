@@ -231,6 +231,15 @@ export const LogDetailModal = ({ log, onClose }) => {
 
             <div>
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Layers size={12} /> Namespace:
+              </span>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#7C3AED', fontFamily: 'var(--font-mono)' }}>
+                {log.namespace || log.metadata?.namespace || 'default'}
+              </span>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Server size={12} /> Dịch vụ (Service):
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0284C7' }}>
@@ -243,7 +252,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                 <Box size={12} /> Pod ID / Container:
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155', fontFamily: 'var(--font-mono)' }}>
-                {log.pod_id || log.pod || 'Chưa gán'}
+                {log.pod_name || log.pod_id || log.pod || 'Chưa gán'}
               </span>
             </div>
 
