@@ -234,6 +234,57 @@ export const telemetryService = {
   /**
    * Fetch historical APM metrics with range (1h, 24h, 7d), pagination, and cursor (Task [S4][PB16] 2.3)
    */
+  /**
+   * Fetch centralized logs with filters (level, serviceId, search, time range) and pagination (Task [S4][PB17] 3.1)
+   */
+  async getLogs(params = {}, options = {}) {
+    try {
+      const {
+        serviceId,
+        level,
+        search,
+        range,
+        startTime,
+        endTime,
+        clusterId,
+        page = 1,
+        limit = 50,
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (serviceId && serviceId !== 'all') queryParams.set('service_id', serviceId);
+      if (level && level !== 'all') queryParams.set('level', level);
+      if (search && search.trim()) queryParams.set('search', search.trim());
+      if (range && range !== 'all') queryParams.set('range', range);
+      if (startTime) queryParams.set('start_time', startTime);
+      if (endTime) queryParams.set('end_time', endTime);
+      if (clusterId) queryParams.set('cluster_id', clusterId);
+      if (page) queryParams.set('page', String(page));
+      if (limit) queryParams.set('limit', String(limit));
+
+      const qs = queryParams.toString();
+      const url = `${API_BASE_URL}/telemetry/logs${qs ? `?${qs}` : ''}`;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      return json.data || { logs: [], pagination: { total: 0, page: 1, limit, totalPages: 1 } };
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getLogs error:', err.message);
+      throw err;
+    }
+  },
+
   async getMetricsHistory(params = {}, options = {}) {
     try {
       const {

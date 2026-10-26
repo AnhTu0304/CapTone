@@ -33,7 +33,8 @@
     "test:agent-disconnect": "tsx --test src/test/agentDisconnectDelete.test.ts",
     "test:node-metrics": "tsx --test src/test/nodeMetricsApi.test.ts",
     "test:k8s-status": "tsx --test src/test/k8sStatusApi.test.ts",
-    "benchmark:node-metrics": "tsx src/scripts/benchmarkNodeMetricsTask44.ts"
+    "benchmark:node-metrics": "tsx src/scripts/benchmarkNodeMetricsTask44.ts",
+    "test:logs": "tsx --test src/test/logsApi.test.ts"
   },
   "keywords": [
     "nodejs",

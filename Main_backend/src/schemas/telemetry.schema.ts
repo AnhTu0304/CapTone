@@ -82,3 +82,41 @@ export type GetServiceSequenceQuery = z.infer<typeof GetServiceSequenceQuerySche
 export type GetRcaContextQuery = z.infer<typeof GetRcaContextQuerySchema>;
 export type EvaluateServiceBody = z.infer<typeof EvaluateServiceBodySchema>;
 export type GetMetricsHistoryQuery = z.infer<typeof GetMetricsHistoryQuerySchema>;
+
+/**
+ * Validation schema cho API truy vấn logs tập trung (Task [S4][PB17] 3.1)
+ */
+export const GetLogsQuerySchema = z
+  .object({
+    service_id: z.string().trim().max(100).optional(),
+    level: z.string().trim().max(50).optional(),
+    search: z.string().trim().max(255).optional(),
+    range: z.enum(['15m', '1h', '24h', '7d']).optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+    start_time: z.string().optional(),
+    end_time: z.string().optional(),
+    cluster_id: z.string().trim().max(100).optional(),
+    page: z.coerce.number().int().min(1).default(1).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50).optional(),
+  })
+  .refine(
+    (data) => {
+      const startStr = data.from || data.start_time;
+      const endStr = data.to || data.end_time;
+      if (startStr && endStr) {
+        const startMs = new Date(startStr).getTime();
+        const endMs = new Date(endStr).getTime();
+        if (!isNaN(startMs) && !isNaN(endMs) && startMs > endMs) {
+          return false;
+        }
+      }
+      return true;
+    },
+    {
+      message: 'Thời gian bắt đầu (start_time/from) không được lớn hơn thời gian kết thúc (end_time/to)',
+      path: ['start_time'],
+    }
+  );
+
+export type GetLogsQuery = z.infer<typeof GetLogsQuerySchema>;

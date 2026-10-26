@@ -8,8 +8,10 @@ import {
   GetRcaContextQuerySchema,
   EvaluateServiceBodySchema,
   GetMetricsHistoryQuerySchema,
+  GetLogsQuerySchema,
 } from '../schemas/telemetry.schema';
 import { MetricModel } from '../models/metric.model';
+import { LogModel } from '../models/log.model';
 
 export class TelemetryController {
   /**
@@ -341,6 +343,89 @@ export class TelemetryController {
         result,
         200
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/telemetry/logs
+   * Centralized logs querying with level, service, search and time range filters
+   */
+  public static async getLogs(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const parsedQuery = GetLogsQuerySchema.safeParse(req.query);
+
+      if (!parsedQuery.success) {
+        return ApiResponse.error(
+          res,
+          'Validation failed: Invalid query parameters for logs query',
+          400,
+          parsedQuery.error.format()
+        );
+      }
+
+      const {
+        service_id,
+        level,
+        search,
+        range,
+        from,
+        to,
+        start_time,
+        end_time,
+        cluster_id,
+        page = 1,
+        limit = 50,
+      } = parsedQuery.data;
+
+      let computedStartTime: Date | undefined;
+      let computedEndTime: Date | undefined;
+
+      const rawFrom = from || start_time;
+      const rawTo = to || end_time;
+
+      if (rawFrom) {
+        const d = new Date(rawFrom);
+        if (!isNaN(d.getTime())) computedStartTime = d;
+      }
+      if (rawTo) {
+        const d = new Date(rawTo);
+        if (!isNaN(d.getTime())) computedEndTime = d;
+      }
+
+      if (!computedStartTime && range) {
+        const now = Date.now();
+        const durationMap: Record<string, number> = {
+          '15m': 15 * 60 * 1000,
+          '1h': 60 * 60 * 1000,
+          '24h': 24 * 60 * 60 * 1000,
+          '7d': 7 * 24 * 60 * 60 * 1000,
+        };
+        const duration = durationMap[range];
+        if (duration) {
+          computedStartTime = new Date(now - duration);
+        }
+      }
+
+      const offset = (page - 1) * limit;
+
+      const result = await LogModel.queryLogs({
+        serviceId: service_id,
+        level,
+        search,
+        startTime: computedStartTime,
+        endTime: computedEndTime,
+        clusterId: cluster_id,
+        limit,
+        offset,
+      });
+
+      return ApiResponse.success(res, `Retrieved ${result.logs.length} logs successfully`, result, 200);
     } catch (error) {
       next(error);
     }

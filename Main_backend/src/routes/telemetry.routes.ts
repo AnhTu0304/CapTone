@@ -49,6 +49,15 @@ telemetryRoutes.get(
   TelemetryController.getMetricsHistory
 );
 
+// GET /api/v1/telemetry/logs
+// Centralized logs querying with severity, service, search and time filters (Task [S4][PB17] 3.1)
+telemetryRoutes.get(
+  '/logs',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getLogs
+);
+
 // GET /api/v1/telemetry/services/:serviceId/metrics-history
 telemetryRoutes.get(
   '/services/:serviceId/metrics-history',
