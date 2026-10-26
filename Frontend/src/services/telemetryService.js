@@ -306,6 +306,7 @@ export const telemetryService = {
       deployment,
       pod,
       level,
+      search,
       clusterId,
       tail = 20,
     } = params;
@@ -316,6 +317,7 @@ export const telemetryService = {
     if (deployment && deployment !== 'all' && deployment !== 'ALL') queryParams.set('deployment', deployment);
     if (pod && pod !== 'all' && pod !== 'ALL') queryParams.set('pod', pod);
     if (level && level !== 'all' && level !== 'ALL') queryParams.set('level', level);
+    if (search && search.trim()) queryParams.set('search', search.trim());
     if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
     if (tail !== undefined && tail !== null) queryParams.set('tail', String(tail));
 

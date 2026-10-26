@@ -317,4 +317,53 @@ describe('Real-Time Log Streaming & Load Limits Suite [S4][PB17] 3.3', () => {
     const countsAfter = LogStreamService.getActiveCounts();
     assert.strictEqual(countsAfter.global, 0);
   });
+
+  test('11. Stream filters incoming logs by dynamic search keyword (?search=...) [S4][PB17] 3.4', async () => {
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/v1/telemetry/logs/stream?tail=0&search=DatabaseTimeout`, {
+      headers: { Authorization: `Bearer ${validUserToken}` },
+      signal: controller.signal,
+    });
+
+    assert.ok(res.body);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    // 1. Emit non-matching log
+    setTimeout(() => {
+      LogStreamService.emitLog({
+        id: 'non-matching-log-1',
+        service_id: 'test-svc',
+        level: 'INFO',
+        message: 'Normal query executed in 12ms',
+        occurred_at: new Date().toISOString(),
+      });
+
+      // 2. Emit matching log
+      setTimeout(() => {
+        LogStreamService.emitLog({
+          id: 'matching-log-2',
+          service_id: 'test-svc',
+          level: 'ERROR',
+          message: 'Critical error: DatabaseTimeout occurred after 30000ms',
+          occurred_at: new Date().toISOString(),
+        });
+      }, 30);
+    }, 30);
+
+    let receivedData = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      receivedData += decoder.decode(value, { stream: true });
+      if (receivedData.includes('DatabaseTimeout occurred')) {
+        break;
+      }
+    }
+
+    controller.abort();
+
+    assert.ok(!receivedData.includes('Normal query executed'));
+    assert.ok(receivedData.includes('Critical error: DatabaseTimeout occurred after 30000ms'));
+  });
 });

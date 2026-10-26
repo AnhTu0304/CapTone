@@ -680,4 +680,292 @@ describe('Task [S4][PB17] 3.1 – Centralized Logs Viewer, Filters & Details Sui
       expect(mockUnsubscribe).toHaveBeenCalled();
     });
   });
+
+  describe('9. Task [S4][PB17] 3.4 – Terminal UI, Dynamic Search & Load More Logs Suite', () => {
+    let mockUnsubscribe;
+    let streamCallback;
+
+    beforeEach(() => {
+      mockUnsubscribe = jest.fn();
+      telemetryService.streamLogs = jest.fn().mockImplementation((params, onEvent, onError) => {
+        streamCallback = onEvent;
+        return mockUnsubscribe;
+      });
+      telemetryService.getLogs.mockResolvedValue({
+        logs: sampleLogs,
+        pagination: { total: 3, page: 1, limit: 50, totalPages: 1 },
+      });
+    });
+
+    test('9.1. Renders multiline log messages safely as plain text with pre-wrap formatting', async () => {
+      const multilineLog = {
+        id: 'multi-log-01',
+        service_id: 'order-service',
+        service_name: 'order-service',
+        pod_id: 'order-pod-1',
+        level: 'ERROR',
+        message: 'Exception in thread "main" java.lang.NullPointerException\n\tat com.aegis.Order.process(Order.java:42)\n\tat <script>alert("xss")</script>',
+        occurred_at: '2026-10-26T14:00:00.000Z',
+      };
+
+      telemetryService.getLogs.mockResolvedValueOnce({
+        logs: [multilineLog],
+        pagination: { total: 1, page: 1, limit: 50, totalPages: 1 },
+      });
+
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('log-msg-multi-log-01')).toBeInTheDocument();
+      });
+
+      const msgElement = screen.getByTestId('log-msg-multi-log-01');
+      expect(msgElement.textContent).toContain('Exception in thread "main"');
+      expect(msgElement.textContent).toContain('at com.aegis.Order.process(Order.java:42)');
+      expect(msgElement.textContent).toContain('<script>alert("xss")</script>');
+      // Rendered as plain text, not executable HTML
+      expect(msgElement.querySelector('script')).toBeNull();
+      expect(msgElement).toHaveStyle({ whiteSpace: 'pre-wrap' });
+    });
+
+    test('9.2. Stale search responses are discarded when newer search finishes first', async () => {
+      jest.useFakeTimers();
+      let resolveFirstSearch;
+      let resolveSecondSearch;
+
+      // 1. Initial mount fetch
+      telemetryService.getLogs.mockResolvedValueOnce({
+        logs: sampleLogs,
+        pagination: { total: 3, page: 1, limit: 50, totalPages: 1 },
+      });
+
+      // 2. Slow search (query A)
+      telemetryService.getLogs.mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirstSearch = resolve;
+      }));
+
+      // 3. Fast search (query B)
+      telemetryService.getLogs.mockImplementationOnce(() => new Promise((resolve) => {
+        resolveSecondSearch = resolve;
+      }));
+
+      render(<LogsPage />);
+
+      // Let initial mount settle
+      act(() => {
+        jest.advanceTimersByTime(10);
+      });
+
+      const searchInput = screen.getByTestId('logs-search-input');
+
+      // First search keyword (slow)
+      fireEvent.change(searchInput, { target: { value: 'slow-query' } });
+      act(() => {
+        jest.advanceTimersByTime(300);
+      });
+
+      // Second search keyword typed shortly after (fast)
+      fireEvent.change(searchInput, { target: { value: 'fast-query' } });
+      act(() => {
+        jest.advanceTimersByTime(300);
+      });
+
+      // Second search finishes first
+      await act(async () => {
+        resolveSecondSearch({
+          logs: [{ id: 'fast-1', message: 'Fast query result', level: 'INFO', occurred_at: '2026-10-26T15:00:00Z' }],
+          pagination: { total: 1, page: 1, limit: 50, totalPages: 1 },
+        });
+      });
+
+      expect(screen.getByText(/Fast query result/i)).toBeInTheDocument();
+
+      // Slow (stale) search finishes later
+      await act(async () => {
+        resolveFirstSearch({
+          logs: [{ id: 'slow-1', message: 'Stale slow query result', level: 'WARN', occurred_at: '2026-10-26T14:00:00Z' }],
+          pagination: { total: 1, page: 1, limit: 50, totalPages: 1 },
+        });
+      });
+
+      // Stale response must NOT overwrite the latest result
+      expect(screen.queryByText(/Stale slow query result/i)).toBeNull();
+      expect(screen.getByText(/Fast query result/i)).toBeInTheDocument();
+      jest.useRealTimers();
+    });
+
+    test('9.3. Combines search input with namespace and deployment filters and resets to page 1', async () => {
+      jest.useFakeTimers();
+      render(<LogsPage />);
+
+      await act(async () => {
+        jest.advanceTimersByTime(300);
+      });
+
+      // Select namespace
+      const nsSelect = screen.getByTestId('logs-namespace-select');
+      fireEvent.change(nsSelect, { target: { value: 'production' } });
+
+      // Type search term
+      const searchInput = screen.getByTestId('logs-search-input');
+      fireEvent.change(searchInput, { target: { value: 'crashloop' } });
+
+      act(() => {
+        jest.advanceTimersByTime(300);
+      });
+
+      expect(telemetryService.getLogs).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          namespace: 'production',
+          search: 'crashloop',
+          page: 1,
+        }),
+        expect.anything()
+      );
+      jest.useRealTimers();
+    });
+
+    test('9.4. Load More button fetches next page and appends older logs without duplicates', async () => {
+      telemetryService.getLogs
+        .mockResolvedValueOnce({
+          logs: [sampleLogs[0]],
+          pagination: { total: 2, page: 1, limit: 1, totalPages: 2 },
+        })
+        .mockResolvedValueOnce({
+          logs: [sampleLogs[1]],
+          pagination: { total: 2, page: 2, limit: 1, totalPages: 2 },
+        });
+
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Scraping target kubelet metrics completed in 14ms/i)).toBeInTheDocument();
+      });
+
+      const loadMoreBtn = screen.getByTestId('logs-load-more-btn');
+      expect(loadMoreBtn).toBeInTheDocument();
+      expect(loadMoreBtn).toHaveTextContent(/Tải thêm nhật ký cũ hơn/i);
+
+      fireEvent.click(loadMoreBtn);
+
+      await waitFor(() => {
+        expect(telemetryService.getLogs).toHaveBeenCalledWith(
+          expect.objectContaining({ page: 2 }),
+          expect.anything()
+        );
+        expect(screen.getByText(/Connection pool approaching threshold/i)).toBeInTheDocument();
+      });
+
+      // Both log rows are present (appended together)
+      expect(screen.getByText(/Scraping target kubelet metrics completed in 14ms/i)).toBeInTheDocument();
+      expect(screen.getByText(/Connection pool approaching threshold/i)).toBeInTheDocument();
+    });
+
+    test('9.5. End of history indicator is rendered when all pages are loaded', async () => {
+      telemetryService.getLogs.mockResolvedValueOnce({
+        logs: [sampleLogs[0]],
+        pagination: { total: 1, page: 1, limit: 50, totalPages: 1 },
+      });
+
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('logs-end-of-history')).toBeInTheDocument();
+        expect(screen.getByText(/Đã tải toàn bộ lịch sử \(1 bản ghi\)/i)).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId('logs-load-more-btn')).toBeNull();
+    });
+
+    test('9.6. Real-time stream deduplicates incoming log matching existing log ID', async () => {
+      telemetryService.getLogs.mockResolvedValueOnce({
+        logs: [sampleLogs[0]],
+        pagination: { total: 1, page: 1, limit: 50, totalPages: 1 },
+      });
+
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Scraping target kubelet metrics completed in 14ms/i)).toBeInTheDocument();
+      });
+
+      // Start live stream
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      expect(telemetryService.streamLogs).toHaveBeenCalled();
+
+      // Emit identical log ID
+      act(() => {
+        streamCallback('log', {
+          id: sampleLogs[0].id,
+          message: sampleLogs[0].message,
+          level: sampleLogs[0].level,
+          occurred_at: sampleLogs[0].occurred_at,
+        });
+      });
+
+      // Should still only have 1 instance rendered, not duplicated
+      const renderedLogs = screen.getAllByText(/Scraping target kubelet metrics completed in 14ms/i);
+      expect(renderedLogs.length).toBe(1);
+    });
+
+    test('9.7. Enforces maximum 500 rows limit on UI buffer to prevent memory exhaustion', async () => {
+      const hugeInitialLogs = Array.from({ length: 500 }, (_, i) => ({
+        id: `initial-row-${i}`,
+        message: `Initial log record ${i}`,
+        level: 'INFO',
+        occurred_at: new Date(Date.now() - i * 1000).toISOString(),
+      }));
+
+      telemetryService.getLogs.mockResolvedValueOnce({
+        logs: hugeInitialLogs,
+        pagination: { total: 1000, page: 1, limit: 500, totalPages: 2 },
+      });
+
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Initial log record 0/i)).toBeInTheDocument();
+      });
+
+      // Start live stream and emit a new live log
+      const liveBtn = screen.getByTestId('logs-live-toggle');
+      fireEvent.click(liveBtn);
+
+      act(() => {
+        streamCallback('log', {
+          id: 'live-burst-entry-999',
+          message: 'Burst live event beyond 500',
+          level: 'WARN',
+          occurred_at: new Date().toISOString(),
+        });
+      });
+
+      expect(screen.getByText(/Burst live event beyond 500/i)).toBeInTheDocument();
+      // Oldest log (row 499) must be sliced off to maintain max 500 items
+      expect(screen.queryByText(/Initial log record 499/i)).toBeNull();
+    });
+
+    test('9.8. Jump to newest button navigates terminal container back to top', async () => {
+      render(<LogsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('logs-container')).toBeInTheDocument();
+      });
+
+      const container = screen.getByTestId('logs-container');
+      container.scrollTo = jest.fn();
+
+      // Simulate scrolling down > 80px
+      fireEvent.scroll(container, { target: { scrollTop: 150 } });
+
+      const jumpBtn = screen.getByTestId('logs-jump-latest-btn');
+      expect(jumpBtn).toBeInTheDocument();
+
+      fireEvent.click(jumpBtn);
+
+      expect(container.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+    });
+  });
 });

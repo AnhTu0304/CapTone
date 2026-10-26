@@ -20,6 +20,8 @@ import {
   ChevronRight,
   Filter,
   X,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 export const LogsPage = () => {
@@ -41,6 +43,7 @@ export const LogsPage = () => {
   const [logs, setLogs] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 50, totalPages: 1 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [servicesList, setServicesList] = useState([]);
 
@@ -53,6 +56,7 @@ export const LogsPage = () => {
   const [isLive, setIsLive] = useState(false);
   const [streamNotice, setStreamNotice] = useState(null);
   const [autoScroll, setAutoScroll] = useState(false);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
 
@@ -63,7 +67,7 @@ export const LogsPage = () => {
   // Debounce search input (300ms)
   useEffect(() => {
     const handler = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
+      setDebouncedSearch(searchQuery.trim());
       setPage(1); // Reset to page 1 on new search
     }, 300);
     return () => clearTimeout(handler);
@@ -272,13 +276,15 @@ export const LogsPage = () => {
             deployment: selectedDeployment !== 'ALL' ? selectedDeployment : undefined,
             pod: selectedPod !== 'ALL' ? selectedPod : undefined,
             level: selectedLevel !== 'ALL' ? selectedLevel : undefined,
+            search: debouncedSearch ? debouncedSearch : undefined,
             clusterId: currentEnv?.clusterId || currentEnv?.id,
             tail: 20,
           },
           (eventType, data) => {
             if (eventType === 'log' && data) {
               setLogs((prev) => {
-                if (prev.some((item) => item.id === data.id)) return prev;
+                const logKey = data.id || `${data.occurred_at || data.timestamp}_${data.message}`;
+                if (prev.some((item) => (item.id || `${item.occurred_at || item.timestamp}_${item.message}`) === logKey)) return prev;
                 const nextLogs = [data, ...prev];
                 return nextLogs.length > 500 ? nextLogs.slice(0, 500) : nextLogs;
               });
@@ -313,17 +319,78 @@ export const LogsPage = () => {
     selectedDeployment,
     selectedPod,
     selectedLevel,
+    debouncedSearch,
     currentEnv?.clusterId,
     currentEnv?.id,
     fetchLogs,
   ]);
 
-  // Auto-scroll to bottom if enabled
+  // Auto-scroll to newest (top of list in DESC mode) if enabled
   useEffect(() => {
     if (autoScroll && logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      logContainerRef.current.scrollTop = 0;
     }
   }, [logs, autoScroll]);
+
+  const hasMore = pagination.page < pagination.totalPages;
+
+  // Load More Older Logs (Tải thêm nhật ký cũ) [S4][PB17] 3.4
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMore || isLoading) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      const res = await telemetryService.getLogs({
+        level: selectedLevel,
+        serviceId: selectedService,
+        namespace: selectedNamespace !== 'ALL' ? selectedNamespace : undefined,
+        deployment: selectedDeployment !== 'ALL' ? selectedDeployment : undefined,
+        pod: selectedPod !== 'ALL' ? selectedPod : undefined,
+        range: selectedRange,
+        search: debouncedSearch,
+        clusterId: currentEnv?.clusterId || currentEnv?.id,
+        page: nextPage,
+        limit,
+      });
+
+      const nextLogs = Array.isArray(res?.logs) ? res.logs : [];
+      setPage(nextPage);
+      if (res?.pagination) {
+        setPagination(res.pagination);
+      }
+      setLogs((prev) => {
+        const existingKeys = new Set(
+          prev.map((l) => l.id || `${l.occurred_at || l.timestamp}_${l.message}`)
+        );
+        const filteredNew = nextLogs.filter(
+          (l) => !existingKeys.has(l.id || `${l.occurred_at || l.timestamp}_${l.message}`)
+        );
+        const combined = [...prev, ...filteredNew];
+        return combined.length > 500 ? combined.slice(0, 500) : combined;
+      });
+    } catch (err) {
+      console.warn('[LogsPage] Could not load more logs:', err.message);
+      setErrorMessage(err.message || 'Không thể tải thêm nhật ký cũ');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleContainerScroll = (e) => {
+    const { scrollTop } = e.currentTarget;
+    if (scrollTop > 80) {
+      setShowJumpLatest(true);
+    } else {
+      setShowJumpLatest(false);
+    }
+  };
+
+  const handleJumpToLatest = () => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setShowJumpLatest(false);
+  };
 
   const handleLevelChange = (e) => {
     setSelectedLevel(e.target.value);
@@ -823,6 +890,7 @@ export const LogsPage = () => {
       <div
         data-testid="logs-terminal-window"
         style={{
+          position: 'relative',
           backgroundColor: '#1E1E1E',
           border: '1px solid #334155',
           borderRadius: '6px',
@@ -869,6 +937,7 @@ export const LogsPage = () => {
         <div
           ref={logContainerRef}
           data-testid="logs-container"
+          onScroll={handleContainerScroll}
           style={{
             height: '480px',
             overflowY: 'auto',
@@ -990,6 +1059,7 @@ export const LogsPage = () => {
                     [{item.namespace ? `${item.namespace}/` : ''}{svcName}/{item.pod_name || podName}]
                   </span>
                   <span
+                    data-testid={`log-msg-${item.id || idx}`}
                     style={{
                       color:
                         item.level === 'FATAL' || item.level === 'CRITICAL' || item.level === 'ERROR'
@@ -997,7 +1067,11 @@ export const LogsPage = () => {
                           : item.level === 'WARN' || item.level === 'WARNING'
                           ? '#FDE68A'
                           : '#F1F5F9',
-                      wordBreak: 'break-all',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: "var(--font-mono, 'Menlo', 'Monaco', 'Courier New', monospace)",
+                      flex: 1,
                     }}
                   >
                     {maskSensitiveData(item.message || item.msg)}
@@ -1006,7 +1080,97 @@ export const LogsPage = () => {
               );
             })
           )}
+
+          {/* Load More Button or End of History Indicator [S4][PB17] 3.4 */}
+          {logs.length > 0 && (
+            <div
+              data-testid="logs-load-more-container"
+              style={{
+                marginTop: '12px',
+                padding: '10px 0',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              {hasMore ? (
+                <button
+                  type="button"
+                  data-testid="logs-load-more-btn"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 16px',
+                    backgroundColor: '#1E293B',
+                    color: '#38BDF8',
+                    border: '1px solid #334155',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: isLoadingMore ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <RefreshCw size={13} className={isLoadingMore ? 'animate-spin' : ''} />
+                  <span>
+                    {isLoadingMore
+                      ? 'Đang tải thêm nhật ký cũ...'
+                      : `Tải thêm nhật ký cũ hơn (Trang ${pagination.page + 1} / ${pagination.totalPages})`}
+                  </span>
+                </button>
+              ) : (
+                <div
+                  data-testid="logs-end-of-history"
+                  style={{
+                    fontSize: '0.75rem',
+                    color: '#64748B',
+                    fontFamily: 'var(--font-mono)',
+                    fontStyle: 'italic',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>✓ Đã tải toàn bộ lịch sử ({pagination.total} bản ghi)</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Floating Jump to Newest Button */}
+        {showJumpLatest && (
+          <button
+            type="button"
+            data-testid="logs-jump-latest-btn"
+            onClick={handleJumpToLatest}
+            style={{
+              position: 'absolute',
+              bottom: '56px',
+              right: '24px',
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              backgroundColor: '#0284C7',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '20px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              cursor: 'pointer',
+            }}
+          >
+            <ArrowUp size={13} />
+            <span>Cuộn về log mới nhất</span>
+          </button>
+        )}
 
         {/* Pagination Bar */}
         <div

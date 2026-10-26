@@ -478,6 +478,7 @@ export class TelemetryController {
         pod,
         pod_id,
         level,
+        search,
         cluster_id,
         tail,
       } = parsedQuery.data;
@@ -488,6 +489,7 @@ export class TelemetryController {
         deployment: deployment || deployment_id,
         pod: pod || pod_id,
         level,
+        search,
         cluster_id,
         tail,
       };

@@ -8,6 +8,7 @@ export interface ILogStreamFilters {
   deployment?: string;
   pod?: string;
   level?: string;
+  search?: string;
   cluster_id?: string;
   tail?: number;
 }
@@ -179,6 +180,18 @@ class LogStreamManager extends EventEmitter {
       }
     }
 
+    // 7. Dynamic Search keyword check (case-insensitive substring in message, pod, service, or source) [S4][PB17] 3.4
+    if (filters.search && filters.search.trim()) {
+      const term = filters.search.trim().toLowerCase();
+      const msg = String(log.message || log.msg || '').toLowerCase();
+      const pod = String(log.pod_name || log.pod_id || log.metadata?.pod_name || '').toLowerCase();
+      const svc = String(log.service_name || log.service_id || log.metadata?.service_name || '').toLowerCase();
+      const src = String(log.source || '').toLowerCase();
+      if (!msg.includes(term) && !pod.includes(term) && !svc.includes(term) && !src.includes(term)) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -300,6 +313,7 @@ class LogStreamManager extends EventEmitter {
           deployment: filters.deployment,
           pod: filters.pod,
           level: filters.level,
+          search: filters.search,
           clusterId: filters.cluster_id,
           limit: tailLimit,
           offset: 0,

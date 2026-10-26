@@ -136,6 +136,7 @@ export const StreamLogsQuerySchema = z.object({
   pod: z.string().trim().max(255).optional(),
   pod_id: z.string().trim().max(255).optional(),
   level: z.string().trim().max(50).optional(),
+  search: z.string().trim().max(255).optional(),
   cluster_id: z.string().trim().max(100).optional(),
   tail: z.coerce.number().int().min(0).max(100).default(20).optional(),
   token: z.string().optional(),
