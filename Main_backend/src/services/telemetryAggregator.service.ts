@@ -430,7 +430,7 @@ export class TelemetryAggregatorService {
           GREATEST(1, COUNT(DISTINCT am.pod_id))::int as replica_count,
           SUM(am.pod_restart_count)::int as total_restarts
         FROM agent_metrics am
-        LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id
+        LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id::text
         LEFT JOIN environments e ON e.id = c.environment_id
         WHERE am.collected_at > NOW() - ($1 || ' minutes')::INTERVAL
           AND ($2::text IS NULL OR am.cluster_id::text = $2)

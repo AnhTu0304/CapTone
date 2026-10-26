@@ -115,16 +115,17 @@ describe('APM Monitoring Services & Ingestion Pipeline Suite [S4][PB15 1.1 - 1.3
     );
 
     // 3. Insert baseline agent_metrics test rows
-    await pool.query(`
-      INSERT INTO agent_metrics (
+    await pool.query(
+      `INSERT INTO agent_metrics (
         agent_id, cluster_id, service_id, pod_id,
         cpu, ram, disk, request_rate, latency, http_5xx_rate,
         pod_restart_count, replica_count, collected_at
       ) VALUES
-        ('test-apm-agent', 'test-cluster', 'test-apm-order-service', 'pod-1', 15.0, 30.0, 10.0, 48.5, 25.0, 0.0, 0, 2, NOW() - INTERVAL '1 minute'),
-        ('test-apm-agent', 'test-cluster', 'test-apm-order-service', 'pod-2', 18.0, 32.0, 10.0, 52.0, 30.0, 0.2, 0, 2, NOW() - INTERVAL '30 seconds'),
-        ('test-apm-agent', 'test-cluster', 'test-apm-payment-service', 'pod-3', 25.0, 40.0, 15.0, 15.0, 120.0, 1.5, 1, 1, NOW() - INTERVAL '45 seconds');
-    `);
+        ($1, $2, 'test-apm-order-service', 'pod-1', 15.0, 30.0, 10.0, 48.5, 25.0, 0.0, 0, 2, NOW() - INTERVAL '1 minute'),
+        ($1, $2, 'test-apm-order-service', 'pod-2', 18.0, 32.0, 10.0, 52.0, 30.0, 0.2, 0, 2, NOW() - INTERVAL '30 seconds'),
+        ($1, $2, 'test-apm-payment-service', 'pod-3', 25.0, 40.0, 15.0, 15.0, 120.0, 1.5, 1, 1, NOW() - INTERVAL '45 seconds');`,
+      [testAgentId, testClusterId]
+    );
 
     // 4. Start local server
     await new Promise<void>((resolve) => {

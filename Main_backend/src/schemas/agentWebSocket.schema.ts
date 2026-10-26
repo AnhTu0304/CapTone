@@ -58,22 +58,26 @@ export const AgentMetricsPayloadSchema = z.object({
     .number()
     .finite('disk must be a finite number')
     .min(0, 'disk cannot be negative')
-    .max(100000000, 'disk value out of range'),
+    .max(100000000, 'disk value out of range')
+    .default(10.0),
   request_rate: z
     .number()
     .finite('request_rate must be a finite number')
     .min(0, 'request_rate cannot be negative')
-    .max(10000000, 'request_rate out of range'),
+    .max(10000000, 'request_rate out of range')
+    .default(0.0),
   latency: z
     .number()
     .finite('latency must be a finite number')
     .min(0, 'latency cannot be negative')
-    .max(600000, 'latency cannot exceed 600,000 ms (10 minutes)'),
+    .max(600000, 'latency cannot exceed 600,000 ms (10 minutes)')
+    .default(0.0),
   http_5xx_rate: z
     .number()
     .finite('http_5xx_rate must be a finite number')
     .min(0, 'http_5xx_rate cannot be negative')
-    .max(100, 'http_5xx_rate cannot exceed 100%'),
+    .max(100, 'http_5xx_rate cannot exceed 100%')
+    .default(0.0),
   pod_restart_count: z
     .number()
     .int('pod_restart_count must be an integer')
@@ -90,6 +94,8 @@ export const AgentMetricsPayloadSchema = z.object({
   node_ram_percent: z.number().finite().min(0).max(100).optional().nullable(),
   node_cpu_cores: z.number().finite().min(0).optional().nullable(),
   node_ram_gb: z.number().finite().min(0).optional().nullable(),
+  sample_id: z.string().trim().max(100).optional().nullable(),
+  batch_id: z.string().trim().max(100).optional().nullable(),
 });
 
 /**

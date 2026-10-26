@@ -86,8 +86,9 @@ export class AgentService {
    */
   public static async storeMetrics(
     agent: AuthenticatedAgent,
-    data: AgentMetricsPayload
-  ): Promise<{ id: number | string }> {
+    data: AgentMetricsPayload,
+    dbClient: { query: typeof pool.query } = pool
+  ): Promise<{ id: number | string; deduplicated: boolean; service_id: string; pod_id: string; collected_at: string }> {
     const rawDate = new Date(data.timestamp);
     const collectedAt = isNaN(rawDate.getTime()) ? new Date() : rawDate;
 
@@ -101,7 +102,7 @@ export class AgentService {
     if (clusterId && serviceId) {
       try {
         const nsRes = await pool.query(
-          `SELECT id FROM namespaces WHERE (cluster_id = $1 OR cluster_id IN (SELECT name FROM clusters WHERE id::text = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
+          `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id IN (SELECT id FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
           [clusterId, namespaceName]
         );
         const namespaceId = nsRes.rows[0]?.id || null;
@@ -111,7 +112,29 @@ export class AgentService {
       }
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let resolvedOrgId = agent.organization_id && uuidRegex.test(agent.organization_id) ? agent.organization_id : null;
+    const resolvedEnvId =
+      agent.environment_id && uuidRegex.test(agent.environment_id) && agent.environment_id !== '00000000-0000-0000-0000-000000000000'
+        ? agent.environment_id
+        : null;
+
+    if (!resolvedOrgId && resolvedEnvId) {
+      try {
+        const envRes = await dbClient.query(`SELECT organization_id FROM environments WHERE id = $1 LIMIT 1`, [resolvedEnvId]);
+        if (envRes.rows[0]?.organization_id) {
+          resolvedOrgId = envRes.rows[0].organization_id;
+        }
+      } catch {
+        // Non-blocking org resolution
+      }
+    }
+
     const result = await MetricModel.create({
+      organization_id: resolvedOrgId,
+      environment_id: resolvedEnvId,
+      batch_id: (data as any).batch_id || null,
+      sample_id: (data as any).sample_id || null,
       agent_id: agent.id.slice(0, 100),
       cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 100) : null,
       service_id: serviceId,
@@ -125,11 +148,19 @@ export class AgentService {
       pod_restart_count: Number.isInteger(data.pod_restart_count) ? data.pod_restart_count : 0,
       replica_count: Number.isInteger(data.replica_count) && data.replica_count > 0 ? data.replica_count : 1,
       collected_at: collectedAt,
-    });
+    }, dbClient);
 
     await this.bridgeAgentMetricToNodeMetric(agent, data, collectedAt, serviceId, result.id);
-    await AgentModel.touchLastSeen(agent.id);
-    return result;
+    if (uuidRegex.test(agent.id)) {
+      await AgentModel.touchLastSeen(agent.id);
+    }
+    return {
+      id: result.id,
+      deduplicated: result.deduplicated,
+      service_id: serviceId,
+      pod_id: podId,
+      collected_at: collectedAt.toISOString(),
+    };
   }
 
   /**
@@ -428,6 +459,7 @@ export class AgentService {
     agent: AuthenticatedAgent,
     body: any
   ) {
+    const rawBatchId = typeof body?.batch_id === 'string' ? body.batch_id.slice(0, 100) : null;
     const samples: AgentMetricsPayload[] = Array.isArray(body)
       ? body
       : Array.isArray(body?.metrics)
@@ -440,18 +472,43 @@ export class AgentService {
       throw ApiError.badRequest('Số lượng mẫu APM Metrics phải nằm trong khoảng từ 1 đến 100');
     }
 
-    const records = [];
-    for (const sample of samples) {
-      const saved = await this.storeMetrics(agent, sample);
-      records.push(saved);
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const records = [];
+      for (const sample of samples) {
+        if (rawBatchId && !(sample as any).batch_id) {
+          (sample as any).batch_id = rawBatchId;
+        }
+        const saved = await this.storeMetrics(agent, sample, client);
+        records.push(saved);
+      }
+      await client.query('COMMIT');
 
-    return {
-      agent_id: agent.id,
-      cluster_id: agent.cluster_id,
-      ingested_count: records.length,
-      records,
-    };
+      const insertedCount = records.filter((r) => !r.deduplicated).length;
+      const deduplicatedCount = records.filter((r) => r.deduplicated).length;
+
+      console.log(`[APM Ingestion] Agent ${agent.id} (Cluster ${agent.cluster_id}) batch=${rawBatchId || 'none'}: received=${records.length}, inserted=${insertedCount}, deduplicated=${deduplicatedCount}`);
+
+      return {
+        agent_id: agent.id,
+        cluster_id: agent.cluster_id,
+        batch_id: rawBatchId,
+        ingested_count: records.length,
+        inserted_count: insertedCount,
+        deduplicated_count: deduplicatedCount,
+        records,
+      };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      console.error('[AgentService.ingestApmMetricsFromDaemon] Transaction error:', err?.message || err);
+      throw new ApiError(500, 'Lỗi cơ sở dữ liệu khi lưu trữ APM Metrics');
+    } finally {
+      client.release();
+    }
   }
 
   /**

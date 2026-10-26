@@ -165,12 +165,14 @@ export const ingestApmMetricsSchema = z.object({
     AgentMetricsPayloadSchema,
     z.array(AgentMetricsPayloadSchema).min(1).max(100),
     z.object({
+      batch_id: z.string().trim().max(100).optional().nullable(),
       metrics: z
         .array(AgentMetricsPayloadSchema)
         .min(1, 'Danh sach metrics khong duoc rong')
         .max(100, 'So luong mau metrics trong mot batch khong vuot qua 100'),
     }),
     z.object({
+      batch_id: z.string().trim().max(100).optional().nullable(),
       samples: z
         .array(AgentMetricsPayloadSchema)
         .min(1, 'Danh sach samples khong duoc rong')

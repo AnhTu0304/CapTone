@@ -40,6 +40,23 @@ telemetryRoutes.get(
   TelemetryController.getMetricsSequence
 );
 
+// GET /api/v1/telemetry/metrics-history
+// Truy vấn lịch sử viễn trắc chi tiết theo resource, metric_type, time window, pagination (Task [S4][PB16] 2.1)
+telemetryRoutes.get(
+  '/metrics-history',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getMetricsHistory
+);
+
+// GET /api/v1/telemetry/services/:serviceId/metrics-history
+telemetryRoutes.get(
+  '/services/:serviceId/metrics-history',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getMetricsHistory
+);
+
 // Protect all following sensitive operations with JWT authentication + DEVOPS/ADMIN role
 telemetryRoutes.use(authenticateToken);
 telemetryRoutes.use(requireRoles('VIEWER', 'USER', 'DEVOPS', 'ADMIN'));

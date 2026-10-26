@@ -46,12 +46,14 @@ BEGIN
 
     -- 5. Nối khóa ngoại tới bảng agents và clusters
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agents') THEN
+        DELETE FROM agent_metrics WHERE agent_id IS NOT NULL AND agent_id NOT IN (SELECT id FROM agents);
         ALTER TABLE agent_metrics
             ADD CONSTRAINT fk_agent_metrics_agent
             FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE;
     END IF;
 
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'clusters') THEN
+        DELETE FROM agent_metrics WHERE cluster_id IS NOT NULL AND cluster_id NOT IN (SELECT id FROM clusters);
         ALTER TABLE agent_metrics
             ADD CONSTRAINT fk_agent_metrics_cluster
             FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE CASCADE;

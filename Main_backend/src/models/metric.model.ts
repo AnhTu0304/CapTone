@@ -3,6 +3,10 @@ import { GRUMetricPoint } from '../schemas/ai.schema';
 
 export interface IAgentMetric {
   id?: string | number;
+  organization_id?: string | null;
+  environment_id?: string | null;
+  batch_id?: string | null;
+  sample_id?: string | null;
   agent_id: string;
   cluster_id: string | null;
   service_id: string;
@@ -17,6 +21,21 @@ export interface IAgentMetric {
   replica_count: number;
   collected_at: Date;
   created_at?: Date;
+}
+
+export interface IMetricsHistoryQueryFilter {
+  serviceId?: string;
+  podId?: string;
+  clusterId?: string;
+  organizationId?: string;
+  organizationIds?: string[];
+  metricType?: string;
+  startTime?: Date;
+  endTime?: Date;
+  limit?: number;
+  page?: number;
+  offset?: number;
+  order?: 'asc' | 'desc';
 }
 
 export interface INodeMetric {
@@ -68,6 +87,42 @@ export interface INodeMetricQueryFilter {
 
 export class MetricModel {
   private static nodeTableEnsured = false;
+  private static agentMetricsSchemaEnsured = false;
+
+  public static async ensureAgentMetricsSchema(): Promise<void> {
+    if (this.agentMetricsSchemaEnsured) return;
+    await pool.query(`
+      ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+        ADD COLUMN IF NOT EXISTS environment_id UUID REFERENCES environments(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS batch_id VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS sample_id VARCHAR(100);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_dedup
+        ON agent_metrics(agent_id, service_id, pod_id, collected_at);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_sample_id
+        ON agent_metrics(sample_id)
+        WHERE sample_id IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_time
+        ON agent_metrics(organization_id, collected_at DESC, id DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_service_time
+        ON agent_metrics(organization_id, service_id, collected_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_agent_metrics_service_pod_time
+        ON agent_metrics(service_id, pod_id, collected_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_time
+        ON agent_metrics(cluster_id, collected_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_agent_metrics_batch_id
+        ON agent_metrics(batch_id)
+        WHERE batch_id IS NOT NULL;
+    `);
+    this.agentMetricsSchemaEnsured = true;
+  }
 
   public static async ensureNodeMetricsTable(): Promise<void> {
     if (this.nodeTableEnsured) return;
@@ -179,7 +234,7 @@ export class MetricModel {
         am.collected_at,
         am.created_at
       FROM agent_metrics am
-      JOIN clusters c ON c.id::text = am.cluster_id
+      JOIN clusters c ON (c.id = am.cluster_id OR c.name = am.cluster_id::text)
       LEFT JOIN environments e ON e.id = c.environment_id
       JOIN nodes n ON n.cluster_id = c.id
       ON CONFLICT (agent_id, node_name, collected_at) DO NOTHING;
@@ -458,18 +513,42 @@ export class MetricModel {
   /**
    * Insert raw pod metric record
    */
-  public static async create(metric: IAgentMetric): Promise<{ id: string | number }> {
+  public static async create(
+    metric: IAgentMetric,
+    dbClient: { query: typeof pool.query } = pool
+  ): Promise<{ id: string | number; deduplicated: boolean }> {
+    await this.ensureAgentMetricsSchema();
     const query = `
       INSERT INTO agent_metrics (
+        organization_id, environment_id, batch_id, sample_id,
         agent_id, cluster_id, service_id, pod_id,
         cpu, ram, disk, request_rate, latency, http_5xx_rate,
         pod_restart_count, replica_count, collected_at, created_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()
-      ) RETURNING id;
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
+      )
+      ON CONFLICT (agent_id, service_id, pod_id, collected_at) DO UPDATE SET
+        organization_id = COALESCE(EXCLUDED.organization_id, agent_metrics.organization_id),
+        environment_id = COALESCE(EXCLUDED.environment_id, agent_metrics.environment_id),
+        cluster_id = COALESCE(EXCLUDED.cluster_id, agent_metrics.cluster_id),
+        batch_id = COALESCE(EXCLUDED.batch_id, agent_metrics.batch_id),
+        sample_id = COALESCE(EXCLUDED.sample_id, agent_metrics.sample_id),
+        cpu = EXCLUDED.cpu,
+        ram = EXCLUDED.ram,
+        disk = EXCLUDED.disk,
+        request_rate = EXCLUDED.request_rate,
+        latency = EXCLUDED.latency,
+        http_5xx_rate = EXCLUDED.http_5xx_rate,
+        pod_restart_count = EXCLUDED.pod_restart_count,
+        replica_count = EXCLUDED.replica_count
+      RETURNING id, (xmax <> 0) AS deduplicated;
     `;
 
-    const res = await pool.query(query, [
+    const res = await dbClient.query(query, [
+      metric.organization_id || null,
+      metric.environment_id || null,
+      metric.batch_id || null,
+      metric.sample_id || null,
       metric.agent_id,
       metric.cluster_id,
       metric.service_id,
@@ -485,7 +564,10 @@ export class MetricModel {
       metric.collected_at,
     ]);
 
-    return { id: res.rows[0].id };
+    return {
+      id: res.rows[0].id,
+      deduplicated: Boolean(res.rows[0].deduplicated),
+    };
   }
 
   /**
@@ -635,5 +717,121 @@ export class MetricModel {
       [limit]
     );
     return res.rows;
+  }
+
+  /**
+   * Query raw and filtered APM historical metrics with time range, pagination, and tenant isolation (Task 2.1)
+   */
+  public static async queryMetricsHistory(filter: IMetricsHistoryQueryFilter): Promise<{
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+    records: any[];
+  }> {
+    await this.ensureAgentMetricsSchema();
+    const page = Math.max(1, filter.page || 1);
+    const limit = Math.min(500, Math.max(1, filter.limit || 50));
+    const offset = filter.offset ?? (page - 1) * limit;
+    const orderDirection = filter.order?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (filter.organizationId) {
+      conditions.push(`(am.organization_id = $${paramIndex}::uuid OR e.organization_id = $${paramIndex}::uuid)`);
+      values.push(filter.organizationId);
+      paramIndex++;
+    } else if (filter.organizationIds && filter.organizationIds.length > 0) {
+      conditions.push(`(am.organization_id = ANY($${paramIndex}::uuid[]) OR e.organization_id = ANY($${paramIndex}::uuid[]))`);
+      values.push(filter.organizationIds);
+      paramIndex++;
+    }
+
+    if (filter.serviceId) {
+      conditions.push(`am.service_id = $${paramIndex}`);
+      values.push(filter.serviceId);
+      paramIndex++;
+    }
+
+    if (filter.podId) {
+      conditions.push(`am.pod_id = $${paramIndex}`);
+      values.push(filter.podId);
+      paramIndex++;
+    }
+
+    if (filter.clusterId) {
+      conditions.push(`(am.cluster_id::text = $${paramIndex} OR c.id::text = $${paramIndex} OR c.name = $${paramIndex})`);
+      values.push(filter.clusterId);
+      paramIndex++;
+    }
+
+    if (filter.startTime) {
+      conditions.push(`am.collected_at >= $${paramIndex}`);
+      values.push(filter.startTime);
+      paramIndex++;
+    }
+
+    if (filter.endTime) {
+      conditions.push(`am.collected_at <= $${paramIndex}`);
+      values.push(filter.endTime);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countQuery = `
+      SELECT COUNT(*)::int as total
+      FROM agent_metrics am
+      LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id::text
+      LEFT JOIN environments e ON e.id = c.environment_id OR e.id = am.environment_id
+      ${whereClause};
+    `;
+
+    const countRes = await pool.query(countQuery, values);
+    const total = countRes.rows[0]?.total ? parseInt(countRes.rows[0].total, 10) : 0;
+
+    const limitP = `$${paramIndex}`;
+    const offsetP = `$${paramIndex + 1}`;
+
+    const dataQuery = `
+      SELECT 
+        am.id::text,
+        am.agent_id,
+        am.cluster_id,
+        am.organization_id,
+        am.environment_id,
+        am.service_id,
+        am.pod_id,
+        ROUND(am.cpu::numeric, 2)::float as cpu,
+        ROUND(am.ram::numeric, 2)::float as ram,
+        ROUND(am.disk::numeric, 2)::float as disk,
+        ROUND(am.request_rate::numeric, 2)::float as request_rate,
+        ROUND(am.latency::numeric, 2)::float as latency,
+        ROUND(am.http_5xx_rate::numeric, 2)::float as http_5xx_rate,
+        am.pod_restart_count,
+        am.replica_count,
+        am.batch_id,
+        am.sample_id,
+        am.collected_at,
+        am.created_at
+      FROM agent_metrics am
+      LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id::text
+      LEFT JOIN environments e ON e.id = c.environment_id OR e.id = am.environment_id
+      ${whereClause}
+      ORDER BY am.collected_at ${orderDirection}, am.id ${orderDirection}
+      LIMIT ${limitP} OFFSET ${offsetP};
+    `;
+
+    const dataRes = await pool.query(dataQuery, [...values, limit, offset]);
+
+    return {
+      total,
+      page,
+      limit,
+      total_pages: Math.ceil(total / limit) || (total === 0 ? 0 : 1),
+      records: dataRes.rows,
+    };
   }
 }

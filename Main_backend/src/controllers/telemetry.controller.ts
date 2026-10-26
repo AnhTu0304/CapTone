@@ -7,7 +7,9 @@ import {
   GetServiceSequenceQuerySchema,
   GetRcaContextQuerySchema,
   EvaluateServiceBodySchema,
+  GetMetricsHistoryQuerySchema,
 } from '../schemas/telemetry.schema';
+import { MetricModel } from '../models/metric.model';
 
 export class TelemetryController {
   /**
@@ -251,6 +253,75 @@ export class TelemetryController {
         res,
         `Retrieved ${services.length} APM microservices`,
         services,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/telemetry/metrics-history & /api/v1/telemetry/services/:serviceId/metrics-history
+   * Detailed historical metrics query with filtering, pagination, and tenant isolation (Task [S4][PB16] 2.1)
+   */
+  public static async getMetricsHistory(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const parsedQuery = GetMetricsHistoryQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return ApiResponse.error(
+          res,
+          parsedQuery.error.issues[0]?.message || 'Tham số truy vấn lịch sử metrics không hợp lệ',
+          400,
+          parsedQuery.error.format()
+        );
+      }
+
+      const query = parsedQuery.data;
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+      const userOrgId = user?.organizationId || user?.organization_id;
+
+      // Enforce tenant isolation for non-super admins
+      let scopedOrgId: string | undefined = query.organization_id;
+      if (!isGlobalAdmin) {
+        if (!userOrgId) {
+          return ApiResponse.error(res, 'Người dùng không thuộc tổ chức nào để truy vấn dữ liệu metrics', 403);
+        }
+        if (query.organization_id && query.organization_id !== userOrgId) {
+          return ApiResponse.error(res, 'Từ chối truy cập: Không thể xem metrics của tổ chức khác', 403);
+        }
+        scopedOrgId = userOrgId;
+      }
+
+      const startTimeStr = query.from || query.start_time;
+      const endTimeStr = query.to || query.end_time;
+      const startTime = startTimeStr ? new Date(startTimeStr) : undefined;
+      const endTime = endTimeStr ? new Date(endTimeStr) : undefined;
+
+      const serviceId = (req.params as any)?.serviceId || query.service_id;
+
+      const result = await MetricModel.queryMetricsHistory({
+        serviceId: serviceId || undefined,
+        podId: query.pod_id || undefined,
+        clusterId: query.cluster_id || undefined,
+        organizationId: scopedOrgId || undefined,
+        metricType: query.metric_type || 'all',
+        startTime,
+        endTime,
+        page: query.page,
+        limit: query.limit,
+        order: query.order,
+      });
+
+      return ApiResponse.success(
+        res,
+        `Retrieved ${result.records.length} metrics history records`,
+        result,
         200
       );
     } catch (error) {
