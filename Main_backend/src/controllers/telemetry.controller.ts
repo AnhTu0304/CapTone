@@ -298,10 +298,26 @@ export class TelemetryController {
         scopedOrgId = userOrgId;
       }
 
-      const startTimeStr = query.from || query.start_time;
-      const endTimeStr = query.to || query.end_time;
-      const startTime = startTimeStr ? new Date(startTimeStr) : undefined;
-      const endTime = endTimeStr ? new Date(endTimeStr) : undefined;
+      // Fixed reference time for consistent range evaluation across sub-queries
+      const requestNow = new Date();
+      let startTime: Date | undefined;
+      let endTime: Date | undefined;
+
+      const endCandidate = query.to || query.end_time;
+      if (query.range) {
+        endTime = endCandidate ? new Date(endCandidate) : requestNow;
+        if (query.range === '1h') {
+          startTime = new Date(endTime.getTime() - 60 * 60 * 1000);
+        } else if (query.range === '24h') {
+          startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
+        } else if (query.range === '7d') {
+          startTime = new Date(endTime.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+      } else {
+        const startTimeStr = query.from || query.start_time;
+        startTime = startTimeStr ? new Date(startTimeStr) : undefined;
+        endTime = endCandidate ? new Date(endCandidate) : undefined;
+      }
 
       const serviceId = (req.params as any)?.serviceId || query.service_id;
 

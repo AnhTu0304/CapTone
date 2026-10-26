@@ -49,12 +49,13 @@ export const GetMetricsHistoryQuerySchema = z
       .enum(['all', 'cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate'])
       .default('all')
       .optional(),
+    range: z.enum(['1h', '24h', '7d']).optional(),
     from: z.string().optional(),
     to: z.string().optional(),
     start_time: z.string().optional(),
     end_time: z.string().optional(),
     page: z.coerce.number().int().min(1).default(1).optional(),
-    limit: z.coerce.number().int().min(1).max(500).default(50).optional(),
+    limit: z.coerce.number().int().min(1).max(1000).default(50).optional(),
     order: z.enum(['asc', 'desc']).default('desc').optional(),
   })
   .refine(

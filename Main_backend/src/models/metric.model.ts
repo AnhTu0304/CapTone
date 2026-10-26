@@ -30,6 +30,7 @@ export interface IMetricsHistoryQueryFilter {
   organizationId?: string;
   organizationIds?: string[];
   metricType?: string;
+  range?: '1h' | '24h' | '7d';
   startTime?: Date;
   endTime?: Date;
   limit?: number;
@@ -730,8 +731,22 @@ export class MetricModel {
     records: any[];
   }> {
     await this.ensureAgentMetricsSchema();
+    if (filter.range && !filter.startTime) {
+      const now = filter.endTime || new Date();
+      if (filter.range === '1h') {
+        filter.startTime = new Date(now.getTime() - 60 * 60 * 1000);
+      } else if (filter.range === '24h') {
+        filter.startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      } else if (filter.range === '7d') {
+        filter.startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      }
+      if (!filter.endTime) {
+        filter.endTime = now;
+      }
+    }
+
     const page = Math.max(1, filter.page || 1);
-    const limit = Math.min(500, Math.max(1, filter.limit || 50));
+    const limit = Math.min(1000, Math.max(1, filter.limit || 50));
     const offset = filter.offset ?? (page - 1) * limit;
     const orderDirection = filter.order?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
