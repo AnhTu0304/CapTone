@@ -9,6 +9,11 @@ export const GetServiceSequenceQuerySchema = z.object({
     .transform((val) => val === 'true' || val === '1')
     .optional()
     .default(true),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  start_time: z.string().optional(),
+  end_time: z.string().optional(),
+  cluster_id: z.string().trim().max(100).optional(),
 });
 
 export const GetRcaContextQuerySchema = z.object({
@@ -26,6 +31,9 @@ export const EvaluateServiceBodySchema = z.object({
 
 export const GetApmServicesQuerySchema = z.object({
   window_minutes: z.coerce.number().int().min(1).max(1440).optional().default(60),
+  cluster_id: z.string().trim().max(100).optional(),
+  environment_id: z.string().trim().max(100).optional(),
+  organization_id: z.string().trim().max(100).optional(),
 });
 
 export type GetServiceSequenceQuery = z.infer<typeof GetServiceSequenceQuerySchema>;

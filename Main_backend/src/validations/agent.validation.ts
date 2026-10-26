@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentNodeMetricsPayloadSchema } from '../schemas/agentWebSocket.schema';
+import { AgentNodeMetricsPayloadSchema, AgentMetricsPayloadSchema } from '../schemas/agentWebSocket.schema';
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -153,6 +153,28 @@ export const ingestNodeMetricsSchema = z.object({
         .array(AgentNodeMetricsPayloadSchema)
         .min(1, 'Danh sách samples không được rỗng')
         .max(100, 'Số lượng mẫu samples trong một batch không được vượt quá 100'),
+    }),
+  ]),
+});
+
+/**
+ * Validation schema tiep nhan APM Service Metrics (don le hoac batch toi da 100 mau) tu Agent Daemon (PB15 1.3)
+ */
+export const ingestApmMetricsSchema = z.object({
+  body: z.union([
+    AgentMetricsPayloadSchema,
+    z.array(AgentMetricsPayloadSchema).min(1).max(100),
+    z.object({
+      metrics: z
+        .array(AgentMetricsPayloadSchema)
+        .min(1, 'Danh sach metrics khong duoc rong')
+        .max(100, 'So luong mau metrics trong mot batch khong vuot qua 100'),
+    }),
+    z.object({
+      samples: z
+        .array(AgentMetricsPayloadSchema)
+        .min(1, 'Danh sach samples khong duoc rong')
+        .max(100, 'So luong mau samples trong mot batch khong vuot qua 100'),
     }),
   ]),
 });

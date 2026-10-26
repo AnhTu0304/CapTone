@@ -60,6 +60,9 @@ export class TelemetryAggregatorService {
       bucketSeconds?: number;
       limit?: number;
       fillPadding?: boolean;
+      startTime?: Date | null;
+      endTime?: Date | null;
+      clusterId?: string | null;
     }
   ): Promise<GRUMetricPoint[]> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -67,7 +70,11 @@ export class TelemetryAggregatorService {
     const fillPadding = options?.fillPadding ?? true;
 
     // Delegate query to MetricModel
-    const points = await MetricModel.aggregateByService(serviceId, bucketSeconds, limit);
+    const points = await MetricModel.aggregateByService(serviceId, bucketSeconds, limit, {
+      startTime: options?.startTime,
+      endTime: options?.endTime,
+      clusterId: options?.clusterId,
+    });
 
     if (points.length === 0) {
       return [];
@@ -401,7 +408,16 @@ export class TelemetryAggregatorService {
   /**
    * Summary of APM-monitored microservices with aggregated latency, throughput, error rate and health
    */
-  public static async getApmServicesSummary(windowMinutes: number = 60) {
+  public static async getApmServicesSummary(
+    windowMinutes: number = 60,
+    options?: {
+      clusterId?: string | null;
+      organizationId?: string | null;
+    }
+  ) {
+    const clusterId = options?.clusterId || null;
+    const orgId = options?.organizationId || null;
+
     const query = `
       WITH recent_metrics AS (
         SELECT 
@@ -414,7 +430,11 @@ export class TelemetryAggregatorService {
           GREATEST(1, COUNT(DISTINCT am.pod_id))::int as replica_count,
           SUM(am.pod_restart_count)::int as total_restarts
         FROM agent_metrics am
+        LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id
+        LEFT JOIN environments e ON e.id = c.environment_id
         WHERE am.collected_at > NOW() - ($1 || ' minutes')::INTERVAL
+          AND ($2::text IS NULL OR am.cluster_id::text = $2)
+          AND ($3::uuid IS NULL OR e.organization_id = $3::uuid)
         GROUP BY am.service_id
       )
       SELECT 
@@ -432,14 +452,14 @@ export class TelemetryAggregatorService {
       LEFT JOIN services s ON s.id::text = rm.service_id OR s.name = rm.service_id
       ORDER BY rm.service_id ASC;
     `;
-    const res = await pool.query(query, [windowMinutes]);
+    const res = await pool.query(query, [windowMinutes, clusterId, orgId]);
     if (res.rows.length > 0) {
       return res.rows;
     }
 
     // Fallback if no recent metrics: return known services with 0 metrics
-    const fallbackRes = await pool.query(`
-      SELECT 
+    const fallbackRes = await pool.query(
+      `SELECT 
         s.name as service_id,
         s.name as service_name,
         COALESCE(s.service_type, 'ClusterIP') as service_type,
@@ -451,9 +471,14 @@ export class TelemetryAggregatorService {
         1::int as replica_count,
         0::int as total_restarts
       FROM services s
+      LEFT JOIN clusters c ON c.id = s.cluster_id
+      LEFT JOIN environments e ON e.id = c.environment_id
+      WHERE ($1::uuid IS NULL OR e.organization_id = $1::uuid)
+        AND ($2::text IS NULL OR c.id::text = $2 OR c.name = $2)
       ORDER BY s.name ASC
-      LIMIT 20;
-    `);
+      LIMIT 20;`,
+      [orgId, clusterId]
+    );
     return fallbackRes.rows;
   }
 }

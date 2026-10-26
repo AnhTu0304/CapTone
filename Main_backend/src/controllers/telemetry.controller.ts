@@ -32,12 +32,29 @@ export class TelemetryController {
         );
       }
 
-      const { bucket_seconds, limit, fill_padding } = parsedQuery.data;
+      const { bucket_seconds, limit, fill_padding, from, to, start_time, end_time, cluster_id } = parsedQuery.data;
+
+      const rawFrom = from || start_time;
+      const rawTo = to || end_time;
+      let startTime: Date | undefined;
+      let endTime: Date | undefined;
+
+      if (rawFrom) {
+        const d = new Date(rawFrom);
+        if (!isNaN(d.getTime())) startTime = d;
+      }
+      if (rawTo) {
+        const d = new Date(rawTo);
+        if (!isNaN(d.getTime())) endTime = d;
+      }
 
       const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
         bucketSeconds: bucket_seconds,
         limit,
         fillPadding: fill_padding,
+        startTime,
+        endTime,
+        clusterId: cluster_id,
       });
 
       return ApiResponse.success(
@@ -217,7 +234,18 @@ export class TelemetryController {
   ): Promise<any> {
     try {
       const windowMinutes = Math.min(1440, Math.max(5, Number(req.query.window_minutes) || 60));
-      const services = await TelemetryAggregatorService.getApmServicesSummary(windowMinutes);
+      const clusterId = (req.query.cluster_id as string) || undefined;
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+      const orgId = isGlobalAdmin
+        ? (req.query.organization_id as string) || undefined
+        : user?.organizationId || user?.organization_id || (req.query.organization_id as string) || undefined;
+
+      const services = await TelemetryAggregatorService.getApmServicesSummary(windowMinutes, {
+        clusterId,
+        organizationId: orgId,
+      });
 
       return ApiResponse.success(
         res,

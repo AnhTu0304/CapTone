@@ -495,8 +495,17 @@ export class MetricModel {
   public static async aggregateByService(
     serviceId: string,
     bucketSeconds: number = 5,
-    limit: number = 12
+    limit: number = 12,
+    options?: {
+      startTime?: Date | null;
+      endTime?: Date | null;
+      clusterId?: string | null;
+    }
   ): Promise<GRUMetricPoint[]> {
+    const startTime = options?.startTime || null;
+    const endTime = options?.endTime || null;
+    const clusterId = options?.clusterId || null;
+
     const query = `
       SELECT 
         to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
@@ -510,13 +519,15 @@ export class MetricModel {
         GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
       FROM agent_metrics
       WHERE service_id::text = $1
+        AND ($4::timestamptz IS NULL OR collected_at >= $4)
+        AND ($5::timestamptz IS NULL OR collected_at <= $5)
+        AND ($6::text IS NULL OR cluster_id::text = $6)
       GROUP BY time_bucket
       ORDER BY time_bucket DESC
       LIMIT $3;
     `;
 
-    const res = await pool.query(query, [serviceId, bucketSeconds, limit]);
-
+    const res = await pool.query(query, [serviceId, bucketSeconds, limit, startTime, endTime, clusterId]);
     const points: GRUMetricPoint[] = res.rows.map((row) => ({
       time_bucket: row.time_bucket ? new Date(row.time_bucket).toISOString() : undefined,
       cpu: Number(row.cpu),

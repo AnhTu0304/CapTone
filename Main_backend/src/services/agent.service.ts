@@ -422,6 +422,39 @@ export class AgentService {
   }
 
   /**
+   * Ingest single or batch APM Service Metrics via HTTP REST endpoint (Task PB15 1.3)
+   */
+  public static async ingestApmMetricsFromDaemon(
+    agent: AuthenticatedAgent,
+    body: any
+  ) {
+    const samples: AgentMetricsPayload[] = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.metrics)
+      ? body.metrics
+      : Array.isArray(body?.samples)
+      ? body.samples
+      : [body];
+
+    if (samples.length === 0 || samples.length > 100) {
+      throw ApiError.badRequest('Số lượng mẫu APM Metrics phải nằm trong khoảng từ 1 đến 100');
+    }
+
+    const records = [];
+    for (const sample of samples) {
+      const saved = await this.storeMetrics(agent, sample);
+      records.push(saved);
+    }
+
+    return {
+      agent_id: agent.id,
+      cluster_id: agent.cluster_id,
+      ingested_count: records.length,
+      records,
+    };
+  }
+
+  /**
    * Query Node Metrics with strict query validation, pagination, and tenant isolation (Task 4.3)
    */
   public static async queryNodeMetricsScoped(params: {
