@@ -436,6 +436,32 @@ export class AiService {
       kubernetes_events: input.kubernetes_events,
     };
 
+    if ((input as any).kubernetes) {
+      rcaPayload.kubernetes = (input as any).kubernetes;
+    }
+    if ((input as any).prediction) {
+      rcaPayload.prediction = (input as any).prediction;
+    }
+
+    if (!rcaPayload.pod_id) {
+      try {
+        const podRes = await pool.query(
+          `SELECT p.name FROM pods p 
+           LEFT JOIN workloads w ON w.id = p.workload_id 
+           WHERE (w.name = $1 OR p.name LIKE $2 OR p.labels->>'app' = $1)
+             AND p.deleted_at IS NULL 
+           ORDER BY p.restart_count DESC, p.created_at DESC 
+           LIMIT 1`,
+          [input.service_id, `${input.service_id}%`]
+        );
+        if (podRes.rows.length > 0 && podRes.rows[0].name) {
+          rcaPayload.pod_id = podRes.rows[0].name;
+        }
+      } catch (err) {
+        console.warn('[AiService] Failed to auto-resolve pod_id:', err);
+      }
+    };
+
     if (prevAction && prevActionResult) {
       rcaPayload.previous_action = prevAction;
       rcaPayload.previous_action_result = prevActionResult;

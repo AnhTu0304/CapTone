@@ -2,81 +2,37 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
 import SelfHealingTrendChart from '../../../components/dashboard/SelfHealingTrendChart';
+import ActionDetailModal from './ActionDetailModal';
 import {
   History,
   CheckCircle2,
   Search,
   RefreshCw,
-  Database,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  XCircle,
+  Activity,
+  Eye
 } from 'lucide-react';
-
-const HISTORY_RECORDS = [
-  {
-    id: 'HIST-4091',
-    title: 'Tự động khởi động lại Pod order-processor sau lỗi OOMKilled',
-    target: 'Pod/order-processor-66bf-aa18x',
-    namespace: 'production',
-    policy: 'POL-RESTART-OOM',
-    mttr: '1.4 giây',
-    result: 'Thành công (100%)',
-    timestamp: '28 phút trước',
-    verifiedBy: 'MAPE-K Health Probe',
-  },
-  {
-    id: 'HIST-4088',
-    title: 'Xóa bộ nhớ đệm cache và giải phóng kết nối Redis',
-    target: 'StatefulSet/redis-cluster-leader-0',
-    namespace: 'redis',
-    policy: 'POL-FLUSH-CACHE-LAZY',
-    mttr: '1.1 giây',
-    result: 'Thành công (100%)',
-    timestamp: '1 giờ trước',
-    verifiedBy: 'TCP Ping Probe',
-  },
-  {
-    id: 'HIST-4085',
-    title: 'Scale Replicas từ 2 lên 4 do nghẽn hàng đợi thanh toán',
-    target: 'Deployment/payment-service',
-    namespace: 'production',
-    policy: 'POL-AUTO-SCALE-P90',
-    mttr: '2.3 giây',
-    result: 'Thành công (100%)',
-    timestamp: '3 giờ trước',
-    verifiedBy: 'Kubelet Metrics',
-  },
-  {
-    id: 'HIST-4080',
-    title: 'Khôi phục kết nối Gateway và làm mới cấu hình Envoy',
-    target: 'Deployment/api-gateway',
-    namespace: 'production',
-    policy: 'POL-ENVOY-RELOAD',
-    mttr: '1.8 giây',
-    result: 'Thành công (100%)',
-    timestamp: '5 giờ trước',
-    verifiedBy: 'HTTP 200 Probe',
-  },
-  {
-    id: 'HIST-4074',
-    title: 'Cân bằng lại lưu lượng Ingress sau sự cố mạng đột biến',
-    target: 'Ingress/production-ingress',
-    namespace: 'ingress-nginx',
-    policy: 'POL-INGRESS-REBALANCE',
-    mttr: '1.6 giây',
-    result: 'Thành công (100%)',
-    timestamp: '8 giờ trước',
-    verifiedBy: 'P99 Latency Monitor',
-  },
-];
 
 export const ActionHistoryPage = () => {
   const { currentOrg, currentEnv } = useDashboard();
   const [searchTerm, setSearchTerm] = useState('');
   const [actions, setActions] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+  const [isUsingLiveDb, setIsUsingLiveDb] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedAction, setSelectedAction] = useState(null);
+
+  const activeClusterId = useMemo(() => {
+    return currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster || '';
+  }, [currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster]);
+
+  const activeOrgId = useMemo(() => {
+    return currentOrg?.id || '';
+  }, [currentOrg?.id]);
 
   const formatRelativeTime = (dateStr) => {
     if (!dateStr) return 'Vừa xong';
@@ -91,62 +47,71 @@ export const ActionHistoryPage = () => {
   };
 
   const mapBackendActionToUI = useCallback((item) => {
-    const shortId = item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : item.id;
+    const shortId = item.id && item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : (item.id || 'N/A');
     const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
-    const mttrSec = (durMs / 1000).toFixed(1);
+    const mttrSec = item.elapsed_seconds ? `${item.elapsed_seconds}s` : `${(durMs / 1000).toFixed(1)}s`;
 
-    let title = item.result?.message || `Thực thi ${item.action_type_name || item.action_type_code} trên ${item.target_name || 'workload'}`;
-    let policyName = item.policy_name || 'POL-DEFAULT-MAPE-K';
-    let verified = item.verification?.verification_type || 'SLO Health Probe';
+    const targetName = item.target_name || item.target_id || 'Chưa xác định';
+    const actionTypeName = item.action_type_name || item.action_type_code || 'Tự phục hồi';
+    const title = item.result?.message || `Thực thi ${actionTypeName} trên ${targetName}`;
+    const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
+    const verified = item.verification?.verification_type || (item.execution_status === 'SUCCEEDED' ? 'SLO Health Probe' : 'Hệ thống K8s');
+
+    let resultText = 'Thành công (100%)';
+    if (item.execution_status === 'FAILED') resultText = 'Thất bại (Failed)';
+    if (item.execution_status === 'CANCELLED') resultText = 'Đã hủy bỏ (Cancelled)';
+    if (item.execution_status === 'RUNNING') resultText = 'Đang thực thi...';
 
     return {
       id: shortId,
       rawId: item.id,
       title,
-      target: `${item.target_type || 'Pod'}/${item.target_name || 'sme-order-service'}`,
-      namespace: 'production',
+      target: `${item.target_type || 'Workload'}/${targetName}`,
+      namespace: item.namespace || 'default',
       policy: policyName,
-      mttr: `${mttrSec} giây`,
-      result: item.execution_status === 'SUCCEEDED' ? 'Thành công (100%)' : item.execution_status,
+      mttr: mttrSec,
+      result: resultText,
       timestamp: formatRelativeTime(item.completed_at || item.created_at),
       verifiedBy: verified,
       status: item.execution_status,
+      errorMessage: item.error_message || null,
+      rawItem: item,
     };
   }, []);
 
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
     try {
-      const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster;
-      const activeOrgId = currentOrg?.id;
-
+      // 1. Fetch action records from Main Backend
       const res = await selfHealingService.getActions({
         limit: 50,
         cluster_id: activeClusterId,
         organization_id: activeOrgId,
       });
 
+      // 2. Fetch MTTR analytics from Main Backend
+      const analyticsRes = await selfHealingService.getAnalytics({
+        cluster_id: activeClusterId,
+        organization_id: activeOrgId,
+      });
+
       const items = res?.items || (Array.isArray(res) ? res : []);
-      if (items.length > 0) {
-        setActions(items.map(mapBackendActionToUI));
-        setIsUsingLiveDb(true);
-      } else {
-        setActions(HISTORY_RECORDS);
-        setIsUsingLiveDb(false);
-      }
+      setActions(items.map(mapBackendActionToUI));
+      setAnalytics(analyticsRes);
+      setIsUsingLiveDb(true);
     } catch (err) {
       console.warn('[ActionHistoryPage] Lỗi tải lịch sử:', err.message);
-      setActions(HISTORY_RECORDS);
-      setIsUsingLiveDb(false);
+      setActions([]);
+      setIsUsingLiveDb(true);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, mapBackendActionToUI]);
+  }, [activeClusterId, activeOrgId, mapBackendActionToUI]);
 
   useEffect(() => {
     fetchActions();
-  }, [fetchActions, currentOrg?.id, currentEnv?.id, currentEnv?.cluster]);
+  }, [fetchActions]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -174,27 +139,10 @@ export const ActionHistoryPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Lịch Sử Tự Phục Hồi & Báo Cáo Hiệu Quả MTTR
             </h1>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '10px',
-                backgroundColor: isUsingLiveDb ? '#DCFCE7' : '#FEF3C7',
-                color: isUsingLiveDb ? '#15803D' : '#B45309',
-                border: `1px solid ${isUsingLiveDb ? '#86EFAC' : '#FDE68A'}`,
-              }}
-            >
-              <Database size={10} />
-              <span>{isUsingLiveDb ? 'Live DB' : 'Mô phỏng'}</span>
-            </span>
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'SME Retail Enterprise'}</strong> &bull; Cụm K8s:{' '}
-            <span style={{ fontWeight: 600, color: 'var(--dash-primary)' }}>{currentEnv?.cluster || 'sang-k8s'}</span> &bull; Lưu vết mọi hành động tự phục hồi đã thực thi
+            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Cụm K8s:{' '}
+            <span style={{ fontWeight: 600, color: 'var(--dash-primary)' }}>{currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm'}</span> &bull; Dữ liệu lưu vết thực tế từ cơ sở dữ liệu
           </p>
         </div>
 
@@ -213,7 +161,7 @@ export const ActionHistoryPage = () => {
               borderRadius: 'var(--dash-radius-md)',
               fontSize: '0.8125rem',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
@@ -223,7 +171,7 @@ export const ActionHistoryPage = () => {
       </div>
 
       {/* Embedded Self-Healing Trend Chart */}
-      <SelfHealingTrendChart />
+      <SelfHealingTrendChart actions={actions} analytics={analytics} />
 
       {/* History Records Table */}
       <div className="dash-card" style={{ padding: '20px' }}>
@@ -233,7 +181,7 @@ export const ActionHistoryPage = () => {
               Nhật Ký Hành Động Đã Hoàn Tất ({filteredHistory.length})
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-              Thời gian hồi phục trung bình đạt 1.62s &bull; Đạt cam kết chuẩn SLA cho SME
+              Thời gian hồi phục trung bình đạt {analytics?.averageRecoveryTime || '0s'} &bull; Tỷ lệ thành công: {analytics?.successRate || (actions.length > 0 ? '100%' : '100%')} ({analytics?.totalActions !== undefined ? analytics.totalActions : actions.length} tác vụ) &bull; Nhấp vào hàng để xem chi tiết
             </p>
           </div>
 
@@ -265,46 +213,133 @@ export const ActionHistoryPage = () => {
                 <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>MÃ BẢN GHI</th>
                 <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>HÀNH ĐỘNG & NỘI DUNG</th>
                 <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>ĐỐI TƯỢNG (TARGET)</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>THỜI GIAN MTTR</th>
+                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>THỜI LƯỢNG</th>
                 <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>KẾT QUẢ KIỂM TRA</th>
                 <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>THỜI ĐIỂM</th>
+                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', textAlign: 'center' }}>CHI TIẾT</th>
               </tr>
             </thead>
             <tbody>
-              {filteredHistory.map((rec) => (
-                <tr key={rec.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                    {rec.id}
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{rec.title}</div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      Chính sách: {rec.policy}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-primary)' }}>
-                    <div>{rec.target}</div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>ns: {rec.namespace}</div>
-                  </td>
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#059669' }}>
-                    {rec.mttr}
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 600 }}>
-                      <CheckCircle2 size={13} />
-                      <span>{rec.result}</span>
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{rec.verifiedBy}</div>
-                  </td>
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-                    {rec.timestamp}
+              {filteredHistory.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
+                    <ShieldCheck size={32} color="#059669" style={{ margin: '0 auto 8px', display: 'block' }} />
+                    <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>Không có bản ghi lịch sử nào phù hợp</div>
+                    <div style={{ fontSize: '0.75rem', marginTop: '2px' }}>Chưa có hành động tự phục hồi nào được ghi nhận cho bộ lọc hiện tại.</div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredHistory.map((rec) => {
+                  const isSucceeded = rec.status === 'SUCCEEDED';
+                  const isCancelled = rec.status === 'CANCELLED';
+                  const isFailed = rec.status === 'FAILED';
+
+                  let statusColor = '#059669';
+                  if (isCancelled) statusColor = '#D97706';
+                  if (isFailed) statusColor = '#DC2626';
+
+                  return (
+                    <tr
+                      key={rec.id}
+                      onClick={() => setSelectedAction({ id: rec.rawId, item: rec.rawItem })}
+                      style={{
+                        borderBottom: '1px solid #F1F5F9',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#F8FAFC';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                        <span style={{ borderBottom: '1px dashed #CBD5E1' }}>{rec.id}</span>
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{rec.title}</div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          Chính sách: {rec.policy}
+                        </div>
+                        {rec.errorMessage && (
+                          <div style={{ fontSize: '0.6875rem', color: '#DC2626', marginTop: '2px' }}>
+                            Lý do: {rec.errorMessage}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-primary)' }}>
+                        <div>{rec.target}</div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>ns: {rec.namespace}</div>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: statusColor }}>
+                        {rec.mttr}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: statusColor, fontWeight: 600 }}>
+                          {isSucceeded && <CheckCircle2 size={13} />}
+                          {isCancelled && <XCircle size={13} />}
+                          {isFailed && <AlertCircle size={13} />}
+                          <span>{rec.result}</span>
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{rec.verifiedBy}</div>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+                        {rec.timestamp}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedAction({ id: rec.rawId, item: rec.rawItem });
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #CBD5E1',
+                            backgroundColor: '#FFFFFF',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: 'var(--dash-text-primary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#F1F5F9';
+                            e.currentTarget.style.borderColor = 'var(--dash-primary)';
+                            e.currentTarget.style.color = 'var(--dash-primary)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#FFFFFF';
+                            e.currentTarget.style.borderColor = '#CBD5E1';
+                            e.currentTarget.style.color = 'var(--dash-text-primary)';
+                          }}
+                        >
+                          <Eye size={13} />
+                          <span>Chi tiết</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Action Detail Modal */}
+      {selectedAction && (
+        <ActionDetailModal
+          actionId={selectedAction.id}
+          initialItem={selectedAction.item}
+          onClose={() => setSelectedAction(null)}
+        />
+      )}
     </div>
   );
 };

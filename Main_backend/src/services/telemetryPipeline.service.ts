@@ -169,9 +169,17 @@ export class TelemetryPipelineService {
           data: {
             id: result.rca_diagnosis.recommendation_id,
             incident_id: result.rca_diagnosis.incident_id,
+            recommendation: result.rca_diagnosis.recommendation.action,
             action: result.rca_diagnosis.recommendation.action,
+            action_code: result.rca_diagnosis.recommendation.action,
             reason: result.rca_diagnosis.recommendation.reason,
+            reasoning: result.rca_diagnosis.recommendation.reason,
             priority: result.rca_diagnosis.recommendation.priority,
+            target_name: serviceId,
+            target_id: serviceId,
+            incident_title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
+            cluster_id: (result.rca_diagnosis as any)?.cluster_id,
+            created_at: new Date().toISOString(),
           },
         });
 
@@ -340,18 +348,33 @@ export class TelemetryPipelineService {
         );
         if (wlRes.rows.length > 0 && wlRes.rows[0].namespace_name) {
           targetNamespace = wlRes.rows[0].namespace_name;
-        } else if (serviceId === 'selfheal-test-app') {
-          targetNamespace = 'test-lab';
+        } else {
+          const podNsRes = await pool.query(
+            `SELECT n.name as namespace_name 
+             FROM pods p 
+             JOIN namespaces n ON n.id = p.namespace_id 
+             WHERE (p.name LIKE $1 OR p.labels->>'app' = $2) 
+             LIMIT 1`,
+            [`${serviceId}%`, serviceId]
+          );
+          if (podNsRes.rows.length > 0 && podNsRes.rows[0].namespace_name) {
+            targetNamespace = podNsRes.rows[0].namespace_name;
+          }
         }
-      } catch {
-        if (serviceId === 'selfheal-test-app') targetNamespace = 'test-lab';
+      } catch (e) {
+        console.warn(`[AutonomousSelfHealing] Could not resolve namespace for ${serviceId}:`, e);
       }
 
+      const targetPod = rca.target?.id || rca.target?.name;
       const dispatchResult = await dispatchHealingActionToAgent({
         action_id: actionId,
         action_type: policy.action_code || 'RESTART_POD',
         target_name: serviceId,
         namespace: targetNamespace,
+        params: {
+          pod_name: targetPod,
+          pod_id: targetPod,
+        },
       });
 
       console.log(`📡 [AutonomousSelfHealing] Action dispatched to agent: ${dispatchResult.dispatched ? 'SUCCESS' : 'NO AGENT (QUEUED)'}`);

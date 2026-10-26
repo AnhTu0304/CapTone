@@ -117,16 +117,21 @@ export class IncidentModel {
     }
 
     if (params.cluster_id && params.cluster_id !== 'all') {
-      conditions.push(`(
-        i.cluster_id = $${idx} OR 
-        EXISTS (
-          SELECT 1 FROM clusters c2 
-          WHERE (c2.id::text = i.cluster_id OR c2.cluster_uid = i.cluster_id OR c2.name = i.cluster_id)
-            AND (c2.id::text = $${idx} OR c2.name = $${idx} OR c2.cluster_uid = $${idx})
-        )
-      )`);
-      values.push(params.cluster_id);
-      idx++;
+      const clusterMatches = await pool.query(
+        'SELECT id, name, cluster_uid FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1',
+        [params.cluster_id]
+      );
+      if (clusterMatches.rows.length > 0) {
+        const cRow = clusterMatches.rows[0];
+        const validIds = Array.from(new Set([params.cluster_id, String(cRow.id), cRow.name, cRow.cluster_uid].filter(Boolean)));
+        conditions.push(`i.cluster_id = ANY($${idx})`);
+        values.push(validIds);
+        idx++;
+      } else {
+        conditions.push(`i.cluster_id = $${idx}`);
+        values.push(params.cluster_id);
+        idx++;
+      }
     }
 
     if (params.status && params.status !== 'all') {
@@ -171,6 +176,8 @@ export class IncidentModel {
       SELECT 
         i.id,
         i.organization_id,
+        COALESCE(i.organization_id, e.organization_id) AS effective_organization_id,
+        e.organization_id AS env_organization_id,
         o.name AS organization_name,
         i.environment_id,
         e.name AS environment_name,
@@ -190,7 +197,10 @@ export class IncidentModel {
         r.root_cause_type,
         r.root_cause_description,
         r.confidence_score AS rca_confidence,
-        r.analysis_result
+        r.analysis_method,
+        r.analysis_result,
+        COALESCE(ns.name, 'default') AS namespace,
+        COALESCE(nd.name, 'minikube') AS node_name
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
@@ -202,7 +212,20 @@ export class IncidentModel {
         LIMIT 1
       ) c ON true
       LEFT JOIN LATERAL (
-        SELECT r.id, r.root_cause_type, r.root_cause_description, r.confidence_score, r.analysis_result
+        SELECT w.id, w.name, w.namespace_id
+        FROM workloads w
+        WHERE (w.id::text = i.target_id OR w.name = i.target_id)
+        LIMIT 1
+      ) w ON true
+      LEFT JOIN namespaces ns ON ns.id = w.namespace_id
+      LEFT JOIN LATERAL (
+        SELECT nd.name
+        FROM nodes nd
+        WHERE (nd.cluster_id::text = i.cluster_id OR nd.cluster_id IN (SELECT id FROM clusters WHERE name = i.cluster_id))
+        LIMIT 1
+      ) nd ON true
+      LEFT JOIN LATERAL (
+        SELECT r.id, r.root_cause_type, r.root_cause_description, r.confidence_score, r.analysis_method, r.analysis_result
         FROM rca_analyses r
         WHERE r.incident_id = i.id
         ORDER BY r.analyzed_at DESC
@@ -227,6 +250,8 @@ export class IncidentModel {
       SELECT 
         i.id,
         i.organization_id,
+        COALESCE(i.organization_id, e.organization_id) AS effective_organization_id,
+        e.organization_id AS env_organization_id,
         o.name AS organization_name,
         i.environment_id,
         e.name AS environment_name,
@@ -251,7 +276,9 @@ export class IncidentModel {
         r.confidence_score AS rca_confidence,
         r.analysis_method,
         r.analysis_result,
-        r.analyzed_at
+        r.analyzed_at,
+        COALESCE(ns.name, 'default') AS namespace,
+        COALESCE(nd.name, 'minikube') AS node_name
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
@@ -262,6 +289,19 @@ export class IncidentModel {
         ORDER BY (c.id::text = i.cluster_id) DESC, c.created_at DESC
         LIMIT 1
       ) c ON true
+      LEFT JOIN LATERAL (
+        SELECT w.id, w.name, w.namespace_id
+        FROM workloads w
+        WHERE (w.id::text = i.target_id OR w.name = i.target_id)
+        LIMIT 1
+      ) w ON true
+      LEFT JOIN namespaces ns ON ns.id = w.namespace_id
+      LEFT JOIN LATERAL (
+        SELECT nd.name
+        FROM nodes nd
+        WHERE (nd.cluster_id::text = i.cluster_id OR nd.cluster_id IN (SELECT id FROM clusters WHERE name = i.cluster_id))
+        LIMIT 1
+      ) nd ON true
       LEFT JOIN LATERAL (
         SELECT r.id, r.root_cause_type, r.root_cause_description, r.confidence_score, r.analysis_method, r.analysis_result, r.analyzed_at
         FROM rca_analyses r
@@ -306,5 +346,36 @@ export class IncidentModel {
       [limit]
     );
     return res.rows;
+  }
+
+  /**
+   * Validate if a cluster belongs to the specified organization
+   */
+  public static async validateClusterBelongsToOrg(clusterIdOrName: string, orgId: string): Promise<boolean> {
+    const query = `
+      SELECT 1 
+      FROM clusters c
+      JOIN environments e ON c.environment_id = e.id
+      WHERE (c.id::text = $1 OR c.name = $1 OR c.cluster_uid = $1)
+        AND e.organization_id = $2
+      LIMIT 1;
+    `;
+    const res = await pool.query(query, [clusterIdOrName, orgId]);
+    return res.rows.length > 0;
+  }
+
+  /**
+   * Resolve organization ID owning an incident
+   */
+  public static async findOrgIdByIncidentId(incidentId: string): Promise<string | null> {
+    const query = `
+      SELECT COALESCE(i.organization_id, e.organization_id) AS organization_id
+      FROM incidents i
+      LEFT JOIN environments e ON e.id = i.environment_id
+      WHERE i.id = $1
+      LIMIT 1;
+    `;
+    const res = await pool.query(query, [incidentId]);
+    return res.rows[0]?.organization_id || null;
   }
 }

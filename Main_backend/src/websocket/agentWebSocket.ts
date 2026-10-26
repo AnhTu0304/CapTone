@@ -544,6 +544,8 @@ export async function dispatchHealingActionToAgent(payload: {
   target_name: string;
   namespace?: string;
   params?: any;
+  cluster_id?: string;
+  environment_id?: string;
 }): Promise<{ dispatched: boolean; recipient_agent?: string }> {
   if (!activeAgentWss || activeAgentWss.clients.size === 0) {
     console.warn(`[AgentWebSocket] No connected agents available to receive action '${payload.action_type}' for target '${payload.target_name}'.`);
@@ -551,11 +553,21 @@ export async function dispatchHealingActionToAgent(payload: {
   }
 
   let chosenClient: ExtWebSocket | null = null;
+  // Tenant-aware agent selection: match specifically by cluster_id or environment_id if provided
   for (const client of activeAgentWss.clients) {
     const extWs = client as ExtWebSocket;
     if (extWs.isAlive && extWs.agent && extWs.readyState === WebSocket.OPEN) {
-      chosenClient = extWs;
-      break;
+      if (payload.cluster_id && extWs.agent.cluster_id === payload.cluster_id) {
+        chosenClient = extWs;
+        break;
+      }
+      if (payload.environment_id && extWs.agent.environment_id === payload.environment_id) {
+        chosenClient = extWs;
+        break;
+      }
+      if (!chosenClient) {
+        chosenClient = extWs;
+      }
     }
   }
 

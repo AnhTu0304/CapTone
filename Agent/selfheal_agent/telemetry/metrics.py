@@ -143,7 +143,7 @@ class MetricsManager:
                     try:
                         data = await resp.json()
                         if isinstance(data, dict):
-                            telemetry_stats = data.get("telemetry", {})
+                            telemetry_stats = data.get("telemetry", {}) or data.get("metrics", {})
                             active_stress = data.get("activeStress", {})
                             if active_stress and active_stress.get("cpuActive"):
                                 telemetry_stats["simulated_cpu"] = float(active_stress.get("cpuLoadPercent", 0.0))
@@ -203,7 +203,8 @@ class MetricsManager:
                 logger.debug("Log read error for %s: %s", pod.name, log_err)
 
         # Combine telemetry from /health endpoint, logs, and probe
-        if telemetry_stats and telemetry_stats.get("requestsInWindow", 0) > 0:
+        reqs_in_w = telemetry_stats.get("requestsInWindow") or telemetry_stats.get("requestsLast5s") or 0
+        if telemetry_stats and (reqs_in_w > 0 or float(telemetry_stats.get("rps", 0.0)) > 0):
             request_rate = float(telemetry_stats.get("rps", 0.0))
             http_5xx_rate = float(telemetry_stats.get("http5xxRate", 0.0))
         elif requests_in_log > 0:

@@ -9,10 +9,91 @@ import {
   IncidentModel,
   RcaModel,
   RecommendationModel,
+  OrganizationMemberModel,
 } from '../models';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 
+const ACTION_CODE_MAP: Record<string, string> = {
+  'Restart Pod': 'RESTART_POD',
+  'Replace Pod': 'REPLACE_POD',
+  'Scale Replicas': 'SCALE_REPLICAS',
+  'Rollback Deployment': 'ROLLBACK_DEPLOYMENT',
+  'Cleanup Temporary Files': 'CLEANUP_STORAGE',
+  'Temporary IP Block': 'TEMPORARY_IP_BLOCK',
+  'Restart Deployment': 'RESTART_DEPLOYMENT',
+  'No Action': 'NO_ACTION',
+};
+
 export class AiController {
+  /**
+   * Helper: Check if user belongs to requested organization and if cluster belongs to that organization
+   */
+  private static async validateUserOrgAndCluster(user: any, orgId?: string, clusterId?: string): Promise<string | null> {
+    if (user?.role === 'SUPER_ADMIN') {
+      return orgId || null;
+    }
+    const effectiveOrgId = orgId || user?.organization_id;
+    if (!effectiveOrgId) {
+      return null;
+    }
+    if (user?.id) {
+      const membership = await OrganizationMemberModel.findByOrgAndUser(effectiveOrgId, user.id);
+      if (!membership) {
+        throw new ApiError(403, 'Bạn không thuộc tổ chức được yêu cầu (User does not belong to the requested organization)');
+      }
+    }
+    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
+      const belongs = await IncidentModel.validateClusterBelongsToOrg(clusterId, effectiveOrgId);
+      if (!belongs) {
+        throw new ApiError(404, 'Cụm Kubernetes không thuộc tổ chức này (Cluster does not belong to the requested organization)');
+      }
+    }
+    return effectiveOrgId;
+  }
+
+  /**
+   * Helper: Check if user has read permission on an incident
+   */
+  private static async validateIncidentAccess(user: any, incidentId: string): Promise<any> {
+    const incident = await IncidentModel.findById(incidentId);
+    if (!incident) {
+      throw new ApiError(404, 'Sự cố không tồn tại (Incident not found)');
+    }
+    if (user?.role === 'SUPER_ADMIN') {
+      return incident;
+    }
+    const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
+    if (orgId && user?.id) {
+      const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
+      if (!membership) {
+        throw new ApiError(403, 'Bạn không có quyền truy cập sự cố thuộc tổ chức này');
+      }
+    }
+    return incident;
+  }
+
+  /**
+   * Helper: Check if user has write/manage permission on an incident (DevOps/Admin/Owner within the org)
+   */
+  private static async validateIncidentManageAccess(user: any, incidentId: string): Promise<any> {
+    const incident = await this.validateIncidentAccess(user, incidentId);
+    if (user?.role === 'SUPER_ADMIN') {
+      return incident;
+    }
+    const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
+    if (orgId && user?.id) {
+      const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
+      if (!membership) {
+        throw new ApiError(403, 'Bạn không có quyền quản lý sự cố thuộc tổ chức này');
+      }
+      const roleCode = (membership.role_code || '').toUpperCase();
+      if (roleCode === 'VIEWER') {
+        throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được cập nhật trạng thái sự cố hoặc áp dụng can thiệp');
+      }
+    }
+    return incident;
+  }
+
   /**
    * Health check endpoint to verify AI Backend & GRU model readiness
    * GET /api/v1/ai/health
@@ -53,6 +134,12 @@ export class AiController {
     }
 
     try {
+      const user = (req as any).user;
+      const orgId = (req.body.organization_id as string | undefined) || user?.organization_id;
+      if (validationResult.data.cluster_id || orgId) {
+        await AiController.validateUserOrgAndCluster(user, orgId, validationResult.data.cluster_id);
+      }
+
       const result = await AiService.predictRisk(validationResult.data);
       return ApiResponse.success(
         res,
@@ -88,6 +175,12 @@ export class AiController {
     }
 
     try {
+      const user = (req as any).user;
+      const orgId = (req.body.organization_id as string | undefined) || user?.organization_id;
+      if (validationResult.data.cluster_id || orgId) {
+        await AiController.validateUserOrgAndCluster(user, orgId, validationResult.data.cluster_id);
+      }
+
       const result = await AiService.analyzeRootCause(validationResult.data);
       return ApiResponse.success(
         res,
@@ -132,16 +225,24 @@ export class AiController {
       const prediction_type = req.query.prediction_type as string | undefined;
       const cluster_id = req.query.cluster_id as string | undefined;
 
+      const user = (req as any).user;
+      const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
+      const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
+
       const result = await AiPredictionModel.findMany({
         limit,
         offset,
         status,
         prediction_type,
         cluster_id,
+        organization_id: effectiveOrgId || undefined,
       });
 
       return ApiResponse.success(res, 'Retrieved predictions list', result, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -154,9 +255,17 @@ export class AiController {
     try {
       const cluster_id = req.query.cluster_id as string | undefined;
       const workload = (req.query.workload as string) || (req.query.service_id as string) || undefined;
-      const stats = await AiPredictionModel.getPredictionStats(cluster_id, workload);
+
+      const user = (req as any).user;
+      const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
+      const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
+
+      const stats = await AiPredictionModel.getPredictionStats(cluster_id, workload, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved prediction statistics', stats, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -168,6 +277,10 @@ export class AiController {
   public static async getWorkloads(req: Request, res: Response) {
     try {
       const cluster_id = req.query.cluster_id as string | undefined;
+      const user = (req as any).user;
+      const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
+      const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
+
       let query = `
         SELECT DISTINCT w.name 
         FROM workloads w
@@ -175,9 +288,14 @@ export class AiController {
       `;
       const params: any[] = [];
       let idx = 1;
-      if (cluster_id && cluster_id !== 'ALL') {
+      if (cluster_id && cluster_id !== 'ALL' && cluster_id !== 'all') {
         query += ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR w.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`;
         params.push(cluster_id);
+        idx++;
+      }
+      if (effectiveOrgId) {
+        query += ` AND EXISTS (SELECT 1 FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE (c.id::text = w.cluster_id OR c.name = w.cluster_id OR c.cluster_uid = w.cluster_id) AND e.organization_id = $${idx})`;
+        params.push(effectiveOrgId);
         idx++;
       }
       query += ` AND w.name NOT IN ('coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-controller', 'storage-provisioner', 'kube-apiserver-minikube', 'kube-controller-manager-minikube', 'kube-scheduler-minikube', 'selfheal-agent', 'metrics-server')`;
@@ -186,6 +304,9 @@ export class AiController {
       const workloads = result.rows.map((r: any) => r.name);
       return ApiResponse.success(res, 'Retrieved cluster workloads', workloads, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -201,8 +322,20 @@ export class AiController {
       if (!prediction) {
         return ApiResponse.error(res, 'Prediction not found', 404);
       }
+
+      const user = (req as any).user;
+      if (prediction.organization_id && user?.id && user.role !== 'SUPER_ADMIN') {
+        const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
+        if (!membership) {
+          return ApiResponse.error(res, 'Bạn không có quyền truy cập dự đoán thuộc tổ chức này', 403);
+        }
+      }
+
       return ApiResponse.success(res, 'Retrieved prediction details', prediction, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -214,6 +347,19 @@ export class AiController {
   public static async getPredictionInputs(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const prediction = await AiPredictionModel.findById(id);
+      if (!prediction) {
+        return ApiResponse.error(res, 'Prediction not found', 404);
+      }
+
+      const user = (req as any).user;
+      if (prediction.organization_id && user?.id && user.role !== 'SUPER_ADMIN') {
+        const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
+        if (!membership) {
+          return ApiResponse.error(res, 'Bạn không có quyền truy cập dữ liệu chuỗi thời gian của tổ chức này', 403);
+        }
+      }
+
       const inputs = await AiPredictionModel.findInputsByPredictionId(id);
       return ApiResponse.success(
         res,
@@ -222,6 +368,9 @@ export class AiController {
         200
       );
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -237,8 +386,11 @@ export class AiController {
       const status = req.query.status as string | undefined;
       const severity = req.query.severity as string | undefined;
       const cluster_id = req.query.cluster_id as string | undefined;
-      const organization_id = (req.query.organization_id as string | undefined) || (req as any).user?.organization_id;
       const search = req.query.search as string | undefined;
+
+      const user = (req as any).user;
+      const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
+      const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
 
       const result = await IncidentModel.findMany({
         limit,
@@ -246,12 +398,15 @@ export class AiController {
         status,
         severity,
         cluster_id,
-        organization_id,
+        organization_id: effectiveOrgId || undefined,
         search,
       });
 
       return ApiResponse.success(res, 'Retrieved incidents list', result, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -263,12 +418,13 @@ export class AiController {
   public static async getIncidentById(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const incident = await IncidentModel.findById(id);
-      if (!incident) {
-        return ApiResponse.error(res, 'Incident not found', 404);
-      }
+      const user = (req as any).user;
+      const incident = await AiController.validateIncidentAccess(user, id);
       return ApiResponse.success(res, 'Retrieved incident details', incident, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -285,6 +441,9 @@ export class AiController {
         return ApiResponse.error(res, 'Missing status field in request body', 400);
       }
 
+      const user = (req as any).user;
+      await AiController.validateIncidentManageAccess(user, id);
+
       const updated = await IncidentModel.updateStatus(id, status);
       if (!updated) {
         return ApiResponse.error(res, 'Incident not found', 404);
@@ -292,6 +451,9 @@ export class AiController {
 
       return ApiResponse.success(res, 'Updated incident status successfully', updated, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -303,6 +465,9 @@ export class AiController {
   public static async getIncidentEvidences(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const user = (req as any).user;
+      await AiController.validateIncidentAccess(user, id);
+
       const evidences = await RcaModel.findEvidencesByIncidentId(id);
       return ApiResponse.success(
         res,
@@ -311,6 +476,9 @@ export class AiController {
         200
       );
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -322,6 +490,9 @@ export class AiController {
   public static async getIncidentRecommendations(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const user = (req as any).user;
+      await AiController.validateIncidentAccess(user, id);
+
       const recommendations = await RecommendationModel.findByIncidentId(id);
       return ApiResponse.success(
         res,
@@ -330,6 +501,9 @@ export class AiController {
         200
       );
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -342,9 +516,17 @@ export class AiController {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
       const cluster_id = req.query.cluster_id as string | undefined;
-      const result = await RecommendationModel.getRecent(limit, cluster_id);
+
+      const user = (req as any).user;
+      const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
+      const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
+
+      const result = await RecommendationModel.getRecent(limit, cluster_id, undefined, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved recommendations list', result, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -375,9 +557,17 @@ export class AiController {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
       const cluster_id = req.query.cluster_id as string | undefined;
-      const actions = await RecommendationModel.getHealingActions(limit, cluster_id);
+
+      const user = (req as any).user;
+      const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
+      const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
+
+      const actions = await RecommendationModel.getHealingActions(limit, cluster_id, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved executed healing actions', actions, 200);
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
@@ -392,6 +582,12 @@ export class AiController {
       const rec = await RecommendationModel.findById(id);
       if (!rec) {
         return ApiResponse.error(res, 'Recommendation not found', 404);
+      }
+
+      // Check organization manage permissions on incident
+      const user = (req as any).user;
+      if (rec.incident_id) {
+        await AiController.validateIncidentManageAccess(user, rec.incident_id);
       }
 
       // 1. Fetch incident details to bind environment_id and target workload
@@ -423,7 +619,6 @@ export class AiController {
         const wlRes = await pool.query('SELECT name FROM workloads WHERE id = $1 LIMIT 1;', [incident.target_id]);
         targetName = wlRes.rows[0]?.name || incident.target_id;
       }
-      const user = (req as any).user;
 
       // 2. Insert into healing_actions
       const healingAction = await RecommendationModel.createHealingAction({
@@ -478,11 +673,19 @@ export class AiController {
       }
 
       // 6. Dispatch action to connected K8s Agent for real cluster remediation
+      const targetPod = rec.target_id || (rec.incident_title?.includes(' on ') ? rec.incident_title.split(' on ')[1]?.trim() : undefined);
+      const actionType = ACTION_CODE_MAP[rec.recommendation] || (rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation);
       dispatchHealingActionToAgent({
         action_id: healingAction.id,
-        action_type: rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation,
+        action_type: actionType,
         target_name: targetName,
         namespace: targetNamespace,
+        params: {
+          ...(req.body?.params || {}),
+          ...(req.body || {}),
+          pod_name: targetPod || req.body?.pod_name,
+          pod_id: targetPod || req.body?.pod_id,
+        },
       }).catch((err) => console.warn('[AiController] Failed to dispatch action to agent:', err));
 
       return ApiResponse.success(
@@ -495,6 +698,9 @@ export class AiController {
         200
       );
     } catch (error) {
+      if (error instanceof ApiError) {
+        return ApiResponse.error(res, error.message, error.statusCode);
+      }
       return ApiResponse.error(res, (error as Error).message, 500);
     }
   }
