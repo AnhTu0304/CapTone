@@ -159,9 +159,10 @@ export const ApmPage = ({ onNavigate }) => {
     () =>
       transformApmMetricsForCharts(rawSequence, {
         maxPoints: presetConfig.maxChartPoints,
+        bucketSeconds: presetConfig.bucketSeconds,
         nowMs: Date.now(),
       }),
-    [rawSequence, presetConfig.maxChartPoints]
+    [rawSequence, presetConfig.maxChartPoints, presetConfig.bucketSeconds]
   );
 
   const { summary } = chartModel;

@@ -237,7 +237,15 @@ export function downsampleApmSeries(points, maxPoints = 240) {
  * @param {number} [options.nowMs=Date.now()]
  */
 export function transformApmMetricsForCharts(sequence = [], options = {}) {
-  const { maxPoints = 240, nowMs = Date.now() } = options;
+  const {
+    maxPoints = 240,
+    nowMs = Date.now(),
+    bucketSeconds = 5,
+    staleThresholdMs = Math.max(
+      APM_STALE_THRESHOLD_MS,
+      (Number(bucketSeconds) || 5) * 1000 + APM_STALE_THRESHOLD_MS
+    ),
+  } = options;
 
   if (!Array.isArray(sequence) || sequence.length === 0) {
     return {
@@ -353,7 +361,7 @@ export function transformApmMetricsForCharts(sequence = [], options = {}) {
   const count = samples.length;
   const latestSample = count > 0 ? samples[count - 1] : null;
   const latestAgeMs = latestSample ? Math.max(0, nowMs - latestSample.time * 1000) : 0;
-  const isStale = Boolean(latestSample && latestAgeMs > APM_STALE_THRESHOLD_MS);
+  const isStale = Boolean(latestSample && latestAgeMs > staleThresholdMs);
 
   const avgLat = count > 0 ? Math.round((latencySum / count) * 10) / 10 : 0;
   const avgThroughput = count > 0 ? Math.round((throughputSum / count) * 10) / 10 : 0;

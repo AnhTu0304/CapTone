@@ -202,6 +202,36 @@ describe('Task [S4][PB15] 1.1 – APM Monitoring Layout, Charts & Utilities Suit
       expect(model.summary.isStale).toBe(true);
     });
 
+    test('1.5b. Prevents false-positive stale alerts on wide buckets (7d / 1800s bucket)', () => {
+      // 30m bucket starts at 09:00:00
+      const wideSequence = [
+        {
+          time_bucket: '2026-10-26T09:00:00.000Z',
+          latency: 20.0,
+          request_rate: 50.0,
+          http_5xx_rate: 0.0,
+          cpu: 10.0,
+          ram: 20.0,
+        },
+      ];
+
+      // At 09:24:00 (24 minutes into the 30-minute bucket), data is actively ingested and NOT stale
+      const liveNow = new Date('2026-10-26T09:24:00.000Z').getTime();
+      const liveModel = transformApmMetricsForCharts(wideSequence, {
+        nowMs: liveNow,
+        bucketSeconds: 1800,
+      });
+      expect(liveModel.summary.isStale).toBe(false);
+
+      // At 09:36:00 (> 35m later, 5m past bucket end), stale alert correctly fires
+      const trulyStaleNow = new Date('2026-10-26T09:36:00.000Z').getTime();
+      const staleModel = transformApmMetricsForCharts(wideSequence, {
+        nowMs: trulyStaleNow,
+        bucketSeconds: 1800,
+      });
+      expect(staleModel.summary.isStale).toBe(true);
+    });
+
     test('1.6. Downsampling preserves first, last, and peak anomaly point', () => {
       const points = [];
       for (let i = 0; i < 500; i++) {
