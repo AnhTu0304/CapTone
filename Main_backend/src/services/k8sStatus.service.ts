@@ -1052,9 +1052,9 @@ export class K8sStatusService {
         w.updated_at,
         COALESCE(ns.name, 'default') AS namespace
       FROM workloads w
-      JOIN clusters c ON w.cluster_id = c.id
+      JOIN clusters c ON w.cluster_id::text = c.id::text
       LEFT JOIN environments e ON c.environment_id = e.id
-      LEFT JOIN namespaces ns ON w.namespace_id = ns.id
+      LEFT JOIN namespaces ns ON w.namespace_id::text = ns.id::text
       LEFT JOIN LATERAL (
         SELECT a.status
         FROM agents a
@@ -1140,9 +1140,9 @@ export class K8sStatusService {
          w.updated_at,
          COALESCE(ns.name, 'default') AS namespace
        FROM workloads w
-       JOIN clusters c ON w.cluster_id = c.id
+       JOIN clusters c ON w.cluster_id::text = c.id::text
        LEFT JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN namespaces ns ON w.namespace_id = ns.id
+       LEFT JOIN namespaces ns ON w.namespace_id::text = ns.id::text
        LEFT JOIN LATERAL (
          SELECT a.status
          FROM agents a
