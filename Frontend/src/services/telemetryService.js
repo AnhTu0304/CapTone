@@ -59,8 +59,7 @@ export const telemetryService = {
     const validClusterId =
       clusterId &&
       !clusterId.startsWith('org-') &&
-      !clusterId.startsWith('sandbox-') &&
-      clusterId !== 'k8s-cluster-01'
+      !clusterId.startsWith('sandbox-')
         ? clusterId
         : null;
     const validNodeId =
@@ -547,6 +546,144 @@ export const telemetryService = {
   },
 
   /**
+   * Fetch cluster-scoped CPU & RAM resource time series trend
+   * Queries real node_metrics across cluster nodes, falling back to APM service sequence.
+   * @param {Object} params - { orgId, clusterId, range, activeServiceId }
+   * @param {Object} [options] - { signal }
+   */
+  async getClusterResourceTrend(params = {}, options = {}) {
+    const { orgId, clusterId, range = '15m', activeServiceId = 'sme-order-service' } = params;
+    const durationMsMap = {
+      '15m': 15 * 60 * 1000,
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+    };
+    const durationMs = durationMsMap[range] || durationMsMap['15m'];
+    const limitMap = { '15m': 180, '1h': 360, '6h': 720, '24h': 1440 };
+    const limit = limitMap[range] || 180;
+    const nowMs = Date.now();
+    const fromIso = new Date(nowMs - durationMs).toISOString();
+    const toIso = new Date(nowMs).toISOString();
+
+    // 1. First attempt: query real host/node metrics for the cluster
+    if (clusterId && !clusterId.startsWith('org-') && !clusterId.startsWith('sandbox-')) {
+      try {
+        const nodeRes = await this.getNodeMetrics(
+          {
+            orgId,
+            clusterId,
+            from: fromIso,
+            to: toIso,
+            limit,
+            order: 'asc',
+          },
+          { signal: options?.signal }
+        );
+
+        const items = Array.isArray(nodeRes?.items) ? nodeRes.items : [];
+        if (items.length > 0) {
+          const bucketSec = range === '15m' ? 5 : range === '1h' ? 60 : range === '6h' ? 300 : 900;
+          const pointsByBucket = new Map();
+
+          for (let i = 0; i < items.length; i++) {
+            const row = items[i];
+            const d = new Date(row.collected_at || '');
+            if (isNaN(d.getTime())) continue;
+
+            const bucketKey = Math.floor(d.getTime() / (bucketSec * 1000)) * bucketSec;
+            const existing = pointsByBucket.get(bucketKey) || {
+              epochSec: bucketKey,
+              date: new Date(bucketKey * 1000),
+              cpuSum: 0,
+              ramSum: 0,
+              rawRamMbSum: 0,
+              diskSum: 0,
+              count: 0,
+            };
+
+            existing.cpuSum += Number(row.cpu_usage_percent || 0);
+            existing.ramSum += Number(row.ram_usage_percent || 0);
+            const ramMb = row.ram_used_bytes ? Number(row.ram_used_bytes) / (1024 * 1024) : 0;
+            existing.rawRamMbSum += ramMb;
+            existing.diskSum += Number(row.disk_usage_percent || 0);
+            existing.count += 1;
+            pointsByBucket.set(bucketKey, existing);
+          }
+
+          const sortedKeys = Array.from(pointsByBucket.keys()).sort((a, b) => a - b);
+          const sequence = sortedKeys.map((k) => {
+            const p = pointsByBucket.get(k);
+            const c = p.count || 1;
+            const t = p.date;
+            return {
+              time_bucket: t.toISOString(),
+              time: t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              fullTime: `${t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} (${t.toLocaleDateString('vi-VN')})`,
+              cpu: Math.round((p.cpuSum / c) * 100) / 100,
+              ram: Math.round((p.ramSum / c) * 100) / 100,
+              rawRamMb: Math.round((p.rawRamMbSum / c) * 10) / 10,
+              disk: Math.round((p.diskSum / c) * 10) / 10,
+              latency: 0,
+            };
+          });
+
+          if (sequence.length > 0) {
+            const latestItem = items[items.length - 1];
+            const latestTime = new Date(latestItem.collected_at).getTime();
+            const isStale = (Date.now() - latestTime) > (5 * 60 * 1000);
+
+            return {
+              sequence,
+              latestPoint: sequence[sequence.length - 1],
+              isStale,
+              source: 'node_metrics',
+            };
+          }
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') throw err;
+        console.warn('[telemetryService] getNodeMetrics failed in getClusterResourceTrend:', err.message);
+      }
+    }
+
+    // 2. Fallback: query APM service metrics sequence for the cluster
+    try {
+      const bucketSeconds = range === '15m' ? 5 : range === '1h' ? 60 : range === '6h' ? 300 : 900;
+      const seq = await this.getMetricsSequence(activeServiceId, {
+        limit: Math.min(100, limit),
+        bucket_seconds: bucketSeconds,
+        cluster_id: clusterId,
+        signal: options?.signal,
+      });
+
+      if (Array.isArray(seq) && seq.length > 0) {
+        const latestTime = seq[seq.length - 1]?.time_bucket
+          ? new Date(seq[seq.length - 1].time_bucket).getTime()
+          : Date.now();
+        const isStale = (Date.now() - latestTime) > (5 * 60 * 1000);
+
+        return {
+          sequence: seq,
+          latestPoint: seq[seq.length - 1],
+          isStale,
+          source: 'agent_metrics',
+        };
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getMetricsSequence fallback error:', err.message);
+    }
+
+    return {
+      sequence: [],
+      latestPoint: null,
+      isStale: false,
+      source: 'none',
+    };
+  },
+
+  /**
    * Subscribe to live WebSocket telemetry stream (100% Push Protocol)
    * @param {string} serviceId
    * @param {Function} onMessage - Callback receives parsed WebSocket JSON messages
@@ -573,7 +710,8 @@ export const telemetryService = {
           localStorage.getItem('selfheal_auth_token') ||
           localStorage.getItem('token');
         const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}${tokenParam}`;
+        const clusterParam = clusterId ? `&cluster_id=${encodeURIComponent(clusterId)}` : '';
+        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}${clusterParam}${tokenParam}`;
 
         ws = new WebSocket(wsUrl);
 

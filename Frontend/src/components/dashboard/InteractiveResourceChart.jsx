@@ -4,6 +4,7 @@ import {
   Cpu, 
   HardDrive, 
   AlertTriangle,
+  AlertCircle,
   ZoomIn,
   Sliders,
   Radio,
@@ -34,7 +35,11 @@ export const InteractiveResourceChart = ({
   timeRange = '15m',
   onTimeRangeChange,
   isLive = false,
+  isStale = false,
+  isClusterOnline = true,
   isLoading = false,
+  error = null,
+  onRetry,
 }) => {
   const [internalTimeRange, setInternalTimeRange] = useState(timeRange);
   const [showCpu, setShowCpu] = useState(true);
@@ -65,7 +70,7 @@ export const InteractiveResourceChart = ({
   // Stats calculation
   const stats = useMemo(() => {
     if (telemetryData.length === 0) {
-      return { avgCpu: 0, maxCpu: 0, minCpu: 0, avgRam: 0, maxRam: 0, minRam: 0, avgRamMb: 0, maxRamMb: 0 };
+      return { hasData: false, avgCpu: 0, maxCpu: 0, minCpu: 0, avgRam: 0, maxRam: 0, minRam: 0, avgRamMb: 0, maxRamMb: 0 };
     }
     const cpus = telemetryData.map((d) => Number(d.cpu) || 0);
     const rams = telemetryData.map((d) => Number(d.ram) || 0);
@@ -82,7 +87,7 @@ export const InteractiveResourceChart = ({
     const avgRamMb = ramMbs.length > 0 ? Math.round((ramMbs.reduce((a, b) => a + b, 0) / ramMbs.length) * 10) / 10 : 0;
     const maxRamMb = ramMbs.length > 0 ? Math.round(Math.max(...ramMbs) * 10) / 10 : 0;
 
-    return { avgCpu, maxCpu, minCpu, avgRam, maxRam, minRam, avgRamMb, maxRamMb };
+    return { hasData: true, avgCpu, maxCpu, minCpu, avgRam, maxRam, minRam, avgRamMb, maxRamMb };
   }, [telemetryData]);
 
   // Dynamic Y-axis scale calculation
@@ -209,8 +214,50 @@ export const InteractiveResourceChart = ({
               {title}
             </h3>
 
-            {/* Live Telemetry Indicator */}
-            {isLive ? (
+            {/* Live / Stale / Offline Telemetry Indicator */}
+            {!isClusterOnline ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor: '#F1F5F9',
+                  color: '#64748B',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                }}
+              >
+                ● Ngoại tuyến
+              </span>
+            ) : isStale ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                  color: '#D97706',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono, monospace)',
+                }}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#D97706',
+                    boxShadow: '0 0 6px #D97706',
+                  }}
+                />
+                DỮ LIỆU CŨ (Stale)
+              </span>
+            ) : isLive ? (
               <span
                 style={{
                   display: 'inline-flex',
@@ -234,7 +281,7 @@ export const InteractiveResourceChart = ({
                     boxShadow: '0 0 6px #059669',
                   }}
                 />
-                TRỰC TIẾP (eBPF 3s)
+                TRỰC TIẾP (eBPF 5s)
               </span>
             ) : (
               <span
@@ -250,7 +297,7 @@ export const InteractiveResourceChart = ({
                   fontWeight: 600,
                 }}
               >
-                ● Ngoại tuyến
+                ● Chờ dữ liệu
               </span>
             )}
           </div>
@@ -406,8 +453,8 @@ export const InteractiveResourceChart = ({
         </div>
       </div>
 
-      {/* 2. SVG Chart Area */}
-      {telemetryData.length === 0 ? (
+      {/* 2. SVG Chart Area / Loading / Error / Empty States */}
+      {isLoading ? (
         <div
           style={{
             height: `${height}px`,
@@ -422,8 +469,123 @@ export const InteractiveResourceChart = ({
         >
           <RefreshCw size={24} className="animate-spin" color="#059669" />
           <span style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>
-            {isLoading ? 'Đang tải dữ liệu chuỗi thời gian...' : 'Đang đồng bộ chuỗi viễn trắc eBPF từ cụm...'}
+            Đang tải dữ liệu chuỗi thời gian...
           </span>
+        </div>
+      ) : error ? (
+        <div
+          style={{
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#FEF2F2',
+            border: '1px dashed #FCA5A5',
+            borderRadius: '6px',
+            padding: '20px',
+            gap: '10px',
+          }}
+        >
+          <AlertCircle size={28} color="#DC2626" />
+          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>
+            Lỗi tải dữ liệu viễn trắc
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#B91C1C', textAlign: 'center', maxWidth: '400px' }}>
+            {error}
+          </span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                marginTop: '4px',
+                padding: '6px 14px',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                borderRadius: '6px',
+                border: 'none',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <RefreshCw size={13} />
+              Thử lại
+            </button>
+          )}
+        </div>
+      ) : !isClusterOnline ? (
+        <div
+          style={{
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#F8FAFC',
+            border: '1px dashed #CBD5E1',
+            borderRadius: '6px',
+            padding: '20px',
+            gap: '10px',
+          }}
+        >
+          <AlertTriangle size={28} color="#D97706" />
+          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+            Cụm Kubernetes đang ngoại tuyến hoặc chưa kết nối Agent.
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+            Vui lòng cài đặt hoặc kích hoạt selfheal-agent để truyền chuỗi viễn trắc eBPF.
+          </span>
+        </div>
+      ) : telemetryData.length === 0 ? (
+        <div
+          style={{
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#F8FAFC',
+            border: '1px dashed #E2E8F0',
+            borderRadius: '6px',
+            padding: '20px',
+            gap: '10px',
+          }}
+        >
+          <Activity size={28} color="#94A3B8" />
+          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+            Chưa có dữ liệu viễn trắc đo đạc
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#64748B', textAlign: 'center', maxWidth: '420px' }}>
+            Không tìm thấy dữ liệu metrics CPU/RAM từ các tác tử eBPF trong khoảng thời gian này.
+          </span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                marginTop: '4px',
+                padding: '6px 14px',
+                backgroundColor: '#F1F5F9',
+                color: '#334155',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <RefreshCw size={13} />
+              Thử lại
+            </button>
+          )}
         </div>
       ) : (
         <div 
@@ -741,10 +903,20 @@ export const InteractiveResourceChart = ({
             CPU TRUNG BÌNH / ĐỈNH
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#064E3B' }}>
-            {stats.avgCpu}% <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#047857' }}>/ Đỉnh {stats.maxCpu}%</span>
+            {stats.hasData ? (
+              <>
+                {stats.avgCpu}% <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#047857' }}>/ Đỉnh {stats.maxCpu}%</span>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#059669' }}>
-            Quy đổi: {((stats.avgCpu / 100) * totalCpuCores).toFixed(2)} / {totalCpuCores} vCPUs
+            {stats.hasData ? (
+              `Quy đổi: ${((stats.avgCpu / 100) * totalCpuCores).toFixed(2)} / ${totalCpuCores} vCPUs`
+            ) : (
+              `Quy đổi: — / ${totalCpuCores} vCPUs`
+            )}
           </div>
         </div>
 
@@ -753,13 +925,23 @@ export const InteractiveResourceChart = ({
             RAM TRUNG BÌNH / ĐỈNH
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#1E3A8A' }}>
-            {stats.avgRamMb > 0 ? `${stats.avgRamMb} MB` : `${stats.avgRam}%`}{' '}
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#2563EB' }}>
-              / Đỉnh {stats.maxRamMb > 0 ? `${stats.maxRamMb} MB` : `${stats.maxRam}%`}
-            </span>
+            {stats.hasData ? (
+              <>
+                {stats.avgRamMb > 0 ? `${stats.avgRamMb} MB` : `${stats.avgRam}%`}{' '}
+                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#2563EB' }}>
+                  / Đỉnh {stats.maxRamMb > 0 ? `${stats.maxRamMb} MB` : `${stats.maxRam}%`}
+                </span>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#3B82F6' }}>
-            Quy đổi: {stats.avgRam}% / {totalMemoryGb} GB RSS
+            {stats.hasData ? (
+              `Quy đổi: ${stats.avgRam}% / ${totalMemoryGb} GB RSS`
+            ) : (
+              `Quy đổi: — / ${totalMemoryGb} GB RSS`
+            )}
           </div>
         </div>
 
@@ -771,7 +953,9 @@ export const InteractiveResourceChart = ({
             Vòng lặp MAPE-K
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#059669' }}>
-            {stats.maxCpu > 80 ? '⚠️ Tự động kích hoạt Scale Replicas' : 'Mô hình GRU + Multi-Agent RCA: Giám sát'}
+            {stats.hasData && stats.maxCpu > 80
+              ? '⚠️ Tự động kích hoạt Scale Replicas'
+              : 'Mô hình GRU + Multi-Agent RCA: Giám sát'}
           </div>
         </div>
       </div>

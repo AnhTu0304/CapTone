@@ -39,8 +39,15 @@ export const OverviewPage = () => {
     onNavigate,
   } = useDashboard();
 
+  const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
+
   // Kiểm tra trạng thái Agent của Cụm Kubernetes đang chọn
-  const isClusterOnline = currentEnv?.agentStatus === 'ONLINE';
+  const isClusterOnline = Boolean(
+    currentEnv?.agentStatus === 'ONLINE' ||
+    clusterInfo?.status === 'ACTIVE' ||
+    clusterInfo?.status === 'HEALTHY' ||
+    (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
+  );
 
   // Realtime Telemetry & Live Cluster State
   const [telemetry, setTelemetry] = useState(null);
@@ -54,40 +61,73 @@ export const OverviewPage = () => {
   const [prevRam, setPrevRam] = useState(null);
   const [chartTimeRange, setChartTimeRange] = useState('15m');
   const [isChartLoading, setIsChartLoading] = useState(false);
+  const [chartError, setChartError] = useState(null);
+  const [isDataStale, setIsDataStale] = useState(false);
+  const activeChartRequestRef = useRef(0);
 
-  // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn
-  const handleChartRangeChange = useCallback(async (newRange) => {
-    setChartTimeRange(newRange);
-    if (!isClusterOnline) return;
+  // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn với race-condition guard
+  const loadClusterTrend = useCallback(async (range) => {
+    const reqId = ++activeChartRequestRef.current;
+    setChartTimeRange(range);
+    setChartError(null);
+
+    if (!isClusterOnline || !activeClusterId) {
+      setTelemetrySequence([]);
+      setIsChartLoading(false);
+      return;
+    }
 
     setIsChartLoading(true);
-    try {
-      let bucketSeconds = 5;
-      let limit = 30;
-      if (newRange === '15m') {
-        bucketSeconds = 5;
-        limit = 30;
-      } else if (newRange === '1h') {
-        bucketSeconds = 60;
-        limit = 60;
-      } else if (newRange === '6h') {
-        bucketSeconds = 300;
-        limit = 72;
-      } else if (newRange === '24h') {
-        bucketSeconds = 900;
-        limit = 96;
-      }
+    const controller = new AbortController();
 
-      const seq = await telemetryService.getMetricsSequence('sme-order-service', limit, bucketSeconds);
-      if (Array.isArray(seq) && seq.length > 0) {
-        setTelemetrySequence(seq);
+    try {
+      const res = await telemetryService.getClusterResourceTrend(
+        {
+          orgId: currentOrg?.id,
+          clusterId: activeClusterId,
+          range,
+        },
+        { signal: controller.signal }
+      );
+
+      // Bỏ qua response cũ nếu người dùng đã chuyển range hoặc cụm khác trong khi request đang bay
+      if (activeChartRequestRef.current !== reqId) return;
+
+      if (Array.isArray(res?.sequence) && res.sequence.length > 0) {
+        setTelemetrySequence(res.sequence);
+        setIsDataStale(Boolean(res.isStale));
+        if (res.latestPoint) {
+          setTelemetry((prev) => ({
+            ...prev,
+            ...res.latestPoint,
+          }));
+          setLastDataTimestamp(new Date().toLocaleTimeString('vi-VN'));
+        }
+      } else {
+        setTelemetrySequence([]);
+        setIsDataStale(false);
       }
     } catch (err) {
-      console.warn('[OverviewPage] Không thể tải dữ liệu chuỗi thời gian:', err);
+      if (err?.name === 'AbortError') return;
+      if (activeChartRequestRef.current === reqId) {
+        console.warn('[OverviewPage] Không thể tải dữ liệu chuỗi thời gian:', err.message);
+        setChartError(err.message || 'Không thể tải chuỗi viễn trắc từ cụm.');
+        setTelemetrySequence([]);
+      }
     } finally {
-      setIsChartLoading(false);
+      if (activeChartRequestRef.current === reqId) {
+        setIsChartLoading(false);
+      }
     }
-  }, [isClusterOnline]);
+  }, [activeClusterId, currentOrg?.id, isClusterOnline]);
+
+  const handleChartRangeChange = useCallback((newRange) => {
+    loadClusterTrend(newRange);
+  }, [loadClusterTrend]);
+
+  useEffect(() => {
+    loadClusterTrend(chartTimeRange);
+  }, [loadClusterTrend, chartTimeRange]);
 
   // 1. Tải chi tiết cụm Kubernetes THẬT (Nodes, Pods, dung lượng phần cứng)
   const fetchClusterInfo = useCallback(async () => {
@@ -199,7 +239,8 @@ export const OverviewPage = () => {
       },
       (connected) => {
         if (isMounted) setIsWsLive(connected);
-      }
+      },
+      activeClusterId
     );
 
     return () => {
@@ -226,19 +267,34 @@ export const OverviewPage = () => {
 
   const namespacesCount = namespacesList.length || 3;
 
-  // Node hardware capacity
-  const firstNode = clusterInfo?.nodes?.[0];
-  const totalCpuCores = firstNode?.cpu_capacity_millicores
-    ? Math.round(parseInt(firstNode.cpu_capacity_millicores, 10) / 1000)
-    : 12;
+  // Node hardware capacity - Tổng hợp dung lượng thực tế từ toàn bộ nodes của cụm
+  const { totalCpuCores, totalRamGb, totalDiskTb } = useMemo(() => {
+    if (clusterInfo?.nodes && clusterInfo.nodes.length > 0) {
+      const totalCores = clusterInfo.nodes.reduce((acc, n) => {
+        const mCores = parseInt(n.cpu_capacity_millicores, 10);
+        return acc + (Number.isFinite(mCores) ? mCores / 1000 : 0);
+      }, 0);
+      const totalRam = clusterInfo.nodes.reduce((acc, n) => {
+        const bytes = parseInt(n.memory_capacity_bytes, 10);
+        return acc + (Number.isFinite(bytes) ? bytes : 0);
+      }, 0);
+      const totalDisk = clusterInfo.nodes.reduce((acc, n) => {
+        const bytes = parseInt(n.disk_capacity_bytes, 10);
+        return acc + (Number.isFinite(bytes) ? bytes : 0);
+      }, 0);
 
-  const totalRamGb = firstNode?.memory_capacity_bytes
-    ? (parseInt(firstNode.memory_capacity_bytes, 10) / (1024 * 1024 * 1024)).toFixed(1)
-    : '8.0';
-
-  const totalDiskTb = firstNode?.disk_capacity_bytes
-    ? (parseInt(firstNode.disk_capacity_bytes, 10) / (1024 * 1024 * 1024 * 1024)).toFixed(1)
-    : '1.0';
+      return {
+        totalCpuCores: totalCores > 0 ? Math.round(totalCores) : 12,
+        totalRamGb: totalRam > 0 ? (totalRam / (1024 * 1024 * 1024)).toFixed(1) : '8.0',
+        totalDiskTb: totalDisk > 0 ? (totalDisk / (1024 * 1024 * 1024 * 1024)).toFixed(1) : '1.0',
+      };
+    }
+    return {
+      totalCpuCores: 12,
+      totalRamGb: '8.0',
+      totalDiskTb: '1.0',
+    };
+  }, [clusterInfo?.nodes]);
 
   // Metrics telemetry values
   const cpuVal = telemetry?.cpu !== undefined ? Number(telemetry.cpu) : 0.28;
@@ -811,8 +867,12 @@ export const OverviewPage = () => {
         subtitle="Dữ liệu viễn trắc đo đạc từ các DaemonSet eBPF theo thời gian thực"
         timeRange={chartTimeRange}
         onTimeRangeChange={handleChartRangeChange}
-        isLive={isWsLive && isClusterOnline}
+        isLive={isWsLive && isClusterOnline && !isDataStale}
+        isStale={isDataStale}
+        isClusterOnline={isClusterOnline}
         isLoading={isChartLoading}
+        error={chartError}
+        onRetry={() => loadClusterTrend(chartTimeRange)}
       />
 
       {/* 5, 6, 7. Summaries Grid: AI Predictions, Incidents, Self-Healing */}

@@ -381,6 +381,7 @@ export class TelemetryAggregatorService {
       bucketSeconds: 5,
       limit: 20,
       fillPadding: false,
+      clusterId,
     });
     const rawMetrics = await MetricModel.getRecentRaw(10);
     const logs = await LogModel.getRecent(30);
@@ -388,13 +389,54 @@ export class TelemetryAggregatorService {
     const incidents = await IncidentModel.getRecent(10);
     const recommendations = await RecommendationModel.getRecent(10, clusterId);
     const predictions = await AiPredictionModel.getRecent(5);
-    const latestPoint = sequence.length > 0 ? sequence[sequence.length - 1] : null;
+
+    // If clusterId is specified, also fetch most recent host/node metrics
+    let latestNodeMetric: any = null;
+    if (clusterId) {
+      try {
+        const nodeRes = await pool.query(
+          `SELECT node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
+           FROM node_metrics
+           WHERE cluster_id = $1
+           ORDER BY collected_at DESC
+           LIMIT 1`,
+          [clusterId]
+        );
+        if (nodeRes.rows.length > 0) {
+          latestNodeMetric = nodeRes.rows[0];
+        }
+      } catch (err) {
+        // Safe fallback without disrupting summary
+      }
+    }
+
+    const latestPoint = sequence.length > 0 
+      ? sequence[sequence.length - 1] 
+      : latestNodeMetric 
+        ? {
+            time_bucket: new Date(latestNodeMetric.collected_at).toISOString(),
+            cpu: Number(latestNodeMetric.cpu_usage_percent || 0),
+            ram: Number(latestNodeMetric.ram_usage_percent || 0),
+            node_cpu_percent: Number(latestNodeMetric.cpu_usage_percent || 0),
+            node_ram_percent: Number(latestNodeMetric.ram_usage_percent || 0),
+            node_cpu_cores: Number(latestNodeMetric.cpu_cores || 1),
+            node_ram_gb: latestNodeMetric.ram_used_bytes ? Number(latestNodeMetric.ram_used_bytes) / (1024 * 1024 * 1024) : 0,
+            disk: Number(latestNodeMetric.disk_usage_percent || 0),
+            latency: 0,
+            request_rate: 0,
+            http_5xx_rate: 0,
+            pod_restart_count: 0,
+            replica_count: 1,
+          }
+        : null;
 
     return {
       service_id: serviceId,
+      cluster_id: clusterId,
       agents,
       sequence,
       latest_point: latestPoint,
+      latest_node_metric: latestNodeMetric,
       raw_metrics: rawMetrics,
       logs,
       events,
