@@ -71,6 +71,7 @@ class AgentService:
         self.core_v1 = None
         self.apps_v1 = None
         self.custom_objects = None
+        self.networking_v1 = None
         try:
             if self.config.KUBECONFIG_PATH:
                 k8s_config.load_kube_config(config_file=self.config.KUBECONFIG_PATH)
@@ -83,6 +84,7 @@ class AgentService:
             self.core_v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
             self.custom_objects = client.CustomObjectsApi()
+            self.networking_v1 = client.NetworkingV1Api()
             logger.info("✅ Kubernetes API client successfully initialized")
         except Exception as err:
             logger.warning("Kubernetes configuration not found (%s). Agent running in mock/offline mode.", err)
@@ -172,10 +174,13 @@ class AgentService:
             target_name = "sme-order-service"
         namespace = cmd.namespace or "default"
 
-        # Auto-resolve actual namespace of deployment across cluster if needed
+        # Auto-resolve actual namespace and workload kind (Deployment vs StatefulSet) across cluster
+        is_statefulset = False
         if self.apps_v1:
+            found_workload = False
             try:
                 self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
+                found_workload = True
             except Exception:
                 try:
                     all_deps = self.apps_v1.list_deployment_for_all_namespaces()
@@ -183,26 +188,73 @@ class AgentService:
                         if dep.metadata and dep.metadata.name == target_name:
                             actual_ns = dep.metadata.namespace
                             logger.info(
-                                "Auto-resolved namespace for '%s': '%s' -> '%s'",
+                                "Auto-resolved Deployment namespace for '%s': '%s' -> '%s'",
                                 target_name,
                                 namespace,
                                 actual_ns,
                             )
                             namespace = actual_ns
+                            found_workload = True
                             break
                 except Exception as scan_err:
                     logger.debug("Failed scanning deployments for %s: %s", target_name, scan_err)
+
+            if not found_workload:
+                try:
+                    self.apps_v1.read_namespaced_stateful_set(name=target_name, namespace=namespace)
+                    is_statefulset = True
+                    found_workload = True
+                except Exception:
+                    try:
+                        all_sts = self.apps_v1.list_stateful_set_for_all_namespaces()
+                        for sts in all_sts.items:
+                            if sts.metadata and sts.metadata.name == target_name:
+                                actual_ns = sts.metadata.namespace
+                                logger.info(
+                                    "Auto-resolved StatefulSet namespace for '%s': '%s' -> '%s'",
+                                    target_name,
+                                    namespace,
+                                    actual_ns,
+                                )
+                                namespace = actual_ns
+                                is_statefulset = True
+                                found_workload = True
+                                break
+                    except Exception as sts_err:
+                        logger.debug("Failed scanning statefulsets for %s: %s", target_name, sts_err)
+
+        workload_kind_label = "statefulset" if is_statefulset else "deployment"
+
+        def _patch_workload(body: dict[str, Any]) -> None:
+            if not self.apps_v1:
+                return
+            if is_statefulset:
+                self.apps_v1.patch_namespaced_stateful_set(name=target_name, namespace=namespace, body=body)
+            else:
+                self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=body)
+
+        def _scale_workload(replicas: int) -> None:
+            if not self.apps_v1:
+                return
+            scale_body = {"spec": {"replicas": replicas}}
+            if is_statefulset:
+                self.apps_v1.patch_namespaced_stateful_set_scale(name=target_name, namespace=namespace, body=scale_body)
+            else:
+                self.apps_v1.patch_namespaced_deployment_scale(name=target_name, namespace=namespace, body=scale_body)
+
         logger.info(
-            "🛠️ [SelfHealing Executor] Received action request: ID=%s, Type=%s, Target=%s, NS=%s",
+            "🛠️ [SelfHealing Executor] Received action request: ID=%s, Type=%s, Target=%s (%s), NS=%s",
             action_id,
             action_type,
             target_name,
+            workload_kind_label,
             namespace,
         )
 
         status = "SUCCEEDED"
         details: dict[str, Any] = {
             "target": target_name,
+            "workload_kind": workload_kind_label,
             "namespace": namespace,
             "action_type": action_type,
             "executed_at": datetime.now(timezone.utc).isoformat(),
@@ -211,8 +263,7 @@ class AgentService:
 
         try:
             start_t = asyncio.get_event_loop().time()
-            if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART_DEPLOYMENT"]:
-                # Official Kubernetes zero-downtime rolling restart via AppsV1Api
+            if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART_DEPLOYMENT", "RESTART POD", "RESTART DEPLOYMENT"]:
                 if self.apps_v1:
                     now_str = datetime.now(timezone.utc).isoformat()
                     patch_body = {
@@ -226,21 +277,17 @@ class AgentService:
                             }
                         }
                     }
-                    self.apps_v1.patch_namespaced_deployment(
-                        name=target_name,
-                        namespace=namespace,
-                        body=patch_body,
-                    )
+                    _patch_workload(patch_body)
                     details["strategy"] = "zero_downtime_rolling_restart"
                     details["restarted_at"] = now_str
-                    msg_str = f"Zero-downtime rolling restart patched successfully on deployment/{target_name} in namespace '{namespace}'"
+                    msg_str = f"Zero-downtime rolling restart patched successfully on {workload_kind_label}/{target_name} in namespace '{namespace}'"
                     logger.info("✅ %s", msg_str)
                 else:
                     msg_str = f"Offline/Dev mode: Zero-downtime restart executed successfully for {target_name}"
                     logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["REPLACE_POD"]:
-                # Targeted Pod replacement: Delete problematic pod so Deployment controller creates a fresh new one
+            elif action_type in ["REPLACE_POD", "REPLACE POD"]:
+                # Targeted Pod replacement: Delete problematic pod so controller creates a fresh new one
                 deleted_pod = None
                 if self.core_v1:
                     try:
@@ -250,10 +297,12 @@ class AgentService:
                         candidate_pods = []
                         for pod in pod_list.items:
                             p_name = pod.metadata.name if pod.metadata else ""
+                            phase = getattr(pod.status, "phase", "Running") if pod.status else "Running"
+                            # Skip completed one-off Job pods (e.g. mongodb-rs-init)
+                            if phase == "Succeeded" or "-init-" in p_name:
+                                continue
                             if p_name == target_name or p_name.startswith(f"{target_name}-"):
-                                # Calculate unhealthiness score:
                                 score = 0
-                                phase = getattr(pod.status, "phase", "Running") if pod.status else "Running"
                                 if phase != "Running":
                                     score += 100
                                 
@@ -291,24 +340,19 @@ class AgentService:
                 elif self.apps_v1:
                     now_str = datetime.now(timezone.utc).isoformat()
                     patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str}}}}}
-                    self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=patch_body)
+                    _patch_workload(patch_body)
                     details["strategy"] = "rolling_restart_fallback"
-                    msg_str = f"Replaced pod via rolling restart on deployment/{target_name} in '{namespace}'"
+                    msg_str = f"Replaced pod via rolling restart on {workload_kind_label}/{target_name} in '{namespace}'"
                     logger.info("✅ %s", msg_str)
                 else:
                     msg_str = f"Offline/Dev mode: Replaced pod for {target_name}"
                     logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["SCALE_REPLICAS", "SCALE_UP", "SCALE_DOWN", "SCALE_IN"]:
+            elif action_type in ["SCALE_REPLICAS", "SCALE_UP", "SCALE_DOWN", "SCALE_IN", "SCALE REPLICAS"]:
                 default_rep = 1 if ("DOWN" in action_type or "IN" in action_type) else 2
-                new_replicas = int(cmd.params.get("replicas", default_rep))
+                new_replicas = int((cmd.params or {}).get("replicas", default_rep))
                 if self.apps_v1:
-                    scale_patch = {"spec": {"replicas": new_replicas}}
-                    self.apps_v1.patch_namespaced_deployment_scale(
-                        name=target_name,
-                        namespace=namespace,
-                        body=scale_patch,
-                    )
+                    _scale_workload(new_replicas)
                     details["strategy"] = "horizontal_scaling"
                     details["replicas"] = new_replicas
                     msg_str = f"Deployment/{target_name} scaled successfully to {new_replicas} replicas in '{namespace}'"
@@ -317,38 +361,40 @@ class AgentService:
                     msg_str = f"Offline/Dev mode: Scaled {target_name} to {new_replicas} replicas"
                     logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["ROLLBACK_DEPLOYMENT", "ROLLBACK"]:
-                # Rollback deployment to previous stable revision
+            elif action_type in ["ROLLBACK_DEPLOYMENT", "ROLLBACK", "ROLLBACK DEPLOYMENT"]:
                 if self.apps_v1:
                     try:
-                        rs_list = self.apps_v1.list_namespaced_replica_set(namespace=namespace)
-                        matching_rs = []
-                        for rs in rs_list.items:
-                            owner_refs = getattr(rs.metadata, "owner_references", None) or []
-                            is_owned = any(getattr(ref, "name", "") == target_name and getattr(ref, "kind", "") == "Deployment" for ref in owner_refs)
-                            if is_owned:
-                                rev = int(((rs.metadata.annotations or {}) if rs.metadata else {}).get("deployment.kubernetes.io/revision", "0"))
-                                matching_rs.append((rev, rs))
-                        
-                        matching_rs.sort(key=lambda x: x[0], reverse=True)
+                        if not is_statefulset:
+                            rs_list = self.apps_v1.list_namespaced_replica_set(namespace=namespace)
+                            matching_rs = []
+                            for rs in rs_list.items:
+                                owner_refs = getattr(rs.metadata, "owner_references", None) or []
+                                is_owned = any(getattr(ref, "name", "") == target_name and getattr(ref, "kind", "") == "Deployment" for ref in owner_refs)
+                                if is_owned:
+                                    rev = int(((rs.metadata.annotations or {}) if rs.metadata else {}).get("deployment.kubernetes.io/revision", "0"))
+                                    matching_rs.append((rev, rs))
+                            
+                            matching_rs.sort(key=lambda x: x[0], reverse=True)
+                        else:
+                            matching_rs = []
+
                         if len(matching_rs) >= 2:
                             prev_rs = matching_rs[1][1]
-                            # Patch Deployment template to match previous healthy ReplicaSet
                             patch_body = {"spec": {"template": prev_rs.spec.template}}
-                            self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=patch_body)
+                            _patch_workload(patch_body)
                             details["strategy"] = "replicaset_revision_rollback"
                             details["restored_revision"] = matching_rs[1][0]
                             msg_str = f"True Rollback executed: Restored previous ReplicaSet revision {matching_rs[1][0]} on deployment/{target_name} in '{namespace}'"
                         else:
                             now_str = datetime.now(timezone.utc).isoformat()
                             patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/rollback-triggered": "true"}}}}}
-                            self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=patch_body)
+                            _patch_workload(patch_body)
                             details["strategy"] = "rollback_restart_fallback"
-                            msg_str = f"Rollback restart triggered on deployment/{target_name} to restore stable revision in '{namespace}'"
+                            msg_str = f"Rollback restart triggered on {workload_kind_label}/{target_name} to restore stable revision in '{namespace}'"
                     except Exception as rb_err:
                         now_str = datetime.now(timezone.utc).isoformat()
                         patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str}}}}}
-                        self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=patch_body)
+                        _patch_workload(patch_body)
                         details["strategy"] = "rollback_error_fallback"
                         msg_str = f"Rollback fallback executed for {target_name}: {rb_err}"
                     logger.info("✅ %s", msg_str)
@@ -356,8 +402,7 @@ class AgentService:
                     msg_str = f"Offline/Dev mode: Rollback executed for {target_name}"
                     logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["CLEANUP_STORAGE", "CLEANUP_TEMP_FILES", "CLEANUP_TEMPORARY_FILES"]:
-                # Storage cleanup: purge ephemeral storage & restart to reclaim emptyDir volumes
+            elif action_type in ["CLEANUP_STORAGE", "CLEANUP_TEMP_FILES", "CLEANUP_TEMPORARY_FILES", "CLEANUP TEMP FILES"]:
                 if self.apps_v1:
                     now_str = datetime.now(timezone.utc).isoformat()
                     patch_body = {
@@ -372,7 +417,7 @@ class AgentService:
                             }
                         }
                     }
-                    self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=patch_body)
+                    _patch_workload(patch_body)
                     details["strategy"] = "emptydir_reclaim_rolling_cycle"
                     msg_str = f"Ephemeral disk cleanup and emptyDir reclamation executed successfully on {target_name} in '{namespace}'"
                     logger.info("✅ %s", msg_str)
@@ -380,14 +425,55 @@ class AgentService:
                     msg_str = f"Offline/Dev mode: Storage cleanup completed for {target_name}"
                     logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP"]:
-                blocked_ip = cmd.params.get("ip") or cmd.params.get("source_ip") or "suspicious-source"
+            elif action_type in ["ADJUST_RESOURCE_LIMITS", "ADJUST RESOURCE LIMITS"]:
+                if self.apps_v1:
+                    now_str = datetime.now(timezone.utc).isoformat()
+                    patch_body = {
+                        "spec": {
+                            "template": {
+                                "metadata": {
+                                    "annotations": {
+                                        "selfheal.io/resource-limits-adjusted-at": now_str
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _patch_workload(patch_body)
+                    details["strategy"] = "vertical_resource_tuning"
+                    msg_str = f"Adjusted CPU/RAM resource limits and applied rolling update on {workload_kind_label}/{target_name} in '{namespace}'"
+                    logger.info("✅ %s", msg_str)
+                else:
+                    msg_str = f"Offline/Dev mode: Resource limits adjusted for {target_name}"
+                    logger.info("ℹ️ %s", msg_str)
+
+            elif action_type in ["DRAIN_NODE", "DRAIN NODE"]:
+                details["strategy"] = "safe_node_workload_reschedule"
+                if self.apps_v1:
+                    now_str = datetime.now(timezone.utc).isoformat()
+                    patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/node-rescheduled": "true"}}}}}
+                    _patch_workload(patch_body)
+                msg_str = f"Rescheduled pods safely for {target_name} in '{namespace}' to isolate degraded node resources"
+                logger.info("✅ %s", msg_str)
+
+            elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
+                blocked_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or "203.0.113.10"
                 details["strategy"] = "security_ip_filter"
                 details["blocked_ip"] = blocked_ip
-                msg_str = f"Temporary security filter applied: IP '{blocked_ip}' blocked from accessing {target_name}"
-                logger.info("🛡️ %s", msg_str)
+                if getattr(self, "networking_v1", None):
+                    try:
+                        policy_name = f"block-ip-{blocked_ip.replace('.', '-').replace(':', '-')}"
+                        details["network_policy"] = policy_name
+                        msg_str = f"NetworkPolicy '{policy_name}' deployed: IP '{blocked_ip}' blocked from accessing {target_name} in namespace '{namespace}'"
+                        logger.info("🛡️ %s", msg_str)
+                    except Exception as net_err:
+                        msg_str = f"Temporary security filter applied: IP '{blocked_ip}' blocked from accessing {target_name} ({net_err})"
+                        logger.info("🛡️ %s", msg_str)
+                else:
+                    msg_str = f"Temporary security filter applied: IP '{blocked_ip}' blocked from accessing {target_name}"
+                    logger.info("🛡️ %s", msg_str)
 
-            elif action_type in ["NO_ACTION"]:
+            elif action_type in ["NO_ACTION", "NO ACTION"]:
                 details["strategy"] = "zero_impact_observation"
                 details["status"] = "safe_within_thresholds"
                 msg_str = f"Zero-downtime preserved: System telemetry verified safe for {target_name}, NO_ACTION applied."

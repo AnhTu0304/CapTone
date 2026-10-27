@@ -1,0 +1,82 @@
+{
+  "test_case_id": "03",
+  "action_name": "RESTART_DEPLOYMENT",
+  "scenario_title": "Khởi động lại toàn bộ Deployment (Restart Deployment)",
+  "file_name": "03_action_RESTART_DEPLOYMENT.json",
+  "test_status": "PASSED",
+  "tested_at": "2026-10-26T15:56:44.321835+00:00",
+  "description": "Lỗi ứng dụng cấp hệ thống (Application errors / deadlock) xảy ra diện rộng trên toàn bộ Replicas của Deployment mà không có Pod crash riêng lẻ (restart_count: 0, HTTP 5xx: 15%). RCA đề xuất RESTART_DEPLOYMENT thực hiện rolling restart an toàn.",
+  "input_payload": {
+    "request_id": "req-20261026-restart-depl-003",
+    "incident_id": "inc-20261026-restart-depl-003",
+    "cluster_id": "cluster-prod-asia-01",
+    "namespace": "production",
+    "service_id": "auth-service",
+    "workload_id": "wl-auth-svc-003",
+    "workload_type": "Deployment",
+    "metrics": {
+      "cpu": 45.0,
+      "ram": 60.0,
+      "disk": 30.0,
+      "request_rate": 500.0,
+      "latency": 250.0,
+      "http_5xx_rate": 15.0,
+      "pod_restart_count": 0,
+      "replica_count": 3
+    },
+    "logs": [
+      "ERROR HTTP 500 internal application error across all active sessions"
+    ],
+    "kubernetes": {
+      "pod_status": "Running",
+      "restart_count": 0,
+      "desired_replicas": 3,
+      "available_replicas": 3,
+      "deployment": {
+        "desired_replicas": 3,
+        "available_replicas": 3,
+        "version": "auth-v3.1.0"
+      }
+    }
+  },
+  "output_response": {
+    "service_id": "auth-service",
+    "prediction": null,
+    "root_cause": {
+      "cause": "Application errors",
+      "confidence": 0.6,
+      "severity": "MEDIUM"
+    },
+    "evidence": [
+      "Tỷ lệ lỗi HTTP 5xx ở mức cao (15.00%)"
+    ],
+    "recommendation": {
+      "action": "RESTART_DEPLOYMENT",
+      "reason": "Lỗi ứng dụng xảy ra phân tán trên nhiều replica; khuyến nghị rolling restart toàn bộ deployment",
+      "priority": "MEDIUM",
+      "target_type": "DEPLOYMENT",
+      "target_name": "auth-v3.1.0",
+      "target_id": null,
+      "target_node": null,
+      "action_parameters": {
+        "faulty_pod_id": null,
+        "faulty_pod_name": "auth-v3.1.0",
+        "faulty_node_id": null,
+        "faulty_node_name": null,
+        "recommended_destination_node": null,
+        "destination_node_id": null,
+        "consecutive_failures": 0,
+        "circuit_breaker_tripped": false,
+        "manual_playbook": []
+      }
+    },
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Lỗi ứng dụng nội bộ (HTTP 5xx).",
+    "historical_context_used": false,
+    "similar_incident_ids": [],
+    "workload_id": "wl-auth-svc-003",
+    "namespace": "production",
+    "cluster_id": "cluster-prod-asia-01",
+    "incident_id": "inc-20261026-restart-depl-003",
+    "request_id": "req-20261026-restart-depl-003"
+  }
+}

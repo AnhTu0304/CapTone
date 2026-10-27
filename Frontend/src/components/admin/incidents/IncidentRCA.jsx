@@ -71,7 +71,7 @@ export const IncidentRCA = ({ rca, isLoading = false }) => {
           }}
         >
           <Sparkles size={13} />
-          <span>Độ Tin Cậy AI: {rca.confidence}</span>
+          <span>Độ tin cậy: {rca.confidence}</span>
         </div>
       </div>
 

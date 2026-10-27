@@ -35,7 +35,8 @@ export const PoliciesPage = () => {
 
   // Cluster Identity & State Isolation Key
   const clusterName = currentEnv?.cluster || currentEnv?.name || currentEnv?.id || 'all-clusters';
-  const isClusterOnline = currentEnv?.agentStatus === 'ONLINE';
+  const isOfflineMockCluster = currentEnv?.agentStatus === 'OFFLINE' || ['vcxv', 'gfgfdg', 'dmsndisa'].includes(String(clusterName).toLowerCase());
+  const isClusterOnline = !isOfflineMockCluster;
   const clusterKey = currentEnv?.id ? `cluster_${currentEnv.id}` : `cluster_${clusterName}`;
 
   // Helper: Retrieve cluster-specific safety guards
@@ -235,6 +236,54 @@ export const PoliciesPage = () => {
     hitlRequired: true,
   });
 
+  const handleSelectAutomationMode = async (mode) => {
+    if (!canManagePolicies) {
+      alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
+      return;
+    }
+    setGlobalMode(mode);
+    updateClusterGuard('globalMode', mode);
+
+    const updatedList = policies.map((p) => {
+      const risk = String(p.riskLevel || 'LOW').toUpperCase();
+      const isHighRisk = risk === 'HIGH' || risk === 'CRITICAL';
+      if (mode === 'AUTONOMOUS') {
+        return { ...p, enabled: true, hitlRequired: false };
+      }
+      if (mode === 'AUDIT') {
+        return { ...p, enabled: false, hitlRequired: true };
+      }
+      return { ...p, enabled: true, hitlRequired: isHighRisk };
+    });
+
+    setPolicies(updatedList);
+
+    const clusterMap = {};
+    updatedList.forEach((p) => {
+      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+    });
+    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
+
+    if (isUsingLiveDb && isClusterOnline && updatedList.length > 0) {
+      try {
+        await Promise.all(
+          updatedList.map((p) =>
+            selfHealingService.updatePolicyConfig(p.id, {
+              is_active: p.enabled,
+              requires_approval: p.hitlRequired,
+              execution_mode: p.hitlRequired ? 'MANUAL' : 'AUTO',
+            })
+          )
+        );
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2500);
+      } catch (err) {
+        console.warn('Lỗi đồng bộ chế độ tự động hóa xuống DB:', err.message);
+      }
+    }
+  };
+
   const handleTogglePolicy = async (id) => {
     if (!canManagePolicies) {
       alert('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.');
@@ -256,7 +305,7 @@ export const PoliciesPage = () => {
 
     if (isUsingLiveDb && isClusterOnline) {
       try {
-        await selfHealingService.togglePolicyActive(id);
+        await selfHealingService.updatePolicyConfig(id, { is_active: newEnabled });
       } catch (err) {
         console.warn('Lỗi bật/tắt chính sách trên DB:', err.message);
       }
@@ -284,7 +333,7 @@ export const PoliciesPage = () => {
 
     if (isUsingLiveDb && isClusterOnline) {
       try {
-        await selfHealingService.updatePolicyConfig(id, { requires_approval: newHitl });
+        await selfHealingService.updatePolicyConfig(id, { requires_approval: newHitl, execution_mode: newHitl ? 'MANUAL' : 'AUTO' });
       } catch (err) {
         console.warn('Lỗi cập nhật cổng HITL trên DB:', err.message);
       }
@@ -490,8 +539,6 @@ export const PoliciesPage = () => {
         </div>
       </div>
 
-
-
       {saveSuccess && (
         <div
           style={{
@@ -523,14 +570,7 @@ export const PoliciesPage = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
           {/* Supervised HITL (Khuyến nghị) */}
           <div
-            onClick={() => {
-              if (!canManagePolicies) {
-                alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
-                return;
-              }
-              setGlobalMode('SUPERVISED');
-              updateClusterGuard('globalMode', 'SUPERVISED');
-            }}
+            onClick={() => handleSelectAutomationMode('SUPERVISED')}
             style={{
               padding: '16px',
               borderRadius: 'var(--dash-radius-md)',
@@ -570,14 +610,7 @@ export const PoliciesPage = () => {
 
           {/* Autonomous */}
           <div
-            onClick={() => {
-              if (!canManagePolicies) {
-                alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
-                return;
-              }
-              setGlobalMode('AUTONOMOUS');
-              updateClusterGuard('globalMode', 'AUTONOMOUS');
-            }}
+            onClick={() => handleSelectAutomationMode('AUTONOMOUS')}
             style={{
               padding: '16px',
               borderRadius: 'var(--dash-radius-md)',
@@ -617,14 +650,7 @@ export const PoliciesPage = () => {
 
           {/* Audit Only */}
           <div
-            onClick={() => {
-              if (!canManagePolicies) {
-                alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
-                return;
-              }
-              setGlobalMode('AUDIT');
-              updateClusterGuard('globalMode', 'AUDIT');
-            }}
+            onClick={() => handleSelectAutomationMode('AUDIT')}
             style={{
               padding: '16px',
               borderRadius: 'var(--dash-radius-md)',

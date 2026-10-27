@@ -63,13 +63,9 @@ export class HealingActionModel {
     }
 
     if (filters.cluster_id && filters.cluster_id !== 'ALL') {
-      conditions.push(`(
-        i.cluster_id = $${idx} OR 
-        EXISTS (
-          SELECT 1 FROM clusters c 
-          WHERE (c.id::text = i.cluster_id OR c.cluster_uid = i.cluster_id OR c.name = i.cluster_id)
-            AND (c.id::text = $${idx} OR c.name = $${idx} OR c.cluster_uid = $${idx})
-        )
+      conditions.push(`i.cluster_id IN (
+        SELECT id::text FROM clusters 
+        WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
       values.push(filters.cluster_id);
       idx++;
@@ -193,13 +189,9 @@ export class HealingActionModel {
     }
 
     if (filters.cluster_id && filters.cluster_id !== 'ALL') {
-      conditions.push(`(
-        i.cluster_id = $${idx} OR 
-        EXISTS (
-          SELECT 1 FROM clusters c 
-          WHERE (c.id::text = i.cluster_id OR c.cluster_uid = i.cluster_id OR c.name = i.cluster_id)
-            AND (c.id::text = $${idx} OR c.name = $${idx} OR c.cluster_uid = $${idx})
-        )
+      conditions.push(`i.cluster_id IN (
+        SELECT id::text FROM clusters 
+        WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
       values.push(filters.cluster_id);
       idx++;
@@ -479,7 +471,7 @@ export class HealingActionModel {
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, 
         $9::risk_level, $10::execution_mode, $11::approval_status, $12::execution_status,
-        $13, NOW(), CASE WHEN $12 = 'RUNNING' THEN NOW() ELSE NULL END, '{}'::jsonb
+        (SELECT id FROM users WHERE id::text = $13 LIMIT 1), NOW(), CASE WHEN $12 = 'RUNNING' THEN NOW() ELSE NULL END, '{}'::jsonb
       ) RETURNING *;
     `;
 
@@ -505,7 +497,7 @@ export class HealingActionModel {
     if (isHighRisk) {
       await pool.query(
         `INSERT INTO approvals (healing_action_id, requested_by, status, reason, requested_at, expires_at)
-         VALUES ($1, $2, 'PENDING', $3, NOW(), NOW() + interval '24 hours');`,
+         VALUES ($1, (SELECT id FROM users WHERE id::text = $2 LIMIT 1), 'PENDING', $3, NOW(), NOW() + interval '24 hours');`,
         [
           createdAction.id,
           data.requested_by || null,
@@ -538,7 +530,7 @@ export class HealingActionModel {
     // 2. Mark action RUNNING
     await pool.query(
       `UPDATE healing_actions 
-       SET execution_status = 'RUNNING', started_at = COALESCE(started_at, NOW()), executed_by = COALESCE($2, executed_by)
+       SET execution_status = 'RUNNING', started_at = COALESCE(started_at, NOW()), executed_by = COALESCE((SELECT id FROM users WHERE id::text = $2 LIMIT 1), executed_by)
        WHERE id = $1;`,
       [actionId, executedBy || null]
     );
@@ -910,6 +902,7 @@ export class HealingActionModel {
       cooldown_seconds?: number;
       max_retries?: number;
       requires_approval?: boolean;
+      is_active?: boolean;
       execution_mode?: string;
       risk_level?: string;
     }
@@ -941,6 +934,10 @@ export class HealingActionModel {
     if (typeof data.requires_approval === 'boolean') {
       fields.push(`requires_approval = $${idx++}`);
       values.push(data.requires_approval);
+    }
+    if (typeof data.is_active === 'boolean') {
+      fields.push(`is_active = $${idx++}`);
+      values.push(data.is_active);
     }
     if (data.execution_mode) {
       const mode = (data.execution_mode === 'AUTO' || data.execution_mode === 'AUTONOMOUS') ? 'AUTO' : 'MANUAL';
@@ -1082,13 +1079,9 @@ export class HealingActionModel {
     }
 
     if (filters.cluster_id && filters.cluster_id !== 'ALL') {
-      conditions.push(`(
-        i.cluster_id = $${idx} OR 
-        EXISTS (
-          SELECT 1 FROM clusters c 
-          WHERE (c.id::text = i.cluster_id OR c.cluster_uid = i.cluster_id OR c.name = i.cluster_id)
-            AND (c.id::text = $${idx} OR c.name = $${idx} OR c.cluster_uid = $${idx})
-        )
+      conditions.push(`i.cluster_id IN (
+        SELECT id::text FROM clusters 
+        WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
       values.push(filters.cluster_id);
       idx++;
@@ -1152,7 +1145,7 @@ export class HealingActionModel {
   public static async approveAction(actionId: string, approvedBy: string, reason?: string): Promise<any> {
     await pool.query(
       `UPDATE approvals 
-       SET status = 'APPROVED', approved_by = $2, decided_at = NOW(), reason = COALESCE($3, reason)
+       SET status = 'APPROVED', approved_by = (SELECT id FROM users WHERE id::text = $2 LIMIT 1), decided_at = NOW(), reason = COALESCE($3, reason)
        WHERE healing_action_id = $1 AND status = 'PENDING';`,
       [actionId, approvedBy, reason || 'Phê duyệt can thiệp tự phục hồi']
     );
@@ -1171,7 +1164,7 @@ export class HealingActionModel {
   public static async rejectAction(actionId: string, rejectedBy: string, reason?: string): Promise<any> {
     await pool.query(
       `UPDATE approvals 
-       SET status = 'REJECTED', approved_by = $2, decided_at = NOW(), reason = COALESCE($3, reason)
+       SET status = 'REJECTED', approved_by = (SELECT id FROM users WHERE id::text = $2 LIMIT 1), decided_at = NOW(), reason = COALESCE($3, reason)
        WHERE healing_action_id = $1 AND status = 'PENDING';`,
       [actionId, rejectedBy, reason || 'Từ chối thực thi do rủi ro gián đoạn dịch vụ']
     );
@@ -1201,13 +1194,9 @@ export class HealingActionModel {
     }
 
     if (clusterId && clusterId !== 'ALL') {
-      conditions.push(`(
-        i.cluster_id = $${idx} OR 
-        EXISTS (
-          SELECT 1 FROM clusters c 
-          WHERE (c.id::text = i.cluster_id OR c.cluster_uid = i.cluster_id OR c.name = i.cluster_id)
-            AND (c.id::text = $${idx} OR c.name = $${idx} OR c.cluster_uid = $${idx})
-        )
+      conditions.push(`i.cluster_id IN (
+        SELECT id::text FROM clusters 
+        WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
       values.push(clusterId);
       idx++;

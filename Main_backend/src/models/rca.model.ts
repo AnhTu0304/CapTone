@@ -36,10 +36,10 @@ export class RcaModel {
 
     const res = await client.query(query, [
       analysis.incident_id,
-      analysis.root_cause_type,
+      analysis.root_cause_type ? analysis.root_cause_type.substring(0, 250) : 'UNKNOWN',
       analysis.root_cause_description,
       analysis.confidence_score,
-      analysis.analysis_method || 'AI_DETERMINISTIC_RULES',
+      (analysis.analysis_method || 'AI_DETERMINISTIC_RULES').substring(0, 250),
       analysis.analysis_result || null,
     ]);
 

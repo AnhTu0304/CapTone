@@ -66,7 +66,9 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id = $1 OR service_id IN (SELECT id::text FROM workloads WHERE name = $1)
+          OR service_id = $1
+          OR service_id IN (SELECT id::text FROM workloads WHERE name = $1 OR id::text = $1)
+          OR pod_id IN (SELECT id FROM pods WHERE name LIKE $1 || '%')
         )
         AND occurred_at >= NOW() - ($2 || ' minutes')::interval
       )

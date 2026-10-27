@@ -123,8 +123,9 @@ export class MetricModel {
       WHERE (nm.organization_id IS NULL OR nm.environment_id IS NULL)
         AND (a.id::text = nm.agent_id OR a.agent_uid = nm.agent_id);
     `);
-    await pool.query(`
-      INSERT INTO node_metrics (
+    const nmCount = await pool.query('SELECT 1 FROM node_metrics LIMIT 1');
+    if (nmCount.rows.length === 0) {
+      await pool.query(`INSERT INTO node_metrics (
         organization_id, environment_id, agent_id, cluster_id, node_id, node_name,
         cpu_usage_percent, cpu_cores,
         ram_total_bytes, ram_used_bytes, ram_available_bytes, ram_usage_percent,
@@ -178,14 +179,16 @@ export class MetricModel {
         jsonb_build_object('source', 'k8s-agent-telemetry', 'service_id', am.service_id) AS metadata,
         am.collected_at,
         am.created_at
-      FROM agent_metrics am
-      JOIN clusters c ON c.id::text = am.cluster_id
+      FROM (
+        SELECT * FROM agent_metrics ORDER BY collected_at DESC LIMIT 100
+      ) am
+      JOIN clusters c ON (c.id::text = am.cluster_id OR c.name = am.cluster_id OR c.cluster_uid = am.cluster_id)
       LEFT JOIN environments e ON e.id = c.environment_id
       JOIN nodes n ON n.cluster_id = c.id
-      ON CONFLICT (agent_id, node_name, collected_at) DO NOTHING;
-    `).catch((err) => {
-      console.warn('[MetricModel] Non-blocking agent_metrics -> node_metrics backfill warning:', err?.message);
-    });
+      ON CONFLICT (agent_id, node_name, collected_at) DO NOTHING;`).catch((err) => {
+        console.warn('[MetricModel] Non-blocking agent_metrics -> node_metrics backfill warning:', err?.message);
+      });
+    }
     this.nodeTableEnsured = true;
   }
 
@@ -459,6 +462,31 @@ export class MetricModel {
    * Insert raw pod metric record
    */
   public static async create(metric: IAgentMetric): Promise<{ id: string | number }> {
+    const isUuid = (val?: string | null) =>
+      Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+    let resolvedAgentId: string | null = isUuid(metric.agent_id) ? (metric.agent_id as string) : null;
+    if (!resolvedAgentId && metric.agent_id) {
+      try {
+        const agRes = await pool.query(
+          `SELECT id FROM agents WHERE id::text = $1 OR name = $1 OR agent_uid = $1 LIMIT 1`,
+          [metric.agent_id]
+        );
+        resolvedAgentId = agRes.rows[0]?.id || null;
+      } catch {}
+    }
+
+    let resolvedClusterId: string | null = isUuid(metric.cluster_id) ? (metric.cluster_id as string) : null;
+    if (!resolvedClusterId && metric.cluster_id) {
+      try {
+        const clRes = await pool.query(
+          `SELECT id FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1 LIMIT 1`,
+          [metric.cluster_id]
+        );
+        resolvedClusterId = clRes.rows[0]?.id || null;
+      } catch {}
+    }
+
     const query = `
       INSERT INTO agent_metrics (
         agent_id, cluster_id, service_id, pod_id,
@@ -470,8 +498,8 @@ export class MetricModel {
     `;
 
     const res = await pool.query(query, [
-      metric.agent_id,
-      metric.cluster_id,
+      resolvedAgentId,
+      resolvedClusterId,
       metric.service_id,
       metric.pod_id,
       metric.cpu,
@@ -501,12 +529,12 @@ export class MetricModel {
       SELECT 
         to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
         ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
-        ROUND(COALESCE(MAX(ram), 0)::numeric, 2)::float as ram,
+        ROUND((CASE WHEN COALESCE(MAX(ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(ram), 0) END)::numeric, 2)::float as ram,
         ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
         ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
         ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
         ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
-        COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
+        COALESCE(MAX(pod_restart_count), 0)::int as pod_restart_count,
         GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
       FROM agent_metrics
       WHERE service_id::text = $1
@@ -531,6 +559,15 @@ export class MetricModel {
 
     // Chronological order: [t-11 ... t0]
     points.reverse();
+
+    // Normalize pod_restart_count to delta restarts within the window (0 if stable)
+    if (points.length > 0) {
+      const baseRestarts = points[0].pod_restart_count;
+      for (const pt of points) {
+        pt.pod_restart_count = Math.max(0, pt.pod_restart_count - baseRestarts);
+      }
+    }
+
     return points;
   }
 
@@ -552,16 +589,16 @@ export class MetricModel {
         SELECT 
           to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
           ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
-          ROUND(COALESCE(MAX(ram), 0)::numeric, 2)::float as ram,
+          ROUND((CASE WHEN COALESCE(MAX(ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(ram), 0) END)::numeric, 2)::float as ram,
           ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
           ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
           ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
           ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
-          COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
+          COALESCE(MAX(pod_restart_count), 0)::int as pod_restart_count,
           GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count,
           MAX(cluster_id) as cluster_id
         FROM agent_metrics
-        WHERE service_id::text = $1 AND collected_at > $3
+        WHERE service_id::text = $1 AND collected_at >= ($3::timestamptz + ($2 * interval '1 second'))
         GROUP BY time_bucket
         ORDER BY time_bucket ASC
         LIMIT $4;
@@ -573,12 +610,12 @@ export class MetricModel {
           SELECT 
             to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
             ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
-            ROUND(COALESCE(MAX(ram), 0)::numeric, 2)::float as ram,
+            ROUND((CASE WHEN COALESCE(MAX(ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(ram), 0) END)::numeric, 2)::float as ram,
             ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
             ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
             ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
             ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
-            COALESCE(SUM(pod_restart_count), 0)::int as pod_restart_count,
+            COALESCE(MAX(pod_restart_count), 0)::int as pod_restart_count,
             GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count,
           MAX(cluster_id) as cluster_id
           FROM agent_metrics
@@ -604,6 +641,14 @@ export class MetricModel {
       pod_restart_count: Number(row.pod_restart_count),
       replica_count: Number(row.replica_count),
     }));
+
+    // Normalize pod_restart_count to delta restarts within the window (0 if stable)
+    if (points.length > 0) {
+      const baseRestarts = points[0].pod_restart_count;
+      for (const pt of points) {
+        pt.pod_restart_count = Math.max(0, pt.pod_restart_count - baseRestarts);
+      }
+    }
 
     const latestTimeBucket =
       res.rows.length > 0 ? new Date(res.rows[res.rows.length - 1].time_bucket) : undefined;

@@ -74,7 +74,7 @@ export class WorkloadModel {
       if (clusterId) {
         const res = await db.query(
           `SELECT id, cluster_id, namespace_id FROM workloads 
-           WHERE name = $1 AND (cluster_id = $2 OR cluster_id IN (SELECT name FROM clusters WHERE id::text = $2 OR cluster_uid = $2) OR cluster_id IN (SELECT id::text FROM clusters WHERE name = $2))
+           WHERE name = $1 AND (cluster_id = $2 OR cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $2 OR cluster_uid = $2 OR name = $2))
            LIMIT 1`,
           [name, clusterId]
         );

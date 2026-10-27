@@ -1,0 +1,501 @@
+@baseUrl = http://127.0.0.1:8000
+
+### ====================================================================
+### 0. BƯỚC 1: GRU MODEL SUY LUẬN TRỰC TIẾP TỪ CHUỖI 12 BƯỚC VIỄN TRẮC (5s/bước)
+### Mô tả: Gửi chuỗi 12 điểm viễn trắc đo đạc từ eBPF Agent vào mô hình GRU
+### AI dự báo sớm các nguy cơ rủi ro: OOM, CPU_OVERLOAD, HIGH_LATENCY, 5XX...
+### ====================================================================
+POST {{baseUrl}}/api/v1/predict
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: req-gru-predict-001
+
+{
+  "service_id": "payment-service",
+  "sequence": [
+    { "cpu": 25.0, "ram": 55.0, "disk": 30.0, "request_rate": 300.0, "latency": 110.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 28.0, "ram": 59.0, "disk": 30.0, "request_rate": 310.0, "latency": 115.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 30.0, "ram": 63.0, "disk": 30.0, "request_rate": 320.0, "latency": 120.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 32.0, "ram": 68.0, "disk": 30.0, "request_rate": 330.0, "latency": 125.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 35.0, "ram": 73.0, "disk": 30.0, "request_rate": 340.0, "latency": 130.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 38.0, "ram": 78.0, "disk": 30.0, "request_rate": 350.0, "latency": 140.0, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 40.0, "ram": 83.0, "disk": 30.0, "request_rate": 360.0, "latency": 155.0, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 42.0, "ram": 88.0, "disk": 30.0, "request_rate": 370.0, "latency": 170.0, "http_5xx_rate": 1.0, "pod_restart_count": 1, "replica_count": 2 },
+    { "cpu": 44.0, "ram": 92.0, "disk": 30.0, "request_rate": 380.0, "latency": 190.0, "http_5xx_rate": 1.2, "pod_restart_count": 1, "replica_count": 2 },
+    { "cpu": 46.0, "ram": 95.0, "disk": 30.0, "request_rate": 390.0, "latency": 210.0, "http_5xx_rate": 1.5, "pod_restart_count": 2, "replica_count": 2 },
+    { "cpu": 48.0, "ram": 97.5, "disk": 30.0, "request_rate": 400.0, "latency": 235.0, "http_5xx_rate": 2.0, "pod_restart_count": 2, "replica_count": 2 },
+    { "cpu": 50.0, "ram": 98.8, "disk": 30.0, "request_rate": 410.0, "latency": 260.0, "http_5xx_rate": 2.5, "pod_restart_count": 3, "replica_count": 2 }
+  ]
+}
+
+
+### ====================================================================
+### 1. KỊCH BẢN 1: GRU DỰ BÁO OOM (RAM LEAK) -> GỬI KÈM LOGS, PODS VÀ NODES SANG RCA
+### Bối cảnh: GRU cảnh báo nguy cơ OOM 96.0%. Pod lỗi bị OOMKilled trên worker-node-01.
+### AI phân tích: Xác định đúng Pod lỗi, nhận diện Node 01 bị MemoryPressure,
+### và tự động chỉ định worker-node-02 (còn 8GB RAM) làm Node đích di dời.
+### ====================================================================
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: req-gru-rca-oom-001
+
+{
+  "request_id": "req-20261027-gru-rca-oom-001",
+  "incident_id": "inc-20261027-gru-rca-oom-001",
+  "cluster_id": "cluster-prod-asia-01",
+  "namespace": "production",
+  "service_id": "payment-service",
+  "workload_id": "wl-payment-svc-001",
+  "workload_type": "Deployment",
+  "risk_type": "OOM",
+  "confidence": 0.96,
+  "suspected_pod_name": "payment-service-pod-0",
+  "metrics": {
+    "cpu": 48.0,
+    "ram": 98.8,
+    "disk": 32.0,
+    "request_rate": 410.0,
+    "latency": 260.0,
+    "http_5xx_rate": 2.5,
+    "pod_restart_count": 3,
+    "replica_count": 2
+  },
+  "metric_sequence": [
+    { "cpu": 25.0, "ram": 55.0, "disk": 30.0, "request_rate": 300.0, "latency": 110.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 28.0, "ram": 59.0, "disk": 30.0, "request_rate": 310.0, "latency": 115.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 30.0, "ram": 63.0, "disk": 30.0, "request_rate": 320.0, "latency": 120.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 32.0, "ram": 68.0, "disk": 30.0, "request_rate": 330.0, "latency": 125.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 35.0, "ram": 73.0, "disk": 30.0, "request_rate": 340.0, "latency": 130.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 38.0, "ram": 78.0, "disk": 30.0, "request_rate": 350.0, "latency": 140.0, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 40.0, "ram": 83.0, "disk": 30.0, "request_rate": 360.0, "latency": 155.0, "http_5xx_rate": 0.5, "pod_restart_count": 0, "replica_count": 2 },
+    { "cpu": 42.0, "ram": 88.0, "disk": 30.0, "request_rate": 370.0, "latency": 170.0, "http_5xx_rate": 1.0, "pod_restart_count": 1, "replica_count": 2 },
+    { "cpu": 44.0, "ram": 92.0, "disk": 30.0, "request_rate": 380.0, "latency": 190.0, "http_5xx_rate": 1.2, "pod_restart_count": 1, "replica_count": 2 },
+    { "cpu": 46.0, "ram": 95.0, "disk": 30.0, "request_rate": 390.0, "latency": 210.0, "http_5xx_rate": 1.5, "pod_restart_count": 2, "replica_count": 2 },
+    { "cpu": 48.0, "ram": 97.5, "disk": 30.0, "request_rate": 400.0, "latency": 235.0, "http_5xx_rate": 2.0, "pod_restart_count": 2, "replica_count": 2 },
+    { "cpu": 50.0, "ram": 98.8, "disk": 30.0, "request_rate": 410.0, "latency": 260.0, "http_5xx_rate": 2.5, "pod_restart_count": 3, "replica_count": 2 }
+  ],
+  "prediction": {
+    "service_id": "payment-service",
+    "threshold": 0.70,
+    "thresholds": {
+      "OOM": 0.70,
+      "CPU_OVERLOAD": 0.75,
+      "DISK_FULL": 0.80,
+      "HIGH_LATENCY": 0.80,
+      "HTTP_5XX_SPIKE": 0.70,
+      "TRAFFIC_OVERLOAD": 0.75
+    },
+    "detected_risks": [
+      { "risk_type": "OOM", "confidence": 0.96 }
+    ],
+    "risk_outputs": {
+      "OOM": { "confidence": 0.96 },
+      "CPU_OVERLOAD": { "confidence": 0.22 },
+      "DISK_FULL": { "confidence": 0.10 },
+      "HIGH_LATENCY": { "confidence": 0.35 },
+      "HTTP_5XX_SPIKE": { "confidence": 0.15 },
+      "TRAFFIC_OVERLOAD": { "confidence": 0.18 }
+    }
+  },
+  "logs": [
+    "2026-10-27T06:30:10Z [ERROR] java.lang.OutOfMemoryError: Java heap space",
+    "2026-10-27T06:30:12Z [FATAL] Linux Kernel OOM-Killer: Kill process 12480 (java) total-vm:4194304kB, anon-rss:2097152kB",
+    "2026-10-27T06:30:15Z [WARN] Container died with exit code 137 (SIGKILL by OOM-Killer)"
+  ],
+  "kubernetes_events": [
+    "Container payment-container in pod payment-service-pod-0 was OOMKilled",
+    "Back-off restarting failed container in pod payment-service-pod-0"
+  ],
+  "kubernetes": {
+    "pod_status": "CrashLoopBackOff",
+    "restart_count": 3,
+    "events": [
+      "Container payment-container in pod payment-service-pod-0 was OOMKilled",
+      "Back-off restarting failed container in pod payment-service-pod-0"
+    ],
+    "desired_replicas": 2,
+    "available_replicas": 1,
+    "all_pods": [
+      {
+        "pod_name": "payment-service-pod-0",
+        "pod_id": "pod-uuid-payment-001",
+        "node_name": "worker-node-01",
+        "status": "CrashLoopBackOff",
+        "ready": false,
+        "restart_count": 3,
+        "termination": {
+          "last_exit_code": 137,
+          "reason": "OOMKilled"
+        }
+      },
+      {
+        "pod_name": "payment-service-pod-1",
+        "pod_id": "pod-uuid-payment-002",
+        "node_name": "worker-node-02",
+        "status": "Running",
+        "ready": true,
+        "restart_count": 0
+      }
+    ],
+    "nodes": [
+      {
+        "node_id": "node-uuid-001",
+        "node_name": "worker-node-01",
+        "status": "Ready",
+        "free_memory_bytes": 104857600,
+        "ram_usage_pct": 97.2,
+        "conditions": {
+          "MemoryPressure": true,
+          "Ready": true
+        }
+      },
+      {
+        "node_id": "node-uuid-002",
+        "node_name": "worker-node-02",
+        "status": "Ready",
+        "free_memory_bytes": 8589934592,
+        "ram_usage_pct": 24.5,
+        "conditions": {
+          "MemoryPressure": false,
+          "Ready": true
+        }
+      }
+    ]
+  }
+}
+
+
+### ====================================================================
+### 2. KỊCH BẢN 2: GRU DỰ BÁO CPU_OVERLOAD -> GỬI KÈM LOGS VÀ PODS/NODES SANG RCA
+### Bối cảnh: GRU dự đoán nguy cơ quá tải CPU 94.0%. Toàn bộ 2 pod đang chạy đều gánh tải cao.
+### AI phân tích: Xác định đây là sự cố bão hòa CPU toàn dịch vụ (Deployment).
+### Đề xuất: SCALE_REPLICAS mở rộng số lượng pod cho Deployment checkout-service.
+### ====================================================================
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: req-gru-rca-cpu-002
+
+{
+  "request_id": "req-20261027-gru-rca-cpu-002",
+  "incident_id": "inc-20261027-gru-rca-cpu-002",
+  "cluster_id": "cluster-prod-asia-01",
+  "namespace": "production",
+  "service_id": "checkout-service",
+  "workload_id": "wl-checkout-svc-002",
+  "workload_type": "Deployment",
+  "risk_type": "CPU_OVERLOAD",
+  "confidence": 0.94,
+  "metrics": {
+    "cpu": 96.5,
+    "ram": 74.0,
+    "disk": 40.0,
+    "request_rate": 1450.0,
+    "latency": 920.0,
+    "http_5xx_rate": 4.5,
+    "pod_restart_count": 0,
+    "replica_count": 2
+  },
+  "prediction": {
+    "service_id": "checkout-service",
+    "threshold": 0.75,
+    "thresholds": {
+      "CPU_OVERLOAD": 0.75,
+      "OOM": 0.70,
+      "DISK_FULL": 0.80,
+      "HIGH_LATENCY": 0.80,
+      "HTTP_5XX_SPIKE": 0.70,
+      "TRAFFIC_OVERLOAD": 0.75
+    },
+    "detected_risks": [
+      { "risk_type": "CPU_OVERLOAD", "confidence": 0.94 },
+      { "risk_type": "HIGH_LATENCY", "confidence": 0.88 }
+    ],
+    "risk_outputs": {
+      "CPU_OVERLOAD": { "confidence": 0.94 },
+      "OOM": { "confidence": 0.20 },
+      "DISK_FULL": { "confidence": 0.10 },
+      "HIGH_LATENCY": { "confidence": 0.88 },
+      "HTTP_5XX_SPIKE": { "confidence": 0.25 },
+      "TRAFFIC_OVERLOAD": { "confidence": 0.85 }
+    }
+  },
+  "logs": [
+    "2026-10-27T06:31:00Z [WARN] ThreadPoolExecutor queue saturated: 1000/1000 tasks pending",
+    "2026-10-27T06:31:02Z [WARN] HTTP Request handling latency spiked to 920ms (P99 > 1500ms)",
+    "2026-10-27T06:31:05Z [ERROR] Upstream ingress reporting HTTP 504 Gateway Timeout due to CPU saturation"
+  ],
+  "kubernetes_events": [
+    "Deployment checkout-service has 2/2 replicas saturated (CPU > 95%)"
+  ],
+  "kubernetes": {
+    "pod_status": "Running",
+    "restart_count": 0,
+    "desired_replicas": 4,
+    "available_replicas": 2,
+    "events": [
+      "Deployment checkout-service has 2/2 replicas saturated (CPU > 95%)"
+    ],
+    "all_pods": [
+      {
+        "pod_name": "checkout-service-7f89d-pod-1",
+        "pod_id": "pod-checkout-001",
+        "node_name": "worker-node-01",
+        "status": "Running",
+        "ready": true,
+        "restart_count": 0
+      },
+      {
+        "pod_name": "checkout-service-7f89d-pod-2",
+        "pod_id": "pod-checkout-002",
+        "node_name": "worker-node-02",
+        "status": "Running",
+        "ready": true,
+        "restart_count": 0
+      }
+    ],
+    "nodes": [
+      {
+        "node_id": "node-uuid-001",
+        "node_name": "worker-node-01",
+        "status": "Ready",
+        "cpu_usage_pct": 89.0,
+        "free_memory_bytes": 4294967296
+      },
+      {
+        "node_id": "node-uuid-002",
+        "node_name": "worker-node-02",
+        "status": "Ready",
+        "cpu_usage_pct": 32.0,
+        "free_memory_bytes": 8589934592
+      }
+    ]
+  }
+}
+
+
+### ====================================================================
+### 3. KỊCH BẢN 3: GRU DỰ BÁO HTTP_5XX_SPIKE SAU KHI DEPLOY PHIÊN BẢN MỚI
+### Bối cảnh: Tỷ lệ lỗi 5xx tăng vọt lên 18% ngay sau khi deploy v1.9.0.
+### AI phân tích: Xác định lỗi hồi quy (Deployment Failure).
+### Đề xuất: ROLLBACK_DEPLOYMENT về phiên bản ổn định trước đó (v1.8.2).
+### ====================================================================
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: req-gru-rca-rollback-003
+
+{
+  "request_id": "req-20261027-gru-rca-rollback-003",
+  "incident_id": "inc-20261027-gru-rca-rollback-003",
+  "cluster_id": "cluster-prod-asia-01",
+  "namespace": "production",
+  "service_id": "order-service",
+  "workload_id": "wl-order-svc-003",
+  "workload_type": "Deployment",
+  "risk_type": "HTTP_5XX_SPIKE",
+  "confidence": 0.95,
+  "metrics": {
+    "cpu": 45.0,
+    "ram": 58.0,
+    "disk": 32.0,
+    "request_rate": 600.0,
+    "latency": 350.0,
+    "http_5xx_rate": 18.5,
+    "pod_restart_count": 2,
+    "replica_count": 3
+  },
+  "prediction": {
+    "service_id": "order-service",
+    "threshold": 0.70,
+    "thresholds": {
+      "HTTP_5XX_SPIKE": 0.70,
+      "OOM": 0.70,
+      "CPU_OVERLOAD": 0.75,
+      "DISK_FULL": 0.80,
+      "HIGH_LATENCY": 0.80,
+      "TRAFFIC_OVERLOAD": 0.75
+    },
+    "detected_risks": [
+      { "risk_type": "HTTP_5XX_SPIKE", "confidence": 0.95 }
+    ],
+    "risk_outputs": {
+      "HTTP_5XX_SPIKE": { "confidence": 0.95 },
+      "OOM": { "confidence": 0.15 },
+      "CPU_OVERLOAD": { "confidence": 0.20 },
+      "DISK_FULL": { "confidence": 0.05 },
+      "HIGH_LATENCY": { "confidence": 0.40 },
+      "TRAFFIC_OVERLOAD": { "confidence": 0.25 }
+    }
+  },
+  "logs": [
+    "2026-10-27T06:32:00Z [FATAL] NullPointerException at com.company.order.v190.PaymentGatewayClient.init(PaymentGatewayClient.java:42)",
+    "2026-10-27T06:32:01Z [ERROR] Failed to instantiate bean 'paymentService' in new release v1.9.0",
+    "2026-10-27T06:32:05Z [ERROR] HTTP 500 Internal Server Error returned to all callers"
+  ],
+  "kubernetes_events": [
+    "Deployment rollout started for order-v1.9.0",
+    "Readiness probe failed on pod order-service-v190-abc12"
+  ],
+  "kubernetes": {
+    "pod_status": "Running",
+    "restart_count": 2,
+    "events": [
+      "Deployment rollout started for order-v1.9.0",
+      "Readiness probe failed on pod order-service-v190-abc12"
+    ],
+    "desired_replicas": 3,
+    "available_replicas": 1,
+    "deployment": {
+      "version": "order-v1.9.0",
+      "previous_version": "order-v1.8.2",
+      "desired_replicas": 3,
+      "available_replicas": 1
+    },
+    "all_pods": [
+      {
+        "pod_name": "order-service-v190-abc12",
+        "pod_id": "pod-order-v190-01",
+        "node_name": "worker-node-01",
+        "status": "Running",
+        "ready": false,
+        "restart_count": 2
+      }
+    ],
+    "nodes": [
+      {
+        "node_id": "node-uuid-001",
+        "node_name": "worker-node-01",
+        "status": "Ready",
+        "free_memory_bytes": 6442450944
+      }
+    ]
+  }
+}
+
+
+### ====================================================================
+### 4. KỊCH BẢN 4: GRU DỰ BÁO SỰ CỐ DATABASE PRIMARY -> CIRCUIT BREAKER NGẮT VÀ XUẤT PLAYBOOK
+### Bối cảnh: Pod MongoDB Primary bị OOM, lịch sử đã thử restart 2 lần liên tiếp thất bại.
+### AI phân tích: Kích hoạt Circuit Breaker, cấm tự động restart làm vỡ Quorum Database.
+### Đề xuất: NO_ACTION và xuất 3 bước Manual Playbook hướng dẫn kỹ sư stepDown an toàn.
+### ====================================================================
+POST {{baseUrl}}/api/v1/rca
+Content-Type: application/json
+Accept: application/json
+X-Request-ID: req-gru-rca-circuit-breaker-004
+
+{
+  "request_id": "req-20261027-gru-rca-cb-004",
+  "incident_id": "inc-20261027-gru-rca-cb-004",
+  "cluster_id": "cluster-prod-asia-01",
+  "namespace": "production",
+  "service_id": "mongodb",
+  "workload_id": "wl-mongodb-statefulset-004",
+  "workload_type": "StatefulSet",
+  "risk_type": "OOM",
+  "confidence": 0.98,
+  "suspected_pod_name": "mongodb-0",
+  "metrics": {
+    "cpu": 55.0,
+    "ram": 99.2,
+    "disk": 45.0,
+    "request_rate": 800.0,
+    "latency": 1200.0,
+    "http_5xx_rate": 8.0,
+    "pod_restart_count": 4,
+    "replica_count": 3
+  },
+  "prediction": {
+    "service_id": "mongodb",
+    "threshold": 0.70,
+    "thresholds": {
+      "OOM": 0.70,
+      "CPU_OVERLOAD": 0.75,
+      "DISK_FULL": 0.80,
+      "HIGH_LATENCY": 0.80,
+      "HTTP_5XX_SPIKE": 0.70,
+      "TRAFFIC_OVERLOAD": 0.75
+    },
+    "detected_risks": [
+      { "risk_type": "OOM", "confidence": 0.98 }
+    ],
+    "risk_outputs": {
+      "OOM": { "confidence": 0.98 },
+      "CPU_OVERLOAD": { "confidence": 0.25 },
+      "DISK_FULL": { "confidence": 0.15 },
+      "HIGH_LATENCY": { "confidence": 0.85 },
+      "HTTP_5XX_SPIKE": { "confidence": 0.30 },
+      "TRAFFIC_OVERLOAD": { "confidence": 0.35 }
+    }
+  },
+  "logs": [
+    "2026-10-27T06:33:00Z [FATAL] WiredTiger cache dirty percent > 95% - eviction server stuck",
+    "2026-10-27T06:33:05Z [FATAL] Kernel: Out of memory: Kill process 3201 (mongod) score 995",
+    "2026-10-27T06:33:10Z [ERROR] Container terminated with exitCode 137"
+  ],
+  "kubernetes_events": [
+    "Pod mongodb-0 terminated with exitCode 137 (OOMKilled)",
+    "Circuit breaker warning: 2 prior automated restarts failed"
+  ],
+  "kubernetes": {
+    "pod_status": "CrashLoopBackOff",
+    "restart_count": 4,
+    "events": [
+      "Pod mongodb-0 terminated with exitCode 137 (OOMKilled)"
+    ],
+    "all_pods": [
+      {
+        "pod_name": "mongodb-0",
+        "pod_id": "pod-mongodb-primary-001",
+        "node_name": "worker-node-01",
+        "status": "CrashLoopBackOff",
+        "ready": false,
+        "restart_count": 4,
+        "termination": {
+          "last_exit_code": 137,
+          "reason": "OOMKilled"
+        },
+        "mongodb_cluster_health": {
+          "role": "PRIMARY",
+          "quorum_status": "INTACT"
+        }
+      },
+      {
+        "pod_name": "mongodb-1",
+        "pod_id": "pod-mongodb-secondary-002",
+        "node_name": "worker-node-02",
+        "status": "Running",
+        "ready": true,
+        "restart_count": 0,
+        "mongodb_cluster_health": {
+          "role": "SECONDARY",
+          "quorum_status": "INTACT"
+        }
+      }
+    ],
+    "nodes": [
+      {
+        "node_id": "node-uuid-001",
+        "node_name": "worker-node-01",
+        "status": "Ready",
+        "free_memory_bytes": 104857600,
+        "conditions": { "MemoryPressure": true, "Ready": true }
+      },
+      {
+        "node_id": "node-uuid-002",
+        "node_name": "worker-node-02",
+        "status": "Ready",
+        "free_memory_bytes": 8589934592,
+        "conditions": { "MemoryPressure": false, "Ready": true }
+      }
+    ]
+  },
+  "action_history": {
+    "total_actions_recorded": 2,
+    "consecutive_failures": 2,
+    "circuit_breaker_tripped": true,
+    "blocked_actions": ["RESTART_POD", "REPLACE_POD"]
+  }
+}

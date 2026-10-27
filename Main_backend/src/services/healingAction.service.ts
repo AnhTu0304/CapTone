@@ -1,3 +1,4 @@
+import { pool } from '../config/database';
 import { HealingActionModel, IHealingActionFilter } from '../models/healingAction.model';
 import { ApiError } from '../utils/apiError';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
@@ -21,12 +22,18 @@ export class HealingActionService {
     const userRoles: string[] = Array.isArray(user.roles)
       ? user.roles.map((r: string) => r.trim().toUpperCase())
       : [];
-    const isSystemAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SYSTEM_ADMIN');
+    const isSystemAdmin =
+      userRoles.includes('SUPER_ADMIN') ||
+      userRoles.includes('SYSTEM_ADMIN') ||
+      userRoles.includes('ADMIN') ||
+      userRoles.includes('SME_OWNER') ||
+      userRoles.includes('DEVOPS');
 
-    // Xác định tổ chức mục tiêu
+    // Xác định tổ chức mục tiêu (cho phép truy cập cụm Lab mặc định 00000000-0000-0000-0000-000000000001)
     const targetOrgId = organizationId || user.organization_id;
+    const isDefaultSharedOrg = targetOrgId === '00000000-0000-0000-0000-000000000001';
 
-    if (!isSystemAdmin && targetOrgId) {
+    if (!isSystemAdmin && targetOrgId && !isDefaultSharedOrg) {
       const member = await OrganizationMemberModel.findByOrgAndUser(targetOrgId, user.id);
       if (!member || member.status !== 'ACTIVE') {
         throw new ApiError(
@@ -37,7 +44,7 @@ export class HealingActionService {
     }
 
     // Kiểm tra tính hợp lệ của Cụm K8s (nếu có cung cấp)
-    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
+    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all' && !isDefaultSharedOrg) {
       const clusterCheck = await HealingActionModel.validateClusterBelongsToOrg(clusterId, targetOrgId);
       if (!clusterCheck && !isSystemAdmin) {
         throw new ApiError(
@@ -139,14 +146,6 @@ export class HealingActionService {
       await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
     }
 
-    const completedStatuses = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
-    if (completedStatuses.includes(action.execution_status)) {
-      throw new ApiError(
-        400,
-        `Hành động đã kết thúc với trạng thái ${action.execution_status}, không thể hủy bỏ`
-      );
-    }
-
     // Broadcast WebSocket event: started
     try {
       broadcastTelemetryToUi({
@@ -166,17 +165,63 @@ export class HealingActionService {
 
     const result = await HealingActionModel.executeAction(actionId, executedBy || undefined);
 
-    try {
-      dispatchHealingActionToAgent({
-        action_id: actionId,
-        action_type: action.action_type_code || action.action_type_name || 'RESTART_POD',
-        target_name: action.target_name || 'sme-order-service',
-        namespace: 'default',
-        cluster_id: action.cluster_id,
-        environment_id: action.environment_id,
-      }).catch((err) => console.warn('[HealingActionService] Dispatch warning:', err));
-    } catch (e) {
-      console.warn('[HealingActionService] Dispatch to agent failed:', e);
+    // Resolve actual namespace and canonical workload name
+    let targetNamespace = 'default';
+    let targetWorkloadName = action.target_name || 'sme-order-service';
+    if (action.target_name || action.target_id) {
+      try {
+        const lookupKey = action.target_name || action.target_id;
+        const wlRes = await pool.query(
+          `SELECT w.name as workload_name, n.name as namespace_name 
+           FROM workloads w 
+           LEFT JOIN namespaces n ON n.id = w.namespace_id 
+           WHERE w.name = $1 OR w.id::text = $1 
+           ORDER BY w.updated_at DESC NULLS LAST
+           LIMIT 1`,
+          [lookupKey]
+        );
+        if (wlRes.rows.length > 0) {
+          if (wlRes.rows[0].workload_name) targetWorkloadName = wlRes.rows[0].workload_name;
+          if (wlRes.rows[0].namespace_name) targetNamespace = wlRes.rows[0].namespace_name;
+        } else if (
+          ['chaos-testagent2', 'ecommerce-store-app', 'attack-injector-app', 'selfheal-test-app', 'mongodb'].some((svc) =>
+            String(targetWorkloadName).startsWith(svc)
+          )
+        ) {
+          targetNamespace = 'test-lab';
+        }
+      } catch {}
+    }
+
+    const actionCode = (action.action_type_code || action.action_type_name || 'RESTART_POD')
+      .toUpperCase()
+      .trim()
+      .replace(/\s+/g, '_');
+
+    if (actionCode === 'NO_ACTION') {
+      console.log(`🛡️ [HealingActionService] Action is NO_ACTION (Circuit Breaker). Skipping automated agent dispatch.`);
+    } else {
+      try {
+        const dispatched = await dispatchHealingActionToAgent({
+          action_id: actionId,
+          action_type: actionCode,
+          target_name: targetWorkloadName,
+          namespace: targetNamespace,
+          cluster_id: action.cluster_id,
+          environment_id: action.environment_id,
+          params: action.result?.params || {},
+        });
+        if (dispatched) {
+          // Wait briefly for K8s Agent WebSocket action_result callback to persist actual K8s outcome
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          const refreshed = await HealingActionModel.findActionById(actionId);
+          if (refreshed) {
+            result.action = refreshed;
+          }
+        }
+      } catch (e) {
+        console.warn('[HealingActionService] Dispatch to agent failed:', e);
+      }
     }
 
     // Broadcast WebSocket event: completed
@@ -185,8 +230,8 @@ export class HealingActionService {
         type: 'healing_action_completed',
         data: {
           action_id: actionId,
-          status: 'SUCCEEDED',
-          target_name: action.target_name,
+          status: result.action?.execution_status || 'SUCCEEDED',
+          target_name: targetWorkloadName,
           cluster_name: action.cluster_name,
           result: result.action?.result,
           timestamp: new Date().toISOString(),
@@ -327,6 +372,7 @@ export class HealingActionService {
       cooldown_seconds?: number;
       max_retries?: number;
       requires_approval?: boolean;
+      is_active?: boolean;
       execution_mode?: string;
       risk_level?: string;
     }
@@ -416,7 +462,13 @@ export class HealingActionService {
     if (!approved) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể phê duyệt');
     }
-    return approved;
+    // Sau khi phê duyệt HITL thành công, tự động kích hoạt thực thi xuống K8s Agent
+    try {
+      await this.executeAction(actionId, approvedBy, user);
+    } catch (execErr) {
+      console.warn('[HealingActionService] Auto-execute after HITL approval warning:', execErr);
+    }
+    return await HealingActionModel.findActionById(actionId);
   }
 
   public static async rejectAction(actionId: string, rejectedBy: string, reason?: string, user?: any) {
