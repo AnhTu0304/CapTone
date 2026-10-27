@@ -197,21 +197,25 @@ export const OverviewPage = () => {
             if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
             setLastDataTimestamp(new Date(payload.timestamp || Date.now()).toLocaleTimeString());
           }
-        } else if ((payload.type === 'raw_metric' || payload.type === 'metrics') && payload.data) {
+        } else if ((payload.type === 'raw_metric' || payload.type === 'metrics' || payload.type === 'node_metrics') && payload.data) {
           const raw = payload.data;
+          setIsDataStale(false);
+          const cpuVal = raw.cpu_usage_percent !== undefined ? Number(raw.cpu_usage_percent) : raw.cpu !== undefined ? Number(raw.cpu) : undefined;
+          const ramVal = raw.ram_usage_percent !== undefined ? Number(raw.ram_usage_percent) : raw.ram !== undefined ? Number(raw.ram) : undefined;
+
           setTelemetry((prev) => {
             if (prev?.cpu !== undefined) setPrevCpu(Number(prev.cpu));
             if (prev?.ram !== undefined) setPrevRam(Number(prev.ram));
             return {
               ...prev,
-              cpu: raw.cpu !== undefined ? Number(raw.cpu) : prev?.cpu,
-              ram: raw.ram !== undefined ? Number(raw.ram) : prev?.ram,
+              cpu: cpuVal !== undefined ? cpuVal : prev?.cpu,
+              ram: ramVal !== undefined ? ramVal : prev?.ram,
               disk: raw.disk !== undefined ? Number(raw.disk) : prev?.disk,
               latency: raw.latency !== undefined ? Number(raw.latency) : prev?.latency,
-              node_cpu_percent: raw.node_cpu_percent !== undefined ? Number(raw.node_cpu_percent) : prev?.node_cpu_percent,
-              node_ram_percent: raw.node_ram_percent !== undefined ? Number(raw.node_ram_percent) : prev?.node_ram_percent,
-              node_cpu_cores: raw.node_cpu_cores !== undefined ? Number(raw.node_cpu_cores) : prev?.node_cpu_cores,
-              node_ram_gb: raw.node_ram_gb !== undefined ? Number(raw.node_ram_gb) : prev?.node_ram_gb,
+              node_cpu_percent: raw.cpu_usage_percent !== undefined ? Number(raw.cpu_usage_percent) : prev?.node_cpu_percent,
+              node_ram_percent: raw.ram_usage_percent !== undefined ? Number(raw.ram_usage_percent) : prev?.node_ram_percent,
+              node_cpu_cores: raw.cpu_cores !== undefined ? Number(raw.cpu_cores) : prev?.node_cpu_cores,
+              node_ram_gb: raw.ram_used_bytes !== undefined ? (Number(raw.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2) : prev?.node_ram_gb,
             };
           });
           // Tự động đẩy điểm đo vào chuỗi viễn trắc khi ở chế độ xem live 15m
@@ -219,8 +223,11 @@ export const OverviewPage = () => {
             if (!prevSeq || prevSeq.length === 0) return prevSeq;
             const newPoint = {
               time_bucket: new Date().toISOString(),
-              cpu: Number(raw.cpu),
-              ram: Number(raw.ram),
+              time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              fullTime: `${new Date().toLocaleTimeString('vi-VN')} (${new Date().toLocaleDateString('vi-VN')})`,
+              cpu: cpuVal !== undefined ? cpuVal : 0,
+              ram: ramVal !== undefined ? ramVal : 0,
+              rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : Number(raw.rawRamMb || 0),
               disk: Number(raw.disk !== undefined ? raw.disk : 10),
               latency: Number(raw.latency !== undefined ? raw.latency : 0),
               request_rate: Number(raw.request_rate || 0),
