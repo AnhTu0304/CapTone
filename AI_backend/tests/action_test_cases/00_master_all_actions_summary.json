@@ -1,0 +1,104 @@
+{
+  "title": "Master Summary of All 8 RCA Self-Healing Actions",
+  "total_actions_tested": 8,
+  "all_passed": true,
+  "tested_at": "2026-10-26T15:56:44.447637+00:00",
+  "actions": [
+    {
+      "id": "01",
+      "action": "RESTART_POD",
+      "file_name": "01_action_RESTART_POD.json",
+      "scenario_title": "Khởi động lại Pod đơn lẻ (Restart Pod)",
+      "root_cause": "Unstable application pod",
+      "severity": "HIGH",
+      "recommendation_priority": "HIGH",
+      "target_type": "POD",
+      "target_name": null,
+      "status": "PASSED"
+    },
+    {
+      "id": "02",
+      "action": "REPLACE_POD",
+      "file_name": "02_action_REPLACE_POD.json",
+      "scenario_title": "Thay thế và tái tạo mới Pod (Replace Pod)",
+      "root_cause": "Unstable application pod",
+      "severity": "HIGH",
+      "recommendation_priority": "HIGH",
+      "target_type": "POD",
+      "target_name": null,
+      "status": "PASSED"
+    },
+    {
+      "id": "03",
+      "action": "RESTART_DEPLOYMENT",
+      "file_name": "03_action_RESTART_DEPLOYMENT.json",
+      "scenario_title": "Khởi động lại toàn bộ Deployment (Restart Deployment)",
+      "root_cause": "Application errors",
+      "severity": "MEDIUM",
+      "recommendation_priority": "MEDIUM",
+      "target_type": "DEPLOYMENT",
+      "target_name": "auth-v3.1.0",
+      "status": "PASSED"
+    },
+    {
+      "id": "04",
+      "action": "SCALE_REPLICAS",
+      "file_name": "04_action_SCALE_REPLICAS.json",
+      "scenario_title": "Tăng cường quy mô bản sao Workload (Scale Replicas)",
+      "root_cause": "CPU saturation",
+      "severity": "HIGH",
+      "recommendation_priority": "HIGH",
+      "target_type": "POD",
+      "target_name": null,
+      "status": "PASSED"
+    },
+    {
+      "id": "05",
+      "action": "ROLLBACK_DEPLOYMENT",
+      "file_name": "05_action_ROLLBACK_DEPLOYMENT.json",
+      "scenario_title": "Thu hồi phiên bản lỗi về bản cũ ổn định (Rollback Deployment)",
+      "root_cause": "Deployment failure",
+      "severity": "CRITICAL",
+      "recommendation_priority": "CRITICAL",
+      "target_type": "DEPLOYMENT",
+      "target_name": "notification-v1.9.0",
+      "status": "PASSED"
+    },
+    {
+      "id": "06",
+      "action": "CLEANUP_STORAGE",
+      "file_name": "06_action_CLEANUP_STORAGE.json",
+      "scenario_title": "Dọn dẹp dung lượng ổ đĩa / PVC (Cleanup Storage)",
+      "root_cause": "Storage capacity exhausted",
+      "severity": "HIGH",
+      "recommendation_priority": "HIGH",
+      "target_type": "POD",
+      "target_name": null,
+      "status": "PASSED"
+    },
+    {
+      "id": "07",
+      "action": "TEMPORARY_IP_BLOCK",
+      "file_name": "07_action_TEMPORARY_IP_BLOCK.json",
+      "scenario_title": "Khóa tạm thời IP tấn công (Temporary IP Block)",
+      "root_cause": "UNKNOWN",
+      "severity": "LOW",
+      "recommendation_priority": "LOW",
+      "target_type": null,
+      "target_name": null,
+      "status": "PASSED"
+    },
+    {
+      "id": "08",
+      "action": "NO_ACTION",
+      "file_name": "08_action_NO_ACTION_CIRCUIT_BREAKER.json",
+      "scenario_title": "Ngắt mạch an toàn Circuit Breaker & Human-in-the-Loop",
+      "root_cause": "Container memory exhausted",
+      "severity": "CRITICAL",
+      "recommendation_priority": "CRITICAL",
+      "target_type": "POD",
+      "target_name": "mongodb-0",
+      "status": "PASSED"
+    }
+  ]
+}

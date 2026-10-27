@@ -77,7 +77,7 @@ export class WorkloadModel {
           `SELECT id, name, cluster_id, namespace_id FROM workloads
            WHERE name = $1 AND (
              cluster_id::text = $2
-             OR cluster_id IN (SELECT id FROM clusters WHERE id::text = $2 OR cluster_uid = $2 OR name = $2)
+             OR cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $2 OR cluster_uid = $2 OR name = $2)
            )
            LIMIT 1`,
           [name, clusterId]

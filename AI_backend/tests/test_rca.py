@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RCA_RESPONSE_FIELDS = {
     "service_id", "prediction", "root_cause", "evidence", "recommendation",
     "explanation", "historical_context_used", "similar_incident_ids",
+    "workload_id", "namespace", "cluster_id", "incident_id", "request_id",
 }
 
 
@@ -215,7 +216,7 @@ def test_rca_rejects_main_backend_management_identifiers():
         },
     }
     with TestClient(app) as client:
-        for field in ("company_id", "cluster_id", "incident_id"):
+        for field in ("company_id", "billing_account_id", "tenant_id"):
             response = client.post("/api/v1/rca", json={**base, field: "external-id"})
             assert response.status_code == 422, field
 
@@ -759,3 +760,205 @@ def test_log_agent_deduplicates_relevant_logs():
     ])
     assert result.important_logs == ["ERROR Readiness probe failed while serving requests"]
     assert "unstable_pod" in result.suspected_causes
+
+
+def test_rca_enterprise_mongodb_circuit_breaker_and_node_correlation():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    payload = {
+        "request_id": "req-20261026-9ea1db42-7524",
+        "incident_id": "inc-20261026-01265dc8-7e77",
+        "cluster_id": "9ea1db42-7524-4238-8716-315cbe0d0b39",
+        "namespace": "test-lab",
+        "service_id": "mongodb",
+        "workload_id": "wl-7788-99aa-bbcc-ddeeff001122",
+        "workload_type": "StatefulSet",
+        "suspected_pod_name": "mongodb-0",
+        "risk_type": "OOM",
+        "confidence": 0.94,
+        "metrics": {
+            "cpu": 45.2, "ram": 98.7, "disk": 34.0, "request_rate": 420.5,
+            "latency": 850.0, "http_5xx_rate": 6.8, "pod_restart_count": 3, "replica_count": 3,
+        },
+        "metric_sequence": [
+            {"cpu": 38.5, "ram": 70.2, "disk": 34.0, "request_rate": 410.0, "latency": 115.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 3},
+            {"cpu": 39.0, "ram": 72.8, "disk": 34.0, "request_rate": 412.0, "latency": 120.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 3},
+            {"cpu": 40.2, "ram": 75.4, "disk": 34.0, "request_rate": 415.0, "latency": 125.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 3},
+            {"cpu": 41.0, "ram": 78.1, "disk": 34.0, "request_rate": 418.0, "latency": 140.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 3},
+            {"cpu": 41.8, "ram": 81.3, "disk": 34.0, "request_rate": 420.0, "latency": 160.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 3},
+            {"cpu": 42.5, "ram": 84.6, "disk": 34.0, "request_rate": 422.0, "latency": 190.0, "http_5xx_rate": 0.0, "pod_restart_count": 0, "replica_count": 3},
+            {"cpu": 43.1, "ram": 87.9, "disk": 34.0, "request_rate": 425.0, "latency": 240.0, "http_5xx_rate": 0.5, "pod_restart_count": 1, "replica_count": 3},
+            {"cpu": 43.8, "ram": 90.5, "disk": 34.0, "request_rate": 424.0, "latency": 320.0, "http_5xx_rate": 1.2, "pod_restart_count": 1, "replica_count": 3},
+            {"cpu": 44.2, "ram": 93.1, "disk": 34.0, "request_rate": 423.0, "latency": 450.0, "http_5xx_rate": 2.5, "pod_restart_count": 2, "replica_count": 3},
+            {"cpu": 44.9, "ram": 95.8, "disk": 34.0, "request_rate": 421.0, "latency": 610.0, "http_5xx_rate": 4.1, "pod_restart_count": 2, "replica_count": 3},
+            {"cpu": 45.0, "ram": 97.4, "disk": 34.0, "request_rate": 422.0, "latency": 730.0, "http_5xx_rate": 5.4, "pod_restart_count": 3, "replica_count": 3},
+            {"cpu": 45.2, "ram": 98.7, "disk": 34.0, "request_rate": 420.5, "latency": 850.0, "http_5xx_rate": 6.8, "pod_restart_count": 3, "replica_count": 3},
+        ],
+        "kubernetes": {
+            "cluster_id": "9ea1db42-7524-4238-8716-315cbe0d0b39",
+            "namespace": "test-lab",
+            "workload_id": "wl-7788-99aa-bbcc-ddeeff001122",
+            "workload_type": "StatefulSet",
+            "workload_name": "mongodb",
+            "desired_replicas": 3,
+            "available_replicas": 2,
+            "events": [
+                "Pod mongodb-0 container mongod terminated with exitCode 137 (OOMKilled)",
+            ],
+            "nodes": [
+                {
+                    "node_id": "node-worker-01-uuid",
+                    "node_name": "worker-node-01",
+                    "status": "Ready",
+                    "conditions": {"Ready": True, "MemoryPressure": True},
+                    "free_memory_bytes": 104857600,
+                },
+                {
+                    "node_id": "node-worker-02-uuid",
+                    "node_name": "worker-node-02",
+                    "status": "Ready",
+                    "conditions": {"Ready": True, "MemoryPressure": False},
+                    "free_memory_bytes": 5347737600,
+                },
+            ],
+            "all_pods": [
+                {
+                    "pod_id": "c72b8f80-9289-4b47-b2eb-67055c5df389",
+                    "pod_name": "mongodb-0",
+                    "node_name": "worker-node-01",
+                    "status": "Running",
+                    "ready": False,
+                    "restart_count": 3,
+                    "termination": {
+                        "last_state": "Terminated",
+                        "last_exit_code": 137,
+                        "reason": "OOMKilled",
+                        "container_name": "mongod",
+                    },
+                    "mongodb_cluster_health": {
+                        "role": "PRIMARY",
+                        "healthy_members": 2,
+                        "total_members": 3,
+                        "replication_lag_seconds": 0.0,
+                        "quorum_status": "INTACT",
+                    },
+                    "storage_pvc": {
+                        "pvc_name": "datadir-mongodb-0",
+                        "mount_status": "Mounted",
+                        "used_percent": 34.0,
+                        "io_errors": 0,
+                    },
+                    "memory_config": {
+                        "container_limit_bytes": 1073741824,
+                        "wiredtiger_cache_size_bytes": 536870912,
+                    },
+                },
+                {
+                    "pod_id": "pod-worker-02-uuid",
+                    "pod_name": "mongodb-1",
+                    "node_name": "worker-node-02",
+                    "status": "Running",
+                    "ready": True,
+                    "restart_count": 0,
+                    "mongodb_cluster_health": {
+                        "role": "SECONDARY",
+                        "healthy_members": 2,
+                        "total_members": 3,
+                        "replication_lag_seconds": 0.0,
+                        "quorum_status": "INTACT",
+                    },
+                },
+                {
+                    "pod_id": "pod-worker-03-uuid",
+                    "pod_name": "mongodb-2",
+                    "node_name": "worker-node-02",
+                    "status": "Running",
+                    "ready": True,
+                    "restart_count": 0,
+                    "mongodb_cluster_health": {
+                        "role": "SECONDARY",
+                        "healthy_members": 2,
+                        "total_members": 3,
+                        "replication_lag_seconds": 0.0,
+                        "quorum_status": "INTACT",
+                    },
+                },
+            ],
+        },
+        "logs": [
+            "[2026-10-26T16:08:10Z] [QUERY] slow query on collection orders planSummary: COLLSCAN keysExamined:0 docsExamined:250000 1250ms",
+            "[2026-10-26T16:08:11Z] [FATAL] Out of memory: unable to allocate 16777216 bytes in cache bucket",
+        ],
+        "action_history": {
+            "total_actions_recorded": 2,
+            "consecutive_failures": 2,
+            "circuit_breaker_tripped": True,
+            "blocked_actions": ["RESTART_POD", "REPLACE_POD"],
+            "history": [
+                {
+                    "action_id": "act-20261026-001",
+                    "action": "RESTART_POD",
+                    "target_type": "POD",
+                    "target_name": "mongodb-0",
+                    "result": "FAILED",
+                    "failure_reason": "OOMKilled_137",
+                },
+                {
+                    "action_id": "act-20261026-002",
+                    "action": "REPLACE_POD",
+                    "target_type": "POD",
+                    "target_name": "mongodb-0",
+                    "result": "FAILED",
+                    "failure_reason": "OOMKilled_137",
+                },
+            ],
+        },
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/api/v1/rca", json=payload)
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    # Scope & Identity
+    assert body["service_id"] == "mongodb"
+    assert body["workload_id"] == "wl-7788-99aa-bbcc-ddeeff001122"
+    assert body["namespace"] == "test-lab"
+    assert body["cluster_id"] == "9ea1db42-7524-4238-8716-315cbe0d0b39"
+    assert body["incident_id"] == "inc-20261026-01265dc8-7e77"
+    assert body["request_id"] == "req-20261026-9ea1db42-7524"
+
+    # Root Cause & Severity
+    assert body["root_cause"]["cause"] == "Container memory exhausted"
+    assert body["root_cause"]["severity"] == "CRITICAL"
+    assert body["root_cause"]["confidence"] >= 0.90
+
+    # Evidence checks
+    evidence_text = " ".join(body["evidence"])
+    assert "exitCode 137" in evidence_text or "137" in evidence_text
+    assert "consecutive failure" in evidence_text
+
+    # Recommendation & Circuit Breaker Enforcement
+    rec = body["recommendation"]
+    assert rec["action"] == "NO_ACTION"
+    assert rec["priority"] == "CRITICAL"
+    assert "Circuit Breaker" in rec["reason"]
+    assert rec["target_type"] == "POD"
+    assert rec["target_name"] == "mongodb-0"
+    assert rec["target_id"] == "c72b8f80-9289-4b47-b2eb-67055c5df389"
+    assert rec["target_node"] == "worker-node-01"
+
+    # Action Parameters & Playbook
+    params = rec["action_parameters"]
+    assert params is not None
+    assert params["faulty_pod_id"] == "c72b8f80-9289-4b47-b2eb-67055c5df389"
+    assert params["faulty_pod_name"] == "mongodb-0"
+    assert params["faulty_node_id"] == "node-worker-01-uuid"
+    assert params["faulty_node_name"] == "worker-node-01"
+    assert params["recommended_destination_node"] == "worker-node-02"
+    assert params["destination_node_id"] == "node-worker-02-uuid"
+    assert params["consecutive_failures"] == 2
+    assert params["circuit_breaker_tripped"] is True
+    assert len(params["manual_playbook"]) == 3
+    assert any("rs.stepDown(60)" in step for step in params["manual_playbook"])

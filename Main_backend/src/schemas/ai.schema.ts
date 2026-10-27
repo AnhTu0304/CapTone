@@ -28,7 +28,12 @@ export const PredictRequestSchema = z.object({
 });
 
 export const RCARequestSchema = z.object({
+  request_id: z.string().optional(),
+  incident_id: z.string().optional(),
   service_id: z.string().min(1, 'service_id is required'),
+  namespace: z.string().optional(),
+  workload_type: z.string().optional(),
+  suspected_pod_name: z.string().optional(),
   risk_type: z
     .enum([
       'CPU_OVERLOAD',
@@ -52,19 +57,9 @@ export const RCARequestSchema = z.object({
     pod_restart_count: z.number().int().min(0),
     replica_count: z.number().int().min(0),
   }),
+  metric_sequence: z.array(GRUMetricPointSchema).optional(),
   logs: z.array(z.string()).max(1000).optional().default([]),
-  kubernetes: z
-    .object({
-      pod_status: z.string().nullable().optional(),
-      container_status: z.string().nullable().optional(),
-      restart_count: z.number().int().min(0).optional().default(0),
-      events: z.array(z.string()).optional().default([]),
-      desired_replicas: z.number().int().nullable().optional(),
-      available_replicas: z.number().int().nullable().optional(),
-      readiness_probe: z.union([z.string(), z.boolean()]).nullable().optional(),
-      liveness_probe: z.union([z.string(), z.boolean()]).nullable().optional(),
-    })
-    .optional(),
+  kubernetes: z.record(z.string(), z.any()).optional(),
   prediction: z.any().optional(),
   kubernetes_events: z.array(z.string()).max(500).optional().default([]),
   prediction_id: z.string().uuid().optional(),
@@ -75,6 +70,7 @@ export const RCARequestSchema = z.object({
   previous_action_result: z.enum(['SUCCESS', 'FAILED', 'PARTIAL', 'UNKNOWN']).optional().nullable(),
   previous_action_result_source: z.literal('POST_ACTION_VERIFICATION').optional().nullable(),
   previous_rca_root_cause: z.string().optional().nullable(),
+  action_history: z.any().optional(),
 });
 
 export type GRUMetricPoint = z.infer<typeof GRUMetricPointSchema>;

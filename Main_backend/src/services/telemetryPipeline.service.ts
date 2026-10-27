@@ -10,9 +10,8 @@ export class TelemetryPipelineService {
   private static intervalHandle: NodeJS.Timeout | null = null;
   // Boundary tracking: only take time-buckets STRICTLY AFTER this timestamp
   private static lastEvaluatedBucketTimestamp: Record<string, Date | null> = {};
-  private static pendingUrgentEval: Record<string, NodeJS.Timeout> = {};
+  private static urgentReasonByService: Record<string, string> = {};
   private static isProcessingService: Record<string, boolean> = {};
-  private static serviceStepCounter: Record<string, number> = {};
 
   /**
    * Start the continuous background pipeline for Tumbling Batches (Lô 12 điểm mới tinh):
@@ -25,11 +24,15 @@ export class TelemetryPipelineService {
 
     this.intervalHandle = setInterval(async () => {
       try {
-        const activeServices = await MetricModel.getActiveServices(30);
+        const activeServices = await MetricModel.getActiveServices(2);
         if (!activeServices || activeServices.length === 0) return;
-        for (const sId of activeServices) {
-          await this.processServiceBatch(sId);
-        }
+        await Promise.all(
+          activeServices.map((sId) =>
+            this.processServiceBatch(sId).catch((err) => {
+              console.error(`[TelemetryPipeline] Error processing service ${sId}:`, err?.message || err);
+            })
+          )
+        );
       } catch (err) {
         console.error('[TelemetryPipeline] Error in background cycle:', err);
       }
@@ -37,36 +40,20 @@ export class TelemetryPipelineService {
   }
 
   /**
-   * Reactive trigger: When Agent detects an Error log, OOM, Crash, or Warning event,
-   * trigger an immediate evaluation with a 2-second debounce to avoid storming.
+   * Mark urgent signal (Error log, OOM, Crash, or Warning event) for the service
+   * so when the 12-point batch completes, RCA is guaranteed to evaluate it without
+   * bypassing the 12-point tumbling batch rule.
    */
   public static triggerUrgentEvaluation(serviceId: string, reason: string) {
-    console.log(`🚨 [TelemetryPipeline] Urgent diagnosis scheduled for '${serviceId}' [Reason: ${reason.slice(0, 80)}]`);
-
-    if (this.pendingUrgentEval[serviceId]) {
-      clearTimeout(this.pendingUrgentEval[serviceId]);
-    }
-
-    this.pendingUrgentEval[serviceId] = setTimeout(async () => {
-      delete this.pendingUrgentEval[serviceId];
-      try {
-        await TelemetryAggregatorService.evaluateAndDiagnoseService(serviceId, {
-          bucketSeconds: 5,
-          windowMinutes: 30,
-          forceRca: true,
-          autoTriggerRca: true,
-        });
-      } catch (err) {
-        console.error(`[TelemetryPipeline] Urgent evaluation error for ${serviceId}:`, err);
-      }
-    }, 1500);
+    this.urgentReasonByService[serviceId] = reason;
   }
 
   /**
    * Tumbling Batch Logic:
    * 1. Query new time-buckets strictly after lastEvaluatedBucketTimestamp
    * 2. If < 12 points: WAIT and report progress (e.g. 5/12 new points)
-   * 3. When 12 new points reached: Feed all 12 points into GRU, advance boundary, discard old 12 points!
+   * 3. When 12 new points reached: Advance boundary immediately so next batch [1/12] accumulates in parallel,
+   *    and feed all 12 points into GRU + RCA asynchronously without blocking!
    */
   public static async processServiceBatch(serviceId: string) {
     if (this.isProcessingService[serviceId]) return;
@@ -87,6 +74,30 @@ export class TelemetryPipelineService {
       );
 
       const count = freshBatch.points.length;
+
+      // Nếu vừa chốt 12/12 (lastBucket đã có) và đang trong cùng khung 5s chưa sang bucket mới (count === 0):
+      // Giữ nguyên hiển thị mốc 12/12 (T1) với điểm cập nhật mới nhất (nếu có nhiều pod cùng gửi trong 1 bucket),
+      // tuyệt đối KHÔNG reset sớm về bước 1 (T12) khi chưa có điểm mới!
+      if (count === 0 && lastBucket) {
+        if (Date.now() - lastBucket.getTime() < 5500) {
+          broadcastTelemetryToUi({
+            type: 'batch_accumulation',
+            data: {
+              service_id: serviceId,
+              collected: 12,
+              target: 12,
+              active_step: 12,
+              percent: 100,
+              status: 'ready_for_gru',
+              points: displayPoints,
+              latest_point: displayPoints[displayPoints.length - 1] || null,
+              message: `Đã gom đủ 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...`,
+            },
+          });
+        }
+        return;
+      }
+
       const currentStep = count === 0 ? 1 : Math.min(count, 12);
 
       // Broadcast trạng thái tới UI Dashboard:
@@ -116,78 +127,89 @@ export class TelemetryPipelineService {
         return;
       }
 
-      // ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12): Gửi toàn bộ 12 điểm mới vào GRU!
-      console.log(`🎯 [TelemetryPipeline] '${serviceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Gửi nguyên lô 12 điểm mới vào GRU dự đoán...`);
-
-      const result = await TelemetryAggregatorService.evaluateAndDiagnoseService(serviceId, {
-        bucketSeconds: 5,
-        windowMinutes: 30,
-        forceRca: false,
-        autoTriggerRca: true,
-        providedSequence: freshBatch.points,
-        clusterId: freshBatch.clusterId,
-      });
-
-      // Cập nhật mốc chốt chặn: đợt sau chỉ gom các điểm MỚI SAU mốc này
+      // ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12):
+      // 1. Cập nhật mốc chốt chặn NGAY LẬP TỨC để lô tiếp theo [1/12] gom song song không phải đợi GRU/RCA!
       this.lastEvaluatedBucketTimestamp[serviceId] = freshBatch.latestTimeBucket || new Date();
+      delete this.urgentReasonByService[serviceId];
 
-      // Broadcast kết quả dự đoán GRU kèm chuỗi 12 điểm qua WebSocket
-      if (result.gru_prediction) {
-        broadcastTelemetryToUi({
-          type: 'ai_prediction',
-          data: {
-            ...result.gru_prediction,
-            workload_name: serviceId,
-            service_id: serviceId,
-            active_step: 12,
-            sequence: displayPoints,
-            evaluated_at: new Date().toISOString(),
-            is_tumbling_batch: true,
-          },
-        });
-      }
+      const batchPointsSnapshot = [...freshBatch.points];
+      const displayPointsSnapshot = [...displayPoints];
+      const batchClusterId = freshBatch.clusterId;
 
-      // Nếu phát hiện nguy cơ cao -> Kích hoạt RCA & đề xuất khắc phục
-      if (result.rca_triggered && result.rca_diagnosis) {
-        console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS on '${serviceId}': ${result.rca_diagnosis.root_cause.cause}`);
+      console.log(`🎯 [TelemetryPipeline] '${serviceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Đẩy bất đồng bộ sang GRU & tiếp tục gom lô mới ngay lập tức...`);
 
-        broadcastTelemetryToUi({
-          type: 'incident',
-          data: {
-            id: result.rca_diagnosis.incident_id,
-            service_id: serviceId,
-            title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
-            severity: result.rca_diagnosis.root_cause.severity,
-            cause: result.rca_diagnosis.root_cause.cause,
-            explanation: result.rca_diagnosis.explanation,
-            created_at: result.rca_diagnosis.created_at,
-          },
-        });
+      // 2. Chạy GRU và RCA hoàn toàn bất đồng bộ (non-blocking) ở background để không khóa isProcessingService[serviceId]
+      (async () => {
+        try {
+          const result = await TelemetryAggregatorService.evaluateAndDiagnoseService(serviceId, {
+            bucketSeconds: 5,
+            windowMinutes: 30,
+            forceRca: false,
+            autoTriggerRca: true,
+            providedSequence: batchPointsSnapshot,
+            clusterId: batchClusterId,
+            onGruPrediction: (gruPred) => {
+              // Broadcast kết quả dự đoán GRU NGAY LẬP TỨC khi GRU vừa trả về (không đợi RCA)
+              broadcastTelemetryToUi({
+                type: 'ai_prediction',
+                data: {
+                  ...gruPred,
+                  workload_name: serviceId,
+                  service_id: serviceId,
+                  active_step: 12,
+                  sequence: displayPointsSnapshot,
+                  evaluated_at: new Date().toISOString(),
+                  is_tumbling_batch: true,
+                },
+              });
+            },
+          });
 
-        broadcastTelemetryToUi({
-          type: 'ai_recommendation',
-          data: {
-            id: result.rca_diagnosis.recommendation_id,
-            incident_id: result.rca_diagnosis.incident_id,
-            recommendation: result.rca_diagnosis.recommendation.action,
-            action: result.rca_diagnosis.recommendation.action,
-            action_code: result.rca_diagnosis.recommendation.action,
-            reason: result.rca_diagnosis.recommendation.reason,
-            reasoning: result.rca_diagnosis.recommendation.reason,
-            priority: result.rca_diagnosis.recommendation.priority,
-            target_name: serviceId,
-            target_id: serviceId,
-            incident_title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
-            cluster_id: (result.rca_diagnosis as any)?.cluster_id,
-            created_at: new Date().toISOString(),
-          },
-        });
+          // Nếu phát hiện nguy cơ cao -> Kích hoạt RCA & đề xuất khắc phục
+          if (result.rca_triggered && result.rca_diagnosis) {
+            console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS on '${serviceId}': ${result.rca_diagnosis.root_cause.cause}`);
 
-        await TelemetryPipelineService.evaluatePolicyAndTriggerAutonomousHealing(
-          result.rca_diagnosis,
-          serviceId
-        );
-      }
+            broadcastTelemetryToUi({
+              type: 'incident',
+              data: {
+                id: result.rca_diagnosis.incident_id,
+                service_id: serviceId,
+                title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
+                severity: result.rca_diagnosis.root_cause.severity,
+                cause: result.rca_diagnosis.root_cause.cause,
+                explanation: result.rca_diagnosis.explanation,
+                created_at: result.rca_diagnosis.created_at,
+              },
+            });
+
+            broadcastTelemetryToUi({
+              type: 'ai_recommendation',
+              data: {
+                id: result.rca_diagnosis.recommendation_id,
+                incident_id: result.rca_diagnosis.incident_id,
+                recommendation: result.rca_diagnosis.recommendation.action,
+                action: result.rca_diagnosis.recommendation.action,
+                action_code: result.rca_diagnosis.recommendation.action,
+                reason: result.rca_diagnosis.recommendation.reason,
+                reasoning: result.rca_diagnosis.recommendation.reason,
+                priority: result.rca_diagnosis.recommendation.priority,
+                target_name: serviceId,
+                target_id: serviceId,
+                incident_title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
+                cluster_id: (result.rca_diagnosis as any)?.cluster_id,
+                created_at: new Date().toISOString(),
+              },
+            });
+
+            await TelemetryPipelineService.evaluatePolicyAndTriggerAutonomousHealing(
+              result.rca_diagnosis,
+              serviceId
+            );
+          }
+        } catch (bgErr: any) {
+          console.error(`[TelemetryPipeline] Async GRU/RCA error on ${serviceId}:`, bgErr?.message || bgErr);
+        }
+      })();
     } catch (err: any) {
       console.error(`[TelemetryPipeline] Processing error on ${serviceId}:`, err?.message || err);
     } finally {
@@ -206,32 +228,36 @@ export class TelemetryPipelineService {
   ): Promise<void> {
     try {
       let recAction = rca.recommendation.action || 'Restart Pod';
-      if (recAction === 'REPLACE_POD') recAction = 'RESTART_POD';
+      if (recAction === 'NO_ACTION') {
+        console.log(`🛡️ [PolicyEngine] Recommendation is NO_ACTION (Circuit Breaker). Bypassing automated healing dispatch.`);
+        return;
+      }
       if (recAction === 'CLEANUP_STORAGE') recAction = 'CLEANUP_TEMP_FILES';
       if (recAction === 'TEMPORARY_IP_BLOCK') recAction = 'BLOCK_IP_TEMP';
       const confidence = rca.root_cause.confidence || 0.85;
 
-      // 1. Query matching active policies
+      // 1. Query matching policy (prioritizing active policies)
       const query = `
         SELECT 
           p.id AS policy_id,
           p.name AS policy_name,
           p.execution_mode,
+          p.risk_level,
           p.confidence_threshold,
           p.requires_approval,
           p.is_active,
           p.environment_id,
           act.id AS action_type_id,
           act.code AS action_code,
-          act.name AS action_name
+          act.name AS action_name,
+          act.default_risk_level
         FROM healing_policies p
         JOIN policy_actions pa ON pa.policy_id = p.id
         JOIN healing_action_types act ON act.id = pa.action_type_id
-        WHERE p.is_active = true
-          AND p.deleted_at IS NULL
+        WHERE p.deleted_at IS NULL
           AND pa.is_enabled = true
           AND (act.name ILIKE $1 OR act.code ILIKE $2 OR p.name ILIKE $3)
-        ORDER BY pa.priority ASC
+        ORDER BY p.is_active DESC, pa.priority ASC
         LIMIT 1;
       `;
 
@@ -240,37 +266,77 @@ export class TelemetryPipelineService {
       const polRes = await pool.query(query, [searchPattern, codePattern, searchPattern]);
 
       if (polRes.rows.length === 0) {
-        console.log(`ℹ️ [PolicyEngine] No active policy matches action '${recAction}'. Kept in PROPOSED status for HITL approval.`);
+        console.log(`ℹ️ [PolicyEngine] No policy matches action '${recAction}'. Kept in PROPOSED status.`);
         return;
       }
 
       const policy = polRes.rows[0];
-      const threshold = policy.confidence_threshold !== null ? Number(policy.confidence_threshold) : 0.70;
-
-      // Check confidence threshold
-      if (confidence < threshold) {
-        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' matched, but AI confidence (${confidence.toFixed(2)}) < threshold (${threshold.toFixed(2)}). Waiting for HITL confirmation.`);
-        return;
-      }
-
-      // Check execution mode & approval requirement
-      const isAuto = (policy.execution_mode === 'AUTO' || policy.execution_mode === 'AUTONOMOUS');
-      if (!isAuto || policy.requires_approval) {
-        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires human approval (Execution Mode: ${policy.execution_mode}, Requires Approval: ${policy.requires_approval}). Kept in PROPOSED.`);
-        return;
-      }
-
-      // 2. AUTONOMOUS HEALING TRIGGERED!
-      console.log(`⚡ [AutonomousSelfHealing] Matched ACTIVE AUTO Policy '${policy.policy_name}'!`);
-      console.log(`   - Target Service: ${serviceId}`);
-      console.log(`   - Action: ${policy.action_name} (${policy.action_code})`);
-      console.log(`   - AI Confidence: ${(confidence * 100).toFixed(1)}% >= Threshold: ${(threshold * 100).toFixed(1)}%`);
-
       let environmentId = rca.environment_id || policy.environment_id;
       if (!environmentId) {
         const envRes = await pool.query('SELECT id FROM environments LIMIT 1;');
         environmentId = envRes.rows[0]?.id;
       }
+
+      // Case 1: Policy is turned OFF or Cluster is in AUDIT & Dry-Run Mode
+      if (!policy.is_active) {
+        console.log(`🔒 [PolicyEngine] Policy '${policy.policy_name}' is DISABLED (Audit / Dry-Run Mode). AI only diagnoses & alerts without modifying K8s cluster.`);
+        return;
+      }
+
+      const threshold = policy.confidence_threshold !== null ? Number(policy.confidence_threshold) : 0.70;
+      const isAuto = (policy.execution_mode === 'AUTO' || policy.execution_mode === 'AUTONOMOUS');
+      const effectiveRisk = (policy.risk_level || policy.default_risk_level || 'LOW').toUpperCase();
+
+      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold)
+      if (!isAuto || policy.requires_approval || confidence < threshold) {
+        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires HITL approval (Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
+        const hitlActInsert = await pool.query(
+          `INSERT INTO healing_actions (
+            incident_id, recommendation_id, policy_id, environment_id, action_type_id,
+            target_type, target_name, risk_level, execution_mode, approval_status, execution_status,
+            requested_at, result
+          ) VALUES (
+            $1, $2, $3, $4, $5,
+            'WORKLOAD', $6, $7::risk_level, 'MANUAL'::execution_mode, 'PENDING'::approval_status, 'PENDING'::execution_status,
+            NOW(), $8::jsonb
+          ) RETURNING id;`,
+          [
+            rca.incident_id,
+            rca.recommendation_id,
+            policy.policy_id,
+            environmentId,
+            policy.action_type_id,
+            serviceId,
+            effectiveRisk,
+            JSON.stringify({
+              status: 'PENDING_APPROVAL',
+              policy_id: policy.policy_id,
+              policy_name: policy.policy_name,
+              action: policy.action_name,
+              target: serviceId,
+              message: `Hành động ${policy.action_name} (${policy.action_code}) trên ${serviceId} đang chờ phê duyệt tại Cổng HITL theo chính sách ${policy.policy_name}.`,
+            }),
+          ]
+        );
+        const pendingActionId = hitlActInsert.rows[0]?.id;
+        if (pendingActionId) {
+          await pool.query(
+            `INSERT INTO approvals (healing_action_id, status, reason, requested_at, expires_at)
+             VALUES ($1, 'PENDING', $2, NOW(), NOW() + interval '24 hours');`,
+            [
+              pendingActionId,
+              `Chính sách ${policy.policy_name} (Mức rủi ro: ${effectiveRisk}) yêu cầu phê duyệt con người (HITL) trước khi thực thi ${policy.action_name} trên dịch vụ ${serviceId}.`,
+            ]
+          );
+        }
+        return;
+      }
+
+      // Case 3: AUTONOMOUS HEALING TRIGGERED!
+      console.log(`⚡ [AutonomousSelfHealing] Matched ACTIVE AUTO Policy '${policy.policy_name}'!`);
+      console.log(`   - Target Service: ${serviceId}`);
+      console.log(`   - Action: ${policy.action_name} (${policy.action_code})`);
+      console.log(`   - AI Confidence: ${(confidence * 100).toFixed(1)}% >= Threshold: ${(threshold * 100).toFixed(1)}%`);
 
       // Insert record into healing_actions with status 'RUNNING' and approval 'APPROVED'
       const insertActQuery = `
@@ -372,6 +438,7 @@ export class TelemetryPipelineService {
         target_name: serviceId,
         namespace: targetNamespace,
         params: {
+          ...(rca.recommendation.action_parameters || {}),
           pod_name: targetPod,
           pod_id: targetPod,
         },

@@ -35,6 +35,30 @@ const formatRelativeTime = (dateStr) => {
   return `${days} ngày trước`;
 };
 
+// Chuẩn hóa confidence: không tự gán mặc định, giữ nguyên giá trị 0, trả về null nếu không hợp lệ
+const parseConfidence = (val) => {
+  if (val === null || val === undefined || val === '') {
+    return null;
+  }
+  const num = Number(val);
+  if (!Number.isFinite(num) || num < 0 || num > 100) {
+    return null;
+  }
+  return Math.round(num <= 1 ? num * 100 : num);
+};
+
+// Danh sách trắng cho phép loại rủi ro dự báo hợp lệ (ngăn chặn việc lấy tên hành động thay cho rủi ro)
+const VALID_RISKS = new Set([
+  'OOM',
+  'CPU_OVERLOAD',
+  'DISK_FULL',
+  'HIGH_LATENCY',
+  'HTTP_5XX_SPIKE',
+  'TRAFFIC_OVERLOAD',
+  'UNSTABLE_POD',
+  'SCALE_DOWN_CANDIDATE',
+]);
+
 const mapBackendIncidentToUI = (item) => {
   const shortId = item.id.length > 12 ? `INC-${item.id.slice(0, 8).toUpperCase()}` : item.id;
   const isResolved = item.status === 'RESOLVED';
@@ -61,18 +85,41 @@ const mapBackendIncidentToUI = (item) => {
   const recAction = rcaParsed?.recommendation?.action || item.recommendation || (item.title?.includes('UNKNOWN') ? 'NO_ACTION' : 'RESTART_POD & RESCALE');
   const isNoAction = recAction === 'NO_ACTION' || (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
 
-  let statusLabel = 'Chờ phê duyệt HITL';
-  if (isResolved) statusLabel = 'Đã khắc phục hoàn tất';
-  else if (isNoAction) statusLabel = 'Tự động an toàn (NO_ACTION)';
-  else if (isRecovering) statusLabel = 'Đang tự phục hồi';
+  // Trạng thái vòng đời sự cố lấy từ backend status, không tự suy ra sự cố an toàn chỉ từ NO_ACTION
+  let statusLabel = 'Đang theo dõi';
+  if (isResolved) {
+    statusLabel = 'Đã khắc phục hoàn tất';
+  } else if (isRecovering) {
+    statusLabel = 'Đang tự phục hồi';
+  } else if (item.status === 'OPEN') {
+    statusLabel = isNoAction ? 'Chưa đủ bằng chứng (NO_ACTION)' : 'Chờ phê duyệt HITL';
+  } else if (item.status) {
+    statusLabel = item.status;
+  }
   const recReason = rcaParsed?.recommendation?.reason || 'Tự động giải phóng tiến trình và điều chỉnh ngưỡng tài nguyên an toàn theo MAPE-K';
+
+  // Chuẩn hóa confidence an toàn, giữ nguyên 0 và không fallback về 92%
+  const rcaConfidence = parseConfidence(item.rca_confidence);
+
+  // Chỉ chấp nhận predictedRisk khi thuộc VALID_RISKS, không lấy tên hành động thay cho rủi ro
+  let predictedRisk = null;
+  const rawRiskCandidate = rcaParsed?.prediction?.detected_risks?.[0]?.risk_type
+    || item.prediction?.detected_risks?.[0]?.risk_type
+    || item.prediction_type
+    || item.incident_type;
+
+  if (rawRiskCandidate && VALID_RISKS.has(String(rawRiskCandidate).toUpperCase())) {
+    predictedRisk = String(rawRiskCandidate).toUpperCase();
+  }
 
   let evidencesList = [
     {
       type: 'AI_TELEMETRY',
       ref: serviceName,
-      summary: `Mô hình AI phát hiện nguy cơ ${item.incident_type || 'bất thường'} với độ tin cậy ${Math.round(Number(item.rca_confidence || 0.95) * 100)}%`,
-      score: `${Math.round(Number(item.rca_confidence || 0.95) * 100)}%`,
+      summary: predictedRisk
+        ? `Mô hình AI phát hiện nguy cơ ${predictedRisk}${rcaConfidence !== null ? ` với độ tin cậy ${rcaConfidence}%` : ''}`
+        : 'Mô hình AI theo dõi chuỗi viễn trắc telemetry',
+      score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
     },
     {
       type: 'K8S_EVENT',
@@ -87,7 +134,7 @@ const mapBackendIncidentToUI = (item) => {
       type: idx === 0 ? 'AI_TELEMETRY' : 'K8S_EVENT',
       ref: serviceName,
       summary: typeof ev === 'string' ? ev : (ev.summary || JSON.stringify(ev)),
-      score: `${Math.round(Number(item.rca_confidence || 0.92) * 100)}%`,
+      score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
     }));
   }
 
@@ -108,9 +155,11 @@ const mapBackendIncidentToUI = (item) => {
     detectedAt: item.detected_at || item.created_at,
     impact: item.description || `Ảnh hưởng hiệu năng dịch vụ ${serviceName}`,
     rootCause: item.root_cause_description || item.description || 'Hệ thống tự động phát hiện mẫu hành vi bất thường từ chuỗi viễn trắc AI.',
-    rootCauseType: item.root_cause_type || item.incident_type || 'Bất thường dịch vụ',
-    confidence: Math.round(Number(item.rca_confidence || 0.92) * 100),
-    primaryRisk: `${item.incident_type || 'RỦI RO'} (${Math.round(Number(item.rca_confidence || 0.92) * 100)}%)`,
+    rootCauseType: item.root_cause_type || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Bất thường dịch vụ'),
+    confidence: rcaConfidence,
+    rcaConfidence: rcaConfidence,
+    predictedRisk: predictedRisk,
+    primaryRisk: predictedRisk ? `${predictedRisk}${rcaConfidence !== null ? ` (${rcaConfidence}%)` : ''}` : null,
     mttr: isResolved ? 'Đã khắc phục hoàn tất' : 'Đang chạy (1.4s)',
     recommendationAction: recAction,
     recommendationReason: recReason,

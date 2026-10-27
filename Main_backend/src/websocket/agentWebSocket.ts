@@ -183,10 +183,11 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               console.error(`[agentWebSocket] Error processing batch on metric for ${msg.data.service_id}:`, err);
             });
 
-            // Only trigger on pod restarts if restart count actually INCREASED
-            const prevRestarts = lastKnownRestartsByService[msg.data.service_id];
+            // Only trigger on pod restarts if restart count actually INCREASED for this specific pod
+            const restartKey = `${msg.data.service_id}:${msg.data.pod_id || 'default'}`;
+            const prevRestarts = lastKnownRestartsByService[restartKey];
             const hasNewRestart = prevRestarts !== undefined && msg.data.pod_restart_count > prevRestarts;
-            lastKnownRestartsByService[msg.data.service_id] = msg.data.pod_restart_count;
+            lastKnownRestartsByService[restartKey] = msg.data.pod_restart_count;
 
             // Trigger urgent AI diagnosis if metrics exceed anomaly thresholds
             if (
@@ -255,10 +256,11 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               }
             });
 
-            // Check if log indicates an error / crash / OOM
+            // Check if log indicates an error / crash / OOM (ignore routine MongoDB JSON info logs)
             const upperLevel = msg.data.level.toUpperCase();
-            const isErrorLog = ['ERROR', 'FATAL', 'CRITICAL'].includes(upperLevel);
-            const hasErrorKeywords = /(exception|timeout|oom|crash|connection error|killed|deadlock|fail)/i.test(msg.data.message);
+            const isRoutineJsonInfo = msg.data.message.includes('"s":"I"');
+            const isErrorLog = !isRoutineJsonInfo && ['ERROR', 'FATAL', 'CRITICAL'].includes(upperLevel);
+            const hasErrorKeywords = !isRoutineJsonInfo && /(exception|timeout|oom|crash|connection error|killed|deadlock|fail)/i.test(msg.data.message);
 
             if (isErrorLog || hasErrorKeywords) {
               TelemetryPipelineService.triggerUrgentEvaluation(
@@ -342,7 +344,39 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
           }
 
           case 'action_result': {
-            const { action_id, status, message, duration_ms, details } = msg.data;
+            const { action_id, status, message: rawMessage, duration_ms, details } = msg.data;
+            let message = String(rawMessage || '');
+            const targetSvc = details?.target || 'dịch vụ mục tiêu';
+            const targetNs = details?.namespace || 'default';
+            if (message.includes('HTTPHeaderDict') || message.includes('HTTP response body:')) {
+              const bodyMatch = message.match(/HTTP response body:\s*(\{[\s\S]*\})/);
+              if (bodyMatch) {
+                try {
+                  const k8sErr = JSON.parse(bodyMatch[1]);
+                  message = `Lỗi thực thi K8s (${k8sErr.code || 403} ${k8sErr.reason || 'Error'}): ${k8sErr.message || rawMessage.split('HTTP response headers:')[0].trim()}`;
+                } catch {
+                  message = message.split('HTTP response headers:')[0].trim();
+                }
+              } else {
+                message = message.split('HTTP response headers:')[0].trim();
+              }
+            } else if (/scaled successfully to (\d+) replicas/i.test(message)) {
+              const rep = message.match(/scaled successfully to (\d+) replicas/i)?.[1] || '2';
+              message = `Đã mở rộng ngang (SCALE_REPLICAS) dịch vụ "${targetSvc}" lên ${rep} bản sao (Replicas) thành công tại namespace "${targetNs}".`;
+            } else if (/Specific unhealthy pod '([^']+)' terminated and successfully replaced/i.test(message)) {
+              const pod = message.match(/Specific unhealthy pod '([^']+)'/i)?.[1] || targetSvc;
+              message = `Đã chấm điểm, cô lập và xóa Pod lỗi "${pod}"; ReplicaSet/Controller trong namespace "${targetNs}" đã tự động khởi tạo Pod mới thay thế thành công.`;
+            } else if (/Zero-downtime rolling restart patched successfully/i.test(message)) {
+              message = `Đã thực thi khởi động lại cuốn chiếu không gián đoạn (Zero-downtime Rolling Restart) thành công cho dịch vụ "${targetSvc}" tại namespace "${targetNs}".`;
+            } else if (/Replaced pod via rolling restart/i.test(message)) {
+              message = `Đã thay thế Pod lỗi thông qua khởi động lại cuốn chiếu (Rolling Restart) trên dịch vụ "${targetSvc}" tại namespace "${targetNs}".`;
+            } else if (/Rollback/i.test(message) && status === 'SUCCEEDED') {
+              message = `Đã khôi phục (Rollback) dịch vụ "${targetSvc}" về phiên bản ReplicaSet ổn định trước đó tại namespace "${targetNs}".`;
+            } else if (/Ephemeral disk cleanup/i.test(message)) {
+              message = `Đã dọn dẹp bộ nhớ tạm (emptyDir / Ephemeral Storage) và tái khởi tạo lưu trữ sạch cho dịch vụ "${targetSvc}" tại namespace "${targetNs}".`;
+            } else if (/Zero-downtime preserved: System telemetry verified safe/i.test(message)) {
+              message = `AI xác nhận chỉ số viễn trắc của "${targetSvc}" đang an toàn, giữ nguyên trạng thái (NO_ACTION) để bảo toàn Zero-downtime.`;
+            }
             console.log(`🎯 [AGENT ACTION RESULT] [${ws.agent.name}] Action: ${action_id} | Status: ${status} | Msg: ${message}`);
 
             try {
