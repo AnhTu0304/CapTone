@@ -15,6 +15,7 @@ describe('APM Monitoring Services & Ingestion Pipeline Suite [S4][PB15 1.1 - 1.3
 
   const testUserId = 'a9000000-0000-4000-8000-000000000001';
   const testOrgId = 'b9000000-0000-4000-8000-000000000001';
+  const emptyOrgId = 'b9000000-0000-4000-8000-000000000002';
   const testEnvId = 'c9000000-0000-4000-8000-000000000001';
   const testClusterId = 'd9000000-0000-4000-8000-000000000001';
   const testAgentId = 'e9000000-0000-4000-8000-000000000001';
@@ -145,6 +146,7 @@ describe('APM Monitoring Services & Ingestion Pipeline Suite [S4][PB15 1.1 - 1.3
     await pool.query(`DELETE FROM agents WHERE id = $1`, [testAgentId]).catch(() => {});
     await pool.query(`DELETE FROM clusters WHERE id = $1`, [testClusterId]).catch(() => {});
     await pool.query(`DELETE FROM environments WHERE id = $1`, [testEnvId]).catch(() => {});
+    await pool.query(`DELETE FROM organizations WHERE id = $1`, [emptyOrgId]).catch(() => {});
     await pool.query(`DELETE FROM organizations WHERE id = $1`, [testOrgId]).catch(() => {});
     await pool.query(`DELETE FROM users WHERE id = $1`, [testUserId]).catch(() => {});
     await new Promise<void>((resolve) => {
@@ -349,5 +351,29 @@ describe('APM Monitoring Services & Ingestion Pipeline Suite [S4][PB15 1.1 - 1.3
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.success, true);
     assert.ok(Array.isArray(res.body.data));
+  });
+  test('11. GET /api/v1/telemetry/services enforces multi-tenant isolation and returns empty array for org without clusters', async () => {
+    const res = await requestJson('/api/v1/telemetry/services?window_minutes=60', {
+      token: validUserToken,
+      headers: { 'x-organization-id': emptyOrgId },
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.length, 0, 'Should not leak services from other organizations');
+  });
+
+  test('12. GET /api/v1/telemetry/services/:serviceId/metrics-sequence enforces multi-tenant isolation', async () => {
+    const res = await requestJson(
+      '/api/v1/telemetry/services/test-apm-order-service/metrics-sequence?limit=50&bucket_seconds=5',
+      {
+        token: validUserToken,
+        headers: { 'x-organization-id': emptyOrgId },
+      }
+    );
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.sequence.length, 0, 'Should not return metric sequence for service outside tenant');
   });
 });

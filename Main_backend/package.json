@@ -37,7 +37,8 @@
     "test:logs": "tsx --test src/test/logsApi.test.ts",
     "test:logs-stream": "tsx --test src/test/logStreamApi.test.ts",
     "test:logs-isolation": "tsx --test src/test/logsSecurityAndLoad.test.ts",
-    "test:k8s-events": "tsx --test --test-concurrency=1 src/test/kubernetesEvents.test.ts"
+    "test:k8s-events": "tsx --test --test-concurrency=1 src/test/kubernetesEvents.test.ts",
+    "test:apm": "tsx --test src/test/apmApi.test.ts"
   },
   "keywords": [
     "nodejs",

@@ -4,7 +4,7 @@
  * Connects directly to Main Backend (/api/v1/telemetry) with automatic fallback.
  */
 
-import { getAuthToken, request } from './apiClient';
+import { getAuthToken, getActiveOrganizationId, request } from './apiClient';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
 
@@ -21,6 +21,11 @@ const getHeaders = () => {
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const activeOrgId = getActiveOrganizationId();
+  if (activeOrgId) {
+    headers['X-Organization-Id'] = activeOrgId;
   }
 
   return headers;
@@ -142,12 +147,19 @@ export const telemetryService = {
    */
   async getApmServices(windowMinutes = 60, options = {}) {
     try {
+      const activeOrgId = typeof options === 'object' && options?.organizationId
+        ? options.organizationId
+        : getActiveOrganizationId();
+      const clusterId = typeof options === 'object' && options?.clusterId ? options.clusterId : undefined;
+      const orgParam = activeOrgId ? `&organization_id=${encodeURIComponent(activeOrgId)}` : '';
+      const clusterParam = clusterId ? `&cluster_id=${encodeURIComponent(clusterId)}` : '';
+
       const res = await fetch(
-        `${API_BASE_URL}/telemetry/services?window_minutes=${windowMinutes}`,
+        `${API_BASE_URL}/telemetry/services?window_minutes=${windowMinutes}${orgParam}${clusterParam}`,
         {
           method: 'GET',
           headers: getHeaders(),
-          signal: options?.signal,
+          signal: typeof options === 'object' ? options?.signal : undefined,
         }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -170,10 +182,15 @@ export const telemetryService = {
       const bucketSeconds = typeof options === 'object' && options?.bucket_seconds ? options.bucket_seconds : 5;
       const range = typeof options === 'object' && options?.range ? options.range : undefined;
       const signal = typeof options === 'object' ? options?.signal : undefined;
+      const clusterId = typeof options === 'object' && options?.cluster_id ? options.cluster_id : undefined;
+      const activeOrgId = typeof options === 'object' && options?.organization_id ? options.organization_id : getActiveOrganizationId();
+
       const rangeParam = range ? `&range=${encodeURIComponent(range)}` : '';
+      const clusterParam = clusterId ? `&cluster_id=${encodeURIComponent(clusterId)}` : '';
+      const orgParam = activeOrgId ? `&organization_id=${encodeURIComponent(activeOrgId)}` : '';
 
       const res = await fetch(
-        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}${rangeParam}`,
+        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}${rangeParam}${clusterParam}${orgParam}`,
         {
           method: 'GET',
           headers: getHeaders(),

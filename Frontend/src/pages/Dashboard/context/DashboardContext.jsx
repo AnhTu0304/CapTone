@@ -118,21 +118,53 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           if (Array.isArray(items) && items.length > 0) {
             const mapped = items.map((e) => ({
               id: e.id,
+              clusterId: null,
               name: e.name,
               displayName: e.name,
               cluster: 'Chưa liên kết cụm K8s',
               envName: e.name,
-              status: 'Ready',
+              status: 'Pending',
+              agentStatus: 'OFFLINE',
               nodes: 0,
               pods: 0,
             }));
             setEnvList(mapped);
             setCurrentEnv(mapped[0]);
+            localStorage.removeItem('selfheal_active_cluster_id');
+            localStorage.removeItem('selfheal_active_cluster_name');
           } else {
             setEnvList([]);
+            setCurrentEnv({
+              id: null,
+              clusterId: null,
+              name: 'Chưa liên kết cụm K8s',
+              displayName: 'Chưa liên kết cụm K8s',
+              cluster: null,
+              envName: 'Môi trường mặc định',
+              status: 'Pending',
+              agentStatus: 'OFFLINE',
+              nodes: 0,
+              pods: 0,
+            });
+            localStorage.removeItem('selfheal_active_cluster_id');
+            localStorage.removeItem('selfheal_active_cluster_name');
           }
         } catch (e) {
-          // ignore
+          setEnvList([]);
+          setCurrentEnv({
+            id: null,
+            clusterId: null,
+            name: 'Chưa liên kết cụm K8s',
+            displayName: 'Chưa liên kết cụm K8s',
+            cluster: null,
+            envName: 'Môi trường mặc định',
+            status: 'Pending',
+            agentStatus: 'OFFLINE',
+            nodes: 0,
+            pods: 0,
+          });
+          localStorage.removeItem('selfheal_active_cluster_id');
+          localStorage.removeItem('selfheal_active_cluster_name');
         }
       }
     } catch (err) {
@@ -202,6 +234,23 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     localStorage.setItem('selfheal_active_org_id', target.id);
     localStorage.setItem('selfheal_active_org_name', target.name);
     localStorage.setItem('selfheal_active_org_role', activeRole);
+    localStorage.removeItem('selfheal_active_cluster_id');
+    localStorage.removeItem('selfheal_active_cluster_name');
+    localStorage.removeItem('selfheal_active_env_name');
+
+    // Reset currentEnv khi đổi sang tổ chức mới để không bị rò rỉ cụm cũ
+    setCurrentEnv({
+      id: null,
+      clusterId: null,
+      name: 'Chưa liên kết cụm K8s',
+      displayName: 'Chưa liên kết cụm K8s',
+      cluster: null,
+      envName: 'Môi trường mặc định',
+      status: 'Pending',
+      agentStatus: 'OFFLINE',
+      nodes: 0,
+      pods: 0,
+    });
 
     if (setActiveOrganizationId) {
       setActiveOrganizationId(target.id);

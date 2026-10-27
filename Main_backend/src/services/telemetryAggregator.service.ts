@@ -63,6 +63,7 @@ export class TelemetryAggregatorService {
       startTime?: Date | null;
       endTime?: Date | null;
       clusterId?: string | null;
+      organizationId?: string | null;
     }
   ): Promise<GRUMetricPoint[]> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -74,6 +75,7 @@ export class TelemetryAggregatorService {
       startTime: options?.startTime,
       endTime: options?.endTime,
       clusterId: options?.clusterId,
+      organizationId: options?.organizationId,
     });
 
     if (points.length === 0) {
@@ -375,13 +377,14 @@ export class TelemetryAggregatorService {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string) {
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
     const agents = await AgentModel.listAll();
     const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
       bucketSeconds: 5,
       limit: 20,
       fillPadding: false,
       clusterId,
+      organizationId,
     });
     const rawMetrics = await MetricModel.getRecentRaw(10);
     const logs = await LogModel.getRecent(30);
@@ -476,7 +479,7 @@ export class TelemetryAggregatorService {
         LEFT JOIN environments e ON e.id = c.environment_id
         WHERE am.collected_at > NOW() - ($1 || ' minutes')::INTERVAL
           AND ($2::text IS NULL OR am.cluster_id::text = $2)
-          AND ($3::uuid IS NULL OR e.organization_id = $3::uuid)
+          AND ($3::text IS NULL OR e.organization_id::text = $3::text)
         GROUP BY am.service_id
       )
       SELECT 
@@ -515,7 +518,7 @@ export class TelemetryAggregatorService {
       FROM services s
       LEFT JOIN clusters c ON c.id = s.cluster_id
       LEFT JOIN environments e ON e.id = c.environment_id
-      WHERE ($1::uuid IS NULL OR e.organization_id = $1::uuid)
+      WHERE ($1::text IS NULL OR e.organization_id::text = $1::text)
         AND ($2::text IS NULL OR c.id::text = $2 OR c.name = $2)
       ORDER BY s.name ASC
       LIMIT 20;`,
