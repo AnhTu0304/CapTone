@@ -17,8 +17,11 @@ import {
   Inbox,
   X,
   Server,
+  Eye,
 } from 'lucide-react';
 import { telemetryService } from '../../../services/telemetryService';
+import { K8sEventSeverityBadge } from '../../../components/dashboard/K8sEventSeverityBadge';
+import { EventDetailModal } from '../../../components/dashboard/EventDetailModal';
 
 const PRESET_REASONS = [
   { id: 'all', label: 'Tất cả Lý do' },
@@ -102,6 +105,16 @@ export const EventsPage = () => {
   const [errorMessage, setErrorMessage] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedRowId, setExpandedRowId] = useState(null);
+  const [selectedEventDetail, setSelectedEventDetail] = useState(null);
+
+  const handleApplyFilterFromDetail = useCallback((filterUpdate) => {
+    if (!filterUpdate) return;
+    if (filterUpdate.namespace) setSelectedNamespace(filterUpdate.namespace);
+    if (filterUpdate.eventType) setSelectedType(filterUpdate.eventType);
+    if (filterUpdate.reason) setSelectedReason(filterUpdate.reason);
+    if (filterUpdate.resourceType) setSelectedResourceType(filterUpdate.resourceType);
+    setPage(1);
+  }, []);
 
   // Available namespaces for filter
   const [namespacesList, setNamespacesList] = useState(['default', 'kube-system', 'production', 'staging']);
@@ -546,12 +559,13 @@ export const EventsPage = () => {
               <th style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', width: '220px' }}>ĐỐI TƯỢNG (OBJECT)</th>
               <th style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>THÔNG ĐIỆP CHI TIẾT</th>
               <th style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', width: '130px' }}>THỜI ĐIỂM</th>
+              <th style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', width: '90px', textAlign: 'center' }}>THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} style={{ padding: '50px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}>
+                <td colSpan={6} style={{ padding: '50px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}>
                   <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                     <RefreshCw size={24} className="animate-spin" color="var(--dash-primary)" />
                     <span>Đang truy vấn sự kiện Kubernetes từ hệ thống...</span>
@@ -560,7 +574,7 @@ export const EventsPage = () => {
               </tr>
             ) : events.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center' }}>
+                <td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center' }}>
                   <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                     <Inbox size={32} color="var(--dash-text-muted)" />
                     <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
@@ -599,32 +613,18 @@ export const EventsPage = () => {
                   <React.Fragment key={ev.id}>
                     <tr
                       data-testid={`event-row-${ev.id}`}
+                      onClick={() => setSelectedEventDetail(ev)}
                       style={{
                         borderBottom: '1px solid #F1F5F9',
                         backgroundColor: isExpanded ? 'rgba(59, 130, 246, 0.02)' : 'transparent',
                         transition: 'background-color 0.15s ease',
+                        cursor: 'pointer',
                       }}
                     >
                       {/* Event Type Badge */}
                       <td style={{ padding: '12px 16px' }}>
-                        <span
-                          data-testid="event-type-badge"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            backgroundColor: isWarning ? '#FFF1F2' : 'rgba(5, 150, 105, 0.1)',
-                            color: isWarning ? '#E11D48' : '#059669',
-                            border: isWarning ? '1px solid #FDA4AF' : '1px solid #34D399',
-                          }}
-                        >
-                          {isWarning ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
-                          <span>{ev.event_type}</span>
+                        <span data-testid="event-type-badge">
+                          <K8sEventSeverityBadge type={ev.event_type} />
                         </span>
                       </td>
 
@@ -662,7 +662,10 @@ export const EventsPage = () => {
                           {isLongMessage && (
                             <button
                               type="button"
-                              onClick={() => toggleRow(ev.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleRow(ev.id);
+                              }}
                               style={{
                                 marginLeft: '6px',
                                 border: 'none',
@@ -708,6 +711,34 @@ export const EventsPage = () => {
                           {new Date(ev.last_seen_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </td>
+
+                      {/* Actions */}
+                      <td style={{ padding: '12px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <button
+                          type="button"
+                          data-testid={`event-detail-btn-${ev.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEventDetail(ev);
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid var(--dash-border, #E2E8F0)',
+                            borderRadius: 'var(--dash-radius-xs, 4px)',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: 'var(--dash-primary, #4F46E5)',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Eye size={12} />
+                          <span>Chi tiết</span>
+                        </button>
+                      </td>
                     </tr>
                   </React.Fragment>
                 );
@@ -716,7 +747,20 @@ export const EventsPage = () => {
           </tbody>
         </table>
 
-        {/* Pagination Toolbar */}
+        {/* Event Detail Modal [S4][PB18] 4.3 */}
+      {selectedEventDetail && (
+        <EventDetailModal
+          event={selectedEventDetail}
+          clusterContext={{
+            clusterName: selectedCluster?.name,
+            environmentName: currentEnv?.name,
+          }}
+          onClose={() => setSelectedEventDetail(null)}
+          onApplyFilter={handleApplyFilterFromDetail}
+        />
+      )}
+
+      {/* Pagination Toolbar */}
         {!isLoading && events.length > 0 && (
           <div
             style={{

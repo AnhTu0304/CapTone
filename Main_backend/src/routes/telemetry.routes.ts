@@ -67,6 +67,15 @@ telemetryRoutes.get(
   TelemetryController.getKubernetesEvents
 );
 
+// GET /api/v1/telemetry/events/:id
+// Centralized Kubernetes event detail query with tenant isolation (Task [S4][PB18] 4.3)
+telemetryRoutes.get(
+  '/events/:id',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getKubernetesEventById
+);
+
 // GET /api/v1/telemetry/logs/stream
 // Real-time Server-Sent Events (SSE) log streaming with load limits (Task [S4][PB17] 3.3)
 telemetryRoutes.get(

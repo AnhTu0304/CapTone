@@ -483,4 +483,79 @@ describe('Kubernetes Events Ingestion, Deduplication, Multi-Tenant Isolation & Q
       assert.ok(clusterIds.has(clusterBId), 'Super Admin should see Cluster B');
     });
   });
+
+  // =========================================================================
+  // PHẦN 4: SINGLE EVENT DETAIL API & TENANT AUTHORIZATION [S4][PB18] 4.3
+  // =========================================================================
+  describe('4. Event Detail API & Tenant Authorization [S4][PB18] 4.3', () => {
+    let eventAId: string;
+    let eventBId: string;
+
+    before(async () => {
+      const rowA = await pool.query(
+        `SELECT id FROM kubernetes_events WHERE cluster_id = $1 LIMIT 1;`,
+        [clusterAId]
+      );
+      assert.ok(rowA.rows.length > 0, 'Must have at least 1 event in Cluster A');
+      eventAId = String(rowA.rows[0].id);
+
+      const rowB = await pool.query(
+        `SELECT id FROM kubernetes_events WHERE cluster_id = $1 LIMIT 1;`,
+        [clusterBId]
+      );
+      assert.ok(rowB.rows.length > 0, 'Must have at least 1 event in Cluster B');
+      eventBId = String(rowB.rows[0].id);
+    });
+
+    test('4.1. Reject unauthorized request without JWT token with 401', async () => {
+      const res = await fetch(`${baseUrl}/api/v1/telemetry/events/${eventAId}`);
+      assert.strictEqual(res.status, 401, 'Must reject with 401 without auth token');
+    });
+
+    test('4.2. Return 404 for non-existent event ID', async () => {
+      const res = await fetch(`${baseUrl}/api/v1/telemetry/events/999999999`, {
+        headers: { Authorization: `Bearer ${ownerAToken}` },
+      });
+      assert.strictEqual(res.status, 404, 'Must return 404 when event does not exist');
+    });
+
+    test('4.3. Owner A can fetch detail of Event belonging to Cluster A with complete fields', async () => {
+      const res = await fetch(`${baseUrl}/api/v1/telemetry/events/${eventAId}`, {
+        headers: { Authorization: `Bearer ${ownerAToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      const ev = json.data;
+
+      assert.strictEqual(String(ev.id), eventAId);
+      assert.strictEqual(ev.cluster_id, clusterAId);
+      assert.ok(ev.event_type, 'Must include event_type');
+      assert.ok(ev.reason, 'Must include reason');
+      assert.ok(ev.message, 'Must include message');
+      assert.ok(ev.resource_type, 'Must include resource_type');
+      assert.ok(ev.first_seen_at, 'Must include first_seen_at');
+      assert.ok(ev.last_seen_at, 'Must include last_seen_at');
+      assert.ok(typeof ev.count === 'number', 'Count must be a number');
+      assert.strictEqual(ev.cluster_name, 'k8s-cluster-alpha-pb18');
+      assert.strictEqual(ev.environment_name, 'Env Alpha Production');
+    });
+
+    test('4.4. Tenant isolation: Owner A cannot access Event belonging to Cluster B (Org B) -> 404', async () => {
+      const res = await fetch(`${baseUrl}/api/v1/telemetry/events/${eventBId}`, {
+        headers: { Authorization: `Bearer ${ownerAToken}` },
+      });
+      assert.strictEqual(res.status, 404, 'Cross-tenant event detail must return 404 not found to prevent data leakage');
+    });
+
+    test('4.5. Super Admin can fetch detail of Event belonging to Cluster B', async () => {
+      const res = await fetch(`${baseUrl}/api/v1/telemetry/events/${eventBId}`, {
+        headers: { Authorization: `Bearer ${superAdminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(String(json.data.id), eventBId);
+      assert.strictEqual(json.data.cluster_id, clusterBId);
+    });
+  });
 });

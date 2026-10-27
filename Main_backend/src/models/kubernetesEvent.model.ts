@@ -372,6 +372,84 @@ export class KubernetesEventModel {
   }
 
   /**
+   * Find single Kubernetes event by ID with tenant organization scope [S4][PB18] 4.3
+   */
+  public static async findById(
+    id: string | number,
+    allowedOrgIds?: string[] | null
+  ): Promise<any | null> {
+    const params: any[] = [id];
+    let query = `
+      SELECT 
+        e.id,
+        e.cluster_id,
+        e.namespace_id,
+        e.event_uid,
+        e.dedup_hash,
+        COALESCE(e.metadata->>'namespace', 'default') AS namespace,
+        e.resource_type,
+        e.resource_uid,
+        COALESCE(e.metadata->>'resource_name', e.resource_uid) AS resource_name,
+        e.event_type,
+        e.reason,
+        e.message,
+        e.source_component,
+        e.reporting_controller,
+        e.action,
+        e.count,
+        e.first_seen_at,
+        e.last_seen_at,
+        e.observed_at,
+        e.metadata,
+        c.name AS cluster_name,
+        c.provider AS cluster_provider,
+        env.name AS environment_name,
+        env.organization_id
+      FROM kubernetes_events e
+      LEFT JOIN clusters c ON e.cluster_id = c.id
+      LEFT JOIN environments env ON c.environment_id = env.id
+      WHERE e.id = $1
+    `;
+
+    if (allowedOrgIds && allowedOrgIds.length > 0) {
+      params.push(allowedOrgIds);
+      query += ` AND (env.organization_id = ANY($2::uuid[]) OR e.cluster_id IS NULL)`;
+    }
+
+    query += ` LIMIT 1;`;
+
+    const res = await pool.query(query, params);
+    if (res.rows.length === 0) return null;
+
+    const row = res.rows[0];
+    return {
+      id: String(row.id),
+      cluster_id: row.cluster_id ? String(row.cluster_id) : null,
+      namespace_id: row.namespace_id ? String(row.namespace_id) : null,
+      event_uid: row.event_uid || null,
+      dedup_hash: row.dedup_hash || null,
+      namespace: row.namespace || 'default',
+      resource_type: row.resource_type || 'Pod',
+      resource_uid: row.resource_uid || 'unknown',
+      resource_name: row.resource_name || row.resource_uid || 'unknown',
+      event_type: row.event_type || 'Normal',
+      reason: row.reason || 'General',
+      message: row.message || '',
+      source_component: row.source_component || 'k8s-agent',
+      reporting_controller: row.reporting_controller || null,
+      action: row.action || null,
+      count: Number(row.count) || 1,
+      first_seen_at: row.first_seen_at ? new Date(row.first_seen_at).toISOString() : new Date().toISOString(),
+      last_seen_at: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : new Date().toISOString(),
+      observed_at: row.observed_at ? new Date(row.observed_at).toISOString() : null,
+      cluster_name: row.cluster_name || null,
+      cluster_provider: row.cluster_provider || null,
+      environment_name: row.environment_name || null,
+      metadata: row.metadata || null,
+    };
+  }
+
+  /**
    * Query Warning/Incident K8s events for RCA context (within active window)
    */
   public static async findWarningEventsByService(

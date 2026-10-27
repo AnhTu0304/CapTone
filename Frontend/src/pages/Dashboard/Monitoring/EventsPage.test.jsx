@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { EventsPage, formatEventAge } from './EventsPage';
 import { telemetryService } from '../../../services/telemetryService';
 
@@ -14,16 +14,37 @@ jest.mock('../context/DashboardContext', () => ({
   useDashboard: () => MOCK_DASHBOARD_CONTEXT,
 }));
 
+import {
+  K8sEventSeverityBadge,
+  normalizeK8sEventType,
+  getK8sSeverityConfig,
+} from '../../../components/dashboard/K8sEventSeverityBadge';
+import {
+  EventDetailModal,
+  maskSensitiveData,
+  formatEventDateTime,
+} from '../../../components/dashboard/EventDetailModal';
+
+// Mock clipboard
+Object.assign(navigator, {
+  clipboard: {
+    writeText: jest.fn().mockImplementation(() => Promise.resolve()),
+  },
+});
+
 // Mock telemetryService
 jest.mock('../../../services/telemetryService', () => {
   const getKubernetesEvents = jest.fn();
+  const getKubernetesEventById = jest.fn();
   return {
     telemetryService: {
       getKubernetesEvents,
+      getKubernetesEventById,
     },
     __esModule: true,
     default: {
       getKubernetesEvents,
+      getKubernetesEventById,
     },
   };
 });
@@ -516,6 +537,334 @@ describe('Task [S4][PB18] 4.1 – Kubernetes Events List & Filters UI Suite', ()
       // Stale result must NOT overwrite the current view!
       expect(screen.queryByText('StaleOldResult')).not.toBeInTheDocument();
       expect(screen.getByText('FastNewResult')).toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 7. K8sEventSeverityBadge UNIT & CANONICAL MAPPING [S4][PB18] 4.3
+  // =========================================================================
+  describe('7. K8sEventSeverityBadge Unit & Canonical Mapping', () => {
+    test('7.1. normalizeK8sEventType normalizes warning variations to Warning', () => {
+      expect(normalizeK8sEventType('Warning')).toBe('Warning');
+      expect(normalizeK8sEventType('WARNING')).toBe('Warning');
+      expect(normalizeK8sEventType('warn')).toBe('Warning');
+      expect(normalizeK8sEventType('  WARN  ')).toBe('Warning');
+    });
+
+    test('7.2. normalizeK8sEventType normalizes normal variations to Normal', () => {
+      expect(normalizeK8sEventType('Normal')).toBe('Normal');
+      expect(normalizeK8sEventType('NORMAL')).toBe('Normal');
+      expect(normalizeK8sEventType('info')).toBe('Normal');
+      expect(normalizeK8sEventType('  Normal  ')).toBe('Normal');
+    });
+
+    test('7.3. normalizeK8sEventType returns Unknown for missing, null, or unrecognized values', () => {
+      expect(normalizeK8sEventType(null)).toBe('Unknown');
+      expect(normalizeK8sEventType(undefined)).toBe('Unknown');
+      expect(normalizeK8sEventType('')).toBe('Unknown');
+      expect(normalizeK8sEventType('CriticalCustom')).toBe('Unknown');
+    });
+
+    test('7.4. SeverityBadge renders accessible text label and not color alone', () => {
+      const { rerender } = render(<K8sEventSeverityBadge type="Warning" showFullLabel={true} />);
+      const warningBadge = screen.getByTestId('event-severity-badge');
+      expect(warningBadge).toHaveAttribute('data-severity', 'Warning');
+      expect(warningBadge).toHaveAttribute('aria-label', 'Mức độ Cảnh báo (Warning)');
+      expect(screen.getByText('Cảnh báo (Warning)')).toBeInTheDocument();
+
+      rerender(<K8sEventSeverityBadge type="Normal" showFullLabel={false} />);
+      const normalBadge = screen.getByTestId('event-severity-badge');
+      expect(normalBadge).toHaveAttribute('data-severity', 'Normal');
+      expect(screen.getByText('Normal')).toBeInTheDocument();
+
+      rerender(<K8sEventSeverityBadge type="CustomUnknownType" showFullLabel={true} />);
+      const unknownBadge = screen.getByTestId('event-severity-badge');
+      expect(unknownBadge).toHaveAttribute('data-severity', 'Unknown');
+      expect(screen.getByText(/Không xác định \(CustomUnknownType\)/i)).toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 8. EVENT DETAIL MODAL & KEY FIELDS RENDERING [S4][PB18] 4.3
+  // =========================================================================
+  describe('8. Event Detail Modal & Key Fields Rendering', () => {
+    test('8.1. Clicking Chi tiết button on a row opens EventDetailModal', async () => {
+      await act(async () => {
+        render(<EventsPage />);
+      });
+
+      const detailBtn = screen.getByTestId('event-detail-btn-1');
+      await act(async () => {
+        fireEvent.click(detailBtn);
+      });
+
+      expect(screen.getByTestId('event-detail-modal-backdrop')).toBeInTheDocument();
+      const modal = screen.getByRole('dialog');
+      expect(modal).toBeInTheDocument();
+      expect(within(modal).getByRole('heading', { name: /OOMKilled/i })).toBeInTheDocument();
+      expect(within(modal).getByText(/Container memory limit exceeded/i)).toBeInTheDocument();
+    });
+
+    test('8.2. Displays all key fields: resource, namespace, count, timestamps, source and cluster', async () => {
+      await act(async () => {
+        render(<EventsPage />);
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-btn-1'));
+      });
+
+      const modal = screen.getByRole('dialog');
+
+      // Resource object & namespace
+      expect(within(modal).getByText('Pod/order-service-7f89d-11')).toBeInTheDocument();
+      expect(within(modal).getByText('production')).toBeInTheDocument();
+
+      // Count
+      expect(within(modal).getByTestId('event-detail-count')).toHaveTextContent('3 lần');
+
+      // Source
+      expect(within(modal).getByText(/Component: kubelet/i)).toBeInTheDocument();
+
+      // Cluster & Env
+      expect(within(modal).getByText(/k8s-cluster-prod/i)).toBeInTheDocument();
+      expect(within(modal).getByText(/Production Env/i)).toBeInTheDocument();
+    });
+
+    test('8.3. Handles missing optional fields without crashing', async () => {
+      const minimalEvent = {
+        id: 'min-1',
+        event_type: 'Normal',
+        reason: 'MinimalReason',
+        first_seen_at: '2026-10-27T01:00:00.000Z',
+        last_seen_at: '2026-10-27T01:00:00.000Z',
+        // Optional fields absent: resource_type, namespace, source_component, reporting_controller, message
+      };
+
+      await act(async () => {
+        render(<EventDetailModal event={minimalEvent} onClose={jest.fn()} />);
+      });
+
+      const modal = screen.getByRole('dialog');
+      expect(within(modal).getByRole('heading', { name: /MinimalReason/i })).toBeInTheDocument();
+      expect(within(modal).getByText('default')).toBeInTheDocument(); // fallback namespace
+      expect(within(modal).getByText('Không có nội dung thông điệp')).toBeInTheDocument();
+    });
+
+    test('8.4. maskSensitiveData masks tokens, passwords and bearer credentials in message', () => {
+      const sensitiveText = 'DB error: password=secretPassword123 with authorization: bearer eyJhbGciOiJIUzI1NiJ9.test and api_key=superSecretKey';
+      const masked = maskSensitiveData(sensitiveText);
+      expect(masked).not.toContain('secretPassword123');
+      expect(masked).not.toContain('superSecretKey');
+      expect(masked).toContain('password=******');
+      expect(masked).toContain('api_key=******');
+    });
+
+    test('8.5. Copy message and copy JSON buttons invoke clipboard writeText', async () => {
+      await act(async () => {
+        render(<EventDetailModal event={MOCK_EVENTS[0]} onClose={jest.fn()} />);
+      });
+
+      const copyMsgBtn = screen.getByTestId('copy-event-message-btn');
+      fireEvent.click(copyMsgBtn);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(MOCK_EVENTS[0].message);
+
+      // Toggle raw JSON
+      const toggleJsonBtn = screen.getByTestId('toggle-raw-json-btn');
+      fireEvent.click(toggleJsonBtn);
+
+      const copyJsonBtn = screen.getByTestId('copy-event-json-btn');
+      fireEvent.click(copyJsonBtn);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining(MOCK_EVENTS[0].id));
+    });
+
+    test('8.6. Closing detail modal via close button, footer close button or Escape key', async () => {
+      const onCloseMock = jest.fn();
+      render(<EventDetailModal event={MOCK_EVENTS[0]} onClose={onCloseMock} />);
+
+      // 1. Close button
+      fireEvent.click(screen.getByTestId('event-detail-close-btn'));
+      expect(onCloseMock).toHaveBeenCalledTimes(1);
+
+      // 2. Footer close button
+      fireEvent.click(screen.getByTestId('event-detail-footer-close-btn'));
+      expect(onCloseMock).toHaveBeenCalledTimes(2);
+
+      // 3. Escape key press
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onCloseMock).toHaveBeenCalledTimes(3);
+    });
+
+    test('8.7. Handles error and retry when loading event detail by ID fails', async () => {
+      telemetryService.getKubernetesEventById.mockRejectedValueOnce(new Error('Kube-apiserver unavailable'));
+
+      await act(async () => {
+        render(<EventDetailModal eventId="err-id-1" onClose={jest.fn()} />);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('event-detail-error')).toBeInTheDocument();
+        expect(screen.getByText('Kube-apiserver unavailable')).toBeInTheDocument();
+      });
+
+      // Click retry
+      telemetryService.getKubernetesEventById.mockResolvedValueOnce(MOCK_EVENTS[0]);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-retry-btn'));
+      });
+
+      const modal = screen.getByRole('dialog');
+      await waitFor(() => {
+        expect(within(modal).getByRole('heading', { name: /OOMKilled/i })).toBeInTheDocument();
+      });
+    });
+
+    test('8.8. Handles not found state when event does not exist', async () => {
+      telemetryService.getKubernetesEventById.mockResolvedValueOnce(null);
+
+      await act(async () => {
+        render(<EventDetailModal eventId="missing-id-99" onClose={jest.fn()} />);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('event-detail-not-found')).toBeInTheDocument();
+        expect(screen.getByText('Sự kiện không tồn tại')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // =========================================================================
+  // 9. FILTER INTEGRATION & DRILL-DOWN FILTERING [S4][PB18] 4.3
+  // =========================================================================
+  describe('9. Filter Integration & Drill-Down Filtering', () => {
+    test('9.1. Opening and closing EventDetailModal preserves all active filters and pagination', async () => {
+      await act(async () => {
+        render(<EventsPage />);
+      });
+
+      // Change filters first
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('type-filter-Warning'));
+        fireEvent.change(screen.getByTestId('namespace-select'), { target: { value: 'production' } });
+      });
+
+      // Open detail modal
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-btn-1'));
+      });
+      expect(screen.getByTestId('event-detail-modal-backdrop')).toBeInTheDocument();
+
+      // Close modal
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-close-btn'));
+      });
+      expect(screen.queryByTestId('event-detail-modal-backdrop')).not.toBeInTheDocument();
+
+      // Active filters must remain intact
+      expect(screen.getByTestId('namespace-select')).toHaveValue('production');
+      expect(screen.getByTestId('type-filter-Warning')).toHaveStyle({ backgroundColor: '#FFFFFF' });
+    });
+
+    test('9.2. Clicking "Lọc theo namespace này" from detail modal applies filter, resets page to 1 and closes modal', async () => {
+      await act(async () => {
+        render(<EventsPage />);
+      });
+
+      // Open detail for event 1 (namespace: production)
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-btn-1'));
+      });
+
+      // Click filter by namespace
+      const filterNsBtn = screen.getByTestId('filter-by-namespace-btn');
+      await act(async () => {
+        fireEvent.click(filterNsBtn);
+      });
+
+      // Modal closes
+      expect(screen.queryByTestId('event-detail-modal-backdrop')).not.toBeInTheDocument();
+
+      // Namespace filter updated to production
+      expect(screen.getByTestId('namespace-select')).toHaveValue('production');
+
+      // API was called with namespace=production and page=1
+      await waitFor(() => {
+        expect(telemetryService.getKubernetesEvents).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            namespace: 'production',
+            page: 1,
+          }),
+          expect.any(Object)
+        );
+      });
+    });
+
+    test('9.3. Clicking "Lọc theo loại Pod" from detail modal applies resourceType filter and resets page to 1', async () => {
+      await act(async () => {
+        render(<EventsPage />);
+      });
+
+      // Open detail
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-btn-1'));
+      });
+
+      // Click filter by resource
+      const filterResBtn = screen.getByTestId('filter-by-resource-btn');
+      await act(async () => {
+        fireEvent.click(filterResBtn);
+      });
+
+      // Modal closes
+      expect(screen.queryByTestId('event-detail-modal-backdrop')).not.toBeInTheDocument();
+
+      // Resource type filter updated to Pod
+      expect(screen.getByTestId('resource-type-select')).toHaveValue('Pod');
+
+      // API called with resourceType=Pod and page=1
+      await waitFor(() => {
+        expect(telemetryService.getKubernetesEvents).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            resourceType: 'Pod',
+            page: 1,
+          }),
+          expect.any(Object)
+        );
+      });
+    });
+
+    test('9.4. Clicking "Lọc theo lý do này" from detail modal applies reason filter and resets page to 1', async () => {
+      await act(async () => {
+        render(<EventsPage />);
+      });
+
+      // Open detail
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('event-detail-btn-1'));
+      });
+
+      // Click filter by reason (OOMKilled)
+      const filterReasonBtn = screen.getByTestId('filter-by-reason-btn');
+      await act(async () => {
+        fireEvent.click(filterReasonBtn);
+      });
+
+      // Modal closes
+      expect(screen.queryByTestId('event-detail-modal-backdrop')).not.toBeInTheDocument();
+
+      // Reason filter updated to OOMKilled
+      expect(screen.getByTestId('reason-select')).toHaveValue('OOMKilled');
+
+      // API called with reason=OOMKilled and page=1
+      await waitFor(() => {
+        expect(telemetryService.getKubernetesEvents).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            reason: 'OOMKilled',
+            page: 1,
+          }),
+          expect.any(Object)
+        );
+      });
     });
   });
 });

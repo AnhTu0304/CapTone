@@ -766,4 +766,49 @@ export class TelemetryController {
       return next(error);
     }
   }
+
+  /**
+   * GET /api/v1/telemetry/events/:id
+   * Retrieve single Kubernetes event detail with organization isolation [S4][PB18] 4.3
+   */
+  public static async getKubernetesEventById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      if (!id || (isNaN(Number(id)) && typeof id !== 'string')) {
+        return ApiResponse.error(res, 'ID sự kiện không hợp lệ', 400);
+      }
+
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+
+      let allowedOrgIds: string[] | undefined = undefined;
+
+      if (!isGlobalAdmin) {
+        if (!user?.id) {
+          return ApiResponse.error(res, 'Yêu cầu đăng nhập để xem chi tiết sự kiện', 401);
+        }
+
+        const memberRes = await pool.query(
+          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+          [user.id]
+        );
+        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
+
+        const tokenOrgId = user?.organization_id || user?.organizationId;
+        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
+          allowedOrgIds.push(tokenOrgId);
+        }
+      }
+
+      const event = await KubernetesEventModel.findById(id, allowedOrgIds);
+      if (!event) {
+        return ApiResponse.error(res, 'Không tìm thấy sự kiện Kubernetes hoặc bạn không có quyền truy cập', 404);
+      }
+
+      return ApiResponse.success(res, 'Lấy thông tin chi tiết sự kiện thành công', event);
+    } catch (error) {
+      return next(error);
+    }
+  }
 }

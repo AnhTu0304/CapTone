@@ -353,6 +353,37 @@ export const telemetryService = {
   },
 
   /**
+   * Fetch single Kubernetes Event detail by ID [S4][PB18] 4.3
+   * @param {string|number} id - Event ID
+   * @param {Object} [options] - Request options (signal)
+   */
+  async getKubernetesEventById(id, options = {}) {
+    try {
+      const url = `${API_BASE_URL}/telemetry/events/${encodeURIComponent(id)}`;
+      const res = await fetch(url, {
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+      if (!res.ok) {
+        let errorMsg = `HTTP Error ${res.status}`;
+        try {
+          const errBody = await res.json();
+          errorMsg = errBody.message || errorMsg;
+        } catch {
+          // ignore
+        }
+        throw new Error(errorMsg);
+      }
+      const json = await res.json();
+      return json.data || null;
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getKubernetesEventById error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
    * Connect to Real-time SSE Logs Stream [S4][PB17] 3.3
    * @param {Object} params - Query filters (serviceId, namespace, deployment, pod, level, clusterId, tail)
    * @param {Function} onEvent - Callback for SSE events: (eventType, data) => void
