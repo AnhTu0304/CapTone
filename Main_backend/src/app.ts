@@ -63,4 +63,5 @@ app.use(config.apiPrefix, apiRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+export { app };
 export default app;

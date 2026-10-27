@@ -5,6 +5,7 @@ import AgentsPage from './Agents';
 import InfrastructurePage from './Infrastructure';
 import WorkloadsPage from './Workloads';
 import MetricsPage from './Monitoring/MetricsPage';
+import ApmPage from './Monitoring/ApmPage';
 import LogsPage from './Monitoring/LogsPage';
 import EventsPage from './Monitoring/EventsPage';
 import PredictionsPage from './AI/PredictionsPage';
@@ -47,6 +48,8 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         label = 'Cụm Kubernetes';
       } else if (parts[index - 1] === 'clusters') {
         label = 'Chi Tiết Cụm';
+      } else if (part === 'apm') {
+        label = 'Giám Sát APM';
       } else if (part === 'incidents') {
         label = 'Quản Lý Sự Cố & RCA';
       }
@@ -99,8 +102,11 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     }
 
     // 4. Monitoring
+    if (path === '/dashboard/monitoring/apm') {
+      return <ApmPage onNavigate={onNavigate} />;
+    }
     if (path === '/dashboard/monitoring/metrics') {
-      return <MetricsPage />;
+      return <MetricsPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/monitoring/logs') {
       return <LogsPage />;

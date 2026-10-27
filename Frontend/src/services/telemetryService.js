@@ -139,21 +139,53 @@ export const telemetryService = {
   },
 
   /**
-   * Fetch metrics sequence for Chart
+   * Fetch list of APM-monitored services with summary KPIs
    */
-  async getMetricsSequence(serviceId = 'sme-order-service', limit = 20) {
+  async getApmServices(windowMinutes = 60, options = {}) {
     try {
       const res = await fetch(
-        `${API_BASE_URL}/telemetry/services/${serviceId}/metrics-sequence?limit=${limit}&bucket_seconds=5`,
+        `${API_BASE_URL}/telemetry/services?window_minutes=${windowMinutes}`,
         {
           method: 'GET',
           headers: getHeaders(),
+          signal: options?.signal,
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      return Array.isArray(json?.data) ? json.data : [];
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getApmServices fallback:', err.message);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch metrics sequence for APM Chart
+   * Supports options object: { limit, bucket_seconds, signal } or legacy limit number
+   */
+  async getMetricsSequence(serviceId = 'sme-order-service', options = 20) {
+    try {
+      const limit = typeof options === 'number' ? options : options?.limit || 60;
+      const bucketSeconds = typeof options === 'object' && options?.bucket_seconds ? options.bucket_seconds : 5;
+      const range = typeof options === 'object' && options?.range ? options.range : undefined;
+      const signal = typeof options === 'object' ? options?.signal : undefined;
+      const rangeParam = range ? `&range=${encodeURIComponent(range)}` : '';
+
+      const res = await fetch(
+        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}${rangeParam}`,
+        {
+          method: 'GET',
+          headers: getHeaders(),
+          signal,
         }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.data?.sequence || [];
     } catch (err) {
+      if (err?.name === 'AbortError') throw err;
       console.warn('[telemetryService] getMetricsSequence fallback:', err.message);
       return [];
     }
@@ -196,6 +228,321 @@ export const telemetryService = {
     } catch (err) {
       console.warn('[telemetryService] evaluateService fallback:', err.message);
       return null;
+    }
+  },
+
+  /**
+   * Fetch historical APM metrics with range (1h, 24h, 7d), pagination, and cursor (Task [S4][PB16] 2.3)
+   */
+  /**
+   * Fetch centralized logs with K8s filters (namespace, deployment, pod, level, serviceId, search, time range) and pagination (Task [S4][PB17] 3.1 & 3.2 / [4.36])
+   */
+  async getLogs(params = {}, options = {}) {
+    try {
+      const {
+        serviceId,
+        namespace,
+        deployment,
+        pod,
+        level,
+        search,
+        range,
+        startTime,
+        endTime,
+        clusterId,
+        page = 1,
+        limit = 50,
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (serviceId && serviceId !== 'all' && serviceId !== 'ALL') queryParams.set('service_id', serviceId);
+      if (namespace && namespace !== 'all' && namespace !== 'ALL') queryParams.set('namespace', namespace);
+      if (deployment && deployment !== 'all' && deployment !== 'ALL') queryParams.set('deployment', deployment);
+      if (pod && pod !== 'all' && pod !== 'ALL') queryParams.set('pod', pod);
+      if (level && level !== 'all' && level !== 'ALL') queryParams.set('level', level);
+      if (search && search.trim()) queryParams.set('search', search.trim());
+      if (range && range !== 'all' && range !== 'ALL') queryParams.set('range', range);
+      if (startTime) queryParams.set('start_time', startTime);
+      if (endTime) queryParams.set('end_time', endTime);
+      if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
+      if (page) queryParams.set('page', String(page));
+      if (limit) queryParams.set('limit', String(limit));
+
+      const qs = queryParams.toString();
+      const url = `${API_BASE_URL}/telemetry/logs${qs ? `?${qs}` : ''}`;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      return json.data || { logs: [], pagination: { total: 0, page: 1, limit, totalPages: 1 } };
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getLogs error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
+   * Fetch centralized Kubernetes Events with filters and pagination [S4][PB18] 4.1 & 4.2
+   */
+  async getKubernetesEvents(params = {}, options = {}) {
+    try {
+      const {
+        clusterId,
+        namespace,
+        eventType,
+        type,
+        reason,
+        resourceType,
+        resourceUid,
+        pod,
+        search,
+        range,
+        startTime,
+        endTime,
+        page = 1,
+        limit = 50,
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
+      if (namespace && namespace !== 'all' && namespace !== 'ALL') queryParams.set('namespace', namespace);
+      const effectiveType = eventType || type;
+      if (effectiveType && effectiveType !== 'all' && effectiveType !== 'ALL') queryParams.set('type', effectiveType);
+      if (reason && reason !== 'all' && reason !== 'ALL') queryParams.set('reason', reason);
+      if (resourceType && resourceType !== 'all' && resourceType !== 'ALL') queryParams.set('resource_type', resourceType);
+      const effectivePod = resourceUid || pod;
+      if (effectivePod && effectivePod !== 'all' && effectivePod !== 'ALL') queryParams.set('resource_uid', effectivePod);
+      if (search && search.trim()) queryParams.set('search', search.trim());
+      if (range && range !== 'all' && range !== 'ALL') queryParams.set('range', range);
+      if (startTime) queryParams.set('start_time', startTime);
+      if (endTime) queryParams.set('end_time', endTime);
+      if (page) queryParams.set('page', String(page));
+      if (limit) queryParams.set('limit', String(limit));
+
+      const qs = queryParams.toString();
+      const url = `${API_BASE_URL}/telemetry/events${qs ? `?${qs}` : ''}`;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      return json.data || { events: [], pagination: { total: 0, page: 1, limit, totalPages: 1 } };
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getKubernetesEvents error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
+   * Fetch single Kubernetes Event detail by ID [S4][PB18] 4.3
+   * @param {string|number} id - Event ID
+   * @param {Object} [options] - Request options (signal)
+   */
+  async getKubernetesEventById(id, options = {}) {
+    try {
+      const url = `${API_BASE_URL}/telemetry/events/${encodeURIComponent(id)}`;
+      const res = await fetch(url, {
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+      if (!res.ok) {
+        let errorMsg = `HTTP Error ${res.status}`;
+        try {
+          const errBody = await res.json();
+          errorMsg = errBody.message || errorMsg;
+        } catch {
+          // ignore
+        }
+        throw new Error(errorMsg);
+      }
+      const json = await res.json();
+      return json.data || null;
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getKubernetesEventById error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
+   * Connect to Real-time SSE Logs Stream [S4][PB17] 3.3
+   * @param {Object} params - Query filters (serviceId, namespace, deployment, pod, level, clusterId, tail)
+   * @param {Function} onEvent - Callback for SSE events: (eventType, data) => void
+   * @param {Function} onError - Callback for stream errors: (err) => void
+   * @param {Object} [options] - Stream options (signal)
+   * @returns {Function} unsubscribe - Function to close the stream
+   */
+  streamLogs(params = {}, onEvent, onError, options = {}) {
+    const {
+      serviceId,
+      namespace,
+      deployment,
+      pod,
+      level,
+      search,
+      clusterId,
+      tail = 20,
+    } = params;
+
+    const queryParams = new URLSearchParams();
+    if (serviceId && serviceId !== 'all' && serviceId !== 'ALL') queryParams.set('service_id', serviceId);
+    if (namespace && namespace !== 'all' && namespace !== 'ALL') queryParams.set('namespace', namespace);
+    if (deployment && deployment !== 'all' && deployment !== 'ALL') queryParams.set('deployment', deployment);
+    if (pod && pod !== 'all' && pod !== 'ALL') queryParams.set('pod', pod);
+    if (level && level !== 'all' && level !== 'ALL') queryParams.set('level', level);
+    if (search && search.trim()) queryParams.set('search', search.trim());
+    if (clusterId && clusterId !== 'all' && clusterId !== 'ALL') queryParams.set('cluster_id', clusterId);
+    if (tail !== undefined && tail !== null) queryParams.set('tail', String(tail));
+
+    const qs = queryParams.toString();
+    const url = `${API_BASE_URL}/telemetry/logs/stream${qs ? `?${qs}` : ''}`;
+    const controller = new AbortController();
+
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => controller.abort());
+    }
+
+    let isClosed = false;
+
+    (async () => {
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: getHeaders(),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const errMsg = errJson?.message || `HTTP ${res.status} ${res.statusText}`;
+          throw new Error(errMsg);
+        }
+
+        if (!res.body) {
+          throw new Error('Response body is not a ReadableStream');
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (!isClosed) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const block of parts) {
+            if (!block.trim()) continue;
+            let eventType = 'message';
+            let dataStr = '';
+
+            const lines = block.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                eventType = line.slice(6).trim();
+              } else if (line.startsWith('data:')) {
+                dataStr += line.slice(5).trim();
+              }
+            }
+
+            try {
+              const parsedData = dataStr ? JSON.parse(dataStr) : null;
+              if (typeof onEvent === 'function') {
+                onEvent(eventType, parsedData);
+              }
+            } catch {
+              if (typeof onEvent === 'function') {
+                onEvent(eventType, dataStr);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name === 'AbortError' || isClosed) return;
+        console.warn('[telemetryService] streamLogs connection error:', err.message);
+        if (typeof onError === 'function') {
+          onError(err);
+        }
+      }
+    })();
+
+    return () => {
+      isClosed = true;
+      controller.abort();
+    };
+  },
+
+  async getMetricsHistory(params = {}, options = {}) {
+    try {
+      const {
+        serviceId,
+        podId,
+        clusterId,
+        range,
+        startTime,
+        endTime,
+        page = 1,
+        limit = 50,
+        cursor,
+        order = 'desc',
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (range) queryParams.set('range', range);
+      if (startTime) queryParams.set('start_time', startTime);
+      if (endTime) queryParams.set('end_time', endTime);
+      if (page) queryParams.set('page', String(page));
+      if (limit) queryParams.set('limit', String(limit));
+      if (cursor) queryParams.set('cursor', cursor);
+      if (order) queryParams.set('order', order);
+      if (podId) queryParams.set('pod_id', podId);
+      if (clusterId) queryParams.set('cluster_id', clusterId);
+
+      let endpoint = `${API_BASE_URL}/telemetry/metrics-history`;
+      if (serviceId) {
+        endpoint = `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-history`;
+      }
+
+      const qs = queryParams.toString();
+      const url = qs ? `${endpoint}?${qs}` : endpoint;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(),
+        signal: options?.signal,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      return json.data;
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('[telemetryService] getMetricsHistory fallback:', err.message);
+      throw err;
     }
   },
 
@@ -275,3 +622,5 @@ export const telemetryService = {
     };
   },
 };
+
+export default telemetryService;

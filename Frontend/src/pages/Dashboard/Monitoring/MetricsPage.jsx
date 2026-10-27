@@ -10,9 +10,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Server,
+  Zap,
 } from 'lucide-react';
 
-export const MetricsPage = () => {
+export const MetricsPage = ({ onNavigate }) => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
   const [searchTerm, setSearchTerm] = useState('');
   const [clusterNodes, setClusterNodes] = useState([]);
@@ -129,7 +130,47 @@ export const MetricsPage = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            disabled
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              backgroundColor: '#059669',
+              border: '1px solid #059669',
+              borderRadius: '6px',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Server size={14} />
+            <span>Hạ Tầng (Node Metrics)</span>
+          </button>
+          <button
+            type="button"
+            data-testid="metrics-switch-to-apm-btn"
+            onClick={() => onNavigate && onNavigate('/dashboard/monitoring/apm')}
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #CBD5E1',
+              borderRadius: '6px',
+              color: '#475569',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Zap size={14} />
+            <span>Ứng Dụng (APM)</span>
+          </button>
           <button
             type="button"
             onClick={() => {

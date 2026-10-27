@@ -233,6 +233,23 @@ export class AgentController {
   }
 
   /**
+   * [POST] /api/v1/agents/apm-metrics & /api/v1/agents/service-metrics
+   * Tiếp nhận dữ liệu viễn trắc APM (Latency, Request Rate, 5xx Rate, Replicas) từ Agent Daemon (PB15 1.3)
+   */
+  public static async ingestApmMetrics(req: Request, res: Response, next: NextFunction) {
+    try {
+      const agent = (req as any).agent;
+      if (!agent) {
+        return ApiResponse.error(res, 'Thiếu thông tin xác thực Agent', 401);
+      }
+      const result = await AgentService.ingestApmMetricsFromDaemon(agent, req.body);
+      return ApiResponse.success(res, 'Tiếp nhận và lưu trữ APM Service Metrics thành công', result, 201);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * [GET] /api/v1/organizations/:orgId/agents/:agentId/metrics
    * Truy vấn lịch sử Node Metrics của một Agent theo khoảng thời gian và phân trang (Task 4.3)
    */

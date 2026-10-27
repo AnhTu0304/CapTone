@@ -96,6 +96,9 @@ class AgentK8sEventDetail(BaseModel):
     message: str
 
 
+K8sEventDetail = AgentK8sEventDetail
+
+
 class AgentK8sEventData(BaseModel):
     """Kubernetes cluster lifecycle and error anomaly event payload."""
     service_id: str
@@ -146,6 +149,7 @@ class AgentK8sInventoryData(BaseModel):
     namespaces: list[dict[str, Any]] = Field(default_factory=list)
     pods: list[dict[str, Any]] = Field(default_factory=list)
     services: list[dict[str, Any]] = Field(default_factory=list)
+    deployments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class K8sInventoryMessage(BaseModel):

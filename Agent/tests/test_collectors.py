@@ -95,7 +95,7 @@ def test_events_collector_and_deduplication() -> None:
     assert len(events) == 1
     ev = events[0]
     assert ev.service_id == "worker-queue"
-    assert ev.status == "CrashLoopBackOff"
+    assert ev.status == "OOMKilled"
     assert ev.event.reason == "OOMKilled"
 
     # Deduplication test

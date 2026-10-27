@@ -583,7 +583,14 @@ class AgentService:
                 events = self.events_collector.collect_events(
                     self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
                 )
-                for ev in events:
+                pod_anomalies = self.pods_collector.detect_pod_anomalies(
+                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                )
+                dep_anomalies = self.deployments_collector.detect_deployment_anomalies(
+                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                )
+                node_anomalies = self.nodes_collector.detect_node_anomalies()
+                for ev in (*events, *pod_anomalies, *dep_anomalies, *node_anomalies):
                     await self.ws_client.send(K8sEventMessage(data=ev))
             except asyncio.CancelledError:
                 break
@@ -602,14 +609,20 @@ class AgentService:
             try:
                 nodes = self.nodes_collector.list_nodes_detail()
                 namespaces = self.nodes_collector.list_namespaces()
-                pods = self.pods_collector.list_pods_detail()
+                pods = self.pods_collector.list_pods_detail(
+                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                )
                 services = self.services_collector.list_services_detail()
-                if nodes or pods or services:
+                deployments = self.deployments_collector.list_deployments_detail(
+                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                )
+                if nodes or pods or services or deployments:
                     await self.ws_client.send(K8sInventoryMessage(data={
                         "nodes": nodes,
                         "namespaces": namespaces,
                         "pods": pods,
                         "services": services,
+                        "deployments": deployments,
                     }))
             except asyncio.CancelledError:
                 break

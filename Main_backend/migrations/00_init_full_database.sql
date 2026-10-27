@@ -1014,7 +1014,7 @@ INSERT INTO workloads (id, name, cluster_id, namespace_id, workload_type)
 VALUES (
     'c0000000-0000-0000-0000-000000000001',
     'order-service',
-    'cluster-k8s-sme-01',
+    'c0000000-0000-0000-0000-000000000001',
     'b0000000-0000-0000-0000-000000000001',
     'Deployment'
 )
@@ -1030,12 +1030,12 @@ VALUES
     ('d0000000-0000-0000-0000-000000000005', 'BLOCK_IP_TEMP', 'Temporary IP Block', 'Tạm thời chặn nguồn lưu lượng bất thường gây quá tải', 'NETWORK', 'HIGH', true, true),
     ('d0000000-0000-0000-0000-000000000006', 'ADJUST_RESOURCE_LIMITS', 'Adjust Resource Limits', 'Điều chỉnh hạn mức CPU và RAM của container', 'WORKLOAD', 'MEDIUM', false, true),
     ('d0000000-0000-0000-0000-000000000007', 'DRAIN_NODE', 'Drain Node', 'Di tản toàn bộ Pod khỏi Node gặp sự cố phần cứng', 'NODE', 'CRITICAL', true, true)
-ON CONFLICT (name) DO UPDATE 
-SET code = EXCLUDED.code, description = EXCLUDED.description, default_risk_level = EXCLUDED.default_risk_level;
+ON CONFLICT (code) DO UPDATE 
+SET name = EXCLUDED.name, description = EXCLUDED.description, default_risk_level = EXCLUDED.default_risk_level;
 
 -- 12. AI Model GRU phân loại rủi ro
-INSERT INTO ai_models (id, name, status, framework, version)
-VALUES ('00000000-0000-0000-0000-000000000001', 'GRU_RISK_CLASSIFICATION', 'ACTIVE', 'PyTorch', '1.0.0')
+INSERT INTO ai_models (id, name, model_type, status, framework, version)
+VALUES ('00000000-0000-0000-0000-000000000001', 'GRU_RISK_CLASSIFICATION', 'GRU_RISK_CLASSIFICATION', 'ACTIVE', 'PyTorch', '1.0.0')
 ON CONFLICT (id) DO NOTHING;
 
 -- 13. K8s Agent mẫu cho doanh nghiệp
@@ -1044,7 +1044,7 @@ VALUES (
     'a0000000-0000-0000-0000-000000000001',
     'Production K8s SME Agent',
     'captone-agent-default',
-    'cluster-k8s-sme-01',
+    'c0000000-0000-0000-0000-000000000001',
     'e0000000-0000-0000-0000-000000000001',
     'ONLINE',
     NOW()
@@ -1053,12 +1053,12 @@ ON CONFLICT (agent_uid) DO UPDATE
 SET status = 'ONLINE', last_seen_at = NOW();
 
 -- 14. Token xác thực Agent
-INSERT INTO agent_tokens (id, agent_id, token_hash, expires_at, created_at)
+INSERT INTO agent_tokens (id, agent_id, token_hash, token_prefix, expires_at, created_at)
 VALUES
-    ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '7119ac14ceb8f5b908262a253c96011341843ca57f025e482cade4f859e05afc', NOW() + INTERVAL '365 days', NOW()),
-    ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'cpt_sec_demo_token_2026_change_me', NOW() + INTERVAL '365 days', NOW()),
-    ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'sh_sec_demo_token_change_me_in_production', NOW() + INTERVAL '365 days', NOW()),
-    ('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', '879fb60445897373ff2ef309326af711eebb639d088f2e7a054a06a705c4840c', NOW() + INTERVAL '365 days', NOW())
+    ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '7119ac14ceb8f5b908262a253c96011341843ca57f025e482cade4f859e05afc', 'aegis_agt_demo1', NOW() + INTERVAL '365 days', NOW()),
+    ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'cpt_sec_demo_token_2026_change_me', 'aegis_agt_demo2', NOW() + INTERVAL '365 days', NOW()),
+    ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'sh_sec_demo_token_change_me_in_production', 'aegis_agt_demo3', NOW() + INTERVAL '365 days', NOW()),
+    ('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', '879fb60445897373ff2ef309326af711eebb639d088f2e7a054a06a705c4840c', 'aegis_agt_demo4', NOW() + INTERVAL '365 days', NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- ====================================================================

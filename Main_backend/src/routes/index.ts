@@ -12,6 +12,7 @@ import { agentDaemonRoutes } from './agent.routes';
 import { clusterGlobalRoutes } from './cluster.routes';
 import { nodeRoutes } from './node.routes';
 import { podRoutes } from './pod.routes';
+import { deploymentRoutes } from './deployment.routes';
 import { auditRoutes } from './audit.routes';
 
 const apiRouter = Router();
@@ -30,6 +31,7 @@ apiRouter.use('/agents', agentDaemonRoutes);
 apiRouter.use('/clusters', clusterGlobalRoutes);
 apiRouter.use('/nodes', nodeRoutes);
 apiRouter.use('/pods', podRoutes);
+apiRouter.use('/deployments', deploymentRoutes);
 apiRouter.use('/audit-logs', auditRoutes);
 
 export default apiRouter;

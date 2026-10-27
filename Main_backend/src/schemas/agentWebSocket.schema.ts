@@ -58,22 +58,26 @@ export const AgentMetricsPayloadSchema = z.object({
     .number()
     .finite('disk must be a finite number')
     .min(0, 'disk cannot be negative')
-    .max(100000000, 'disk value out of range'),
+    .max(100000000, 'disk value out of range')
+    .default(10.0),
   request_rate: z
     .number()
     .finite('request_rate must be a finite number')
     .min(0, 'request_rate cannot be negative')
-    .max(10000000, 'request_rate out of range'),
+    .max(10000000, 'request_rate out of range')
+    .default(0.0),
   latency: z
     .number()
     .finite('latency must be a finite number')
     .min(0, 'latency cannot be negative')
-    .max(600000, 'latency cannot exceed 600,000 ms (10 minutes)'),
+    .max(600000, 'latency cannot exceed 600,000 ms (10 minutes)')
+    .default(0.0),
   http_5xx_rate: z
     .number()
     .finite('http_5xx_rate must be a finite number')
     .min(0, 'http_5xx_rate cannot be negative')
-    .max(100, 'http_5xx_rate cannot exceed 100%'),
+    .max(100, 'http_5xx_rate cannot exceed 100%')
+    .default(0.0),
   pod_restart_count: z
     .number()
     .int('pod_restart_count must be an integer')
@@ -90,6 +94,8 @@ export const AgentMetricsPayloadSchema = z.object({
   node_ram_percent: z.number().finite().min(0).max(100).optional().nullable(),
   node_cpu_cores: z.number().finite().min(0).optional().nullable(),
   node_ram_gb: z.number().finite().min(0).optional().nullable(),
+  sample_id: z.string().trim().max(100).optional().nullable(),
+  batch_id: z.string().trim().max(100).optional().nullable(),
 });
 
 /**
@@ -200,6 +206,9 @@ export const AgentLogPayloadSchema = z.object({
  */
 export const AgentK8sEventPayloadSchema = z.object({
   service_id: SafeString(100),
+  namespace: z.string().trim().max(100).optional().default('default'),
+  event_uid: z.string().trim().max(255).optional().nullable(),
+  resource_type: z.string().trim().max(100).optional().default('Pod'),
   pod_id: z
     .string()
     .trim()
@@ -220,8 +229,16 @@ export const AgentK8sEventPayloadSchema = z.object({
     .max(50)
     .default('Running')
     .transform((str) => str.replace(/\0/g, '')),
+  count: z.number().int().min(1).optional().default(1),
+  first_seen_at: IsoTimestampSchema.optional().nullable(),
+  last_seen_at: IsoTimestampSchema.optional().nullable(),
+  source_component: z.string().trim().max(100).optional().default('k8s-agent'),
+  reporting_controller: z.string().trim().max(100).optional().nullable(),
+  action: z.string().trim().max(100).optional().nullable(),
   timestamp: IsoTimestampSchema,
   event: z.object({
+    uid: z.string().trim().max(255).optional().nullable(),
+    event_uid: z.string().trim().max(255).optional().nullable(),
     type: z
       .string()
       .trim()
@@ -239,6 +256,12 @@ export const AgentK8sEventPayloadSchema = z.object({
       .max(10000, 'event.message cannot exceed 10,000 characters')
       .default('')
       .transform((str) => str.replace(/\0/g, '')),
+    count: z.number().int().min(1).optional(),
+    source_component: z.string().trim().max(100).optional(),
+    reporting_controller: z.string().trim().max(100).optional(),
+    action: z.string().trim().max(100).optional(),
+    first_timestamp: IsoTimestampSchema.optional().nullable(),
+    last_timestamp: IsoTimestampSchema.optional().nullable(),
   }),
 });
 
@@ -249,10 +272,20 @@ export const AgentK8sInventoryPayloadSchema = z.object({
   nodes: z.array(z.object({
     name: z.string().trim().min(1).max(255),
     kubernetes_uid: z.string().optional().nullable(),
-    status: z.string().default('Ready'),
+    // Missing status must never be assumed healthy (Task 5.2)
+    status: z.string().max(30).default('Unknown'),
     cpu_capacity_millicores: z.number().optional().nullable(),
     memory_capacity_bytes: z.number().optional().nullable(),
     disk_capacity_bytes: z.number().optional().nullable(),
+    cpu_allocatable_millicores: z.number().optional().nullable(),
+    memory_allocatable_bytes: z.number().optional().nullable(),
+    disk_allocatable_bytes: z.number().optional().nullable(),
+    pods_capacity: z.number().optional().nullable(),
+    pods_allocatable: z.number().optional().nullable(),
+    conditions: z.record(z.string(), z.string()).optional().default({}),
+    active_pressures: z.array(z.string()).optional().default([]),
+    ready_reason: z.string().max(255).optional().nullable(),
+    ready_message: z.string().max(2000).optional().nullable(),
     kubelet_version: z.string().optional().nullable(),
     roles: z.array(z.string()).optional().default([]),
     labels: z.record(z.string(), z.any()).optional().default({}),
@@ -269,12 +302,15 @@ export const AgentK8sInventoryPayloadSchema = z.object({
     service_id: z.string().optional().nullable(),
     node_name: z.string().optional().nullable(),
     kubernetes_uid: z.string().optional().nullable(),
-    status: z.string().default('Running'),
-    phase: z.string().default('Running'),
+    status: z.string().max(30).default('Unknown'),
+    phase: z.string().max(50).default('Unknown'),
     restart_count: z.number().int().nonnegative().default(0),
     image: z.string().optional().nullable(),
     labels: z.record(z.string(), z.any()).optional().default({}),
     started_at: z.string().optional().nullable(),
+    is_healthy: z.boolean().optional().nullable(),
+    containers: z.array(z.record(z.string(), z.any())).max(100).optional().default([]),
+    init_containers: z.array(z.record(z.string(), z.any())).max(100).optional().default([]),
   })).default([]),
   services: z.array(z.object({
     name: z.string().trim().min(1).max(255),
@@ -285,6 +321,23 @@ export const AgentK8sInventoryPayloadSchema = z.object({
     ports: z.any().optional().default([]),
     selector: z.record(z.string(), z.any()).optional().default({}),
     status: z.string().optional().default('Active'),
+  })).optional().default([]),
+  deployments: z.array(z.object({
+    name: z.string().trim().min(1).max(255),
+    namespace: z.string().default('default'),
+    kubernetes_uid: z.string().optional().nullable(),
+    // No healthy defaults: missing fields stay null and surface as InsufficientData (Task 5.2)
+    status: z.string().max(50).optional().nullable(),
+    is_healthy: z.boolean().optional().nullable(),
+    desired_replicas: z.number().int().nonnegative().optional().nullable(),
+    ready_replicas: z.number().int().nonnegative().optional().nullable(),
+    available_replicas: z.number().int().nonnegative().optional().nullable(),
+    updated_replicas: z.number().int().nonnegative().optional().nullable(),
+    unavailable_replicas: z.number().int().nonnegative().optional().nullable(),
+    generation: z.number().int().nonnegative().optional().nullable(),
+    observed_generation: z.number().int().nonnegative().optional().nullable(),
+    conditions: z.record(z.string(), z.any()).optional().default({}),
+    labels: z.record(z.string(), z.any()).optional().default({}),
   })).optional().default([]),
 });
 

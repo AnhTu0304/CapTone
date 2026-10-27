@@ -70,6 +70,7 @@ class LogsCollector:
                     AgentLogData(
                         service_id=pod.service_id,
                         pod_id=pod.uid,
+                        namespace=pod.namespace,
                         timestamp=now.isoformat(),
                         level=level,
                         message=sanitized,

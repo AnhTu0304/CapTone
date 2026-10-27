@@ -33,7 +33,12 @@
     "test:agent-disconnect": "tsx --test src/test/agentDisconnectDelete.test.ts",
     "test:node-metrics": "tsx --test src/test/nodeMetricsApi.test.ts",
     "test:rca-integration": "tsx src/test/rcaAiIntegration.test.ts",
-    "benchmark:node-metrics": "tsx src/scripts/benchmarkNodeMetricsTask44.ts"
+    "test:k8s-status": "tsx --test src/test/k8sStatusApi.test.ts",
+    "benchmark:node-metrics": "tsx src/scripts/benchmarkNodeMetricsTask44.ts",
+    "test:logs": "tsx --test src/test/logsApi.test.ts",
+    "test:logs-stream": "tsx --test src/test/logStreamApi.test.ts",
+    "test:logs-isolation": "tsx --test src/test/logsSecurityAndLoad.test.ts",
+    "test:k8s-events": "tsx --test --test-concurrency=1 src/test/kubernetesEvents.test.ts"
   },
   "keywords": [
     "nodejs",

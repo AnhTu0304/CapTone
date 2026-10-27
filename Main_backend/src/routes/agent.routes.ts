@@ -14,6 +14,7 @@ import {
   agentQuerySchema,
   agentIdParamSchema,
   ingestNodeMetricsSchema,
+  ingestApmMetricsSchema,
 } from '../validations/agent.validation';
 
 /* ==========================================================================
@@ -243,6 +244,34 @@ daemonRouter.post(
   authenticateAgentToken,
   validate(ingestNodeMetricsSchema),
   AgentController.ingestNodeMetrics
+);
+
+/**
+ * [POST] /api/v1/agents/apm-metrics & /api/v1/agents/service-metrics
+ * Tiếp nhận APM Application/Service Metrics (Latency, Throughput, 5xx Rate, Replicas) từ Daemon Agent (PB15 1.3)
+ */
+daemonRouter.post(
+  '/apm-metrics',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: 300,
+    message: 'Quá nhiều yêu cầu gửi APM Metrics từ địa chỉ này, vui lòng thử lại sau.',
+  }),
+  authenticateAgentToken,
+  validate(ingestApmMetricsSchema),
+  AgentController.ingestApmMetrics
+);
+
+daemonRouter.post(
+  '/service-metrics',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: 300,
+    message: 'Quá nhiều yêu cầu gửi APM Metrics từ địa chỉ này, vui lòng thử lại sau.',
+  }),
+  authenticateAgentToken,
+  validate(ingestApmMetricsSchema),
+  AgentController.ingestApmMetrics
 );
 
 /* ==========================================================================

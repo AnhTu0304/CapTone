@@ -79,6 +79,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'GIÁM SÁT',
       items: [
+        { name: 'Giám sát APM', path: '/dashboard/monitoring/apm', icon: Zap, badge: 'APM', badgeType: 'mint' },
         { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart, badge: 'LIVE', badgeType: 'mint' },
         { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },
         { name: 'Sự kiện K8s', path: '/dashboard/monitoring/events', icon: Activity },

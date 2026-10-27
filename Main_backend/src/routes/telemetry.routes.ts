@@ -22,6 +22,15 @@ telemetryRoutes.get(
   TelemetryController.getNodeMetrics
 );
 
+// GET /api/v1/telemetry/services
+// Danh sách các dịch vụ đang được giám sát APM kèm tổng hợp chỉ số
+telemetryRoutes.get(
+  '/services',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getApmServices
+);
+
 // GET /api/v1/telemetry/services/:serviceId/metrics-sequence
 // Cho phép tất cả người dùng hợp lệ xem chuỗi viễn trắc để vẽ biểu đồ
 telemetryRoutes.get(
@@ -29,6 +38,67 @@ telemetryRoutes.get(
   authenticateToken,
   requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
   TelemetryController.getMetricsSequence
+);
+
+// GET /api/v1/telemetry/metrics-history
+// Truy vấn lịch sử viễn trắc chi tiết theo resource, metric_type, time window, pagination (Task [S4][PB16] 2.1)
+telemetryRoutes.get(
+  '/metrics-history',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getMetricsHistory
+);
+
+// GET /api/v1/telemetry/logs
+// Centralized logs querying with severity, service, search and time filters (Task [S4][PB17] 3.1)
+telemetryRoutes.get(
+  '/logs',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getLogs
+);
+
+// GET /api/v1/telemetry/events
+// Centralized Kubernetes events querying with filters, normalization & multi-tenant isolation (Task [S4][PB18] 4.1 & 4.2)
+telemetryRoutes.get(
+  '/events',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getKubernetesEvents
+);
+
+// GET /api/v1/telemetry/events/:id
+// Centralized Kubernetes event detail query with tenant isolation (Task [S4][PB18] 4.3)
+telemetryRoutes.get(
+  '/events/:id',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getKubernetesEventById
+);
+
+// GET /api/v1/telemetry/logs/stream
+// Real-time Server-Sent Events (SSE) log streaming with load limits (Task [S4][PB17] 3.3)
+telemetryRoutes.get(
+  '/logs/stream',
+  (req, res, next) => {
+    // If token passed in query parameter (e.g. EventSource client), populate Authorization header
+    const authHeader = req.headers['authorization'];
+    if (!authHeader && typeof req.query.token === 'string') {
+      req.headers['authorization'] = `Bearer ${req.query.token}`;
+    }
+    next();
+  },
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.streamLogs
+);
+
+// GET /api/v1/telemetry/services/:serviceId/metrics-history
+telemetryRoutes.get(
+  '/services/:serviceId/metrics-history',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getMetricsHistory
 );
 
 // Protect all following sensitive operations with JWT authentication + DEVOPS/ADMIN role

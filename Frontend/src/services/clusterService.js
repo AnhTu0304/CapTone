@@ -67,6 +67,61 @@ export const clusterService = {
   },
 
   /**
+   * Lấy danh sách Namespaces của cụm Kubernetes (Task [S4][PB17] 3.2 / [4.36])
+   * @param {string} clusterId 
+   * @param {string} [orgId] 
+   * @returns {Promise<Array>}
+   */
+  async getClusterNamespaces(clusterId, orgId) {
+    if (!clusterId) return [];
+    try {
+      if (orgId && !orgId.startsWith('org-')) {
+        try {
+          const res = await request(`/organizations/${orgId}/clusters/${clusterId}/namespaces`);
+          if (res?.success && Array.isArray(res.data)) return res.data;
+        } catch (_) {}
+      }
+      const res = await request(`/clusters/${clusterId}/namespaces`);
+      if (res?.success && Array.isArray(res.data)) return res.data;
+      const detail = await this.getClusterDetail(clusterId, orgId);
+      return detail?.namespaces || [];
+    } catch (err) {
+      console.warn(`[clusterService] Lỗi lấy danh sách namespaces của cụm ${clusterId}:`, err.message);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy tổng quan trạng thái Cụm Kubernetes (Nodes, Pods, Deployments, Freshness)
+   * Tuyến đường Task 5.2: /organizations/:orgId/clusters/:clusterId/status
+   * @param {string} clusterId 
+   * @param {string} [orgId] 
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<Object|null>}
+   */
+  async getClusterStatusSummary(clusterId, orgId, signal) {
+    if (!clusterId) return null;
+    try {
+      if (orgId && !orgId.startsWith('org-')) {
+        try {
+          const res = await request(`/organizations/${orgId}/clusters/${clusterId}/status`, { signal });
+          if (res?.success && res.data) return res.data;
+        } catch (orgErr) {
+          if (orgErr.name === 'AbortError') throw orgErr;
+          console.warn(`[clusterService] Org route cluster status summary failed:`, orgErr.message);
+        }
+      }
+      const res = await request(`/clusters/${clusterId}/status`, { signal });
+      if (res?.success && res.data) return res.data;
+      return null;
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      console.warn(`[clusterService] Lỗi tải status summary cụm ${clusterId}:`, err.message);
+      return null;
+    }
+  },
+
+  /**
    * Đăng ký cụm Kubernetes mới cho tổ chức
    * @param {string} orgId 
    * @param {Object} data 

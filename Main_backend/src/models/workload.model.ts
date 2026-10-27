@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 
 export interface IWorkloadInfo {
   id: string;
+  name?: string;
   cluster_id?: string | null;
   namespace_id?: string | null;
 }
@@ -39,7 +40,7 @@ export class WorkloadModel {
       const res = await db.query(
         `INSERT INTO workloads (name, cluster_id, namespace_id, workload_type, status)
          VALUES ($1, $2, $3, 'Deployment', 'HEALTHY')
-         RETURNING id, cluster_id, namespace_id`,
+         RETURNING id, name, cluster_id, namespace_id`,
         [name, clusterId || null, namespaceId || null]
       );
       return res.rows[0];
@@ -57,7 +58,7 @@ export class WorkloadModel {
         }
         return retry;
       }
-      return { id: name, cluster_id: clusterId || null, namespace_id: namespaceId || null };
+      return { id: name, name: name, cluster_id: clusterId || null, namespace_id: namespaceId || null };
     }
   }
 
@@ -73,15 +74,18 @@ export class WorkloadModel {
     try {
       if (clusterId) {
         const res = await db.query(
-          `SELECT id, cluster_id, namespace_id FROM workloads 
-           WHERE name = $1 AND (cluster_id = $2 OR cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $2 OR cluster_uid = $2 OR name = $2))
+          `SELECT id, name, cluster_id, namespace_id FROM workloads
+           WHERE name = $1 AND (
+             cluster_id::text = $2
+             OR cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $2 OR cluster_uid = $2 OR name = $2)
+           )
            LIMIT 1`,
           [name, clusterId]
         );
         if (res.rows.length > 0) return res.rows[0];
       }
       const res = await db.query(
-        'SELECT id, cluster_id, namespace_id FROM workloads WHERE name = $1 LIMIT 1',
+        'SELECT id, name, cluster_id, namespace_id FROM workloads WHERE name = $1 LIMIT 1',
         [name]
       );
       return res.rows[0] || null;
