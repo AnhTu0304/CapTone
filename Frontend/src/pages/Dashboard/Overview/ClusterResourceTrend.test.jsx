@@ -1,9 +1,53 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
+
+// Mock lightweight-charts v5.2.1 lifecycle and series creation
+const mockSetData = jest.fn();
+const mockApplyOptions = jest.fn();
+const mockRemove = jest.fn();
+const mockSubscribeCrosshairMove = jest.fn();
+const mockUnsubscribeCrosshairMove = jest.fn();
+const mockFitContent = jest.fn();
+const mockAddSeries = jest.fn(() => ({
+  setData: mockSetData,
+  applyOptions: mockApplyOptions,
+  update: jest.fn(),
+  createPriceLine: jest.fn(),
+}));
+
+jest.mock('lightweight-charts', () => ({
+  createChart: jest.fn(),
+  AreaSeries: 'AreaSeriesDefinition',
+  LineSeries: 'LineSeriesDefinition',
+  ColorType: { Solid: 'solid' },
+  CrosshairMode: { Normal: 0 },
+  LineStyle: { Dotted: 1, Dashed: 2 },
+}));
+
+const { createChart } = require('lightweight-charts');
 import InteractiveResourceChart from '../../../components/dashboard/InteractiveResourceChart';
 
 describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
+  beforeEach(() => {
+    mockAddSeries.mockImplementation(() => ({
+      setData: mockSetData,
+      applyOptions: mockApplyOptions,
+      update: jest.fn(),
+      createPriceLine: jest.fn(),
+    }));
+
+    createChart.mockImplementation(() => ({
+      addSeries: mockAddSeries,
+      applyOptions: mockApplyOptions,
+      remove: mockRemove,
+      subscribeCrosshairMove: mockSubscribeCrosshairMove,
+      unsubscribeCrosshairMove: mockUnsubscribeCrosshairMove,
+      timeScale: () => ({
+        fitContent: mockFitContent,
+      }),
+    }));
+  });
   const sampleData = [
     {
       time: '14:00:00',
@@ -225,5 +269,48 @@ describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
       />
     );
     expect(screen.getByText('⚠️ Tự động kích hoạt Scale Replicas')).toBeInTheDocument();
+  });
+
+  test('10. Initializes lightweight-charts with AreaSeries & LineSeries, calls setData with sanitized points', () => {
+    render(
+      <InteractiveResourceChart
+        data={sampleData}
+        totalCpuCores={8}
+        totalMemoryGb={16}
+      />
+    );
+
+    expect(createChart).toHaveBeenCalledTimes(1);
+    expect(mockAddSeries).toHaveBeenCalledTimes(2); // 1 AreaSeries for CPU, 1 LineSeries for RAM
+    expect(mockSetData).toHaveBeenCalledTimes(2); // Both series populated
+  });
+
+  test('11. Toggles zoom scale mode and triggers fitContent', () => {
+    render(
+      <InteractiveResourceChart
+        data={sampleData}
+      />
+    );
+
+    const zoomBtn = screen.getByRole('button', { name: /Phóng to dao động/i });
+    expect(zoomBtn).toBeInTheDocument();
+
+    fireEvent.click(zoomBtn);
+    expect(screen.getByRole('button', { name: /Chuẩn \(0-100%\)/i })).toBeInTheDocument();
+
+    const fitBtn = screen.getByRole('button', { name: /Vừa khít/i });
+    fireEvent.click(fitBtn);
+    expect(mockFitContent).toHaveBeenCalled();
+  });
+
+  test('12. Cleans up lightweight-charts instance on unmount to prevent memory leaks', () => {
+    const { unmount } = render(
+      <InteractiveResourceChart
+        data={sampleData}
+      />
+    );
+
+    unmount();
+    expect(mockRemove).toHaveBeenCalledTimes(1);
   });
 });
