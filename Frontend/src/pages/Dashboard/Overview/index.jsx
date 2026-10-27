@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
@@ -266,6 +266,7 @@ export const OverviewPage = () => {
   }, [rawPods]);
 
   const namespacesCount = namespacesList.length || 3;
+  const firstNode = clusterInfo?.nodes?.[0];
 
   // Node hardware capacity - Tổng hợp dung lượng thực tế từ toàn bộ nodes của cụm
   const { totalCpuCores, totalRamGb, totalDiskTb } = useMemo(() => {
