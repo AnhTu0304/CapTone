@@ -28,6 +28,7 @@ export function useK8sResourcePolling({ clusterId, orgId, intervalMs = 20000, en
   const abortControllerRef = useRef(null);
   const inFlightRef = useRef(false);
   const timerRef = useRef(null);
+  const hasLoadedOnceRef = useRef(false);
 
   const fetchData = useCallback(
     async (isManualRefresh = false) => {
@@ -44,7 +45,7 @@ export function useK8sResourcePolling({ clusterId, orgId, intervalMs = 20000, en
 
       if (isManualRefresh) {
         setIsRefreshing(true);
-      } else if (!lastUpdated) {
+      } else if (!hasLoadedOnceRef.current) {
         setIsLoading(true);
       }
 
@@ -103,15 +104,17 @@ export function useK8sResourcePolling({ clusterId, orgId, intervalMs = 20000, en
         });
       } finally {
         inFlightRef.current = false;
+        hasLoadedOnceRef.current = true;
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [clusterId, orgId, enabled, lastUpdated]
+    [clusterId, orgId, enabled]
   );
 
   // Kích hoạt initial fetch và polling lặp lại
   useEffect(() => {
+    hasLoadedOnceRef.current = false;
     if (!clusterId || !enabled) {
       setIsLoading(false);
       return;
