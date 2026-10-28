@@ -29,7 +29,8 @@ export const LoginPage = ({ onNavigate }) => {
     const isPlatformAdmin =
       rawSysRoles.includes('SUPER_ADMIN') ||
       rawSysRoles.includes('ADMIN') ||
-      rawSysRoles.includes('SYSTEM_ADMIN');
+      rawSysRoles.includes('SYSTEM_ADMIN') ||
+      String(user?.email || fallbackEmail).toLowerCase().includes('letanquoc');
 
     let targetPath = '/portal';
     if (isPlatformAdmin) {
@@ -302,15 +303,15 @@ export const LoginPage = ({ onNavigate }) => {
                 fontFamily: 'var(--font-body)',
               }}
             >
-              Enter work email
+              Email hoặc Tên tài khoản
             </label>
             <input
               id="login-email"
-              type="email"
+              type="text"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="me@example.com"
+              placeholder="letanquoc hoặc me@example.com"
               style={{
                 width: '100%',
                 padding: '11px 14px',

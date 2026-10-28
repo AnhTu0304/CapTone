@@ -93,7 +93,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <ArrowRight size={14} color="var(--dash-text-muted)" />
                 </div>
                 <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.companies?.total || 86}
+                  {kpiData.companies?.total ?? 86}
                 </div>
               </div>
               <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
@@ -101,12 +101,12 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#059669', fontWeight: 700 }}>
                       <CheckCircle2 size={11} color="#059669" />
-                      {kpiData.companies?.active || 82} Active
+                      {kpiData.companies?.active ?? 82} Active
                     </span>
                     <span style={{ color: '#94A3B8' }}>•</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#D97706', fontWeight: 700 }}>
                       <AlertTriangle size={11} color="#D97706" />
-                      {kpiData.companies?.incident || 4} Sự cố/Treo
+                      {kpiData.companies?.incident ?? 0} Sự cố/Treo
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px' }}>
@@ -153,7 +153,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <ArrowRight size={14} color="var(--dash-text-muted)" />
                 </div>
                 <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.users?.total?.toLocaleString() || '1,420'}
+                  {(kpiData.users?.total ?? 0).toLocaleString()}
                 </div>
               </div>
               <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
@@ -161,12 +161,12 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#059669', fontWeight: 700 }}>
                       <CheckCircle2 size={11} color="#059669" />
-                      {kpiData.users?.active?.toLocaleString() || '1,385'} Active
+                      {(kpiData.users?.active ?? 0).toLocaleString()} Active
                     </span>
                     <span style={{ color: '#94A3B8' }}>•</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#DC2626', fontWeight: 700 }}>
                       <XCircle size={11} color="#DC2626" />
-                      {kpiData.users?.locked || 35} Bị khóa
+                      {kpiData.users?.locked ?? 0} Bị khóa
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px' }}>
@@ -213,7 +213,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <ArrowRight size={14} color="var(--dash-text-muted)" />
                 </div>
                 <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.agents?.total || 128}
+                  {kpiData.agents?.total ?? 0}
                 </div>
               </div>
               <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
@@ -221,12 +221,12 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#059669', fontWeight: 700 }}>
                       <CheckCircle2 size={11} color="#059669" />
-                      {kpiData.agents?.online || 122} Online
+                      {kpiData.agents?.online ?? 0} Online
                     </span>
                     <span style={{ color: '#94A3B8' }}>•</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#64748B', fontWeight: 700 }}>
                       <XCircle size={11} color="#64748B" />
-                      {kpiData.agents?.offline || 6} Offline
+                      {kpiData.agents?.offline ?? 0} Offline
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px' }}>
@@ -273,7 +273,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <ArrowRight size={14} color="var(--dash-text-muted)" />
                 </div>
                 <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.clusters?.total || 34}
+                  {kpiData.clusters?.total ?? 0}
                 </div>
               </div>
               <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
@@ -281,12 +281,12 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#059669', fontWeight: 700 }}>
                       <CheckCircle2 size={11} color="#059669" />
-                      {kpiData.clusters?.healthy || 31} Ổn định
+                      {kpiData.clusters?.healthy ?? 0} Ổn định
                     </span>
                     <span style={{ color: '#94A3B8' }}>•</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#D97706', fontWeight: 700 }}>
                       <AlertTriangle size={11} color="#D97706" />
-                      {kpiData.clusters?.degraded || 3} Cần chú ý
+                      {kpiData.clusters?.degraded ?? 0} Cần chú ý
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', backgroundColor: '#F1F5F9', padding: '2px 6px', borderRadius: '4px' }}>

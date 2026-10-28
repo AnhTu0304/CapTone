@@ -1,94 +1,28 @@
 import React, { useState, useRef } from 'react';
 import {
   TrendingUp,
-  DollarSign,
+  Activity,
   ShieldCheck,
   CheckCircle2
 } from 'lucide-react';
 
 /**
  * SLACostSavingsChart
- * React 19 native SVG chart demonstrating business ROI, SLA Uptime vs Target,
- * and Downtime Cost Savings for SME Owners.
+ * React 19 native SVG chart demonstrating SLA Uptime vs Target,
+ * and Automated Incident Recovery metrics for Enterprises.
  */
 export const SLACostSavingsChart = ({
-  title = 'Hiệu Quả Kinh Tế & Cam Kết SLA Uptime (6 Tháng Gần Nhất)',
-  subtitle = 'Đối chiếu thời gian hoạt động thực tế với cam kết chuẩn SLA 99.9% và chi phí thiệt hại được ngăn ngừa',
+  title = 'Cam Kết & Xu Hướng SLA Uptime (6 Tháng Gần Nhất)',
+  subtitle = 'Đối chiếu thời gian hoạt động thực tế với cam kết chuẩn SLA 99.9% và số lượng sự cố tự phục hồi',
   className = '',
   height = 260,
+  trendsData = null,
+  summary = null,
 }) => {
   const [hoverIndex, setHoverIndex] = useState(null);
   const svgRef = useRef(null);
 
-  // 6 months of historical metrics
-  const data = [
-    {
-      month: 'T4/2026',
-      uptime: 99.96,
-      slaTarget: 99.90,
-      downtimeWithoutSelfHealHours: 3.2,
-      costWithoutSelfHeal: 3840,
-      costWithSelfHeal: 480,
-      savings: 3360,
-      engineerHoursSaved: 18,
-      preventedIncidents: 9,
-    },
-    {
-      month: 'T5/2026',
-      uptime: 99.97,
-      slaTarget: 99.90,
-      downtimeWithoutSelfHealHours: 2.8,
-      costWithoutSelfHeal: 3360,
-      costWithSelfHeal: 360,
-      savings: 3000,
-      engineerHoursSaved: 16,
-      preventedIncidents: 11,
-    },
-    {
-      month: 'T6/2026',
-      uptime: 99.98,
-      slaTarget: 99.90,
-      downtimeWithoutSelfHealHours: 4.1,
-      costWithoutSelfHeal: 4920,
-      costWithSelfHeal: 420,
-      savings: 4500,
-      engineerHoursSaved: 24,
-      preventedIncidents: 14,
-    },
-    {
-      month: 'T7/2026',
-      uptime: 99.99,
-      slaTarget: 99.90,
-      downtimeWithoutSelfHealHours: 3.6,
-      costWithoutSelfHeal: 4320,
-      costWithSelfHeal: 300,
-      savings: 4020,
-      engineerHoursSaved: 20,
-      preventedIncidents: 12,
-    },
-    {
-      month: 'T8/2026',
-      uptime: 99.98,
-      slaTarget: 99.90,
-      downtimeWithoutSelfHealHours: 4.5,
-      costWithoutSelfHeal: 5400,
-      costWithSelfHeal: 450,
-      savings: 4950,
-      engineerHoursSaved: 26,
-      preventedIncidents: 16,
-    },
-    {
-      month: 'T9/2026',
-      uptime: 99.99,
-      slaTarget: 99.90,
-      downtimeWithoutSelfHealHours: 3.9,
-      costWithoutSelfHeal: 4680,
-      costWithSelfHeal: 360,
-      savings: 4320,
-      engineerHoursSaved: 22,
-      preventedIncidents: 15,
-    },
-  ];
+  const data = Array.isArray(trendsData) ? trendsData : [];
 
   const padding = { top: 25, right: 65, bottom: 35, left: 55 };
   const width = 740;
@@ -96,21 +30,21 @@ export const SLACostSavingsChart = ({
   const chartHeight = height - padding.top - padding.bottom;
 
   // Scales
-  const maxCost = 6000; // $6,000 max for savings bar
+  const maxIncidents = 20; // 20 incidents max for recovery bar
   const minUptime = 99.80;
   const maxUptime = 100.00;
 
-  const getX = (i) => padding.left + (i / (data.length - 1)) * chartWidth;
-  const getYCost = (val) => padding.top + chartHeight - (val / maxCost) * chartHeight;
+  const getX = (i) => padding.left + (data.length > 1 ? (i / (data.length - 1)) * chartWidth : chartWidth / 2);
+  const getYIncidents = (val) => padding.top + chartHeight - (val / maxIncidents) * chartHeight;
   const getYUptime = (val) =>
     padding.top + chartHeight - ((val - minUptime) / (maxUptime - minUptime)) * chartHeight;
 
   // Coordinates for Uptime curve
-  const uptimePoints = data.map((d, i) => `${getX(i)},${getYUptime(d.uptime)}`).join(' ');
+  const uptimePoints = data.length > 0 ? data.map((d, i) => `${getX(i)},${getYUptime(d.uptime)}`).join(' ') : '';
   const slaTargetY = getYUptime(99.90);
 
   const handleMouseMove = (e) => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || data.length === 0) return;
     const rect = svgRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const relativeX = (mouseX / rect.width) * width;
@@ -120,7 +54,7 @@ export const SLACostSavingsChart = ({
       return;
     }
 
-    const colWidth = chartWidth / (data.length - 1);
+    const colWidth = chartWidth / (data.length > 1 ? (data.length - 1) : 1);
     const index = Math.round((relativeX - padding.left) / colWidth);
     const clampedIndex = Math.max(0, Math.min(data.length - 1, index));
     setHoverIndex(clampedIndex);
@@ -161,7 +95,7 @@ export const SLACostSavingsChart = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '12px', height: '12px', backgroundColor: 'var(--dash-primary)', borderRadius: '2px', display: 'inline-block' }} />
-            <span style={{ color: 'var(--dash-text-secondary)', fontWeight: 600 }}>Chi phí tiết kiệm ($)</span>
+            <span style={{ color: 'var(--dash-text-secondary)', fontWeight: 600 }}>Sự cố tự phục hồi (vụ)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '16px', height: '3px', backgroundColor: '#0284C7', borderRadius: '2px', display: 'inline-block' }} />
@@ -183,11 +117,11 @@ export const SLACostSavingsChart = ({
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         >
-          {/* Horizontal Grid lines for Costs */}
-          {[0, 2000, 4000, 6000].map((val) => {
-            const y = getYCost(val);
+          {/* Horizontal Grid lines for Incidents */}
+          {[0, 5, 10, 15, 20].map((val) => {
+            const y = getYIncidents(val);
             return (
-              <g key={`cost-grid-${val}`}>
+              <g key={`incident-grid-${val}`}>
                 <line
                   x1={padding.left}
                   y1={y}
@@ -204,7 +138,7 @@ export const SLACostSavingsChart = ({
                   fontFamily="var(--font-mono)"
                   fill="#94A3B8"
                 >
-                  ${val.toLocaleString()}
+                  {val} vụ
                 </text>
               </g>
             );
@@ -239,11 +173,11 @@ export const SLACostSavingsChart = ({
             strokeDasharray="4,4"
           />
 
-          {/* Savings Bars */}
+          {/* Recovery Incident Bars */}
           {data.map((d, i) => {
             const cx = getX(i);
             const barW = 28;
-            const barH = chartHeight - (getYCost(d.savings) - padding.top);
+            const barH = chartHeight - (getYIncidents(d.preventedIncidents) - padding.top);
             const isHovered = hoverIndex === i;
 
             return (
@@ -257,10 +191,10 @@ export const SLACostSavingsChart = ({
                   fill={isHovered ? 'rgba(16, 185, 129, 0.08)' : 'transparent'}
                   rx="4"
                 />
-                {/* Cost Savings Bar */}
+                {/* Recovery Bar */}
                 <rect
                   x={cx - barW / 2}
-                  y={getYCost(d.savings)}
+                  y={getYIncidents(d.preventedIncidents)}
                   width={barW}
                   height={Math.max(4, barH)}
                   fill={isHovered ? '#047857' : 'var(--dash-primary)'}
@@ -364,21 +298,15 @@ export const SLACostSavingsChart = ({
                 </strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#94A3B8' }}>Chi Phí Tiết Kiệm:</span>
+                <span style={{ color: '#94A3B8' }}>Sự Cố Tự Phục Hồi:</span>
                 <strong style={{ color: '#34D399', fontFamily: 'var(--font-mono)' }}>
-                  +${hoveredData.savings.toLocaleString()} USD
+                  {hoveredData.preventedIncidents} sự cố
                 </strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#94A3B8' }}>Giờ Kỹ Sư Tiết Kiệm:</span>
+                <span style={{ color: '#94A3B8' }}>Downtime Tránh Được:</span>
                 <span style={{ color: '#F1F5F9', fontFamily: 'var(--font-mono)' }}>
-                  {hoveredData.engineerHoursSaved} giờ trực đêm
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#94A3B8' }}>Sự Cố AI Đã Ngăn Chặn:</span>
-                <span style={{ color: '#FCD34D', fontFamily: 'var(--font-mono)' }}>
-                  {hoveredData.preventedIncidents} vụ bão hòa
+                  {hoveredData.downtimeWithoutSelfHealHours} giờ
                 </span>
               </div>
             </div>
@@ -401,24 +329,30 @@ export const SLACostSavingsChart = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <DollarSign size={18} color="var(--dash-primary)" />
+          <Activity size={18} color="var(--dash-primary)" />
           <div>
-            <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.6875rem', fontWeight: 600 }}>TỔNG TIẾT KIỆM 6 THÁNG</div>
-            <div style={{ fontWeight: 800, color: 'var(--dash-text-primary)' }}>$24,150 USD (~600M VNĐ)</div>
+            <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.6875rem', fontWeight: 600 }}>TỔNG THỜI GIAN VẬN HÀNH</div>
+            <div style={{ fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+              {summary?.totalOperatingHours ? `${summary.totalOperatingHours.toLocaleString('vi-VN')} Giờ liên tục` : '0 Giờ'}
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ShieldCheck size={18} color="#0284C7" />
           <div>
             <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.6875rem', fontWeight: 600 }}>CAM KẾT THỰC ĐẠT</div>
-            <div style={{ fontWeight: 800, color: '#0284C7' }}>99.98% Uptime (Vượt SLA 0.08%)</div>
+            <div style={{ fontWeight: 800, color: '#0284C7' }}>
+              {summary?.actualUptime || '100.00%'} Uptime
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CheckCircle2 size={18} color="#059669" />
           <div>
             <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.6875rem', fontWeight: 600 }}>TỔNG SỰ CỐ TỰ VÁ LỖI</div>
-            <div style={{ fontWeight: 800, color: '#059669' }}>79 sự cố không gián đoạn</div>
+            <div style={{ fontWeight: 800, color: '#059669' }}>
+              {summary?.totalIncidentsResolved ?? 0} sự cố đã xử lý
+            </div>
           </div>
         </div>
       </div>

@@ -176,7 +176,7 @@ export const SME_OWNER_NAV_GROUPS = [
       },
       {
         id: 'reports',
-        label: 'Báo cáo SLA & Chi phí',
+        label: 'Báo cáo SLA & Vận hành',
         path: '/dashboard/reports',
         icon: TrendingUp,
       },

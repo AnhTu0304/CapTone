@@ -14,6 +14,8 @@ import { nodeRoutes } from './node.routes';
 import { podRoutes } from './pod.routes';
 import { deploymentRoutes } from './deployment.routes';
 import { auditRoutes } from './audit.routes';
+import { adminRoutes } from './admin.routes';
+import { reportRoutes } from './report.routes';
 
 const apiRouter = Router();
 
@@ -33,5 +35,7 @@ apiRouter.use('/nodes', nodeRoutes);
 apiRouter.use('/pods', podRoutes);
 apiRouter.use('/deployments', deploymentRoutes);
 apiRouter.use('/audit-logs', auditRoutes);
+apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/reports', reportRoutes);
 
 export default apiRouter;

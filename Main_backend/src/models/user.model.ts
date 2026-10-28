@@ -185,13 +185,23 @@ export class UserModel {
     /**
      * Tìm người dùng theo email (kèm password_hash phục vụ xác thực đăng nhập)
      */
-    public static async findByEmailWithPassword(email: string, client?: PoolClient): Promise<IUser | null> {
+    public static async findByEmailWithPassword(emailOrIdentifier: string, client?: PoolClient): Promise<IUser | null> {
         const db = client || pool;
+        const normalized = emailOrIdentifier.toLowerCase().trim();
         const querySql = `
-          SELECT id, email, password_hash, status, email_verified_at
-          FROM users WHERE email = $1 AND deleted_at IS NULL LIMIT 1
+          SELECT id, email, full_name, password_hash, status, email_verified_at
+          FROM users 
+          WHERE (
+            email = $1 
+            OR email = $1 || '@gmail.com' 
+            OR email = $1 || '@selfheal.com' 
+            OR (email LIKE $1 || '@%' AND deleted_at IS NULL)
+          ) 
+          AND deleted_at IS NULL 
+          ORDER BY (email = $1) DESC, created_at ASC 
+          LIMIT 1
         `;
-        const result = await db.query<IUser>(querySql, [email]);
+        const result = await db.query<IUser>(querySql, [normalized]);
         return result.rows[0] || null;
     }
 

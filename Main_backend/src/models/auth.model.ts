@@ -46,7 +46,9 @@ export interface IAuthResult {
 export interface ILoginResult {
     id: string;
     email: string;
+    full_name?: string;
     token: string;
+    system_roles?: string[];
     has_organization?: boolean;
     organization_roles?: IUserOrgRole[];
 }
