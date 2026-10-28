@@ -69,6 +69,7 @@ export class TelemetryAggregatorService {
       startTime?: Date | null;
       endTime?: Date | null;
       clusterId?: string | null;
+      organizationId?: string | null;
     }
   ): Promise<GRUMetricPoint[]> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -80,6 +81,7 @@ export class TelemetryAggregatorService {
       startTime: options?.startTime,
       endTime: options?.endTime,
       clusterId: options?.clusterId,
+      organizationId: options?.organizationId,
     });
 
     if (points.length === 0) {
@@ -528,12 +530,14 @@ export class TelemetryAggregatorService {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string) {
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
     const agents = await AgentModel.listAll();
     const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
       bucketSeconds: 5,
       limit: 20,
       fillPadding: false,
+      clusterId,
+      organizationId,
     });
     const rawMetrics = await MetricModel.getRecentRaw(10);
     const logs = await LogModel.getRecent(30);
@@ -541,13 +545,54 @@ export class TelemetryAggregatorService {
     const incidents = await IncidentModel.getRecent(10);
     const recommendations = await RecommendationModel.getRecent(10, clusterId);
     const predictions = await AiPredictionModel.getRecent(5);
-    const latestPoint = sequence.length > 0 ? sequence[sequence.length - 1] : null;
+
+    // If clusterId is specified, also fetch most recent host/node metrics
+    let latestNodeMetric: any = null;
+    if (clusterId) {
+      try {
+        const nodeRes = await pool.query(
+          `SELECT node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
+           FROM node_metrics
+           WHERE cluster_id = $1
+           ORDER BY collected_at DESC
+           LIMIT 1`,
+          [clusterId]
+        );
+        if (nodeRes.rows.length > 0) {
+          latestNodeMetric = nodeRes.rows[0];
+        }
+      } catch (err) {
+        // Safe fallback without disrupting summary
+      }
+    }
+
+    const latestPoint = sequence.length > 0 
+      ? sequence[sequence.length - 1] 
+      : latestNodeMetric 
+        ? {
+            time_bucket: new Date(latestNodeMetric.collected_at).toISOString(),
+            cpu: Number(latestNodeMetric.cpu_usage_percent || 0),
+            ram: Number(latestNodeMetric.ram_usage_percent || 0),
+            node_cpu_percent: Number(latestNodeMetric.cpu_usage_percent || 0),
+            node_ram_percent: Number(latestNodeMetric.ram_usage_percent || 0),
+            node_cpu_cores: Number(latestNodeMetric.cpu_cores || 1),
+            node_ram_gb: latestNodeMetric.ram_used_bytes ? Number(latestNodeMetric.ram_used_bytes) / (1024 * 1024 * 1024) : 0,
+            disk: Number(latestNodeMetric.disk_usage_percent || 0),
+            latency: 0,
+            request_rate: 0,
+            http_5xx_rate: 0,
+            pod_restart_count: 0,
+            replica_count: 1,
+          }
+        : null;
 
     return {
       service_id: serviceId,
+      cluster_id: clusterId,
       agents,
       sequence,
       latest_point: latestPoint,
+      latest_node_metric: latestNodeMetric,
       raw_metrics: rawMetrics,
       logs,
       events,
@@ -587,7 +632,7 @@ export class TelemetryAggregatorService {
         LEFT JOIN environments e ON e.id = c.environment_id
         WHERE am.collected_at > NOW() - ($1 || ' minutes')::INTERVAL
           AND ($2::text IS NULL OR am.cluster_id::text = $2)
-          AND ($3::uuid IS NULL OR e.organization_id = $3::uuid)
+          AND ($3::text IS NULL OR e.organization_id::text = $3::text)
         GROUP BY am.service_id
       )
       SELECT 
@@ -626,7 +671,7 @@ export class TelemetryAggregatorService {
       FROM services s
       LEFT JOIN clusters c ON c.id = s.cluster_id
       LEFT JOIN environments e ON e.id = c.environment_id
-      WHERE ($1::uuid IS NULL OR e.organization_id = $1::uuid)
+      WHERE ($1::text IS NULL OR e.organization_id::text = $1::text)
         AND ($2::text IS NULL OR c.id::text = $2 OR c.name = $2)
       ORDER BY s.name ASC
       LIMIT 20;`,

@@ -1,27 +1,91 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import {
+  createChart,
+  AreaSeries,
+  LineSeries,
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+} from 'lightweight-charts';
 import { 
   Activity, 
   Cpu, 
   HardDrive, 
-  AlertTriangle,
-  ZoomIn,
-  Sliders,
-  Radio,
-  RefreshCw
+  AlertTriangle, 
+  AlertCircle, 
+  ZoomIn, 
+  RefreshCw,
+  Maximize2
 } from 'lucide-react';
 
 /**
+ * Utility: Extract Unix timestamp in seconds (UTCTimestamp) from data point
+ */
+function extractTimestamp(item, index, totalItems) {
+  if (typeof item.timestamp === 'number' && Number.isFinite(item.timestamp)) {
+    return Math.floor(item.timestamp / 1000);
+  }
+  if (item.time_bucket) {
+    const parsed = new Date(item.time_bucket).getTime();
+    if (!isNaN(parsed)) return Math.floor(parsed / 1000);
+  }
+  if (item.time && typeof item.time === 'string') {
+    const parts = item.time.split(':');
+    if (parts.length >= 2) {
+      const now = new Date();
+      now.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), parseInt(parts[2] || '0', 10), 0);
+      return Math.floor(now.getTime() / 1000);
+    }
+  }
+  // Fallback: monotonic ascending timestamps in seconds
+  const baseTime = Math.floor(Date.now() / 1000) - (totalItems - index) * 5;
+  return baseTime;
+}
+
+/**
+ * Utility: Sanitize and sort points to ensure strictly increasing UTCTimestamps
+ */
+function sanitizeSeriesData(items, valueKey) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  
+  const mapped = items.map((item, idx) => ({
+    time: extractTimestamp(item, idx, items.length),
+    value: Number(item[valueKey]) || 0,
+    rawItem: item,
+  }));
+
+  mapped.sort((a, b) => a.time - b.time);
+
+  const deduped = [];
+  let lastTime = -1;
+  for (const pt of mapped) {
+    let t = pt.time;
+    if (t <= lastTime) {
+      t = lastTime + 1;
+    }
+    lastTime = t;
+    deduped.push({
+      time: t,
+      value: pt.value,
+      rawItem: pt.rawItem,
+    });
+  }
+
+  return deduped;
+}
+
+/**
  * InteractiveResourceChart
- * Production-ready, React 19 native interactive telemetry chart.
+ * Production-ready, React 19 native interactive telemetry chart powered by TradingView's lightweight-charts v5.2.1.
  * Features:
- * - Direct connection to live eBPF telemetry stream (WebSocket 3s + REST history)
+ * - High-DPI Canvas rendering with AreaSeries (CPU) and LineSeries (RAM)
  * - Auto-scale (Zoom) mode vs Standard (0-100%) mode toggle for micro-variation tracking
  * - Crosshair vertical tracking line with synchronized coordinate projection
- * - Detailed tooltip showing both percentages and real physical units (vCPU, MB/GB RSS, Disk, Latency)
- * - Series toggles (CPU / RAM)
- * - 80% Warning Threshold line with badge
+ * - Detailed floating tooltip showing both percentages and real physical units (vCPU, MB/GB RSS)
+ * - Series toggles (CPU / RAM) & Fit Content button
  * - Time range selector (15 phút, 1 giờ, 6 giờ, 24 giờ)
  * - Summary statistics (Min, Max, Trung bình)
+ * - MAPE-K Autonomous Loop monitoring card
  */
 export const InteractiveResourceChart = ({
   data: initialData,
@@ -30,19 +94,28 @@ export const InteractiveResourceChart = ({
   title = 'Biến thiên Tài nguyên Cụm máy chủ (CPU & RAM)',
   subtitle = 'Dữ liệu viễn trắc đo đạc từ các DaemonSet eBPF theo thời gian thực',
   className = '',
-  height = 270,
+  height = 280,
   timeRange = '15m',
   onTimeRangeChange,
   isLive = false,
+  isStale = false,
+  isClusterOnline = true,
   isLoading = false,
+  error = null,
+  onRetry,
 }) => {
   const [internalTimeRange, setInternalTimeRange] = useState(timeRange);
   const [showCpu, setShowCpu] = useState(true);
   const [showRam, setShowRam] = useState(true);
-  const [showThreshold, setShowThreshold] = useState(true);
+  const [showThreshold] = useState(true);
   const [scaleMode, setScaleMode] = useState('auto'); // 'auto' | 'standard'
-  const [hoverIndex, setHoverIndex] = useState(null);
-  const svgRef = useRef(null);
+  const [hoverData, setHoverData] = useState(null);
+
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  const cpuSeriesRef = useRef(null);
+  const ramSeriesRef = useRef(null);
+  const thresholdLineRef = useRef(null);
 
   const selectedRange = onTimeRangeChange ? timeRange : internalTimeRange;
 
@@ -65,7 +138,7 @@ export const InteractiveResourceChart = ({
   // Stats calculation
   const stats = useMemo(() => {
     if (telemetryData.length === 0) {
-      return { avgCpu: 0, maxCpu: 0, minCpu: 0, avgRam: 0, maxRam: 0, minRam: 0, avgRamMb: 0, maxRamMb: 0 };
+      return { hasData: false, avgCpu: 0, maxCpu: 0, minCpu: 0, avgRam: 0, maxRam: 0, minRam: 0, avgRamMb: 0, maxRamMb: 0 };
     }
     const cpus = telemetryData.map((d) => Number(d.cpu) || 0);
     const rams = telemetryData.map((d) => Number(d.ram) || 0);
@@ -82,92 +155,255 @@ export const InteractiveResourceChart = ({
     const avgRamMb = ramMbs.length > 0 ? Math.round((ramMbs.reduce((a, b) => a + b, 0) / ramMbs.length) * 10) / 10 : 0;
     const maxRamMb = ramMbs.length > 0 ? Math.round(Math.max(...ramMbs) * 10) / 10 : 0;
 
-    return { avgCpu, maxCpu, minCpu, avgRam, maxRam, minRam, avgRamMb, maxRamMb };
+    return { hasData: true, avgCpu, maxCpu, minCpu, avgRam, maxRam, minRam, avgRamMb, maxRamMb };
   }, [telemetryData]);
 
-  // Dynamic Y-axis scale calculation
-  const { yMax, yTicks } = useMemo(() => {
-    if (scaleMode === 'standard') {
-      return { yMax: 100, yTicks: [0, 25, 50, 75, 100] };
+  // Clean data series for lightweight-charts
+  const sanitizedCpuData = useMemo(() => sanitizeSeriesData(telemetryData, 'cpu'), [telemetryData]);
+  const sanitizedRamData = useMemo(() => sanitizeSeriesData(telemetryData, 'ram'), [telemetryData]);
+
+  // Value formatter for percent
+  const valueFormatter = useCallback((val) => {
+    if (!Number.isFinite(val)) return '0.00%';
+    return val < 1 && val > 0 ? `${val.toFixed(2)}%` : `${val.toFixed(1)}%`;
+  }, []);
+
+  // Time formatter for unix timestamp
+  const timeFormatter = useCallback((time) => {
+    if (typeof time === 'number') {
+      const d = new Date(time * 1000);
+      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    return String(time);
+  }, []);
+
+  // Reset / Fit Content
+  const handleFitContent = useCallback(() => {
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
+  }, []);
+
+  // Toggle Series Visibility
+  const toggleCpuSeries = useCallback(() => {
+    setShowCpu((prev) => {
+      const next = !prev;
+      if (cpuSeriesRef.current && typeof cpuSeriesRef.current.applyOptions === 'function') {
+        cpuSeriesRef.current.applyOptions({ visible: next });
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleRamSeries = useCallback(() => {
+    setShowRam((prev) => {
+      const next = !prev;
+      if (ramSeriesRef.current && typeof ramSeriesRef.current.applyOptions === 'function') {
+        ramSeriesRef.current.applyOptions({ visible: next });
+      }
+      return next;
+    });
+  }, []);
+
+  // Initialize and manage lightweight-charts instance
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || telemetryData.length === 0 || isLoading || error || !isClusterOnline) {
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+        cpuSeriesRef.current = null;
+        ramSeriesRef.current = null;
+      }
+      return undefined;
     }
 
-    // Auto-scale mode: adapt ceiling to highest observed metric
-    const peak = Math.max(stats.maxCpu, stats.maxRam, 0.1);
-    if (peak <= 0.5) {
-      return { yMax: 0.5, yTicks: [0, 0.1, 0.25, 0.5] };
-    }
-    if (peak <= 1.0) {
-      return { yMax: 1.0, yTicks: [0, 0.25, 0.5, 0.75, 1.0] };
-    }
-    if (peak <= 2.0) {
-      return { yMax: 2.0, yTicks: [0, 0.5, 1.0, 1.5, 2.0] };
-    }
-    if (peak <= 5.0) {
-      return { yMax: 5.0, yTicks: [0, 1.25, 2.5, 3.75, 5.0] };
-    }
-    if (peak <= 10.0) {
-      return { yMax: 10.0, yTicks: [0, 2.5, 5.0, 7.5, 10.0] };
-    }
-    if (peak <= 25.0) {
-      return { yMax: 25.0, yTicks: [0, 5, 10, 15, 20, 25] };
-    }
-    if (peak <= 50.0) {
-      return { yMax: 50.0, yTicks: [0, 10, 20, 30, 40, 50] };
-    }
-    return { yMax: 100, yTicks: [0, 25, 50, 75, 100] };
-  }, [scaleMode, stats.maxCpu, stats.maxRam]);
+    let chart = chartRef.current;
+    let resizeObserver = null;
 
-  // Chart Dimensions
-  const padding = { top: 25, right: 30, bottom: 35, left: 52 };
-  const width = 800; // SVG coordinate space
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
+    if (!chart) {
+      try {
+        const initialWidth = Math.max(300, container.clientWidth || 700);
+        chart = typeof createChart === 'function' ? createChart(container, {
+          width: initialWidth,
+          height,
+          layout: {
+            background: { type: ColorType.Solid, color: '#FFFFFF' },
+            textColor: '#475569',
+            fontFamily: 'monospace',
+            fontSize: 11,
+          },
+          grid: {
+            vertLines: { color: '#F1F5F9', style: LineStyle.Dotted },
+            horzLines: { color: '#F1F5F9', style: LineStyle.Dotted },
+          },
+          crosshair: {
+            mode: CrosshairMode.Normal,
+          },
+          rightPriceScale: {
+            borderColor: '#E2E8F0',
+            scaleMargins: { top: 0.15, bottom: 0.08 },
+          },
+          timeScale: {
+            borderColor: '#E2E8F0',
+            timeVisible: true,
+            secondsVisible: true,
+            tickMarkFormatter: timeFormatter,
+          },
+          localization: {
+            priceFormatter: valueFormatter,
+            timeFormatter: timeFormatter,
+          },
+        }) : null;
+      } catch (err) {
+        console.warn('[InteractiveResourceChart] createChart warning:', err);
+        chart = null;
+      }
 
-  // Coordinate mapping
-  const getX = (index) => {
-    if (telemetryData.length <= 1) return padding.left;
-    return padding.left + (index / (telemetryData.length - 1)) * chartWidth;
-  };
-  const getY = (val) => {
-    const clamped = Math.min(yMax, Math.max(0, Number(val) || 0));
-    return padding.top + chartHeight - (clamped / yMax) * chartHeight;
-  };
+      if (!chart || typeof chart.addSeries !== 'function') {
+        return undefined;
+      }
 
-  // Generate SVG path strings
-  const cpuPoints = telemetryData.map((d, i) => `${getX(i)},${getY(d.cpu)}`).join(' ');
-  const ramPoints = telemetryData.map((d, i) => `${getX(i)},${getY(d.ram)}`).join(' ');
+      // 1. CPU Series: Emerald Area
+      const cpuSeries = chart.addSeries(AreaSeries, {
+        lineColor: '#059669',
+        topColor: 'rgba(5, 150, 105, 0.22)',
+        bottomColor: 'rgba(5, 150, 105, 0.01)',
+        lineWidth: 2,
+        priceFormat: {
+          type: 'custom',
+          minMove: 0.01,
+          formatter: valueFormatter,
+        },
+        autoscaleInfoProvider: scaleMode === 'standard'
+          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+          : undefined,
+      });
 
-  const cpuArea = telemetryData.length > 0
-    ? `${getX(0)},${getY(0)} ${cpuPoints} ${getX(telemetryData.length - 1)},${getY(0)}`
-    : '';
-  const ramArea = telemetryData.length > 0
-    ? `${getX(0)},${getY(0)} ${ramPoints} ${getX(telemetryData.length - 1)},${getY(0)}`
-    : '';
+      // 2. RAM Series: Blue Line
+      const ramSeries = chart.addSeries(LineSeries, {
+        color: '#2563EB',
+        lineWidth: 2,
+        priceFormat: {
+          type: 'custom',
+          minMove: 0.01,
+          formatter: valueFormatter,
+        },
+        autoscaleInfoProvider: scaleMode === 'standard'
+          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+          : undefined,
+      });
 
-  // Handle Mouse Move for Crosshair
-  const handleMouseMove = (e) => {
-    if (!svgRef.current || telemetryData.length === 0) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const relativeX = (mouseX / rect.width) * width;
-    
-    if (relativeX < padding.left || relativeX > width - padding.right) {
-      setHoverIndex(null);
-      return;
+      cpuSeriesRef.current = cpuSeries;
+      ramSeriesRef.current = ramSeries;
+      chartRef.current = chart;
+
+      // 80% Warning threshold line
+      if (showThreshold && scaleMode === 'standard' && typeof cpuSeries.createPriceLine === 'function') {
+        thresholdLineRef.current = cpuSeries.createPriceLine({
+          price: 80,
+          color: '#E11D48',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'NGƯỠNG 80%',
+        });
+      }
+
+      // Crosshair tracking for floating tooltip
+      if (typeof chart.subscribeCrosshairMove === 'function') {
+        chart.subscribeCrosshairMove((param) => {
+          if (!param || param.time === undefined || !param.point) {
+            setHoverData(null);
+            return;
+          }
+          const time = Number(param.time);
+          const cpuPt = param.seriesData ? param.seriesData.get(cpuSeries) : null;
+          const ramPt = param.seriesData ? param.seriesData.get(ramSeries) : null;
+          const cpuVal = cpuPt?.value !== undefined ? cpuPt.value : null;
+          const ramVal = ramPt?.value !== undefined ? ramPt.value : null;
+
+          setHoverData({
+            time,
+            x: param.point.x,
+            y: param.point.y,
+            cpu: cpuVal,
+            ram: ramVal,
+          });
+        });
+      }
+
+      // ResizeObserver
+      if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver((entries) => {
+          if (!entries || !entries[0] || !chartRef.current) return;
+          const width = entries[0].contentRect.width;
+          if (width > 0) {
+            chartRef.current.applyOptions({ width });
+          }
+        });
+        resizeObserver.observe(container);
+      }
     }
 
-    const ratio = (relativeX - padding.left) / chartWidth;
-    const idx = Math.round(ratio * (telemetryData.length - 1));
-    setHoverIndex(Math.max(0, Math.min(telemetryData.length - 1, idx)));
-  };
+    // Update Series data
+    if (cpuSeriesRef.current && typeof cpuSeriesRef.current.setData === 'function') {
+      cpuSeriesRef.current.setData(sanitizedCpuData);
+      cpuSeriesRef.current.applyOptions({
+        visible: showCpu,
+        autoscaleInfoProvider: scaleMode === 'standard'
+          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+          : undefined,
+      });
+    }
 
-  const handleMouseLeave = () => {
-    setHoverIndex(null);
-  };
+    if (ramSeriesRef.current && typeof ramSeriesRef.current.setData === 'function') {
+      ramSeriesRef.current.setData(sanitizedRamData);
+      ramSeriesRef.current.applyOptions({
+        visible: showRam,
+        autoscaleInfoProvider: scaleMode === 'standard'
+          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+          : undefined,
+      });
+    }
 
-  const activePoint = hoverIndex !== null 
-    ? telemetryData[hoverIndex] 
-    : telemetryData[telemetryData.length - 1] || null;
+    if (chart && typeof chart.timeScale === 'function') {
+      const ts = chart.timeScale();
+      if (typeof ts.fitContent === 'function') {
+        ts.fitContent();
+      }
+    }
+
+    return () => {
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }, [
+    sanitizedCpuData,
+    sanitizedRamData,
+    telemetryData.length,
+    isLoading,
+    error,
+    isClusterOnline,
+    scaleMode,
+    showCpu,
+    showRam,
+    showThreshold,
+    height,
+    timeFormatter,
+    valueFormatter,
+  ]);
+
+  // Cleanup chart on component unmount
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+        cpuSeriesRef.current = null;
+        ramSeriesRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -180,6 +416,7 @@ export const InteractiveResourceChart = ({
         position: 'relative',
         boxShadow: 'var(--dash-shadow-sm, 0 1px 3px rgba(0,0,0,0.05))',
       }}
+      data-testid="interactive-resource-chart"
     >
       {/* 1. Header bar with filters and controls */}
       <div
@@ -209,8 +446,49 @@ export const InteractiveResourceChart = ({
               {title}
             </h3>
 
-            {/* Live Telemetry Indicator */}
-            {isLive ? (
+            {/* Live / Stale / Offline Telemetry Indicator */}
+            {!isClusterOnline ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor: '#F1F5F9',
+                  color: '#64748B',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                }}
+              >
+                ● Ngoại tuyến
+              </span>
+            ) : isStale ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                  color: '#D97706',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono, monospace)',
+                }}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#D97706',
+                  }}
+                />
+                DỮ LIỆU CŨ (Stale)
+              </span>
+            ) : isLive ? (
               <span
                 style={{
                   display: 'inline-flex',
@@ -231,50 +509,32 @@ export const InteractiveResourceChart = ({
                     height: '6px',
                     borderRadius: '50%',
                     backgroundColor: '#059669',
-                    boxShadow: '0 0 6px #059669',
                   }}
                 />
-                TRỰC TIẾP (eBPF 3s)
+                TRỰC TIẾP (eBPF 5s)
               </span>
-            ) : (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  backgroundColor: '#F1F5F9',
-                  color: '#64748B',
-                  fontSize: '0.6875rem',
-                  fontWeight: 600,
-                }}
-              >
-                ● Ngoại tuyến
-              </span>
-            )}
+            ) : null}
           </div>
           <p
             style={{
-              fontFamily: 'var(--font-body, inherit)',
-              fontSize: '0.75rem',
-              color: 'var(--dash-text-secondary, #64748B)',
-              margin: '3px 0 0 0',
+              fontSize: '0.8125rem',
+              color: 'var(--dash-text-muted, #64748B)',
+              margin: '4px 0 0 0',
             }}
           >
             {subtitle}
           </p>
         </div>
 
-        {/* Controls: Range selector, series switches, and scale mode */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+        {/* Action Controls: Time Range Selector, Zoom Mode, Toggles */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
           {/* Time range selector */}
           <div
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               backgroundColor: '#F1F5F9',
-              padding: '2px',
               borderRadius: '6px',
+              padding: '2px',
               border: '1px solid #E2E8F0',
             }}
           >
@@ -283,131 +543,123 @@ export const InteractiveResourceChart = ({
               { id: '1h', label: '1 giờ' },
               { id: '6h', label: '6 giờ' },
               { id: '24h', label: '24 giờ' },
-            ].map((t) => (
+            ].map((r) => (
               <button
-                key={t.id}
+                key={r.id}
                 type="button"
-                onClick={() => handleRangeClick(t.id)}
-                disabled={isLoading}
+                onClick={() => handleRangeClick(r.id)}
                 style={{
                   padding: '4px 10px',
-                  fontFamily: 'var(--font-mono, monospace)',
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  backgroundColor: selectedRange === t.id ? '#FFFFFF' : 'transparent',
-                  color: selectedRange === t.id ? '#0F172A' : '#64748B',
+                  fontSize: '0.75rem',
+                  fontWeight: selectedRange === r.id ? 700 : 500,
+                  color: selectedRange === r.id ? '#0F172A' : '#64748B',
+                  backgroundColor: selectedRange === r.id ? '#FFFFFF' : 'transparent',
                   border: 'none',
                   borderRadius: '4px',
-                  boxShadow: selectedRange === t.id ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   cursor: 'pointer',
+                  boxShadow: selectedRange === r.id ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
-                {t.label}
+                {r.label}
               </button>
             ))}
           </div>
 
-          {/* Scale Mode Toggle (Auto-Scale vs 0-100%) */}
+          {/* Auto-scale vs Standard 0-100% Mode Toggle */}
           <button
             type="button"
-            onClick={() => setScaleMode(scaleMode === 'auto' ? 'standard' : 'auto')}
-            title={scaleMode === 'auto' ? 'Đang phóng to dao động (Auto-Scale). Bấm để chuyển về thang đo chuẩn 0-100%' : 'Đang xem thang đo 0-100%. Bấm để tự động phóng to dao động'}
+            onClick={() => setScaleMode((m) => (m === 'auto' ? 'standard' : 'auto'))}
+            title={scaleMode === 'auto' ? 'Đang phóng to dao động (Auto-scale). Bấm để xem chuẩn 0-100%' : 'Đang ở chuẩn 0-100%. Bấm để phóng to dao động'}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '5px',
-              padding: '4px 9px',
-              backgroundColor: scaleMode === 'auto' ? 'rgba(99, 102, 241, 0.08)' : '#F8FAFC',
-              border: scaleMode === 'auto' ? '1px solid #818CF8' : '1px solid #E2E8F0',
-              color: scaleMode === 'auto' ? '#4F46E5' : '#64748B',
+              gap: '4px',
+              padding: '4px 8px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
               borderRadius: '6px',
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
+              border: scaleMode === 'auto' ? '1px solid #93C5FD' : '1px solid #E2E8F0',
+              backgroundColor: scaleMode === 'auto' ? '#EFF6FF' : '#FFFFFF',
+              color: scaleMode === 'auto' ? '#1D4ED8' : '#64748B',
               cursor: 'pointer',
             }}
           >
             <ZoomIn size={12} />
-            <span>{scaleMode === 'auto' ? `Phóng to dao động (${yMax}%)` : 'Thang đo 0-100%'}</span>
+            {scaleMode === 'auto' ? 'Phóng to dao động (Auto)' : 'Chuẩn (0-100%)'}
           </button>
 
-          {/* Series Toggle Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <button
-              type="button"
-              onClick={() => setShowCpu(!showCpu)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '4px 9px',
-                backgroundColor: showCpu ? 'rgba(5, 150, 105, 0.1)' : 'transparent',
-                border: showCpu ? '1px solid #059669' : '1px solid #CBD5E1',
-                color: showCpu ? '#059669' : '#64748B',
-                borderRadius: '6px',
-                fontFamily: 'var(--font-mono, monospace)',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#059669' }} />
-              <span>CPU (%)</span>
-            </button>
+          {/* Reset Fit Content */}
+          <button
+            type="button"
+            onClick={handleFitContent}
+            title="Khôi phục góc nhìn vừa khít dữ liệu"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid #E2E8F0',
+              backgroundColor: '#FFFFFF',
+              color: '#64748B',
+              cursor: 'pointer',
+            }}
+          >
+            <Maximize2 size={12} />
+            Vừa khít
+          </button>
 
-            <button
-              type="button"
-              onClick={() => setShowRam(!showRam)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '4px 9px',
-                backgroundColor: showRam ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
-                border: showRam ? '1px solid #2563EB' : '1px solid #CBD5E1',
-                color: showRam ? '#2563EB' : '#64748B',
-                borderRadius: '6px',
-                fontFamily: 'var(--font-mono, monospace)',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
-              <span>RAM</span>
-            </button>
+          {/* Series Toggle: CPU */}
+          <button
+            type="button"
+            onClick={toggleCpuSeries}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '4px 8px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: showCpu ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+              backgroundColor: showCpu ? 'rgba(5, 150, 105, 0.08)' : '#F8FAFC',
+              color: showCpu ? '#047857' : '#94A3B8',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: showCpu ? '#059669' : '#CBD5E1' }} />
+            CPU (%)
+          </button>
 
-            {yMax >= 80 && (
-              <button
-                type="button"
-                onClick={() => setShowThreshold(!showThreshold)}
-                title="Ngưỡng cảnh báo 80%"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px',
-                  backgroundColor: showThreshold ? '#FFF1F2' : 'transparent',
-                  border: showThreshold ? '1px solid #FDA4AF' : '1px solid #CBD5E1',
-                  color: showThreshold ? '#E11D48' : '#64748B',
-                  borderRadius: '6px',
-                  fontFamily: 'var(--font-mono, monospace)',
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <AlertTriangle size={12} />
-                <span>Ngưỡng 80%</span>
-              </button>
-            )}
-          </div>
+          {/* Series Toggle: RAM */}
+          <button
+            type="button"
+            onClick={toggleRamSeries}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '4px 8px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: showRam ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
+              backgroundColor: showRam ? 'rgba(37, 99, 235, 0.08)' : '#F8FAFC',
+              color: showRam ? '#1D4ED8' : '#94A3B8',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: showRam ? '#2563EB' : '#CBD5E1' }} />
+            RAM
+          </button>
         </div>
       </div>
 
-      {/* 2. SVG Chart Area */}
-      {telemetryData.length === 0 ? (
+      {/* 2. Chart Body with States */}
+      {isLoading ? (
         <div
           style={{
             height: `${height}px`,
@@ -417,223 +669,176 @@ export const InteractiveResourceChart = ({
             justifyContent: 'center',
             backgroundColor: '#F8FAFC',
             borderRadius: '6px',
-            gap: '12px',
+            gap: '10px',
           }}
         >
-          <RefreshCw size={24} className="animate-spin" color="#059669" />
-          <span style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>
-            {isLoading ? 'Đang tải dữ liệu chuỗi thời gian...' : 'Đang đồng bộ chuỗi viễn trắc eBPF từ cụm...'}
+          <RefreshCw className="animate-spin" size={24} color="#059669" />
+          <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>
+            Đang tải dữ liệu chuỗi thời gian...
           </span>
+        </div>
+      ) : error ? (
+        <div
+          style={{
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#FEF2F2',
+            border: '1px dashed #FCA5A5',
+            borderRadius: '6px',
+            padding: '20px',
+            gap: '10px',
+          }}
+        >
+          <AlertCircle size={28} color="#DC2626" />
+          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>
+            Lỗi tải dữ liệu viễn trắc
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#B91C1C', textAlign: 'center', maxWidth: '420px' }}>
+            {error}
+          </span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                marginTop: '4px',
+                padding: '6px 14px',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                borderRadius: '6px',
+                border: 'none',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <RefreshCw size={13} />
+              Thử lại
+            </button>
+          )}
+        </div>
+      ) : !isClusterOnline ? (
+        <div
+          style={{
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#F8FAFC',
+            border: '1px dashed #CBD5E1',
+            borderRadius: '6px',
+            padding: '20px',
+            gap: '10px',
+          }}
+        >
+          <AlertTriangle size={28} color="#D97706" />
+          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+            Cụm Kubernetes đang ngoại tuyến hoặc chưa kết nối Agent.
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+            Vui lòng cài đặt hoặc kích hoạt selfheal-agent để truyền chuỗi viễn trắc eBPF.
+          </span>
+        </div>
+      ) : telemetryData.length === 0 ? (
+        <div
+          style={{
+            height: `${height}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#F8FAFC',
+            border: '1px dashed #E2E8F0',
+            borderRadius: '6px',
+            padding: '20px',
+            gap: '10px',
+          }}
+        >
+          <Activity size={28} color="#94A3B8" />
+          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+            Chưa có dữ liệu viễn trắc đo đạc
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#64748B', textAlign: 'center', maxWidth: '420px' }}>
+            Không tìm thấy dữ liệu metrics CPU/RAM từ các tác tử eBPF trong khoảng thời gian này.
+          </span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{
+                marginTop: '4px',
+                padding: '6px 14px',
+                backgroundColor: '#F1F5F9',
+                color: '#334155',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <RefreshCw size={13} />
+              Thử lại
+            </button>
+          )}
         </div>
       ) : (
         <div 
-          style={{ width: '100%', position: 'relative', cursor: 'crosshair', userSelect: 'none' }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
+          style={{ width: '100%', position: 'relative', minHeight: `${height}px` }}
+          data-testid="interactive-resource-chart-canvas-container"
         >
-          <svg
-            ref={svgRef}
-            viewBox={`0 0 ${width} ${height}`}
-            style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
-          >
-            <defs>
-              <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#059669" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#059669" stopOpacity="0.0" />
-              </linearGradient>
-              <linearGradient id="ramGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#2563EB" stopOpacity="0.20" />
-                <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
+          {/* Lightweight Charts Canvas Host */}
+          <div ref={containerRef} style={{ width: '100%', height: `${height}px` }} />
 
-            {/* Grid lines according to dynamic yTicks */}
-            {yTicks.map((val) => {
-              const y = getY(val);
-              return (
-                <g key={val}>
-                  <line
-                    x1={padding.left}
-                    y1={y}
-                    x2={width - padding.right}
-                    y2={y}
-                    stroke={val === 0 ? '#CBD5E1' : '#F1F5F9'}
-                    strokeWidth="1"
-                    strokeDasharray={val === 0 ? 'none' : '3 3'}
-                  />
-                  <text
-                    x={padding.left - 8}
-                    y={y + 3}
-                    textAnchor="end"
-                    fontFamily="monospace"
-                    fontSize="10"
-                    fill="#64748B"
-                  >
-                    {val < 1 && val > 0 ? val.toFixed(2) : val}%
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* 80% Threshold Reference Line if within view */}
-            {showThreshold && yMax >= 80 && (
-              <g>
-                <line
-                  x1={padding.left}
-                  y1={getY(80)}
-                  x2={width - padding.right}
-                  y2={getY(80)}
-                  stroke="#E11D48"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                  strokeOpacity="0.8"
-                />
-                <rect
-                  x={width - padding.right - 120}
-                  y={getY(80) - 10}
-                  width="120"
-                  height="20"
-                  fill="#FFF1F2"
-                  stroke="#FDA4AF"
-                  strokeWidth="1"
-                  rx="3"
-                />
-                <text
-                  x={width - padding.right - 60}
-                  y={getY(80) + 4}
-                  textAnchor="middle"
-                  fontFamily="monospace"
-                  fontSize="9"
-                  fontWeight="700"
-                  fill="#E11D48"
-                >
-                  NGƯỠNG CẢNH BÁO 80%
-                </text>
-              </g>
-            )}
-
-            {/* RAM Series Area & Line */}
-            {showRam && (
-              <>
-                <polygon points={ramArea} fill="url(#ramGradient)" />
-                <polyline
-                  fill="none"
-                  stroke="#2563EB"
-                  strokeWidth="2.2"
-                  points={ramPoints}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </>
-            )}
-
-            {/* CPU Series Area & Line */}
-            {showCpu && (
-              <>
-                <polygon points={cpuArea} fill="url(#cpuGradient)" />
-                <polyline
-                  fill="none"
-                  stroke="#059669"
-                  strokeWidth="2.2"
-                  points={cpuPoints}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </>
-            )}
-
-            {/* X Axis Time Labels */}
-            {telemetryData.map((d, i) => {
-              // Show approximately 4 to 6 evenly-spaced labels
-              const step = Math.max(1, Math.floor(telemetryData.length / 5));
-              if (i % step !== 0 && i !== telemetryData.length - 1) return null;
-              return (
-                <text
-                  key={i}
-                  x={getX(i)}
-                  y={height - 10}
-                  textAnchor="middle"
-                  fontFamily="monospace"
-                  fontSize="10"
-                  fill="#64748B"
-                >
-                  {d.time}
-                </text>
-              );
-            })}
-
-            {/* Crosshair indicator when hovering */}
-            {hoverIndex !== null && activePoint && (
-              <g>
-                <line
-                  x1={getX(hoverIndex)}
-                  y1={padding.top}
-                  x2={getX(hoverIndex)}
-                  y2={height - padding.bottom}
-                  stroke="#0F172A"
-                  strokeWidth="1.5"
-                  strokeDasharray="2 2"
-                />
-                {showCpu && (
-                  <circle
-                    cx={getX(hoverIndex)}
-                    cy={getY(activePoint.cpu)}
-                    r="4.5"
-                    fill="#FFFFFF"
-                    stroke="#059669"
-                    strokeWidth="2.5"
-                  />
-                )}
-                {showRam && (
-                  <circle
-                    cx={getX(hoverIndex)}
-                    cy={getY(activePoint.ram)}
-                    r="4.5"
-                    fill="#FFFFFF"
-                    stroke="#2563EB"
-                    strokeWidth="2.5"
-                  />
-                )}
-              </g>
-            )}
-          </svg>
-
-          {/* Floating Tooltip Box */}
-          {hoverIndex !== null && activePoint && (
+          {/* Interactive Floating Crosshair Tooltip */}
+          {hoverData && (
             <div
               style={{
                 position: 'absolute',
                 top: '12px',
-                left: `${Math.min(Math.max((getX(hoverIndex) / width) * 100, 18), 72)}%`,
-                transform: 'translateX(-50%)',
-                backgroundColor: '#0F172A',
+                left: Math.min(Math.max(16, hoverData.x - 110), (containerRef.current?.clientWidth || 600) - 230),
+                backgroundColor: 'rgba(15, 23, 42, 0.94)',
                 color: '#FFFFFF',
-                padding: '10px 14px',
                 borderRadius: '6px',
-                boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
+                padding: '8px 12px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
                 pointerEvents: 'none',
+                minWidth: '210px',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
                 zIndex: 20,
-                minWidth: '220px',
-                border: '1px solid rgba(255,255,255,0.15)',
+                backdropFilter: 'blur(4px)',
               }}
             >
               <div
                 style={{
-                  fontFamily: 'var(--font-mono, monospace)',
-                  fontSize: '0.6875rem',
-                  color: '#94A3B8',
-                  marginBottom: '6px',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)',
-                  paddingBottom: '4px',
                   display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'space-between',
+                  borderBottom: '1px solid rgba(255,255,255,0.15)',
+                  paddingBottom: '4px',
+                  marginBottom: '6px',
+                  fontSize: '0.75rem',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  color: '#94A3B8',
                 }}
               >
-                <span>THỜI ĐIỂM:</span>
-                <strong style={{ color: '#F8FAFC' }}>{activePoint.fullTime || activePoint.time}</strong>
+                <span>Thời gian:</span>
+                <span style={{ color: '#F8FAFC', fontWeight: 700 }}>
+                  {timeFormatter(hoverData.time)}
+                </span>
               </div>
 
-              {showCpu && (
+              {hoverData.cpu !== null && showCpu && (
                 <div
                   style={{
                     display: 'flex',
@@ -646,18 +851,18 @@ export const InteractiveResourceChart = ({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#34D399' }}>
                     <Cpu size={13} />
-                    <span>CPU Tải:</span>
+                    <span>CPU:</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontWeight: 800, color: '#FFFFFF' }}>{activePoint.cpu}%</span>
+                    <span style={{ fontWeight: 800, color: '#FFFFFF' }}>{hoverData.cpu.toFixed(2)}%</span>
                     <span style={{ fontSize: '0.6875rem', color: '#94A3B8', marginLeft: '4px' }}>
-                      ({((activePoint.cpu / 100) * totalCpuCores).toFixed(2)}/{totalCpuCores} vCPU)
+                      ({((hoverData.cpu / 100) * totalCpuCores).toFixed(2)}/{totalCpuCores} vCPU)
                     </span>
                   </div>
                 </div>
               )}
 
-              {showRam && (
+              {hoverData.ram !== null && showRam && (
                 <div
                   style={{
                     display: 'flex',
@@ -670,33 +875,16 @@ export const InteractiveResourceChart = ({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#60A5FA' }}>
                     <HardDrive size={13} />
-                    <span>RAM Dùng:</span>
+                    <span>RAM:</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontWeight: 800, color: '#FFFFFF' }}>
-                      {activePoint.rawRamMb ? `${activePoint.rawRamMb.toFixed(1)} MB` : `${activePoint.ram}%`}
+                      {hoverData.ram.toFixed(2)}%
                     </span>
                     <span style={{ fontSize: '0.6875rem', color: '#94A3B8', marginLeft: '4px' }}>
-                      ({activePoint.ram.toFixed(1)}% / {totalMemoryGb} GB RSS)
+                      ({((hoverData.ram / 100) * totalMemoryGb).toFixed(2)} GB RSS)
                     </span>
                   </div>
-                </div>
-              )}
-
-              {activePoint.disk !== undefined && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontFamily: 'var(--font-mono, monospace)',
-                    fontSize: '0.6875rem',
-                    color: '#CBD5E1',
-                    marginBottom: '4px',
-                  }}
-                >
-                  <span>Ổ đĩa (PV):</span>
-                  <span>{activePoint.disk}%</span>
                 </div>
               )}
 
@@ -710,12 +898,12 @@ export const InteractiveResourceChart = ({
                   fontSize: '0.625rem',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  color: activePoint.cpu >= 80 || activePoint.ram >= 80 ? '#F87171' : '#34D399',
+                  color: (hoverData.cpu || 0) >= 80 || (hoverData.ram || 0) >= 80 ? '#F87171' : '#34D399',
                 }}
               >
                 <span>TRẠNG THÁI:</span>
                 <span>
-                  {activePoint.cpu >= 80 || activePoint.ram >= 80
+                  {(hoverData.cpu || 0) >= 80 || (hoverData.ram || 0) >= 80
                     ? '🔴 VƯỢT NGƯỠNG AN TOÀN'
                     : '🟢 HOẠT ĐỘNG TỐI ƯU'}
                 </span>
@@ -741,10 +929,20 @@ export const InteractiveResourceChart = ({
             CPU TRUNG BÌNH / ĐỈNH
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#064E3B' }}>
-            {stats.avgCpu}% <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#047857' }}>/ Đỉnh {stats.maxCpu}%</span>
+            {stats.hasData ? (
+              <>
+                {stats.avgCpu}% <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#047857' }}>/ Đỉnh {stats.maxCpu}%</span>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#059669' }}>
-            Quy đổi: {((stats.avgCpu / 100) * totalCpuCores).toFixed(2)} / {totalCpuCores} vCPUs
+            {stats.hasData ? (
+              `Quy đổi: ${((stats.avgCpu / 100) * totalCpuCores).toFixed(2)} / ${totalCpuCores} vCPUs`
+            ) : (
+              `Quy đổi: — / ${totalCpuCores} vCPUs`
+            )}
           </div>
         </div>
 
@@ -753,13 +951,23 @@ export const InteractiveResourceChart = ({
             RAM TRUNG BÌNH / ĐỈNH
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#1E3A8A' }}>
-            {stats.avgRamMb > 0 ? `${stats.avgRamMb} MB` : `${stats.avgRam}%`}{' '}
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#2563EB' }}>
-              / Đỉnh {stats.maxRamMb > 0 ? `${stats.maxRamMb} MB` : `${stats.maxRam}%`}
-            </span>
+            {stats.hasData ? (
+              <>
+                {stats.avgRamMb > 0 ? `${stats.avgRamMb} MB` : `${stats.avgRam}%`}{' '}
+                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#2563EB' }}>
+                  / Đỉnh {stats.maxRamMb > 0 ? `${stats.maxRamMb} MB` : `${stats.maxRam}%`}
+                </span>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#3B82F6' }}>
-            Quy đổi: {stats.avgRam}% / {totalMemoryGb} GB RSS
+            {stats.hasData ? (
+              `Quy đổi: ${stats.avgRam}% / ${totalMemoryGb} GB RSS`
+            ) : (
+              `Quy đổi: — / ${totalMemoryGb} GB RSS`
+            )}
           </div>
         </div>
 
@@ -771,7 +979,9 @@ export const InteractiveResourceChart = ({
             Vòng lặp MAPE-K
           </div>
           <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#059669' }}>
-            {stats.maxCpu > 80 ? '⚠️ Tự động kích hoạt Scale Replicas' : 'Mô hình GRU + Multi-Agent RCA: Giám sát'}
+            {stats.hasData && stats.maxCpu > 80
+              ? '⚠️ Tự động kích hoạt Scale Replicas'
+              : 'Mô hình GRU + Multi-Agent RCA: Giám sát'}
           </div>
         </div>
       </div>

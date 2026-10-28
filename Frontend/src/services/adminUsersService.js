@@ -117,6 +117,39 @@ export const adminUsersService = {
     });
     return response?.data;
   },
+
+  /**
+   * Gán vai trò hệ thống hoặc tổ chức cho người dùng
+   * @param {string} userId
+   * @param {string} role
+   * @param {string} [reason]
+   * @returns {Promise<any>}
+   */
+  async assignRole(userId, role, reason) {
+    if (!userId) throw new Error('Yêu cầu ID người dùng');
+    if (!role) throw new Error('Yêu cầu tên vai trò cần cấp');
+    const response = await request('/roles/assign', {
+      method: 'POST',
+      body: JSON.stringify({ userId, role, reason }),
+    });
+    return response?.data;
+  },
+
+  /**
+   * Thu hồi vai trò hệ thống của người dùng
+   * @param {string} userId
+   * @param {string} role
+   * @returns {Promise<any>}
+   */
+  async revokeRole(userId, role) {
+    if (!userId) throw new Error('Yêu cầu ID người dùng');
+    if (!role) throw new Error('Yêu cầu tên vai trò cần thu hồi');
+    const response = await request('/roles/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ userId, role }),
+    });
+    return response?.data;
+  },
 };
 
 export default adminUsersService;

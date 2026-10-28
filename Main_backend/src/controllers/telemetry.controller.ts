@@ -41,7 +41,7 @@ export class TelemetryController {
         );
       }
 
-      const { bucket_seconds, limit, fill_padding, from, to, start_time, end_time, cluster_id } = parsedQuery.data;
+      const { bucket_seconds, limit, fill_padding, from, to, start_time, end_time, cluster_id, organization_id } = parsedQuery.data;
 
       const rawFrom = from || start_time;
       const rawTo = to || end_time;
@@ -57,6 +57,13 @@ export class TelemetryController {
         if (!isNaN(d.getTime())) endTime = d;
       }
 
+      const headerOrgId = (req.headers['x-organization-id'] as string) || undefined;
+      const queryOrgId = organization_id || undefined;
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+      const orgId = headerOrgId || queryOrgId || (!isGlobalAdmin ? ((req as any).orgMember?.organizationId || user?.organizationId || user?.organization_id) : undefined);
+
       const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
         bucketSeconds: bucket_seconds,
         limit,
@@ -64,6 +71,7 @@ export class TelemetryController {
         startTime,
         endTime,
         clusterId: cluster_id,
+        organizationId: orgId,
       });
 
       return ApiResponse.success(
@@ -168,8 +176,8 @@ export class TelemetryController {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string) {
-    return TelemetryAggregatorService.getLiveSummaryData(serviceId, clusterId);
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
+    return TelemetryAggregatorService.getLiveSummaryData(serviceId, clusterId, organizationId);
   }
 
   public static async getLiveSummary(
@@ -180,10 +188,15 @@ export class TelemetryController {
     try {
       const serviceId = (req.query.service_id as string) || 'sme-order-service';
       const clusterId = (req.query.cluster_id as string) || undefined;
-      const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId);
-
+      const headerOrgId = (req.headers['x-organization-id'] as string) || undefined;
+      const queryOrgId = (req.query.organization_id as string) || undefined;
       const user = (req as any).user;
       const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
+      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+      const orgId = headerOrgId || queryOrgId || (!isGlobalAdmin ? ((req as any).orgMember?.organizationId || user?.organizationId || user?.organization_id) : undefined);
+
+      const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId, orgId);
+
       const expanded = expandRoles(userRoles);
       const isPrivileged = expanded.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'DEVOPS'].includes(r));
 
@@ -244,12 +257,12 @@ export class TelemetryController {
     try {
       const windowMinutes = Math.min(1440, Math.max(5, Number(req.query.window_minutes) || 60));
       const clusterId = (req.query.cluster_id as string) || undefined;
+      const headerOrgId = (req.headers['x-organization-id'] as string) || undefined;
+      const queryOrgId = (req.query.organization_id as string) || undefined;
       const user = (req as any).user;
       const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
       const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-      const orgId = isGlobalAdmin
-        ? (req.query.organization_id as string) || undefined
-        : user?.organizationId || user?.organization_id || (req.query.organization_id as string) || undefined;
+      const orgId = headerOrgId || queryOrgId || (!isGlobalAdmin ? ((req as any).orgMember?.organizationId || user?.organizationId || user?.organization_id) : undefined);
 
       const services = await TelemetryAggregatorService.getApmServicesSummary(windowMinutes, {
         clusterId,

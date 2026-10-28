@@ -624,34 +624,39 @@ export class MetricModel {
       startTime?: Date | null;
       endTime?: Date | null;
       clusterId?: string | null;
+      organizationId?: string | null;
     }
   ): Promise<GRUMetricPoint[]> {
     const startTime = options?.startTime || null;
     const endTime = options?.endTime || null;
     const clusterId = options?.clusterId || null;
+    const organizationId = options?.organizationId || null;
 
     const query = `
       SELECT 
-        to_timestamp(floor(extract(epoch from collected_at) / $2) * $2) as time_bucket,
-        ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
-        ROUND((CASE WHEN COALESCE(MAX(ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(ram), 0) END)::numeric, 2)::float as ram,
-        ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
-        ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
-        ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
-        ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
-        COALESCE(MAX(pod_restart_count), 0)::int as pod_restart_count,
-        GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
-      FROM agent_metrics
-      WHERE service_id::text = $1
-        AND ($4::timestamptz IS NULL OR collected_at >= $4)
-        AND ($5::timestamptz IS NULL OR collected_at <= $5)
-        AND ($6::text IS NULL OR cluster_id::text = $6)
+        to_timestamp(floor(extract(epoch from am.collected_at) / $2) * $2) as time_bucket,
+        ROUND(COALESCE(MAX(am.cpu), 0)::numeric, 2)::float as cpu,
+        ROUND((CASE WHEN COALESCE(MAX(am.ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(am.ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(am.ram), 0) END)::numeric, 2)::float as ram,
+        ROUND(COALESCE(MAX(am.disk), 0)::numeric, 2)::float as disk,
+        ROUND(COALESCE(SUM(am.request_rate), 0)::numeric, 2)::float as request_rate,
+        ROUND(COALESCE(MAX(am.latency), 0)::numeric, 2)::float as latency,
+        ROUND(COALESCE(AVG(am.http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
+        COALESCE(MAX(am.pod_restart_count), 0)::int as pod_restart_count,
+        GREATEST(COALESCE(MAX(am.replica_count), 1), COUNT(DISTINCT am.pod_id))::int as replica_count
+      FROM agent_metrics am
+      LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id::text
+      LEFT JOIN environments e ON e.id = c.environment_id
+      WHERE am.service_id::text = $1
+        AND ($4::timestamptz IS NULL OR am.collected_at >= $4)
+        AND ($5::timestamptz IS NULL OR am.collected_at <= $5)
+        AND ($6::text IS NULL OR am.cluster_id::text = $6)
+        AND ($7::text IS NULL OR e.organization_id::text = $7::text)
       GROUP BY time_bucket
       ORDER BY time_bucket DESC
       LIMIT $3;
     `;
 
-    const res = await pool.query(query, [serviceId, bucketSeconds, limit, startTime, endTime, clusterId]);
+    const res = await pool.query(query, [serviceId, bucketSeconds, limit, startTime, endTime, clusterId, organizationId]);
     const points: GRUMetricPoint[] = res.rows.map((row) => ({
       time_bucket: row.time_bucket ? new Date(row.time_bucket).toISOString() : undefined,
       cpu: Number(row.cpu),

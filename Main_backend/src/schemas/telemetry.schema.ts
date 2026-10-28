@@ -14,6 +14,7 @@ export const GetServiceSequenceQuerySchema = z.object({
   start_time: z.string().optional(),
   end_time: z.string().optional(),
   cluster_id: z.string().trim().max(100).optional(),
+  organization_id: z.string().trim().max(100).optional(),
 });
 
 export const GetRcaContextQuerySchema = z.object({

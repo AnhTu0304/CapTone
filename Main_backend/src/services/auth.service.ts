@@ -123,7 +123,9 @@ export class AuthService {
         return {
             id: user.id,
             email: user.email,
+            full_name: user.full_name,
             token,
+            system_roles: roles,
             has_organization: orgRoles.length > 0,
             organization_roles: orgRoles,
         };
