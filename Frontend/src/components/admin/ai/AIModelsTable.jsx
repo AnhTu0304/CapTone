@@ -754,7 +754,7 @@ export const AIModelsTable = ({
           <div
             style={{
               width: '100%',
-              maxWidth: '560px',
+              maxWidth: '680px',
               height: '100%',
               backgroundColor: '#FFFFFF',
               boxShadow: 'var(--dash-shadow-dropdown)',
@@ -859,15 +859,144 @@ export const AIModelsTable = ({
                 </div>
               </div>
 
-              {/* Performance Metrics */}
-              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #A7F3D0', backgroundColor: '#ECFDF5' }}>
-                <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#065F46', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Chỉ Số Đánh Giá Kiểm Chuẩn (Evaluation Metrics)
+              {/* Performance Metrics & Scorecard */}
+              {selectedModel.rawMetrics?.overall ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Overall KPIs */}
+                  <div style={{ padding: '16px', borderRadius: '12px', border: '1px solid #A7F3D0', backgroundColor: '#ECFDF5' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Chỉ Số Đánh Giá Toàn Diện (Overall Benchmark)
+                      </div>
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', backgroundColor: '#D1FAE5', color: '#047857' }}>
+                        {selectedModel.rawMetrics.sample_count || 3000} mẫu test holdout
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                      <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1FAE5' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>Độ chính xác</div>
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
+                          {selectedModel.rawMetrics.overall.accuracy}%
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1FAE5' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>F1-Score</div>
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1D4ED8', marginTop: '2px' }}>
+                          {selectedModel.rawMetrics.overall.f1_score}
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1FAE5' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>Precision</div>
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#4338CA', marginTop: '2px' }}>
+                          {selectedModel.rawMetrics.overall.precision}%
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1FAE5' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>Recall (Bao phủ)</div>
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#6D28D9', marginTop: '2px' }}>
+                          {selectedModel.rawMetrics.overall.recall}%
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1FAE5' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>Báo nhầm (FPR)</div>
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#B45309', marginTop: '2px' }}>
+                          {selectedModel.rawMetrics.overall.false_positive_rate}%
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #D1FAE5' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>Độ trễ suy luận</div>
+                        <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0369A1', marginTop: '2px' }}>
+                          {selectedModel.rawMetrics.overall.latency_ms} ms
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Metadata tags */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap', fontSize: '0.6875rem', color: '#065F46' }}>
+                      <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #A7F3D0' }}>
+                        Tham số mạng: <strong>{selectedModel.rawMetrics.parameters_count ? selectedModel.rawMetrics.parameters_count.toLocaleString() : 'N/A'}</strong> params
+                      </span>
+                      <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #A7F3D0' }}>
+                        Ngưỡng rủi ro (Threshold): <strong>{selectedModel.rawMetrics.threshold || '0.79'}</strong>
+                      </span>
+                      <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #A7F3D0' }}>
+                        Dataset: <strong>{selectedModel.rawMetrics.dataset_name || 'test.csv'}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Per-Risk Scorecard Table */}
+                  {selectedModel.rawMetrics.per_risk && (
+                    <div style={{ borderRadius: '12px', border: '1px solid var(--dash-border)', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                      <div style={{ padding: '12px 16px', backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Bảng Đánh Giá Chi Tiết Theo Từng Loại Rủi Ro (Per-Risk Scorecard)
+                        </div>
+                      </div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#F1F5F9', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', fontWeight: 700 }}>
+                              <th style={{ padding: '10px 12px' }}>Loại rủi ro K8s</th>
+                              <th style={{ padding: '10px 10px', textAlign: 'right' }}>F1-Score</th>
+                              <th style={{ padding: '10px 10px', textAlign: 'right' }}>Precision</th>
+                              <th style={{ padding: '10px 10px', textAlign: 'right' }}>Recall</th>
+                              <th style={{ padding: '10px 10px', textAlign: 'right' }}>Báo nhầm (FPR)</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'right' }}>Mẫu test</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(selectedModel.rawMetrics.per_risk).map(([riskKey, riskMetrics], rIdx) => {
+                              const RISK_NAME_MAP = {
+                                cpu_overload: 'Quá tải CPU',
+                                oom: 'Tràn RAM (OOM)',
+                                disk_full: 'Tràn ổ đĩa',
+                                high_latency: 'Độ trễ cao',
+                                http_5xx_spike: 'Bùng nổ mã lỗi 5xx',
+                                traffic_overload: 'Đột biến tải mạng',
+                                scale_down_candidate: 'Hạ tải nhàn rỗi',
+                              };
+                              const displayName = RISK_NAME_MAP[riskKey] || riskKey;
+                              return (
+                                <tr key={riskKey} style={{ borderBottom: rIdx === Object.keys(selectedModel.rawMetrics.per_risk).length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                                  <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                                    {displayName}
+                                  </td>
+                                  <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, color: '#1D4ED8', fontFamily: 'var(--font-mono)' }}>
+                                    {riskMetrics.f1_score}
+                                  </td>
+                                  <td style={{ padding: '10px 10px', textAlign: 'right', color: 'var(--dash-text-primary)' }}>
+                                    {riskMetrics.precision}%
+                                  </td>
+                                  <td style={{ padding: '10px 10px', textAlign: 'right', color: 'var(--dash-text-primary)' }}>
+                                    {riskMetrics.recall}%
+                                  </td>
+                                  <td style={{ padding: '10px 10px', textAlign: 'right', color: riskMetrics.false_positive_rate > 2 ? '#B45309' : '#059669', fontWeight: 600 }}>
+                                    {riskMetrics.false_positive_rate}%
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--dash-text-muted)' }}>
+                                    {riskMetrics.support}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                  {selectedModel.evaluationMetrics}
+              ) : (
+                <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #A7F3D0', backgroundColor: '#ECFDF5' }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#065F46', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Chỉ Số Đánh Giá Kiểm Chuẩn (Evaluation Metrics)
+                  </div>
+                  <div style={{ fontSize: '0.8125rem', color: '#059669', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {selectedModel.evaluationMetrics}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

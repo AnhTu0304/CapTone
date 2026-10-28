@@ -248,63 +248,7 @@ const MOCK_RCA_ANALYSES = [
   },
 ];
 
-const MOCK_PERFORMANCE_METRICS = [
-  {
-    modelId: 'mod-ebpf-anom-01',
-    modelName: 'Kernel Telemetry Anomaly Detector',
-    modelType: 'Anomaly Detection',
-    dataset: 'K8s Kernel Telemetry Corpus v3.2',
-    accuracy: '98.4%',
-    precision: '97.6%',
-    recall: '98.8%',
-    f1: '0.982',
-    mae: 'N/A (Phân loại)',
-    rmse: 'N/A (Phân loại)',
-    falsePositiveRate: '0.8%',
-  },
-  {
-    modelId: 'mod-causal-rca-02',
-    name: 'Distributed Causal Graph RCA Engine',
-    modelName: 'Distributed Causal Graph RCA Engine',
-    modelType: 'Causal Graph RCA',
-    dataset: 'Microservice Distributed Traces Benchmark',
-    accuracy: '97.8%',
-    precision: '97.2%',
-    recall: '98.9%',
-    f1: '0.980',
-    mae: 'N/A (Causal Graph)',
-    rmse: 'N/A (Causal Graph)',
-    falsePositiveRate: '1.2%',
-  },
-  {
-    modelId: 'mod-fail-predict-03',
-    name: 'Pod CrashLoop & OOM Failure Predictor',
-    modelName: 'Pod CrashLoop & OOM Failure Predictor',
-    modelType: 'Failure Predictive',
-    dataset: 'cgroup Linux Container OOM Logs 2025-2026',
-    accuracy: '96.8%',
-    precision: '95.4%',
-    recall: '96.1%',
-    f1: '0.957',
-    mae: 'N/A (Nhị phân)',
-    rmse: 'N/A (Nhị phân)',
-    falsePositiveRate: '1.5%',
-  },
-  {
-    modelId: 'mod-cap-forecast-04',
-    name: 'Cluster Capacity & HPA Wave Forecaster',
-    modelName: 'Cluster Capacity & HPA Wave Forecaster',
-    modelType: 'Capacity Forecasting',
-    dataset: 'Multi-tenant Node Resource Series (365 days)',
-    accuracy: '95.9%',
-    precision: '95.1%',
-    recall: '96.0%',
-    f1: '0.955',
-    mae: '0.042 cores',
-    rmse: '0.068 cores',
-    falsePositiveRate: '1.9%',
-  },
-];
+const MOCK_PERFORMANCE_METRICS = [];
 
 // ==========================================
 // MOCK SERVICE METHODS
@@ -465,12 +409,37 @@ export const getAIRCAAnalyses = async () => {
  * Lấy ma trận chỉ số hiệu năng thực tế được kiểm định trên test dataset
  * @returns {Promise<Object[]>}
  */
-export const getAIPerformanceMetrics = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([...MOCK_PERFORMANCE_METRICS]);
-    }, 60);
-  });
+export const getAIPerformanceMetrics = async () => {
+  try {
+    const models = await getRegisteredModels();
+    if (!Array.isArray(models) || models.length === 0) {
+      return [];
+    }
+    return models
+      .filter((m) => m.rawMetrics?.overall)
+      .map((m) => {
+        const o = m.rawMetrics.overall;
+        return {
+          modelId: m.id,
+          modelName: `${m.name} (${m.version})`,
+          name: m.name,
+          version: m.version,
+          status: m.status,
+          modelType: m.modelType || 'Phân loại rủi ro GRU',
+          dataset: `${m.dataset} (${m.rawMetrics.sample_count || 3000} mẫu test)`,
+          accuracy: `${o.accuracy}%`,
+          precision: `${o.precision}%`,
+          recall: `${o.recall}%`,
+          f1: `${o.f1_score}`,
+          mae: `${o.latency_ms} ms (Độ trễ)`,
+          rmse: `${m.rawMetrics.parameters_count ? m.rawMetrics.parameters_count.toLocaleString() : 'N/A'} tham số`,
+          falsePositiveRate: `${o.false_positive_rate}%`
+        };
+      });
+  } catch (err) {
+    console.error('Lỗi lấy chỉ số hiệu năng AI thực tế:', err);
+    return [];
+  }
 };
 
 const adminAIService = {
