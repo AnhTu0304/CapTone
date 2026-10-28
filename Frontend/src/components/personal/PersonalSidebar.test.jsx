@@ -3,17 +3,8 @@ import { render, screen, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { PersonalSidebar, PERSONAL_NAV_ITEMS } from './PersonalSidebar';
 import { personalPortalService } from '../../services/personalPortalService';
-import multiTabSync, { SYNC_EVENTS } from '../../services/multiTabSync';
 
-jest.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({
-    user: { id: 'usr-1', email: 'dev@selfheal.vn', full_name: 'Dev Lead' },
-    isSuperAdmin: () => false,
-    isAdmin: () => false,
-  }),
-}));
-
-describe('PersonalSidebar Component - Company Count Badge Suite', () => {
+describe('PersonalSidebar Component - Company Count Badge & Nav Suite', () => {
   beforeEach(() => {
     localStorage.clear();
     jest.clearAllMocks();
@@ -98,5 +89,36 @@ describe('PersonalSidebar Component - Company Count Badge Suite', () => {
     });
 
     expect(screen.queryByTestId('badge-companies')).not.toBeInTheDocument();
+  });
+
+  test('TC07: Đã xóa hoàn toàn nhóm "CHUYỂN KHÔNG GIAN" và mục "Về Dashboard", giữ nguyên 8 mục Chức Năng Cá Nhân', async () => {
+    jest.spyOn(personalPortalService, 'fetchMyCompanies').mockResolvedValue([]);
+    const mockToggleCollapse = jest.fn();
+
+    await act(async () => {
+      render(<PersonalSidebar currentPath="/portal" onToggleCollapse={mockToggleCollapse} />);
+    });
+
+    // 1. Phải KHÔNG còn tiêu đề CHUYỂN KHÔNG GIAN
+    expect(screen.queryByText(/CHUYỂN KHÔNG GIAN/i)).not.toBeInTheDocument();
+
+    // 2. Phải KHÔNG còn mục Về Dashboard
+    expect(screen.queryByText(/Về Dashboard/i)).not.toBeInTheDocument();
+
+    // 3. Phải KHÔNG còn mục Cổng Quản Trị
+    expect(screen.queryByText(/Cổng Quản Trị/i)).not.toBeInTheDocument();
+
+    // 4. Giữ nguyên toàn bộ 8 mục Chức Năng Cá Nhân
+    expect(screen.getByText('Bảng Điều Khiển')).toBeInTheDocument();
+    expect(screen.getByText('Company Của Tôi')).toBeInTheDocument();
+    expect(screen.getByText('Hồ Sơ Cá Nhân')).toBeInTheDocument();
+    expect(screen.getByText('Bảo Mật Tài Khoản')).toBeInTheDocument();
+    expect(screen.getByText('Tùy Chỉnh Cá Nhân')).toBeInTheDocument();
+    expect(screen.getByText('Thông Báo')).toBeInTheDocument();
+    expect(screen.getByText('Lịch Sử Hoạt Động')).toBeInTheDocument();
+    expect(screen.getByText('Trợ Giúp & Hỗ Trợ')).toBeInTheDocument();
+
+    // 5. Nút thu gọn sidebar vẫn hoạt động bình thường
+    expect(screen.getByRole('button', { name: /Thu gọn sidebar/i })).toBeInTheDocument();
   });
 });
