@@ -47,6 +47,7 @@ export class SessionRevocationService {
     if (!rawToken || ttlSeconds <= 0) return;
 
     if (!this.isAvailable()) {
+      if (!config.isProduction) return;
       throw new ApiError(503, 'Dịch vụ xác thực tạm thời không khả dụng, không thể thu hồi phiên đăng nhập');
     }
 
@@ -72,6 +73,7 @@ export class SessionRevocationService {
     if (!rawToken) return false;
 
     if (!this.isAvailable()) {
+      if (!config.isProduction) return false;
       throw new ApiError(503, 'Dịch vụ xác thực tạm thời không khả dụng, không thể xác minh phiên làm việc');
     }
 

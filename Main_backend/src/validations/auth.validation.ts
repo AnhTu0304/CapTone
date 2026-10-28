@@ -26,9 +26,9 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   body: z.object({
     email: z
-      .string('Vui lòng cung cấp email')
+      .string('Vui lòng cung cấp email hoặc tài khoản')
       .trim()
-      .email('Địa chỉ email không đúng định dạng'),
+      .min(1, 'Email hoặc tài khoản không được để trống'),
     password: z
       .string('Vui lòng cung cấp mật khẩu')
       .min(1, 'Mật khẩu không được để trống'),

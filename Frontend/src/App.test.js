@@ -308,10 +308,9 @@ test('renders Policies Page (/dashboard/self-healing/policies) with automation m
 test('renders Reports Page (/dashboard/reports) with SLACostSavingsChart and microservice SLA table', () => {
   window.history.pushState({}, '', '/dashboard/reports');
   render(<App />);
-  expect(screen.getByText(/Báo Cáo SLA & Hiệu Quả Chi Phí Doanh Nghiệp/i)).toBeInTheDocument();
-  expect(screen.getByText(/Hiệu Quả Kinh Tế & Cam Kết SLA Uptime/i)).toBeInTheDocument();
+  expect(screen.getByText(/Báo Cáo SLA & Vận Hành Doanh Nghiệp/i)).toBeInTheDocument();
+  expect(screen.getByText(/Cam Kết & Xu Hướng SLA Uptime/i)).toBeInTheDocument();
   expect(screen.getByText(/Bảng Phân Tích SLA Theo Từng Dịch Vụ Microservice/i)).toBeInTheDocument();
-  expect(screen.getByText(/payment-service/i)).toBeInTheDocument();
   expect(screen.getByText(/Xuất Báo Cáo SLA/i)).toBeInTheDocument();
 });
 

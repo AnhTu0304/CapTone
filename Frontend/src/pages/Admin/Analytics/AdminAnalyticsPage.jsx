@@ -3,7 +3,6 @@ import {
   TrendingUp,
   Building2,
   Users,
-  CreditCard,
   Calendar,
   Filter,
   Download,
@@ -26,18 +25,18 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
 
   // Dữ liệu tăng trưởng giả lập 12 tháng năm 2026
   const monthlyData2026 = [
-    { month: 'T1', monthName: 'Tháng 1', newOrgs: 3, totalOrgs: 35, mau: 980, revenue: 12400 },
-    { month: 'T2', monthName: 'Tháng 2', newOrgs: 4, totalOrgs: 39, mau: 1050, revenue: 13800 },
-    { month: 'T3', monthName: 'Tháng 3', newOrgs: 2, totalOrgs: 41, mau: 1120, revenue: 14500 },
-    { month: 'T4', monthName: 'Tháng 4', newOrgs: 3, totalOrgs: 44, mau: 1190, revenue: 15300 },
-    { month: 'T5', monthName: 'Tháng 5', newOrgs: 5, totalOrgs: 49, mau: 1280, revenue: 16800 },
-    { month: 'T6', monthName: 'Tháng 6', newOrgs: 4, totalOrgs: 53, mau: 1350, revenue: 17600 },
-    { month: 'T7', monthName: 'Tháng 7', newOrgs: 6, totalOrgs: 59, mau: 1420, revenue: 18900 },
-    { month: 'T8', monthName: 'Tháng 8', newOrgs: 4, totalOrgs: 63, mau: 1510, revenue: 19800 },
-    { month: 'T9', monthName: 'Tháng 9', newOrgs: 5, totalOrgs: 68, mau: 1620, revenue: 21200 },
-    { month: 'T10', monthName: 'Tháng 10', newOrgs: 6, totalOrgs: 74, mau: 1750, revenue: 22800 },
-    { month: 'T11', monthName: 'Tháng 11', newOrgs: 5, totalOrgs: 79, mau: 1840, revenue: 24100 },
-    { month: 'T12', monthName: 'Tháng 12', newOrgs: 7, totalOrgs: 86, mau: 1960, revenue: 25900 },
+    { month: 'T1', monthName: 'Tháng 1', newOrgs: 3, totalOrgs: 35, mau: 980 },
+    { month: 'T2', monthName: 'Tháng 2', newOrgs: 4, totalOrgs: 39, mau: 1050 },
+    { month: 'T3', monthName: 'Tháng 3', newOrgs: 2, totalOrgs: 41, mau: 1120 },
+    { month: 'T4', monthName: 'Tháng 4', newOrgs: 3, totalOrgs: 44, mau: 1190 },
+    { month: 'T5', monthName: 'Tháng 5', newOrgs: 5, totalOrgs: 49, mau: 1280 },
+    { month: 'T6', monthName: 'Tháng 6', newOrgs: 4, totalOrgs: 53, mau: 1350 },
+    { month: 'T7', monthName: 'Tháng 7', newOrgs: 6, totalOrgs: 59, mau: 1420 },
+    { month: 'T8', monthName: 'Tháng 8', newOrgs: 4, totalOrgs: 63, mau: 1510 },
+    { month: 'T9', monthName: 'Tháng 9', newOrgs: 5, totalOrgs: 68, mau: 1620 },
+    { month: 'T10', monthName: 'Tháng 10', newOrgs: 6, totalOrgs: 74, mau: 1750 },
+    { month: 'T11', monthName: 'Tháng 11', newOrgs: 5, totalOrgs: 79, mau: 1840 },
+    { month: 'T12', monthName: 'Tháng 12', newOrgs: 7, totalOrgs: 86, mau: 1960 },
   ];
 
   // Danh sách công ty kèm số liệu chi tiết
@@ -51,7 +50,6 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
       clustersCount: 6,
       aiRequests: '142,500/tháng',
       status: 'Active',
-      mrr: '$2,800',
     },
     {
       id: 'org-nexus',
@@ -62,7 +60,6 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
       clustersCount: 3,
       aiRequests: '86,200/tháng',
       status: 'Active',
-      mrr: '$1,200',
     },
     {
       id: 'org-finflow',
@@ -73,7 +70,6 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
       clustersCount: 8,
       aiRequests: '310,000/tháng',
       status: 'Active',
-      mrr: '$4,500',
     },
     {
       id: 'org-viettel-sme',
@@ -84,7 +80,6 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
       clustersCount: 12,
       aiRequests: '520,000/tháng',
       status: 'Active',
-      mrr: '$6,200',
     },
     {
       id: 'org-vnpay',
@@ -95,7 +90,6 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
       clustersCount: 4,
       aiRequests: '112,000/tháng',
       status: 'Active',
-      mrr: '$1,800',
     },
     {
       id: 'org-techlead',
@@ -106,7 +100,6 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
       clustersCount: 1,
       aiRequests: '24,000/tháng',
       status: 'Active',
-      mrr: '$450',
     },
   ];
 
@@ -174,7 +167,7 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
               margin: '4px 0 0 0',
             }}
           >
-            Phân tích số lượng công ty, người dùng hoạt động và cơ cấu doanh thu theo Tháng & Năm.
+            Phân tích số lượng công ty, người dùng hoạt động và quy mô hạ tầng K8s theo Tháng & Năm.
           </p>
         </div>
 
@@ -342,7 +335,7 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Card 3: Doanh Thu Ước Tính (MRR/ARR) */}
+        {/* Card 3: Hạ Tầng Cụm K8s Đang Kết Nối */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -354,7 +347,7 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
-              Doanh Thu Thuê Định Kỳ (MRR)
+              Cụm K8s Đang Quản Lý
             </span>
             <div
               style={{
@@ -368,15 +361,15 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
                 color: '#D97706',
               }}
             >
-              <CreditCard size={16} />
+              <Layers size={16} />
             </div>
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '8px' }}>
-            $25,900 <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--dash-text-muted)' }}>/tháng</span>
+            34 <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--dash-text-muted)' }}>cụm Kubernetes</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>
             <ArrowUpRight size={14} />
-            <span>ARR ước tính: $310,800/năm</span>
+            <span>Tổng cộng: 112 nodes vật lý & ảo hóa</span>
           </div>
         </div>
 
@@ -511,10 +504,10 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Cơ Cấu Phân Bổ Gói Dịch Vụ
+                Cơ Cấu Quy Mô Tổ Chức
               </h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '2px 0 0 0' }}>
-                Phân bổ theo doanh số và số lượng tổ chức đăng ký
+                Phân bổ theo số lượng tổ chức đăng ký từng gói
               </p>
             </div>
             <PieChart size={18} color="var(--dash-text-muted)" />
@@ -525,10 +518,10 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>Enterprise VIP Platform</span>
-                <span style={{ fontWeight: 700, color: '#059669' }}>28 tổ chức (52% doanh thu)</span>
+                <span style={{ fontWeight: 700, color: '#059669' }}>28 tổ chức (33% tổng số)</span>
               </div>
               <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '52%', height: '100%', backgroundColor: '#059669', borderRadius: '4px' }} />
+                <div style={{ width: '33%', height: '100%', backgroundColor: '#059669', borderRadius: '4px' }} />
               </div>
             </div>
 
@@ -536,10 +529,10 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>SME Production Pro</span>
-                <span style={{ fontWeight: 700, color: '#3B82F6' }}>42 tổ chức (38% doanh thu)</span>
+                <span style={{ fontWeight: 700, color: '#3B82F6' }}>42 tổ chức (49% tổng số)</span>
               </div>
               <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '38%', height: '100%', backgroundColor: '#3B82F6', borderRadius: '4px' }} />
+                <div style={{ width: '49%', height: '100%', backgroundColor: '#3B82F6', borderRadius: '4px' }} />
               </div>
             </div>
 
@@ -547,10 +540,10 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>SME Starter Package</span>
-                <span style={{ fontWeight: 700, color: '#F59E0B' }}>16 tổ chức (10% doanh thu)</span>
+                <span style={{ fontWeight: 700, color: '#F59E0B' }}>16 tổ chức (18% tổng số)</span>
               </div>
               <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '10%', height: '100%', backgroundColor: '#F59E0B', borderRadius: '4px' }} />
+                <div style={{ width: '18%', height: '100%', backgroundColor: '#F59E0B', borderRadius: '4px' }} />
               </div>
             </div>
           </div>
@@ -620,7 +613,7 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>THÀNH VIÊN</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>CỤM K8S</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>LƯỢNG GỌI AI</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600 }}>DOANH THU MRR</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600 }}>HẠ TẦNG NODES</th>
                 <th style={{ padding: '12px 20px', fontWeight: 600, textAlign: 'right' }}>THAO TÁC</th>
               </tr>
             </thead>
@@ -670,7 +663,7 @@ export const AdminAnalyticsPage = ({ onNavigate }) => {
                     {org.aiRequests}
                   </td>
                   <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                    {org.mrr}
+                    {org.clustersCount * 3} nodes
                   </td>
                   <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                     <button
