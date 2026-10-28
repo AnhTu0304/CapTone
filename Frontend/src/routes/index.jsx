@@ -18,7 +18,7 @@ import AdminLayout from '../layouts/AdminLayout';
 import OverviewPage from '../pages/Admin/Overview';
 import { OrganizationsListPage, OrganizationDetailsPage } from '../pages/Admin/Organizations';
 import { AdminInfrastructurePage } from '../pages/Admin/Infrastructure';
-import { IncidentDetailPage } from '../pages/Admin/Incidents';
+import { IncidentDetailPage, IncidentsListPage } from '../pages/Admin/Incidents';
 import { AdminSelfHealingPage } from '../pages/Admin/SelfHealing';
 import { AdminAIPage } from '../pages/Admin/AI';
 import { AdminAuditLogsPage } from '../pages/Admin/AuditLogs';
@@ -29,7 +29,6 @@ import { AdminRolesPage } from '../pages/Admin/Roles/AdminRolesPage';
 import { AdminAgentManagementPage } from '../pages/Admin/Agents/AdminAgentManagementPage';
 import { AdminClusterOverviewPage } from '../pages/Admin/Clusters/AdminClusterOverviewPage';
 import { AdminMonitoringPage } from '../pages/Admin/Monitoring/AdminMonitoringPage';
-import { AdminSystemLogsPage } from '../pages/Admin/SystemLogs/AdminSystemLogsPage';
 import { AdminAlertsPage } from '../pages/Admin/Alerts/AdminAlertsPage';
 import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSettingsPage';
 import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
@@ -59,7 +58,6 @@ export const ROUTES = {
   ADMIN_CLUSTERS: '/admin/clusters',
   ADMIN_MONITORING: '/admin/monitoring',
   ADMIN_ALERTS: '/admin/alerts',
-  ADMIN_SYSTEM_LOGS: '/admin/system-logs',
   ADMIN_SETTINGS: '/admin/settings',
   ADMIN_ACTIVITY: '/admin/activity',
   ADMIN_INCIDENTS: '/admin/incidents',
@@ -278,12 +276,10 @@ export const RouteRenderer = ({
     } else if (path === '/admin/alerts') {
       adminContent = <AdminAlertsPage onNavigate={onNavigate} />;
     } else if (path === '/admin/incidents') {
-      adminContent = <AdminAlertsPage onNavigate={onNavigate} />;
+      adminContent = <IncidentsListPage onNavigate={onNavigate} />;
     } else if (path.startsWith('/admin/incidents/')) {
       const incidentId = path.substring('/admin/incidents/'.length);
       adminContent = <IncidentDetailPage incidentId={incidentId} onNavigate={onNavigate} />;
-    } else if (path === '/admin/system-logs') {
-      adminContent = <AdminSystemLogsPage onNavigate={onNavigate} />;
     } else if (path === '/admin/self-healing/actions' || path === '/admin/self-healing') {
       adminContent = <AdminSelfHealingPage currentSection="actions" onNavigate={onNavigate} />;
     } else if (path === '/admin/self-healing/action-types') {
