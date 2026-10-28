@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, getPrimaryRole, isAdmin } = useAuth();
+  const { user, logout, getInitials, isAdmin } = useAuth();
   const {
     currentOrg,
     orgList,
@@ -865,23 +865,6 @@ export const TopHeader = () => {
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', wordBreak: 'break-all' }}>
                   {displayEmail}
-                </div>
-                <div style={{ marginTop: '6px' }}>
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      fontSize: '0.625rem',
-                      fontWeight: 700,
-                      fontFamily: 'var(--font-mono)',
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: 'rgba(40, 233, 159, 0.15)',
-                      color: '#065F46',
-                      border: '1px solid rgba(40, 233, 159, 0.3)',
-                    }}
-                  >
-                    {getPrimaryRole(user)}
-                  </span>
                 </div>
               </div>
               {(isAdmin(user) || user?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))) && (

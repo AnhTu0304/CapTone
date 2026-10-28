@@ -9,6 +9,7 @@ Tài liệu này hướng dẫn chi tiết từng bước cách khởi chạy, c
 | Dịch Vụ | Container Name | Cổng Expose (Host : Container) | Chức Năng |
 |---|---|---|---|
 | **postgres** | `captone-postgres` | `5432:5432` | Cơ sở dữ liệu chính PostgreSQL 16 (kèm volume lưu trữ) |
+| **redis** | `captone-redis` | `6379:6379` | Cache / Session Blacklist / Email Queue Redis 7 (kèm AOF volume) |
 | **main-backend** | `captone-main-backend` | `5000:5000` | Node.js Express TypeScript MVC API |
 | **ai-backend** | `captone-ai-backend` | `8000:8000` | FastAPI PyTorch GRU (12 timesteps) & Multi-Agent RCA |
 | **selfheal-frontend** | `selfheal_platform_web` | `3000:80` | Giao diện React 19 tối ưu qua Web Server Nginx Alpine |

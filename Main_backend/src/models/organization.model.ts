@@ -27,6 +27,7 @@ export interface IOrganizationDetail extends IOrganization {
   profile?: IOrganizationProfile | null;
   role_in_org?: string | null;
   members_count?: number;
+  clusters_count?: number;
 }
 
 export interface ICreateOrganizationDto {
@@ -187,7 +188,8 @@ export class OrganizationModel {
         op.id AS profile_id, op.email AS profile_email, op.phone AS profile_phone, op.website AS profile_website,
         op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
         r.code AS role_in_org,
-        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count
+        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
+        (SELECT COUNT(*)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND c.deleted_at IS NULL AND e.deleted_at IS NULL) AS clusters_count
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $${paramIndex}
@@ -212,6 +214,7 @@ export class OrganizationModel {
       updated_at: row.updated_at,
       role_in_org: row.role_in_org || null,
       members_count: row.members_count || 0,
+      clusters_count: row.clusters_count || 0,
       profile: row.profile_id
         ? {
             id: row.profile_id,
@@ -296,7 +299,8 @@ export class OrganizationModel {
         op.id AS profile_id, op.email AS profile_email, op.phone AS profile_phone, op.website AS profile_website,
         op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
         r.code AS role_in_org, cur_om.status AS member_status,
-        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count
+        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
+        (SELECT COUNT(*)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND c.deleted_at IS NULL AND e.deleted_at IS NULL) AS clusters_count
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $2
@@ -321,6 +325,7 @@ export class OrganizationModel {
       role_in_org: row.role_in_org || null,
       member_status: row.member_status || undefined,
       members_count: row.members_count || 0,
+      clusters_count: row.clusters_count || 0,
       profile: row.profile_id
         ? {
             id: row.profile_id,
@@ -417,7 +422,8 @@ export class OrganizationModel {
         op.id AS profile_id, op.email AS profile_email, op.phone AS profile_phone, op.website AS profile_website,
         op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
         r.code AS role_in_org,
-        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count
+        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
+        (SELECT COUNT(*)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND c.deleted_at IS NULL AND e.deleted_at IS NULL) AS clusters_count
       FROM organizations o
       JOIN organization_members cur_om ON o.id = cur_om.organization_id
       JOIN roles r ON cur_om.role_id = r.id
@@ -440,6 +446,7 @@ export class OrganizationModel {
       updated_at: row.updated_at,
       role_in_org: row.role_in_org,
       members_count: row.members_count || 0,
+      clusters_count: row.clusters_count || 0,
       profile: row.profile_id
         ? {
             id: row.profile_id,
