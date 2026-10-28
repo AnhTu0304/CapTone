@@ -52,7 +52,7 @@ export const AIModelsTable = ({
     try {
       setActivatingId(modelId);
       setActionSuccessMsg('');
-      const res = await activateRegisteredModel(modelId);
+      await activateRegisteredModel(modelId);
       setActionSuccessMsg(`Đã kích hoạt mô hình thành công!`);
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -198,7 +198,6 @@ export const AIModelsTable = ({
   };
 
   const activeCount = models.filter((m) => m.status === 'ACTIVE').length;
-  const stagingCount = models.filter((m) => m.status === 'STAGING' || m.status === 'TRAINING').length;
 
   const evaluatedModels = models.filter((m) => m.rawMetrics?.overall?.accuracy != null);
   const avgAccuracy = evaluatedModels.length > 0
@@ -287,25 +286,7 @@ export const AIModelsTable = ({
           </div>
         </div>
 
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '14px',
-            border: '1px solid var(--dash-border)',
-            padding: '18px 20px',
-            boxShadow: 'var(--dash-shadow-xs)',
-          }}
-        >
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase' }}>
-            MÔ HÌNH ĐANG THỬ NGHIỆM
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563EB', marginTop: '6px' }}>
-            {stagingCount} Mô hình
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
-            Đang kiểm chuẩn trên Staging
-          </div>
-        </div>
+
 
         <div
           style={{

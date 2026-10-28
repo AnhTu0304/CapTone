@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Cpu, Box, Sparkles, GitCommit, Activity, Scale } from 'lucide-react';
+import { Cpu, Box, Scale } from 'lucide-react';
 
 export const AINavTabs = ({ currentSection, activeTab, onNavigate, onTabChange }) => {
   const active = activeTab || currentSection || 'overview';
@@ -23,24 +23,6 @@ export const AINavTabs = ({ currentSection, activeTab, onNavigate, onTabChange }
       label: 'Đánh Giá & So Sánh Trước/Sau',
       path: '/admin/ai/comparison',
       icon: Scale,
-    },
-    {
-      id: 'predictions',
-      label: 'Dự Báo Dị Thường',
-      path: '/admin/ai/predictions',
-      icon: Sparkles,
-    },
-    {
-      id: 'rca',
-      label: 'Đồ Thị Nhân Quả RCA',
-      path: '/admin/ai/rca',
-      icon: GitCommit,
-    },
-    {
-      id: 'performance',
-      label: 'Hiệu Năng & Kiểm Chuẩn',
-      path: '/admin/ai/performance',
-      icon: Activity,
     },
   ];
 

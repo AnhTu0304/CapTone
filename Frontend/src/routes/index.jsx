@@ -308,12 +308,8 @@ export const RouteRenderer = ({
       adminContent = <AdminAIPage currentSection="models" onNavigate={onNavigate} />;
     } else if (path === '/admin/ai/comparison') {
       adminContent = <AdminAIPage currentSection="comparison" onNavigate={onNavigate} />;
-    } else if (path === '/admin/ai/predictions') {
-      adminContent = <AdminAIPage currentSection="predictions" onNavigate={onNavigate} />;
-    } else if (path === '/admin/ai/rca') {
-      adminContent = <AdminAIPage currentSection="rca" onNavigate={onNavigate} />;
-    } else if (path === '/admin/ai/performance') {
-      adminContent = <AdminAIPage currentSection="performance" onNavigate={onNavigate} />;
+    } else if (path === '/admin/ai/predictions' || path === '/admin/ai/rca' || path === '/admin/ai/performance') {
+      adminContent = <AdminAIPage currentSection="models" onNavigate={onNavigate} />;
     } else if (path === '/admin/audit-logs') {
       adminContent = <AdminAuditLogsPage onNavigate={onNavigate} />;
     } else if (path === '/admin/analytics') {
