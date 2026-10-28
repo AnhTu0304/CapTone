@@ -98,6 +98,8 @@ services:
       - ./AI_backend/.env
     environment:
       PORT: 8000
+    volumes:
+      - ./AI_backend/saved_models:/app/saved_models
     ports:
       - "8000:8000"
     healthcheck:
