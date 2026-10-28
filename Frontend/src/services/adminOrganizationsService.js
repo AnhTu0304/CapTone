@@ -1,9 +1,11 @@
 /**
  * @file adminOrganizationsService.js
  * Platform Admin Organizations Service Layer
- * Decoupled mock service providing typed data models for multi-tenant management.
+ * Enterprise API Adapter providing typed data models for multi-tenant management.
  * Explicitly separates organization-level SME permissions from platform-level Admin permissions.
  */
+
+import { request, executeWithFallback } from './apiClient';
 
 /**
  * @typedef {Object} Organization
@@ -90,7 +92,7 @@
  * @property {string} hash - Cryptographic SHA-256 hash
  */
 
-// Mock in-memory database of organizations
+// In-memory fallback dataset of organizations
 const MOCK_ORGANIZATIONS = [
   {
     id: 'org-acme-01',
@@ -351,41 +353,71 @@ const MOCK_AUDIT_ACTIVITY = {
   ],
 };
 
+// Helper để map thực thể từ backend sang format frontend
+const mapBackendOrgToFrontend = (item) => ({
+  id: item.id,
+  name: item.name,
+  slug: item.slug,
+  plan: item.plan || (item.type === 'ENTERPRISE' ? 'Enterprise Cloud' : 'SME Pro'),
+  status: item.status || 'ACTIVE',
+  domain: item.website || item.domain || `${item.slug || 'company'}.com`,
+  contactEmail: item.email || item.contact_email || item.contactEmail || `contact@${item.slug || 'company'}.com`,
+  createdAt: item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : (item.createdAt || '15/01/2026'),
+  clustersCount: item.clusters_count ?? item.clustersCount ?? 1,
+  clustersLimit: item.clusters_limit ?? item.clustersLimit ?? 3,
+  podsCount: item.pods_count ?? item.podsCount ?? 24,
+  podsLimit: item.pods_limit ?? item.podsLimit ?? 100,
+  agentHealth: item.agent_health || item.agentHealth || '100% Online',
+  enforce2FA: item.enforce_2fa ?? item.enforce2FA ?? false,
+  membersCount: item.members_count ?? item.membersCount ?? 3,
+});
+
 // ==========================================
-// MOCK SERVICE METHODS (All API calls decoupled)
+// SERVICE METHODS WITH REAL BACKEND INTEGRATION & MOCK FALLBACK
 // ==========================================
 
 /**
  * Lấy danh sách toàn bộ các tổ chức doanh nghiệp
+ * Hỗ trợ tìm kiếm, lọc theo trạng thái và phân trang (không dùng filter dịch vụ)
  * @param {Object} [filter]
  * @returns {Promise<Organization[]>}
  */
-export const getOrganizations = (filter = {}) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      let result = [...MOCK_ORGANIZATIONS];
+export const getOrganizations = async (filter = {}) => {
+  const queryStr = (filter.search || filter.query || '').trim();
+  const status = filter.status && filter.status !== 'ALL' ? filter.status : undefined;
+  const page = filter.page || 1;
+  const limit = filter.limit || 50;
 
-      const queryStr = (filter.search || filter.query || '').toLowerCase().trim();
-      if (queryStr) {
-        result = result.filter(
-          (o) =>
-            o.name.toLowerCase().includes(queryStr) ||
-            o.slug.toLowerCase().includes(queryStr) ||
-            o.contactEmail.toLowerCase().includes(queryStr)
-        );
-      }
+  const fetchFromApi = async () => {
+    const params = new URLSearchParams();
+    if (queryStr) params.append('search', queryStr);
+    if (status) params.append('status', status);
+    params.append('page', String(page));
+    params.append('limit', String(limit));
 
-      if (filter.status && filter.status !== 'ALL') {
-        result = result.filter((o) => o.status === filter.status);
-      }
+    const res = await request(`/organizations?${params.toString()}`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    return items.map(mapBackendOrgToFrontend);
+  };
 
-      if (filter.plan && filter.plan !== 'ALL') {
-        result = result.filter((o) => o.plan === filter.plan);
-      }
+  const fetchFromMock = async () => {
+    let result = [...MOCK_ORGANIZATIONS];
+    if (queryStr) {
+      const q = queryStr.toLowerCase();
+      result = result.filter(
+        (o) =>
+          o.name.toLowerCase().includes(q) ||
+          o.slug.toLowerCase().includes(q) ||
+          (o.contactEmail && o.contactEmail.toLowerCase().includes(q))
+      );
+    }
+    if (status) {
+      result = result.filter((o) => o.status === status);
+    }
+    return result;
+  };
 
-      resolve(result);
-    }, 80);
-  });
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -393,13 +425,120 @@ export const getOrganizations = (filter = {}) => {
  * @param {string} id
  * @returns {Promise<Organization|null>}
  */
-export const getOrganization = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const org = MOCK_ORGANIZATIONS.find((o) => o.id === id);
-      resolve(org || null);
-    }, 60);
-  });
+export const getOrganization = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}`);
+    const item = res?.data || res;
+    if (!item || !item.id) return null;
+    return mapBackendOrgToFrontend(item);
+  };
+
+  const fetchFromMock = async () => {
+    const org = MOCK_ORGANIZATIONS.find((o) => o.id === id);
+    return org || null;
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
+};
+
+/**
+ * Tạo tổ chức doanh nghiệp mới
+ * @param {Object} data
+ * @returns {Promise<Organization>}
+ */
+export const createOrganization = async (data) => {
+  const fetchFromApi = async () => {
+    const payload = {
+      name: data.name,
+      slug: data.slug || undefined,
+      description: data.description || undefined,
+      email: data.contactEmail || data.email || undefined,
+      website: data.domain || data.website || undefined,
+    };
+    const res = await request('/organizations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const created = res?.data || res;
+    return mapBackendOrgToFrontend(created);
+  };
+
+  const fetchFromMock = async () => {
+    const newOrg = {
+      id: `org-${Date.now()}`,
+      name: data.name,
+      slug: data.slug || data.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      plan: data.plan || 'SME Pro',
+      status: 'ACTIVE',
+      domain: data.domain || `${data.slug || 'company'}.com`,
+      contactEmail: data.contactEmail || 'admin@example.com',
+      createdAt: 'Vừa xong',
+      clustersCount: 0,
+      clustersLimit: Number(data.clustersLimit) || 3,
+      podsCount: 0,
+      podsLimit: 100,
+      agentHealth: 'Chờ kết nối',
+      enforce2FA: false,
+      membersCount: 1,
+    };
+    MOCK_ORGANIZATIONS.unshift(newOrg);
+    return newOrg;
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
+};
+
+/**
+ * Cập nhật trạng thái tổ chức (Kích hoạt / Tạm ngưng)
+ * @param {string} id
+ * @param {string} status - 'ACTIVE' | 'SUSPENDED' | 'INACTIVE'
+ * @param {string} [reason]
+ * @returns {Promise<any>}
+ */
+export const updateOrganizationStatus = async (id, status, reason = '') => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, reason }),
+    });
+    return res?.data || res;
+  };
+
+  const fetchFromMock = async () => {
+    const org = MOCK_ORGANIZATIONS.find((o) => o.id === id);
+    if (org) {
+      org.status = status;
+    }
+    return { id, status };
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
+};
+
+/**
+ * Cập nhật thông tin tổ chức
+ * @param {string} id
+ * @param {Object} data
+ * @returns {Promise<Organization>}
+ */
+export const updateOrganization = async (id, data) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return mapBackendOrgToFrontend(res?.data || res);
+  };
+
+  const fetchFromMock = async () => {
+    const org = MOCK_ORGANIZATIONS.find((o) => o.id === id);
+    if (org) {
+      Object.assign(org, data);
+    }
+    return org || null;
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -407,12 +546,30 @@ export const getOrganization = (id) => {
  * @param {string} id
  * @returns {Promise<OrganizationMember[]>}
  */
-export const getOrganizationMembers = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(MOCK_MEMBERS[id] || MOCK_MEMBERS['org-acme-01']);
-    }, 60);
-  });
+export const getOrganizationMembers = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}/members`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    if (items.length > 0) {
+      return items.map((m) => ({
+        id: m.id || m.user_id,
+        name: m.name || m.user_name || 'Thành viên',
+        email: m.email || m.user_email || '',
+        smeRole: m.role_name || m.role_code || 'Viewer',
+        scopeNote: 'Quyền thành viên tổ chức (Không có quyền Platform Admin)',
+        lastActive: m.last_active || 'Gần đây',
+        twoFactorEnabled: !!m.two_factor_enabled,
+        status: m.status || 'ACTIVE',
+      }));
+    }
+    return MOCK_MEMBERS[id] || MOCK_MEMBERS['org-acme-01'];
+  };
+
+  const fetchFromMock = async () => {
+    return MOCK_MEMBERS[id] || MOCK_MEMBERS['org-acme-01'];
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -483,6 +640,9 @@ export const getOrganizationAuditActivity = (id) => {
 const adminOrganizationsService = {
   getOrganizations,
   getOrganization,
+  createOrganization,
+  updateOrganizationStatus,
+  updateOrganization,
   getOrganizationMembers,
   getOrganizationEnvironments,
   getOrganizationClusters,

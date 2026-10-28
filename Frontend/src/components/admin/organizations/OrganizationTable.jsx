@@ -111,7 +111,24 @@ export const OrganizationTable = ({
                       {initial}
                     </div>
                     <div>
-                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{org.name}</div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          color: 'var(--dash-text-primary)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleSelect(org)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSelect(org);
+                          }
+                        }}
+                      >
+                        {org.name}
+                      </div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {org.domain}
                       </div>
@@ -128,12 +145,12 @@ export const OrganizationTable = ({
                       borderRadius: '6px',
                       fontSize: '0.6875rem',
                       fontWeight: 700,
-                      backgroundColor: org.plan.includes('Enterprise') ? '#FAF5FF' : org.plan.includes('Pro') ? '#EFF6FF' : '#F1F5F9',
-                      color: org.plan.includes('Enterprise') ? '#7E22CE' : org.plan.includes('Pro') ? '#1D4ED8' : '#475569',
-                      border: org.plan.includes('Enterprise') ? '1px solid #E9D5FF' : org.plan.includes('Pro') ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
+                      backgroundColor: org.plan && org.plan.includes('Enterprise') ? '#FAF5FF' : org.plan && org.plan.includes('Pro') ? '#EFF6FF' : '#F1F5F9',
+                      color: org.plan && org.plan.includes('Enterprise') ? '#7E22CE' : org.plan && org.plan.includes('Pro') ? '#1D4ED8' : '#475569',
+                      border: org.plan && org.plan.includes('Enterprise') ? '1px solid #E9D5FF' : org.plan && org.plan.includes('Pro') ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
                     }}
                   >
-                    {org.plan}
+                    {org.plan || 'SME Pro'}
                   </span>
                 </td>
 
@@ -161,9 +178,9 @@ export const OrganizationTable = ({
                     <Radio
                       size={13}
                       style={{
-                        color: org.agentHealth.includes('100%')
+                        color: org.agentHealth && org.agentHealth.includes('100%')
                           ? '#059669'
-                          : org.agentHealth.includes('Degraded')
+                          : org.agentHealth && org.agentHealth.includes('Degraded')
                           ? '#D97706'
                           : '#DC2626',
                       }}
@@ -171,14 +188,14 @@ export const OrganizationTable = ({
                     <span
                       style={{
                         fontWeight: 600,
-                        color: org.agentHealth.includes('100%')
+                        color: org.agentHealth && org.agentHealth.includes('100%')
                           ? '#059669'
-                          : org.agentHealth.includes('Degraded')
+                          : org.agentHealth && org.agentHealth.includes('Degraded')
                           ? '#D97706'
                           : '#DC2626',
                       }}
                     >
-                      {org.agentHealth}
+                      {org.agentHealth || '100% Online'}
                     </span>
                   </div>
                 </td>

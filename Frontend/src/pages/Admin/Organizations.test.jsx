@@ -5,9 +5,12 @@ import OrganizationsListPage from './Organizations/OrganizationsListPage';
 import OrganizationDetailsPage from './Organizations/OrganizationDetailsPage';
 import OrganizationStatusBadge from '../../components/admin/organizations/OrganizationStatusBadge';
 import OrganizationMembers from '../../components/admin/organizations/OrganizationMembers';
+import OrganizationFilters from '../../components/admin/organizations/OrganizationFilters';
 import {
   getOrganizations,
   getOrganization,
+  createOrganization,
+  updateOrganizationStatus,
   getOrganizationMembers,
   getOrganizationEnvironments,
   getOrganizationClusters,
@@ -35,6 +38,25 @@ describe('Platform Admin Organizations Service & Components', () => {
       expect(org).toBeDefined();
       expect(org.id).toBe('org-acme-01');
       expect(org.name).toBe('Acme Infrastructure Corp');
+    });
+
+    test('createOrganization adds new organization', async () => {
+      const newOrg = await createOrganization({
+        name: 'Test Innovation Hub',
+        slug: 'test-hub',
+        contactEmail: 'contact@testhub.vn',
+        domain: 'testhub.vn',
+        clustersLimit: 2,
+      });
+      expect(newOrg).toBeDefined();
+      expect(newOrg.name).toBe('Test Innovation Hub');
+      expect(newOrg.status).toBe('ACTIVE');
+    });
+
+    test('updateOrganizationStatus updates status in dataset', async () => {
+      const result = await updateOrganizationStatus('org-health-05', 'ACTIVE');
+      expect(result).toBeDefined();
+      expect(result.status).toBe('ACTIVE');
     });
 
     test('getOrganizationMembers returns SME members with segregated scopeNote', async () => {
@@ -118,13 +140,39 @@ describe('Platform Admin Organizations Service & Components', () => {
     });
   });
 
+  describe('Service Filter Removal Verification', () => {
+    test('OrganizationFilters renders search and status filter without service/plan filter dropdown', () => {
+      const onSearchChange = jest.fn();
+      const onStatusChange = jest.fn();
+
+      render(
+        <OrganizationFilters
+          search=""
+          onSearchChange={onSearchChange}
+          status="ALL"
+          onStatusChange={onStatusChange}
+          totalCount={5}
+        />
+      );
+
+      // Search input is present
+      expect(screen.getByLabelText('Tìm kiếm tổ chức')).toBeInTheDocument();
+      // Status filter is present
+      expect(screen.getByLabelText('Lọc theo trạng thái')).toBeInTheDocument();
+      // Service / Plan filter dropdown is NOT present
+      expect(screen.queryByLabelText(/Lọc theo gói cước/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Lọc theo dịch vụ/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Mọi Gói Dịch Vụ/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe('OrganizationsListPage', () => {
     test('renders page title, summary cards, and organization table', async () => {
       const mockNavigate = jest.fn();
       render(<OrganizationsListPage onNavigate={mockNavigate} />);
 
-      expect(screen.getByText(/Quản Lý Tổ Chức & Doanh Nghiệp \(Tenants\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/TỔNG SỐ TỔ CHỨC/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: /Quản Lý Doanh Nghiệp/i })).toBeInTheDocument();
+      expect(screen.getByText(/TỔNG DOANH NGHIỆP/i)).toBeInTheDocument();
 
       // Wait for table to load
       await waitFor(() => {
@@ -132,6 +180,10 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
 
       expect(screen.getByText('Fintech Payments Group')).toBeInTheDocument();
+
+      // Confirm service filter dropdown is absent on page
+      expect(screen.queryByLabelText(/Lọc theo gói cước/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Mọi Gói Dịch Vụ/i)).not.toBeInTheDocument();
     });
 
     test('triggers onNavigate when clicking on an organization', async () => {
@@ -162,6 +214,22 @@ describe('Platform Admin Organizations Service & Components', () => {
         expect(screen.getByText('Fintech Payments Group')).toBeInTheDocument();
         expect(screen.queryByText('Acme Infrastructure Corp')).not.toBeInTheDocument();
       });
+    });
+
+    test('create modal contains required fields and no service selector', async () => {
+      render(<OrganizationsListPage onNavigate={jest.fn()} />);
+
+      const createBtn = screen.getByRole('button', { name: /Tạo Company Mới/i });
+      fireEvent.click(createBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Đăng Ký / Tạo Company Mới')).toBeInTheDocument();
+      });
+
+      expect(screen.getByPlaceholderText(/Ví dụ: VNG Cloud Technology/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/admin@vngcloud.vn/i)).toBeInTheDocument();
+      // No service selector in create modal
+      expect(screen.queryByText(/Gói Dịch Vụ Thuê Bao/i)).not.toBeInTheDocument();
     });
   });
 

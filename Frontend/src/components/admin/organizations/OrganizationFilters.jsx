@@ -1,13 +1,11 @@
 import React from 'react';
-import { Search, Filter, Tag } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 
 export const OrganizationFilters = ({
   search,
   onSearchChange,
   status,
   onStatusChange,
-  plan,
-  onPlanChange,
   totalCount = 0,
 }) => {
   return (
@@ -27,7 +25,7 @@ export const OrganizationFilters = ({
       }}
     >
       {/* Search Input */}
-      <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+      <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
         <input
           type="text"
           placeholder="Tìm theo tên tổ chức, slug hoặc email..."
@@ -86,32 +84,6 @@ export const OrganizationFilters = ({
             <option value="ACTIVE">Đang Hoạt Động</option>
             <option value="TRIAL">Dùng Thử Nghiệm</option>
             <option value="SUSPENDED">Đang Tạm Dừng</option>
-          </select>
-        </div>
-
-        {/* Plan Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Tag size={14} color="#64748B" />
-          <select
-            aria-label="Lọc theo gói cước"
-            value={plan}
-            onChange={(e) => onPlanChange(e.target.value)}
-            style={{
-              padding: '6px 10px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '8px',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: 'var(--dash-bg-canvas)',
-              color: 'var(--dash-text-primary)',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          >
-            <option value="ALL">Mọi Gói Dịch Vụ</option>
-            <option value="SME Starter">SME Starter</option>
-            <option value="SME Pro">SME Pro</option>
-            <option value="Enterprise Cloud">Enterprise Cloud</option>
           </select>
         </div>
 

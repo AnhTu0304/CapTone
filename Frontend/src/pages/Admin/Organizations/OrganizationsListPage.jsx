@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Building2, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck, Plus, X, Save } from 'lucide-react';
-import { getOrganizations } from '../../../services/adminOrganizationsService';
+import { getOrganizations, createOrganization, updateOrganizationStatus } from '../../../services/adminOrganizationsService';
 import OrganizationTable from '../../../components/admin/organizations/OrganizationTable';
 import OrganizationFilters from '../../../components/admin/organizations/OrganizationFilters';
 import { useDebounce } from '../../../hooks/useDebounce';
@@ -12,7 +12,6 @@ export const OrganizationsListPage = ({ onNavigate }) => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [planFilter, setPlanFilter] = useState('ALL');
   const [toastMessage, setToastMessage] = useState(null);
 
   // Modal Đăng Ký / Tạo Company mới
@@ -20,7 +19,6 @@ export const OrganizationsListPage = ({ onNavigate }) => {
   const [createForm, setCreateForm] = useState({
     name: '',
     slug: '',
-    plan: 'SME Pro',
     domain: '',
     contactEmail: '',
     clustersLimit: 3,
@@ -39,7 +37,6 @@ export const OrganizationsListPage = ({ onNavigate }) => {
     try {
       const data = await getOrganizations({
         status: statusFilter,
-        plan: planFilter,
         query: debouncedSearch,
       });
       setOrganizations(data);
@@ -49,7 +46,7 @@ export const OrganizationsListPage = ({ onNavigate }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, planFilter, debouncedSearch]);
+  }, [statusFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchOrganizationsData();
@@ -61,54 +58,54 @@ export const OrganizationsListPage = ({ onNavigate }) => {
     }
   };
 
-  const handleToggleOrgStatus = (org) => {
+  const handleToggleOrgStatus = async (org) => {
     const newStatus = org.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-    setOrganizations((prev) =>
-      prev.map((item) => (item.id === org.id ? { ...item, status: newStatus } : item))
-    );
-    showToast(
-      newStatus === 'ACTIVE'
-        ? `Đã kích hoạt lại hoạt động cho công ty "${org.name}"!`
-        : `Đã tạm ngưng hoạt động của công ty "${org.name}"!`
-    );
+    try {
+      await updateOrganizationStatus(org.id, newStatus);
+      setOrganizations((prev) =>
+        prev.map((item) => (item.id === org.id ? { ...item, status: newStatus } : item))
+      );
+      showToast(
+        newStatus === 'ACTIVE'
+          ? `Đã kích hoạt lại hoạt động cho công ty "${org.name}"!`
+          : `Đã tạm ngưng hoạt động của công ty "${org.name}"!`
+      );
+    } catch (err) {
+      console.error('Lỗi khi cập nhật trạng thái tổ chức:', err);
+      showToast('Không thể cập nhật trạng thái tổ chức. Vui lòng thử lại.');
+    }
   };
 
-  const handleCreateCompanySubmit = (e) => {
+  const handleCreateCompanySubmit = async (e) => {
     e.preventDefault();
     if (!createForm.name.trim() || !createForm.contactEmail.trim()) {
       alert('Vui lòng điền tên công ty và email liên hệ.');
       return;
     }
 
-    const newOrg = {
-      id: `org-${Date.now()}`,
-      name: createForm.name.trim(),
-      slug: createForm.slug.trim() || createForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-      plan: createForm.plan,
-      status: 'ACTIVE',
-      domain: createForm.domain.trim() || `${createForm.slug || 'company'}.com`,
-      contactEmail: createForm.contactEmail.trim(),
-      createdAt: 'Vừa xong',
-      clustersCount: 0,
-      clustersLimit: Number(createForm.clustersLimit) || 3,
-      podsCount: 0,
-      podsLimit: 100,
-      agentHealth: 'Chờ kết nối',
-      enforce2FA: false,
-      membersCount: 1,
-    };
+    try {
+      const newOrg = await createOrganization({
+        name: createForm.name.trim(),
+        slug: createForm.slug.trim() || undefined,
+        domain: createForm.domain.trim() || undefined,
+        contactEmail: createForm.contactEmail.trim(),
+        clustersLimit: Number(createForm.clustersLimit) || 3,
+      });
 
-    setOrganizations((prev) => [newOrg, ...prev]);
-    setIsCreateModalOpen(false);
-    setCreateForm({
-      name: '',
-      slug: '',
-      plan: 'SME Pro',
-      domain: '',
-      contactEmail: '',
-      clustersLimit: 3,
-    });
-    showToast(`Đã tạo thành công doanh nghiệp mới "${newOrg.name}"!`);
+      setOrganizations((prev) => [newOrg, ...prev]);
+      setIsCreateModalOpen(false);
+      setCreateForm({
+        name: '',
+        slug: '',
+        domain: '',
+        contactEmail: '',
+        clustersLimit: 3,
+      });
+      showToast(`Đã tạo thành công doanh nghiệp mới "${newOrg.name}"!`);
+    } catch (err) {
+      console.error('Lỗi khi tạo doanh nghiệp mới:', err);
+      alert(err.message || 'Lỗi khi tạo doanh nghiệp mới. Vui lòng thử lại.');
+    }
   };
 
   const { activeCount, trialCount, suspendedCount } = useMemo(() => {
@@ -167,7 +164,7 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             }}
           >
             <Building2 size={26} style={{ color: '#059669' }} />
-            Quản Lý Công Ty & Doanh Nghiệp (Companies)
+            Quản Lý Doanh Nghiệp (Organizations)
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
             Quản lý tập trung toàn bộ doanh nghiệp đăng ký sử dụng SelfAI, kích hoạt/tạm ngưng, theo dõi thành viên, tác tử và cụm máy chủ.
@@ -319,14 +316,12 @@ export const OrganizationsListPage = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* Filter Bar - Service/Plan filter removed */}
       <OrganizationFilters
         search={searchQuery}
         onSearchChange={setSearchQuery}
         status={statusFilter}
         onStatusChange={setStatusFilter}
-        plan={planFilter}
-        onPlanChange={setPlanFilter}
         totalCount={organizations.length}
       />
 
@@ -348,7 +343,7 @@ export const OrganizationsListPage = ({ onNavigate }) => {
         onToggleStatus={handleToggleOrgStatus}
       />
 
-      {/* Modal Tạo Company Mới */}
+      {/* Modal Tạo Company Mới - No service selector */}
       {isCreateModalOpen && (
         <div
           style={{
@@ -427,28 +422,6 @@ export const OrganizationsListPage = ({ onNavigate }) => {
                     fontFamily: 'var(--font-mono)',
                   }}
                 />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Gói Dịch Vụ Thuê Bao
-                </label>
-                <select
-                  value={createForm.plan}
-                  onChange={(e) => setCreateForm({ ...createForm, plan: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  <option value="SME Starter">SME Starter (Tối đa 1 cụm)</option>
-                  <option value="SME Pro">SME Pro (Tối đa 3 cụm)</option>
-                  <option value="Enterprise Cloud">Enterprise Cloud (Không giới hạn)</option>
-                </select>
               </div>
 
               <div>
