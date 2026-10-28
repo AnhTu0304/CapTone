@@ -39,11 +39,31 @@ const ACTION_CODE_MAP: Record<string, string> = {
 
 export class AiController {
   /**
+   * Helper: Check if user has Platform Super Admin or Admin privileges
+   */
+  private static isUserSuperAdmin(user: any): boolean {
+    if (!user) return false;
+    const r = String(user.role || '').toUpperCase();
+    if (r === 'SUPER_ADMIN' || r === 'ADMIN' || r === 'SYSTEM_ADMIN') return true;
+    if (Array.isArray(user.roles)) {
+      if (user.roles.some((x: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(x).toUpperCase()))) {
+        return true;
+      }
+    }
+    if (Array.isArray(user.systemRoles)) {
+      if (user.systemRoles.some((x: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(x).toUpperCase()))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Helper: Check if user belongs to requested organization and if cluster belongs to that organization
    */
   private static async validateUserOrgAndCluster(user: any, orgId?: string, clusterId?: string): Promise<string | null> {
-    if (user?.role === 'SUPER_ADMIN') {
-      return orgId || null;
+    if (this.isUserSuperAdmin(user)) {
+      return (orgId && orgId !== 'all') ? orgId : null;
     }
     const effectiveOrgId = orgId || user?.organization_id;
     if (!effectiveOrgId) {
@@ -72,7 +92,7 @@ export class AiController {
     if (!incident) {
       throw new ApiError(404, 'Sự cố không tồn tại (Incident not found)');
     }
-    if (user?.role === 'SUPER_ADMIN') {
+    if (this.isUserSuperAdmin(user)) {
       return incident;
     }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
@@ -90,7 +110,7 @@ export class AiController {
    */
   private static async validateIncidentManageAccess(user: any, incidentId: string): Promise<any> {
     const incident = await this.validateIncidentAccess(user, incidentId);
-    if (user?.role === 'SUPER_ADMIN') {
+    if (this.isUserSuperAdmin(user)) {
       return incident;
     }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;

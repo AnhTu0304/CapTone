@@ -62,12 +62,22 @@ export interface IAdminKpiStats {
   };
 }
 
+export interface IRawKpiData {
+  u: any;
+  a: any;
+  c: any;
+  n: any;
+  p: any;
+  o: any;
+  inc: any;
+  heal: any;
+}
+
 export class AdminDashboardModel {
   /**
-   * Lấy số liệu thống kê tổng hợp thực tế từ PostgreSQL cho 4 khối chỉ số cốt lõi và các chỉ số phụ trợ
+   * Truy vấn cơ sở dữ liệu thô (Raw Data Access) cho các chỉ số KPI nền tảng
    */
-  public static async getKpiStats(): Promise<IAdminKpiStats> {
-    // 1. Thống kê Users
+  public static async getRawKpiData(): Promise<IRawKpiData> {
     const usersQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -81,7 +91,6 @@ export class AdminDashboardModel {
       WHERE deleted_at IS NULL;
     `;
 
-    // 2. Thống kê Agents
     const agentsQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -92,7 +101,6 @@ export class AdminDashboardModel {
       FROM agents;
     `;
 
-    // 3. Thống kê Clusters
     const clustersQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -102,7 +110,6 @@ export class AdminDashboardModel {
       WHERE deleted_at IS NULL;
     `;
 
-    // 4. Thống kê Nodes & Pods
     const nodesQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -118,7 +125,6 @@ export class AdminDashboardModel {
       WHERE deleted_at IS NULL;
     `;
 
-    // 5. Thống kê Organizations (Doanh nghiệp)
     const orgsQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -129,7 +135,6 @@ export class AdminDashboardModel {
       WHERE deleted_at IS NULL;
     `;
 
-    // 6. Thống kê Incidents (Sự cố)
     const incidentsQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -138,7 +143,6 @@ export class AdminDashboardModel {
       FROM incidents;
     `;
 
-    // 7. Thống kê Healing Actions (Tự phục hồi)
     const healingQuery = `
       SELECT 
         COUNT(*)::int AS total,
@@ -146,7 +150,6 @@ export class AdminDashboardModel {
       FROM healing_actions;
     `;
 
-    // Chạy song song có phòng thủ (defensive fallbacks)
     const [
       usersRes,
       agentsRes,
@@ -167,114 +170,124 @@ export class AdminDashboardModel {
       pool.query(healingQuery),
     ]);
 
-    const u = usersRes.status === 'fulfilled' ? usersRes.value.rows[0] : {};
-    const a = agentsRes.status === 'fulfilled' ? agentsRes.value.rows[0] : {};
-    const c = clustersRes.status === 'fulfilled' ? clustersRes.value.rows[0] : {};
-    const n = nodesRes.status === 'fulfilled' ? nodesRes.value.rows[0] : {};
-    const p = podsRes.status === 'fulfilled' ? podsRes.value.rows[0] : {};
-    const o = orgsRes.status === 'fulfilled' ? orgsRes.value.rows[0] : {};
-    const inc = incidentsRes.status === 'fulfilled' ? incidentsRes.value.rows[0] : {};
-    const heal = healingRes.status === 'fulfilled' ? healingRes.value.rows[0] : {};
-
-    // 1. Tính toán User stats
-    const totalUsers = u.total || 0;
-    const activeUsers = u.active || 0;
-    const lockedUsers = u.locked || 0;
-    const pendingUsers = u.pending || 0;
-    const newUsersMonth = u.new_month || 0;
-
-    // 2. Tính toán Agent stats
-    const totalAgents = a.total || 0;
-    const onlineAgents = a.online || 0;
-    const offlineAgents = a.offline || 0;
-    const pendingAgents = a.pending || 0;
-    const revokedAgents = a.revoked || 0;
-    const agentAvailRate = totalAgents > 0 ? ((onlineAgents / totalAgents) * 100).toFixed(1) : '100.0';
-
-    // 3. Tính toán Cluster stats
-    const totalClusters = c.total || 0;
-    const healthyClusters = c.healthy || 0;
-    const degradedClusters = c.degraded || 0;
-
-    // 4. Tính toán Nodes & Pods stats
-    const totalNodes = n.total || 0;
-    const totalPods = p.total || 0;
-
-    // 5. Tính toán Organization stats
-    const totalOrgs = o.total || 0;
-    const activeOrgs = o.active || 0;
-    const suspendedOrgs = o.suspended || 0;
-    const newOrgsMonth = o.new_month || 0;
-
-    // 6. Tính toán Incidents stats
-    const activeIncidents = inc.active || 0;
-    const criticalIncidents = inc.critical || 0;
-
-    // 7. Tính toán Healing stats
-    const totalHeals = heal.total || 0;
-    const succeededHeals = heal.succeeded || 0;
-    const healingRate = totalHeals > 0 ? ((succeededHeals / totalHeals) * 100).toFixed(1) : '94.2';
-
     return {
-      companies: {
-        total: totalOrgs,
-        active: activeOrgs,
-        incident: suspendedOrgs,
-        diff: `+${newOrgsMonth} tháng này`,
-        status: suspendedOrgs > 0 ? 'neutral' : 'positive',
-        label: `${activeOrgs} Đang hoạt động • ${suspendedOrgs} Tạm ngưng/Sự cố`,
-      },
-      users: {
-        total: totalUsers,
-        active: activeUsers,
-        locked: lockedUsers,
-        pending: pendingUsers,
-        diff: `+${newUsersMonth} mới`,
-        status: lockedUsers > 0 ? 'neutral' : 'positive',
-        label: `${activeUsers.toLocaleString()} Đang hoạt động • ${lockedUsers} Bị khóa`,
-      },
-      agents: {
-        total: totalAgents,
-        online: onlineAgents,
-        offline: offlineAgents,
-        pending: pendingAgents,
-        revoked: revokedAgents,
-        diff: `${agentAvailRate}% sẵn sàng`,
-        status: offlineAgents > 0 ? 'neutral' : 'positive',
-        label: `${onlineAgents} Online • ${offlineAgents} Offline`,
-      },
-      clusters: {
-        total: totalClusters,
-        healthy: healthyClusters,
-        degraded: degradedClusters,
-        diff: `${totalNodes} Nodes / ${totalPods} Pods`,
-        status: degradedClusters > 0 ? 'critical' : 'positive',
-        label: `${healthyClusters} Ổn định • ${degradedClusters} Cần kiểm tra`,
-      },
-      uptime: {
-        value: totalClusters > 0 && degradedClusters === 0 ? '99.99%' : '99.95%',
-        diff: '+0.05%',
-        status: 'positive',
-        label: 'Cam kết SLA 99.90%',
-      },
-      selfHealingRate: {
-        value: `${healingRate}%`,
-        diff: '+2.4%',
-        status: 'positive',
-        label: 'MTTR trung bình 1.4s',
-      },
-      activeIncidents: {
-        value: activeIncidents > 0 ? `${activeIncidents} Sự cố` : '0 Bình thường',
-        diff: criticalIncidents > 0 ? `${criticalIncidents} Khẩn cấp` : 'Hạ tầng ổn định',
-        status: criticalIncidents > 0 ? 'critical' : activeIncidents > 0 ? 'neutral' : 'positive',
-        label: `${criticalIncidents} Critical • ${activeIncidents - criticalIncidents} Warning/Info`,
-      },
-      managedResources: {
-        value: `${totalNodes} Nodes / ${totalPods} Pods`,
-        diff: '100% Sẵn sàng',
-        status: 'neutral',
-        label: `${totalClusters} Cụm K8s đang vận hành`,
-      },
+      u: usersRes.status === 'fulfilled' ? usersRes.value.rows[0] : {},
+      a: agentsRes.status === 'fulfilled' ? agentsRes.value.rows[0] : {},
+      c: clustersRes.status === 'fulfilled' ? clustersRes.value.rows[0] : {},
+      n: nodesRes.status === 'fulfilled' ? nodesRes.value.rows[0] : {},
+      p: podsRes.status === 'fulfilled' ? podsRes.value.rows[0] : {},
+      o: orgsRes.status === 'fulfilled' ? orgsRes.value.rows[0] : {},
+      inc: incidentsRes.status === 'fulfilled' ? incidentsRes.value.rows[0] : {},
+      heal: healingRes.status === 'fulfilled' ? healingRes.value.rows[0] : {},
     };
+  }
+
+  /**
+   * Truy vấn số liệu thống kê sự cố và tác tử thô từ database
+   */
+  public static async getAlertsStats(): Promise<any> {
+    const query = `
+      SELECT 
+        (SELECT count(*)::int FROM incidents) as total_incidents,
+        (SELECT count(*)::int FROM incidents WHERE severity = 'CRITICAL' AND status NOT IN ('RESOLVED', 'IGNORED')) as critical_incidents,
+        (SELECT count(*)::int FROM incidents WHERE status IN ('OPEN', 'INVESTIGATING')) as open_incidents,
+        (SELECT count(*)::int FROM incidents WHERE status = 'RESOLVED') as resolved_incidents,
+        (SELECT count(*)::int FROM agents) as total_agents,
+        (SELECT count(*)::int FROM agents WHERE status = 'ONLINE') as online_agents,
+        (SELECT count(*)::int FROM agents WHERE status = 'OFFLINE') as offline_agents,
+        (SELECT count(*)::int FROM agents WHERE status = 'PENDING') as pending_agents,
+        (SELECT count(*)::int FROM healing_actions) as total_healing_actions,
+        (SELECT count(*)::int FROM healing_actions WHERE execution_status = 'SUCCEEDED') as succeeded_healing_actions,
+        (SELECT count(*)::int FROM clusters WHERE deleted_at IS NULL) as total_clusters,
+        (SELECT count(*)::int FROM organizations WHERE deleted_at IS NULL) as total_organizations,
+        (SELECT COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(resolved_at, created_at) - detected_at)))::numeric, 0), 45) 
+         FROM incidents WHERE status = 'RESOLVED' AND detected_at IS NOT NULL) as avg_mttr_seconds;
+    `;
+    const res = await pool.query(query);
+    return res.rows[0] || {};
+  }
+
+  /**
+   * Truy vấn danh sách các cụm có tác tử bị Offline
+   */
+  public static async getClustersWithOfflineAgents(): Promise<any[]> {
+    const query = `
+      SELECT 
+        COALESCE(c.id::text, a.cluster_id::text, 'unknown') as cluster_id,
+        COALESCE(c.name, 'Cụm k8s chưa gán') as cluster_name,
+        count(*)::int as total_agents,
+        count(*) FILTER (WHERE a.status = 'OFFLINE')::int as offline_agents,
+        count(*) FILTER (WHERE a.status = 'ONLINE')::int as online_agents,
+        MAX(a.last_seen_at) as last_seen_at
+      FROM agents a
+      LEFT JOIN clusters c ON c.id = a.cluster_id
+      GROUP BY c.id, c.name, a.cluster_id
+      HAVING count(*) FILTER (WHERE a.status = 'OFFLINE') > 0
+      ORDER BY offline_agents DESC;
+    `;
+    const res = await pool.query(query);
+    return res.rows || [];
+  }
+
+  /**
+   * Truy vấn danh sách tác tử bị Offline gần đây
+   */
+  public static async getOfflineAgents(limit: number = 10): Promise<any[]> {
+    const query = `
+      SELECT 
+        a.id,
+        a.name,
+        a.agent_uid,
+        a.status,
+        a.version,
+        a.last_seen_at,
+        COALESCE(c.name, 'minikube') as cluster_name
+      FROM agents a
+      LEFT JOIN clusters c ON c.id = a.cluster_id
+      WHERE a.status = 'OFFLINE'
+      ORDER BY a.last_seen_at DESC NULLS LAST
+      LIMIT $1;
+    `;
+    const res = await pool.query(query, [limit]);
+    return res.rows || [];
+  }
+
+  /**
+   * Truy vấn các sự cố Critical gần đây chưa giải quyết
+   */
+  public static async getRecentCriticalIncidents(limit: number = 5): Promise<any[]> {
+    const query = `
+      SELECT 
+        i.id,
+        i.title,
+        i.incident_type,
+        i.severity,
+        i.status,
+        i.detected_at,
+        COALESCE(o.name, 'Tổ chức chung') as organization_name,
+        COALESCE(c.name, 'Cụm k8s') as cluster_name
+      FROM incidents i
+      LEFT JOIN organizations o ON o.id = i.organization_id
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id)
+      WHERE i.severity = 'CRITICAL' AND i.status NOT IN ('RESOLVED', 'IGNORED')
+      ORDER BY i.detected_at DESC
+      LIMIT $1;
+    `;
+    const res = await pool.query(query, [limit]);
+    return res.rows || [];
+  }
+
+  /**
+   * Truy vấn danh sách các tổ chức đang hoạt động
+   */
+  public static async getActiveOrganizations(): Promise<any[]> {
+    const query = `
+      SELECT id, name, slug, status 
+      FROM organizations 
+      WHERE deleted_at IS NULL 
+      ORDER BY name ASC;
+    `;
+    const res = await pool.query(query);
+    return res.rows || [];
   }
 }

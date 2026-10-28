@@ -356,12 +356,6 @@ export const ADMIN_NAV_GROUPS = [
         badge: 'Cảnh báo',
         badgeColor: '#EF4444',
       },
-      {
-        id: 'system-logs',
-        label: 'Nhật Ký Hệ Thống',
-        path: '/admin/system-logs',
-        icon: FileCode,
-      },
     ],
   },
   {
