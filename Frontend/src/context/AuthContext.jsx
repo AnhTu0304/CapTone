@@ -150,6 +150,10 @@ export const AuthProvider = ({ children }) => {
       });
       localStorage.removeItem('selfheal_active_org_id');
       localStorage.removeItem('selfheal_active_org_name');
+      localStorage.removeItem('selfheal_active_org_role');
+      localStorage.removeItem('selfheal_active_cluster_id');
+      localStorage.removeItem('selfheal_active_cluster_name');
+      localStorage.removeItem('selfheal_active_env_name');
     } catch {}
 
     const res = await authService.register({ email, password, full_name });
@@ -178,6 +182,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('selfheal_active_org_id');
     localStorage.removeItem('selfheal_active_org_name');
     localStorage.removeItem('selfheal_active_org_role');
+    localStorage.removeItem('selfheal_active_cluster_id');
+    localStorage.removeItem('selfheal_active_cluster_name');
+    localStorage.removeItem('selfheal_active_env_name');
     sessionStorage.removeItem('admin_access_token');
     try {
       sessionStorage.removeItem('selfheal_onboarding_state_v1');

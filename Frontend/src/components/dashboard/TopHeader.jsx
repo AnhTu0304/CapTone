@@ -190,7 +190,7 @@ export const TopHeader = () => {
             <span>
               {isSwitchingOrg
                 ? 'Đang chuyển...'
-                : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa chọn tổ chức')}
+                : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa có Tổ chức')}
             </span>
             {currentOrg?.role_in_org && (
               <span
@@ -366,7 +366,11 @@ export const TopHeader = () => {
           >
             <Server size={15} color="var(--dash-text-secondary)" />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-              {currentEnv?.cluster ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}` : (currentEnv?.displayName || currentEnv?.name || 'Chọn Cụm K8s')}
+              {isLoadingEnvs
+                ? 'Đang tải cụm...'
+                : currentEnv?.cluster
+                ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}`
+                : currentEnv?.displayName || currentEnv?.name || (envList.length === 0 ? 'Chưa có Cụm K8s' : 'Chọn Cụm K8s')}
             </span>
             {currentEnv?.agentStatus === 'ONLINE' ? (
               <span

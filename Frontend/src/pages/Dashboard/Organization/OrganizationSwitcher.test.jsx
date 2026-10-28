@@ -4,6 +4,7 @@ import '@testing-library/jest-dom';
 import { DashboardProvider, useDashboard } from '../context/DashboardContext';
 import { TopHeader } from '../../../components/dashboard/TopHeader';
 import { Sidebar } from '../../../components/dashboard/Sidebar';
+import { clusterService } from '../../../services/clusterService';
 import apiClient, {
   getActiveOrganizationId,
   setActiveOrganizationId,
@@ -11,6 +12,15 @@ import apiClient, {
   createDefaultHeaders,
   request,
 } from '../../../services/apiClient';
+
+// Mock clusterService
+jest.mock('../../../services/clusterService', () => ({
+  clusterService: {
+    getClustersByOrg: jest.fn(() => Promise.resolve([])),
+    getAllClusters: jest.fn(() => Promise.resolve([])),
+    getClusterDetail: jest.fn(() => Promise.resolve(null)),
+  },
+}));
 
 // Mock AuthContext
 jest.mock('../../../context/AuthContext', () => ({
@@ -203,6 +213,102 @@ describe('TASK [S2][PB07] 3.1 — Organization Switcher Suite', () => {
 
       expect(screen.getByText('TỔ CHỨC')).toBeInTheDocument();
       expect(screen.getByText('Thành viên & Phân quyền')).toBeInTheDocument();
+    });
+  });
+
+  describe('5. Dynamic K8s Cluster Synchronization & Zero Mock Data', () => {
+    test('5.1. Khi chưa có tổ chức hoặc rỗng, hiển thị đúng "Chưa có Tổ chức" và "Chưa có Cụm K8s"', async () => {
+      render(
+        <DashboardProvider>
+          <TopHeader />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Chưa có Tổ chức')).toBeInTheDocument();
+        expect(screen.getByText('Chưa có Cụm K8s')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Acme Corporation')).not.toBeInTheDocument();
+      expect(screen.queryByText('k8s-cluster-01')).not.toBeInTheDocument();
+      expect(screen.queryByText('cluster-k8s-sme-01')).not.toBeInTheDocument();
+    });
+
+    test('5.2. Khi tổ chức có cụm K8s thực tế, tự động đồng bộ cụm và trạng thái agent eBPF từ database', async () => {
+      clusterService.getClustersByOrg.mockResolvedValueOnce([
+        {
+          id: 'c-uuid-prod',
+          name: 'vng-payment-k8s',
+          environment_name: 'Staging',
+          agent_status: 'ONLINE',
+          nodes_count: 3,
+          pods_count: 12,
+        },
+      ]);
+
+      localStorage.setItem('selfheal_active_org_id', 'org-vng-uuid');
+      localStorage.setItem('selfheal_active_org_name', 'VNG Corporation');
+
+      render(
+        <DashboardProvider>
+          <TopHeader />
+        </DashboardProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/vng-payment-k8s/i)).toBeInTheDocument();
+      });
+
+      expect(localStorage.getItem('selfheal_active_cluster_id')).toBe('c-uuid-prod');
+      expect(localStorage.getItem('selfheal_active_cluster_name')).toBe('vng-payment-k8s');
+      expect(localStorage.getItem('selfheal_active_env_name')).toBe('Staging');
+    });
+
+    test('5.3. Khi chuyển sang tổ chức KHÔNG có cụm K8s, xóa ngay lập tức cụm cũ và hiển thị "Chưa có Cụm K8s"', async () => {
+      clusterService.getClustersByOrg.mockResolvedValueOnce([]);
+
+      const ClusterConsumer = () => {
+        const { currentEnv, switchOrganization, envList } = useDashboard();
+        return (
+          <div>
+            <div data-testid="current-cluster">{currentEnv?.cluster || 'NO_CLUSTER'}</div>
+            <div data-testid="cluster-count">{envList.length}</div>
+            <button
+              onClick={() =>
+                switchOrganization({
+                  id: 'org-empty-k8s',
+                  name: 'Zero Cluster Org',
+                })
+              }
+            >
+              Switch To Empty Cluster Org
+            </button>
+          </div>
+        );
+      };
+
+      localStorage.setItem('selfheal_active_org_id', 'org-with-cluster');
+      localStorage.setItem('selfheal_active_cluster_id', 'old-cluster-uuid');
+      localStorage.setItem('selfheal_active_cluster_name', 'old-cluster-name');
+      localStorage.setItem('selfheal_active_env_name', 'Production');
+
+      render(
+        <DashboardProvider>
+          <ClusterConsumer />
+        </DashboardProvider>
+      );
+
+      expect(screen.getByTestId('current-cluster')).toHaveTextContent('old-cluster-name');
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Switch To Empty Cluster Org'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('current-cluster')).toHaveTextContent('NO_CLUSTER');
+        expect(screen.getByTestId('cluster-count')).toHaveTextContent('0');
+      });
+      expect(localStorage.getItem('selfheal_active_cluster_id')).toBeNull();
+      expect(localStorage.getItem('selfheal_active_cluster_name')).toBeNull();
     });
   });
 });
