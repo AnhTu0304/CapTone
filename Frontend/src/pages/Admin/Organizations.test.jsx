@@ -6,6 +6,7 @@ import OrganizationDetailsPage from './Organizations/OrganizationDetailsPage';
 import OrganizationStatusBadge from '../../components/admin/organizations/OrganizationStatusBadge';
 import OrganizationMembers from '../../components/admin/organizations/OrganizationMembers';
 import OrganizationFilters from '../../components/admin/organizations/OrganizationFilters';
+import OrganizationTable from '../../components/admin/organizations/OrganizationTable';
 import {
   getOrganizations,
   getOrganization,
@@ -28,7 +29,6 @@ describe('Platform Admin Organizations Service & Components', () => {
       const first = orgs[0];
       expect(first).toHaveProperty('id');
       expect(first).toHaveProperty('name');
-      expect(first).toHaveProperty('plan');
       expect(first).toHaveProperty('status');
       expect(first).toHaveProperty('clustersCount');
     });
@@ -140,7 +140,7 @@ describe('Platform Admin Organizations Service & Components', () => {
     });
   });
 
-  describe('Service Filter Removal Verification', () => {
+  describe('Service Filter & Plan Column Removal Verification', () => {
     test('OrganizationFilters renders search and status filter without service/plan filter dropdown', () => {
       const onSearchChange = jest.fn();
       const onStatusChange = jest.fn();
@@ -164,10 +164,39 @@ describe('Platform Admin Organizations Service & Components', () => {
       expect(screen.queryByLabelText(/Lọc theo dịch vụ/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/Mọi Gói Dịch Vụ/i)).not.toBeInTheDocument();
     });
+
+    test('OrganizationTable renders without Gói Dịch Vụ column header and without plan badges', () => {
+      const sampleOrgs = [
+        {
+          id: 'org-test-1',
+          name: 'SME Retail Enterprise',
+          slug: 'sme-retail',
+          domain: 'sme-retail.com',
+          status: 'ACTIVE',
+          createdAt: '26/10/2026',
+          clustersCount: 1,
+          clustersLimit: 3,
+          podsCount: 24,
+          podsLimit: 100,
+          agentHealth: '100% Online',
+          membersCount: 1,
+        },
+      ];
+
+      render(<OrganizationTable organizations={sampleOrgs} />);
+
+      // Column headers
+      expect(screen.queryByText('Gói Dịch Vụ')).not.toBeInTheDocument();
+      expect(screen.queryByText(/SME Pro/i)).not.toBeInTheDocument();
+      expect(screen.getByText('Tổ Chức & Tên Miền')).toBeInTheDocument();
+      expect(screen.getByText('Thành Viên')).toBeInTheDocument();
+      expect(screen.getByText('Cụm K8s & Pods')).toBeInTheDocument();
+      expect(screen.getByText('SME Retail Enterprise')).toBeInTheDocument();
+    });
   });
 
   describe('OrganizationsListPage', () => {
-    test('renders page title, summary cards, and organization table', async () => {
+    test('renders page title, summary cards, and organization table without Gói Dịch Vụ', async () => {
       const mockNavigate = jest.fn();
       render(<OrganizationsListPage onNavigate={mockNavigate} />);
 
@@ -181,9 +210,10 @@ describe('Platform Admin Organizations Service & Components', () => {
 
       expect(screen.getByText('Fintech Payments Group')).toBeInTheDocument();
 
-      // Confirm service filter dropdown is absent on page
+      // Confirm service filter dropdown and column are absent
       expect(screen.queryByLabelText(/Lọc theo gói cước/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/Mọi Gói Dịch Vụ/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('Gói Dịch Vụ')).not.toBeInTheDocument();
     });
 
     test('triggers onNavigate when clicking on an organization', async () => {
@@ -234,7 +264,7 @@ describe('Platform Admin Organizations Service & Components', () => {
   });
 
   describe('OrganizationDetailsPage', () => {
-    test('renders organization details, tabs, and switches views', async () => {
+    test('renders organization details, tabs, and switches views without plan badge', async () => {
       const mockNavigate = jest.fn();
       render(<OrganizationDetailsPage orgId="org-acme-01" onNavigate={mockNavigate} />);
 

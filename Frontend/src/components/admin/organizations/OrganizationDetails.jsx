@@ -98,19 +98,6 @@ export const OrganizationDetails = ({ organization, onBack, onToggleStatus }) =>
                 {organization.name}
               </h1>
               <OrganizationStatusBadge status={organization.status} />
-              <span
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: 'var(--dash-bg-canvas)',
-                  border: '1px solid var(--dash-border)',
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  color: 'var(--dash-text-secondary)',
-                }}
-              >
-                {organization.plan}
-              </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px', fontSize: '0.75rem', color: 'var(--dash-text-muted)', flexWrap: 'wrap' }}>

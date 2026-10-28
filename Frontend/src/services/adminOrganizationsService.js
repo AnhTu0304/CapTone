@@ -369,7 +369,7 @@ const mapBackendOrgToFrontend = (item) => ({
   podsLimit: item.pods_limit ?? item.podsLimit ?? 100,
   agentHealth: item.agent_health || item.agentHealth || '100% Online',
   enforce2FA: item.enforce_2fa ?? item.enforce2FA ?? false,
-  membersCount: item.members_count ?? item.membersCount ?? 3,
+  membersCount: item.members_count ?? item.membersCount ?? 1,
 });
 
 // ==========================================
@@ -551,16 +551,33 @@ export const getOrganizationMembers = async (id) => {
     const res = await request(`/organizations/${id}/members`);
     const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
     if (items.length > 0) {
-      return items.map((m) => ({
-        id: m.id || m.user_id,
-        name: m.name || m.user_name || 'Thành viên',
-        email: m.email || m.user_email || '',
-        smeRole: m.role_name || m.role_code || 'Viewer',
-        scopeNote: 'Quyền thành viên tổ chức (Không có quyền Platform Admin)',
-        lastActive: m.last_active || 'Gần đây',
-        twoFactorEnabled: !!m.two_factor_enabled,
-        status: m.status || 'ACTIVE',
-      }));
+      return items.map((m) => {
+        const userObj = m.user || {};
+        const roleObj = m.role || {};
+        const name =
+          userObj.full_name ||
+          m.full_name ||
+          m.name ||
+          m.user_name ||
+          userObj.email?.split('@')[0] ||
+          m.email?.split('@')[0] ||
+          'Thành viên';
+        const email = userObj.email || m.email || m.user_email || '';
+        const smeRole = roleObj.name || roleObj.code || m.role_name || m.role_code || m.role || 'Viewer';
+        const is2FA = !!(userObj.is_2fa_enabled || m.two_factor_enabled || m.twoFactorEnabled);
+        const lastActive = m.joined_at ? new Date(m.joined_at).toLocaleDateString('vi-VN') : (m.last_active || 'Gần đây');
+
+        return {
+          id: m.id || userObj.id || m.user_id,
+          name,
+          email,
+          smeRole,
+          scopeNote: 'Quyền thành viên tổ chức (Không có quyền Platform Admin)',
+          lastActive,
+          twoFactorEnabled: is2FA,
+          status: m.status || 'ACTIVE',
+        };
+      });
     }
     return MOCK_MEMBERS[id] || MOCK_MEMBERS['org-acme-01'];
   };
@@ -577,12 +594,33 @@ export const getOrganizationMembers = async (id) => {
  * @param {string} id
  * @returns {Promise<OrganizationEnvironment[]>}
  */
-export const getOrganizationEnvironments = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(MOCK_ENVIRONMENTS[id] || MOCK_ENVIRONMENTS['org-acme-01']);
-    }, 60);
-  });
+export const getOrganizationEnvironments = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}/environments`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    if (items.length > 0) {
+      return items.map((env) => ({
+        id: env.id,
+        name:
+          env.name === 'DEVELOPMENT'
+            ? 'Development (Phát Triển)'
+            : env.name === 'STAGING'
+            ? 'Staging (Kiểm Thử)'
+            : env.name,
+        clusterId: env.cluster_id || env.clusterId || 'Chưa gán cụm',
+        status: env.status || 'HEALTHY',
+        workloadsCount: env.workloads_count ?? env.workloadsCount ?? 0,
+        autoHealingMode: env.auto_healing_mode || env.autoHealingMode || 'AUTOMATIC',
+      }));
+    }
+    return MOCK_ENVIRONMENTS[id] || MOCK_ENVIRONMENTS['org-acme-01'];
+  };
+
+  const fetchFromMock = async () => {
+    return MOCK_ENVIRONMENTS[id] || MOCK_ENVIRONMENTS['org-acme-01'];
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -590,12 +628,30 @@ export const getOrganizationEnvironments = (id) => {
  * @param {string} id
  * @returns {Promise<OrganizationCluster[]>}
  */
-export const getOrganizationClusters = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(MOCK_CLUSTERS[id] || MOCK_CLUSTERS['org-acme-01']);
-    }, 60);
-  });
+export const getOrganizationClusters = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}/clusters`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    if (items.length > 0) {
+      return items.map((cls) => ({
+        id: cls.id,
+        name: cls.name,
+        version: cls.k8s_version || cls.version || 'v1.30.2',
+        region: cls.region || 'ap-southeast-1 (Local DC)',
+        nodesCount: cls.nodes_count ?? cls.nodesCount ?? 2,
+        podsCount: cls.pods_count ?? cls.podsCount ?? 0,
+        agentLatency: cls.agent_latency || cls.agentLatency || '1.5ms',
+        status: cls.status || 'READY',
+      }));
+    }
+    return MOCK_CLUSTERS[id] || MOCK_CLUSTERS['org-acme-01'];
+  };
+
+  const fetchFromMock = async () => {
+    return MOCK_CLUSTERS[id] || MOCK_CLUSTERS['org-acme-01'];
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -603,12 +659,29 @@ export const getOrganizationClusters = (id) => {
  * @param {string} id
  * @returns {Promise<OrganizationAgent[]>}
  */
-export const getOrganizationAgents = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(MOCK_AGENTS[id] || MOCK_AGENTS['org-acme-01']);
-    }, 60);
-  });
+export const getOrganizationAgents = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}/agents`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    if (items.length > 0) {
+      return items.map((ag) => ({
+        id: ag.id,
+        node: ag.node_name || ag.node || 'worker-node',
+        clusterId: ag.cluster_id || ag.clusterId || 'k8s-cluster',
+        version: ag.version || 'v1.4.2',
+        kernel: ag.kernel_version || ag.kernel || '5.15.0-generic',
+        status: ag.status || 'ONLINE',
+        heartbeat: ag.last_heartbeat_at ? 'Vừa xong' : (ag.heartbeat || 'Gần đây'),
+      }));
+    }
+    return MOCK_AGENTS[id] || MOCK_AGENTS['org-acme-01'];
+  };
+
+  const fetchFromMock = async () => {
+    return MOCK_AGENTS[id] || MOCK_AGENTS['org-acme-01'];
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -616,12 +689,29 @@ export const getOrganizationAgents = (id) => {
  * @param {string} id
  * @returns {Promise<OrganizationIncident[]>}
  */
-export const getOrganizationIncidents = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(MOCK_INCIDENTS[id] || MOCK_INCIDENTS['org-acme-01']);
-    }, 60);
-  });
+export const getOrganizationIncidents = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/telemetry/incidents?organization_id=${id}`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    if (items.length > 0) {
+      return items.map((inc) => ({
+        id: inc.id,
+        severity: inc.severity || 'MAJOR',
+        service: inc.service || inc.service_name || 'k8s-service',
+        rootCause: inc.root_cause || inc.rootCause || 'Đang phân tích',
+        mttr: inc.mttr || '1.5s',
+        status: inc.status || 'RESOLVED',
+        timestamp: inc.created_at || inc.timestamp || 'Gần đây',
+      }));
+    }
+    return MOCK_INCIDENTS[id] || MOCK_INCIDENTS['org-acme-01'];
+  };
+
+  const fetchFromMock = async () => {
+    return MOCK_INCIDENTS[id] || MOCK_INCIDENTS['org-acme-01'];
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 /**
@@ -629,12 +719,29 @@ export const getOrganizationIncidents = (id) => {
  * @param {string} id
  * @returns {Promise<OrganizationAuditItem[]>}
  */
-export const getOrganizationAuditActivity = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(MOCK_AUDIT_ACTIVITY[id] || MOCK_AUDIT_ACTIVITY['org-acme-01']);
-    }, 60);
-  });
+export const getOrganizationAuditActivity = async (id) => {
+  const fetchFromApi = async () => {
+    const res = await request(`/organizations/${id}/audit-logs`);
+    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    if (items.length > 0) {
+      return items.map((aud) => ({
+        id: aud.id,
+        actor: aud.user?.full_name || aud.actor || 'Quản Trị Viên',
+        actorRole: aud.user_role || aud.actorRole || 'System Actor',
+        action: aud.action_description || aud.action || 'Thao tác cấu hình',
+        target: aud.target_type ? `${aud.target_type}/${aud.target_id || ''}` : (aud.target || 'Hệ thống'),
+        time: aud.created_at ? new Date(aud.created_at).toLocaleString('vi-VN') : (aud.time || 'Gần đây'),
+        hash: aud.hash || aud.signature || 'sha256:verified',
+      }));
+    }
+    return MOCK_AUDIT_ACTIVITY[id] || MOCK_AUDIT_ACTIVITY['org-acme-01'];
+  };
+
+  const fetchFromMock = async () => {
+    return MOCK_AUDIT_ACTIVITY[id] || MOCK_AUDIT_ACTIVITY['org-acme-01'];
+  };
+
+  return executeWithFallback(fetchFromApi, fetchFromMock);
 };
 
 const adminOrganizationsService = {
