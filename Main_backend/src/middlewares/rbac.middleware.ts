@@ -98,7 +98,8 @@ export const requireRoles = (...allowedRoles: string[]) => {
         rolesThatSatisfyAllowed.push('DEVOPS', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'USER', 'VIEWER');
       }
 
-      const hasDbMatch = await SystemRoleService.hasAnyRole(user.id, rolesThatSatisfyAllowed);
+      const isExplicitlyViewerOnly = rawTokenRoles.length > 0 && rawTokenRoles.every((r) => r === 'VIEWER' || r === 'USER') && !normalizedAllowed.includes('VIEWER') && !normalizedAllowed.includes('USER');
+      const hasDbMatch = isExplicitlyViewerOnly ? false : await SystemRoleService.hasAnyRole(user.id, rolesThatSatisfyAllowed);
       if (hasDbMatch) {
         return next();
       }

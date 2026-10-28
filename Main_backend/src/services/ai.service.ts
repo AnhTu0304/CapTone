@@ -66,6 +66,21 @@ export interface RecommendationResult {
   action: string;
   reason: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  target_type?: string | null;
+  target_name?: string | null;
+  target_id?: string | null;
+  target_node?: string | null;
+  action_parameters?: {
+    faulty_pod_id?: string | null;
+    faulty_pod_name?: string | null;
+    faulty_node_id?: string | null;
+    faulty_node_name?: string | null;
+    recommended_destination_node?: string | null;
+    destination_node_id?: string | null;
+    consecutive_failures?: number | null;
+    circuit_breaker_tripped?: boolean | null;
+    manual_playbook?: string[];
+  } | null;
 }
 
 export interface TargetContext {
@@ -84,6 +99,11 @@ export interface AiBackendRCAResponse {
   historical_context_used: boolean;
   similar_incident_ids: string[];
   target?: TargetContext;
+  workload_id?: string | null;
+  namespace?: string | null;
+  cluster_id?: string | null;
+  incident_id?: string | null;
+  request_id?: string | null;
 }
 
 export interface RCAResult {
@@ -106,6 +126,8 @@ export interface RCAResult {
   created_at: string;
   previous_action?: string | null;
   previous_action_result?: string | null;
+  namespace?: string | null;
+  request_id?: string | null;
 }
 
 const METRIC_UNITS: Record<keyof GRUMetricPoint, string> = {
@@ -131,6 +153,10 @@ const ACTION_NAME_MAP: Record<string, string> = {
   ROLLBACK_DEPLOYMENT: 'Rollback Deployment',
   CLEANUP_STORAGE: 'Cleanup Temporary Files',
   TEMPORARY_IP_BLOCK: 'Temporary IP Block',
+  BLOCK_IP: 'Temporary IP Block',
+  BLOCK_IP_TEMP: 'Temporary IP Block',
+  BLOCK_SUSPICIOUS_IP: 'Temporary IP Block',
+  NO_ACTION: 'No Action',
 };
 
 const PRIORITY_INT_MAP: Record<string, number> = {
@@ -188,14 +214,14 @@ export class AiService {
         body: JSON.stringify({
           service_id: input.service_id,
           sequence: input.sequence.map((pt) => ({
-            cpu: Number(pt.cpu),
-            ram: Number(pt.ram),
-            disk: Number(pt.disk),
-            request_rate: Number(pt.request_rate),
-            latency: Number(pt.latency),
-            http_5xx_rate: Number(pt.http_5xx_rate),
-            pod_restart_count: Number(pt.pod_restart_count),
-            replica_count: Number(pt.replica_count),
+            cpu: Math.min(100, Math.max(0, Number(pt.cpu || 0))),
+            ram: Math.min(100, Math.max(0, Number(pt.ram || 0))),
+            disk: Math.min(100, Math.max(0, Number(pt.disk || 0))),
+            request_rate: Math.max(0, Number(pt.request_rate || 0)),
+            latency: Math.max(0, Number(pt.latency || 0)),
+            http_5xx_rate: Math.min(100, Math.max(0, Number(pt.http_5xx_rate || 0))),
+            pod_restart_count: Math.max(0, Number(pt.pod_restart_count || 0)),
+            replica_count: Math.max(1, Number(pt.replica_count || 1)),
           })),
         }),
         signal: AbortSignal.timeout(6000),
@@ -226,11 +252,33 @@ export class AiService {
       // Resolve model_id via Model
       const modelId = await AiPredictionModel.findActiveModelId(client);
 
-      // Resolve workload, cluster, environment via Models
+      // Resolve cluster, environment, and workload via Models safely
       let workloadId: string | null = input.workload_id || null;
       let clusterId: string | null = input.cluster_id || null;
       let environmentId: string | null = input.environment_id || null;
 
+      // 1. Resolve cluster first
+      if (!clusterId) {
+        const cluster = await ClusterModel.findFirst(client);
+        if (cluster) {
+          clusterId = cluster.id;
+          if (!environmentId) environmentId = cluster.environment_id;
+        }
+      }
+
+      // 2. Resolve environment
+      if (!environmentId) {
+        if (clusterId) {
+          const cluster = await ClusterModel.findByIdOrName(clusterId, client);
+          if (cluster) environmentId = cluster.environment_id;
+        }
+        if (!environmentId) {
+          const env = await EnvironmentModel.findFirst(client);
+          if (env) environmentId = env.id;
+        }
+      }
+
+      // 3. Resolve or create workload safely with valid clusterId & namespaceId
       if (!workloadId) {
         let namespaceId: string | null = null;
         try {
@@ -242,35 +290,20 @@ export class AiService {
           );
           if (nsRes.rows.length > 0 && nsRes.rows[0].namespace_id) {
             namespaceId = nsRes.rows[0].namespace_id;
+          } else {
+            const fallbackNs = await client.query(
+              `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id IN (SELECT id FROM clusters WHERE name = $1 OR id::text = $1) OR $1::text IS NULL) AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`,
+              [clusterId]
+            );
+            if (fallbackNs.rows.length > 0) {
+              namespaceId = fallbackNs.rows[0].id;
+            }
           }
         } catch {}
+
         const workload = await WorkloadModel.findOrCreateByName(input.service_id, clusterId, client, namespaceId);
-        if (workload) {
+        if (workload && workload.id && !workload.id.includes(input.service_id)) {
           workloadId = workload.id;
-          if (!clusterId && workload.cluster_id) clusterId = workload.cluster_id;
-        }
-      }
-
-      if (!clusterId && workloadId) {
-        clusterId = await WorkloadModel.findClusterId(workloadId, client);
-      }
-
-      if (!clusterId) {
-        const cluster = await ClusterModel.findFirst(client);
-        if (cluster) {
-          clusterId = cluster.id;
-          if (!environmentId) environmentId = cluster.environment_id;
-        }
-      }
-
-      if (!environmentId) {
-        if (clusterId) {
-          const cluster = await ClusterModel.findByIdOrName(clusterId, client);
-          if (cluster) environmentId = cluster.environment_id;
-        }
-        if (!environmentId) {
-          const env = await EnvironmentModel.findFirst(client);
-          if (env) environmentId = env.id;
         }
       }
 
@@ -417,6 +450,74 @@ export class AiService {
       }
     }
 
+    // Resolve action_history context (anti-loop & circuit breaker) if not passed
+    let actionHistory = input.action_history || null;
+    if (!actionHistory) {
+      try {
+        const actRes = await pool.query(
+          `SELECT 
+             h.id AS action_id,
+             act.code AS action_code,
+             h.target_type,
+             h.target_name,
+             h.target_id,
+             h.started_at,
+             h.completed_at,
+             h.execution_status,
+             h.error_message AS error_details,
+             h.result AS verification_details
+           FROM healing_actions h
+           LEFT JOIN healing_action_types act ON act.id = h.action_type_id
+           WHERE (h.target_name ILIKE $1 OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR h.target_name = $2)))
+           ORDER BY h.completed_at DESC NULLS LAST, h.started_at DESC NULLS LAST, h.created_at DESC
+           LIMIT 10;`,
+          [`%${input.service_id}%`, input.workload_id || null]
+        );
+
+        if (actRes.rows.length > 0) {
+          let consecutiveFailures = 0;
+          for (const r of actRes.rows) {
+            if (r.execution_status === 'FAILED') {
+              consecutiveFailures++;
+            } else if (r.execution_status === 'SUCCEEDED') {
+              break;
+            }
+          }
+          const blockedActions: string[] = [];
+          for (const r of actRes.rows) {
+            if (r.execution_status === 'FAILED' && r.action_code) {
+              if (!blockedActions.includes(r.action_code)) {
+                blockedActions.push(r.action_code);
+              }
+            }
+          }
+          actionHistory = {
+            total_actions_recorded: actRes.rows.length,
+            consecutive_failures: consecutiveFailures,
+            circuit_breaker_tripped: consecutiveFailures >= 2,
+            blocked_actions: blockedActions,
+            history: actRes.rows.map((r: any) => ({
+              action_id: r.action_id,
+              action: r.action_code || 'UNKNOWN',
+              target_type: r.target_type,
+              target_name: r.target_name,
+              target_id: r.target_id,
+              executed_at: r.started_at || r.completed_at,
+              result: r.execution_status === 'SUCCEEDED' ? 'SUCCESS' : (r.execution_status === 'FAILED' ? 'FAILED' : 'PARTIAL'),
+              verification_result: typeof r.verification_details === 'object' && r.verification_details !== null
+                ? JSON.stringify(r.verification_details)
+                : (r.verification_details ? String(r.verification_details) : null),
+              failure_reason: typeof r.error_details === 'object' && r.error_details !== null
+                ? JSON.stringify(r.error_details)
+                : (r.error_details ? String(r.error_details) : null),
+            })),
+          };
+        }
+      } catch (err) {
+        console.warn('[AiService] Failed to compile action_history:', err);
+      }
+    }
+
     const rcaPayload: Record<string, any> = {
       service_id: input.service_id,
       risk_type: input.risk_type,
@@ -435,6 +536,16 @@ export class AiService {
       logs: input.logs,
       kubernetes_events: input.kubernetes_events,
     };
+
+    if (input.request_id) rcaPayload.request_id = input.request_id;
+    if (input.incident_id) rcaPayload.incident_id = input.incident_id;
+    if (input.cluster_id) rcaPayload.cluster_id = input.cluster_id;
+    if (input.namespace) rcaPayload.namespace = input.namespace;
+    if (input.workload_id) rcaPayload.workload_id = input.workload_id;
+    if (input.workload_type) rcaPayload.workload_type = input.workload_type;
+    if (input.suspected_pod_name) rcaPayload.suspected_pod_name = input.suspected_pod_name;
+    if (input.metric_sequence) rcaPayload.metric_sequence = input.metric_sequence;
+    if (actionHistory) rcaPayload.action_history = actionHistory;
 
     if ((input as any).kubernetes) {
       rcaPayload.kubernetes = (input as any).kubernetes;
@@ -478,7 +589,7 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rcaPayload),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(25000),
       });
 
       if (!response.ok) {
@@ -503,7 +614,7 @@ export class AiService {
     try {
       await client.query('BEGIN');
 
-      // Resolve workload, cluster, environment, and organization
+      // Resolve cluster, environment, organization, and workload safely
       let workloadId: string | null = input.workload_id || null;
       let clusterId: string | null = input.cluster_id || null;
       let environmentId: string | null = input.environment_id || null;
@@ -517,18 +628,6 @@ export class AiService {
           if (!clusterId) clusterId = predContext.cluster_id || null;
           if (!workloadId) workloadId = predContext.workload_id || null;
         }
-      }
-
-      if (!workloadId) {
-        const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
-        if (workload) {
-          workloadId = workload.id;
-          if (!clusterId && workload.cluster_id) clusterId = workload.cluster_id;
-        }
-      }
-
-      if (!clusterId && workloadId) {
-        clusterId = await WorkloadModel.findClusterId(workloadId, client);
       }
 
       if (!clusterId) {
@@ -550,6 +649,13 @@ export class AiService {
             environmentId = env.id;
             organizationId = env.organization_id;
           }
+        }
+      }
+
+      if (!workloadId) {
+        const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
+        if (workload) {
+          workloadId = workload.id;
         }
       }
 
@@ -643,7 +749,7 @@ export class AiService {
         root_cause_type: aiResponse.root_cause.cause,
         root_cause_description: aiResponse.explanation,
         confidence_score: rcaConfidence,
-        analysis_method: 'AI_DETERMINISTIC_RULES',
+        analysis_method: (aiResponse as any).engine || 'OpenAI GPT-4o-mini',
         analysis_result: JSON.stringify(aiResponse),
       });
       const rcaAnalysisId = rcaRecord.id;
@@ -693,7 +799,11 @@ export class AiService {
         explanation: aiResponse.explanation,
         historical_context_used: aiResponse.historical_context_used ?? false,
         similar_incident_ids: aiResponse.similar_incident_ids ?? [],
-        target: aiResponse.target,
+        target: aiResponse.target || {
+          type: aiResponse.recommendation.target_type || targetType,
+          name: aiResponse.recommendation.target_name || rcaPayload.pod_id || input.service_id,
+          id: aiResponse.recommendation.target_id || workloadId || undefined,
+        },
         environment_id: environmentId,
         cluster_id: clusterId,
         workload_id: workloadId,
@@ -701,6 +811,8 @@ export class AiService {
         created_at: incidentCreatedAt,
         previous_action: prevAction,
         previous_action_result: prevActionResult,
+        namespace: aiResponse.namespace || input.namespace || undefined,
+        request_id: aiResponse.request_id || input.request_id || undefined,
       };
     } catch (dbError) {
       await client.query('ROLLBACK');

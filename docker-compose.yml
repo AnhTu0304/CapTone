@@ -94,6 +94,8 @@ services:
       dockerfile: Dockerfile
     container_name: captone-ai-backend
     restart: unless-stopped
+    env_file:
+      - ./AI_backend/.env
     environment:
       PORT: 8000
     ports:

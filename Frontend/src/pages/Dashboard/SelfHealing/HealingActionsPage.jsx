@@ -15,6 +15,97 @@ import {
   ChevronRight
 } from 'lucide-react';
 
+const ACTION_LABELS_VI = {
+  RESTART_POD: 'Khởi động lại Pod (RESTART_POD)',
+  REPLACE_POD: 'Thay thế Pod mới (REPLACE_POD)',
+  SCALE_REPLICAS: 'Mở rộng bản sao (SCALE_REPLICAS)',
+  SCALE_UP: 'Tăng số lượng Pod (SCALE_UP)',
+  SCALE_DOWN: 'Thu hẹp bản sao (SCALE_DOWN)',
+  ROLLBACK_DEPLOYMENT: 'Quay lui phiên bản (ROLLBACK_DEPLOYMENT)',
+  CLEANUP_STORAGE: 'Dọn dẹp ổ đĩa (CLEANUP_STORAGE)',
+  CLEANUP_TEMP_FILES: 'Dọn dẹp tệp tạm (CLEANUP_TEMP_FILES)',
+  TEMPORARY_IP_BLOCK: 'Chặn tạm thời IP tấn công (TEMPORARY_IP_BLOCK)',
+  BLOCK_IP_TEMP: 'Chặn tạm thời IP tấn công (BLOCK_IP_TEMP)',
+  NO_ACTION: 'Giám sát an toàn (NO_ACTION)',
+};
+
+const formatHealingActionDetails = (item, actionCode, targetName) => {
+  const ns = item.namespace || 'default';
+  const rawMsg = String(item.result?.message || item.error_message || '');
+  const actionVi = ACTION_LABELS_VI[actionCode] || actionCode || 'Tự phục hồi';
+
+  // 1. Parse Kubernetes RBAC 403 Forbidden error
+  const rbacMatch = rawMsg.match(
+    /User\\?\s*"([^"\\]+)\\?"\s+cannot\s+(\w+)\s+resource\s+\\?"([^"\\]+)\\?"(?:\s+in API group\s+\\?"([^"\\]*)\\?")?(?:\s+in the namespace\s+\\?"([^"\\]+)\\?")?/i
+  );
+  if (rbacMatch || rawMsg.includes('(403)') || rawMsg.includes('Forbidden')) {
+    const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
+    const verb = rbacMatch ? rbacMatch[2] : 'patch';
+    const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
+    const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : ns;
+    return {
+      title: `Thực thi ${actionVi} trên dịch vụ "${targetName}" thất bại (Lỗi phân quyền Kubernetes 403 Forbidden)`,
+      detail: `Nguyên nhân cụ thể: ServiceAccount "${saUser}" thiếu quyền RBAC ("${verb}") đối với tài nguyên "${resource}" tại namespace "${targetNs}".`,
+    };
+  }
+
+  // 2. Parse Kubernetes 404 NotFound error
+  if (rawMsg.includes('(404)') || /not found/i.test(rawMsg)) {
+    return {
+      title: `Thực thi ${actionVi} trên dịch vụ "${targetName}" thất bại (404 Not Found)`,
+      detail: `Nguyên nhân cụ thể: Không tìm thấy đối tượng Deployment/Pod "${targetName}" tại namespace "${ns}" trên cụm Kubernetes.`,
+    };
+  }
+
+  // 3. Parse generic English success message
+  const successMatch = rawMsg.match(/Self-healing mitigate action '([^']+)' executed successfully on ([^.]+)\.?/i);
+  if (successMatch || item.execution_status === 'SUCCEEDED') {
+    const code = (successMatch ? successMatch[1] : actionCode || '').toUpperCase();
+    if (code === 'NO_ACTION') {
+      return {
+        title: `Giám sát an toàn (NO_ACTION) trên dịch vụ "${targetName}"`,
+        detail: `Hệ thống ghi nhận dịch vụ "${targetName}" (namespace "${ns}") đang trong ngưỡng an toàn hoặc giữ trạng thái bảo vệ, không cần can thiệp trực tiếp lên Pod.`,
+      };
+    }
+    if (code === 'SCALE_REPLICAS' || code === 'SCALE_UP') {
+      return {
+        title: `Đã mở rộng số lượng bản sao (${code}) cho dịch vụ "${targetName}" thành công`,
+        detail: `K8s Agent đã cập nhật cấu hình replicas cho Deployment "${targetName}" tại namespace "${ns}" để phân tải lưu lượng.`,
+      };
+    }
+    if (code === 'REPLACE_POD') {
+      return {
+        title: `Đã thay thế và khởi tạo lại Pod mới (REPLACE_POD) cho dịch vụ "${targetName}" thành công`,
+        detail: `K8s Agent đã điều phối thay thế Pod lỗi của dịch vụ "${targetName}" tại namespace "${ns}" và xác nhận Pod mới đạt trạng thái Ready.`,
+      };
+    }
+    if (code === 'RESTART_POD') {
+      return {
+        title: `Đã khởi động lại Pod (RESTART_POD) cho dịch vụ "${targetName}" thành công`,
+        detail: `K8s Agent đã thực thi khởi động lại Pod của dịch vụ "${targetName}" tại namespace "${ns}" để giải phóng tài nguyên bị treo.`,
+      };
+    }
+    return {
+      title: `Đã thực thi thành công ${ACTION_LABELS_VI[code] || code} trên dịch vụ "${targetName}"`,
+      detail: rawMsg && !rawMsg.includes('Self-healing mitigate action') ? rawMsg : `Đã hoàn tất lệnh tự phục hồi trên "${targetName}" (namespace "${ns}").`,
+    };
+  }
+
+  // 4. Other failed messages (strip HTTPHeaderDict dump if present)
+  if (rawMsg.includes('HTTPHeaderDict')) {
+    const cleanMsg = rawMsg.split('HTTP response headers:')[0].trim();
+    return {
+      title: `Thực thi ${actionVi} trên dịch vụ "${targetName}" thất bại`,
+      detail: cleanMsg || 'Lỗi kết nối Kubernetes API khi thực thi lệnh tự phục hồi.',
+    };
+  }
+
+  return {
+    title: rawMsg || `Thực thi ${actionVi} trên dịch vụ "${targetName}"`,
+    detail: item.error_message && item.error_message !== rawMsg ? item.error_message : null,
+  };
+};
+
 export const HealingActionsPage = () => {
   const { currentOrg, currentEnv } = useDashboard();
   const [runningActions, setRunningActions] = useState([]);
@@ -64,15 +155,17 @@ export const HealingActionsPage = () => {
       : `${(durMs / 1000).toFixed(1)}s`;
 
     const targetName = item.target_name || item.target_id || 'Chưa xác định';
-    const actionTypeName = item.action_type_name || item.action_type_code || 'Tự phục hồi';
+    const actionTypeCode = item.action_type_code || item.action_type_name || 'RESTART_POD';
     const clusterName = item.cluster_name || currentEnv?.name || currentEnv?.cluster || 'Mặc định';
     const orgName = item.organization_name || currentOrg?.name || 'Tổ chức hiện tại';
     const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
+    const formattedInfo = formatHealingActionDetails(item, actionTypeCode, targetName);
 
     return {
       id: shortId,
       rawId: item.id,
-      title: item.result?.message || `Thực thi ${actionTypeName} trên ${targetName}`,
+      title: formattedInfo.title,
+      detailMessage: formattedInfo.detail,
       service: targetName,
       clusterName,
       orgName,
@@ -86,7 +179,7 @@ export const HealingActionsPage = () => {
       riskLevel: item.risk_level || 'LOW',
       executionMode: item.execution_mode || 'AUTO',
       approvalStatus: item.approval_status || 'NOT_REQUIRED',
-      errorMessage: item.error_message || null,
+      errorMessage: formattedInfo.detail || null,
       rawItem: item,
     };
   }, [currentEnv?.cluster, currentEnv?.name, currentOrg?.name]);
@@ -579,7 +672,7 @@ export const HealingActionsPage = () => {
                     padding: '14px 18px',
                     backgroundColor: isCompleted ? 'rgba(5, 150, 105, 0.02)' : '#FFFFFF',
                     border: `1px solid ${borderColor}`,
-                    borderLeft: `4px solid ${leftColor}`,
+                    borderRadius: '10px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -587,7 +680,7 @@ export const HealingActionsPage = () => {
                     gap: '12px',
                   }}
                 >
-                  <div>
+                  <div style={{ flex: '1 1 520px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
                         {act.id}
@@ -604,18 +697,19 @@ export const HealingActionsPage = () => {
                           backgroundColor: badgeBg,
                           color: badgeColor,
                           border: `1px solid ${badgeBorder}`,
+                          borderRadius: '4px',
                         }}
                       >
                         {act.stage}
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
                       {act.title}
                     </div>
                     {act.errorMessage && (
-                      <div style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '2px' }}>
-                        Lỗi / Lý do: {act.errorMessage}
+                      <div style={{ fontSize: '0.78125rem', color: isFailed ? '#DC2626' : '#475569', marginTop: '3px', lineHeight: 1.45 }}>
+                        {act.errorMessage}
                       </div>
                     )}
                   </div>

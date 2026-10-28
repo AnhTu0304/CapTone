@@ -103,7 +103,7 @@ export class AgentService {
     if (clusterId && serviceId) {
       try {
         const nsRes = await pool.query(
-          `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id IN (SELECT id FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
+          `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
           [clusterId, namespaceName]
         );
         const namespaceId = nsRes.rows[0]?.id || null;

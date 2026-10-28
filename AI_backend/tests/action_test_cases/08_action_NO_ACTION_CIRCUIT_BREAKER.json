@@ -1,0 +1,128 @@
+{
+  "test_case_id": "08",
+  "action_name": "NO_ACTION",
+  "scenario_title": "Ngắt mạch an toàn Circuit Breaker & Human-in-the-Loop",
+  "file_name": "08_action_NO_ACTION_CIRCUIT_BREAKER.json",
+  "test_status": "PASSED",
+  "tested_at": "2026-10-26T15:56:44.445943+00:00",
+  "description": "Sự cố MongoDB Replica Set OOM SIGKILL 137, Pod giữ vai trò PRIMARY, đã thử tự động cứu chữa 2 lần thất bại (consecutive_failures: 2). Kích hoạt Circuit Breaker chuyển quyền can thiệp thủ công (NO_ACTION, CRITICAL) kèm manual_playbook 3 bước failover rs.stepDown(60).",
+  "input_payload": {
+    "request_id": "req-20261026-circuit-breaker-008",
+    "incident_id": "inc-20261026-circuit-breaker-008",
+    "cluster_id": "9ea1db42-7524-4238-8716-315cbe0d0b39",
+    "namespace": "test-lab",
+    "service_id": "mongodb",
+    "workload_id": "wl-7788-99aa-bbcc-ddeeff001122",
+    "workload_type": "StatefulSet",
+    "suspected_pod_name": "mongodb-0",
+    "risk_type": "OOM",
+    "confidence": 0.94,
+    "metrics": {
+      "cpu": 45.2,
+      "ram": 98.7,
+      "disk": 34.0,
+      "request_rate": 420.5,
+      "latency": 850.0,
+      "http_5xx_rate": 6.8,
+      "pod_restart_count": 3,
+      "replica_count": 3
+    },
+    "kubernetes": {
+      "all_pods": [
+        {
+          "pod_name": "mongodb-0",
+          "status": "Running",
+          "restart_count": 3,
+          "termination": {
+            "last_exit_code": 137,
+            "reason": "OOMKilled"
+          },
+          "mongodb_cluster_health": {
+            "role": "PRIMARY",
+            "quorum_status": "INTACT"
+          }
+        }
+      ]
+    },
+    "action_history": {
+      "total_actions_recorded": 2,
+      "consecutive_failures": 2,
+      "circuit_breaker_tripped": true,
+      "blocked_actions": [
+        "RESTART_POD",
+        "REPLACE_POD"
+      ]
+    }
+  },
+  "output_response": {
+    "service_id": "mongodb",
+    "prediction": {
+      "service_id": "mongodb",
+      "threshold": 0.9600000000000005,
+      "thresholds": {
+        "CPU_OVERLOAD": 0.75,
+        "OOM": 0.5875,
+        "DISK_FULL": 0.8475,
+        "HIGH_LATENCY": 0.5275,
+        "HTTP_5XX_SPIKE": 0.7375,
+        "TRAFFIC_OVERLOAD": 0.87,
+        "SCALE_DOWN_CANDIDATE": 0.96
+      },
+      "detected_risks": [
+        {
+          "risk_type": "OOM",
+          "confidence": 0.94
+        }
+      ],
+      "risk_outputs": {
+        "OOM": {
+          "confidence": 0.94
+        }
+      }
+    },
+    "root_cause": {
+      "cause": "Container memory exhausted",
+      "confidence": 0.99,
+      "severity": "CRITICAL"
+    },
+    "evidence": [
+      "Mức sử dụng RAM ở ngưỡng nguy hiểm (98.7%)",
+      "Tiến trình trên Pod 'mongodb-0' bị tiêu diệt: exitCode 137 (OOMKilled)",
+      "Container terminated with exitCode 137 (OOM-Killer SIGKILL)",
+      "GRU predicted OOM (94.0%)",
+      "Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True)"
+    ],
+    "recommendation": {
+      "action": "NO_ACTION",
+      "reason": "Phát hiện lặp sự cố liên tiếp (2 lần thử restart/replace trước đó đều thất bại). Kích hoạt Circuit Breaker chuyển quyền điều khiển cho kỹ sư vận hành (Human-in-the-Loop) nhằm tránh crash loop và nguy cơ ảnh hưởng toàn cụm.",
+      "priority": "CRITICAL",
+      "target_type": "POD",
+      "target_name": "mongodb-0",
+      "target_id": null,
+      "target_node": null,
+      "action_parameters": {
+        "faulty_pod_id": null,
+        "faulty_pod_name": "mongodb-0",
+        "faulty_node_id": null,
+        "faulty_node_name": null,
+        "recommended_destination_node": null,
+        "destination_node_id": null,
+        "consecutive_failures": 2,
+        "circuit_breaker_tripped": true,
+        "manual_playbook": [
+          "1. Failover an toàn: Chuyển quyền Primary sang Pod khác bằng lệnh 'rs.stepDown(60)' trên MongoDB Shell.",
+          "2. Tăng cấu hình cgroup: Cập nhật StatefulSet với resources.limits.memory: 2Gi để tương thích với WiredTiger cache 512MB + query overhead.",
+          "3. Đánh Index: Tạo Index cho trường truy vấn 'createdAt' trên collection 'orders' để ngăn chặn CollScan toàn bộ 250,000 documents."
+        ]
+      }
+    },
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Cạn kiệt bộ nhớ container (OOM). Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True), do đó quy trình chẩn đoán và hành động đã được đánh giá lại an toàn. Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu.",
+    "historical_context_used": false,
+    "similar_incident_ids": [],
+    "workload_id": "wl-7788-99aa-bbcc-ddeeff001122",
+    "namespace": "test-lab",
+    "cluster_id": "9ea1db42-7524-4238-8716-315cbe0d0b39",
+    "incident_id": "inc-20261026-circuit-breaker-008",
+    "request_id": "req-20261026-circuit-breaker-008"
+  }
+}
