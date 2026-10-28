@@ -12,3 +12,5 @@ __pycache__/
 
 .aider-desk/
 skills-lock.json
+scratch/
+dist/

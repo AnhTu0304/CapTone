@@ -193,7 +193,7 @@ class RootCauseAnalysisAgent:
             )
         return RCAConclusion(
             result=RootCauseResult(
-                cause=self.CAUSE_LABELS.get(cause_code, cause_code.replace("_", " ").title()),
+                cause=self.CAUSE_LABELS_VI.get(cause_code, self.CAUSE_LABELS.get(cause_code, cause_code.replace("_", " ").title())),
                 confidence=round(confidence, 4),
                 severity=severity,
             ),

@@ -356,6 +356,7 @@ export const normalizeServiceName = (val) => {
 
 export const PredictionsPage = () => {
   const { currentOrg, currentEnv, isAgentConnected, envList, setCurrentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster || '';
 
   // State dữ liệu thật từ Backend
   const [loading, setLoading] = useState(true);
@@ -631,10 +632,7 @@ export const PredictionsPage = () => {
       ]);
 
       if (workloadsRes.status === 'fulfilled' && Array.isArray(workloadsRes.value) && workloadsRes.value.length > 0) {
-        setRegisteredWorkloads((prev) => {
-          if (prev.length === workloadsRes.value.length) return prev;
-          return workloadsRes.value;
-        });
+        setRegisteredWorkloads(workloadsRes.value);
       }
 
       if (statsRes.status === 'fulfilled' && statsRes.value) {
@@ -881,10 +879,8 @@ export const PredictionsPage = () => {
         if (payload.type === 'ai_recommendation' && payload.data) {
           const newRec = payload.data;
           setRecommendations((prev) => {
-            if (!prev.some((r) => r.id === newRec.id)) {
-              return [newRec, ...prev.slice(0, 49)];
-            }
-            return prev;
+            const filtered = prev.filter((r) => r.id !== newRec.id);
+            return [newRec, ...filtered.slice(0, 49)];
           });
         }
       },
@@ -1165,6 +1161,73 @@ export const PredictionsPage = () => {
     return pinnedService || availableWorkloads[0] || '';
   }, [selectedWorkload, pinnedService, availableWorkloads]);
 
+  // Thông tin số Pod và số Node của dịch vụ hiện tại (Realtime theo luồng Telemetry WebSocket & Topology)
+  const currentServiceMetadata = useMemo(() => {
+    if (!currentServiceTarget) return { pods: 2, nodes: 1 };
+
+    // 1. Ưu tiên cao nhất: Đọc trực tiếp từ luồng Telemetry WebSocket thời gian thực (5s/lần)
+    const liveBatch = batchProgressMap[currentServiceTarget];
+    if (liveBatch) {
+      const pt = liveBatch.latest_point || (Array.isArray(liveBatch.points) && liveBatch.points[liveBatch.points.length - 1]);
+      if (pt && pt.replica_count !== undefined && Number(pt.replica_count) > 0) {
+        return {
+          pods: Number(pt.replica_count),
+          nodes: 1,
+        };
+      }
+    }
+
+    // 2. Tra cứu từ chuỗi dự báo thời gian thực của Service
+    const livePred = servicePredictionMap[currentServiceTarget];
+    if (livePred?.sequence && Array.isArray(livePred.sequence) && livePred.sequence.length > 0) {
+      const lastPt = livePred.sequence[livePred.sequence.length - 1];
+      if (lastPt && lastPt.replica_count !== undefined && Number(lastPt.replica_count) > 0) {
+        return {
+          pods: Number(lastPt.replica_count),
+          nodes: 1,
+        };
+      }
+    }
+
+    // 3. Tìm trong danh sách Workloads đồng bộ từ K8s Cluster Inventory
+    if (Array.isArray(registeredWorkloads)) {
+      const found = registeredWorkloads.find((w) => {
+        const wName = typeof w === 'string' ? w : w?.name;
+        return normalizeServiceName(wName) === currentServiceTarget;
+      });
+      if (found && typeof found === 'object' && found.pod_count !== undefined) {
+        return {
+          pods: Math.max(1, Number(found.pod_count) || 2),
+          nodes: Math.max(1, Number(found.node_count) || 1),
+        };
+      }
+    }
+
+    // 4. Tra cứu từ khuyến nghị hành động phục hồi (nếu có scale event)
+    const relatedRec = recommendations.find((r) => {
+      const tName = normalizeServiceName(r.target_name || r.target_id);
+      return tName === currentServiceTarget;
+    });
+    if (relatedRec?.action_parameters?.current_replicas) {
+      return {
+        pods: Number(relatedRec.action_parameters.current_replicas) || 2,
+        nodes: 1,
+      };
+    }
+
+    // 5. Fallback mặc định theo topology Kubernetes thực tế
+    const defaults = {
+      'ecommerce-store-app': { pods: 2, nodes: 1 },
+      'sme-order-service': { pods: 2, nodes: 1 },
+      'attack-injector-app': { pods: 2, nodes: 1 },
+      'chaos-testagent2': { pods: 2, nodes: 1 },
+      'mongodb': { pods: 2, nodes: 1 },
+      'selfheal-test-app': { pods: 2, nodes: 1 },
+    };
+
+    return defaults[currentServiceTarget] || { pods: 2, nodes: 1 };
+  }, [currentServiceTarget, batchProgressMap, servicePredictionMap, registeredWorkloads, recommendations]);
+
 
   // Lấy dự báo GRU của riêng dịch vụ đang xem (luôn cập nhật bản ghi mới nhất, không bị kẹt ở lượt cũ)
   const displaySelectedPrediction = useMemo(() => {
@@ -1432,6 +1495,144 @@ export const PredictionsPage = () => {
     list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
     return list;
   }, [isAgentConnected, healingActions, bottomServiceFilter]);
+
+  // Phân trang 10 mục mỗi trang cho cả 3 tab bên dưới
+  const ITEMS_PER_PAGE = 10;
+  const [recPage, setRecPage] = useState(1);
+  const [actPage, setActPage] = useState(1);
+  const [predPage, setPredPage] = useState(1);
+
+  useEffect(() => {
+    setRecPage(1);
+    setActPage(1);
+    setPredPage(1);
+  }, [bottomServiceFilter, logWorkloadFilter, selectedTypeFilter, currentEnv?.id, currentEnv?.cluster]);
+
+  const recTotalPages = Math.max(1, Math.ceil(displayRecommendations.length / ITEMS_PER_PAGE));
+  const actTotalPages = Math.max(1, Math.ceil(displayHealingActions.length / ITEMS_PER_PAGE));
+  const predTotalPages = Math.max(1, Math.ceil(displayPredictions.length / ITEMS_PER_PAGE));
+
+  const safeRecPage = Math.min(recPage, recTotalPages);
+  const safeActPage = Math.min(actPage, actTotalPages);
+  const safePredPage = Math.min(predPage, predTotalPages);
+
+  const paginatedRecommendations = useMemo(() => {
+    const start = (safeRecPage - 1) * ITEMS_PER_PAGE;
+    return displayRecommendations.slice(start, start + ITEMS_PER_PAGE);
+  }, [displayRecommendations, safeRecPage]);
+
+  const paginatedHealingActions = useMemo(() => {
+    const start = (safeActPage - 1) * ITEMS_PER_PAGE;
+    return displayHealingActions.slice(start, start + ITEMS_PER_PAGE);
+  }, [displayHealingActions, safeActPage]);
+
+  const paginatedPredictions = useMemo(() => {
+    const start = (safePredPage - 1) * ITEMS_PER_PAGE;
+    return displayPredictions.slice(start, start + ITEMS_PER_PAGE);
+  }, [displayPredictions, safePredPage]);
+
+  const renderPaginationBar = (currentPage, totalItems, onPageChange) => {
+    const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+    if (totalItems <= 0) return null;
+    const startIdx = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+    const endIdx = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        pages.push(i);
+      } else if (pages[pages.length - 1] !== '...') {
+        pages.push('...');
+      }
+    }
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginTop: '16px',
+          paddingTop: '14px',
+          borderTop: '1px solid #E2E8F0',
+        }}
+      >
+        <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
+          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> trong tổng số{' '}
+          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> mục (10 mục / trang)
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            style={{
+              padding: '5px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: currentPage <= 1 ? '#F8FAFC' : '#FFFFFF',
+              color: currentPage <= 1 ? '#94A3B8' : '#334155',
+              cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            &laquo; Trước
+          </button>
+
+          {pages.map((p, idx) =>
+            p === '...' ? (
+              <span key={`ellipsis-${idx}`} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.75rem' }}>
+                ...
+              </span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onPageChange(p)}
+                style={{
+                  minWidth: '30px',
+                  height: '30px',
+                  padding: '0 8px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  borderRadius: '6px',
+                  border: currentPage === p ? '1px solid #2563EB' : '1px solid #CBD5E1',
+                  backgroundColor: currentPage === p ? '#2563EB' : '#FFFFFF',
+                  color: currentPage === p ? '#FFFFFF' : '#334155',
+                  cursor: 'pointer',
+                }}
+              >
+                {p}
+              </button>
+            )
+          )}
+
+          <button
+            type="button"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            style={{
+              padding: '5px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: currentPage >= totalPages ? '#F8FAFC' : '#FFFFFF',
+              color: currentPage >= totalPages ? '#94A3B8' : '#334155',
+              cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Sau &raquo;
+          </button>
+        </div>
+      </div>
+    );
+  };
 
 
   const currentServiceBatchProgress = useMemo(() => {
@@ -1762,6 +1963,12 @@ export const PredictionsPage = () => {
                 <span>Lượt: <strong style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{isAgentConnected ? (displaySelectedPrediction?.id?.substring(0, 8) || 'N/A') : 'N/A'}</strong></span>
                 <span>&bull;</span>
                 <span>Dịch vụ: <strong style={{ fontFamily: 'var(--font-mono)', color: '#2563EB' }}>{isAgentConnected ? (currentServiceTarget || 'Chưa có dữ liệu') : 'Chưa kết nối'}</strong></span>
+                {isAgentConnected && currentServiceTarget && (
+                  <>
+                    <span>&bull;</span>
+                    <span>Quy mô: <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>{currentServiceMetadata.pods} Pods</strong> / <strong style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}>{currentServiceMetadata.nodes} Node</strong></span>
+                  </>
+                )}
               </p>
 
               {/* Bộ chọn chuyển đổi Dịch vụ dạng Dropdown (Sổ xuống) trực tiếp tại Biểu Đồ */}
@@ -1826,6 +2033,49 @@ export const PredictionsPage = () => {
                         pointerEvents: 'none',
                       }}
                     />
+                  </div>
+                )}
+
+                {/* Huy hiệu số Pod và số Node của dịch vụ */}
+                {isAgentConnected && currentServiceTarget && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 9px',
+                        backgroundColor: '#ECFDF5',
+                        color: '#065F46',
+                        border: '1px solid #A7F3D0',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                      }}
+                      title={`Dịch vụ ${currentServiceTarget} đang chạy ${currentServiceMetadata.pods} Pods`}
+                    >
+                      <Box size={13} color="#059669" />
+                      <span>Số Pod: <strong style={{ fontFamily: 'var(--font-mono)' }}>{currentServiceMetadata.pods}</strong></span>
+                    </span>
+
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 9px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#334155',
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                      }}
+                      title={`Dịch vụ ${currentServiceTarget} đang chạy trên ${currentServiceMetadata.nodes} Node máy chủ`}
+                    >
+                      <Server size={13} color="#64748B" />
+                      <span>Số Node: <strong style={{ fontFamily: 'var(--font-mono)' }}>{currentServiceMetadata.nodes}</strong></span>
+                    </span>
                   </div>
                 )}
               </div>
@@ -2576,8 +2826,10 @@ export const PredictionsPage = () => {
             backgroundColor: activeBottomTab === 'recommendations' ? (pendingProposedRecommendations.length > 0 ? '#FEF3C7' : '#DCFCE7') : '#E2E8F0',
             color: activeBottomTab === 'recommendations' ? (pendingProposedRecommendations.length > 0 ? '#92400E' : '#15803D') : '#64748B',
             flexShrink: 0,
-          }}>
-            {displayRecommendations.length}
+          }}
+          title={`Hiển thị ${displayRecommendations.length} đề xuất mới nhất`}
+          >
+            {displayRecommendations.length} gần nhất
           </span>
         </button>
 
@@ -2618,8 +2870,10 @@ export const PredictionsPage = () => {
             backgroundColor: activeBottomTab === 'healing_actions' ? '#D1FAE5' : '#E2E8F0',
             color: activeBottomTab === 'healing_actions' ? '#065F46' : '#64748B',
             flexShrink: 0,
-          }}>
-            {displayHealingActions.length}
+          }}
+          title={`Hiển thị ${displayHealingActions.length} hành động tự lành mới nhất`}
+          >
+            {displayHealingActions.length} gần nhất
           </span>
         </button>
 
@@ -2660,8 +2914,10 @@ export const PredictionsPage = () => {
             backgroundColor: activeBottomTab === 'predictions' ? '#E0E7FF' : '#E2E8F0',
             color: activeBottomTab === 'predictions' ? '#3730A3' : '#64748B',
             flexShrink: 0,
-          }}>
-            {displayPredictions.length}
+          }}
+          title={`Hiển thị ${displayPredictions.length} lượt dự báo mới nhất`}
+          >
+            {displayPredictions.length} gần nhất
           </span>
         </button>
       </div>
@@ -2678,7 +2934,7 @@ export const PredictionsPage = () => {
                 <ShieldCheck size={18} color="#059669" />
               )}
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Đề Xuất Khắc Phục Phòng Ngừa Từ AI & RCA ({displayRecommendations.length})
+                Đề Xuất Khắc Phục Phòng Ngừa Từ AI & RCA ({displayRecommendations.length} mục gần nhất)
               </h3>
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
@@ -2703,16 +2959,25 @@ export const PredictionsPage = () => {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {displayRecommendations.map((rec) => {
+            {paginatedRecommendations.map((rec) => {
               const isApplied = rec.status === 'APPLIED' || appliedActions.includes(rec.id);
               const actionCode = rec.recommendation || rec.action_code || 'RESTART_POD';
               const isNoAction = actionCode === 'NO_ACTION';
-              const targetName = rec.target_name || normalizeServiceName(rec.target_id) || (rec.incident_title && rec.incident_title.includes(' on ') ? rec.incident_title.split(' on ')[1].trim() : '') || 'sme-order-service';
+              const targetName = rec.target_name || normalizeServiceName(rec.target_id) || (rec.incident_title && rec.incident_title.includes(' trên ') ? rec.incident_title.split(' trên ')[1].trim() : (rec.incident_title && rec.incident_title.includes(' on ') ? rec.incident_title.split(' on ')[1].trim() : '')) || 'sme-order-service';
 
               const actionInfo = getActionDetails(actionCode);
 
               // Trích xuất chi tiết bổ sung từ AI RCA & K8s
-              const rootCause = rec.root_cause_type || null;
+              const rawRootCause = rec.root_cause_type || null;
+              const rootCause = rawRootCause ? (
+                rawRootCause === 'Unstable application pod' ? 'Pod ứng dụng bất ổn định' :
+                rawRootCause === 'Container memory exhausted' ? 'Cạn kiệt bộ nhớ container (OOM)' :
+                rawRootCause === 'Storage capacity exhausted' ? 'Cạn kiệt dung lượng lưu trữ' :
+                rawRootCause === 'CPU saturation' ? 'Bão hòa tài nguyên CPU' :
+                rawRootCause === 'Traffic overload' ? 'Quá tải lưu lượng truy cập' :
+                rawRootCause === 'Service performance degradation' ? 'Suy giảm hiệu năng dịch vụ' :
+                rawRootCause
+              ) : null;
               const rcaConfidence = rec.rca_confidence ? Math.round(Number(rec.rca_confidence <= 1 ? rec.rca_confidence * 100 : rec.rca_confidence)) : null;
               const riskLevel = (rec.risk_level || (rec.priority === 1 ? 'CRITICAL' : 'HIGH')).toUpperCase();
 
@@ -2896,7 +3161,7 @@ export const PredictionsPage = () => {
                             border: `1px solid ${riskLevel === 'CRITICAL' ? '#FCA5A5' : riskLevel === 'HIGH' ? '#FDE68A' : '#BBF7D0'}`,
                           }}
                         >
-                          Rủi ro: {riskLevel}
+                          Rủi ro: {riskLevel === 'CRITICAL' ? 'KHẨN CẤP' : riskLevel === 'HIGH' ? 'CAO' : riskLevel === 'MEDIUM' ? 'TRUNG BÌNH' : 'THẤP'}
                         </span>
                       )}
                     </div>
@@ -3155,6 +3420,7 @@ export const PredictionsPage = () => {
                 </div>
               );
             })}
+            {renderPaginationBar(safeRecPage, displayRecommendations.length, setRecPage)}
           </div>
         )}
       </div>
@@ -3168,7 +3434,7 @@ export const PredictionsPage = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ShieldCheck size={18} color="#059669" />
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Nhật Ký Hành Động Khắc Phục Đã Thực Thi ({displayHealingActions.length})
+                Nhật Ký Hành Động Khắc Phục Đã Thực Thi ({displayHealingActions.length} mục gần nhất)
               </h3>
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
@@ -3204,7 +3470,7 @@ export const PredictionsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {displayHealingActions.map((act) => {
+                {paginatedHealingActions.map((act) => {
                   const isSucceeded = act.execution_status === 'SUCCEEDED';
                   let parsedResult = {};
                   try {
@@ -3290,6 +3556,7 @@ export const PredictionsPage = () => {
                 })}
               </tbody>
             </table>
+            {renderPaginationBar(safeActPage, displayHealingActions.length, setActPage)}
           </div>
         )}
       </div>
@@ -3301,7 +3568,7 @@ export const PredictionsPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
           <div>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Nhật Ký Các Lượt Dự Báo Đang Lưu Trữ ({displayPredictions.length})
+              Nhật Ký Các Lượt Dự Báo Đang Lưu Trữ ({displayPredictions.length} lượt gần nhất{displayStats?.total > 0 ? ` • Tổng ${displayStats.total.toLocaleString()} lượt trong CSDL` : ''})
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
               Bấm vào từng lượt để nạp chuỗi 12 điểm viễn trắc tương ứng lên biểu đồ phân tích
@@ -3385,7 +3652,7 @@ export const PredictionsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {displayPredictions.map((p) => {
+              {paginatedPredictions.map((p) => {
                 const isSelected = selectedPrediction?.id === p.id;
                 const isHealthy = p.status === 'HEALTHY' || p.prediction_type === 'NORMAL';
                 const activeRisks = getActiveRisks(p);
@@ -3524,6 +3791,7 @@ export const PredictionsPage = () => {
               })}
             </tbody>
           </table>
+          {renderPaginationBar(safePredPage, displayPredictions.length, setPredPage)}
         </div>
         )}
       </div>

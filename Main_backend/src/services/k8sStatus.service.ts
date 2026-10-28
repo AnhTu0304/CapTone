@@ -1027,7 +1027,7 @@ export class K8sStatusService {
 
     const params: any[] = [];
     let sql = `
-      SELECT
+      SELECT DISTINCT ON (c.name, COALESCE(ns.name, 'default'), w.name)
         w.id,
         w.cluster_id,
         c.name AS cluster_name,
@@ -1064,7 +1064,7 @@ export class K8sStatusService {
       ) ag ON TRUE
       WHERE w.deleted_at IS NULL
         AND c.deleted_at IS NULL
-        AND COALESCE(w.workload_type, 'Deployment') = 'Deployment'
+        AND COALESCE(w.workload_type, 'Deployment') IN ('Deployment', 'StatefulSet')
     `;
 
     if (resolved.effectiveOrgId) {
@@ -1085,7 +1085,7 @@ export class K8sStatusService {
       sql += ` AND ns.name = $${params.length}`;
     }
 
-    sql += ` ORDER BY c.name ASC, ns.name ASC, w.name ASC`;
+    sql += ` ORDER BY c.name ASC, COALESCE(ns.name, 'default') ASC, w.name ASC, w.updated_at DESC NULLS LAST`;
 
     if (pagination.limit !== null) {
       params.push(pagination.limit, pagination.offset);

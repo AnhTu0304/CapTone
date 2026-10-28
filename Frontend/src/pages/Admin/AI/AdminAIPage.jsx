@@ -17,6 +17,7 @@ import {
   getAIRCAAnalyses,
   getAIPerformanceMetrics,
 } from '../../../services/adminAIService';
+import { getRegisteredModels } from '../../../services/aiModelRegistryService';
 
 import AINavTabs from '../../../components/admin/ai/AINavTabs';
 import AIOverviewSection from '../../../components/admin/ai/AIOverviewSection';
@@ -46,12 +47,12 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
       if (currentSection === 'overview') {
         const [kpiRes, modRes] = await Promise.all([
           getAIOverviewKPIs(),
-          getAIModels(),
+          getRegisteredModels(),
         ]);
         setKpis(kpiRes);
         setModels(modRes);
       } else if (currentSection === 'models') {
-        const data = await getAIModels();
+        const data = await getRegisteredModels();
         setModels(data);
       } else if (currentSection === 'predictions') {
         const data = await getAIPredictions();

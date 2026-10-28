@@ -289,14 +289,27 @@ router.use('/:id/clusters', clusterRoutes);
 router.get(
   '/:id/audit-logs',
   requireOrgMember,
-  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
   AuditController.getOrganizationAuditLogs
 );
 router.get(
   '/:orgId/audit-logs',
   requireOrgMember,
-  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
   AuditController.getOrganizationAuditLogs
+);
+
+router.get(
+  '/:id/audit-logs/stats',
+  requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
+  AuditController.getOrganizationAuditStats
+);
+router.get(
+  '/:orgId/audit-logs/stats',
+  requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
+  AuditController.getOrganizationAuditStats
 );
 
 export const organizationRoutes = router;

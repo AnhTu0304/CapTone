@@ -13,6 +13,14 @@ auditRoutes.get(
   AuditController.getPlatformAuditLogs
 );
 
+// Platform Stats: SUPER_ADMIN, ADMIN
+auditRoutes.get(
+  '/stats',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'ADMIN'),
+  AuditController.getPlatformAuditStats
+);
+
 // Retention Policy Stats: SUPER_ADMIN, ADMIN
 auditRoutes.get(
   '/retention/stats',

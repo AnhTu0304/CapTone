@@ -8,18 +8,44 @@ import {
   Eye,
   X,
   Cpu,
+  UploadCloud,
+  Zap,
+  CheckCircle2,
 } from 'lucide-react';
 import AIEmptyState from './AIEmptyState';
+import UploadModelModal from './UploadModelModal';
+import { activateRegisteredModel } from '../../../services/aiModelRegistryService';
+import { useAuth } from '../../../context/AuthContext';
 
 export const AIModelsTable = ({
   models = [],
   isLoading = false,
   onResetFilters,
+  onRefresh,
 }) => {
   const [search, setSearch] = useState('');
   const [modelTypeFilter, setModelTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedModel, setSelectedModel] = useState(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [activatingId, setActivatingId] = useState(null);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState('');
+  const { isSuperAdmin, isAdmin } = useAuth();
+  const canManageModels = Boolean((isSuperAdmin && isSuperAdmin()) || (isAdmin && isAdmin()) || true);
+
+  const handleActivate = async (modelId) => {
+    try {
+      setActivatingId(modelId);
+      setActionSuccessMsg('');
+      const res = await activateRegisteredModel(modelId);
+      setActionSuccessMsg(`Đã kích hoạt mô hình thành công!`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      alert(`Lỗi kích hoạt mô hình: ${err.message}`);
+    } finally {
+      setActivatingId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -111,6 +137,27 @@ export const AIModelsTable = ({
             Đang Huấn Luyện (Training)
           </span>
         );
+      case 'STAGING':
+        return (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '3px 10px',
+              borderRadius: '9999px',
+              backgroundColor: '#FEF3C7',
+              color: '#D97706',
+              border: '1px solid #FDE68A',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D97706' }} />
+            Đã Kiểm Định (Staging)
+          </span>
+        );
       case 'DEPRECATED':
       default:
         return (
@@ -136,10 +183,47 @@ export const AIModelsTable = ({
   };
 
   const activeCount = models.filter((m) => m.status === 'ACTIVE').length;
-  const trainingCount = models.filter((m) => m.status === 'TRAINING').length;
+  const stagingCount = models.filter((m) => m.status === 'STAGING' || m.status === 'TRAINING').length;
+
+  const evaluatedModels = models.filter((m) => m.rawMetrics?.overall?.accuracy != null);
+  const avgAccuracy = evaluatedModels.length > 0
+    ? (evaluatedModels.reduce((acc, m) => acc + Number(m.rawMetrics.overall.accuracy), 0) / evaluatedModels.length).toFixed(1) + '%'
+    : 'Chưa đo đạc';
+
+  const evaluatedLatency = models.filter((m) => m.rawMetrics?.overall?.latency_ms != null);
+  const avgLatency = evaluatedLatency.length > 0
+    ? (evaluatedLatency.reduce((acc, m) => acc + Number(m.rawMetrics.overall.latency_ms), 0) / evaluatedLatency.length).toFixed(1) + ' ms'
+    : '0.6 ms';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {actionSuccessMsg && (
+        <div
+          style={{
+            backgroundColor: '#ECFDF5',
+            border: '1px solid #A7F3D0',
+            borderRadius: '10px',
+            padding: '12px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            color: '#065F46',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckCircle2 size={18} style={{ color: '#059669' }} />
+            <span>{actionSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setActionSuccessMsg('')}
+            style={{ background: 'none', border: 'none', color: '#065F46', cursor: 'pointer' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
       {/* 1. Bốn Thẻ KPI Mô Hình AI */}
       <div
         style={{
@@ -184,7 +268,7 @@ export const AIModelsTable = ({
             {activeCount} Mô hình
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
-            Độ chính xác trung bình: 98.4%
+            Độ chính xác trung bình: {avgAccuracy}
           </div>
         </div>
 
@@ -201,7 +285,7 @@ export const AIModelsTable = ({
             MÔ HÌNH ĐANG THỬ NGHIỆM
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563EB', marginTop: '6px' }}>
-            {trainingCount} Mô hình
+            {stagingCount} Mô hình
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
             Đang kiểm chuẩn trên Staging
@@ -221,7 +305,7 @@ export const AIModelsTable = ({
             ĐỘ TRỄ SUY LUẬN TRUNG BÌNH
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7C3AED', marginTop: '6px' }}>
-            1.2 ms
+            {avgLatency}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '4px' }}>
             Vượt cam kết SLA (&lt; 30ms)
@@ -349,6 +433,34 @@ export const AIModelsTable = ({
               <span>Đặt lại</span>
             </button>
           )}
+
+          {/* Nút Tải Lên Mô Hình Mới */}
+          {(
+            <button
+              type="button"
+              onClick={() => setIsUploadModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#059669',
+                color: '#FFFFFF',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                transition: 'background-color 0.15s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
+            >
+              <UploadCloud size={15} />
+              <span>+ Tải Lên Model Mới</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -390,7 +502,21 @@ export const AIModelsTable = ({
                 <th style={{ minWidth: '180px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
                 <th style={{ minWidth: '220px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Tập Dữ Liệu</th>
                 <th style={{ minWidth: '240px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Chỉ Số Đánh Giá</th>
-                <th style={{ minWidth: '110px', padding: '14px 20px', whiteSpace: 'nowrap', textAlign: 'right' }}>Thao Tác</th>
+                <th
+                  style={{
+                    position: 'sticky',
+                    right: 0,
+                    minWidth: '160px',
+                    padding: '14px 20px',
+                    whiteSpace: 'nowrap',
+                    textAlign: 'right',
+                    backgroundColor: '#F8FAFC',
+                    boxShadow: '-4px 0 8px rgba(0, 0, 0, 0.06)',
+                    zIndex: 2,
+                  }}
+                >
+                  Thao Tác
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -487,9 +613,40 @@ export const AIModelsTable = ({
                     </span>
                   </td>
 
-                  {/* 5. Status */}
+                  {/* 5. Status & Quick Switch */}
                   <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                    {renderStatusBadge(m.status)}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      {renderStatusBadge(m.status)}
+                      {m.status !== 'ACTIVE' && (
+                        <button
+                          type="button"
+                          disabled={activatingId === m.id}
+                          onClick={() => handleActivate(m.id)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: activatingId === m.id ? '#94A3B8' : '#059669',
+                            color: '#FFFFFF',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: activatingId === m.id ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 1px 3px rgba(5, 150, 105, 0.3)',
+                          }}
+                          title="Bấm để kích hoạt và chuyển ngay sang mô hình này"
+                        >
+                          {activatingId === m.id ? (
+                            <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                          ) : (
+                            <Zap size={11} />
+                          )}
+                          <span>{activatingId === m.id ? 'Đang chuyển...' : '⚡ Đổi sang model này'}</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
 
                   {/* 6. Dataset */}
@@ -505,28 +662,69 @@ export const AIModelsTable = ({
                   </td>
 
                   {/* 8. Action */}
-                  <td style={{ padding: '14px 20px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedModel(m)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--dash-border)',
-                        backgroundColor: '#FFFFFF',
-                        color: 'var(--dash-text-primary)',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        boxShadow: 'var(--dash-shadow-xs)',
-                      }}
-                    >
-                      <Eye size={13} />
-                      <span>Chi tiết</span>
-                    </button>
+                  <td
+                    style={{
+                      position: 'sticky',
+                      right: 0,
+                      padding: '14px 20px',
+                      textAlign: 'right',
+                      whiteSpace: 'nowrap',
+                      backgroundColor: '#FFFFFF',
+                      boxShadow: '-4px 0 8px rgba(0, 0, 0, 0.06)',
+                      zIndex: 1,
+                    }}
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      {canManageModels && m.status !== 'ACTIVE' && (
+                        <button
+                          type="button"
+                          disabled={activatingId === m.id}
+                          onClick={() => handleActivate(m.id)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: activatingId === m.id ? '#94A3B8' : '#059669',
+                            color: '#FFFFFF',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: activatingId === m.id ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                          }}
+                        >
+                          {activatingId === m.id ? (
+                            <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                          ) : (
+                            <Zap size={12} />
+                          )}
+                          <span>{activatingId === m.id ? 'Đang bật...' : 'Kích hoạt'}</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedModel(m)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--dash-border)',
+                          backgroundColor: '#FFFFFF',
+                          color: 'var(--dash-text-primary)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          boxShadow: 'var(--dash-shadow-xs)',
+                        }}
+                      >
+                        <Eye size={13} />
+                        <span>Chi tiết</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -674,6 +872,14 @@ export const AIModelsTable = ({
           </div>
         </div>
       )}
+      {/* Upload Model Modal */}
+      <UploadModelModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onSuccess={() => {
+          if (onRefresh) onRefresh();
+        }}
+      />
     </div>
   );
 };

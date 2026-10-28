@@ -174,7 +174,7 @@ export class TelemetryPipelineService {
               data: {
                 id: result.rca_diagnosis.incident_id,
                 service_id: serviceId,
-                title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
+                title: `[Cảnh báo AI] ${result.rca_diagnosis.root_cause.cause} trên dịch vụ ${serviceId}`,
                 severity: result.rca_diagnosis.root_cause.severity,
                 cause: result.rca_diagnosis.root_cause.cause,
                 explanation: result.rca_diagnosis.explanation,
@@ -195,7 +195,7 @@ export class TelemetryPipelineService {
                 priority: result.rca_diagnosis.recommendation.priority,
                 target_name: serviceId,
                 target_id: serviceId,
-                incident_title: `[AI Alert] ${result.rca_diagnosis.root_cause.cause} on ${serviceId}`,
+                incident_title: `[Cảnh báo AI] ${result.rca_diagnosis.root_cause.cause} trên dịch vụ ${serviceId}`,
                 cluster_id: (result.rca_diagnosis as any)?.cluster_id,
                 created_at: new Date().toISOString(),
               },

@@ -14,11 +14,13 @@ import { nodeRoutes } from './node.routes';
 import { podRoutes } from './pod.routes';
 import { deploymentRoutes } from './deployment.routes';
 import { auditRoutes } from './audit.routes';
+import { aiModelRegistryRoutes } from './aiModelRegistry.routes';
 
 const apiRouter = Router();
 
 apiRouter.use('/health', healthRoutes);
 apiRouter.use('/ai', aiRoutes);
+apiRouter.use('/ai-models', aiModelRegistryRoutes);
 apiRouter.use('/healing', healingActionRoutes);
 apiRouter.use('/rule-engine', ruleEngineRoutes);
 apiRouter.use('/telemetry', telemetryRoutes);

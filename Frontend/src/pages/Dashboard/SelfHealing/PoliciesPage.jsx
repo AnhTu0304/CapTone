@@ -95,6 +95,8 @@ export const PoliciesPage = () => {
   const [approvalTimeout, setApprovalTimeout] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).approvalTimeout);
   const [cooldownPeriod, setCooldownPeriod] = useState(() => getGuardsForCluster(clusterKey, isClusterOnline, clusterName).cooldownPeriod);
 
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // Sync guards whenever cluster changes
   useEffect(() => {
     const guards = getGuardsForCluster(clusterKey, isClusterOnline, clusterName);
@@ -104,24 +106,13 @@ export const PoliciesPage = () => {
     setRestartTimeWindow(guards.restartTimeWindow);
     setApprovalTimeout(guards.approvalTimeout);
     setCooldownPeriod(guards.cooldownPeriod);
+    setHasUnsavedChanges(false);
   }, [clusterKey, isClusterOnline, clusterName, getGuardsForCluster]);
 
-  const updateClusterGuard = (field, value) => {
-    const current = getGuardsForCluster(clusterKey, isClusterOnline, clusterName);
-    const updated = {
-      ...current,
-      globalMode,
-      blastRadiusThreshold,
-      maxRestarts,
-      restartTimeWindow,
-      approvalTimeout,
-      cooldownPeriod,
-      [field]: value,
-    };
-    localStorage.setItem(`selfheal_guards_${clusterKey}`, JSON.stringify(updated));
-    if (isClusterOnline) {
-      localStorage.setItem('selfheal_safety_guards', JSON.stringify(updated));
-    }
+  const updateClusterGuard = (_field, _value) => {
+    // Chỉ đánh dấu có thay đổi tạm thời trên giao diện; chỉ lưu thật khi người dùng nhấn nút "Lưu Thay Đổi"
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
   };
 
   // Policies list state
@@ -236,13 +227,14 @@ export const PoliciesPage = () => {
     hitlRequired: true,
   });
 
-  const handleSelectAutomationMode = async (mode) => {
+  const handleSelectAutomationMode = (mode) => {
     if (!canManagePolicies) {
       alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
       return;
     }
     setGlobalMode(mode);
-    updateClusterGuard('globalMode', mode);
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
 
     const updatedList = policies.map((p) => {
       const risk = String(p.riskLevel || 'LOW').toUpperCase();
@@ -257,34 +249,9 @@ export const PoliciesPage = () => {
     });
 
     setPolicies(updatedList);
-
-    const clusterMap = {};
-    updatedList.forEach((p) => {
-      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
-      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
-    });
-    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
-
-    if (isUsingLiveDb && isClusterOnline && updatedList.length > 0) {
-      try {
-        await Promise.all(
-          updatedList.map((p) =>
-            selfHealingService.updatePolicyConfig(p.id, {
-              is_active: p.enabled,
-              requires_approval: p.hitlRequired,
-              execution_mode: p.hitlRequired ? 'MANUAL' : 'AUTO',
-            })
-          )
-        );
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2500);
-      } catch (err) {
-        console.warn('Lỗi đồng bộ chế độ tự động hóa xuống DB:', err.message);
-      }
-    }
   };
 
-  const handleTogglePolicy = async (id) => {
+  const handleTogglePolicy = (id) => {
     if (!canManagePolicies) {
       alert('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.');
       return;
@@ -294,25 +261,11 @@ export const PoliciesPage = () => {
     const newEnabled = !target.enabled;
     const updatedList = policies.map((p) => (p.id === id ? { ...p, enabled: newEnabled } : p));
     setPolicies(updatedList);
-
-    // Save state isolated to current cluster
-    const clusterMap = {};
-    updatedList.forEach((p) => {
-      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
-      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
-    });
-    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
-
-    if (isUsingLiveDb && isClusterOnline) {
-      try {
-        await selfHealingService.updatePolicyConfig(id, { is_active: newEnabled });
-      } catch (err) {
-        console.warn('Lỗi bật/tắt chính sách trên DB:', err.message);
-      }
-    }
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
   };
 
-  const handleToggleHitl = async (id) => {
+  const handleToggleHitl = (id) => {
     if (!canManagePolicies) {
       alert('Chỉ SME Owner và DevOps mới có quyền cấu hình cổng HITL.');
       return;
@@ -322,22 +275,8 @@ export const PoliciesPage = () => {
     const newHitl = !target.hitlRequired;
     const updatedList = policies.map((p) => (p.id === id ? { ...p, hitlRequired: newHitl } : p));
     setPolicies(updatedList);
-
-    // Save state isolated to current cluster
-    const clusterMap = {};
-    updatedList.forEach((p) => {
-      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
-      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
-    });
-    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
-
-    if (isUsingLiveDb && isClusterOnline) {
-      try {
-        await selfHealingService.updatePolicyConfig(id, { requires_approval: newHitl, execution_mode: newHitl ? 'MANUAL' : 'AUTO' });
-      } catch (err) {
-        console.warn('Lỗi cập nhật cổng HITL trên DB:', err.message);
-      }
-    }
+    setHasUnsavedChanges(true);
+    setSaveSuccess(false);
   };
 
   const handleSaveSettings = async () => {
@@ -345,7 +284,6 @@ export const PoliciesPage = () => {
       alert('Chỉ SME Owner và DevOps mới có quyền lưu cấu hình ngưỡng an toàn.');
       return;
     }
-    setSaveSuccess(true);
 
     const guardsData = {
       blastRadiusThreshold,
@@ -372,6 +310,9 @@ export const PoliciesPage = () => {
         await Promise.all(
           policies.map((p) =>
             selfHealingService.updatePolicyConfig(p.id, {
+              is_active: p.enabled,
+              requires_approval: p.hitlRequired,
+              execution_mode: p.hitlRequired ? 'MANUAL' : 'AUTO',
               cooldown_seconds: cooldownPeriod * 60,
               max_retries: maxRestarts,
             })
@@ -382,6 +323,8 @@ export const PoliciesPage = () => {
       }
     }
 
+    setHasUnsavedChanges(false);
+    setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);
     }, 3000);
@@ -538,6 +481,25 @@ export const PoliciesPage = () => {
           </button>
         </div>
       </div>
+
+      {hasUnsavedChanges && !saveSuccess && (
+        <div
+          style={{
+            padding: '12px 16px',
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: 'var(--dash-radius-md)',
+            color: '#92400e',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <AlertTriangle size={18} color="#d97706" />
+          <span>Bạn có thay đổi cấu hình chưa lưu. Hãy nhấn nút <strong>"Lưu Thay Đổi"</strong> ở góc phải để áp dụng vào hệ thống.</span>
+        </div>
+      )}
 
       {saveSuccess && (
         <div
