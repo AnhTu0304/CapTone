@@ -55,7 +55,6 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
         setIsLoading(false);
         return;
       }
-      setOrganization(org);
 
       const [m, e, c, a, inc, aud] = await Promise.all([
         getOrganizationMembers(orgId),
@@ -72,6 +71,18 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
       setAgents(a);
       setIncidents(inc);
       setAuditLogs(aud);
+
+      // Đồng bộ hạn mức và số lượng cụm/pods thực tế từ dữ liệu kết nối
+      const actualClustersCount = Array.isArray(c) && c.length > 0 ? c.length : org.clustersCount;
+      const actualPodsCount = Array.isArray(c) && c.length > 0
+        ? c.reduce((sum, item) => sum + (Number(item.podsCount) || 0), 0)
+        : org.podsCount;
+
+      setOrganization({
+        ...org,
+        clustersCount: actualClustersCount ?? org.clustersCount,
+        podsCount: actualPodsCount > 0 ? actualPodsCount : org.podsCount,
+      });
     } catch (err) {
       console.error('Lỗi khi tải chi tiết tổ chức:', err);
       setError('Không thể tải chi tiết dữ liệu tổ chức từ máy chủ. Vui lòng thử lại sau.');
@@ -186,6 +197,8 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
 
       {/* Navigation Sub-Tabs */}
       <div
+        role="tablist"
+        aria-label="Các phân hệ chi tiết tổ chức"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -202,6 +215,10 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
           return (
             <button
               key={tab.id}
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={isActive}
+              aria-controls={`panel-${tab.id}`}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               style={{
@@ -267,40 +284,42 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
       </div>
 
       {/* Tab Panels */}
-      {activeTab === 'all' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div id={`panel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
+        {activeTab === 'all' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <OrganizationMembers members={members} isLoading={isLoading} />
+            <OrganizationEnvironments environments={environments} isLoading={isLoading} />
+            <OrganizationClusters clusters={clusters} isLoading={isLoading} />
+            <OrganizationAgents agents={agents} isLoading={isLoading} />
+            <OrganizationIncidents incidents={incidents} isLoading={isLoading} />
+            <OrganizationAuditActivity auditLogs={auditLogs} isLoading={isLoading} />
+          </div>
+        )}
+
+        {activeTab === 'members' && (
           <OrganizationMembers members={members} isLoading={isLoading} />
+        )}
+
+        {activeTab === 'environments' && (
           <OrganizationEnvironments environments={environments} isLoading={isLoading} />
+        )}
+
+        {activeTab === 'clusters' && (
           <OrganizationClusters clusters={clusters} isLoading={isLoading} />
+        )}
+
+        {activeTab === 'agents' && (
           <OrganizationAgents agents={agents} isLoading={isLoading} />
+        )}
+
+        {activeTab === 'incidents' && (
           <OrganizationIncidents incidents={incidents} isLoading={isLoading} />
+        )}
+
+        {activeTab === 'audit' && (
           <OrganizationAuditActivity auditLogs={auditLogs} isLoading={isLoading} />
-        </div>
-      )}
-
-      {activeTab === 'members' && (
-        <OrganizationMembers members={members} isLoading={isLoading} />
-      )}
-
-      {activeTab === 'environments' && (
-        <OrganizationEnvironments environments={environments} isLoading={isLoading} />
-      )}
-
-      {activeTab === 'clusters' && (
-        <OrganizationClusters clusters={clusters} isLoading={isLoading} />
-      )}
-
-      {activeTab === 'agents' && (
-        <OrganizationAgents agents={agents} isLoading={isLoading} />
-      )}
-
-      {activeTab === 'incidents' && (
-        <OrganizationIncidents incidents={incidents} isLoading={isLoading} />
-      )}
-
-      {activeTab === 'audit' && (
-        <OrganizationAuditActivity auditLogs={auditLogs} isLoading={isLoading} />
-      )}
+        )}
+      </div>
     </div>
   );
 };

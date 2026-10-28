@@ -281,7 +281,7 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
 
       // Check tabs
-      const membersTab = screen.getByText(/Nhân Sự SME/i);
+      const membersTab = screen.getByRole('tab', { name: /Nhân Sự SME/i });
       expect(membersTab).toBeInTheDocument();
 
       fireEvent.click(membersTab);
@@ -292,11 +292,59 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
 
       // Click clusters tab
-      const clustersTab = screen.getByText(/Cụm K8s/i);
+      const clustersTab = screen.getByRole('tab', { name: /Cụm K8s/i });
       fireEvent.click(clustersTab);
 
       await waitFor(() => {
-        expect(screen.getByText(/Cụm Kubernetes Đã Đăng Ký/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 3, name: /Cụm Kubernetes Đã Đăng Ký/i })).toBeInTheDocument();
+      });
+    });
+
+    test('sub-navigation buttons (Môi Trường, Cụm K8s, Tác Tử eBPF, Sự Cố & MTTR, Nhật Ký Kiểm Toán) connect and render data correctly', async () => {
+      render(<OrganizationDetailsPage orgId="org-acme-01" onNavigate={jest.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Acme Infrastructure Corp')).toBeInTheDocument();
+      });
+
+      // 1. Môi Trường tab
+      const envsTab = screen.getByRole('tab', { name: /Môi Trường/i });
+      expect(envsTab).toBeInTheDocument();
+      fireEvent.click(envsTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Môi Trường Triển Khai/i })).toBeInTheDocument();
+      });
+
+      // 2. Cụm K8s tab
+      const clustersTab = screen.getByRole('tab', { name: /Cụm K8s/i });
+      expect(clustersTab).toBeInTheDocument();
+      fireEvent.click(clustersTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Cụm Kubernetes Đã Đăng Ký/i })).toBeInTheDocument();
+      });
+
+      // 3. Tác Tử eBPF tab
+      const agentsTab = screen.getByRole('tab', { name: /Tác Tử eBPF/i });
+      expect(agentsTab).toBeInTheDocument();
+      fireEvent.click(agentsTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Tác Tử Giám Sát eBPF/i })).toBeInTheDocument();
+      });
+
+      // 4. Sự Cố & MTTR tab
+      const incidentsTab = screen.getByRole('tab', { name: /Sự Cố & MTTR/i });
+      expect(incidentsTab).toBeInTheDocument();
+      fireEvent.click(incidentsTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Lịch Sử Sự Cố & Cứu Hộ Tự Động/i })).toBeInTheDocument();
+      });
+
+      // 5. Nhật Ký Kiểm Toán tab
+      const auditTab = screen.getByRole('tab', { name: /Nhật Ký Kiểm Toán/i });
+      expect(auditTab).toBeInTheDocument();
+      fireEvent.click(auditTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Nhật Ký Kiểm Toán Cấp Quản Trị Hệ Thống/i })).toBeInTheDocument();
       });
     });
 

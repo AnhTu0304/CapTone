@@ -597,17 +597,17 @@ export const getOrganizationMembers = async (id) => {
 export const getOrganizationEnvironments = async (id) => {
   const fetchFromApi = async () => {
     const res = await request(`/organizations/${id}/environments`);
-    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
-    if (items.length > 0) {
-      return items.map((env) => ({
+    const rawItems = res?.data?.environments || res?.data?.items || (Array.isArray(res?.data) ? res.data : null);
+    if (rawItems && rawItems.length > 0) {
+      return rawItems.map((env) => ({
         id: env.id,
         name:
-          env.name === 'DEVELOPMENT'
+          env.name === 'DEVELOPMENT' || env.environment_type === 'DEVELOPMENT'
             ? 'Development (Phát Triển)'
-            : env.name === 'STAGING'
+            : env.name === 'STAGING' || env.environment_type === 'STAGING'
             ? 'Staging (Kiểm Thử)'
             : env.name,
-        clusterId: env.cluster_id || env.clusterId || 'Chưa gán cụm',
+        clusterId: env.cluster_id || env.clusterId || env.code || 'Chưa gán cụm',
         status: env.status || 'HEALTHY',
         workloadsCount: env.workloads_count ?? env.workloadsCount ?? 0,
         autoHealingMode: env.auto_healing_mode || env.autoHealingMode || 'AUTOMATIC',
@@ -631,18 +631,28 @@ export const getOrganizationEnvironments = async (id) => {
 export const getOrganizationClusters = async (id) => {
   const fetchFromApi = async () => {
     const res = await request(`/organizations/${id}/clusters`);
-    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
-    if (items.length > 0) {
-      return items.map((cls) => ({
-        id: cls.id,
-        name: cls.name,
-        version: cls.k8s_version || cls.version || 'v1.30.2',
-        region: cls.region || 'ap-southeast-1 (Local DC)',
-        nodesCount: cls.nodes_count ?? cls.nodesCount ?? 2,
-        podsCount: cls.pods_count ?? cls.podsCount ?? 0,
-        agentLatency: cls.agent_latency || cls.agentLatency || '1.5ms',
-        status: cls.status || 'READY',
-      }));
+    const rawItems = Array.isArray(res?.data) ? res.data : (res?.data?.items || res?.data?.clusters || null);
+    if (rawItems && rawItems.length > 0) {
+      return rawItems.map((cls) => {
+        let status = 'READY';
+        if (cls.status === 'CONNECTED' || cls.status === 'READY') {
+          status = 'READY';
+        } else if (cls.status === 'DEGRADED' || cls.agent_status === 'DEGRADED') {
+          status = 'DEGRADED';
+        } else if (cls.status === 'DISCONNECTED' || cls.status === 'ERROR' || cls.agent_status === 'OFFLINE') {
+          status = 'DISCONNECTED';
+        }
+        return {
+          id: cls.id,
+          name: cls.name,
+          version: cls.kubernetes_version || cls.k8s_version || cls.version || 'v1.30.2',
+          region: cls.provider ? `${cls.provider} (Local DC)` : (cls.region || 'ap-southeast-1 (Local DC)'),
+          nodesCount: cls.nodes_count ?? cls.nodesCount ?? 2,
+          podsCount: cls.pods_count ?? cls.podsCount ?? 0,
+          agentLatency: cls.agent_latency || cls.agentLatency || '1.5ms',
+          status,
+        };
+      });
     }
     return MOCK_CLUSTERS[id] || MOCK_CLUSTERS['org-acme-01'];
   };
@@ -662,16 +672,18 @@ export const getOrganizationClusters = async (id) => {
 export const getOrganizationAgents = async (id) => {
   const fetchFromApi = async () => {
     const res = await request(`/organizations/${id}/agents`);
-    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
-    if (items.length > 0) {
-      return items.map((ag) => ({
+    const rawItems = res?.data?.items || res?.data?.agents || (Array.isArray(res?.data) ? res.data : null);
+    if (rawItems && rawItems.length > 0) {
+      return rawItems.map((ag) => ({
         id: ag.id,
-        node: ag.node_name || ag.node || 'worker-node',
-        clusterId: ag.cluster_id || ag.clusterId || 'k8s-cluster',
+        node: ag.node_name || ag.node || ag.name || 'worker-node',
+        clusterId: ag.cluster_name || ag.cluster_id || ag.clusterId || 'k8s-cluster',
         version: ag.version || 'v1.4.2',
         kernel: ag.kernel_version || ag.kernel || '5.15.0-generic',
         status: ag.status || 'ONLINE',
-        heartbeat: ag.last_heartbeat_at ? 'Vừa xong' : (ag.heartbeat || 'Gần đây'),
+        heartbeat: ag.last_seen_at || ag.last_heartbeat_at
+          ? new Date(ag.last_seen_at || ag.last_heartbeat_at).toLocaleTimeString('vi-VN')
+          : (ag.heartbeat || 'Gần đây'),
       }));
     }
     return MOCK_AGENTS[id] || MOCK_AGENTS['org-acme-01'];
@@ -691,18 +703,25 @@ export const getOrganizationAgents = async (id) => {
  */
 export const getOrganizationIncidents = async (id) => {
   const fetchFromApi = async () => {
-    const res = await request(`/telemetry/incidents?organization_id=${id}`);
-    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
-    if (items.length > 0) {
-      return items.map((inc) => ({
-        id: inc.id,
-        severity: inc.severity || 'MAJOR',
-        service: inc.service || inc.service_name || 'k8s-service',
-        rootCause: inc.root_cause || inc.rootCause || 'Đang phân tích',
-        mttr: inc.mttr || '1.5s',
-        status: inc.status || 'RESOLVED',
-        timestamp: inc.created_at || inc.timestamp || 'Gần đây',
-      }));
+    const res = await request(`/ai/incidents?organization_id=${id}`);
+    const rawItems = res?.data?.items || res?.data?.incidents || (Array.isArray(res?.data) ? res.data : null);
+    if (rawItems && rawItems.length > 0) {
+      return rawItems.map((inc) => {
+        let mttr = '1.5s';
+        if (inc.resolved_at && inc.created_at) {
+          const diffMs = Math.max(0, new Date(inc.resolved_at).getTime() - new Date(inc.created_at).getTime());
+          mttr = diffMs < 1000 ? `${diffMs}ms` : `${(diffMs / 1000).toFixed(1)}s`;
+        }
+        return {
+          id: inc.id,
+          severity: inc.severity || 'MAJOR',
+          service: inc.title || inc.service || inc.service_name || inc.cluster_name || 'k8s-service',
+          rootCause: inc.root_cause_description || inc.root_cause || inc.description || 'Đang phân tích',
+          mttr,
+          status: inc.status === 'OPEN' ? 'INVESTIGATING' : (inc.status || 'RESOLVED'),
+          timestamp: inc.created_at ? new Date(inc.created_at).toLocaleString('vi-VN') : (inc.timestamp || 'Gần đây'),
+        };
+      });
     }
     return MOCK_INCIDENTS[id] || MOCK_INCIDENTS['org-acme-01'];
   };
@@ -722,16 +741,20 @@ export const getOrganizationIncidents = async (id) => {
 export const getOrganizationAuditActivity = async (id) => {
   const fetchFromApi = async () => {
     const res = await request(`/organizations/${id}/audit-logs`);
-    const items = res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
-    if (items.length > 0) {
-      return items.map((aud) => ({
+    const rawItems = res?.data?.items || res?.data?.data || (Array.isArray(res?.data) ? res.data : null);
+    if (rawItems && rawItems.length > 0) {
+      return rawItems.map((aud) => ({
         id: aud.id,
-        actor: aud.user?.full_name || aud.actor || 'Quản Trị Viên',
-        actorRole: aud.user_role || aud.actorRole || 'System Actor',
-        action: aud.action_description || aud.action || 'Thao tác cấu hình',
-        target: aud.target_type ? `${aud.target_type}/${aud.target_id || ''}` : (aud.target || 'Hệ thống'),
+        actor: aud.user_name || aud.user?.full_name || aud.actor || 'Quản Trị Viên',
+        actorRole: aud.actor_type === 'USER' ? 'Platform Super Admin' : (aud.actorRole || 'System Automation'),
+        action: aud.description || aud.action || 'Thao tác cấu hình',
+        target: aud.target_type
+          ? `${aud.target_type}/${aud.target_id || ''}`
+          : aud.resource_type
+          ? `${aud.resource_type}/${aud.resource_id || ''}`
+          : (aud.target || 'Hệ thống'),
         time: aud.created_at ? new Date(aud.created_at).toLocaleString('vi-VN') : (aud.time || 'Gần đây'),
-        hash: aud.hash || aud.signature || 'sha256:verified',
+        hash: aud.metadata?.hash || aud.hash || aud.signature || `sha256:${String(aud.id || 'verified').slice(0, 10)}...`,
       }));
     }
     return MOCK_AUDIT_ACTIVITY[id] || MOCK_AUDIT_ACTIVITY['org-acme-01'];
