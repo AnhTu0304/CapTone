@@ -35,6 +35,7 @@ export const getRegisteredModels = async (filters = {}) => {
           evaluationMetrics: metricsStr,
           rawMetrics: m.evaluation_metrics || null,
           filePath: m.file_path || '',
+          predictionCount: m.prediction_count !== undefined ? Number(m.prediction_count) : 0,
           updatedAt: m.updated_at ? new Date(m.updated_at).toLocaleString('vi-VN') : '',
         };
       });

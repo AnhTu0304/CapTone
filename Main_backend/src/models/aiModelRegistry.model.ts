@@ -14,6 +14,7 @@ export interface AIModelRecord {
   evaluation_metrics?: any | null;
   created_at: string;
   updated_at: string;
+  prediction_count?: number;
 }
 
 export class AiModelRegistryModel {
@@ -23,22 +24,28 @@ export class AiModelRegistryModel {
   public static async findAll(): Promise<AIModelRecord[]> {
     const query = `
       SELECT 
-        id,
-        name,
-        version,
-        model_type,
-        framework,
-        status,
-        description,
-        training_dataset,
-        file_path,
-        evaluation_metrics,
-        created_at,
-        updated_at
-      FROM ai_models
+        m.id,
+        m.name,
+        m.version,
+        m.model_type,
+        m.framework,
+        m.status,
+        m.description,
+        m.training_dataset,
+        m.file_path,
+        m.evaluation_metrics,
+        m.created_at,
+        m.updated_at,
+        COALESCE(p.cnt, 0)::int as prediction_count
+      FROM ai_models m
+      LEFT JOIN (
+        SELECT model_id, COUNT(*) as cnt
+        FROM ai_predictions
+        GROUP BY model_id
+      ) p ON m.id = p.model_id
       ORDER BY 
-        CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END,
-        created_at DESC;
+        CASE WHEN m.status = 'ACTIVE' THEN 0 ELSE 1 END,
+        m.created_at DESC;
     `;
     const res = await pool.query(query);
     return res.rows;
