@@ -191,6 +191,62 @@ export class UserService {
             conditions.push(`status = $${params.length}`);
         }
 
+        // 2.6. Lọc theo vai trò phân cấp RBAC (role: SUPER_ADMIN, ADMIN, SME_OWNER, DEVOPS, VIEWER)
+        if (query.role && typeof query.role === 'string' && query.role.trim() && query.role.trim().toUpperCase() !== 'ALL') {
+            const roleUpper = query.role.trim().toUpperCase();
+            if (roleUpper === 'SUPER_ADMIN') {
+                conditions.push(`EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name = 'SUPER_ADMIN'
+                )`);
+            } else if (roleUpper === 'ADMIN') {
+                conditions.push(`EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name IN ('ADMIN', 'SYSTEM_ADMIN')
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name = 'SUPER_ADMIN'
+                )`);
+            } else if (roleUpper === 'SME_OWNER') {
+                conditions.push(`EXISTS (
+                    SELECT 1 FROM organization_members om 
+                    JOIN roles r ON om.role_id = r.id 
+                    WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code IN ('SME_OWNER', 'OWNER')
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name IN ('SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN')
+                )`);
+            } else if (roleUpper === 'DEVOPS') {
+                conditions.push(`EXISTS (
+                    SELECT 1 FROM organization_members om 
+                    JOIN roles r ON om.role_id = r.id 
+                    WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code = 'DEVOPS'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name IN ('SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN')
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM organization_members om 
+                    JOIN roles r ON om.role_id = r.id 
+                    WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code IN ('SME_OWNER', 'OWNER')
+                )`);
+            } else if (roleUpper === 'VIEWER') {
+                conditions.push(`NOT EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name IN ('SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN')
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM organization_members om 
+                    JOIN roles r ON om.role_id = r.id 
+                    WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code IN ('SME_OWNER', 'OWNER', 'DEVOPS')
+                )`);
+            }
+        }
+
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
         // Đếm tổng số bản ghi khớp điều kiện qua Model

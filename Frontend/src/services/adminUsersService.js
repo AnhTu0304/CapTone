@@ -30,6 +30,7 @@ export const adminUsersService = {
     if (params.limit) query.append('limit', String(params.limit));
     if (params.search && params.search.trim()) query.append('search', params.search.trim());
     if (params.status && params.status !== 'ALL') query.append('status', params.status.trim().toUpperCase());
+    if (params.role && params.role !== 'ALL') query.append('role', params.role.trim().toUpperCase());
     if (params.sort_by) query.append('sort_by', params.sort_by);
     if (params.order) query.append('order', params.order);
 

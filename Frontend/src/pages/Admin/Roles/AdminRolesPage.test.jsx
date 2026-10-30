@@ -421,10 +421,17 @@ describe('AdminRolesPage Component Suite', () => {
     const roleSelect = screen.getByDisplayValue('Tất cả vai trò');
     fireEvent.change(roleSelect, { target: { value: 'SUPER_ADMIN' } });
 
-    // Only Nguyen Van Admin should remain
-    expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    // Wait for async fetchUsers to finish and table to render
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
     expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
     expect(screen.queryByText('Le Thi Owner')).not.toBeInTheDocument();
+
+    // Verify adminUsersService.getUsers was called with role parameter
+    expect(adminUsersService.getUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'SUPER_ADMIN' })
+    );
   });
 
   test('15. Clicking "Xóa bộ lọc" button clears search and role filters', async () => {

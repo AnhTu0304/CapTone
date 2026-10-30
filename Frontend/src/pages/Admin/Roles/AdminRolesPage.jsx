@@ -242,6 +242,7 @@ export const AdminRolesPage = () => {
         page,
         limit: pageSize,
         search: debouncedSearch.trim() || undefined,
+        role: selectedRoleFilter !== 'ALL' ? selectedRoleFilter : undefined,
       });
 
       const rawItems = res?.items || (Array.isArray(res) ? res : []);
@@ -270,7 +271,7 @@ export const AdminRolesPage = () => {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [page, pageSize, debouncedSearch]);
+  }, [page, pageSize, debouncedSearch, selectedRoleFilter]);
 
   /**
    * Tải nhật ký kiểm toán phân quyền thực tế từ API
