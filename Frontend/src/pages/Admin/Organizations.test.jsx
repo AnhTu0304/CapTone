@@ -191,6 +191,8 @@ describe('Platform Admin Organizations Service & Components', () => {
       expect(screen.getByText('Tổ Chức & Tên Miền')).toBeInTheDocument();
       expect(screen.getByText('Thành Viên')).toBeInTheDocument();
       expect(screen.getByText('Cụm K8s & Pods')).toBeInTheDocument();
+      expect(screen.getByText('Tác Tử eBPF')).toBeInTheDocument();
+      expect(screen.getByText('100% Online')).toBeInTheDocument();
       expect(screen.getByText('SME Retail Enterprise')).toBeInTheDocument();
     });
   });

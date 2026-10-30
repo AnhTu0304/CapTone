@@ -54,7 +54,8 @@ export const OrganizationsListPage = ({ onNavigate }) => {
 
   const handleSelectOrg = (org) => {
     if (onNavigate) {
-      onNavigate(`/admin/organizations/${org.id}`);
+      const isCompanies = window.location.pathname.includes('/companies');
+      onNavigate(isCompanies ? `/admin/companies/${org.id}` : `/admin/organizations/${org.id}`);
     }
   };
 

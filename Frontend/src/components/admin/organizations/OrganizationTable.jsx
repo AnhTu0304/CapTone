@@ -2,6 +2,19 @@ import React from 'react';
 import { ArrowUpRight, Radio, Users, Ban, CheckCircle2 } from 'lucide-react';
 import OrganizationStatusBadge from './OrganizationStatusBadge';
 
+const getAgentHealthStyle = (health) => {
+  if (!health || health === 'Chưa kết nối') {
+    return { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+  }
+  if (health.includes('100%') || health === 'ONLINE') {
+    return { color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' };
+  }
+  if (health.includes('%') || health.includes('Degraded')) {
+    return { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' };
+  }
+  return { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' };
+};
+
 export const OrganizationTable = ({
   organizations = [],
   onViewDetails,
@@ -155,30 +168,34 @@ export const OrganizationTable = ({
 
                 {/* eBPF Agent Status */}
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Radio
-                      size={13}
-                      style={{
-                        color: org.agentHealth && org.agentHealth.includes('100%')
-                          ? '#059669'
-                          : org.agentHealth && org.agentHealth.includes('Degraded')
-                          ? '#D97706'
-                          : '#DC2626',
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontWeight: 600,
-                        color: org.agentHealth && org.agentHealth.includes('100%')
-                          ? '#059669'
-                          : org.agentHealth && org.agentHealth.includes('Degraded')
-                          ? '#D97706'
-                          : '#DC2626',
-                      }}
-                    >
-                      {org.agentHealth || '100% Online'}
-                    </span>
-                  </div>
+                  {(() => {
+                    const health = org.agentHealth || 'Chưa kết nối';
+                    const style = getAgentHealthStyle(health);
+                    return (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: style.bg,
+                          border: `1px solid ${style.border}`,
+                        }}
+                      >
+                        <Radio size={12} style={{ color: style.color }} />
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            fontSize: '0.75rem',
+                            color: style.color,
+                          }}
+                        >
+                          {health}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </td>
 
                 {/* Status */}

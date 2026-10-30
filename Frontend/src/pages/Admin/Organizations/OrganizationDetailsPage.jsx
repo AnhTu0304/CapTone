@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import {
   getOrganization,
+  updateOrganizationStatus,
   getOrganizationMembers,
   getOrganizationEnvironments,
   getOrganizationClusters,
@@ -97,14 +98,20 @@ export const OrganizationDetailsPage = ({ orgId, onNavigate }) => {
 
   const handleBack = () => {
     if (onNavigate) {
-      onNavigate('/admin/organizations');
+      const isCompanies = window.location.pathname.includes('/companies');
+      onNavigate(isCompanies ? '/admin/companies' : '/admin/organizations');
     }
   };
 
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
     if (!organization) return;
     const newStatus = organization.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    setOrganization((prev) => ({ ...prev, status: newStatus }));
+    try {
+      await updateOrganizationStatus(organization.id, newStatus);
+      setOrganization((prev) => ({ ...prev, status: newStatus }));
+    } catch (err) {
+      console.error('Lỗi khi cập nhật trạng thái tổ chức:', err);
+    }
   };
 
   if (notFound) {

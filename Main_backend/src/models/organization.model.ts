@@ -27,6 +27,11 @@ export interface IOrganizationDetail extends IOrganization {
   profile?: IOrganizationProfile | null;
   role_in_org?: string | null;
   members_count?: number;
+  clusters_count?: number;
+  pods_count?: number;
+  agents_count?: number;
+  online_agents_count?: number;
+  agent_health?: string;
 }
 
 export interface ICreateOrganizationDto {
@@ -67,6 +72,13 @@ export interface IOrganizationQuery {
   sort_by?: 'created_at' | 'name' | 'status';
   order?: 'ASC' | 'DESC' | 'asc' | 'desc';
 }
+
+const computeAgentHealth = (agentsCount: number, onlineAgentsCount: number): string => {
+  if (agentsCount === 0) return 'Chưa kết nối';
+  if (onlineAgentsCount === agentsCount) return '100% Online';
+  if (onlineAgentsCount > 0) return `${Math.round((onlineAgentsCount / agentsCount) * 100)}% Online`;
+  return 'Offline';
+};
 
 export class OrganizationModel {
   /**
@@ -187,7 +199,11 @@ export class OrganizationModel {
         op.id AS profile_id, op.email AS profile_email, op.phone AS profile_phone, op.website AS profile_website,
         op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
         r.code AS role_in_org,
-        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count
+        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
+        (SELECT COUNT(DISTINCT c.id)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS clusters_count,
+        (SELECT COUNT(DISTINCT p.id)::int FROM pods p JOIN clusters c ON p.cluster_id = c.id JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS pods_count,
+        (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS agents_count,
+        (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.status = 'ONLINE' AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS online_agents_count
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $${paramIndex}
@@ -200,35 +216,44 @@ export class OrganizationModel {
     params.push(filter.userId, filter.limit, filter.offset);
     const res = await db.query(query, params);
 
-    return res.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      slug: row.slug,
-      type: row.type,
-      description: row.description,
-      status: row.status,
-      created_by: row.created_by,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      role_in_org: row.role_in_org || null,
-      members_count: row.members_count || 0,
-      profile: row.profile_id
-        ? {
-            id: row.profile_id,
-            organization_id: row.id,
-            description: row.description,
-            email: row.profile_email,
-            phone: row.profile_phone,
-            website: row.profile_website,
-            address: row.profile_address,
-            city: row.profile_city,
-            country: row.profile_country,
-            timezone: row.profile_timezone,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-          }
-        : null,
-    }));
+    return res.rows.map((row) => {
+      const agentsCount = Number(row.agents_count) || 0;
+      const onlineAgentsCount = Number(row.online_agents_count) || 0;
+      return {
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        type: row.type,
+        description: row.description,
+        status: row.status,
+        created_by: row.created_by,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        role_in_org: row.role_in_org || null,
+        members_count: row.members_count || 0,
+        clusters_count: Number(row.clusters_count) || 0,
+        pods_count: Number(row.pods_count) || 0,
+        agents_count: agentsCount,
+        online_agents_count: onlineAgentsCount,
+        agent_health: computeAgentHealth(agentsCount, onlineAgentsCount),
+        profile: row.profile_id
+          ? {
+              id: row.profile_id,
+              organization_id: row.id,
+              description: row.description,
+              email: row.profile_email,
+              phone: row.profile_phone,
+              website: row.profile_website,
+              address: row.profile_address,
+              city: row.profile_city,
+              country: row.profile_country,
+              timezone: row.profile_timezone,
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+            }
+          : null,
+      };
+    });
   }
 
   /**
@@ -296,7 +321,11 @@ export class OrganizationModel {
         op.id AS profile_id, op.email AS profile_email, op.phone AS profile_phone, op.website AS profile_website,
         op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
         r.code AS role_in_org, cur_om.status AS member_status,
-        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count
+        (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
+        (SELECT COUNT(DISTINCT c.id)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS clusters_count,
+        (SELECT COUNT(DISTINCT p.id)::int FROM pods p JOIN clusters c ON p.cluster_id = c.id JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS pods_count,
+        (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS agents_count,
+        (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.status = 'ONLINE' AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS online_agents_count
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $2
@@ -308,6 +337,8 @@ export class OrganizationModel {
     if (res.rows.length === 0) return null;
 
     const row = res.rows[0];
+    const agentsCount = Number(row.agents_count) || 0;
+    const onlineAgentsCount = Number(row.online_agents_count) || 0;
     return {
       id: row.id,
       name: row.name,
@@ -321,6 +352,11 @@ export class OrganizationModel {
       role_in_org: row.role_in_org || null,
       member_status: row.member_status || undefined,
       members_count: row.members_count || 0,
+      clusters_count: Number(row.clusters_count) || 0,
+      pods_count: Number(row.pods_count) || 0,
+      agents_count: agentsCount,
+      online_agents_count: onlineAgentsCount,
+      agent_health: computeAgentHealth(agentsCount, onlineAgentsCount),
       profile: row.profile_id
         ? {
             id: row.profile_id,

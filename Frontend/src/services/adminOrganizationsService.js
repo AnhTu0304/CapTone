@@ -354,23 +354,40 @@ const MOCK_AUDIT_ACTIVITY = {
 };
 
 // Helper để map thực thể từ backend sang format frontend
-const mapBackendOrgToFrontend = (item) => ({
-  id: item.id,
-  name: item.name,
-  slug: item.slug,
-  plan: item.plan || (item.type === 'ENTERPRISE' ? 'Enterprise Cloud' : 'SME Pro'),
-  status: item.status || 'ACTIVE',
-  domain: item.website || item.domain || `${item.slug || 'company'}.com`,
-  contactEmail: item.email || item.contact_email || item.contactEmail || `contact@${item.slug || 'company'}.com`,
-  createdAt: item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : (item.createdAt || '15/01/2026'),
-  clustersCount: item.clusters_count ?? item.clustersCount ?? 1,
-  clustersLimit: item.clusters_limit ?? item.clustersLimit ?? 3,
-  podsCount: item.pods_count ?? item.podsCount ?? 24,
-  podsLimit: item.pods_limit ?? item.podsLimit ?? 100,
-  agentHealth: item.agent_health || item.agentHealth || '100% Online',
-  enforce2FA: item.enforce_2fa ?? item.enforce2FA ?? false,
-  membersCount: item.members_count ?? item.membersCount ?? 1,
-});
+const mapBackendOrgToFrontend = (item) => {
+  const agentsCount = item.agents_count ?? item.agentsCount ?? 0;
+  const onlineAgentsCount = item.online_agents_count ?? item.onlineAgentsCount ?? 0;
+  let fallbackHealth = 'Chưa kết nối';
+  if (agentsCount > 0) {
+    if (onlineAgentsCount === agentsCount) {
+      fallbackHealth = '100% Online';
+    } else if (onlineAgentsCount > 0) {
+      fallbackHealth = `${Math.round((onlineAgentsCount / agentsCount) * 100)}% Online`;
+    } else {
+      fallbackHealth = 'Offline';
+    }
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    slug: item.slug,
+    plan: item.plan || (item.type === 'ENTERPRISE' ? 'Enterprise Cloud' : 'SME Pro'),
+    status: item.status || 'ACTIVE',
+    domain: item.website || item.domain || `${item.slug || 'company'}.com`,
+    contactEmail: item.email || item.contact_email || item.contactEmail || `contact@${item.slug || 'company'}.com`,
+    createdAt: item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : (item.createdAt || '15/01/2026'),
+    clustersCount: item.clusters_count ?? item.clustersCount ?? 0,
+    clustersLimit: item.clusters_limit ?? item.clustersLimit ?? 3,
+    podsCount: item.pods_count ?? item.podsCount ?? 0,
+    podsLimit: item.pods_limit ?? item.podsLimit ?? 100,
+    agentHealth: item.agent_health || item.agentHealth || fallbackHealth,
+    agentsCount,
+    onlineAgentsCount,
+    enforce2FA: item.enforce_2fa ?? item.enforce2FA ?? false,
+    membersCount: item.members_count ?? item.membersCount ?? 1,
+  };
+};
 
 // ==========================================
 // SERVICE METHODS WITH REAL BACKEND INTEGRATION & MOCK FALLBACK
