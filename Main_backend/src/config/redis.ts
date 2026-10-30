@@ -12,11 +12,15 @@ const redisOptions: RedisOptions = {
   maxRetriesPerRequest: 1,
   enableOfflineQueue: false, // Fail fast so application can fallback immediately to PostgreSQL
   retryStrategy(times: number) {
-    // If Redis is not available, stop retrying after 2 attempts to avoid hanging processes/tests
-    if (times > 2) {
-      return null;
+    // In test mode, stop retrying after 2 attempts to avoid hanging processes/tests
+    if (config.nodeEnv === 'test') {
+      if (times > 2) {
+        return null;
+      }
+      return 1000;
     }
-    return 1000;
+    // In dev / prod: keep retrying with backoff so Redis restarts / boot sequences reconnect cleanly
+    return Math.min(times * 500, 3000);
   },
 };
 
