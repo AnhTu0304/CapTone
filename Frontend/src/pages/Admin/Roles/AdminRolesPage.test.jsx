@@ -140,9 +140,11 @@ describe('AdminRolesPage Component Suite', () => {
     const detailButtons = screen.getAllByText('Chi tiết');
     fireEvent.click(detailButtons[0]);
 
-    expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    });
     expect(screen.getByText('MÃ ĐỊNH DANH HỆ THỐNG (USER ID)')).toBeInTheDocument();
-    expect(screen.getByText('u-01')).toBeInTheDocument();
+    expect(screen.getAllByText('u-01').length).toBeGreaterThanOrEqual(1);
     // Verify no password hash or secrets are displayed
     expect(screen.queryByText(/password_hash/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/secret/i)).not.toBeInTheDocument();
@@ -328,5 +330,58 @@ describe('AdminRolesPage Component Suite', () => {
     ).toBe('Acme Cloud Corp (+1 khác)');
     // No org
     expect(resolveUserOrg({})).toBe('Chưa liên kết tổ chức');
+  });
+
+  test('11. Detail modal shows affiliated organizations list for tenant user', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    });
+
+    const detailButtons = screen.getAllByText('Chi tiết');
+    // Le Thi Owner is the 3rd user
+    fireEvent.click(detailButtons[2]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    });
+
+    // Check organization table contains FinFlow Pay
+    expect(screen.getAllByText('FinFlow Pay').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/org-01/i)).toBeInTheDocument();
+  });
+
+  test('12. Switching to Live Activity tab displays user activity log timeline', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    const detailButtons = screen.getAllByText('Chi tiết');
+    fireEvent.click(detailButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    });
+
+    // Switch to tab "Lịch Sử Hoạt Động (Live)"
+    const activityTabBtn = screen.getByRole('button', { name: /Lịch Sử Hoạt Động \(Live\)/i });
+    fireEvent.click(activityTabBtn);
+
+    // Verify timeline elements
+    await waitFor(() => {
+      expect(screen.getByText(/Nhật Ký Sự Kiện & Thao Tác/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText('SYSTEM_ROLE_ASSIGNED')).toBeInTheDocument();
   });
 });
