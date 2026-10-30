@@ -187,34 +187,33 @@ export class OrganizationService {
       ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(r)
     );
 
+    // Kiểm tra trực tiếp trạng thái thành viên của người dùng trong tổ chức
+    const member = await OrganizationMemberModel.findByOrgAndUser(orgId, userId);
+    const isMember = Boolean(member && member.status === 'ACTIVE');
+
+    // Chỉ cho phép nếu là Quản trị viên hệ thống (xem metadata) hoặc là thành viên ACTIVE của tổ chức
+    if (!isSystemAdmin && !isMember) {
+      throw new ApiError(403, 'Bạn không có quyền truy cập vào thông tin tổ chức này');
+    }
+
+    // SUPER_ADMIN nếu không thuộc organization_members thì role_in_org luôn là null (không có quyền SME_OWNER)
+    const userRoleInOrg = isMember ? member.role_code : null;
+
     const cacheKey = RedisCacheService.organizationKey(orgId);
 
     // 1. Thử lấy từ Redis Cache trước (Read-through)
     const cached = await RedisCacheService.get<IOrganizationDetail>(cacheKey);
     if (cached) {
-      if (isSystemAdmin) {
-        return cached;
-      }
-      const member = await OrganizationMemberModel.findByOrgAndUser(orgId, userId);
-      if (member && member.status !== 'REMOVED') {
-        return {
-          ...cached,
-          role_in_org: member.role_code || cached.role_in_org,
-        };
-      }
-      throw new ApiError(403, 'Bạn không có quyền truy cập vào thông tin tổ chức này');
+      return {
+        ...cached,
+        role_in_org: userRoleInOrg,
+      };
     }
 
     // 2. Cache miss -> Truy vấn trực tiếp từ PostgreSQL
     const row = await OrganizationModel.findDetailById(orgId, userId);
     if (!row) {
       throw new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa');
-    }
-
-    const isMember = Boolean(row.member_status && row.member_status !== 'REMOVED');
-
-    if (!isSystemAdmin && !isMember) {
-      throw new ApiError(403, 'Bạn không có quyền truy cập vào thông tin tổ chức này');
     }
 
     const result: IOrganizationDetail = {
@@ -227,13 +226,13 @@ export class OrganizationService {
       created_by: row.created_by,
       created_at: row.created_at,
       updated_at: row.updated_at,
-      role_in_org: row.role_in_org || null,
+      role_in_org: userRoleInOrg,
       members_count: row.members_count || 0,
       profile: row.profile || null,
     };
 
-    // 3. Ghi kết quả vào Redis Cache với finite TTL
-    await RedisCacheService.set(cacheKey, result);
+    // 3. Ghi kết quả vào Redis Cache (lưu trữ metadata chung với role_in_org: null để tránh ô nhiễm quyền)
+    await RedisCacheService.set(cacheKey, { ...result, role_in_org: null });
 
     return result;
   }
@@ -349,26 +348,8 @@ export class OrganizationService {
     if (!userId) {
       throw new ApiError(401, 'Yêu cầu đăng nhập trước khi xem danh sách tổ chức');
     }
-    const orgs = await OrganizationModel.findOrganizationsByUserId(userId);
-    if (orgs.length === 0 && Array.isArray(userRoles) && userRoles.length > 0) {
-      const normalizedRoles = userRoles.map((r) => String(r).toUpperCase());
-      const isSystemAdmin = normalizedRoles.some((r) =>
-        ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(r)
-      );
-      if (isSystemAdmin) {
-        const allOrgs = await OrganizationModel.findManyWithDetails({
-          isSystemAdmin: true,
-          userId,
-          limit: 50,
-          offset: 0,
-        });
-        return allOrgs.map((o) => ({
-          ...o,
-          role_in_org: o.role_in_org || 'SME_OWNER',
-        }));
-      }
-    }
-    return orgs;
+    // Chỉ trả về các tổ chức mà người dùng thực sự tham gia (active membership trong DB)
+    return await OrganizationModel.findOrganizationsByUserId(userId);
   }
 
   /**

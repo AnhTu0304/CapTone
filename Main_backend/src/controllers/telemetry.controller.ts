@@ -20,6 +20,50 @@ import { pool } from '../config/database';
 
 export class TelemetryController {
   /**
+   * Helper: Xác định và kiểm tra nghiêm ngặt quyền truy cập Organization cho các API Telemetry.
+   * Chặn hoàn toàn bypass SUPER_ADMIN đối với dữ liệu viễn trắc nội bộ công ty.
+   * Chặn tấn công IDOR bằng cách sửa x-organization-id hoặc query organization_id.
+   */
+  public static async resolveAndVerifyTelemetryOrg(
+    req: Request,
+    res: Response
+  ): Promise<{ allowedOrgIds: string[]; scopedOrgId: string } | null> {
+    const user = (req as any).user;
+    if (!user || !user.id) {
+      ApiResponse.error(res, 'Yêu cầu đăng nhập trước khi truy cập dữ liệu viễn trắc', 401);
+      return null;
+    }
+
+    const memberRes = await pool.query(
+      `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+      [user.id]
+    );
+    const userOrgIds: string[] = memberRes.rows.map((r) => r.organization_id);
+
+    if (userOrgIds.length === 0) {
+      ApiResponse.error(res, 'Từ chối truy cập: Bạn không thuộc tổ chức nào hoặc chưa được cấp quyền', 403);
+      return null;
+    }
+
+    const requestedOrg =
+      (req.headers['x-organization-id'] as string) ||
+      (req.query.organization_id as string) ||
+      (req.query.orgId as string) ||
+      (req.body?.organization_id as string) ||
+      (req.params?.orgId as string);
+
+    if (requestedOrg) {
+      if (!userOrgIds.includes(requestedOrg)) {
+        ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem dữ liệu của tổ chức này', 403);
+        return null;
+      }
+      return { allowedOrgIds: [requestedOrg], scopedOrgId: requestedOrg };
+    }
+
+    return { allowedOrgIds: userOrgIds, scopedOrgId: userOrgIds[0] };
+  }
+
+  /**
    * GET /api/v1/telemetry/services/:serviceId/metrics-sequence
    * Aggregate pod metrics across time buckets to prepare 12x8 GRU sequence
    */
@@ -57,12 +101,9 @@ export class TelemetryController {
         if (!isNaN(d.getTime())) endTime = d;
       }
 
-      const headerOrgId = (req.headers['x-organization-id'] as string) || undefined;
-      const queryOrgId = organization_id || undefined;
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-      const orgId = headerOrgId || queryOrgId || (!isGlobalAdmin ? ((req as any).orgMember?.organizationId || user?.organizationId || user?.organization_id) : undefined);
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+      const orgId = tenantContext.scopedOrgId;
 
       const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
         bucketSeconds: bucket_seconds,
@@ -112,12 +153,16 @@ export class TelemetryController {
         );
       }
 
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+
       const { window_minutes, log_limit, event_limit } = parsedQuery.data;
 
       const rcaContext = await TelemetryAggregatorService.buildRcaContext(serviceId, {
         windowMinutes: window_minutes,
         logLimit: log_limit,
         eventLimit: event_limit,
+        organizationId: tenantContext.scopedOrgId,
       });
 
       return ApiResponse.success(
@@ -153,6 +198,9 @@ export class TelemetryController {
         );
       }
 
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+
       const { bucket_seconds, window_minutes, force_rca, auto_trigger_rca } = parsedBody.data;
 
       const result = await TelemetryAggregatorService.evaluateAndDiagnoseService(serviceId, {
@@ -160,6 +208,7 @@ export class TelemetryController {
         windowMinutes: window_minutes,
         forceRca: force_rca,
         autoTriggerRca: auto_trigger_rca,
+        organizationId: tenantContext.scopedOrgId,
       });
 
       return ApiResponse.success(
@@ -186,14 +235,12 @@ export class TelemetryController {
     next: NextFunction
   ): Promise<any> {
     try {
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+
       const serviceId = (req.query.service_id as string) || 'sme-order-service';
       const clusterId = (req.query.cluster_id as string) || undefined;
-      const headerOrgId = (req.headers['x-organization-id'] as string) || undefined;
-      const queryOrgId = (req.query.organization_id as string) || undefined;
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-      const orgId = headerOrgId || queryOrgId || (!isGlobalAdmin ? ((req as any).orgMember?.organizationId || user?.organizationId || user?.organization_id) : undefined);
+      const orgId = tenantContext.scopedOrgId;
 
       const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId, orgId);
 
@@ -255,14 +302,12 @@ export class TelemetryController {
     next: NextFunction
   ): Promise<any> {
     try {
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+
       const windowMinutes = Math.min(1440, Math.max(5, Number(req.query.window_minutes) || 60));
       const clusterId = (req.query.cluster_id as string) || undefined;
-      const headerOrgId = (req.headers['x-organization-id'] as string) || undefined;
-      const queryOrgId = (req.query.organization_id as string) || undefined;
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-      const orgId = headerOrgId || queryOrgId || (!isGlobalAdmin ? ((req as any).orgMember?.organizationId || user?.organizationId || user?.organization_id) : undefined);
+      const orgId = tenantContext.scopedOrgId;
 
       const services = await TelemetryAggregatorService.getApmServicesSummary(windowMinutes, {
         clusterId,
@@ -301,22 +346,9 @@ export class TelemetryController {
       }
 
       const query = parsedQuery.data;
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-      const userOrgId = user?.organizationId || user?.organization_id;
-
-      // Enforce tenant isolation for non-super admins
-      let scopedOrgId: string | undefined = query.organization_id;
-      if (!isGlobalAdmin) {
-        if (!userOrgId) {
-          return ApiResponse.error(res, 'Người dùng không thuộc tổ chức nào để truy vấn dữ liệu metrics', 403);
-        }
-        if (query.organization_id && query.organization_id !== userOrgId) {
-          return ApiResponse.error(res, 'Từ chối truy cập: Không thể xem metrics của tổ chức khác', 403);
-        }
-        scopedOrgId = userOrgId;
-      }
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+      const scopedOrgId: string = tenantContext.scopedOrgId;
 
       // Fixed reference time for consistent range evaluation across sub-queries
       const requestNow = new Date();
@@ -443,57 +475,28 @@ export class TelemetryController {
       const offset = (page - 1) * limit;
 
       // Tenant Isolation Scope [S4][PB17] 3.5
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+      const allowedOrgIds = tenantContext.allowedOrgIds;
 
-      let allowedOrgIds: string[] | undefined = undefined;
-
-      if (!isGlobalAdmin) {
-        if (!user?.id) {
-          return ApiResponse.error(res, 'Yêu cầu đăng nhập để truy vấn nhật ký', 401);
-        }
-
-        const memberRes = await pool.query(
-          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-          [user.id]
+      // Validate cluster ownership if cluster_id is specified
+      if (cluster_id && cluster_id.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
+        const clusterRes = await pool.query(
+          `SELECT c.id FROM clusters c
+           JOIN environments env ON c.environment_id = env.id
+           WHERE (c.id::text = $1 OR c.name = $1)
+             AND env.organization_id = ANY($2::uuid[])`,
+          [cluster_id, allowedOrgIds]
         );
-        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
 
-        const tokenOrgId = user?.organization_id || user?.organizationId;
-        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
-          allowedOrgIds.push(tokenOrgId);
-        }
-
-        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
-        if (requestedOrg && allowedOrgIds.length > 0 && !allowedOrgIds.includes(requestedOrg)) {
-          return ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem nhật ký của tổ chức này', 403);
-        }
-
-        // Validate cluster ownership if cluster_id is specified
-        if (cluster_id && cluster_id.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
-          const clusterRes = await pool.query(
-            `SELECT c.id FROM clusters c
-             JOIN environments env ON c.environment_id = env.id
-             WHERE (c.id::text = $1 OR c.name = $1)
-               AND env.organization_id = ANY($2::uuid[])`,
-            [cluster_id, allowedOrgIds]
+        if (clusterRes.rows.length === 0) {
+          const anyCluster = await pool.query(
+            `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
+            [cluster_id]
           );
-
-          if (clusterRes.rows.length === 0) {
-            const anyCluster = await pool.query(
-              `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
-              [cluster_id]
-            );
-            if (anyCluster.rows.length > 0) {
-              return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
-            }
+          if (anyCluster.rows.length > 0) {
+            return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
           }
-        }
-      } else {
-        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
-        if (requestedOrg) {
-          allowedOrgIds = [requestedOrg];
         }
       }
 
@@ -541,10 +544,6 @@ export class TelemetryController {
 
       const userId = (req as any).user?.id || 'anonymous';
       const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-
-      let allowedOrgIds: string[] | undefined = undefined;
 
       const {
         service_id,
@@ -560,51 +559,28 @@ export class TelemetryController {
         tail,
       } = parsedQuery.data;
 
-      if (!isGlobalAdmin) {
-        if (!user?.id) {
-          return ApiResponse.error(res, 'Yêu cầu đăng nhập để mở luồng nhật ký', 401);
-        }
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+      const allowedOrgIds = tenantContext.allowedOrgIds;
 
-        const memberRes = await pool.query(
-          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-          [user.id]
+      // Validate cluster ownership if cluster_id is specified
+      if (cluster_id && cluster_id.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
+        const clusterRes = await pool.query(
+          `SELECT c.id FROM clusters c
+           JOIN environments env ON c.environment_id = env.id
+           WHERE (c.id::text = $1 OR c.name = $1)
+             AND env.organization_id = ANY($2::uuid[])`,
+          [cluster_id, allowedOrgIds]
         );
-        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
 
-        const tokenOrgId = user?.organization_id || user?.organizationId;
-        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
-          allowedOrgIds.push(tokenOrgId);
-        }
-
-        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
-        if (requestedOrg && allowedOrgIds.length > 0 && !allowedOrgIds.includes(requestedOrg)) {
-          return ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem nhật ký của tổ chức này', 403);
-        }
-
-        // Validate cluster ownership if cluster_id is specified
-        if (cluster_id && cluster_id.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
-          const clusterRes = await pool.query(
-            `SELECT c.id FROM clusters c
-             JOIN environments env ON c.environment_id = env.id
-             WHERE (c.id::text = $1 OR c.name = $1)
-               AND env.organization_id = ANY($2::uuid[])`,
-            [cluster_id, allowedOrgIds]
+        if (clusterRes.rows.length === 0) {
+          const anyCluster = await pool.query(
+            `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
+            [cluster_id]
           );
-
-          if (clusterRes.rows.length === 0) {
-            const anyCluster = await pool.query(
-              `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
-              [cluster_id]
-            );
-            if (anyCluster.rows.length > 0) {
-              return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
-            }
+          if (anyCluster.rows.length > 0) {
+            return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
           }
-        }
-      } else {
-        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
-        if (requestedOrg) {
-          allowedOrgIds = [requestedOrg];
         }
       }
 
@@ -705,57 +681,28 @@ export class TelemetryController {
       const offset = (page - 1) * limit;
 
       // Multi-tenant organization isolation scope [S4][PB18] 4.2
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+      const allowedOrgIds = tenantContext.allowedOrgIds;
 
-      let allowedOrgIds: string[] | undefined = undefined;
-
-      if (!isGlobalAdmin) {
-        if (!user?.id) {
-          return ApiResponse.error(res, 'Yêu cầu đăng nhập để truy vấn sự kiện', 401);
-        }
-
-        const memberRes = await pool.query(
-          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-          [user.id]
+      // Validate cluster ownership if cluster_id is specified
+      if (effectiveClusterId && effectiveClusterId.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
+        const clusterRes = await pool.query(
+          `SELECT c.id FROM clusters c
+           JOIN environments env ON c.environment_id = env.id
+           WHERE (c.id::text = $1 OR c.name = $1)
+             AND env.organization_id = ANY($2::uuid[])`,
+          [effectiveClusterId, allowedOrgIds]
         );
-        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
 
-        const tokenOrgId = user?.organization_id || user?.organizationId;
-        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
-          allowedOrgIds.push(tokenOrgId);
-        }
-
-        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
-        if (requestedOrg && allowedOrgIds.length > 0 && !allowedOrgIds.includes(requestedOrg)) {
-          return ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem sự kiện của tổ chức này', 403);
-        }
-
-        // Validate cluster ownership if cluster_id is specified
-        if (effectiveClusterId && effectiveClusterId.toUpperCase() !== 'ALL' && allowedOrgIds.length > 0) {
-          const clusterRes = await pool.query(
-            `SELECT c.id FROM clusters c
-             JOIN environments env ON c.environment_id = env.id
-             WHERE (c.id::text = $1 OR c.name = $1)
-               AND env.organization_id = ANY($2::uuid[])`,
-            [effectiveClusterId, allowedOrgIds]
+        if (clusterRes.rows.length === 0) {
+          const anyCluster = await pool.query(
+            `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
+            [effectiveClusterId]
           );
-
-          if (clusterRes.rows.length === 0) {
-            const anyCluster = await pool.query(
-              `SELECT id FROM clusters WHERE id::text = $1 OR name = $1`,
-              [effectiveClusterId]
-            );
-            if (anyCluster.rows.length > 0) {
-              return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
-            }
+          if (anyCluster.rows.length > 0) {
+            return ApiResponse.error(res, 'Từ chối truy cập: Cụm máy chủ không thuộc tổ chức được phép của bạn', 403);
           }
-        }
-      } else {
-        const requestedOrg = (req.query.organization_id as string) || (req.query.orgId as string);
-        if (requestedOrg) {
-          allowedOrgIds = [requestedOrg];
         }
       }
 
@@ -791,28 +738,9 @@ export class TelemetryController {
         return ApiResponse.error(res, 'ID sự kiện không hợp lệ', 400);
       }
 
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.roles ? [user.roles] : []);
-      const isGlobalAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase()));
-
-      let allowedOrgIds: string[] | undefined = undefined;
-
-      if (!isGlobalAdmin) {
-        if (!user?.id) {
-          return ApiResponse.error(res, 'Yêu cầu đăng nhập để xem chi tiết sự kiện', 401);
-        }
-
-        const memberRes = await pool.query(
-          `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-          [user.id]
-        );
-        allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
-
-        const tokenOrgId = user?.organization_id || user?.organizationId;
-        if (tokenOrgId && !allowedOrgIds.includes(tokenOrgId)) {
-          allowedOrgIds.push(tokenOrgId);
-        }
-      }
+      const tenantContext = await TelemetryController.resolveAndVerifyTelemetryOrg(req, res);
+      if (!tenantContext) return;
+      const allowedOrgIds = tenantContext.allowedOrgIds;
 
       const event = await KubernetesEventModel.findById(id, allowedOrgIds);
       if (!event) {

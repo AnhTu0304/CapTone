@@ -600,20 +600,18 @@ export class K8sStatusService {
     const requestedOrgId = urlOrgId || queryOrgId || null;
     let allowedOrgIds: string[] = [];
 
-    if (!isPlatformAdmin) {
-      const memberRes = await pool.query(
-        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-        [user.id]
-      );
-      allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
+    const memberRes = await pool.query(
+      `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+      [user.id]
+    );
+    allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
 
-      if (requestedOrgId) {
-        if (!allowedOrgIds.includes(requestedOrgId)) {
-          throw ApiError.forbidden('Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này');
-        }
-      } else if (allowedOrgIds.length === 0) {
-        throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+    if (requestedOrgId) {
+      if (!allowedOrgIds.includes(requestedOrgId)) {
+        throw ApiError.forbidden('Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này');
       }
+    } else if (allowedOrgIds.length === 0) {
+      throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
     }
 
     const rawClusterParam = scope.clusterId;
@@ -659,7 +657,7 @@ export class K8sStatusService {
       if (requestedOrgId && clusterOrgId && clusterOrgId !== requestedOrgId) {
         throw ApiError.forbidden('Từ chối truy cập: Cụm Kubernetes không thuộc tổ chức được yêu cầu');
       }
-      if (!isPlatformAdmin && clusterOrgId && !allowedOrgIds.includes(clusterOrgId)) {
+      if (clusterOrgId && !allowedOrgIds.includes(clusterOrgId)) {
         throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền truy cập cụm Kubernetes của tổ chức khác');
       }
       resolvedClusterId = clusterRow.id;
@@ -720,7 +718,7 @@ export class K8sStatusService {
     if (resolved.effectiveOrgId) {
       params.push(resolved.effectiveOrgId);
       sql += ` AND e.organization_id = $${params.length}`;
-    } else if (!resolved.isPlatformAdmin) {
+    } else {
       params.push(resolved.allowedOrgIds);
       sql += ` AND e.organization_id = ANY($${params.length}::uuid[])`;
     }
@@ -799,7 +797,7 @@ export class K8sStatusService {
     const matchingRow = nodeRes.rows.find((row) => {
       if (resolved.clusterId && row.cluster_id !== resolved.clusterId) return false;
       if (resolved.effectiveOrgId && row.organization_id !== resolved.effectiveOrgId) return false;
-      if (!resolved.isPlatformAdmin && !resolved.allowedOrgIds.includes(row.organization_id)) return false;
+      if (!resolved.allowedOrgIds.includes(row.organization_id)) return false;
       return true;
     });
 
@@ -907,7 +905,7 @@ export class K8sStatusService {
     if (resolved.effectiveOrgId) {
       params.push(resolved.effectiveOrgId);
       sql += ` AND e.organization_id = $${params.length}`;
-    } else if (!resolved.isPlatformAdmin) {
+    } else {
       params.push(resolved.allowedOrgIds);
       sql += ` AND e.organization_id = ANY($${params.length}::uuid[])`;
     }
@@ -1007,7 +1005,7 @@ export class K8sStatusService {
     const matchingRow = podRes.rows.find((row) => {
       if (resolved.clusterId && row.cluster_id !== resolved.clusterId) return false;
       if (resolved.effectiveOrgId && row.organization_id !== resolved.effectiveOrgId) return false;
-      if (!resolved.isPlatformAdmin && !resolved.allowedOrgIds.includes(row.organization_id)) return false;
+      if (!resolved.allowedOrgIds.includes(row.organization_id)) return false;
       return true;
     });
 
@@ -1070,7 +1068,7 @@ export class K8sStatusService {
     if (resolved.effectiveOrgId) {
       params.push(resolved.effectiveOrgId);
       sql += ` AND e.organization_id = $${params.length}`;
-    } else if (!resolved.isPlatformAdmin) {
+    } else {
       params.push(resolved.allowedOrgIds);
       sql += ` AND e.organization_id = ANY($${params.length}::uuid[])`;
     }
@@ -1163,7 +1161,7 @@ export class K8sStatusService {
     const matchingRow = depRes.rows.find((row) => {
       if (resolved.clusterId && row.cluster_id !== resolved.clusterId) return false;
       if (resolved.effectiveOrgId && row.organization_id !== resolved.effectiveOrgId) return false;
-      if (!resolved.isPlatformAdmin && !resolved.allowedOrgIds.includes(row.organization_id)) return false;
+      if (!resolved.allowedOrgIds.includes(row.organization_id)) return false;
       if (namespace && namespace !== 'ALL' && row.namespace !== namespace) return false;
       return true;
     });

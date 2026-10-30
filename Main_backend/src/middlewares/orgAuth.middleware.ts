@@ -38,28 +38,16 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
       req.params.orgId ||
       req.params.id ||
       req.body?.organization_id ||
-      (req.headers['x-organization-id'] as string);
+      (req.headers['x-organization-id'] as string) ||
+      (req.query?.organization_id as string) ||
+      (req.query?.orgId as string);
 
     if (!orgId) {
       return next(new ApiError(400, 'Không tìm thấy định danh tổ chức (ID) trong yêu cầu'));
     }
 
-    const tokenRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: string) => r.trim().toUpperCase())
-      : [];
-
-    // SUPER_ADMIN hoặc ADMIN luôn có toàn quyền truy cập
-    if (tokenRoles.includes('SUPER_ADMIN') || tokenRoles.includes('ADMIN') || tokenRoles.includes('SYSTEM_ADMIN')) {
-      req.orgMember = {
-        organizationId: orgId,
-        roleCode: 'SUPER_ADMIN',
-        status: 'ACTIVE',
-        userId: user.id,
-      };
-      return next();
-    }
-
     // 2. Kiểm tra trực tiếp trạng thái thành viên trong CSDL qua OrganizationMemberModel
+    // Không cho phép SUPER_ADMIN tự động bypass kiểm tra quyền thành viên tổ chức
     const member = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
     if (!member || member.status !== 'ACTIVE') {
       await AuditService.recordFromRequest(req, {
@@ -149,11 +137,6 @@ export const requireOrgRole = (...allowedRoles: OrganizationRoleCode[]) => {
         );
       }
 
-      // SUPER_ADMIN bypass
-      if (orgMember.roleCode === 'SUPER_ADMIN') {
-        return next();
-      }
-
       const normalizedAllowed = allowedRoles.map((r) => r.trim().toUpperCase());
       if (!normalizedAllowed.includes(orgMember.roleCode.toUpperCase())) {
         await AuditService.recordFromRequest(req, {
@@ -205,10 +188,9 @@ export const requireOrgSelfOrOwner = async (req: Request, res: Response, next: N
     const currentUserId = (req as any).user?.id;
     const targetUserId = req.params.userId;
     const isSelf = targetUserId && targetUserId === currentUserId;
-    const isOwnerOrSuper =
-      req.orgMember?.roleCode === 'SME_OWNER' || req.orgMember?.roleCode === 'SUPER_ADMIN';
+    const isOwner = req.orgMember?.roleCode === 'SME_OWNER';
 
-    if (!isSelf && !isOwnerOrSuper) {
+    if (!isSelf && !isOwner) {
       return next(
         new ApiError(
           403,
