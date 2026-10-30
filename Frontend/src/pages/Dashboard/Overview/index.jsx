@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useDashboard } from '../context/DashboardContext';
 import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
+import { dashboardStatisticsService } from '../../../services/dashboardStatisticsService';
 import {
   Cpu,
   Database,
@@ -40,6 +41,36 @@ export const OverviewPage = () => {
   } = useDashboard();
 
   const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
+
+  // Overview Statistics Cluster API State [S5][PBI19]
+  const [overviewStats, setOverviewStats] = useState(null);
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState(null);
+
+  const fetchOverviewStats = useCallback(async () => {
+    setIsStatsLoading(true);
+    setStatsError(null);
+    try {
+      const orgId = currentOrg?.id;
+      const clusterId = activeClusterId && !activeClusterId.startsWith('org-') ? activeClusterId : undefined;
+      const tr = chartTimeRange === '15m' ? '1h' : chartTimeRange;
+      const data = await dashboardStatisticsService.getOverviewStats({
+        organization_id: orgId,
+        cluster_id: clusterId,
+        time_range: tr,
+      });
+      setOverviewStats(data);
+    } catch (err) {
+      console.warn('[OverviewPage] Không thể tải dữ liệu thống kê tổng hợp:', err);
+      setStatsError(err.message || 'Không thể tải thống kê');
+    } finally {
+      setIsStatsLoading(false);
+    }
+  }, [currentOrg?.id, activeClusterId, chartTimeRange]);
+
+  useEffect(() => {
+    fetchOverviewStats();
+  }, [fetchOverviewStats]);
 
   // Realtime Telemetry & Live Cluster State
   const [telemetry, setTelemetry] = useState(null);
