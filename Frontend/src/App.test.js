@@ -311,7 +311,11 @@ test('renders Reports Page (/dashboard/reports) with SLACostSavingsChart and mic
   expect(screen.getByText(/Báo Cáo SLA & Vận Hành Doanh Nghiệp/i)).toBeInTheDocument();
   expect(screen.getByText(/Cam Kết & Xu Hướng SLA Uptime/i)).toBeInTheDocument();
   expect(screen.getByText(/Bảng Phân Tích SLA Theo Từng Dịch Vụ Microservice/i)).toBeInTheDocument();
-  expect(screen.getByText(/Xuất Báo Cáo SLA/i)).toBeInTheDocument();
+  expect(screen.getByText(/Phân Bổ Sự Cố Theo Mức Độ Nghiêm Trọng/i)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/Tìm theo tên dịch vụ.../i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/Lọc theo phân cấp Tier/i)).toBeInTheDocument();
+  expect(screen.getByText(/In \/ Lưu PDF/i)).toBeInTheDocument();
+  expect(screen.getByText(/Nhật Ký Biến Động & Tự Khắc Phục Gần Đây/i)).toBeInTheDocument();
 });
 
 test('renders Audit Logs Page (/dashboard/audit-logs) with AuditDistributionChart and immutable SHA-256 logs', () => {
@@ -391,7 +395,9 @@ test('renders Export buttons for CSV and JSON on Audit Logs and Reports', () => 
 
   window.history.pushState({}, '', '/dashboard/reports');
   render(<App />);
-  expect(screen.getByText(/Xuất Báo Cáo SLA/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/Xuất CSV/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Xuất JSON/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/In \/ Lưu PDF/i)).toBeInTheDocument();
 });
 
 test('renders Vietnamese Footer with localized columns and copyright', () => {
