@@ -224,8 +224,9 @@ export class AuditService {
     }
 
     if (filter.user_id) {
-      conditions.push(`a.user_id = $${paramIndex++}`);
+      conditions.push(`(a.user_id = $${paramIndex} OR (a.target_type = 'USER' AND a.target_id = $${paramIndex}))`);
       values.push(filter.user_id);
+      paramIndex++;
     }
 
     if (filter.action) {

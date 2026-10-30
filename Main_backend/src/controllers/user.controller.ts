@@ -47,7 +47,7 @@ export class UserController {
    */
   public static async getAllUsers(req: Request, res: Response, next: NextFunction) {
     try {
-      const { page, limit, search, name, email, id, status, sort_by, order } = req.query;
+      const { page, limit, search, name, email, id, status, role, sort_by, order } = req.query;
       const result = await UserService.getAll({
         page: page ? parseInt(page as string, 10) : undefined,
         limit: limit ? parseInt(limit as string, 10) : undefined,
@@ -56,6 +56,7 @@ export class UserController {
         email: email as string,
         id: id as string,
         status: status as any,
+        role: role as any,
         sort_by: sort_by as any,
         order: order as any,
       });

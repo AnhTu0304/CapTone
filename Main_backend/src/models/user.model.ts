@@ -106,6 +106,7 @@ export interface IUserQuery {
     email?: string;      // Tìm kiếm chính xác hoặc chứa theo email
     id?: string;         // Tìm kiếm theo ID (UUID)
     status?: UserStatus; // Lọc theo trạng thái PENDING, ACTIVE, INACTIVE, SUSPENDED
+    role?: 'SUPER_ADMIN' | 'ADMIN' | 'SME_OWNER' | 'DEVOPS' | 'VIEWER' | 'ALL'; // Lọc theo vai trò RBAC
     sort_by?: 'created_at' | 'full_name' | 'email' | 'last_login_at';
     order?: 'ASC' | 'DESC';
 }

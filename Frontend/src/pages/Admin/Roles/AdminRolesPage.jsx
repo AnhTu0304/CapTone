@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -17,6 +17,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Building2,
+  Activity,
+  Copy,
+  Check,
+  Calendar,
+  Globe,
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import adminUsersService from '../../../services/adminUsersService';
@@ -137,10 +143,12 @@ export const resolveUserRole = (u) => {
     if (u.system_roles.includes('ADMIN') || u.system_roles.includes('SYSTEM_ADMIN')) return 'ADMIN';
   }
   if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
-    const code = u.organization_roles[0].role_code || u.organization_roles[0].role_name;
-    if (['SME_OWNER', 'DEVOPS', 'VIEWER'].includes(code)) return code;
+    const codes = u.organization_roles.map((r) => (r.role_code || r.role_name || '').toUpperCase());
+    if (codes.includes('SME_OWNER')) return 'SME_OWNER';
+    if (codes.includes('DEVOPS')) return 'DEVOPS';
+    if (codes.includes('VIEWER')) return 'VIEWER';
   }
-  return u.currentRole || (u.system_roles?.[0]) || 'VIEWER';
+  return u.currentRole || 'VIEWER';
 };
 
 /**
@@ -154,7 +162,12 @@ export const resolveUserOrg = (u) => {
     return 'Platform Operations';
   }
   if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
-    return u.organization_roles[0].organization_name || 'Doanh nghiệp liên kết';
+    if (u.organization_roles.length === 1) {
+      return u.organization_roles[0].organization_name || 'Doanh nghiệp liên kết';
+    }
+    const ownerOrg = u.organization_roles.find((r) => (r.role_code || r.role_name) === 'SME_OWNER');
+    const primaryName = (ownerOrg || u.organization_roles[0]).organization_name || 'Doanh nghiệp liên kết';
+    return primaryName + ' (+' + (u.organization_roles.length - 1) + ' khác)';
   }
   return u.org || 'Chưa liên kết tổ chức';
 };
@@ -168,11 +181,25 @@ export const AdminRolesPage = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [userError, setUserError] = useState(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+
+  // Debounce search input (300ms) để tối ưu hiệu năng và tránh spam API
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Reset page về 1 khi từ khóa tìm kiếm hoặc bộ lọc thay đổi
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedRoleFilter]);
 
   // Tab 3: Audit Logs state
   const [auditLogs, setAuditLogs] = useState([]);
@@ -190,6 +217,11 @@ export const AdminRolesPage = () => {
   // Modal 2: Chi tiết người dùng
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [detailUser, setDetailUser] = useState(null);
+  const [detailModalTab, setDetailModalTab] = useState('profile'); // 'profile' | 'activity'
+  const [userActivities, setUserActivities] = useState([]);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
+  const [activityError, setActivityError] = useState(null);
+  const [copiedId, setCopiedId] = useState(false);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState('');
@@ -209,7 +241,8 @@ export const AdminRolesPage = () => {
       const res = await adminUsersService.getUsers({
         page,
         limit: pageSize,
-        search: search.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
+        role: selectedRoleFilter !== 'ALL' ? selectedRoleFilter : undefined,
       });
 
       const rawItems = res?.items || (Array.isArray(res) ? res : []);
@@ -238,7 +271,7 @@ export const AdminRolesPage = () => {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, debouncedSearch, selectedRoleFilter]);
 
   /**
    * Tải nhật ký kiểm toán phân quyền thực tế từ API
@@ -292,10 +325,35 @@ export const AdminRolesPage = () => {
     setIsRoleModalOpen(true);
   };
 
-  // Mở modal chi tiết người dùng
+  // Tải lịch sử hoạt động thời gian thực của người dùng
+  const fetchUserActivities = useCallback(async (userId) => {
+    if (!userId) return;
+    setIsLoadingActivities(true);
+    setActivityError(null);
+    try {
+      const res = await getAuditLogs(
+        { userId },
+        { page: 1, pageSize: 20 },
+        { field: 'timestamp', direction: 'desc' }
+      );
+      const items = res?.data || (Array.isArray(res) ? res : []);
+      setUserActivities(items);
+    } catch (err) {
+      console.warn('[AdminRolesPage] Lỗi lấy lịch sử hoạt động người dùng:', err);
+      setActivityError(err.message || 'Không thể tải lịch sử hoạt động thời gian thực');
+      setUserActivities([]);
+    } finally {
+      setIsLoadingActivities(false);
+    }
+  }, []);
+
+  // Mở modal chi tiết người dùng và đồng bộ dữ liệu thời gian thực
   const openDetailModal = (u) => {
     setDetailUser(u);
+    setDetailModalTab('profile');
     setIsDetailModalOpen(true);
+    setCopiedId(false);
+    fetchUserActivities(u.id);
   };
 
   // Xử lý nộp form thay đổi vai trò
@@ -335,11 +393,21 @@ export const AdminRolesPage = () => {
     }
   };
 
-  // Lọc người dùng tại client theo vai trò (nếu cần)
-  const filteredUsers = users.filter((u) => {
-    const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
-    return matchRole;
-  });
+  // Lọc người dùng kết hợp đa chiều: vai trò + từ khóa tìm kiếm (tên, email, công ty, mã người dùng)
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
+      if (!matchRole) return false;
+      if (!search.trim()) return true;
+      const term = search.toLowerCase().trim();
+      const matchName = (u.name || '').toLowerCase().includes(term);
+      const matchEmail = (u.email || '').toLowerCase().includes(term);
+      const matchOrg = (u.org || '').toLowerCase().includes(term);
+      const matchId = (u.id || '').toLowerCase().includes(term);
+      const matchRoleCode = (u.currentRole || '').toLowerCase().includes(term);
+      return matchName || matchEmail || matchOrg || matchId || matchRoleCode;
+    });
+  }, [users, selectedRoleFilter, search]);
 
   return (
     <div
@@ -673,12 +741,12 @@ export const AdminRolesPage = () => {
               </p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Search
                   size={14}
                   color="var(--dash-text-muted)"
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
+                  style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
                 />
                 <input
                   type="text"
@@ -686,7 +754,7 @@ export const AdminRolesPage = () => {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   style={{
-                    padding: '6px 12px 6px 30px',
+                    padding: '6px 28px 6px 30px',
                     borderRadius: '8px',
                     border: '1px solid var(--dash-border)',
                     fontSize: '0.8125rem',
@@ -694,6 +762,29 @@ export const AdminRolesPage = () => {
                     minWidth: '220px',
                   }}
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      setDebouncedSearch('');
+                    }}
+                    title="Xóa từ khóa tìm kiếm"
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      color: 'var(--dash-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
               <select
@@ -716,6 +807,47 @@ export const AdminRolesPage = () => {
                 <option value="DEVOPS">DEVOPS</option>
                 <option value="VIEWER">VIEWER</option>
               </select>
+
+              {(search.trim() || selectedRoleFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setDebouncedSearch('');
+                    setSelectedRoleFilter('ALL');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #FECACA',
+                    backgroundColor: '#FEF2F2',
+                    color: '#DC2626',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={12} />
+                  <span>Xóa bộ lọc</span>
+                </button>
+              )}
+
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--dash-text-muted)',
+                  fontWeight: 600,
+                  padding: '4px 8px',
+                  backgroundColor: 'var(--dash-bg-subtle)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                }}
+              >
+                Tìm thấy {filteredUsers.length} người dùng
+              </span>
             </div>
           </div>
 
@@ -772,8 +904,40 @@ export const AdminRolesPage = () => {
                 <tbody>
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
-                        Không tìm thấy người dùng nào phù hợp với bộ lọc hiện tại.
+                      <td colSpan={5} style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                          <Search size={24} style={{ opacity: 0.4 }} />
+                          <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', fontSize: '0.875rem' }}>
+                            Không tìm thấy người dùng phù hợp
+                          </div>
+                          <div style={{ fontSize: '0.75rem' }}>
+                            {search.trim() ? `Không có kết quả khớp với từ khóa "${search}"` : 'Không có người dùng nào khớp với bộ lọc'}
+                            {selectedRoleFilter !== 'ALL' ? ` (Vai trò: ${selectedRoleFilter})` : ''}
+                          </div>
+                          {(search.trim() || selectedRoleFilter !== 'ALL') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearch('');
+                                setDebouncedSearch('');
+                                setSelectedRoleFilter('ALL');
+                              }}
+                              style={{
+                                marginTop: '6px',
+                                padding: '5px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--dash-border)',
+                                backgroundColor: '#FFFFFF',
+                                color: 'var(--dash-primary)',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Đặt lại bộ lọc
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -1306,111 +1470,599 @@ export const AdminRolesPage = () => {
         </div>
       )}
 
-      {/* Modal 2: Chi Tiết Người Dùng (An toàn bảo mật) */}
+      {/* Modal 2: Chi tiết người dùng & Lịch sử hoạt động thời gian thực */}
       {isDetailModalOpen && detailUser && (
         <div
           role="dialog"
           aria-modal="true"
+          aria-label="Chi tiết hồ sơ và thẩm quyền tài khoản"
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 9999,
             padding: '16px',
           }}
         >
           <div
+            className="dash-card"
             style={{
               backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              maxWidth: '520px',
+              borderRadius: '16px',
+              border: '1px solid var(--dash-border)',
+              maxWidth: '820px',
               width: '100%',
-              padding: '24px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Eye size={18} color="#059669" />
-                <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Hồ Sơ & Thẩm Quyền Tài Khoản
-                </h3>
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ECFDF5',
+                    border: '1px solid #A7F3D0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Eye size={20} color="#059669" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                    Hồ Sơ & Thẩm Quyền Tài Khoản
+                  </h3>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                    {detailUser.name} ({detailUser.email}) • Phân quyền tổ chức & Lịch sử hoạt động thời gian thực
+                  </div>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsDetailModalOpen(false)}
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--dash-text-muted)' }}
+                aria-label="Đóng modal"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  color: 'var(--dash-text-muted)',
+                  padding: '6px',
+                  borderRadius: '6px',
+                }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8125rem' }}>
-              <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>MÃ ĐỊNH DANH HỆ THỐNG (USER ID)</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                  {detailUser.id}
-                </div>
-              </div>
+            {/* Modal Navigation Tabs */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '8px',
+                padding: '10px 24px',
+                borderBottom: '1px solid var(--dash-border)',
+                backgroundColor: '#FFFFFF',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDetailModalTab('profile')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: detailModalTab === 'profile' ? '#EFF6FF' : 'transparent',
+                  color: detailModalTab === 'profile' ? '#1D4ED8' : 'var(--dash-text-secondary)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Building2 size={15} />
+                <span>Hồ Sơ & Các Công Ty Liên Kết</span>
+                <span
+                  style={{
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    fontSize: '0.6875rem',
+                    backgroundColor: detailModalTab === 'profile' ? '#BFDBFE' : '#F1F5F9',
+                    color: detailModalTab === 'profile' ? '#1E40AF' : 'var(--dash-text-muted)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {Array.isArray(detailUser.raw?.organization_roles) ? detailUser.raw.organization_roles.length : 0}
+                </span>
+              </button>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>HỌ VÀ TÊN</div>
-                  <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{detailUser.name}</div>
-                </div>
-                <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>TRẠNG THÁI</div>
-                  <div style={{ fontWeight: 700, color: detailUser.status === 'ACTIVE' ? '#059669' : '#DC2626' }}>
-                    {detailUser.status}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>ĐỊA CHỈ EMAIL</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                  {detailUser.email}
-                </div>
-              </div>
-
-              <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>TỔ CHỨC / CÔNG TY TRỰC THUỘC</div>
-                <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{detailUser.org}</div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>VAI TRÒ HIỆN HÀNH</div>
-                  <div style={{ fontWeight: 800, color: getRoleBadgeStyle(detailUser.currentRole).color }}>
-                    {detailUser.currentRole}
-                  </div>
-                </div>
-                <div style={{ padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>HOẠT ĐỘNG GẦN NHẤT</div>
-                  <div style={{ fontWeight: 500, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                    {detailUser.lastActive}
-                  </div>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setDetailModalTab('activity')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: detailModalTab === 'activity' ? '#EFF6FF' : 'transparent',
+                  color: detailModalTab === 'activity' ? '#1D4ED8' : 'var(--dash-text-secondary)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Activity size={15} />
+                <span>Lịch Sử Hoạt Động (Live)</span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    fontSize: '0.6875rem',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    fontWeight: 700,
+                  }}
+                >
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+                  Live
+                </span>
+              </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+            {/* Modal Body (Scrollable) */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+              {detailModalTab === 'profile' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Basic User Information Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>MÃ ĐỊNH DANH HỆ THỐNG (USER ID)</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-primary)', fontSize: '0.75rem' }}>
+                          {detailUser.id}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(detailUser.id);
+                              setCopiedId(true);
+                              setTimeout(() => setCopiedId(false), 2000);
+                            }
+                          }}
+                          title="Sao chép User ID"
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: copiedId ? '#059669' : 'var(--dash-text-muted)', padding: '2px' }}
+                        >
+                          {copiedId ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>HỌ VÀ TÊN</div>
+                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px', fontSize: '0.875rem' }}>
+                        {detailUser.name}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>ĐỊA CHỈ EMAIL</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '4px', fontSize: '0.8125rem' }}>
+                        {detailUser.email}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TRẠNG THÁI TÀI KHOẢN</div>
+                      <div style={{ marginTop: '4px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            backgroundColor: detailUser.status === 'ACTIVE' ? '#ECFDF5' : '#FEF2F2',
+                            color: detailUser.status === 'ACTIVE' ? '#059669' : '#DC2626',
+                            border: detailUser.status === 'ACTIVE' ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                          }}
+                        >
+                          <CheckCircle2 size={12} />
+                          {detailUser.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>VAI TRÒ HIỆN HÀNH CHÍNH</div>
+                      <div style={{ marginTop: '4px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 800,
+                            backgroundColor: getRoleBadgeStyle(detailUser.currentRole).bg,
+                            color: getRoleBadgeStyle(detailUser.currentRole).color,
+                            border: '1px solid ' + getRoleBadgeStyle(detailUser.currentRole).border,
+                          }}
+                        >
+                          {detailUser.currentRole}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>HOẠT ĐỘNG GẦN NHẤT</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--dash-text-secondary)', marginTop: '4px', fontSize: '0.75rem' }}>
+                        <Clock size={13} />
+                        <span>{detailUser.lastActive}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section: Associated Companies & Internal Roles */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Building2 size={16} color="#059669" />
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                          Chi Tiết Các Công Ty & Tổ Chức Liên Kết ({Array.isArray(detailUser.raw?.organization_roles) ? detailUser.raw.organization_roles.length : 0})
+                        </h4>
+                      </div>
+                      <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                        Quyền hạn thành viên tại từng tenant doanh nghiệp
+                      </span>
+                    </div>
+
+                    {!Array.isArray(detailUser.raw?.organization_roles) || detailUser.raw.organization_roles.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '32px 20px',
+                          textAlign: 'center',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '10px',
+                          border: '1px dashed var(--dash-border)',
+                          color: 'var(--dash-text-muted)',
+                          fontSize: '0.8125rem',
+                        }}
+                      >
+                        <Building2 size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                        <div style={{ fontWeight: 600 }}>Chưa liên kết tổ chức doanh nghiệp nào</div>
+                        <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                          Đây là tài khoản quản trị cấp Nền tảng (Platform Root / Operations) hoặc người dùng tự do chưa tham gia tenant.
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          border: '1px solid var(--dash-border)',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          backgroundColor: '#FFFFFF',
+                        }}
+                      >
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)' }}>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Doanh Nghiệp / Tổ Chức</th>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Vai Trò Tại Công Ty</th>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Trạng Thái Thành Viên</th>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Phạm Vi Quyền Hạn</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detailUser.raw.organization_roles.map((orgItem, idx) => {
+                              const rCode = (orgItem.role_code || orgItem.role_name || '').toUpperCase();
+                              const badgeStyle = getRoleBadgeStyle(rCode);
+                              return (
+                                <tr
+                                  key={orgItem.organization_id || idx}
+                                  style={{
+                                    borderBottom: idx === detailUser.raw.organization_roles.length - 1 ? 'none' : '1px solid var(--dash-border)',
+                                    transition: 'background-color 0.15s ease',
+                                  }}
+                                >
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <div
+                                        style={{
+                                          width: '28px',
+                                          height: '28px',
+                                          borderRadius: '6px',
+                                          backgroundColor: '#F1F5F9',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontWeight: 700,
+                                          fontSize: '0.75rem',
+                                          color: 'var(--dash-text-primary)',
+                                        }}
+                                      >
+                                        {(orgItem.organization_name || 'C').charAt(0).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                                          {orgItem.organization_name}
+                                        </div>
+                                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                          ID: {orgItem.organization_id ? String(orgItem.organization_id).slice(0, 8) + '...' : 'N/A'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.6875rem',
+                                        fontWeight: 800,
+                                        backgroundColor: badgeStyle.bg,
+                                        color: badgeStyle.color,
+                                        border: '1px solid ' + badgeStyle.border,
+                                      }}
+                                    >
+                                      {rCode}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.6875rem',
+                                        fontWeight: 700,
+                                        backgroundColor: orgItem.member_status === 'ACTIVE' ? '#ECFDF5' : '#FFFBEB',
+                                        color: orgItem.member_status === 'ACTIVE' ? '#059669' : '#D97706',
+                                        border: orgItem.member_status === 'ACTIVE' ? '1px solid #A7F3D0' : '1px solid #FDE68A',
+                                      }}
+                                    >
+                                      {orgItem.member_status === 'ACTIVE' ? 'Đang hoạt động' : 'Chờ xác nhận (INVITED)'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+                                    {rCode === 'SME_OWNER'
+                                      ? 'Toàn quyền cấu hình cụm K8s & tài nguyên nội bộ tổ chức'
+                                      : rCode === 'DEVOPS'
+                                      ? 'Triển khai, theo dõi cụm K8s và khắc phục sự cố'
+                                      : 'Chỉ xem báo cáo, giám sát pods & nhật ký'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Tab 2: Real-time Live Activity History */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Activity Toolbar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                        Nhật Ký Sự Kiện & Thao Tác (Thời Gian Thực)
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                        Dữ liệu truy vấn trực tiếp từ bảng Audit Logs với chữ ký bảo mật SHA-256
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fetchUserActivities(detailUser.id)}
+                      disabled={isLoadingActivities}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--dash-border)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: 'var(--dash-primary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <RefreshCw size={13} className={isLoadingActivities ? 'animate-spin' : ''} />
+                      <span>{isLoadingActivities ? 'Đang làm mới...' : 'Làm Mới'}</span>
+                    </button>
+                  </div>
+
+                  {/* Activity Content */}
+                  {isLoadingActivities ? (
+                    <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                      <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px auto', opacity: 0.6 }} />
+                      <div style={{ fontSize: '0.8125rem' }}>Đang đồng bộ hóa dòng sự kiện thời gian thực...</div>
+                    </div>
+                  ) : activityError ? (
+                    <div style={{ padding: '24px', textAlign: 'center', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FECACA', color: '#DC2626' }}>
+                      <AlertTriangle size={24} style={{ margin: '0 auto 8px auto' }} />
+                      <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{activityError}</div>
+                      <button
+                        type="button"
+                        onClick={() => fetchUserActivities(detailUser.id)}
+                        style={{ marginTop: '10px', padding: '6px 14px', borderRadius: '6px', backgroundColor: '#DC2626', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        Thử lại
+                      </button>
+                    </div>
+                  ) : userActivities.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '10px',
+                        border: '1px dashed var(--dash-border)',
+                        color: 'var(--dash-text-muted)',
+                        fontSize: '0.8125rem',
+                      }}
+                    >
+                      <Activity size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                      <div style={{ fontWeight: 600 }}>Chưa ghi nhận hoạt động nào gần đây từ tài khoản này</div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                        Các hoạt động đăng nhập, thay đổi quyền, thao tác K8s hoặc cấu hình sẽ tự động xuất hiện ở đây theo thời gian thực.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {userActivities.map((act, idx) => (
+                        <div
+                          key={act.id || idx}
+                          style={{
+                            padding: '14px 16px',
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: '10px',
+                            border: '1px solid var(--dash-border)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            boxShadow: 'var(--dash-shadow-xs)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 800,
+                                  fontFamily: 'var(--font-mono)',
+                                  backgroundColor: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  border: '1px solid #BFDBFE',
+                                }}
+                              >
+                                {act.action}
+                              </span>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  padding: '2px 7px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  backgroundColor: act.status === 'SUCCESS' ? '#ECFDF5' : act.status === 'DENIED' ? '#FEF2F2' : '#FFFBEB',
+                                  color: act.status === 'SUCCESS' ? '#059669' : act.status === 'DENIED' ? '#DC2626' : '#D97706',
+                                }}
+                              >
+                                {act.status === 'SUCCESS' ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                                {act.status}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              <Clock size={12} />
+                              <span>{act.timestamp}</span>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)', fontWeight: 500 }}>
+                            {act.description || ('Thực thi hành động ' + act.action)}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.6875rem', color: 'var(--dash-text-muted)', paddingTop: '4px', borderTop: '1px dashed var(--dash-border)', flexWrap: 'wrap' }}>
+                            {act.ipAddress && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Globe size={11} />
+                                <span>IP: {act.ipAddress}</span>
+                              </div>
+                            )}
+                            {act.actor && (
+                              <div>
+                                <span>Tác nhân: <strong>{act.actor}</strong></span>
+                              </div>
+                            )}
+                            {act.metadata?.sha256 && (
+                              <div style={{ fontFamily: 'var(--font-mono)', color: '#94A3B8' }} title={act.metadata.sha256}>
+                                SHA-256: {String(act.metadata.sha256).slice(0, 12)}...
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '14px 24px',
+                borderTop: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                Tài khoản ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{detailUser.id}</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsDetailModalOpen(false)}
                 style={{
-                  padding: '8px 18px',
+                  padding: '8px 22px',
                   borderRadius: '8px',
                   border: '1px solid var(--dash-border)',
                   backgroundColor: '#FFFFFF',
                   fontSize: '0.8125rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
+                  color: 'var(--dash-text-primary)',
                   cursor: 'pointer',
                 }}
               >

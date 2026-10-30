@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AuthContext from '../../../context/AuthContext';
-import { AdminRolesPage } from './AdminRolesPage';
+import { AdminRolesPage, resolveUserRole, resolveUserOrg } from './AdminRolesPage';
 import adminUsersService from '../../../services/adminUsersService';
 import { getAuditLogs } from '../../../services/adminAuditLogsService';
 
@@ -140,9 +140,11 @@ describe('AdminRolesPage Component Suite', () => {
     const detailButtons = screen.getAllByText('Chi tiết');
     fireEvent.click(detailButtons[0]);
 
-    expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    });
     expect(screen.getByText('MÃ ĐỊNH DANH HỆ THỐNG (USER ID)')).toBeInTheDocument();
-    expect(screen.getByText('u-01')).toBeInTheDocument();
+    expect(screen.getAllByText('u-01').length).toBeGreaterThanOrEqual(1);
     // Verify no password hash or secrets are displayed
     expect(screen.queryByText(/password_hash/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/secret/i)).not.toBeInTheDocument();
@@ -279,5 +281,183 @@ describe('AdminRolesPage Component Suite', () => {
     });
 
     expect(screen.getByText(/RBAC Audit Trail/i)).toBeInTheDocument();
+  });
+  test('9. resolveUserRole prioritizes system roles and highest organization roles', () => {
+    // SuperAdmin
+    expect(resolveUserRole({ system_roles: ['SUPER_ADMIN'] })).toBe('SUPER_ADMIN');
+    // Admin
+    expect(resolveUserRole({ system_roles: ['ADMIN'] })).toBe('ADMIN');
+    // Multiple org roles: SME_OWNER beats VIEWER
+    expect(
+      resolveUserRole({
+        system_roles: [],
+        organization_roles: [
+          { organization_name: 'Org A', role_code: 'VIEWER' },
+          { organization_name: 'Org B', role_code: 'SME_OWNER' },
+        ],
+      })
+    ).toBe('SME_OWNER');
+    // User with system_roles: ['USER'] and SME_OWNER in org
+    expect(
+      resolveUserRole({
+        system_roles: ['USER'],
+        organization_roles: [{ organization_name: 'Org C', role_code: 'SME_OWNER' }],
+      })
+    ).toBe('SME_OWNER');
+    // Default fallback
+    expect(resolveUserRole({})).toBe('VIEWER');
+  });
+
+  test('10. resolveUserOrg formats platform and multi-tenant org strings correctly', () => {
+    // SuperAdmin platform root
+    expect(resolveUserOrg({ system_roles: ['SUPER_ADMIN'] })).toBe('Toàn Hệ Thống (Platform Root)');
+    // Admin operations
+    expect(resolveUserOrg({ system_roles: ['ADMIN'] })).toBe('Platform Operations');
+    // Single org
+    expect(
+      resolveUserOrg({
+        organization_roles: [{ organization_name: 'Acme Cloud Corp', role_code: 'SME_OWNER' }],
+      })
+    ).toBe('Acme Cloud Corp');
+    // Multiple orgs
+    expect(
+      resolveUserOrg({
+        organization_roles: [
+          { organization_name: 'Org A', role_code: 'VIEWER' },
+          { organization_name: 'Acme Cloud Corp', role_code: 'SME_OWNER' },
+        ],
+      })
+    ).toBe('Acme Cloud Corp (+1 khác)');
+    // No org
+    expect(resolveUserOrg({})).toBe('Chưa liên kết tổ chức');
+  });
+
+  test('11. Detail modal shows affiliated organizations list for tenant user', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    });
+
+    const detailButtons = screen.getAllByText('Chi tiết');
+    // Le Thi Owner is the 3rd user
+    fireEvent.click(detailButtons[2]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    });
+
+    // Check organization table contains FinFlow Pay
+    expect(screen.getAllByText('FinFlow Pay').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/org-01/i)).toBeInTheDocument();
+  });
+
+  test('12. Switching to Live Activity tab displays user activity log timeline', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    const detailButtons = screen.getAllByText('Chi tiết');
+    fireEvent.click(detailButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Hồ Sơ & Thẩm Quyền Tài Khoản')).toBeInTheDocument();
+    });
+
+    // Switch to tab "Lịch Sử Hoạt Động (Live)"
+    const activityTabBtn = screen.getByRole('button', { name: /Lịch Sử Hoạt Động \(Live\)/i });
+    fireEvent.click(activityTabBtn);
+
+    // Verify timeline elements
+    await waitFor(() => {
+      expect(screen.getByText(/Nhật Ký Sự Kiện & Thao Tác/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText('SYSTEM_ROLE_ASSIGNED')).toBeInTheDocument();
+  });
+
+  test('13. Search input filters user list by name, email, or company name', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+      expect(screen.getByText('Tran Kiem Dinh')).toBeInTheDocument();
+      expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText('Tìm tên, email, công ty...');
+    fireEvent.change(searchInput, { target: { value: 'FinFlow' } });
+
+    // Should filter table to only show Le Thi Owner (org: FinFlow Pay)
+    expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    expect(screen.queryByText('Nguyen Van Admin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
+  });
+
+  test('14. Role select filter filters user list by specific role code', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    const roleSelect = screen.getByDisplayValue('Tất cả vai trò');
+    fireEvent.change(roleSelect, { target: { value: 'SUPER_ADMIN' } });
+
+    // Wait for async fetchUsers to finish and table to render
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
+    expect(screen.queryByText('Le Thi Owner')).not.toBeInTheDocument();
+
+    // Verify adminUsersService.getUsers was called with role parameter
+    expect(adminUsersService.getUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'SUPER_ADMIN' })
+    );
+  });
+
+  test('15. Clicking "Xóa bộ lọc" button clears search and role filters', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText('Tìm tên, email, công ty...');
+    fireEvent.change(searchInput, { target: { value: 'nonexistent-user-keyword' } });
+
+    // Empty state should be visible
+    expect(screen.getByText(/Không tìm thấy người dùng phù hợp/i)).toBeInTheDocument();
+
+    // Click "Xóa bộ lọc" or "Đặt lại bộ lọc"
+    const clearBtn = screen.getAllByRole('button', { name: /(Xóa bộ lọc|Đặt lại bộ lọc)/i })[0];
+    fireEvent.click(clearBtn);
+
+    // All users restored
+    expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    expect(screen.getByText('Tran Kiem Dinh')).toBeInTheDocument();
+    expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
   });
 });
