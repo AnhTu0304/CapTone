@@ -9,6 +9,10 @@ import {
   HardDrive,
   Box,
   AlertTriangle,
+  AlertCircle,
+  Layers,
+  Activity,
+  ExternalLink,
   Radio,
   Zap,
   CheckCircle2,
@@ -41,6 +45,7 @@ export const OverviewPage = () => {
   } = useDashboard();
 
   const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
+  const [chartTimeRange, setChartTimeRange] = useState('15m');
 
   // Overview Statistics Cluster API State [S5][PBI19]
   const [overviewStats, setOverviewStats] = useState(null);
@@ -62,7 +67,7 @@ export const OverviewPage = () => {
       setOverviewStats(data);
     } catch (err) {
       console.warn('[OverviewPage] Không thể tải dữ liệu thống kê tổng hợp:', err);
-      setStatsError(err.message || 'Không thể tải thống kê');
+      setStatsError(err.message || 'Không thể tải thống kê tổng quan.');
     } finally {
       setIsStatsLoading(false);
     }
@@ -71,6 +76,7 @@ export const OverviewPage = () => {
   useEffect(() => {
     fetchOverviewStats();
   }, [fetchOverviewStats]);
+
 
   // Realtime Telemetry & Live Cluster State
   const [telemetry, setTelemetry] = useState(null);
@@ -82,7 +88,6 @@ export const OverviewPage = () => {
   const [lastDataTimestamp, setLastDataTimestamp] = useState(null);
   const [prevCpu, setPrevCpu] = useState(null);
   const [prevRam, setPrevRam] = useState(null);
-  const [chartTimeRange, setChartTimeRange] = useState('15m');
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
   const [isDataStale, setIsDataStale] = useState(false);
@@ -179,6 +184,57 @@ export const OverviewPage = () => {
   useEffect(() => {
     fetchClusterInfo();
   }, [fetchClusterInfo]);
+
+  // Auto-Refresh state & controls [S5][PBI19 Task 1.4]
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(30); // 15, 30, 60 seconds
+  const [isAutoRefreshActive, setIsAutoRefreshActive] = useState(true);
+  const isPollingBusyRef = useRef(false);
+
+  // Manual & automated refresh function
+  const refreshAllData = useCallback(async () => {
+    if (isPollingBusyRef.current) return;
+    isPollingBusyRef.current = true;
+    try {
+      await Promise.allSettled([
+        fetchOverviewStats(),
+        fetchClusterInfo(),
+        loadClusterTrend(chartTimeRange),
+      ]);
+      const now = new Date();
+      setLastDataTimestamp(
+        `${now.toLocaleTimeString('vi-VN')} ${now.toLocaleDateString('vi-VN')}`
+      );
+    } finally {
+      isPollingBusyRef.current = false;
+    }
+  }, [fetchOverviewStats, fetchClusterInfo, loadClusterTrend, chartTimeRange]);
+
+  // Unified Auto-Refresh Timer with Tab Visibility Pause & Concurrency Guard
+  useEffect(() => {
+    if (!isAutoRefreshActive || !isClusterOnline) return;
+
+    let isTabVisible = !document.hidden;
+    const handleVisibilityChange = () => {
+      isTabVisible = !document.hidden;
+      if (isTabVisible) {
+        refreshAllData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const timer = setInterval(() => {
+      if (isTabVisible && !isPollingBusyRef.current) {
+        refreshAllData();
+      }
+    }, autoRefreshInterval * 1000);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAutoRefreshActive, autoRefreshInterval, isClusterOnline, refreshAllData]);
+
 
   // 2. Kết nối WebSocket đẩy viễn trắc Realtime 100% từ Main Backend (CHỈ KHI CỤM ĐANG ONLINE)
   useEffect(() => {
@@ -348,17 +404,21 @@ export const OverviewPage = () => {
   const ramDiff = prevRam !== null ? (ramVal - prevRam).toFixed(1) : '0.0';
 
   // Live Node Cluster metrics (Của chung Cụm Máy Chủ)
-  const nodeCpuPercent = telemetry?.node_cpu_percent !== undefined && telemetry.node_cpu_percent !== null && Number(telemetry.node_cpu_percent) > 0
-    ? Number(telemetry.node_cpu_percent).toFixed(1)
-    : ((567 / (totalCpuCores * 1000)) * 100).toFixed(1);
+  const nodeCpuPercent = overviewStats?.resource_usage?.avg_cpu_percent !== undefined
+    ? Number(overviewStats.resource_usage.avg_cpu_percent).toFixed(1)
+    : (telemetry?.node_cpu_percent !== undefined && telemetry.node_cpu_percent !== null && Number(telemetry.node_cpu_percent) > 0
+        ? Number(telemetry.node_cpu_percent).toFixed(1)
+        : ((567 / (totalCpuCores * 1000)) * 100).toFixed(1));
 
   const nodeCpuCores = telemetry?.node_cpu_cores !== undefined && telemetry.node_cpu_cores !== null && Number(telemetry.node_cpu_cores) > 0
     ? Number(telemetry.node_cpu_cores).toFixed(2)
     : ((Number(nodeCpuPercent) / 100) * totalCpuCores).toFixed(2);
 
-  const nodeRamPercent = telemetry?.node_ram_percent !== undefined && telemetry.node_ram_percent !== null && Number(telemetry.node_ram_percent) > 0
-    ? Number(telemetry.node_ram_percent).toFixed(1)
-    : (14.2).toFixed(1);
+  const nodeRamPercent = overviewStats?.resource_usage?.avg_ram_percent !== undefined
+    ? Number(overviewStats.resource_usage.avg_ram_percent).toFixed(1)
+    : (telemetry?.node_ram_percent !== undefined && telemetry.node_ram_percent !== null && Number(telemetry.node_ram_percent) > 0
+        ? Number(telemetry.node_ram_percent).toFixed(1)
+        : (14.2).toFixed(1));
 
   const nodeRamGb = telemetry?.node_ram_gb !== undefined && telemetry.node_ram_gb !== null && Number(telemetry.node_ram_gb) > 0
     ? Number(telemetry.node_ram_gb).toFixed(2)
@@ -406,7 +466,7 @@ export const OverviewPage = () => {
   // ==========================================
   // Honest Empty State: Khi cụm K8s đang chọn là OFFLINE hoặc chưa cài Agent
   // ==========================================
-  if (!isClusterOnline || (!clusterInfo?.nodes || clusterInfo.nodes.length === 0)) {
+  if (!isClusterOnline || (clusterInfo && (!clusterInfo.nodes || clusterInfo.nodes.length === 0))) {
     return (
       <div className="dashboard-overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -576,20 +636,24 @@ export const OverviewPage = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* WebSocket Pulse Badge */}
-          <span
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Auto-Refresh Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsAutoRefreshActive((prev) => !prev)}
+            title="Nhấn để Bật/Tắt tự động làm mới"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               fontSize: '0.75rem',
               fontWeight: 600,
-              padding: '4px 10px',
-              borderRadius: 'var(--dash-radius-full)',
-              backgroundColor: isWsLive ? 'var(--dash-mint-100)' : 'var(--dash-bg-subtle)',
-              color: isWsLive ? 'var(--dash-mint-600)' : 'var(--dash-text-muted)',
-              border: isWsLive ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-border)',
+              padding: '6px 12px',
+              borderRadius: 'var(--dash-radius-md)',
+              backgroundColor: isAutoRefreshActive ? 'var(--dash-mint-100)' : 'var(--dash-bg-subtle)',
+              color: isAutoRefreshActive ? 'var(--dash-mint-600)' : 'var(--dash-text-muted)',
+              border: isAutoRefreshActive ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-border)',
+              cursor: 'pointer',
             }}
           >
             <span
@@ -597,35 +661,58 @@ export const OverviewPage = () => {
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                backgroundColor: isWsLive ? 'var(--dash-success)' : 'var(--dash-text-muted)',
-                boxShadow: isWsLive ? '0 0 8px var(--dash-success)' : 'none',
+                backgroundColor: isAutoRefreshActive ? 'var(--dash-success)' : 'var(--dash-text-muted)',
+                boxShadow: isAutoRefreshActive ? '0 0 8px var(--dash-success)' : 'none',
               }}
             />
-            <span>{isWsLive ? 'WebSocket Realtime (3s)' : (isAutoRefresh ? 'Tự làm mới: 30s' : 'Tạm dừng')}</span>
-          </span>
+            <span>{isAutoRefreshActive ? `Tự làm mới: ${autoRefreshInterval}s` : 'Tự làm mới: TẮT'}</span>
+          </button>
 
+          {/* Interval selector dropdown */}
+          <select
+            aria-label="Chu kỳ làm mới"
+            value={String(autoRefreshInterval)}
+            onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+            style={{
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              borderRadius: 'var(--dash-radius-md)',
+              border: '1px solid var(--dash-border)',
+              backgroundColor: '#FFFFFF',
+              color: 'var(--dash-text-primary)',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="15">15s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+          </select>
+
+          {/* Manual Refresh Now button */}
           <button
+            type="button"
             onClick={() => {
               triggerRefresh();
-              fetchClusterInfo();
+              refreshAllData();
             }}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isPollingBusyRef.current}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              padding: '6px 14px',
               backgroundColor: '#FFFFFF',
               border: '1px solid var(--dash-border)',
               borderRadius: 'var(--dash-radius-md)',
               color: 'var(--dash-text-primary)',
               fontSize: '0.8125rem',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: (isRefreshing || isPollingBusyRef.current) ? 'wait' : 'pointer',
               boxShadow: 'var(--dash-shadow-xs)',
             }}
           >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={(isRefreshing || isPollingBusyRef.current) ? 'animate-spin' : ''} />
             <span>Làm mới</span>
           </button>
         </div>
@@ -707,7 +794,77 @@ export const OverviewPage = () => {
         </div>
       </div>
 
-      {/* 3. Overview Metric Cards (8 Cards in Responsive Grid - HÀNG TRÊN & DƯỚI REALTIME 100%) */}
+      {/* Error State Banner for Statistics API */}
+      {statsError && (
+        <div
+          style={{
+            padding: '12px 18px',
+            borderRadius: '8px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#DC2626',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', fontWeight: 600 }}>
+            <AlertCircle size={16} />
+            <span>Không thể đồng bộ số liệu thống kê tổng hợp: {statsError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchOverviewStats}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '6px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {/* 3. Overview Metric Cards (with Loading Skeleton) */}
+      {isStatsLoading ? (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '16px',
+          }}
+        >
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="dash-card"
+              style={{
+                padding: '16px 20px',
+                minHeight: '104px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                opacity: 0.7,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ width: '55%', height: '14px', backgroundColor: '#E2E8F0', borderRadius: '4px' }} />
+                <div style={{ width: '18px', height: '18px', backgroundColor: '#E2E8F0', borderRadius: '4px' }} />
+              </div>
+              <div style={{ width: '45%', height: '26px', backgroundColor: '#CBD5E1', borderRadius: '6px', margin: '6px 0' }} />
+              <div style={{ width: '75%', height: '12px', backgroundColor: '#F1F5F9', borderRadius: '4px' }} />
+            </div>
+          ))}
+        </div>
+      ) : (
       <div
         style={{
           display: 'grid',
@@ -855,9 +1012,11 @@ export const OverviewPage = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {aiRecommendations.length > 0 ? aiRecommendations.length : 12}
+              {overviewStats?.remediations?.total !== undefined ? overviewStats.remediations.total : (aiRecommendations.length > 0 ? aiRecommendations.length : 12)}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>100% Thành công</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
+              {overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}% Thành công` : '100% Thành công'}
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
             Thời gian phục hồi TB: 1.8s
@@ -896,6 +1055,7 @@ export const OverviewPage = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* 4. Interactive Infrastructure Metrics Resource Chart */}
       <InteractiveResourceChart
@@ -913,6 +1073,181 @@ export const OverviewPage = () => {
         error={chartError}
         onRetry={() => loadClusterTrend(chartTimeRange)}
       />
+
+      {/* 4b. Cluster Fleet Status & Overview Area [S5][PBI19 Task 1.3] */}
+      <div
+        className="dash-card"
+        style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid var(--dash-border)',
+          borderRadius: '12px',
+          padding: '20px 24px',
+          boxShadow: 'var(--dash-shadow-xs)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Server size={18} color="var(--dash-primary)" />
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                Trạng Thái Hạ Tầng Cụm Kubernetes (Cluster Fleet Status)
+              </h3>
+              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+                Hạ tầng được cấp quyền thuộc tổ chức <strong>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Đồng bộ thời gian thực
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+              Đang kết nối: <strong style={{ color: 'var(--dash-success)' }}>{envList?.filter((c) => c.agentStatus === 'ONLINE').length || 1}</strong> / {envList?.length || 1} cụm
+            </span>
+            <button
+              type="button"
+              onClick={() => onNavigate && onNavigate('/dashboard/clusters')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid var(--dash-border)',
+                color: 'var(--dash-primary)',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>Quản lý cụm</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        </div>
+
+        {/* Cluster List Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>CỤM KUBERNETES</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>MÔI TRƯỜNG</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>TRẠNG THÁI CỤM</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>TÁC TỬ eBPF</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>QUY MÔ PHẦN CỨNG</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600 }}>PHIÊN BẢN K8s</th>
+                <th style={{ padding: '10px 14px', fontWeight: 600, textAlign: 'right' }}>THAO TÁC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(!envList || envList.length === 0) ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                    Chưa có cụm Kubernetes nào được cấu hình trong tổ chức này.
+                  </td>
+                </tr>
+              ) : (
+                envList.map((c) => {
+                  const isCurrent = c.id === activeClusterId;
+                  const isConnected = c.status === 'Ready' || c.status === 'Healthy' || c.status === 'CONNECTED';
+                  const isAgentLive = c.agentStatus === 'ONLINE';
+
+                  return (
+                    <tr
+                      key={c.id}
+                      style={{
+                        borderBottom: '1px solid var(--dash-border)',
+                        backgroundColor: isCurrent ? '#F0FDF4' : 'transparent',
+                      }}
+                    >
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Server size={14} color={isCurrent ? '#16A34A' : 'var(--dash-text-muted)'} />
+                          <span>{c.cluster || c.name}</span>
+                          {isCurrent && (
+                            <span style={{ fontSize: '0.625rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#DCFCE7', color: '#15803D', fontWeight: 800 }}>
+                              HIỆN TẠI
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 14px', color: 'var(--dash-text-secondary)' }}>
+                        {c.envName || c.environment_name || 'Production'}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            backgroundColor: isConnected ? '#ECFDF5' : '#FEF2F2',
+                            color: isConnected ? '#059669' : '#DC2626',
+                            border: isConnected ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                          }}
+                        >
+                          {isConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            backgroundColor: isAgentLive ? '#EFF6FF' : '#F1F5F9',
+                            color: isAgentLive ? '#1D4ED8' : '#64748B',
+                            border: isAgentLive ? '1px solid #BFDBFE' : '1px solid #CBD5E1',
+                          }}
+                        >
+                          {c.agentStatus || 'PENDING'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-secondary)' }}>
+                        {c.nodes || nodeCount} Nodes &bull; {c.pods || podCount} Pods
+                      </td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-muted)' }}>
+                        {clusterInfo?.kubernetes_version || 'v1.37.0'}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        {!isCurrent ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentEnv(c);
+                              localStorage.setItem('selfheal_active_cluster_id', c.id);
+                              localStorage.setItem('selfheal_active_cluster_name', c.cluster || c.name);
+                              localStorage.setItem('selfheal_active_env_name', c.envName || 'Production');
+                              triggerRefresh();
+                            }}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid var(--dash-border)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              color: 'var(--dash-text-primary)',
+                            }}
+                          >
+                            Chuyển sang cụm này
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: '#15803D', fontWeight: 700 }}>
+                            Đang xem
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>>
 
       {/* 5, 6, 7. Summaries Grid: AI Predictions, Incidents, Self-Healing */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
