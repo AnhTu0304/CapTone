@@ -47,6 +47,51 @@ const parseConfidence = (val) => {
   return Math.round(num <= 1 ? num * 100 : num);
 };
 
+// Helper chuyển ngữ tiêu đề sự cố và mức độ sang tiếng Việt
+export const translateIncidentTitle = (rawTitle) => {
+  if (!rawTitle) return '';
+  let title = String(rawTitle);
+
+  title = title.replace(/\[AI Alert\]/gi, '[Cảnh báo AI]');
+  title = title.replace(/\[Alert\]/gi, '[Cảnh báo]');
+
+  const causeTranslations = [
+    { en: /Unstable application pod/gi, vi: 'Pod ứng dụng bất ổn định' },
+    { en: /Container memory exhausted/gi, vi: 'Cạn kiệt bộ nhớ container (OOM)' },
+    { en: /Storage capacity exhausted/gi, vi: 'Cạn kiệt dung lượng lưu trữ' },
+    { en: /CPU saturation/gi, vi: 'Bão hòa tài nguyên CPU' },
+    { en: /Traffic overload/gi, vi: 'Quá tải lưu lượng truy cập' },
+    { en: /Deployment failure/gi, vi: 'Lỗi triển khai phiên bản mới' },
+    { en: /Upstream dependency failure/gi, vi: 'Lỗi dịch vụ phụ thuộc thượng nguồn' },
+    { en: /Application errors/gi, vi: 'Lỗi ứng dụng nội bộ (5xx)' },
+    { en: /Service performance degradation/gi, vi: 'Suy giảm hiệu năng dịch vụ' },
+    { en: /Insufficient available replicas/gi, vi: 'Không đủ số lượng Pod replica' },
+    { en: /Kubernetes scheduling failure/gi, vi: 'Lỗi lập lịch điều phối Kubernetes' },
+    { en: /Workload underutilized/gi, vi: 'Tài nguyên làm việc dư thừa' },
+    { en: /High latency detected/gi, vi: 'Độ trễ phản hồi tăng cao' },
+    { en: /Memory leak detected/gi, vi: 'Phát hiện rò rỉ bộ nhớ' },
+    { en: /Pod crash loop back-off/gi, vi: 'Pod bị kẹt vòng lặp CrashLoopBackOff' },
+    { en: /OOMKilled/gi, vi: 'Tiến trình bị hủy do tràn RAM (OOMKilled)' },
+  ];
+
+  for (const { en, vi } of causeTranslations) {
+    title = title.replace(en, vi);
+  }
+
+  title = title.replace(/\s+on\s+/gi, ' trên ');
+  return title;
+};
+
+export const translateSeverity = (sev) => {
+  if (!sev) return 'TRUNG BÌNH';
+  const s = String(sev).toUpperCase();
+  if (s === 'CRITICAL') return 'KHẨN CẤP';
+  if (s === 'HIGH') return 'CAO';
+  if (s === 'MEDIUM') return 'TRUNG BÌNH';
+  if (s === 'LOW') return 'THẤP';
+  return s;
+};
+
 // Danh sách trắng cho phép loại rủi ro dự báo hợp lệ (ngăn chặn việc lấy tên hành động thay cho rủi ro)
 const VALID_RISKS = new Set([
   'OOM',
@@ -65,8 +110,12 @@ const mapBackendIncidentToUI = (item) => {
   const isRecovering = item.status === 'INVESTIGATING';
 
   let serviceName = item.target_id;
-  if (!serviceName && item.title && item.title.includes(' on ')) {
-    serviceName = item.title.split(' on ')[1].trim();
+  if (!serviceName && item.title) {
+    if (item.title.includes(' trên ')) {
+      serviceName = item.title.split(' trên ')[1].trim();
+    } else if (item.title.includes(' on ')) {
+      serviceName = item.title.split(' on ')[1].trim();
+    }
   }
   if (!serviceName) {
     serviceName = 'ứng dụng hệ thống';
@@ -145,7 +194,7 @@ const mapBackendIncidentToUI = (item) => {
     cluster: item.cluster_name || item.cluster_id,
     clusterId: item.cluster_id,
     clusterName: item.cluster_name,
-    title: item.title,
+    title: translateIncidentTitle(item.title),
     service: serviceName,
     namespace: item.namespace || 'default',
     node: item.node_name || (item.cluster_name ? `${item.cluster_name}-node-1` : (item.cluster_id || 'worker-01')),
@@ -372,13 +421,18 @@ export const IncidentsPage = ({ onNavigate }) => {
       }
     });
 
+    const rawWorkloadNames = (registeredWorkloads || [])
+      .map((w) => (typeof w === 'string' ? w : (w?.name || '')))
+      .filter(Boolean);
+
     const allServiceNames = new Set([
       ...Object.keys(counts),
-      ...(registeredWorkloads || []),
+      ...rawWorkloadNames,
     ]);
 
     return Array.from(allServiceNames)
-      .filter((s) => s && s !== 'selfheal-agent' && !s.includes('-0000-') && s !== 'order-service')
+      .map((s) => (typeof s === 'string' ? s : (s?.name || '')))
+      .filter((s) => typeof s === 'string' && s && s !== 'selfheal-agent' && !s.includes('-0000-') && s !== 'order-service')
       .map((name) => ({
         name,
         count: counts[name] || 0,
@@ -909,7 +963,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                               backgroundColor: isCrit ? '#E11D48' : isHigh ? '#EA580C' : isMed ? '#D97706' : '#2563EB',
                             }}
                           />
-                          {item.severity}
+                          {translateSeverity(item.severity)}
                         </span>
                       </td>
 
@@ -918,7 +972,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                           {item.service}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '2px' }}>
-                          ns: {item.namespace} &bull; {item.node}
+                          <span style={{ color: "#94A3B8" }}>Namespace:</span> {item.namespace} &bull; <span style={{ color: "#94A3B8" }}>Node:</span> {item.node}
                         </div>
                       </td>
 
@@ -939,7 +993,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                             wordBreak: 'break-word',
                           }}
                         >
-                          {item.title}
+                          {translateIncidentTitle(item.title)}
                         </div>
                       </td>
 

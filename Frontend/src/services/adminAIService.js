@@ -1,3 +1,4 @@
+import { getRegisteredModels } from './aiModelRegistryService';
 import aiService from './aiService';
 /**
  * @file adminAIService.js
@@ -91,296 +92,54 @@ import aiService from './aiService';
  */
 
 // ==========================================
-// DỮ LIỆU GIẢ LẬP THEO CHUẨN CƠ SỞ DỮ LIỆU
-// ==========================================
-
-const MOCK_AI_MODELS = [
-  {
-    id: 'mod-ebpf-anom-01',
-    name: 'Kernel Telemetry Anomaly Detector',
-    modelType: 'Anomaly Detection',
-    version: 'v2.4.1-LTS',
-    framework: 'ONNX Runtime',
-    status: 'ACTIVE',
-    dataset: 'K8s Kernel Telemetry Corpus v3.2 (4.2M samples)',
-    evaluationMetrics: 'Acc: 98.4% • F1: 0.980 • FPR: 0.8% • Latency: 1.2ms',
-    updatedAt: '30/09/2026 10:15:00',
-  },
-  {
-    id: 'mod-causal-rca-02',
-    name: 'Distributed Causal Graph RCA Engine',
-    modelType: 'Causal Graph RCA',
-    version: 'v3.1.0-Stable',
-    framework: 'PyTorch',
-    status: 'ACTIVE',
-    dataset: 'Microservice Distributed Traces Benchmark (1.8M spans)',
-    evaluationMetrics: 'Precision: 97.2% • Recall: 98.9% • Latency: 8.4ms',
-    updatedAt: '28/09/2026 18:30:00',
-  },
-  {
-    id: 'mod-fail-predict-03',
-    name: 'Pod CrashLoop & OOM Failure Predictor',
-    modelType: 'Failure Predictive',
-    version: 'v1.9.4',
-    framework: 'Scikit-learn',
-    status: 'ACTIVE',
-    dataset: 'cgroup Linux Container OOM Logs 2025-2026 (850K events)',
-    evaluationMetrics: 'Acc: 96.8% • Precision: 95.4% • Recall: 96.1%',
-    updatedAt: '25/09/2026 14:00:00',
-  },
-  {
-    id: 'mod-cap-forecast-04',
-    name: 'Cluster Capacity & HPA Wave Forecaster',
-    modelType: 'Capacity Forecasting',
-    version: 'v2.0.2',
-    framework: 'TensorFlow Lite',
-    status: 'ACTIVE',
-    dataset: 'Multi-tenant Node Resource Utilization Series (365 days)',
-    evaluationMetrics: 'MAE: 0.042 cores • RMSE: 0.068 cores',
-    updatedAt: '20/09/2026 09:20:00',
-  },
-  {
-    id: 'mod-kafka-lag-05',
-    name: 'Kafka Consumer Lag Poison-Pill Classifier',
-    modelType: 'Anomaly Detection',
-    version: 'v1.2.0-Beta',
-    framework: 'ONNX Runtime',
-    status: 'TRAINING',
-    dataset: 'Financial Transaction Event Stream (650K messages)',
-    evaluationMetrics: 'Đang trong quá trình validation huấn luyện epoch 48/50',
-    updatedAt: '30/09/2026 14:00:00',
-  },
-];
-
-const MOCK_PREDICTION_INPUTS = {
-  'PRED-2026-891': [
-    { id: 'inp-01', predictionId: 'PRED-2026-891', featureName: 'cgroup_memory_rss_growth_rate', featureValue: '+84 MB/min', baselineValue: '< 5 MB/min', anomalyWeight: 0.88 },
-    { id: 'inp-02', predictionId: 'PRED-2026-891', featureName: 'jvm_heap_eden_gc_latency_p99', featureValue: '480 ms', baselineValue: '25 ms', anomalyWeight: 0.74 },
-    { id: 'inp-03', predictionId: 'PRED-2026-891', featureName: 'active_tcp_socket_alloc_count', featureValue: '4,210', baselineValue: '850', anomalyWeight: 0.62 },
-  ],
-  'PRED-2026-892': [
-    { id: 'inp-04', predictionId: 'PRED-2026-892', featureName: 'kafka_partition_consumer_lag_delta', featureValue: '+1,240 msg/s', baselineValue: '< 50 msg/s', anomalyWeight: 0.94 },
-    { id: 'inp-05', predictionId: 'PRED-2026-892', featureName: 'deserialization_exception_count', featureValue: '18 / s', baselineValue: '0 / s', anomalyWeight: 0.91 },
-  ],
-};
-
-const MOCK_AI_RECOMMENDATIONS = {
-  'PRED-2026-891': [
-    {
-      id: 'REC-01',
-      referenceId: 'PRED-2026-891',
-      actionType: 'K8s Resource Limit Patch (RAM)',
-      suggestedParameters: 'resources.limits.memory: 3072Mi (Tăng từ 2048Mi)',
-      impactScore: 92,
-      safetyTier: 'Tier 1 Safe',
-      status: 'PROPOSED',
-    },
-  ],
-  'PRED-2026-892': [
-    {
-      id: 'REC-02',
-      referenceId: 'PRED-2026-892',
-      actionType: 'Kafka Consumer Lag DLQ Re-route',
-      suggestedParameters: 'topic: payments-dlq, skipPoisonPill: true',
-      impactScore: 85,
-      safetyTier: 'Tier 2 HITL Required',
-      status: 'PROPOSED',
-    },
-  ],
-  'RCA-2026-441': [
-    {
-      id: 'REC-03',
-      referenceId: 'RCA-2026-441',
-      actionType: 'In-place Pod Memory Bump & Rolling Restart',
-      suggestedParameters: 'limits.memory: 3072Mi, maxUnavailable: 0',
-      impactScore: 96,
-      safetyTier: 'Tier 1 Safe',
-      status: 'APPLIED',
-    },
-  ],
-};
-
-const MOCK_AI_PREDICTIONS = [
-  {
-    id: 'PRED-2026-891',
-    modelId: 'mod-fail-predict-03',
-    modelName: 'Pod CrashLoop & OOM Failure Predictor',
-    targetResource: 'Deployment/order-processor (namespace: default)',
-    predictionType: 'OOM Risk Spike',
-    confidenceScore: 0.978,
-    riskLevel: 'HIGH',
-    status: 'TRIGGERED',
-    predictedTimeHorizon: 'trong 12 phút tới',
-    createdAt: '30/09/2026 14:10:15',
-  },
-  {
-    id: 'PRED-2026-892',
-    modelId: 'mod-ebpf-anom-01',
-    modelName: 'Kernel Telemetry Anomaly Detector',
-    targetResource: 'Topic/payments-stream (partition: 3)',
-    predictionType: 'Consumer Lag Congestion',
-    confidenceScore: 0.962,
-    riskLevel: 'HIGH',
-    status: 'TRIGGERED',
-    predictedTimeHorizon: 'trong 8 phút tới',
-    createdAt: '30/09/2026 14:38:20',
-  },
-  {
-    id: 'PRED-2026-893',
-    modelId: 'mod-cap-forecast-04',
-    modelName: 'Cluster Capacity & HPA Wave Forecaster',
-    targetResource: 'HPA/checkout-worker (Cụm: prod-hn-01)',
-    predictionType: 'CPU Throttling Ratio Surge',
-    confidenceScore: 0.935,
-    riskLevel: 'MEDIUM',
-    status: 'VERIFIED',
-    predictedTimeHorizon: 'trong 25 phút tới',
-    createdAt: '30/09/2026 11:45:00',
-  },
-  {
-    id: 'PRED-2026-894',
-    modelId: 'mod-ebpf-anom-01',
-    modelName: 'Kernel Telemetry Anomaly Detector',
-    targetResource: 'Node/worker-node-hn-03 (cgroup v2)',
-    predictionType: 'Kernel Thread Contention Spike',
-    confidenceScore: 0.842,
-    riskLevel: 'LOW',
-    status: 'FALSE_ALARM',
-    predictedTimeHorizon: 'trong 45 phút tới',
-    createdAt: '30/09/2026 08:20:00',
-  },
-];
-
-const MOCK_RCA_EVIDENCES = {
-  'RCA-2026-441': [
-    {
-      id: 'ev-01',
-      rcaId: 'RCA-2026-441',
-      evidenceType: 'Kernel Probe SIGKILL',
-      evidenceSource: 'eBPF cgroup Out-Of-Memory Watcher',
-      confidenceContribution: '45%',
-      snippet: 'kernel: [184920.12] Task oom-killer: killed process 14890 (order-processor) total-vm:2097152kB, anon-rss:2048000kB',
-    },
-    {
-      id: 'ev-02',
-      rcaId: 'RCA-2026-441',
-      evidenceType: 'Container Error Log',
-      evidenceSource: 'order-processor stdout log probe',
-      confidenceContribution: '32%',
-      snippet: 'java.lang.OutOfMemoryError: Java heap space at JsonBufferPool.decode(JsonBufferPool.java:142)',
-    },
-    {
-      id: 'ev-03',
-      rcaId: 'RCA-2026-441',
-      evidenceType: 'Metric Divergence',
-      evidenceSource: 'Prometheus Container Memory Working Set',
-      confidenceContribution: '21%',
-      snippet: 'container_memory_working_set_bytes divergence: standard deviation +4.8 sigma over 10-minute window',
-    },
-  ],
-};
-
-const MOCK_RCA_ANALYSES = [
-  {
-    id: 'RCA-2026-441',
-    incidentId: 'INC-2026-8812',
-    modelId: 'mod-causal-rca-02',
-    rootCauseSummary: 'Rò rỉ bộ nhớ không giới hạn (Unbounded memory leak) trong JsonBufferPool khi giải mã payload JSON 18MB đột biến.',
-    confidence: '98.4%',
-    causalGraphNodesCount: 8,
-    causalGraphEdgesCount: 12,
-    analyzedAt: '30/09/2026 14:15:35',
-  },
-  {
-    id: 'RCA-2026-442',
-    incidentId: 'INC-2026-8815',
-    modelId: 'mod-causal-rca-02',
-    rootCauseSummary: 'Tin nhắn sai định dạng schema v2.1 thiếu trường merchant_id gây ngoại lệ DeserializationException và tắc nghẽn partition-3.',
-    confidence: '96.1%',
-    causalGraphNodesCount: 6,
-    causalGraphEdgesCount: 9,
-    analyzedAt: '30/09/2026 14:40:28',
-  },
-];
-
-const MOCK_PERFORMANCE_METRICS = [
-  {
-    modelId: 'mod-ebpf-anom-01',
-    modelName: 'Kernel Telemetry Anomaly Detector',
-    modelType: 'Anomaly Detection',
-    dataset: 'K8s Kernel Telemetry Corpus v3.2',
-    accuracy: '98.4%',
-    precision: '97.6%',
-    recall: '98.8%',
-    f1: '0.982',
-    mae: 'N/A (Phân loại)',
-    rmse: 'N/A (Phân loại)',
-    falsePositiveRate: '0.8%',
-  },
-  {
-    modelId: 'mod-causal-rca-02',
-    name: 'Distributed Causal Graph RCA Engine',
-    modelName: 'Distributed Causal Graph RCA Engine',
-    modelType: 'Causal Graph RCA',
-    dataset: 'Microservice Distributed Traces Benchmark',
-    accuracy: '97.8%',
-    precision: '97.2%',
-    recall: '98.9%',
-    f1: '0.980',
-    mae: 'N/A (Causal Graph)',
-    rmse: 'N/A (Causal Graph)',
-    falsePositiveRate: '1.2%',
-  },
-  {
-    modelId: 'mod-fail-predict-03',
-    name: 'Pod CrashLoop & OOM Failure Predictor',
-    modelName: 'Pod CrashLoop & OOM Failure Predictor',
-    modelType: 'Failure Predictive',
-    dataset: 'cgroup Linux Container OOM Logs 2025-2026',
-    accuracy: '96.8%',
-    precision: '95.4%',
-    recall: '96.1%',
-    f1: '0.957',
-    mae: 'N/A (Nhị phân)',
-    rmse: 'N/A (Nhị phân)',
-    falsePositiveRate: '1.5%',
-  },
-  {
-    modelId: 'mod-cap-forecast-04',
-    name: 'Cluster Capacity & HPA Wave Forecaster',
-    modelName: 'Cluster Capacity & HPA Wave Forecaster',
-    modelType: 'Capacity Forecasting',
-    dataset: 'Multi-tenant Node Resource Series (365 days)',
-    accuracy: '95.9%',
-    precision: '95.1%',
-    recall: '96.0%',
-    f1: '0.955',
-    mae: '0.042 cores',
-    rmse: '0.068 cores',
-    falsePositiveRate: '1.9%',
-  },
-];
-
-// ==========================================
-// MOCK SERVICE METHODS
+// DATA SERVICE METHODS (LIVE FROM POSTGRESQL & MAIN BACKEND)
 // ==========================================
 
 /**
  * Lấy các chỉ số KPI tổng quan động cơ AI trên toàn nền tảng
  * @returns {Promise<Object>}
  */
-export const getAIOverviewKPIs = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        activeModels: MOCK_AI_MODELS.filter((m) => m.status === 'ACTIVE').length,
-        predictionVolume: 1420,
-        averageConfidence: '96.2%',
-        highRiskPredictions: MOCK_AI_PREDICTIONS.filter((p) => p.riskLevel === 'HIGH' || p.riskLevel === 'CRITICAL').length,
-        rcaAnalysisVolume: 34,
-      });
-    }, 60);
-  });
+export const getAIOverviewKPIs = async () => {
+  try {
+    const [models, predStats, incidentsRes] = await Promise.all([
+      getRegisteredModels().catch(() => []),
+      aiService.getPredictionStats().catch(() => ({ total: 0, avg_confidence: 0, by_type: {} })),
+      aiService.getIncidents({ limit: 1 }).catch(() => ({ total: 0 })),
+    ]);
+
+    const activeModel = models.find((m) => m.status === 'ACTIVE') || models[0];
+    const activeModels = models.filter((m) => m.status === 'ACTIVE').length;
+    const totalPredictions = Number(predStats?.total || 0);
+
+    const byType = predStats?.by_type || {};
+    const riskTotal = Object.entries(byType)
+      .filter(([k]) => k !== 'NORMAL')
+      .reduce((sum, [, v]) => sum + Number(v), 0);
+
+    const avgConf = activeModel?.rawMetrics?.overall?.accuracy
+      ? `${activeModel.rawMetrics.overall.accuracy}%`
+      : '0.0%';
+
+    return {
+      activeModels,
+      predictionVolume: totalPredictions,
+      averageConfidence: avgConf,
+      highRiskPredictions: riskTotal,
+      rcaAnalysisVolume: Number(incidentsRes?.total || 0),
+      riskBreakdown: byType,
+      activeModel: activeModel || null,
+    };
+  } catch (err) {
+    return {
+      activeModels: 0,
+      predictionVolume: 0,
+      averageConfidence: '0.0%',
+      highRiskPredictions: 0,
+      rcaAnalysisVolume: 0,
+      riskBreakdown: {},
+      activeModel: null,
+    };
+  }
 };
 
 /**
@@ -388,32 +147,8 @@ export const getAIOverviewKPIs = () => {
  * @param {Object} [filters]
  * @returns {Promise<AIModel[]>}
  */
-export const getAIModels = (filters = {}) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      let result = [...MOCK_AI_MODELS];
-
-      if (filters.search) {
-        const query = filters.search.toLowerCase().trim();
-        result = result.filter(
-          (m) =>
-            m.name.toLowerCase().includes(query) ||
-            m.framework.toLowerCase().includes(query) ||
-            m.dataset.toLowerCase().includes(query)
-        );
-      }
-
-      if (filters.modelType && filters.modelType !== 'ALL') {
-        result = result.filter((m) => m.modelType === filters.modelType);
-      }
-
-      if (filters.status && filters.status !== 'ALL') {
-        result = result.filter((m) => m.status === filters.status);
-      }
-
-      resolve(result);
-    }, 70);
-  });
+export const getAIModels = async (filters = {}) => {
+  return getRegisteredModels(filters);
 };
 
 /**
@@ -421,36 +156,80 @@ export const getAIModels = (filters = {}) => {
  * @param {Object} [filters]
  * @returns {Promise<AIPrediction[]>}
  */
-export const getAIPredictions = (filters = {}) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      let result = MOCK_AI_PREDICTIONS.map((pred) => ({
-        ...pred,
-        inputs: MOCK_PREDICTION_INPUTS[pred.id] || [],
-        recommendations: MOCK_AI_RECOMMENDATIONS[pred.id] || [],
-      }));
+export const getAIPredictions = async (filters = {}) => {
+  try {
+    const params = { limit: 50 };
+    if (filters.status && filters.status !== 'ALL') params.status = filters.status;
+    if (filters.predictionType && filters.predictionType !== 'ALL') params.prediction_type = filters.predictionType;
 
-      if (filters.search) {
-        const query = filters.search.toLowerCase().trim();
-        result = result.filter(
-          (p) =>
-            p.id.toLowerCase().includes(query) ||
-            p.targetResource.toLowerCase().includes(query) ||
-            p.predictionType.toLowerCase().includes(query)
-        );
-      }
+    const res = await aiService.getPredictions(params);
+    const items = res?.items || [];
 
-      if (filters.riskLevel && filters.riskLevel !== 'ALL') {
-        result = result.filter((p) => p.riskLevel === filters.riskLevel);
-      }
+    let result = items.map((p) => {
+      const riskScoreNum = parseFloat(p.risk_score || '0');
+      const riskLevel =
+        riskScoreNum >= 0.8
+          ? 'CRITICAL'
+          : riskScoreNum >= 0.5
+          ? 'HIGH'
+          : riskScoreNum >= 0.2
+          ? 'MEDIUM'
+          : 'LOW';
 
-      if (filters.status && filters.status !== 'ALL') {
-        result = result.filter((p) => p.status === filters.status);
-      }
+      const inputs = p.risk_outputs
+        ? Object.entries(p.risk_outputs).map(([k, v]) => ({
+            metric: k,
+            value: typeof v === 'object' && v !== null && v.confidence !== undefined
+              ? `${(Number(v.confidence) * 100).toFixed(1)}%`
+              : String(v),
+            unit: 'xác suất',
+          }))
+        : [];
 
-      resolve(result);
-    }, 70);
-  });
+      const recommendations = [
+        {
+          id: `rec-${p.id.slice(0, 8)}`,
+          action: p.status === 'HEALTHY' ? 'Duy trì giám sát viễn trắc cgroups' : `Phục hồi tài nguyên cho ${p.workload_name || 'Workload'}`,
+          reason: `Trạng thái: ${p.prediction_type} (Điểm rủi ro: ${(riskScoreNum * 100).toFixed(1)}%)`,
+          status: p.status === 'HEALTHY' ? 'APPLIED' : 'PROPOSED',
+        },
+      ];
+
+      return {
+        id: p.id,
+        modelId: p.model_id,
+        modelName: p.model_name ? `${p.model_name} (${p.model_version || ''})` : 'Multi-Head GRU',
+        targetResource: p.workload_name || p.cluster_name || 'Kubernetes Pod',
+        predictionType: p.prediction_type || 'NORMAL',
+        riskLevel,
+        confidenceScore: `${(parseFloat(p.confidence_score || p.risk_score || 0) * 100).toFixed(1)}%`,
+        predictionTime: p.predicted_at ? new Date(p.predicted_at).toLocaleString('vi-VN') : '',
+        status: p.status === 'HEALTHY' ? 'NORMAL' : p.status || 'PENDING',
+        inputs,
+        recommendations,
+      };
+    });
+
+    if (filters.search) {
+      const query = filters.search.toLowerCase().trim();
+      result = result.filter(
+        (p) =>
+          p.id.toLowerCase().includes(query) ||
+          p.targetResource.toLowerCase().includes(query) ||
+          p.predictionType.toLowerCase().includes(query) ||
+          p.modelName.toLowerCase().includes(query)
+      );
+    }
+
+    if (filters.riskLevel && filters.riskLevel !== 'ALL') {
+      result = result.filter((p) => p.riskLevel === filters.riskLevel);
+    }
+
+    return result;
+  } catch (err) {
+    console.error('Lỗi nạp dự báo AI từ API:', err);
+    return [];
+  }
 };
 
 /**
@@ -515,23 +294,44 @@ export const getAIRCAAnalyses = async () => {
     console.warn('[adminAIService] getAIRCAAnalyses fallback to mock:', err.message);
   }
 
-  return MOCK_RCA_ANALYSES.map((rca) => ({
-    ...rca,
-    evidences: MOCK_RCA_EVIDENCES[rca.id] || [],
-    recommendations: MOCK_AI_RECOMMENDATIONS[rca.id] || [],
-  }));
+  return [];
 };
 
 /**
  * Lấy ma trận chỉ số hiệu năng thực tế được kiểm định trên test dataset
  * @returns {Promise<Object[]>}
  */
-export const getAIPerformanceMetrics = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([...MOCK_PERFORMANCE_METRICS]);
-    }, 60);
-  });
+export const getAIPerformanceMetrics = async () => {
+  try {
+    const models = await getRegisteredModels();
+    if (!Array.isArray(models) || models.length === 0) {
+      return [];
+    }
+    return models
+      .filter((m) => m.rawMetrics?.overall)
+      .map((m) => {
+        const o = m.rawMetrics.overall;
+        return {
+          modelId: m.id,
+          modelName: `${m.name} (${m.version})`,
+          name: m.name,
+          version: m.version,
+          status: m.status,
+          modelType: m.modelType || 'Phân loại rủi ro GRU',
+          dataset: `${m.dataset} (${m.rawMetrics.sample_count || 3000} mẫu test)`,
+          accuracy: `${o.accuracy}%`,
+          precision: `${o.precision}%`,
+          recall: `${o.recall}%`,
+          f1: `${o.f1_score}`,
+          mae: `${o.latency_ms} ms (Độ trễ)`,
+          rmse: `${m.rawMetrics.parameters_count ? m.rawMetrics.parameters_count.toLocaleString() : 'N/A'} tham số`,
+          falsePositiveRate: `${o.false_positive_rate}%`
+        };
+      });
+  } catch (err) {
+    console.error('Lỗi lấy chỉ số hiệu năng AI thực tế:', err);
+    return [];
+  }
 };
 
 const adminAIService = {

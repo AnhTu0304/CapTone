@@ -15,4 +15,10 @@ router.use(requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'));
  */
 router.get('/dashboard/stats', AdminDashboardController.getKpiStats);
 
+/**
+ * [GET] /api/v1/admin/alerts/overview
+ * Lấy tổng hợp cảnh báo nền tảng, tình trạng đứt kết nối tác tử và KPI sự cố (100% dữ liệu thực)
+ */
+router.get('/alerts/overview', AdminDashboardController.getAlertsOverview);
+
 export const adminRoutes = router;

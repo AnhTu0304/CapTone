@@ -347,34 +347,36 @@ export class RecommendationModel {
 
 
   /**
-
-   * Get recent recommendations (deduplicated by recommendation action and status)
-
+   * Get recent recommendations with pagination (limit + offset, uses sp_get_ai_recommendations_paginated with fallback)
    */
-
-  public static async getRecent(limit: number = 10, clusterId?: string, client?: PoolClient, organizationId?: string) {
-
+  public static async getRecent(
+    limit: number = 10,
+    clusterId?: string,
+    client?: PoolClient,
+    organizationId?: string,
+    offset: number = 0
+  ) {
     const db = client || pool;
 
-    const conditions: string[] = [];
-
-    const params: any[] = [];
-
-    let idx = 1;
-
-
-
-    if (organizationId && organizationId !== 'ALL' && organizationId !== 'all') {
-
-      conditions.push(`(i.organization_id = $${idx} OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id = $${idx}))`);
-
-      params.push(organizationId);
-
-      idx++;
-
+    try {
+      const spRes = await db.query(
+        'SELECT * FROM public.sp_get_ai_recommendations_paginated($1, $2, $3, $4);',
+        [limit, clusterId || null, organizationId || null, offset]
+      );
+      return spRes.rows;
+    } catch {
+      // Fallback to inline SQL if stored function is not available
     }
 
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
 
+    if (organizationId && organizationId !== 'ALL' && organizationId !== 'all') {
+      conditions.push(`(i.organization_id = $${idx} OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id = $${idx}))`);
+      params.push(organizationId);
+      idx++;
+    }
 
     if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
       conditions.push(`i.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
@@ -382,76 +384,42 @@ export class RecommendationModel {
       idx++;
     }
 
-
-
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-
-
     const res = await db.query(
-
       `WITH ranked_recs AS (
-
         SELECT 
-
           r.id, r.incident_id, r.rca_analysis_id, r.prediction_id, r.action_type_id,
-
           h.code AS action_code, h.name AS action_name,
-
           r.recommendation, r.reasoning, r.risk_level, r.priority, r.status, r.created_at,
-
           i.cluster_id,
-
           COALESCE(w.name, NULLIF(i.target_id::text, ''), '') as target_name,
-
           COALESCE(w.name, NULLIF(i.target_id::text, ''), '') as target_id,
-
           i.title as incident_title,
-
           rca.analysis_result,
           CASE WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result != '' THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters') ELSE NULL END AS action_parameters,
           CASE WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result != '' THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters'->'manual_playbook') ELSE NULL END AS manual_playbook,
-
           rca.root_cause_type,
-
           rca.confidence_score AS rca_confidence,
-
-          ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status ORDER BY r.created_at DESC) as rn
-
+          ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status, COALESCE(w.name, i.target_id::text, '') ORDER BY r.created_at DESC) as rn
         FROM ai_recommendations r
-
         LEFT JOIN healing_action_types h ON h.id = r.action_type_id
-
         LEFT JOIN incidents i ON r.incident_id = i.id
-
         LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
-
         LEFT JOIN rca_analyses rca ON rca.id = r.rca_analysis_id
-
         ${whereClause}
-
       )
-
       SELECT id, incident_id, rca_analysis_id, prediction_id, action_type_id,
-
              action_code, action_name, recommendation, reasoning, risk_level, priority, status, created_at, cluster_id, target_name, target_id, incident_title,
-
              analysis_result, action_parameters, manual_playbook, root_cause_type, rca_confidence
-
       FROM ranked_recs
-
-      WHERE rn <= 2
-
+      WHERE rn <= 5
       ORDER BY created_at DESC
-
-      LIMIT $${idx};`,
-
-      [...params, limit]
-
+      LIMIT $${idx} OFFSET $${idx + 1};`,
+      [...params, limit, offset]
     );
 
     return res.rows;
-
   }
 
 
@@ -593,32 +561,23 @@ export class RecommendationModel {
 
 
   /**
-
-   * List recent healing actions with action type and incident info
-
+   * List recent healing actions with action type and incident info (supports limit + offset)
    */
-
-  public static async getHealingActions(limit: number = 20, clusterId?: string, organizationId?: string): Promise<any[]> {
-
+  public static async getHealingActions(
+    limit: number = 20,
+    clusterId?: string,
+    organizationId?: string,
+    offset: number = 0
+  ): Promise<any[]> {
     const conditions: string[] = [];
-
     const params: any[] = [];
-
     let idx = 1;
 
-
-
     if (organizationId && organizationId !== 'ALL' && organizationId !== 'all') {
-
       conditions.push(`(EXISTS (SELECT 1 FROM environments env WHERE env.id = h.environment_id AND env.organization_id = $${idx}) OR i.organization_id = $${idx})`);
-
       params.push(organizationId);
-
       idx++;
-
     }
-
-
 
     if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
       conditions.push(`i.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
@@ -626,72 +585,39 @@ export class RecommendationModel {
       idx++;
     }
 
-
-
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-
-
     const query = `
-
       SELECT 
-
         h.id,
-
         h.incident_id,
-
         h.recommendation_id,
-
         h.environment_id,
-
         h.action_type_id,
-
         t.name AS action_type_name,
-
         t.code AS action_type_code,
-
         h.target_type,
-
         h.target_name,
-
         h.risk_level,
-
         h.execution_mode,
-
         h.approval_status,
-
         h.execution_status,
-
         h.started_at,
-
         h.completed_at,
-
         h.result,
-
         h.created_at,
-
         i.title AS incident_title,
-
         i.severity AS incident_severity
-
       FROM healing_actions h
-
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
-
       LEFT JOIN incidents i ON i.id = h.incident_id
-
       ${whereClause}
-
       ORDER BY h.created_at DESC
-
-      LIMIT $${idx};
-
+      LIMIT $${idx} OFFSET $${idx + 1};
     `;
 
-    const res = await pool.query(query, [...params, limit]);
-
+    const res = await pool.query(query, [...params, limit, offset]);
     return res.rows;
-
   }
 
 }

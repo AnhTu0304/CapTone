@@ -137,30 +137,6 @@ export const PersonalHeader = ({
 
       {/* Right Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Quick Link to Dashboard */}
-        <button
-          type="button"
-          onClick={() => onNavigate && onNavigate('/dashboard')}
-          title="Bàn Điều Khiển Doanh Nghiệp (Dashboard)"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            border: '1px solid #E2E8F0',
-            backgroundColor: '#F8FAFC',
-            color: '#334155',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <LayoutDashboard size={15} color="#059669" />
-          <span>Về Dashboard</span>
-        </button>
-
         {/* Notifications Icon Button */}
         <button
           type="button"

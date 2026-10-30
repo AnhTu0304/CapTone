@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { aiService } from '../../../services/aiService';
+import { telemetryService } from '../../../services/telemetryService';
 import {
   X,
   GitBranch,
@@ -280,6 +281,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
     return null;
   });
   const [predictionInputs, setPredictionInputs] = useState([]);
+  const [rawLogsAndEvents, setRawLogsAndEvents] = useState([]);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   const handleCopyText = (text, key) => {
@@ -380,6 +382,110 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
     }
     return s || incident?.service || 'mongodb';
   }, [incident?.service, incidentDetail]);
+
+  // Nạp Log container thực tế & K8s Events thực tế của dịch vụ cho khung Terminal Inspector
+  useEffect(() => {
+    let isMounted = true;
+    const svc = serviceDisplayName;
+    if (!svc) return;
+
+    (async () => {
+      const entries = [];
+      try {
+        const [rcaCtx, logsData, eventsData] = await Promise.all([
+          telemetryService.getRcaContext(svc).catch(() => null),
+          telemetryService.getLogs({ serviceId: svc, limit: 8 }).catch(() => null),
+          telemetryService.getKubernetesEvents({ search: svc, limit: 6 }).catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        // 1. Dòng tóm tắt chỉ số eBPF Kernel Probe tại thời điểm sự cố
+        const m = rcaCtx?.latest_metrics || parsedAnalysis?.metrics;
+        if (m) {
+          entries.push({
+            type: 'eBPF_METRIC',
+            timestamp: rcaCtx?.extracted_at
+              ? new Date(rcaCtx.extracted_at).toLocaleTimeString('vi-VN', { hour12: false })
+              : new Date().toLocaleTimeString('vi-VN', { hour12: false }),
+            ref: rcaCtx?.pod_id || `pod/${svc}`,
+            level: 'TELEMETRY',
+            summary: `CPU=${Number(m.cpu || 0).toFixed(1)}% | RAM=${Number(m.ram || 0).toFixed(1)}% | Disk=${Number(m.disk || 0).toFixed(1)}% | Latency=${Number(m.latency || 0).toFixed(0)}ms | 5xx=${Number(m.http_5xx_rate || 0).toFixed(1)}% | Restarts=${m.pod_restart_count ?? 0} | Replicas=${m.replica_count ?? 1}`,
+          });
+        }
+
+        // 2. Sự kiện Kubernetes thực tế (K8s Events)
+        const k8sEventsRaw = Array.isArray(eventsData?.events)
+          ? eventsData.events
+          : Array.isArray(eventsData?.items)
+          ? eventsData.items
+          : [];
+        if (k8sEventsRaw.length > 0) {
+          k8sEventsRaw.slice(0, 5).forEach((ev) => {
+            const ts = ev.last_seen_at || ev.first_seen_at || ev.created_at;
+            const timeStr = ts ? new Date(ts).toLocaleTimeString('vi-VN', { hour12: false }) : '';
+            entries.push({
+              type: 'K8S_EVENT',
+              timestamp: timeStr,
+              ref: ev.pod_name || ev.resource_uid || `pod/${svc}`,
+              level: (ev.event_type || 'Warning').toUpperCase(),
+              summary: `[Reason: ${ev.reason || 'Event'}] ${ev.message || ''} (count: ${ev.count || 1})`,
+            });
+          });
+        } else if (Array.isArray(rcaCtx?.kubernetes_events) && rcaCtx.kubernetes_events.length > 0) {
+          rcaCtx.kubernetes_events.slice(0, 5).forEach((line) => {
+            entries.push({
+              type: 'K8S_EVENT',
+              timestamp: '',
+              ref: rcaCtx?.pod_id || `pod/${svc}`,
+              level: 'WARNING',
+              summary: line,
+            });
+          });
+        }
+
+        // 3. Nhật ký Container thực tế (Container Stdout/Stderr Logs)
+        const rawLogs = Array.isArray(logsData?.logs)
+          ? logsData.logs
+          : Array.isArray(logsData?.items)
+          ? logsData.items
+          : [];
+        if (rawLogs.length > 0) {
+          rawLogs.slice(0, 8).forEach((lg) => {
+            const ts = lg.occurred_at || lg.created_at;
+            const timeStr = ts ? new Date(ts).toLocaleTimeString('vi-VN', { hour12: false }) : '';
+            entries.push({
+              type: 'CONTAINER_LOG',
+              timestamp: timeStr,
+              ref: lg.pod_name || lg.pod_id || svc,
+              level: (lg.level || 'INFO').toUpperCase(),
+              summary: lg.message,
+            });
+          });
+        } else if (Array.isArray(rcaCtx?.logs) && rcaCtx.logs.length > 0) {
+          rcaCtx.logs.slice(0, 8).forEach((line) => {
+            entries.push({
+              type: 'CONTAINER_LOG',
+              timestamp: '',
+              ref: rcaCtx?.pod_id || svc,
+              level: line.includes('[ERROR]') || line.includes('[FATAL]') ? 'ERROR' : line.includes('[WARN') ? 'WARN' : 'INFO',
+              summary: line,
+            });
+          });
+        }
+
+        if (entries.length > 0 && isMounted) {
+          setRawLogsAndEvents(entries);
+        }
+      } catch (err) {
+        console.warn('[RootCauseModal] Không thể tải raw logs/events:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [serviceDisplayName, parsedAnalysis]);
 
   const rawConfidence = incidentDetail?.rca_confidence ?? incident?.rcaConfidence ?? incident?.confidence ?? parsedAnalysis?.root_cause?.confidence;
   const confidence = parseConfidence(rawConfidence);
@@ -560,21 +666,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
 
   const detectedEngine = useMemo(() => {
     if (parsedAnalysis?.engine) return parsedAnalysis.engine;
-    if (incidentDetail?.analysis_method && incidentDetail.analysis_method !== 'AI_DETERMINISTIC_RULES') {
+    if (incidentDetail?.analysis_method) {
+      if (incidentDetail.analysis_method === 'AI_DETERMINISTIC_RULES') {
+        return 'Deterministic Multi-Agent SRE';
+      }
       return incidentDetail.analysis_method;
     }
-    const exp = String(rootCauseDesc || '');
-    if (
-      exp.includes('doanh số cao lỗi') ||
-      exp.includes('ghi nhận doanh số') ||
-      exp.includes('không nên thực hiện bất kỳ hành động nào tự động') ||
-      exp.includes('Trong sự cố này') ||
-      (parsedAnalysis?.recommendation?.reason && String(parsedAnalysis.recommendation.reason).includes('ngăn chặn tình trạng tồi tệ hơn'))
-    ) {
-      return 'OpenAI GPT-4o-mini';
-    }
-    return 'Multi-Agent SRE';
-  }, [parsedAnalysis, incidentDetail, rootCauseDesc]);
+    return 'Deterministic Multi-Agent SRE';
+  }, [parsedAnalysis, incidentDetail]);
 
   const handleExecuteRemediation = () => {
     setIsExecuting(true);
@@ -1540,12 +1639,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Terminal size={15} color="#0284C7" />
-                    <span>NHẬT KÝ VIỄN TRẮC eBPF &amp; K8S EVENT INSPECTOR</span>
+                    <span>NHẬT KÝ VIỄN TRẮC eBPF &amp; K8S EVENT INSPECTOR (RAW CONTAINER LOGS &amp; EVENTS)</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const logText = evidenceList.map((e) => `[${e.type}] (${e.ref}) ${e.summary}`).join('\n');
+                      const sourceItems = rawLogsAndEvents.length > 0 ? rawLogsAndEvents : evidenceList;
+                      const logText = sourceItems
+                        .map((e) => `${e.timestamp ? `[${e.timestamp}] ` : ''}[${e.type}${e.level ? `:${e.level}` : ''}] (${e.ref}) ${e.summary}`)
+                        .join('\n');
                       handleCopyText(logText, 'logs');
                     }}
                     style={{
@@ -1575,16 +1677,38 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.75rem',
                     lineHeight: 1.6,
-                    maxHeight: '160px',
+                    maxHeight: '220px',
                     overflowY: 'auto',
                     border: '1px solid #1E293B',
                   }}
                 >
-                  <div style={{ color: '#94A3B8', marginBottom: '6px', borderBottom: '1px solid #1E293B', paddingBottom: '4px' }}>
-                    # eBPF Kernel Probe &bull; Service: {serviceDisplayName} &bull; RCA ID: {incidentDetail?.rca_id ? incidentDetail.rca_id.slice(0, 8) : (incident?.rawId ? incident?.rawId.slice(0, 8) : 'N/A')}
+                  <div style={{ color: '#94A3B8', marginBottom: '8px', borderBottom: '1px solid #1E293B', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <span># eBPF Kernel Probe &bull; Service: <strong style={{ color: '#38BDF8' }}>{serviceDisplayName}</strong> &bull; Namespace: <strong style={{ color: '#A7F3D0' }}>{namespaceStr}</strong></span>
+                    <span>RCA ID: {incidentDetail?.rca_id ? incidentDetail.rca_id.slice(0, 8) : (incident?.rawId ? incident?.rawId.slice(0, 8) : 'N/A')}</span>
                   </div>
 
-                  {evidenceList && evidenceList.length > 0 ? (
+                  {rawLogsAndEvents && rawLogsAndEvents.length > 0 ? (
+                    rawLogsAndEvents.map((ev, i) => {
+                      const isEvent = ev.type === 'K8S_EVENT';
+                      const isMetric = ev.type === 'eBPF_METRIC';
+                      const isErr = ev.level === 'ERROR' || ev.level === 'FATAL' || ev.level === 'WARNING';
+                      const badgeColor = isMetric ? '#A78BFA' : isEvent ? '#FB923C' : isErr ? '#F87171' : '#38BDF8';
+                      return (
+                        <div key={i} style={{ marginBottom: '6px', wordBreak: 'break-word' }}>
+                          {ev.timestamp && (
+                            <span style={{ color: '#64748B', marginRight: '6px' }}>[{ev.timestamp}]</span>
+                          )}
+                          <span style={{ color: badgeColor, fontWeight: 700 }}>
+                            [{ev.type}{ev.level ? `:${ev.level}` : ''}]
+                          </span>{' '}
+                          <span style={{ color: '#94A3B8' }}>({ev.ref}):</span>{' '}
+                          <span style={{ color: isMetric ? '#E9D5FF' : isErr ? '#FDE047' : '#E2E8F0' }}>
+                            {ev.summary}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : evidenceList && evidenceList.length > 0 ? (
                     evidenceList.map((ev, i) => (
                       <div key={i} style={{ marginBottom: '6px' }}>
                         <span style={{ color: '#38BDF8', fontWeight: 700 }}>[{ev.type}]</span>{' '}
@@ -1595,7 +1719,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                     ))
                   ) : (
                     <div style={{ color: '#94A3B8', fontStyle: 'italic' }}>
-                      Container 'mongod' terminated with exitCode 137 (OOM-Killer).
+                      Đang đồng bộ luồng nhật ký container &amp; sự kiện K8s cho {serviceDisplayName}...
                     </div>
                   )}
                 </div>

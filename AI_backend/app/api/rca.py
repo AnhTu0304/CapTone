@@ -145,6 +145,7 @@ async def analyze_root_cause(
                 cluster_id=payload.cluster_id,
                 incident_id=payload.incident_id,
                 request_id=payload.request_id,
+                engine="OpenAI GPT-4o-mini",
             )
         except Exception as exc:
             # Availability of an external model must not make incident analysis unavailable.
@@ -164,4 +165,5 @@ async def analyze_root_cause(
         cluster_id=payload.cluster_id,
         incident_id=payload.incident_id,
         request_id=payload.request_id,
+        engine="Deterministic Multi-Agent SRE",
     )

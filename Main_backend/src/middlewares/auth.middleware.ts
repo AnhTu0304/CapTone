@@ -12,7 +12,7 @@ import { SessionRevocationService } from '../services/sessionRevocation.service'
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK !== 'false') {
+    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK === 'true') {
       try {
         const devUser =
           (await UserModel.findFullByEmail('phamthaisang1710@gmail.com')) ||

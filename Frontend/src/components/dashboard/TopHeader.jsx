@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, getPrimaryRole, isAdmin } = useAuth();
+  const { user, logout, getInitials, isAdmin } = useAuth();
   const {
     currentOrg,
     orgList,
@@ -190,7 +190,7 @@ export const TopHeader = () => {
             <span>
               {isSwitchingOrg
                 ? 'Đang chuyển...'
-                : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa chọn tổ chức')}
+                : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa có Tổ chức')}
             </span>
             {currentOrg?.role_in_org && (
               <span
@@ -366,7 +366,11 @@ export const TopHeader = () => {
           >
             <Server size={15} color="var(--dash-text-secondary)" />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-              {currentEnv?.cluster ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}` : (currentEnv?.displayName || currentEnv?.name || 'Chọn Cụm K8s')}
+              {isLoadingEnvs
+                ? 'Đang tải cụm...'
+                : currentEnv?.cluster
+                ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}`
+                : currentEnv?.displayName || currentEnv?.name || (envList.length === 0 ? 'Chưa có Cụm K8s' : 'Chọn Cụm K8s')}
             </span>
             {currentEnv?.agentStatus === 'ONLINE' ? (
               <span
@@ -865,23 +869,6 @@ export const TopHeader = () => {
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', wordBreak: 'break-all' }}>
                   {displayEmail}
-                </div>
-                <div style={{ marginTop: '6px' }}>
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      fontSize: '0.625rem',
-                      fontWeight: 700,
-                      fontFamily: 'var(--font-mono)',
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: 'rgba(40, 233, 159, 0.15)',
-                      color: '#065F46',
-                      border: '1px solid rgba(40, 233, 159, 0.3)',
-                    }}
-                  >
-                    {getPrimaryRole(user)}
-                  </span>
                 </div>
               </div>
               {(isAdmin(user) || user?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))) && (

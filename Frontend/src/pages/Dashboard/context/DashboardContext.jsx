@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { request, setActiveOrganizationId, cancelPendingRequests } from '../../../services/apiClient';
 import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 
@@ -20,28 +20,23 @@ const normalizeNotification = (item) => {
 };
 
 export const DashboardProvider = ({ children, onNavigate }) => {
+  // Ref để chống race condition khi chuyển đổi tổ chức / tải cụm K8s
+  const activeOrgFetchIdRef = useRef(null);
+
   // 1. Organization State
   const [currentOrg, setCurrentOrg] = useState(() => {
     const savedId = localStorage.getItem('selfheal_active_org_id');
     const savedName = localStorage.getItem('selfheal_active_org_name');
     const savedRole = localStorage.getItem('selfheal_active_org_role') || 'SME_OWNER';
-    if (!savedId) {
-      return {
-        id: 'org-acme',
-        name: 'Acme Corporation',
-        slug: 'acme-corp',
-        plan: 'SME Production Pro',
-        clusterCount: 3,
-        role: savedRole,
-        role_in_org: savedRole,
-      };
+    if (!savedId || savedId === 'org-empty') {
+      return null;
     }
     return {
       id: savedId,
       name: savedName || 'Tổ chức hiện tại',
       slug: (savedName || 'org').toLowerCase().replace(/\s+/g, '-'),
       plan: 'SME Production Pro',
-      clusterCount: 3,
+      clusterCount: 0,
       role: savedRole,
       role_in_org: savedRole,
     };
@@ -54,23 +49,26 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
   // 2. User & RBAC Role State ('SME_OWNER' | 'DEVOPS' | 'VIEWER')
   const [currentUserRole, setCurrentUserRole] = useState(() => {
-    return localStorage.getItem('selfheal_active_org_role') || 'SME_OWNER';
+    return localStorage.getItem('selfheal_active_org_role') || null;
   });
 
   // 3. Dynamic Environment & K8s Cluster State
   const [currentEnv, setCurrentEnv] = useState(() => {
     const savedClusterId = localStorage.getItem('selfheal_active_cluster_id');
-    const savedClusterName = localStorage.getItem('selfheal_active_cluster_name') || 'k8s-cluster-01';
-    const savedEnvName = localStorage.getItem('selfheal_active_env_name') || 'Production';
+    const savedClusterName = localStorage.getItem('selfheal_active_cluster_name');
+    const savedEnvName = localStorage.getItem('selfheal_active_env_name');
+    if (!savedClusterId || savedClusterId === 'k8s-cluster-01') {
+      return null;
+    }
     return {
-      id: savedClusterId || 'k8s-cluster-01',
-      clusterId: savedClusterId || 'k8s-cluster-01',
-      name: `${savedEnvName} / ${savedClusterName}`,
-      displayName: `${savedEnvName} / ${savedClusterName}`,
-      cluster: savedClusterName,
-      envName: savedEnvName,
-      status: 'Healthy',
-      agentStatus: 'ONLINE',
+      id: savedClusterId,
+      clusterId: savedClusterId,
+      name: `${savedEnvName || 'Production'} / ${savedClusterName || savedClusterId}`,
+      displayName: `${savedEnvName || 'Production'} / ${savedClusterName || savedClusterId}`,
+      cluster: savedClusterName || savedClusterId,
+      envName: savedEnvName || 'Production',
+      status: 'Ready',
+      agentStatus: 'PENDING',
     };
   });
 
@@ -79,10 +77,19 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
   // Tự động tải danh sách Môi trường & Cụm K8s thực tế theo Tổ chức đang chọn
   const fetchOrgEnvironmentsAndClusters = useCallback(async (orgId) => {
-    if (!orgId || orgId.startsWith('sandbox-') || orgId === 'org-acme') return;
+    if (!orgId || orgId.startsWith('sandbox-') || orgId === 'org-empty') {
+      setEnvList([]);
+      setCurrentEnv(null);
+      setIsAgentConnected(false);
+      return;
+    }
+    activeOrgFetchIdRef.current = orgId;
     setIsLoadingEnvs(true);
     try {
       const clusters = await clusterService.getClustersByOrg(orgId);
+      // Ngăn race-condition: nếu orgId không còn là yêu cầu mới nhất, bỏ qua
+      if (activeOrgFetchIdRef.current !== orgId) return;
+
       if (Array.isArray(clusters) && clusters.length > 0) {
         const mapped = clusters.map((c) => ({
           id: c.id,
@@ -107,76 +114,41 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         }
         if (active) {
           setCurrentEnv(active);
+          setIsAgentConnected(active.agentStatus === 'ONLINE');
           localStorage.setItem('selfheal_active_cluster_id', active.id);
           localStorage.setItem('selfheal_active_cluster_name', active.cluster);
           localStorage.setItem('selfheal_active_env_name', active.envName);
         }
       } else {
-        try {
-          const envsRes = await request(`/organizations/${orgId}/environments`);
-          const items = envsRes?.data?.items || envsRes?.data || [];
-          if (Array.isArray(items) && items.length > 0) {
-            const mapped = items.map((e) => ({
-              id: e.id,
-              clusterId: null,
-              name: e.name,
-              displayName: e.name,
-              cluster: 'Chưa liên kết cụm K8s',
-              envName: e.name,
-              status: 'Pending',
-              agentStatus: 'OFFLINE',
-              nodes: 0,
-              pods: 0,
-            }));
-            setEnvList(mapped);
-            setCurrentEnv(mapped[0]);
-            localStorage.removeItem('selfheal_active_cluster_id');
-            localStorage.removeItem('selfheal_active_cluster_name');
-          } else {
-            setEnvList([]);
-            setCurrentEnv({
-              id: null,
-              clusterId: null,
-              name: 'Chưa liên kết cụm K8s',
-              displayName: 'Chưa liên kết cụm K8s',
-              cluster: null,
-              envName: 'Môi trường mặc định',
-              status: 'Pending',
-              agentStatus: 'OFFLINE',
-              nodes: 0,
-              pods: 0,
-            });
-            localStorage.removeItem('selfheal_active_cluster_id');
-            localStorage.removeItem('selfheal_active_cluster_name');
-          }
-        } catch (e) {
-          setEnvList([]);
-          setCurrentEnv({
-            id: null,
-            clusterId: null,
-            name: 'Chưa liên kết cụm K8s',
-            displayName: 'Chưa liên kết cụm K8s',
-            cluster: null,
-            envName: 'Môi trường mặc định',
-            status: 'Pending',
-            agentStatus: 'OFFLINE',
-            nodes: 0,
-            pods: 0,
-          });
-          localStorage.removeItem('selfheal_active_cluster_id');
-          localStorage.removeItem('selfheal_active_cluster_name');
-        }
+        // Tổ chức này không có Cụm K8s nào trong DB
+        setEnvList([]);
+        setCurrentEnv(null);
+        setIsAgentConnected(false);
+        localStorage.removeItem('selfheal_active_cluster_id');
+        localStorage.removeItem('selfheal_active_cluster_name');
+        localStorage.removeItem('selfheal_active_env_name');
       }
     } catch (err) {
       console.warn('[DashboardContext] Lỗi tải môi trường & cụm của tổ chức:', err);
+      if (activeOrgFetchIdRef.current === orgId) {
+        setEnvList([]);
+        setCurrentEnv(null);
+        setIsAgentConnected(false);
+      }
     } finally {
-      setIsLoadingEnvs(false);
+      if (activeOrgFetchIdRef.current === orgId) {
+        setIsLoadingEnvs(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (currentOrg?.id) {
+    if (currentOrg?.id && !currentOrg.id.startsWith('sandbox-') && currentOrg.id !== 'org-empty') {
       fetchOrgEnvironmentsAndClusters(currentOrg.id);
+    } else {
+      setCurrentEnv(null);
+      setEnvList([]);
+      setIsAgentConnected(false);
     }
   }, [currentOrg?.id, fetchOrgEnvironmentsAndClusters]);
 
@@ -222,6 +194,14 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       cancelPendingRequests();
     }
 
+    // NGAY LẬP TỨC: Xóa cụm K8s của tổ chức cũ để tránh rò rỉ dữ liệu hoặc hiển thị sai lệch
+    setCurrentEnv(null);
+    setEnvList([]);
+    setIsAgentConnected(false);
+    localStorage.removeItem('selfheal_active_cluster_id');
+    localStorage.removeItem('selfheal_active_cluster_name');
+    localStorage.removeItem('selfheal_active_env_name');
+
     const activeRole = target.role_in_org || target.role || 'SME_OWNER';
 
     setCurrentOrg({
@@ -256,7 +236,9 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       setActiveOrganizationId(target.id);
     }
 
-    triggerRefresh();
+    // Tải ngay cụm K8s thuộc tổ chức mới
+    fetchOrgEnvironmentsAndClusters(target.id);
+
     multiTabSync.broadcast(SYNC_EVENTS.ORG_SWITCHED, {
       orgId: target.id,
       orgName: target.name,
@@ -268,7 +250,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     }, 200);
 
     return true;
-  }, [orgList, triggerRefresh]);
+  }, [orgList, fetchOrgEnvironmentsAndClusters]);
 
   // Tự động tải danh sách tổ chức thật của tài khoản từ backend
   const fetchUserOrgs = useCallback(async () => {
@@ -287,30 +269,16 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
       const res = await request('/organizations/me/list');
       if (res && res.data) {
-        let rawOrgs = Array.isArray(res.data) ? res.data : [];
-
-        // Nếu danh sách trống (VD: tài khoản System Admin chưa gán trực tiếp vào organization_members),
-        // thử tải danh sách tổ chức hệ thống làm fallback
-        if (rawOrgs.length === 0) {
-          try {
-            const allRes = await request('/organizations?limit=20');
-            const fallbackItems = allRes?.data?.items || (Array.isArray(allRes?.data) ? allRes.data : []);
-            if (fallbackItems.length > 0) {
-              rawOrgs = fallbackItems;
-            }
-          } catch {
-            // Bỏ qua nếu người dùng không có quyền xem toàn bộ tổ chức
-          }
-        }
+        const rawOrgs = Array.isArray(res.data) ? res.data : [];
 
         const list = rawOrgs.map((o) => ({
           id: o.id,
           name: o.name,
           slug: o.slug,
           plan: 'SME Production Pro',
-          clusterCount: o.members_count || 1,
-          role_in_org: o.role_in_org || 'SME_OWNER',
-          role: o.role_in_org || 'SME_OWNER',
+          clusterCount: o.members_count || 0,
+          role_in_org: o.role_in_org || 'VIEWER',
+          role: o.role_in_org || 'VIEWER',
           status: o.status,
         }));
         setOrgList(list);
@@ -338,35 +306,31 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           if (setActiveOrganizationId) {
             setActiveOrganizationId(matched.id);
           }
-        } else if (list.length === 0) {
-          setCurrentOrg({
-            id: 'org-empty',
-            name: 'Chưa có Tổ chức',
-            slug: 'no-org',
-            plan: 'Standard',
-            clusterCount: 0,
-            role_in_org: 'VIEWER',
-            role: 'VIEWER',
-            status: 'INACTIVE',
-            isEmpty: true,
-          });
-          setCurrentUserRole('VIEWER');
+        } else {
+          // Người dùng không có Organization nào (list rỗng)
+          setCurrentOrg(null);
+          setCurrentUserRole(null);
+          setCurrentEnv(null);
+          setEnvList([]);
+          setIsAgentConnected(false);
           localStorage.removeItem('selfheal_active_org_id');
           localStorage.removeItem('selfheal_active_org_name');
           localStorage.removeItem('selfheal_active_org_role');
+          localStorage.removeItem('selfheal_active_cluster_id');
+          localStorage.removeItem('selfheal_active_cluster_name');
+          localStorage.removeItem('selfheal_active_env_name');
           if (setActiveOrganizationId) {
             setActiveOrganizationId(null);
           }
         }
       }
     } catch (err) {
+      console.warn('[DashboardContext] Lỗi tải danh sách tổ chức:', err);
       setOrgError(err.message || 'Không thể tải danh sách tổ chức');
-      setOrgList((prev) => {
-        if (prev.length > 0) return prev;
-        return [
-          { id: 'org-acme', name: 'Acme Corporation', slug: 'acme-corp', role_in_org: 'SME_OWNER', role: 'SME_OWNER' },
-        ];
-      });
+      setOrgList([]);
+      setCurrentOrg(null);
+      setCurrentEnv(null);
+      setEnvList([]);
     } finally {
       setIsLoadingOrgs(false);
     }
@@ -375,7 +339,8 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   useEffect(() => {
     fetchUserOrgs();
   }, [fetchUserOrgs]);
-  // Lắng nghe sự kiện chuyển đổi Organization từ các Tab khác
+
+  // Lắng nghe sự kiện chuyển đổi Organization, Login, Logout từ các Tab khác
   useEffect(() => {
     const unsubOrg = multiTabSync.subscribe(SYNC_EVENTS.ORG_SWITCHED, (payload) => {
       if (!payload || !payload.orgId) return;
@@ -396,17 +361,36 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           if (setActiveOrganizationId) {
             setActiveOrganizationId(matched.id);
           }
-          triggerRefresh();
+          fetchOrgEnvironmentsAndClusters(matched.id);
         }
         return currentList;
       });
     });
 
+    const unsubLogout = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGOUT, () => {
+      setCurrentOrg(null);
+      setOrgList([]);
+      setCurrentEnv(null);
+      setEnvList([]);
+      setIsAgentConnected(false);
+      localStorage.removeItem('selfheal_active_org_id');
+      localStorage.removeItem('selfheal_active_org_name');
+      localStorage.removeItem('selfheal_active_org_role');
+      localStorage.removeItem('selfheal_active_cluster_id');
+      localStorage.removeItem('selfheal_active_cluster_name');
+      localStorage.removeItem('selfheal_active_env_name');
+    });
+
+    const unsubLogin = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGIN, () => {
+      fetchUserOrgs();
+    });
+
     return () => {
       unsubOrg();
+      unsubLogout();
+      unsubLogin();
     };
-  }, [triggerRefresh]);
-
+  }, [fetchOrgEnvironmentsAndClusters, fetchUserOrgs]);
 
   // Notifications State with centralized persistence
   const [notifications, setNotifications] = useState(() => {

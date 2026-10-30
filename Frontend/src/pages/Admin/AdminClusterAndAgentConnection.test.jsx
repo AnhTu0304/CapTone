@@ -75,7 +75,7 @@ describe('Admin UI, Cluster & Agent Connection Verification Suite', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Tổng Quan Vận Hành Hạ Tầng/i)).toBeInTheDocument();
-        expect(screen.getByText(/Chưa có Tổ chức/i)).toBeInTheDocument();
+        expect(screen.getByText(/Chưa (có|chọn) Tổ chức/i)).toBeInTheDocument();
       });
 
       expect(setActiveOrganizationId).toHaveBeenCalledWith(null);

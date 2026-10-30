@@ -64,21 +64,22 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
     setNewOrgSlug(autoSlug);
   };
 
-  const handleCreateCompany = (e) => {
+  const handleCreateCompany = async (e) => {
     e.preventDefault();
     if (!newOrgName.trim()) {
       setCreateError('Vui lòng nhập tên công ty');
       return;
     }
     try {
-      personalPortalService.createCompany({
+      await personalPortalService.createCompany({
         name: newOrgName,
         slug: newOrgSlug || 'new-company',
         domain: newOrgDomain,
         plan: newOrgPlan,
         description: newOrgDesc,
       });
-      setCompanies(personalPortalService.getMyCompanies());
+      const updatedComps = await personalPortalService.fetchMyCompanies();
+      setCompanies(updatedComps || []);
       setIsCreateModalOpen(false);
       setNewOrgName('');
       setNewOrgSlug('');
@@ -99,11 +100,12 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
     }
   };
 
-  const handleConfirmLeave = () => {
+  const handleConfirmLeave = async () => {
     if (!leaveModalOrg) return;
     try {
       personalPortalService.leaveCompany(leaveModalOrg.id);
-      setCompanies(personalPortalService.getMyCompanies());
+      const updatedComps = await personalPortalService.fetchMyCompanies();
+      setCompanies(updatedComps || []);
       setLeaveModalOrg(null);
     } catch (err) {
       alert(err.message || 'Không thể rời công ty');
@@ -451,9 +453,11 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               }}
             >
               <Building2 size={36} color="#94A3B8" style={{ margin: '0 auto 12px auto' }} />
-              <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>Không tìm thấy Company nào</div>
+              <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>{searchTerm || roleFilter !== 'ALL' ? 'Không tìm thấy Company nào phù hợp' : 'Chưa tham gia Company nào'}</div>
               <p style={{ fontSize: '0.8125rem', margin: '4px 0 0 0' }}>
-                Thử thay đổi từ khóa tìm kiếm hoặc bấm nút "Tạo Company Mới" phía trên.
+                {searchTerm || roleFilter !== 'ALL'
+                  ? 'Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc vai trò.'
+                  : 'Hiện tại bạn chưa thuộc Company nào hoặc chưa được cấp quyền truy cập. Hãy tạo Company nếu bạn có quyền hoặc liên hệ quản trị viên để được mời tham gia.'}
               </p>
             </div>
           )}

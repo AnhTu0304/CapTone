@@ -45,14 +45,6 @@ export const OverviewPage = () => {
   const [telemetry, setTelemetry] = useState(null);
   const [telemetrySequence, setTelemetrySequence] = useState([]);
   const [clusterInfo, setClusterInfo] = useState(null);
-
-  // Kiểm tra trạng thái Agent của Cụm Kubernetes đang chọn
-  const isClusterOnline = Boolean(
-    currentEnv?.agentStatus === 'ONLINE' ||
-    clusterInfo?.status === 'ACTIVE' ||
-    clusterInfo?.status === 'HEALTHY' ||
-    (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
-  );
   const [isWsLive, setIsWsLive] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [aiRecommendations, setAiRecommendations] = useState([]);
@@ -64,6 +56,14 @@ export const OverviewPage = () => {
   const [chartError, setChartError] = useState(null);
   const [isDataStale, setIsDataStale] = useState(false);
   const activeChartRequestRef = useRef(0);
+
+  // Kiểm tra trạng thái Agent của Cụm Kubernetes đang chọn
+  const isClusterOnline = Boolean(
+    currentEnv?.agentStatus === 'ONLINE' ||
+    clusterInfo?.status === 'ACTIVE' ||
+    clusterInfo?.status === 'HEALTHY' ||
+    (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
+  );
 
   // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn với race-condition guard
   const loadClusterTrend = useCallback(async (range) => {

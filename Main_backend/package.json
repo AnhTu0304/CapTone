@@ -39,7 +39,8 @@
     "test:logs-stream": "tsx --test src/test/logStreamApi.test.ts",
     "test:logs-isolation": "tsx --test src/test/logsSecurityAndLoad.test.ts",
     "test:k8s-events": "tsx --test --test-concurrency=1 src/test/kubernetesEvents.test.ts",
-    "test:apm": "tsx --test src/test/apmApi.test.ts"
+    "test:apm": "tsx --test src/test/apmApi.test.ts",
+    "test:role-security": "tsx --test src/test/roleAssignmentSecurity.test.ts"
   },
   "keywords": [
     "nodejs",
@@ -59,6 +60,7 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "multer": "^2.5.0",
     "nodemailer": "^10.1.1",
     "pg": "^8.23.0",
     "ws": "^8.22.0",
@@ -70,6 +72,7 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.9",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2",

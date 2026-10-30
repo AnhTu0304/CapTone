@@ -267,6 +267,7 @@ class RCAResponse(BaseModel):
     cluster_id: str | None = None
     incident_id: str | None = None
     request_id: str | None = None
+    engine: str = "Deterministic Multi-Agent SRE"
 
 
 class LLMRCAResult(BaseModel):

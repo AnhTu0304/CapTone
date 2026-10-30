@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.prediction import router as prediction_router
 from app.api.rca import router as rca_router
+from app.api.model_management import router as model_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.services.prediction_service import PredictionService
@@ -59,6 +60,7 @@ app = FastAPI(
 )
 app.include_router(prediction_router)
 app.include_router(rca_router)
+app.include_router(model_router)
 
 
 @app.middleware("http")

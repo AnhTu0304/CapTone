@@ -1027,7 +1027,7 @@ export class K8sStatusService {
 
     const params: any[] = [];
     let sql = `
-      SELECT
+      SELECT DISTINCT ON (c.name, COALESCE(ns.name, 'default'), w.name)
         w.id,
         w.cluster_id,
         c.name AS cluster_name,
@@ -1052,9 +1052,9 @@ export class K8sStatusService {
         w.updated_at,
         COALESCE(ns.name, 'default') AS namespace
       FROM workloads w
-      JOIN clusters c ON w.cluster_id = c.id
+      JOIN clusters c ON w.cluster_id::text = c.id::text
       LEFT JOIN environments e ON c.environment_id = e.id
-      LEFT JOIN namespaces ns ON w.namespace_id = ns.id
+      LEFT JOIN namespaces ns ON w.namespace_id::text = ns.id::text
       LEFT JOIN LATERAL (
         SELECT a.status
         FROM agents a
@@ -1064,7 +1064,7 @@ export class K8sStatusService {
       ) ag ON TRUE
       WHERE w.deleted_at IS NULL
         AND c.deleted_at IS NULL
-        AND COALESCE(w.workload_type, 'Deployment') = 'Deployment'
+        AND COALESCE(w.workload_type, 'Deployment') IN ('Deployment', 'StatefulSet')
     `;
 
     if (resolved.effectiveOrgId) {
@@ -1085,7 +1085,7 @@ export class K8sStatusService {
       sql += ` AND ns.name = $${params.length}`;
     }
 
-    sql += ` ORDER BY c.name ASC, ns.name ASC, w.name ASC`;
+    sql += ` ORDER BY c.name ASC, COALESCE(ns.name, 'default') ASC, w.name ASC, w.updated_at DESC NULLS LAST`;
 
     if (pagination.limit !== null) {
       params.push(pagination.limit, pagination.offset);
@@ -1140,9 +1140,9 @@ export class K8sStatusService {
          w.updated_at,
          COALESCE(ns.name, 'default') AS namespace
        FROM workloads w
-       JOIN clusters c ON w.cluster_id = c.id
+       JOIN clusters c ON w.cluster_id::text = c.id::text
        LEFT JOIN environments e ON c.environment_id = e.id
-       LEFT JOIN namespaces ns ON w.namespace_id = ns.id
+       LEFT JOIN namespaces ns ON w.namespace_id::text = ns.id::text
        LEFT JOIN LATERAL (
          SELECT a.status
          FROM agents a

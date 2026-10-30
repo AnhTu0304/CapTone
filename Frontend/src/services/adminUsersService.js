@@ -30,6 +30,7 @@ export const adminUsersService = {
     if (params.limit) query.append('limit', String(params.limit));
     if (params.search && params.search.trim()) query.append('search', params.search.trim());
     if (params.status && params.status !== 'ALL') query.append('status', params.status.trim().toUpperCase());
+    if (params.role && params.role !== 'ALL') query.append('role', params.role.trim().toUpperCase());
     if (params.sort_by) query.append('sort_by', params.sort_by);
     if (params.order) query.append('order', params.order);
 
@@ -114,6 +115,39 @@ export const adminUsersService = {
     const response = await request(`/users/${encodeURIComponent(userId)}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+    return response?.data;
+  },
+
+  /**
+   * Gán vai trò hệ thống hoặc tổ chức cho người dùng
+   * @param {string} userId
+   * @param {string} role
+   * @param {string} [reason]
+   * @returns {Promise<any>}
+   */
+  async assignRole(userId, role, reason) {
+    if (!userId) throw new Error('Yêu cầu ID người dùng');
+    if (!role) throw new Error('Yêu cầu tên vai trò cần cấp');
+    const response = await request('/roles/assign', {
+      method: 'POST',
+      body: JSON.stringify({ userId, role, reason }),
+    });
+    return response?.data;
+  },
+
+  /**
+   * Thu hồi vai trò hệ thống của người dùng
+   * @param {string} userId
+   * @param {string} role
+   * @returns {Promise<any>}
+   */
+  async revokeRole(userId, role) {
+    if (!userId) throw new Error('Yêu cầu ID người dùng');
+    if (!role) throw new Error('Yêu cầu tên vai trò cần thu hồi');
+    const response = await request('/roles/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ userId, role }),
     });
     return response?.data;
   },

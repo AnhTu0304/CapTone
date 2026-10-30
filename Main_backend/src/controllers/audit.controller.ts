@@ -117,4 +117,43 @@ export class AuditController {
       next(error);
     }
   }
+
+  /**
+   * [GET] /api/v1/organizations/:id/audit-logs/stats (hoặc :orgId)
+   * Thống kê kiểm toán 7 ngày gần nhất và các chỉ số KPI theo tổ chức
+   */
+  public static async getOrganizationAuditStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const orgMember = (req as any).orgMember;
+
+      if (!user) {
+        throw new ApiError(401, 'Yêu cầu đăng nhập trước khi truy cập');
+      }
+
+      const orgId = orgMember?.organizationId || req.params.orgId || req.params.id;
+      if (!orgId) {
+        throw new ApiError(400, 'Không tìm thấy định danh tổ chức');
+      }
+
+      const stats = await AuditService.getStatsByOrganization(orgId);
+      return ApiResponse.success(res, 'Lấy thống kê kiểm toán tổ chức thành công', stats, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [GET] /api/v1/audit-logs/stats
+   * Thống kê toàn hệ thống cho Platform Admin
+   */
+  public static async getPlatformAuditStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const orgId = (req.query.organization_id as string) || null;
+      const stats = await AuditService.getStatsByOrganization(orgId);
+      return ApiResponse.success(res, 'Lấy thống kê kiểm toán hệ thống thành công', stats, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
