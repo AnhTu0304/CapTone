@@ -14,11 +14,15 @@ import { nodeRoutes } from './node.routes';
 import { podRoutes } from './pod.routes';
 import { deploymentRoutes } from './deployment.routes';
 import { auditRoutes } from './audit.routes';
+import { aiModelRegistryRoutes } from './aiModelRegistry.routes';
+import { adminRoutes } from './admin.routes';
+import { reportRoutes } from './report.routes';
 
 const apiRouter = Router();
 
 apiRouter.use('/health', healthRoutes);
 apiRouter.use('/ai', aiRoutes);
+apiRouter.use('/ai-models', aiModelRegistryRoutes);
 apiRouter.use('/healing', healingActionRoutes);
 apiRouter.use('/rule-engine', ruleEngineRoutes);
 apiRouter.use('/telemetry', telemetryRoutes);
@@ -33,5 +37,7 @@ apiRouter.use('/nodes', nodeRoutes);
 apiRouter.use('/pods', podRoutes);
 apiRouter.use('/deployments', deploymentRoutes);
 apiRouter.use('/audit-logs', auditRoutes);
+apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/reports', reportRoutes);
 
 export default apiRouter;

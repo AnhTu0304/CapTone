@@ -17,6 +17,11 @@ export class HealthController {
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       nodeVersion: process.version,
+      memory: {
+        rssMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
+        heapUsedMb: Math.round(process.memoryUsage().heapUsed / (1024 * 1024)),
+        heapTotalMb: Math.round(process.memoryUsage().heapTotal / (1024 * 1024)),
+      },
       database: {
         status: dbHealth.status,
         name: config.db.database,

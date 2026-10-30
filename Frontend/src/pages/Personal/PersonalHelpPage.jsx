@@ -64,7 +64,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
       category: ticketCategory,
       impact: ticketImpact,
       companyId: ticketCompanyId,
-      companyName: companyObj ? companyObj.name : 'Acme Corporation',
+      companyName: companyObj ? companyObj.name : 'Chưa chọn Công ty',
       description: ticketDesc,
     });
 

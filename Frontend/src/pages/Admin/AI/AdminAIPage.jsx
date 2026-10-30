@@ -1,29 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { 
-  BrainCircuit, 
+  BrainCircuit,
+  Sparkles, 
   Cpu, 
-  Activity, 
-  GitFork, 
-  BarChart2, 
   RefreshCw,
-  Sparkles,
   Scale
 } from 'lucide-react';
 import {
   getAIOverviewKPIs,
-  getAIModels,
-  getAIPredictions,
-  getAIRCAAnalyses,
-  getAIPerformanceMetrics,
 } from '../../../services/adminAIService';
+import { getRegisteredModels } from '../../../services/aiModelRegistryService';
 
 import AINavTabs from '../../../components/admin/ai/AINavTabs';
 import AIOverviewSection from '../../../components/admin/ai/AIOverviewSection';
 import AIModelsTable from '../../../components/admin/ai/AIModelsTable';
-import AIPredictionsTable from '../../../components/admin/ai/AIPredictionsTable';
-import AIRCASection from '../../../components/admin/ai/AIRCASection';
-import AIPerformanceView from '../../../components/admin/ai/AIPerformanceView';
 import AIComparisonView from '../../../components/admin/ai/AIComparisonView';
 
 /**
@@ -33,9 +24,6 @@ import AIComparisonView from '../../../components/admin/ai/AIComparisonView';
 export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
   const [kpis, setKpis] = useState(null);
   const [models, setModels] = useState([]);
-  const [predictions, setPredictions] = useState([]);
-  const [rcaAnalyses, setRcaAnalyses] = useState([]);
-  const [performanceMetrics, setPerformanceMetrics] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -46,22 +34,13 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
       if (currentSection === 'overview') {
         const [kpiRes, modRes] = await Promise.all([
           getAIOverviewKPIs(),
-          getAIModels(),
+          getRegisteredModels(),
         ]);
         setKpis(kpiRes);
         setModels(modRes);
       } else if (currentSection === 'models') {
-        const data = await getAIModels();
+        const data = await getRegisteredModels();
         setModels(data);
-      } else if (currentSection === 'predictions') {
-        const data = await getAIPredictions();
-        setPredictions(data);
-      } else if (currentSection === 'rca') {
-        const data = await getAIRCAAnalyses();
-        setRcaAnalyses(data);
-      } else if (currentSection === 'performance') {
-        const data = await getAIPerformanceMetrics();
-        setPerformanceMetrics(data);
       }
     } catch (err) {
       console.error('Lỗi nạp dữ liệu phân hệ AI Platform:', err);
@@ -94,24 +73,6 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
           title: 'Đánh Giá & So Sánh Mô Hình Trước / Sau (Model Version Comparison)',
           desc: 'Đối chiếu trực tiếp chỉ số hiệu năng phiên bản cũ vs phiên bản mới, kiểm soát trôi dữ liệu và lịch sử đánh giá.',
           icon: Scale,
-        };
-      case 'predictions':
-        return {
-          title: 'Suy Luận & Dự Báo Dị Thường (AI Predictions)',
-          desc: 'Nhật ký các suy luận thời gian thực, vector đặc trưng đầu vào (prediction_inputs) và khuyến nghị hành động phục hồi.',
-          icon: Activity,
-        };
-      case 'rca':
-        return {
-          title: 'Đồ Thị Nhân Quả & Phân Tích Sự Cố (Root Cause Analysis - RCA)',
-          desc: 'Khám phá chuỗi lan truyền sự cố, bằng chứng viễn trắc eBPF đa tầng và khuyến nghị hành động phục hồi tương ứng.',
-          icon: GitFork,
-        };
-      case 'performance':
-        return {
-          title: 'Chỉ Số Hiệu Năng & Kiểm Chuẩn (Model Performance Matrix)',
-          desc: 'Ma trận đo lường định lượng trên tập kiểm thử (Accuracy, Precision, Recall, F1, MAE/RMSE, False Positive Rate). Không suy đoán số liệu.',
-          icon: BarChart2,
         };
       case 'overview':
       default:
@@ -288,37 +249,13 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
         {currentSection === 'comparison' && (
           <AIComparisonView />
         )}
-
-        {currentSection === 'predictions' && (
-          <AIPredictionsTable
-            predictions={predictions}
-            isLoading={isLoading}
-            onRefresh={loadData}
-          />
-        )}
-
-        {currentSection === 'rca' && (
-          <AIRCASection
-            analyses={rcaAnalyses}
-            isLoading={isLoading}
-            onRefresh={loadData}
-          />
-        )}
-
-        {currentSection === 'performance' && (
-          <AIPerformanceView
-            metrics={performanceMetrics}
-            isLoading={isLoading}
-            onRefresh={loadData}
-          />
-        )}
       </div>
     </div>
   );
 };
 
 AdminAIPage.propTypes = {
-  currentSection: PropTypes.oneOf(['overview', 'models', 'comparison', 'predictions', 'rca', 'performance']),
+  currentSection: PropTypes.oneOf(['overview', 'models', 'comparison']),
   onNavigate: PropTypes.func,
 };
 

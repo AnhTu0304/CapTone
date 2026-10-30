@@ -4,6 +4,8 @@
  * Provides snapshot-based data models with zero fake animations or inline mock data in JSX.
  */
 
+import { request } from './apiClient';
+
 export const SCOPE_OPTIONS = {
   organizations: [
     { id: 'acme-corp', name: 'Acme Infrastructure Corp (Chính)' },
@@ -304,11 +306,27 @@ export const fetchAdminOverview = (scope = {}) => {
         hour12: false,
       });
 
-      resolve({
-        status: 'ready',
-        timestamp: snapshotTimestamp,
-        data: BASE_OVERVIEW_DATA,
-      });
+      // 5. Query live KPI stats from Backend API
+      request('/admin/dashboard/stats')
+        .then((apiRes) => {
+          const liveKpi = apiRes?.data;
+          resolve({
+            status: 'ready',
+            timestamp: snapshotTimestamp,
+            data: {
+              ...BASE_OVERVIEW_DATA,
+              kpi: liveKpi ? { ...BASE_OVERVIEW_DATA.kpi, ...liveKpi } : BASE_OVERVIEW_DATA.kpi,
+            },
+          });
+        })
+        .catch((err) => {
+          console.warn('[AdminOverview] API thống kê không khả dụng, dùng dữ liệu đối chiếu dự phòng:', err?.message || err);
+          resolve({
+            status: 'ready',
+            timestamp: snapshotTimestamp,
+            data: BASE_OVERVIEW_DATA,
+          });
+        });
     }, 120);
   });
 };

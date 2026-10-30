@@ -6,11 +6,11 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 class MetricPoint(BaseModel):
     """Current incident metrics used by RCA; Kubernetes counts remain optional."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
-    cpu: float = Field(ge=0, le=100)
-    ram: float = Field(ge=0, le=100)
-    disk: float = Field(ge=0, le=100)
+    cpu: float = Field(ge=0)
+    ram: float = Field(ge=0)
+    disk: float = Field(ge=0)
     request_rate: float = Field(ge=0)
     latency: float = Field(ge=0)
     http_5xx_rate: float = Field(

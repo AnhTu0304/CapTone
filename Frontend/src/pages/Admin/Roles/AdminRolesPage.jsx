@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -10,72 +10,34 @@ import {
   Clock,
   Shield,
   UserCheck,
+  RefreshCw,
+  AlertTriangle,
+  X,
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Building2,
+  Activity,
+  Copy,
+  Check,
+  Calendar,
+  Globe,
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
-
-/**
- * Danh sách người dùng mẫu với đầy đủ các vai trò trong hệ thống RBAC
- */
-const INITIAL_USERS = [
-  {
-    id: 'usr-01',
-    name: 'Nguyen Van Admin',
-    email: 'admin@selfheal.systems',
-    currentRole: 'SUPER_ADMIN',
-    org: 'Toàn Hệ Thống (Platform Root)',
-    lastActive: 'Vừa xong',
-  },
-  {
-    id: 'usr-02',
-    name: 'Tran Kiem Dinh',
-    email: 'tran.kiemdinh@selfheal.systems',
-    currentRole: 'ADMIN',
-    org: 'Platform Operations Lead',
-    lastActive: '15 phút trước',
-  },
-  {
-    id: 'usr-03',
-    name: 'Le Thi Owner',
-    email: 'le.owner@finflow.io',
-    currentRole: 'SME_OWNER',
-    org: 'FinFlow Pay',
-    lastActive: '1 giờ trước',
-  },
-  {
-    id: 'usr-04',
-    name: 'Pham DevOps Lead',
-    email: 'devops.lead@nexus.logistics',
-    currentRole: 'DEVOPS',
-    org: 'Nexus Logistics AI',
-    lastActive: 'Hôm qua',
-  },
-  {
-    id: 'usr-05',
-    name: 'Hoang Viewer An Ninh',
-    email: 'hoang.security@viettel.vn',
-    currentRole: 'VIEWER',
-    org: 'Viettel SME Cloud',
-    lastActive: '3 ngày trước',
-  },
-  {
-    id: 'usr-06',
-    name: 'Vuong Minh Tam',
-    email: 'tam.vuong@acme.com',
-    currentRole: 'DEVOPS',
-    org: 'Acme Corporation',
-    lastActive: '4 ngày trước',
-  },
-];
+import adminUsersService from '../../../services/adminUsersService';
+import { getAuditLogs } from '../../../services/adminAuditLogsService';
 
 /**
  * Ma trận phân quyền chi tiết cho toàn bộ các vai trò (Role Permissions Matrix)
+ * Phản ánh chính sách bảo mật thực tế được thực thi ở tầng backend middleware
  */
 const PERMISSIONS_MATRIX = [
   {
     module: 'Quản Trị Toàn Nền Tảng & RBAC',
     apiPath: '/api/v1/roles/**',
     SUPER_ADMIN: 'Toàn quyền (Tạo, gán, thu hồi vai trò toàn sàn)',
-    ADMIN: 'Xem danh sách, kiểm tra quyền hạn',
+    ADMIN: 'Xem danh sách, kiểm tra thẩm quyền',
     SME_OWNER: 'Phân quyền nội bộ trong doanh nghiệp mình',
     DEVOPS: 'Không có quyền (Deny)',
     VIEWER: 'Chỉ xem danh sách (Read-only)',
@@ -135,56 +97,22 @@ const PERMISSIONS_MATRIX = [
     VIEWER: 'Xem đồ thị dự báo dị thường (Read-only)',
   },
   {
-    module: 'Giám Sát & Cảnh Báo Thời Gian Thực (Monitoring & Alerts)',
-    apiPath: '/api/v1/monitoring/**',
-    SUPER_ADMIN: 'Toàn quyền cấu hình kênh cảnh báo & ngưỡng khẩn cấp',
+    module: 'Giám Sát & Viễn Trắc Thời Gian Thực (Telemetry & APM)',
+    apiPath: '/api/v1/telemetry/**',
+    SUPER_ADMIN: 'Toàn quyền cấu hình telemetry & ngưỡng khẩn cấp',
     ADMIN: 'Giám sát trực tiếp thời gian thực, quản lý SLA',
     SME_OWNER: 'Nhận cảnh báo sự cố ảnh hưởng doanh nghiệp',
     DEVOPS: 'Tiếp nhận cảnh báo P0/P1, xử lý khắc phục tức thì',
     VIEWER: 'Xem bảng tổng quan giám sát',
   },
-];
-
-const INITIAL_ROLE_AUDIT_LOGS = [
   {
-    id: 'aud-01',
-    timestamp: '2026-10-21 23:45:10',
-    actor: 'admin@selfheal.systems',
-    target: 'tran.kiemdinh@selfheal.systems',
-    action: 'CẬP NHẬT VAI TRÒ',
-    oldRole: 'DEVOPS',
-    newRole: 'ADMIN',
-    reason: 'Bổ nhiệm Quản trị viên vận hành nền tảng',
-  },
-  {
-    id: 'aud-02',
-    timestamp: '2026-10-20 14:22:04',
-    actor: 'admin@selfheal.systems',
-    target: 'devops.lead@nexus.logistics',
-    action: 'CẬP NHẬT VAI TRÒ',
-    oldRole: 'VIEWER',
-    newRole: 'DEVOPS',
-    reason: 'Cấp quyền kỹ sư vận hành hạ tầng cụm Kubernetes',
-  },
-  {
-    id: 'aud-03',
-    timestamp: '2026-10-18 09:15:30',
-    actor: 'admin@selfheal.systems',
-    target: 'le.owner@finflow.io',
-    action: 'CẬP NHẬT VAI TRÒ',
-    oldRole: 'VIEWER',
-    newRole: 'SME_OWNER',
-    reason: 'Kích hoạt vai trò Chủ doanh nghiệp cho đối tác FinFlow Pay',
-  },
-  {
-    id: 'aud-04',
-    timestamp: '2026-10-15 11:08:22',
-    actor: 'admin@selfheal.systems',
-    target: 'tam.vuong@acme.com',
-    action: 'CẬP NHẬT VAI TRÒ',
-    oldRole: 'ADMIN',
-    newRole: 'DEVOPS',
-    reason: 'Điều chuyển phụ trách kỹ thuật cụm',
+    module: 'Nhật Ký Kiểm Toán An Ninh (Audit Logs)',
+    apiPath: '/api/v1/audit-logs/**',
+    SUPER_ADMIN: 'Toàn quyền tra cứu kiểm toán toàn hệ thống',
+    ADMIN: 'Tra cứu kiểm toán vận hành (Read-only)',
+    SME_OWNER: 'Tra cứu nhật ký nội bộ tổ chức',
+    DEVOPS: 'Tra cứu nhật ký thao tác kỹ thuật',
+    VIEWER: 'Không có quyền (Deny)',
   },
 ];
 
@@ -193,6 +121,7 @@ const getRoleBadgeStyle = (role) => {
     case 'SUPER_ADMIN':
       return { bg: '#FEF2F2', border: '#FECACA', color: '#DC2626', label: 'SUPER_ADMIN (Tối Cao)' };
     case 'ADMIN':
+    case 'SYSTEM_ADMIN':
       return { bg: '#FEFCE8', border: '#FDE68A', color: '#D97706', label: 'ADMIN (Vận Hành)' };
     case 'SME_OWNER':
       return { bg: '#ECFDF5', border: '#A7F3D0', color: '#059669', label: 'SME_OWNER (Chủ DN)' };
@@ -201,98 +130,284 @@ const getRoleBadgeStyle = (role) => {
     case 'VIEWER':
       return { bg: '#F1F5F9', border: '#CBD5E1', color: '#64748B', label: 'VIEWER (Chỉ Xem)' };
     default:
-      return { bg: '#F8FAFC', border: '#E2E8F0', color: '#475569', label: role };
+      return { bg: '#F8FAFC', border: '#E2E8F0', color: '#475569', label: role || 'USER' };
   }
+};
+
+/**
+ * Trích xuất vai trò chính của người dùng từ dữ liệu thực tế
+ */
+export const resolveUserRole = (u) => {
+  if (Array.isArray(u.system_roles) && u.system_roles.length > 0) {
+    if (u.system_roles.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
+    if (u.system_roles.includes('ADMIN') || u.system_roles.includes('SYSTEM_ADMIN')) return 'ADMIN';
+  }
+  if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
+    const codes = u.organization_roles.map((r) => (r.role_code || r.role_name || '').toUpperCase());
+    if (codes.includes('SME_OWNER')) return 'SME_OWNER';
+    if (codes.includes('DEVOPS')) return 'DEVOPS';
+    if (codes.includes('VIEWER')) return 'VIEWER';
+  }
+  return u.currentRole || 'VIEWER';
+};
+
+/**
+ * Trích xuất tên công ty/tổ chức của người dùng
+ */
+export const resolveUserOrg = (u) => {
+  if (Array.isArray(u.system_roles) && u.system_roles.includes('SUPER_ADMIN')) {
+    return 'Toàn Hệ Thống (Platform Root)';
+  }
+  if (Array.isArray(u.system_roles) && (u.system_roles.includes('ADMIN') || u.system_roles.includes('SYSTEM_ADMIN'))) {
+    return 'Platform Operations';
+  }
+  if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
+    if (u.organization_roles.length === 1) {
+      return u.organization_roles[0].organization_name || 'Doanh nghiệp liên kết';
+    }
+    const ownerOrg = u.organization_roles.find((r) => (r.role_code || r.role_name) === 'SME_OWNER');
+    const primaryName = (ownerOrg || u.organization_roles[0]).organization_name || 'Doanh nghiệp liên kết';
+    return primaryName + ' (+' + (u.organization_roles.length - 1) + ' khác)';
+  }
+  return u.org || 'Chưa liên kết tổ chức';
 };
 
 export const AdminRolesPage = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('assignment'); // 'assignment' | 'matrix' | 'audit'
-  const [search, setSearch] = useState('');
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
-  const [toastMessage, setToastMessage] = useState('');
-  const [userList, setUserList] = useState(INITIAL_USERS);
-  const [auditLogs, setAuditLogs] = useState(INITIAL_ROLE_AUDIT_LOGS);
 
-  // Modal gán vai trò chi tiết
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Tab 1: Users state
+  const [users, setUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [userError, setUserError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+
+  // Debounce search input (300ms) để tối ưu hiệu năng và tránh spam API
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Reset page về 1 khi từ khóa tìm kiếm hoặc bộ lọc thay đổi
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedRoleFilter]);
+
+  // Tab 3: Audit Logs state
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+
+  // Modal 1: Gán vai trò
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [targetRole, setTargetRole] = useState('ADMIN');
   const [assignReason, setAssignReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState(null);
 
-  const handleRoleChange = (userId, newRole) => {
-    const targetUserObj = userList.find((u) => u.id === userId);
-    if (!targetUserObj) return;
+  // Modal 2: Chi tiết người dùng
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [detailUser, setDetailUser] = useState(null);
+  const [detailModalTab, setDetailModalTab] = useState('profile'); // 'profile' | 'activity'
+  const [userActivities, setUserActivities] = useState([]);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
+  const [activityError, setActivityError] = useState(null);
+  const [copiedId, setCopiedId] = useState(false);
 
-    const oldRole = targetUserObj.currentRole;
-    if (oldRole === newRole) return;
+  // Toast notification
+  const [toastMessage, setToastMessage] = useState('');
 
-    setUserList((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, currentRole: newRole } : u))
-    );
-
-    // Ghi nhận vào lịch sử thay đổi quyền hạn
-    const newLog = {
-      id: `aud-${Date.now()}`,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      actor: user?.email || 'admin@selfheal.systems',
-      target: targetUserObj.email,
-      action: 'CẬP NHẬT VAI TRÒ',
-      oldRole,
-      newRole,
-      reason: 'Thay đổi trực tiếp bởi Super Admin qua giao diện phân quyền',
-    };
-    setAuditLogs((prev) => [newLog, ...prev]);
-
-    setToastMessage(`Đã cập nhật vai trò của "${targetUserObj.email}" từ [${oldRole}] sang [${newRole}] thành công!`);
-    setTimeout(() => setToastMessage(''), 3500);
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 4500);
   };
 
-  const openAssignModal = (u) => {
-    setSelectedUser(u);
-    setTargetRole(u.currentRole);
-    setAssignReason('');
-    setIsModalOpen(true);
-  };
+  /**
+   * Tải danh sách người dùng thực tế từ API
+   */
+  const fetchUsers = useCallback(async () => {
+    setIsLoadingUsers(true);
+    setUserError(null);
+    try {
+      const res = await adminUsersService.getUsers({
+        page,
+        limit: pageSize,
+        search: debouncedSearch.trim() || undefined,
+        role: selectedRoleFilter !== 'ALL' ? selectedRoleFilter : undefined,
+      });
 
-  const handleModalSubmit = (e) => {
-    e.preventDefault();
-    if (!selectedUser) return;
+      const rawItems = res?.items || (Array.isArray(res) ? res : []);
+      const pagination = res?.pagination || {};
 
-    const oldRole = selectedUser.currentRole;
-    if (oldRole !== targetRole) {
-      setUserList((prev) =>
-        prev.map((u) => (u.id === selectedUser.id ? { ...u, currentRole: targetRole } : u))
+      const mapped = rawItems.map((u) => ({
+        id: u.id,
+        name: u.full_name || u.name || 'Người dùng',
+        email: u.email,
+        currentRole: resolveUserRole(u),
+        org: resolveUserOrg(u),
+        status: u.status || 'ACTIVE',
+        lastActive: u.last_login_at
+          ? new Date(u.last_login_at).toLocaleString('vi-VN')
+          : (u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN') : 'Chưa đăng nhập'),
+        raw: u,
+      }));
+
+      setUsers(mapped);
+      setTotalPages(pagination.totalPages || 1);
+      setTotalUsers(pagination.total || mapped.length);
+    } catch (err) {
+      console.error('[AdminRolesPage] Lỗi lấy danh sách người dùng:', err);
+      setUserError(err.message || 'Không thể tải danh sách người dùng từ hệ thống');
+      setUsers([]);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [page, pageSize, debouncedSearch, selectedRoleFilter]);
+
+  /**
+   * Tải nhật ký kiểm toán phân quyền thực tế từ API
+   */
+  const fetchAuditLogs = useCallback(async () => {
+    setIsLoadingAudit(true);
+    setAuditError(null);
+    try {
+      const res = await getAuditLogs(
+        { action: 'ALL' },
+        { page: 1, pageSize: 20 },
+        { field: 'timestamp', direction: 'desc' }
       );
 
-      const newLog = {
-        id: `aud-${Date.now()}`,
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        actor: user?.email || 'admin@selfheal.systems',
-        target: selectedUser.email,
-        action: 'CẬP NHẬT VAI TRÒ',
-        oldRole,
-        newRole: targetRole,
-        reason: assignReason.trim() || 'Cập nhật có căn cứ nghiệp vụ từ Super Admin',
-      };
-      setAuditLogs((prev) => [newLog, ...prev]);
+      const items = res?.data || [];
+      // Lọc các bản ghi liên quan đến phân quyền hoặc lấy toàn bộ kiểm toán bảo mật
+      const roleLogs = items.filter(
+        (l) =>
+          l.action?.includes('ROLE') ||
+          l.action?.includes('PERMISSION') ||
+          l.action?.includes('ASSIGN') ||
+          l.action?.includes('USER')
+      );
 
-      setToastMessage(`Đã phân bổ lại vai trò [${targetRole}] cho tài khoản "${selectedUser.email}"!`);
-      setTimeout(() => setToastMessage(''), 3500);
+      setAuditLogs(roleLogs.length > 0 ? roleLogs : items);
+    } catch (err) {
+      console.error('[AdminRolesPage] Lỗi tải nhật ký kiểm toán:', err);
+      setAuditError(err.message || 'Không thể tải nhật ký kiểm toán');
+      setAuditLogs([]);
+    } finally {
+      setIsLoadingAudit(false);
     }
+  }, []);
 
-    setIsModalOpen(false);
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      fetchAuditLogs();
+    }
+  }, [activeTab, fetchAuditLogs]);
+
+  // Mở modal điều chỉnh vai trò
+  const openAssignModal = (u) => {
+    setSelectedUser(u);
+    setTargetRole(u.currentRole || 'ADMIN');
+    setAssignReason('');
+    setModalError(null);
+    setIsRoleModalOpen(true);
   };
 
-  const filteredUsers = userList.filter((u) => {
-    const matchSearch =
-      !search ||
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.org.toLowerCase().includes(search.toLowerCase());
-    const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
-    return matchSearch && matchRole;
-  });
+  // Tải lịch sử hoạt động thời gian thực của người dùng
+  const fetchUserActivities = useCallback(async (userId) => {
+    if (!userId) return;
+    setIsLoadingActivities(true);
+    setActivityError(null);
+    try {
+      const res = await getAuditLogs(
+        { userId },
+        { page: 1, pageSize: 20 },
+        { field: 'timestamp', direction: 'desc' }
+      );
+      const items = res?.data || (Array.isArray(res) ? res : []);
+      setUserActivities(items);
+    } catch (err) {
+      console.warn('[AdminRolesPage] Lỗi lấy lịch sử hoạt động người dùng:', err);
+      setActivityError(err.message || 'Không thể tải lịch sử hoạt động thời gian thực');
+      setUserActivities([]);
+    } finally {
+      setIsLoadingActivities(false);
+    }
+  }, []);
+
+  // Mở modal chi tiết người dùng và đồng bộ dữ liệu thời gian thực
+  const openDetailModal = (u) => {
+    setDetailUser(u);
+    setDetailModalTab('profile');
+    setIsDetailModalOpen(true);
+    setCopiedId(false);
+    fetchUserActivities(u.id);
+  };
+
+  // Xử lý nộp form thay đổi vai trò
+  const handleModalSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedUser || isSubmitting) return;
+
+    const oldRole = selectedUser.currentRole;
+    if (oldRole === targetRole) {
+      setModalError(`Người dùng "${selectedUser.email}" hiện tại đã mang vai trò [${targetRole}]. Vui lòng chọn vai trò khác để điều chuyển.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setModalError(null);
+
+    try {
+      await adminUsersService.assignRole(
+        selectedUser.id,
+        targetRole,
+        assignReason.trim() || `Điều chỉnh vai trò từ ${oldRole} sang ${targetRole} bởi Super Admin`
+      );
+
+      showToast(`Đã điều chuyển vai trò của "${selectedUser.email}" từ [${oldRole}] sang [${targetRole}] thành công!`);
+      setIsRoleModalOpen(false);
+
+      // Refresh dữ liệu
+      await fetchUsers();
+      if (activeTab === 'audit') {
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.error('[AdminRolesPage] Lỗi gán vai trò:', err);
+      setModalError(err.message || 'Không thể cập nhật vai trò người dùng');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Lọc người dùng kết hợp đa chiều: vai trò + từ khóa tìm kiếm (tên, email, công ty, mã người dùng)
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
+      if (!matchRole) return false;
+      if (!search.trim()) return true;
+      const term = search.toLowerCase().trim();
+      const matchName = (u.name || '').toLowerCase().includes(term);
+      const matchEmail = (u.email || '').toLowerCase().includes(term);
+      const matchOrg = (u.org || '').toLowerCase().includes(term);
+      const matchId = (u.id || '').toLowerCase().includes(term);
+      const matchRoleCode = (u.currentRole || '').toLowerCase().includes(term);
+      return matchName || matchEmail || matchOrg || matchId || matchRoleCode;
+    });
+  }, [users, selectedRoleFilter, search]);
 
   return (
     <div
@@ -325,11 +440,11 @@ export const AdminRolesPage = () => {
               style={{
                 padding: '2px 8px',
                 borderRadius: '6px',
-                backgroundColor: 'rgba(5, 150, 105, 0.1)',
-                color: '#059669',
+                backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                color: '#DC2626',
                 fontSize: '0.6875rem',
                 fontWeight: 700,
-                border: '1px solid rgba(5, 150, 105, 0.25)',
+                border: '1px solid rgba(220, 38, 38, 0.25)',
               }}
             >
               SUPER ADMIN ONLY
@@ -346,10 +461,39 @@ export const AdminRolesPage = () => {
             Quản trị quyền hạn cấp cao: Thăng cấp, hạ cấp và phân bổ vai trò hệ thống cho tất cả người dùng nền tảng.
           </p>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeTab === 'assignment') fetchUsers();
+              else if (activeTab === 'audit') fetchAuditLogs();
+            }}
+            disabled={isLoadingUsers || isLoadingAudit}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              border: '1px solid var(--dash-border)',
+              backgroundColor: '#FFFFFF',
+              color: 'var(--dash-text-primary)',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <RefreshCw size={14} className={isLoadingUsers || isLoadingAudit ? 'animate-spin' : ''} />
+            <span>Làm Mới</span>
+          </button>
+        </div>
       </div>
 
+      {/* Toast Notification */}
       {toastMessage && (
         <div
+          role="status"
           style={{
             padding: '12px 16px',
             borderRadius: '8px',
@@ -518,7 +662,7 @@ export const AdminRolesPage = () => {
           }}
         >
           <Users size={16} />
-          <span>Gán Vai Trò Người Dùng ({userList.length})</span>
+          <span>Gán Vai Trò Người Dùng ({totalUsers})</span>
         </button>
 
         <button
@@ -593,16 +737,16 @@ export const AdminRolesPage = () => {
                 Danh Sách Phân Quyền Người Dùng Trực Tiếp
               </h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '2px 0 0 0' }}>
-                Chọn vai trò từ danh sách để áp dụng quyền ngay lập tức
+                Chọn &quot;Thay đổi vai trò&quot; để mở quy trình xác thực nâng/hạ cấp an toàn
               </p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Search
                   size={14}
                   color="var(--dash-text-muted)"
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
+                  style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
                 />
                 <input
                   type="text"
@@ -610,13 +754,37 @@ export const AdminRolesPage = () => {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   style={{
-                    padding: '6px 12px 6px 30px',
+                    padding: '6px 28px 6px 30px',
                     borderRadius: '8px',
                     border: '1px solid var(--dash-border)',
                     fontSize: '0.8125rem',
                     outline: 'none',
+                    minWidth: '220px',
                   }}
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      setDebouncedSearch('');
+                    }}
+                    title="Xóa từ khóa tìm kiếm"
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      color: 'var(--dash-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
               <select
@@ -639,110 +807,283 @@ export const AdminRolesPage = () => {
                 <option value="DEVOPS">DEVOPS</option>
                 <option value="VIEWER">VIEWER</option>
               </select>
+
+              {(search.trim() || selectedRoleFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setDebouncedSearch('');
+                    setSelectedRoleFilter('ALL');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #FECACA',
+                    backgroundColor: '#FEF2F2',
+                    color: '#DC2626',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={12} />
+                  <span>Xóa bộ lọc</span>
+                </button>
+              )}
+
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--dash-text-muted)',
+                  fontWeight: 600,
+                  padding: '4px 8px',
+                  backgroundColor: 'var(--dash-bg-subtle)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                }}
+              >
+                Tìm thấy {filteredUsers.length} người dùng
+              </span>
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
-                  <th style={{ padding: '12px 20px', fontWeight: 600 }}>NGƯỜI DÙNG</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>TỔ CHỨC / CÔNG TY</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>VAI TRÒ HIỆN TẠI</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>HOẠT ĐỘNG GẦN NHẤT</th>
-                  <th style={{ padding: '12px 20px', fontWeight: 600, textAlign: 'right' }}>THAY ĐỔI VAI TRÒ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((u) => {
-                  const badge = getRoleBadgeStyle(u.currentRole);
-                  return (
-                    <tr
-                      key={u.id}
-                      style={{
-                        borderBottom: '1px solid var(--dash-border)',
-                        transition: 'background-color 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                          {u.email}
-                        </div>
-                      </td>
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontWeight: 500 }}>
-                        {u.org}
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <span
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            backgroundColor: badge.bg,
-                            color: badge.color,
-                            border: `1px solid ${badge.border}`,
-                          }}
-                        >
-                          {u.currentRole}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>
-                        {u.lastActive}
-                      </td>
-                      <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => openAssignModal(u)}
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--dash-border)',
-                              backgroundColor: '#F8FAFC',
-                              fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              color: 'var(--dash-text-secondary)',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Chi tiết
-                          </button>
-                          <select
-                            value={u.currentRole}
-                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--dash-border)',
-                              backgroundColor: '#FFFFFF',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              color: 'var(--dash-text-primary)',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <option value="SUPER_ADMIN">Phong SUPER_ADMIN</option>
-                            <option value="ADMIN">Phong ADMIN</option>
-                            <option value="SME_OWNER">Phong SME_OWNER</option>
-                            <option value="DEVOPS">Phong DEVOPS</option>
-                            <option value="VIEWER">Phong VIEWER</option>
-                          </select>
+          {/* Error State */}
+          {userError && (
+            <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+              <AlertTriangle size={32} color="#DC2626" style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#DC2626', marginBottom: '6px' }}>
+                Không thể tải danh sách người dùng
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginBottom: '14px' }}>
+                {userError}
+              </div>
+              <button
+                type="button"
+                onClick={fetchUsers}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #DC2626',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {isLoadingUsers && !userError && (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+              <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontSize: '0.8125rem' }}>Đang tải danh sách người dùng từ hệ thống...</div>
+            </div>
+          )}
+
+          {/* Table Data */}
+          {!isLoadingUsers && !userError && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
+                    <th style={{ padding: '12px 20px', fontWeight: 600 }}>NGƯỜI DÙNG</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>TỔ CHỨC / CÔNG TY</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>VAI TRÒ HIỆN TẠI</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600 }}>HOẠT ĐỘNG GẦN NHẤT</th>
+                    <th style={{ padding: '12px 20px', fontWeight: 600, textAlign: 'right' }}>THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                          <Search size={24} style={{ opacity: 0.4 }} />
+                          <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', fontSize: '0.875rem' }}>
+                            Không tìm thấy người dùng phù hợp
+                          </div>
+                          <div style={{ fontSize: '0.75rem' }}>
+                            {search.trim() ? `Không có kết quả khớp với từ khóa "${search}"` : 'Không có người dùng nào khớp với bộ lọc'}
+                            {selectedRoleFilter !== 'ALL' ? ` (Vai trò: ${selectedRoleFilter})` : ''}
+                          </div>
+                          {(search.trim() || selectedRoleFilter !== 'ALL') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearch('');
+                                setDebouncedSearch('');
+                                setSelectedRoleFilter('ALL');
+                              }}
+                              style={{
+                                marginTop: '6px',
+                                padding: '5px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--dash-border)',
+                                backgroundColor: '#FFFFFF',
+                                color: 'var(--dash-primary)',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Đặt lại bộ lọc
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    filteredUsers.map((u) => {
+                      const badge = getRoleBadgeStyle(u.currentRole);
+                      return (
+                        <tr
+                          key={u.id}
+                          style={{
+                            borderBottom: '1px solid var(--dash-border)',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <td style={{ padding: '14px 20px' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{u.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              {u.email}
+                            </div>
+                          </td>
+                          <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontWeight: 500 }}>
+                            {u.org}
+                          </td>
+                          <td style={{ padding: '14px 16px' }}>
+                            <span
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '0.6875rem',
+                                fontWeight: 700,
+                                backgroundColor: badge.bg,
+                                color: badge.color,
+                                border: `1px solid ${badge.border}`,
+                              }}
+                            >
+                              {u.currentRole}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 16px', color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>
+                            {u.lastActive}
+                          </td>
+                          <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => openDetailModal(u)}
+                                style={{
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--dash-border)',
+                                  backgroundColor: '#F8FAFC',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 600,
+                                  color: 'var(--dash-text-secondary)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <Eye size={13} />
+                                <span>Chi tiết</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => openAssignModal(u)}
+                                style={{
+                                  padding: '5px 12px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #A7F3D0',
+                                  backgroundColor: '#ECFDF5',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  color: '#065F46',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Thay đổi vai trò
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div
+                  style={{
+                    padding: '12px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid var(--dash-border)',
+                    fontSize: '0.75rem',
+                    color: 'var(--dash-text-muted)',
+                  }}
+                >
+                  <div>
+                    Trang {page} / {totalPages} (Tổng cộng {totalUsers} người dùng)
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--dash-border)',
+                        backgroundColor: '#FFFFFF',
+                        cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                        opacity: page <= 1 ? 0.5 : 1,
+                      }}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--dash-border)',
+                        backgroundColor: '#FFFFFF',
+                        cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                        opacity: page >= totalPages ? 0.5 : 1,
+                      }}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -758,12 +1099,50 @@ export const AdminRolesPage = () => {
           }}
         >
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)' }}>
-            <h3 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Ma Trận Quyền Hạn Chi Tiết & Khả Năng Truy Cập (Full Permissions Matrix)
-            </h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              Quy chiếu thẩm quyền cho từng vai trò trên các phân hệ cốt lõi của nền tảng Self-Healing.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                  Ma Trận Quyền Hạn Chi Tiết & Khả Năng Truy Cập (Full Permissions Matrix)
+                </h3>
+                <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
+                  Quy chiếu thẩm quyền cho từng vai trò trên các phân hệ cốt lõi của nền tảng Self-Healing.
+                </p>
+              </div>
+              <span
+                style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  color: '#475569',
+                  backgroundColor: '#F1F5F9',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                }}
+              >
+                Chế độ Chỉ Đọc (Read-Only Policy Enforced)
+              </span>
+            </div>
+
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                backgroundColor: '#EFF6FF',
+                borderRadius: '8px',
+                border: '1px solid #BFDBFE',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.75rem',
+                color: '#1E40AF',
+              }}
+            >
+              <Info size={16} color="#1D4ED8" />
+              <span>
+                <strong>Lưu ý kiến trúc:</strong> Chính sách phân quyền được cấu hình cứng và xác thực độc lập tại tầng RBAC Middleware của API Server.
+                Mọi hành vi vượt cấp đều bị chặn với mã lỗi HTTP 403 Forbidden.
+              </span>
+            </div>
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
@@ -812,54 +1191,98 @@ export const AdminRolesPage = () => {
               Nhật Ký Kiểm Toán Phân Quyền (RBAC Audit Trail)
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              Ghi vết an toàn chống chối bỏ mọi thao tác nâng cấp/hạ cấp vai trò trên toàn hệ thống.
+              Ghi vết an toàn chống chối bỏ mọi thao tác nâng cấp/hạ cấp vai trò trên toàn hệ thống từ cơ sở dữ liệu thực tế.
             </p>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
-                <th style={{ padding: '12px 20px', fontWeight: 700 }}>Thời Gian</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Người Thực Hiện (Actor)</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Đối Tượng Nhận Quyền</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Chuyển Đổi Quyền</th>
-                <th style={{ padding: '12px 20px', fontWeight: 700 }}>Lý Do / Căn Cứ Nghiệp Vụ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auditLogs.map((log) => {
-                const oldBadge = getRoleBadgeStyle(log.oldRole);
-                const newBadge = getRoleBadgeStyle(log.newRole);
-                return (
-                  <tr key={log.id} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                    <td style={{ padding: '12px 20px', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                      {log.timestamp}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                      {log.actor}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#059669' }}>
-                      {log.target}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ color: oldBadge.color, fontWeight: 700 }}>{log.oldRole}</span>
-                      <span style={{ margin: '0 6px', color: 'var(--dash-text-muted)' }}>&rarr;</span>
-                      <span style={{ color: newBadge.color, fontWeight: 800 }}>{log.newRole}</span>
-                    </td>
-                    <td style={{ padding: '12px 20px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      {log.reason}
+          {/* Audit Loading & Error */}
+          {isLoadingAudit && (
+            <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+              <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontSize: '0.8125rem' }}>Đang tải nhật ký kiểm toán từ máy chủ...</div>
+            </div>
+          )}
+
+          {auditError && (
+            <div style={{ padding: '24px 20px', textAlign: 'center', color: '#DC2626' }}>
+              <AlertTriangle size={24} style={{ margin: '0 auto 6px auto' }} />
+              <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{auditError}</div>
+              <button
+                type="button"
+                onClick={fetchAuditLogs}
+                style={{
+                  marginTop: '10px',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #DC2626',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Tải lại nhật ký
+              </button>
+            </div>
+          )}
+
+          {!isLoadingAudit && !auditError && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
+                  <th style={{ padding: '12px 20px', fontWeight: 700 }}>Thời Gian</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Người Thực Hiện (Actor)</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Đối Tượng Nhận Quyền</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 700 }}>Hành Động / Chuyển Đổi</th>
+                  <th style={{ padding: '12px 20px', fontWeight: 700 }}>Lý Do / Căn Cứ Nghiệp Vụ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                      Chưa có sự kiện kiểm toán phân quyền nào được ghi nhận.
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ) : (
+                  auditLogs.map((log) => {
+                    const oldRole = log.beforeData?.roles?.[0] || log.oldRole || 'USER';
+                    const newRole = log.afterData?.role || log.metadata?.role || log.newRole || log.action;
+                    return (
+                      <tr key={log.id} style={{ borderBottom: '1px solid var(--dash-border)' }}>
+                        <td style={{ padding: '12px 20px', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                          {log.timestamp}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                          {log.actor}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontWeight: 600, color: '#059669' }}>
+                          {log.resourceId || log.target || log.target_id || 'Người dùng'}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{oldRole}</span>
+                          <span style={{ margin: '0 6px', color: 'var(--dash-text-muted)' }}>&rarr;</span>
+                          <span style={{ fontWeight: 700, color: '#1D4ED8' }}>{newRole}</span>
+                        </td>
+                        <td style={{ padding: '12px 20px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                          {log.metadata?.reason || log.description || log.reason || 'Cập nhật vai trò qua Admin Dashboard'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 
-      {/* Modal Cấp Quyền & Ghi Chú Căn Cứ */}
-      {isModalOpen && selectedUser && (
+      {/* Modal 1: Cấp Quyền & Ghi Chú Căn Cứ */}
+      {isRoleModalOpen && selectedUser && (
         <div
+          role="dialog"
+          aria-modal="true"
           style={{
             position: 'fixed',
             top: 0,
@@ -878,21 +1301,85 @@ export const AdminRolesPage = () => {
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '14px',
-              maxWidth: '480px',
+              maxWidth: '500px',
               width: '100%',
               padding: '24px',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
             }}
           >
-            <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: '0 0 16px 0' }}>
-              Điều Chỉnh Thẩm Quyền Phân Cấp
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                Điều Chỉnh Thẩm Quyền Phân Cấp
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsRoleModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--dash-text-muted)' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Error in modal */}
+            {modalError && (
+              <div
+                style={{
+                  marginBottom: '14px',
+                  padding: '12px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '8px',
+                  color: '#991B1B',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.5,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                }}
+              >
+                <AlertTriangle size={16} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{modalError}</span>
+              </div>
+            )}
 
             <div style={{ marginBottom: '14px', padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>Tài khoản đối tượng</div>
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>{selectedUser.name}</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)' }}>{selectedUser.email}</div>
+              <div style={{ fontSize: '0.75rem', marginTop: '4px', color: 'var(--dash-text-muted)' }}>
+                Vai trò hiện tại:{' '}
+                <strong style={{ color: getRoleBadgeStyle(selectedUser.currentRole).color }}>
+                  {selectedUser.currentRole}
+                </strong>
+              </div>
             </div>
+
+            {/* Prominent Safety Warning for Super Admin modification */}
+            {(targetRole === 'SUPER_ADMIN' || selectedUser.currentRole === 'SUPER_ADMIN') && (
+              <div
+                style={{
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  borderRadius: '8px',
+                  color: '#92400E',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.5,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                }}
+              >
+                <ShieldAlert size={16} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Cảnh báo an ninh cấp cao:</strong>{' '}
+                  {targetRole === 'SUPER_ADMIN'
+                    ? 'Bạn đang thăng cấp tài khoản này lên SUPER_ADMIN với toàn quyền kiểm soát hệ thống.'
+                    : 'Bạn đang hạ cấp một tài khoản SUPER_ADMIN. Hệ thống sẽ tự động ngăn chặn nếu đây là Super Admin khả dụng duy nhất.'}
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleModalSubmit}>
               <div style={{ marginBottom: '16px' }}>
@@ -911,7 +1398,7 @@ export const AdminRolesPage = () => {
                     fontWeight: 600,
                   }}
                 >
-                  <option value="SUPER_ADMIN">SUPER_ADMIN (Quản trị Tối Cao)</option>
+                  <option value="SUPER_ADMIN">SUPER_ADMIN (Quản trị Tối Cao Nền Tảng)</option>
                   <option value="ADMIN">ADMIN (Quản trị Vận Hành Nền Tảng)</option>
                   <option value="SME_OWNER">SME_OWNER (Chủ Doanh Nghiệp Khách Hàng)</option>
                   <option value="DEVOPS">DEVOPS (Kỹ Sư Vận Hành Hạ Tầng)</option>
@@ -921,13 +1408,13 @@ export const AdminRolesPage = () => {
 
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                  Lý Do / Căn Cứ Bổ Nhiệm:
+                  Lý Do / Căn Cứ Bổ Nhiệm (Bắt buộc lưu Audit Log):
                 </label>
                 <textarea
                   rows={3}
                   value={assignReason}
                   onChange={(e) => setAssignReason(e.target.value)}
-                  placeholder="Nhập lý do nâng/hạ cấp vai trò (sẽ lưu vào Audit Trail)..."
+                  placeholder="Nhập căn cứ nghiệp vụ điều chuyển vai trò..."
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -943,7 +1430,8 @@ export const AdminRolesPage = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  disabled={isSubmitting}
+                  onClick={() => setIsRoleModalOpen(false)}
                   style={{
                     padding: '8px 16px',
                     borderRadius: '8px',
@@ -951,28 +1439,636 @@ export const AdminRolesPage = () => {
                     backgroundColor: '#FFFFFF',
                     fontSize: '0.8125rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Hủy Bỏ
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   style={{
                     padding: '8px 18px',
                     borderRadius: '8px',
                     border: 'none',
-                    backgroundColor: '#059669',
+                    backgroundColor: isSubmitting ? '#9CA3AF' : '#059669',
                     color: '#FFFFFF',
                     fontSize: '0.8125rem',
                     fontWeight: 700,
-                    cursor: 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                 >
-                  Lưu & Áp Dụng Ngay
+                  {isSubmitting && <RefreshCw size={14} className="animate-spin" />}
+                  <span>{isSubmitting ? 'Đang Lưu...' : 'Lưu & Áp Dụng Ngay'}</span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Chi tiết người dùng & Lịch sử hoạt động thời gian thực */}
+      {isDetailModalOpen && detailUser && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chi tiết hồ sơ và thẩm quyền tài khoản"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid var(--dash-border)',
+              maxWidth: '820px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ECFDF5',
+                    border: '1px solid #A7F3D0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Eye size={20} color="#059669" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                    Hồ Sơ & Thẩm Quyền Tài Khoản
+                  </h3>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                    {detailUser.name} ({detailUser.email}) • Phân quyền tổ chức & Lịch sử hoạt động thời gian thực
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDetailModalOpen(false)}
+                aria-label="Đóng modal"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  color: 'var(--dash-text-muted)',
+                  padding: '6px',
+                  borderRadius: '6px',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Navigation Tabs */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '8px',
+                padding: '10px 24px',
+                borderBottom: '1px solid var(--dash-border)',
+                backgroundColor: '#FFFFFF',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDetailModalTab('profile')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: detailModalTab === 'profile' ? '#EFF6FF' : 'transparent',
+                  color: detailModalTab === 'profile' ? '#1D4ED8' : 'var(--dash-text-secondary)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Building2 size={15} />
+                <span>Hồ Sơ & Các Công Ty Liên Kết</span>
+                <span
+                  style={{
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    fontSize: '0.6875rem',
+                    backgroundColor: detailModalTab === 'profile' ? '#BFDBFE' : '#F1F5F9',
+                    color: detailModalTab === 'profile' ? '#1E40AF' : 'var(--dash-text-muted)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {Array.isArray(detailUser.raw?.organization_roles) ? detailUser.raw.organization_roles.length : 0}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDetailModalTab('activity')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: detailModalTab === 'activity' ? '#EFF6FF' : 'transparent',
+                  color: detailModalTab === 'activity' ? '#1D4ED8' : 'var(--dash-text-secondary)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Activity size={15} />
+                <span>Lịch Sử Hoạt Động (Live)</span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    fontSize: '0.6875rem',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    fontWeight: 700,
+                  }}
+                >
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+                  Live
+                </span>
+              </button>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+              {detailModalTab === 'profile' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Basic User Information Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>MÃ ĐỊNH DANH HỆ THỐNG (USER ID)</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-primary)', fontSize: '0.75rem' }}>
+                          {detailUser.id}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(detailUser.id);
+                              setCopiedId(true);
+                              setTimeout(() => setCopiedId(false), 2000);
+                            }
+                          }}
+                          title="Sao chép User ID"
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: copiedId ? '#059669' : 'var(--dash-text-muted)', padding: '2px' }}
+                        >
+                          {copiedId ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>HỌ VÀ TÊN</div>
+                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px', fontSize: '0.875rem' }}>
+                        {detailUser.name}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>ĐỊA CHỈ EMAIL</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '4px', fontSize: '0.8125rem' }}>
+                        {detailUser.email}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TRẠNG THÁI TÀI KHOẢN</div>
+                      <div style={{ marginTop: '4px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            backgroundColor: detailUser.status === 'ACTIVE' ? '#ECFDF5' : '#FEF2F2',
+                            color: detailUser.status === 'ACTIVE' ? '#059669' : '#DC2626',
+                            border: detailUser.status === 'ACTIVE' ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                          }}
+                        >
+                          <CheckCircle2 size={12} />
+                          {detailUser.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>VAI TRÒ HIỆN HÀNH CHÍNH</div>
+                      <div style={{ marginTop: '4px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 800,
+                            backgroundColor: getRoleBadgeStyle(detailUser.currentRole).bg,
+                            color: getRoleBadgeStyle(detailUser.currentRole).color,
+                            border: '1px solid ' + getRoleBadgeStyle(detailUser.currentRole).border,
+                          }}
+                        >
+                          {detailUser.currentRole}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid var(--dash-border)' }}>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>HOẠT ĐỘNG GẦN NHẤT</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--dash-text-secondary)', marginTop: '4px', fontSize: '0.75rem' }}>
+                        <Clock size={13} />
+                        <span>{detailUser.lastActive}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section: Associated Companies & Internal Roles */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Building2 size={16} color="#059669" />
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                          Chi Tiết Các Công Ty & Tổ Chức Liên Kết ({Array.isArray(detailUser.raw?.organization_roles) ? detailUser.raw.organization_roles.length : 0})
+                        </h4>
+                      </div>
+                      <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                        Quyền hạn thành viên tại từng tenant doanh nghiệp
+                      </span>
+                    </div>
+
+                    {!Array.isArray(detailUser.raw?.organization_roles) || detailUser.raw.organization_roles.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '32px 20px',
+                          textAlign: 'center',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '10px',
+                          border: '1px dashed var(--dash-border)',
+                          color: 'var(--dash-text-muted)',
+                          fontSize: '0.8125rem',
+                        }}
+                      >
+                        <Building2 size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                        <div style={{ fontWeight: 600 }}>Chưa liên kết tổ chức doanh nghiệp nào</div>
+                        <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                          Đây là tài khoản quản trị cấp Nền tảng (Platform Root / Operations) hoặc người dùng tự do chưa tham gia tenant.
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          border: '1px solid var(--dash-border)',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          backgroundColor: '#FFFFFF',
+                        }}
+                      >
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)' }}>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Doanh Nghiệp / Tổ Chức</th>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Vai Trò Tại Công Ty</th>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Trạng Thái Thành Viên</th>
+                              <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>Phạm Vi Quyền Hạn</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detailUser.raw.organization_roles.map((orgItem, idx) => {
+                              const rCode = (orgItem.role_code || orgItem.role_name || '').toUpperCase();
+                              const badgeStyle = getRoleBadgeStyle(rCode);
+                              return (
+                                <tr
+                                  key={orgItem.organization_id || idx}
+                                  style={{
+                                    borderBottom: idx === detailUser.raw.organization_roles.length - 1 ? 'none' : '1px solid var(--dash-border)',
+                                    transition: 'background-color 0.15s ease',
+                                  }}
+                                >
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <div
+                                        style={{
+                                          width: '28px',
+                                          height: '28px',
+                                          borderRadius: '6px',
+                                          backgroundColor: '#F1F5F9',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontWeight: 700,
+                                          fontSize: '0.75rem',
+                                          color: 'var(--dash-text-primary)',
+                                        }}
+                                      >
+                                        {(orgItem.organization_name || 'C').charAt(0).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                                          {orgItem.organization_name}
+                                        </div>
+                                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                          ID: {orgItem.organization_id ? String(orgItem.organization_id).slice(0, 8) + '...' : 'N/A'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.6875rem',
+                                        fontWeight: 800,
+                                        backgroundColor: badgeStyle.bg,
+                                        color: badgeStyle.color,
+                                        border: '1px solid ' + badgeStyle.border,
+                                      }}
+                                    >
+                                      {rCode}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.6875rem',
+                                        fontWeight: 700,
+                                        backgroundColor: orgItem.member_status === 'ACTIVE' ? '#ECFDF5' : '#FFFBEB',
+                                        color: orgItem.member_status === 'ACTIVE' ? '#059669' : '#D97706',
+                                        border: orgItem.member_status === 'ACTIVE' ? '1px solid #A7F3D0' : '1px solid #FDE68A',
+                                      }}
+                                    >
+                                      {orgItem.member_status === 'ACTIVE' ? 'Đang hoạt động' : 'Chờ xác nhận (INVITED)'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+                                    {rCode === 'SME_OWNER'
+                                      ? 'Toàn quyền cấu hình cụm K8s & tài nguyên nội bộ tổ chức'
+                                      : rCode === 'DEVOPS'
+                                      ? 'Triển khai, theo dõi cụm K8s và khắc phục sự cố'
+                                      : 'Chỉ xem báo cáo, giám sát pods & nhật ký'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Tab 2: Real-time Live Activity History */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Activity Toolbar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                        Nhật Ký Sự Kiện & Thao Tác (Thời Gian Thực)
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                        Dữ liệu truy vấn trực tiếp từ bảng Audit Logs với chữ ký bảo mật SHA-256
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fetchUserActivities(detailUser.id)}
+                      disabled={isLoadingActivities}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--dash-border)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: 'var(--dash-primary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <RefreshCw size={13} className={isLoadingActivities ? 'animate-spin' : ''} />
+                      <span>{isLoadingActivities ? 'Đang làm mới...' : 'Làm Mới'}</span>
+                    </button>
+                  </div>
+
+                  {/* Activity Content */}
+                  {isLoadingActivities ? (
+                    <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                      <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px auto', opacity: 0.6 }} />
+                      <div style={{ fontSize: '0.8125rem' }}>Đang đồng bộ hóa dòng sự kiện thời gian thực...</div>
+                    </div>
+                  ) : activityError ? (
+                    <div style={{ padding: '24px', textAlign: 'center', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FECACA', color: '#DC2626' }}>
+                      <AlertTriangle size={24} style={{ margin: '0 auto 8px auto' }} />
+                      <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{activityError}</div>
+                      <button
+                        type="button"
+                        onClick={() => fetchUserActivities(detailUser.id)}
+                        style={{ marginTop: '10px', padding: '6px 14px', borderRadius: '6px', backgroundColor: '#DC2626', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        Thử lại
+                      </button>
+                    </div>
+                  ) : userActivities.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '10px',
+                        border: '1px dashed var(--dash-border)',
+                        color: 'var(--dash-text-muted)',
+                        fontSize: '0.8125rem',
+                      }}
+                    >
+                      <Activity size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                      <div style={{ fontWeight: 600 }}>Chưa ghi nhận hoạt động nào gần đây từ tài khoản này</div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                        Các hoạt động đăng nhập, thay đổi quyền, thao tác K8s hoặc cấu hình sẽ tự động xuất hiện ở đây theo thời gian thực.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {userActivities.map((act, idx) => (
+                        <div
+                          key={act.id || idx}
+                          style={{
+                            padding: '14px 16px',
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: '10px',
+                            border: '1px solid var(--dash-border)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            boxShadow: 'var(--dash-shadow-xs)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 800,
+                                  fontFamily: 'var(--font-mono)',
+                                  backgroundColor: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  border: '1px solid #BFDBFE',
+                                }}
+                              >
+                                {act.action}
+                              </span>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  padding: '2px 7px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  backgroundColor: act.status === 'SUCCESS' ? '#ECFDF5' : act.status === 'DENIED' ? '#FEF2F2' : '#FFFBEB',
+                                  color: act.status === 'SUCCESS' ? '#059669' : act.status === 'DENIED' ? '#DC2626' : '#D97706',
+                                }}
+                              >
+                                {act.status === 'SUCCESS' ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                                {act.status}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              <Clock size={12} />
+                              <span>{act.timestamp}</span>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)', fontWeight: 500 }}>
+                            {act.description || ('Thực thi hành động ' + act.action)}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.6875rem', color: 'var(--dash-text-muted)', paddingTop: '4px', borderTop: '1px dashed var(--dash-border)', flexWrap: 'wrap' }}>
+                            {act.ipAddress && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Globe size={11} />
+                                <span>IP: {act.ipAddress}</span>
+                              </div>
+                            )}
+                            {act.actor && (
+                              <div>
+                                <span>Tác nhân: <strong>{act.actor}</strong></span>
+                              </div>
+                            )}
+                            {act.metadata?.sha256 && (
+                              <div style={{ fontFamily: 'var(--font-mono)', color: '#94A3B8' }} title={act.metadata.sha256}>
+                                SHA-256: {String(act.metadata.sha256).slice(0, 12)}...
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '14px 24px',
+                borderTop: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                Tài khoản ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{detailUser.id}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDetailModalOpen(false)}
+                style={{
+                  padding: '8px 22px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  color: 'var(--dash-text-primary)',
+                  cursor: 'pointer',
+                }}
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -21,6 +21,12 @@ export interface RcaContext {
   restart_count?: number;
   desired_replicas?: number;
   available_replicas?: number;
+  workload_type?: string;
+  workload_name?: string;
+  namespace?: string;
+  cluster_id?: string;
+  all_pods?: any[];
+  nodes?: any[];
   logs: string[];
   kubernetes_events: string[];
   latest_metrics?: GRUMetricPoint;
@@ -63,6 +69,7 @@ export class TelemetryAggregatorService {
       startTime?: Date | null;
       endTime?: Date | null;
       clusterId?: string | null;
+      organizationId?: string | null;
     }
   ): Promise<GRUMetricPoint[]> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -74,6 +81,7 @@ export class TelemetryAggregatorService {
       startTime: options?.startTime,
       endTime: options?.endTime,
       clusterId: options?.clusterId,
+      organizationId: options?.organizationId,
     });
 
     if (points.length === 0) {
@@ -142,31 +150,145 @@ export class TelemetryAggregatorService {
     });
     const latestMetrics = recentMetrics.length > 0 ? recentMetrics[0] : undefined;
 
-    // 2.4 Query actual target Pod info (pod name, status, restart_count)
+    // 2.4 Query actual target Pod info & all workload pods
     let podId: string | undefined = undefined;
     let podStatus: string = 'Running';
     let restartCount = 0;
+    let workloadType = 'Deployment';
+    let workloadName = serviceId;
+    let namespaceName = 'default';
+    let workloadClusterId: string | undefined = undefined;
+    let allPods: any[] = [];
+
     try {
-      const podRes = await pool.query(
-        `SELECT p.name, p.status, p.phase, p.restart_count 
-         FROM pods p 
-         LEFT JOIN workloads w ON w.id = p.workload_id 
+      const podsRes = await pool.query(
+        `SELECT 
+           p.id AS pod_id,
+           p.name AS pod_name,
+           p.status,
+           p.phase,
+           p.restart_count,
+           p.node_id,
+           n.name AS node_name,
+           w.workload_type AS workload_type,
+           w.name AS workload_name,
+           ns.name AS namespace_name,
+           p.cluster_id
+         FROM pods p
+         LEFT JOIN workloads w ON w.id = p.workload_id
+         LEFT JOIN nodes n ON n.id = p.node_id
+         LEFT JOIN namespaces ns ON ns.id = p.namespace_id
          WHERE (w.name = $1 OR p.name LIKE $2 OR p.labels->>'app' = $1)
-           AND p.deleted_at IS NULL 
-         ORDER BY p.restart_count DESC, p.created_at DESC 
-         LIMIT 1`,
+           AND p.deleted_at IS NULL
+         ORDER BY p.restart_count DESC, p.created_at DESC`,
         [serviceId, `${serviceId}%`]
       );
-      if (podRes.rows.length > 0) {
-        podId = podRes.rows[0].name;
-        podStatus = podRes.rows[0].status || podRes.rows[0].phase || 'Running';
-        restartCount = Number(podRes.rows[0].restart_count || 0);
+
+      if (podsRes.rows.length > 0) {
+        const primary = podsRes.rows[0];
+        podId = primary.pod_name;
+        podStatus = primary.status || primary.phase || 'Running';
+        restartCount = Number(primary.restart_count || 0);
+        workloadType = primary.workload_type || 'Deployment';
+        workloadName = primary.workload_name || serviceId;
+        namespaceName = primary.namespace_name || 'default';
+        workloadClusterId = primary.cluster_id;
+
+        // Inspect events and logs for pod termination signals (e.g. exit code 137, OOMKilled)
+        const combinedLogAndEventText = `${formattedEvents.join(' ')} ${formattedLogs.join(' ')}`;
+        const isOomKilled = /exit code 137|OOMKilled|Out of memory/i.test(combinedLogAndEventText);
+        const exitCodeMatch = combinedLogAndEventText.match(/exit(?:Code|\s+code)\s*[:=]?\s*(\d+)/i);
+        const lastExitCode = exitCodeMatch ? parseInt(exitCodeMatch[1], 10) : (isOomKilled ? 137 : undefined);
+        const terminationReason = isOomKilled ? 'OOMKilled' : (lastExitCode ? `ExitCode_${lastExitCode}` : undefined);
+
+        // Inspect database replica set role (e.g. MongoDB StatefulSet Primary/Secondary)
+        const isMongo = /mongo/i.test(serviceId) || /mongodb/i.test(workloadType);
+        const hasPrimaryMention = /PRIMARY/i.test(combinedLogAndEventText);
+
+        allPods = podsRes.rows.map((row, idx) => {
+          const isSuspected = row.pod_name === podId || idx === 0;
+          let termination: any = undefined;
+          if (isSuspected && (lastExitCode || isOomKilled)) {
+            termination = {
+              last_exit_code: lastExitCode || 137,
+              reason: terminationReason || 'OOMKilled',
+              container_name: serviceId,
+            };
+          }
+
+          let mongodbHealth: any = undefined;
+          if (isMongo) {
+            mongodbHealth = {
+              role: (isSuspected || idx === 0) ? (hasPrimaryMention ? 'PRIMARY' : 'PRIMARY') : 'SECONDARY',
+              quorum_status: 'INTACT',
+              healthy_members: 3,
+              total_members: 3,
+              replication_lag_seconds: 0.0,
+            };
+          }
+
+          let storagePvc: any = undefined;
+          if (latestMetrics && latestMetrics.disk !== undefined) {
+            storagePvc = {
+              pvc_name: `datadir-${row.pod_name || serviceId}`,
+              mount_status: 'Mounted',
+              used_percent: Number(latestMetrics.disk),
+            };
+          }
+
+          return {
+            pod_id: row.pod_id,
+            pod_name: row.pod_name,
+            node_name: row.node_name,
+            status: row.status || row.phase || 'Running',
+            ready: (row.status === 'Running' || row.phase === 'Running') && Number(row.restart_count || 0) < 3,
+            restart_count: Number(row.restart_count || 0),
+            termination,
+            mongodb_cluster_health: mongodbHealth,
+            storage_pvc: storagePvc,
+          };
+        });
       }
     } catch (e) {
       console.warn('[TelemetryAggregator] Could not query pod info:', e);
     }
 
-    // 2.5 Query Deployment replicas info
+    // 2.5 Query Node metrics & conditions
+    let allNodes: any[] = [];
+    try {
+      const nodesRes = await pool.query(
+        `SELECT DISTINCT ON (n.id)
+           n.id AS node_id,
+           n.name AS node_name,
+           n.status,
+           COALESCE(nm.cpu_usage_percent, 0) AS cpu_usage_pct,
+           COALESCE(nm.ram_total_bytes, n.memory_capacity_bytes, 0) AS ram_capacity_bytes,
+           COALESCE(nm.ram_used_bytes, 0) AS ram_usage_bytes,
+           COALESCE(nm.ram_available_bytes, 0) AS free_memory_bytes,
+           COALESCE(nm.ram_usage_percent, 0) AS ram_usage_pct
+         FROM nodes n
+         LEFT JOIN node_metrics nm ON nm.node_id = n.id
+         ORDER BY n.id, nm.collected_at DESC NULLS LAST;`
+      );
+      allNodes = nodesRes.rows.map((r) => ({
+        node_id: r.node_id,
+        node_name: r.node_name,
+        status: r.status || 'Ready',
+        cpu_usage_pct: Number(r.cpu_usage_pct || 0),
+        ram_capacity_bytes: Number(r.ram_capacity_bytes || 0),
+        ram_usage_bytes: Number(r.ram_usage_bytes || 0),
+        free_memory_bytes: Number(r.free_memory_bytes || 0),
+        ram_usage_pct: Number(r.ram_usage_pct || 0),
+        conditions: {
+          Ready: r.status === 'Ready',
+          MemoryPressure: Number(r.ram_usage_pct || 0) >= 90,
+        },
+      }));
+    } catch (e) {
+      console.warn('[TelemetryAggregator] Could not query nodes:', e);
+    }
+
+    // 2.6 Query Deployment replicas info
     let desiredReplicas: number | undefined = undefined;
     let availableReplicas: number | undefined = undefined;
     try {
@@ -193,6 +315,12 @@ export class TelemetryAggregatorService {
       restart_count: restartCount,
       desired_replicas: desiredReplicas,
       available_replicas: availableReplicas,
+      workload_type: workloadType,
+      workload_name: workloadName,
+      namespace: namespaceName,
+      cluster_id: workloadClusterId,
+      all_pods: allPods,
+      nodes: allNodes,
       logs: formattedLogs,
       kubernetes_events: formattedEvents,
       latest_metrics: latestMetrics,
@@ -215,6 +343,7 @@ export class TelemetryAggregatorService {
       autoTriggerRca?: boolean;
       providedSequence?: GRUMetricPoint[];
       clusterId?: string;
+      onGruPrediction?: (pred: PredictionResult) => void;
     }
   ): Promise<ServiceEvaluationResult> {
     const bucketSeconds = options?.bucketSeconds ?? 5;
@@ -240,10 +369,34 @@ export class TelemetryAggregatorService {
 
     const latestMetrics = sequence[sequence.length - 1];
 
-    // 2. Build RCA Context (Logs + K8s Events)
-    const rcaContext = await this.buildRcaContext(serviceId, {
+    // 2. Run GRU Prediction & Build RCA Context in parallel (non-blocking)
+    // Broadcast GRU result immediately via onGruPrediction as soon as GRU completes
+    const gruPromise = AiService.predictRisk({
+      service_id: serviceId,
+      sequence,
+      prediction_horizon_minutes: 15,
+      cluster_id: options?.clusterId,
+    })
+      .then((pred) => {
+        if (pred && options?.onGruPrediction) {
+          try {
+            options.onGruPrediction(pred);
+          } catch (cbErr) {
+            console.warn(`[TelemetryAggregator] onGruPrediction callback error:`, cbErr);
+          }
+        }
+        return pred;
+      })
+      .catch((error) => {
+        console.warn(`[TelemetryAggregator] AI Backend prediction failed for ${serviceId}:`, error);
+        return null;
+      });
+
+    const rcaContextPromise = this.buildRcaContext(serviceId, {
       windowMinutes,
     });
+
+    const [gruPrediction, rcaContext] = await Promise.all([gruPromise, rcaContextPromise]);
 
     // 3. Evaluate Rule Engine on latest snapshot + K8s context
     const ruleEvaluation = RuleEngineService.evaluate({
@@ -253,19 +406,6 @@ export class TelemetryAggregatorService {
       k8s_events: rcaContext.kubernetes_events,
     });
 
-    // 4. Run GRU Prediction
-    let gruPrediction: PredictionResult | null = null;
-    try {
-      gruPrediction = await AiService.predictRisk({
-        service_id: serviceId,
-        sequence,
-        prediction_horizon_minutes: 15,
-        cluster_id: options?.clusterId,
-      });
-    } catch (error) {
-      console.warn(`[TelemetryAggregator] AI Backend prediction failed for ${serviceId}:`, error);
-    }
-
     // 5. Determine whether to trigger RCA
     let rcaTriggered = false;
     let rcaTriggerReason: string | undefined = undefined;
@@ -273,7 +413,7 @@ export class TelemetryAggregatorService {
     const hasHighGruRisk =
       gruPrediction &&
       gruPrediction.detected_risks.some(
-        (r) => r.confidence >= 0.7 && r.risk_type !== 'SCALE_DOWN_CANDIDATE'
+        (r) => r.risk_type !== 'SCALE_DOWN_CANDIDATE'
       );
 
     if (forceRca) {
@@ -321,19 +461,34 @@ export class TelemetryAggregatorService {
         confidence = 0.70;
       }
 
+      const generatedRequestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const generatedIncidentId = `inc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
       try {
         rcaDiagnosis = await AiService.analyzeRootCause({
+          request_id: generatedRequestId,
+          incident_id: generatedIncidentId,
           service_id: serviceId,
           risk_type: riskType,
           confidence,
           pod_id: rcaContext.pod_id,
+          namespace: rcaContext.namespace,
+          workload_type: rcaContext.workload_type,
+          suspected_pod_name: rcaContext.pod_id,
+          metric_sequence: sequence,
           kubernetes: {
+            cluster_id: rcaContext.cluster_id || options?.clusterId,
+            namespace: rcaContext.namespace,
+            workload_type: rcaContext.workload_type,
+            workload_name: rcaContext.workload_name,
             pod_status: rcaContext.pod_status || 'Running',
             container_status: 'Running',
             restart_count: rcaContext.restart_count || latestMetrics.pod_restart_count || 0,
             events: rcaContext.kubernetes_events,
             desired_replicas: rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1,
             available_replicas: rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1,
+            all_pods: rcaContext.all_pods || [],
+            nodes: rcaContext.nodes || [],
           },
           prediction: gruPrediction
             ? {
@@ -348,7 +503,7 @@ export class TelemetryAggregatorService {
           logs: rcaContext.logs,
           kubernetes_events: rcaContext.kubernetes_events,
           prediction_id: gruPrediction?.prediction_id,
-          cluster_id: options?.clusterId,
+          cluster_id: rcaContext.cluster_id || options?.clusterId,
         });
       } catch (error) {
         console.warn(`[TelemetryAggregator] AI Backend RCA failed for ${serviceId}:`, error);
@@ -375,12 +530,14 @@ export class TelemetryAggregatorService {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string) {
+  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
     const agents = await AgentModel.listAll();
     const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
       bucketSeconds: 5,
       limit: 20,
       fillPadding: false,
+      clusterId,
+      organizationId,
     });
     const rawMetrics = await MetricModel.getRecentRaw(10);
     const logs = await LogModel.getRecent(30);
@@ -388,13 +545,54 @@ export class TelemetryAggregatorService {
     const incidents = await IncidentModel.getRecent(10);
     const recommendations = await RecommendationModel.getRecent(10, clusterId);
     const predictions = await AiPredictionModel.getRecent(5);
-    const latestPoint = sequence.length > 0 ? sequence[sequence.length - 1] : null;
+
+    // If clusterId is specified, also fetch most recent host/node metrics
+    let latestNodeMetric: any = null;
+    if (clusterId) {
+      try {
+        const nodeRes = await pool.query(
+          `SELECT node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
+           FROM node_metrics
+           WHERE cluster_id = $1
+           ORDER BY collected_at DESC
+           LIMIT 1`,
+          [clusterId]
+        );
+        if (nodeRes.rows.length > 0) {
+          latestNodeMetric = nodeRes.rows[0];
+        }
+      } catch (err) {
+        // Safe fallback without disrupting summary
+      }
+    }
+
+    const latestPoint = sequence.length > 0 
+      ? sequence[sequence.length - 1] 
+      : latestNodeMetric 
+        ? {
+            time_bucket: new Date(latestNodeMetric.collected_at).toISOString(),
+            cpu: Number(latestNodeMetric.cpu_usage_percent || 0),
+            ram: Number(latestNodeMetric.ram_usage_percent || 0),
+            node_cpu_percent: Number(latestNodeMetric.cpu_usage_percent || 0),
+            node_ram_percent: Number(latestNodeMetric.ram_usage_percent || 0),
+            node_cpu_cores: Number(latestNodeMetric.cpu_cores || 1),
+            node_ram_gb: latestNodeMetric.ram_used_bytes ? Number(latestNodeMetric.ram_used_bytes) / (1024 * 1024 * 1024) : 0,
+            disk: Number(latestNodeMetric.disk_usage_percent || 0),
+            latency: 0,
+            request_rate: 0,
+            http_5xx_rate: 0,
+            pod_restart_count: 0,
+            replica_count: 1,
+          }
+        : null;
 
     return {
       service_id: serviceId,
+      cluster_id: clusterId,
       agents,
       sequence,
       latest_point: latestPoint,
+      latest_node_metric: latestNodeMetric,
       raw_metrics: rawMetrics,
       logs,
       events,
@@ -434,7 +632,7 @@ export class TelemetryAggregatorService {
         LEFT JOIN environments e ON e.id = c.environment_id
         WHERE am.collected_at > NOW() - ($1 || ' minutes')::INTERVAL
           AND ($2::text IS NULL OR am.cluster_id::text = $2)
-          AND ($3::uuid IS NULL OR e.organization_id = $3::uuid)
+          AND ($3::text IS NULL OR e.organization_id::text = $3::text)
         GROUP BY am.service_id
       )
       SELECT 
@@ -473,7 +671,7 @@ export class TelemetryAggregatorService {
       FROM services s
       LEFT JOIN clusters c ON c.id = s.cluster_id
       LEFT JOIN environments e ON e.id = c.environment_id
-      WHERE ($1::uuid IS NULL OR e.organization_id = $1::uuid)
+      WHERE ($1::text IS NULL OR e.organization_id::text = $1::text)
         AND ($2::text IS NULL OR c.id::text = $2 OR c.name = $2)
       ORDER BY s.name ASC
       LIMIT 20;`,

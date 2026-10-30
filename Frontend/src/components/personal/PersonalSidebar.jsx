@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import React, { useState, useEffect } from 'react';
+import { personalPortalService } from '../../services/personalPortalService';
+import multiTabSync, { SYNC_EVENTS } from '../../services/multiTabSync';
 import {
   LayoutDashboard,
   Building2,
@@ -27,7 +28,7 @@ export const PERSONAL_NAV_ITEMS = [
     label: 'Company Của Tôi',
     path: '/portal/companies',
     icon: Building2,
-    badge: '3',
+    badge: null,
     badgeColor: '#059669',
   },
   {
@@ -57,7 +58,7 @@ export const PERSONAL_NAV_ITEMS = [
     label: 'Thông Báo',
     path: '/portal/notifications',
     icon: Bell,
-    badge: '2',
+    badge: null,
     badgeColor: '#EF4444',
   },
   {
@@ -82,10 +83,85 @@ export const PersonalSidebar = ({
   onNavigate,
   isCollapsed = false,
   onToggleCollapse,
+  companyCount: propCompanyCount,
 }) => {
-  const { user, isSuperAdmin, isAdmin } = useAuth();
-  const canAccessAdmin = (isSuperAdmin && isSuperAdmin(user)) || (isAdmin && isAdmin(user));
   const [hoveredItem, setHoveredItem] = useState(null);
+
+  const [companyCount, setCompanyCount] = useState(() => {
+    const list = personalPortalService.getMyCompanies();
+    return Array.isArray(list) ? list.length : 0;
+  });
+  const [unreadNotifCount, setUnreadNotifCount] = useState(() => {
+    const notifs = personalPortalService.getNotifications();
+    return Array.isArray(notifs) ? notifs.filter((n) => !n.read).length : 0;
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshCounts = async () => {
+      try {
+        const comps = await personalPortalService.fetchMyCompanies();
+        if (isMounted && Array.isArray(comps)) {
+          setCompanyCount(comps.length);
+        }
+      } catch {
+        if (isMounted) {
+          const cached = personalPortalService.getMyCompanies();
+          setCompanyCount(Array.isArray(cached) ? cached.length : 0);
+        }
+      }
+
+      if (isMounted) {
+        const notifs = personalPortalService.getNotifications();
+        setUnreadNotifCount(Array.isArray(notifs) ? notifs.filter((n) => !n.read).length : 0);
+      }
+    };
+
+    refreshCounts();
+
+    const unsubSync = multiTabSync.subscribe(SYNC_EVENTS.ORG_SWITCHED, () => {
+      refreshCounts();
+    });
+
+    const handleLocalChange = () => {
+      const list = personalPortalService.getMyCompanies();
+      setCompanyCount(Array.isArray(list) ? list.length : 0);
+    };
+
+    const handleStorage = (e) => {
+      if (
+        !e.key ||
+        e.key === 'selfheal_personal_companies_v1' ||
+        e.key === 'selfheal_personal_notifications_v1'
+      ) {
+        handleLocalChange();
+      }
+    };
+
+    window.addEventListener('selfheal_companies_changed', handleLocalChange);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      isMounted = false;
+      unsubSync();
+      window.removeEventListener('selfheal_companies_changed', handleLocalChange);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  const effectiveCompanyCount =
+    typeof propCompanyCount === 'number' ? propCompanyCount : companyCount;
+
+  const getItemBadge = (item) => {
+    if (item.id === 'companies') {
+      return String(effectiveCompanyCount);
+    }
+    if (item.id === 'notifications') {
+      return unreadNotifCount > 0 ? String(unreadNotifCount) : null;
+    }
+    return item.badge;
+  };
 
   const isActive = (itemPath) => {
     const normCurrent = currentPath.toLowerCase().split('?')[0].split('#')[0];
@@ -211,6 +287,7 @@ export const PersonalSidebar = ({
           const active = isActive(item.path);
           const ItemIcon = item.icon;
           const isHovered = hoveredItem === item.id;
+          const itemBadge = getItemBadge(item);
 
           return (
             <div
@@ -293,10 +370,14 @@ export const PersonalSidebar = ({
                 )}
 
                 {/* Badge */}
-                {!isCollapsed && item.badge && (
+                {!isCollapsed && itemBadge !== null && itemBadge !== undefined && (
                   <span
+                    data-testid={`badge-${item.id}`}
                     style={{
-                      backgroundColor: item.badgeColor || '#059669',
+                      backgroundColor:
+                        item.id === 'companies' && effectiveCompanyCount === 0
+                          ? '#64748B'
+                          : item.badgeColor || '#059669',
                       color: '#FFFFFF',
                       fontSize: '0.6875rem',
                       fontWeight: 700,
@@ -305,101 +386,13 @@ export const PersonalSidebar = ({
                       fontFamily: 'var(--font-mono, monospace)',
                     }}
                   >
-                    {item.badge}
+                    {itemBadge}
                   </span>
                 )}
               </button>
             </div>
           );
         })}
-
-        {/* Switch Space Divider & Links */}
-        <div style={{ margin: '12px 10px 4px', borderTop: '1px solid #E2E8F0' }} />
-
-        {!isCollapsed && (
-          <div
-            style={{
-              padding: '6px 14px 2px',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              color: '#94A3B8',
-              letterSpacing: '0.04em',
-            }}
-          >
-            CHUYỂN KHÔNG GIAN
-          </div>
-        )}
-
-        <div style={{ padding: '0 8px' }}>
-          <button
-            type="button"
-            onClick={(e) => handleItemClick(e, '/dashboard')}
-            title="Bàn Điều Khiển Doanh Nghiệp (Dashboard)"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              width: '100%',
-              padding: isCollapsed ? '10px 0' : '9px 12px',
-              justifyContent: isCollapsed ? 'center' : 'flex-start',
-              borderRadius: '9px',
-              border: 'none',
-              backgroundColor: 'transparent',
-              color: '#334155',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#F0FDF4';
-              e.currentTarget.style.color = '#059669';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = '#334155';
-            }}
-          >
-            <LayoutDashboard size={18} color="#059669" />
-            {!isCollapsed && <span>Về Dashboard</span>}
-          </button>
-
-          {canAccessAdmin && (
-            <button
-              type="button"
-              onClick={(e) => handleItemClick(e, '/admin')}
-              title="Cổng Quản Trị Hệ Thống (Admin)"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                width: '100%',
-                marginTop: '2px',
-                padding: isCollapsed ? '10px 0' : '9px 12px',
-                justifyContent: isCollapsed ? 'center' : 'flex-start',
-                borderRadius: '9px',
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: '#334155',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#F5F3FF';
-                e.currentTarget.style.color = '#7C3AED';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#334155';
-              }}
-            >
-              <Building2 size={18} color="#7C3AED" />
-              {!isCollapsed && <span>Cổng Quản Trị</span>}
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Sidebar Footer / Collapse Toggle */}

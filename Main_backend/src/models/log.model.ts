@@ -24,6 +24,7 @@ export interface ILogQueryOptions {
   startTime?: Date | null;
   endTime?: Date | null;
   clusterId?: string | null;
+  allowedOrgIds?: string[] | null;
   limit?: number;
   offset?: number;
 }
@@ -143,7 +144,9 @@ export class LogModel {
         FROM logs
         WHERE (
           metadata->>'service_id' = $1 
-          OR service_id::text = $1 OR service_id IN (SELECT id FROM workloads WHERE name = $1)
+          OR service_id::text = $1
+          OR service_id::text IN (SELECT id::text FROM workloads WHERE name = $1 OR id::text = $1)
+          OR pod_id IN (SELECT id FROM pods WHERE name LIKE $1 || '%')
         )
         AND occurred_at >= NOW() - ($2 || ' minutes')::interval
       )
@@ -182,14 +185,14 @@ export class LogModel {
       const isUuid = uuidRegex.test(options.serviceId);
       if (isUuid) {
         conditions.push(`(
-          l.service_id = $${paramIdx} 
+          l.service_id::text = $${paramIdx} 
           OR l.metadata->>'service_id' = $${paramIdx}
         )`);
       } else {
         conditions.push(`(
           l.metadata->>'service_id' = $${paramIdx} 
-          OR l.service_id IN (SELECT id FROM services WHERE name = $${paramIdx})
-          OR l.service_id IN (SELECT id FROM workloads WHERE name = $${paramIdx})
+          OR l.service_id::text IN (SELECT id::text FROM services WHERE name = $${paramIdx})
+          OR l.service_id::text IN (SELECT id::text FROM workloads WHERE name = $${paramIdx})
         )`);
       }
       params.push(options.serviceId);
@@ -202,17 +205,17 @@ export class LogModel {
       const isUuid = uuidRegex.test(ns);
       if (isUuid) {
         conditions.push(`(
-          l.namespace_id = $${paramIdx}
+          l.namespace_id::text = $${paramIdx}
           OR l.metadata->>'namespace' = $${paramIdx}
           OR l.metadata->>'namespace_id' = $${paramIdx}
-          OR l.pod_id IN (SELECT id FROM pods WHERE namespace_id = $${paramIdx})
+          OR l.pod_id::text IN (SELECT id::text FROM pods WHERE namespace_id::text = $${paramIdx})
         )`);
       } else {
         conditions.push(`(
-          l.namespace_id IN (SELECT id FROM namespaces WHERE name = $${paramIdx})
+          l.namespace_id::text IN (SELECT id::text FROM namespaces WHERE name = $${paramIdx})
           OR l.metadata->>'namespace' = $${paramIdx}
           OR l.metadata->>'namespace_id' = $${paramIdx}
-          OR l.pod_id IN (SELECT p.id FROM pods p JOIN namespaces ns ON p.namespace_id = ns.id WHERE ns.name = $${paramIdx})
+          OR l.pod_id::text IN (SELECT p.id::text FROM pods p JOIN namespaces ns ON p.namespace_id = ns.id WHERE ns.name = $${paramIdx})
         )`);
       }
       params.push(ns);
@@ -225,18 +228,18 @@ export class LogModel {
       const isUuid = uuidRegex.test(dep);
       if (isUuid) {
         conditions.push(`(
-          l.service_id = $${paramIdx}
+          l.service_id::text = $${paramIdx}
           OR l.metadata->>'service_id' = $${paramIdx}
           OR l.metadata->>'deployment' = $${paramIdx}
-          OR l.pod_id IN (SELECT id FROM pods WHERE workload_id = $${paramIdx})
+          OR l.pod_id::text IN (SELECT id::text FROM pods WHERE workload_id::text = $${paramIdx})
         )`);
       } else {
         conditions.push(`(
           l.metadata->>'service_id' = $${paramIdx}
           OR l.metadata->>'deployment' = $${paramIdx}
           OR l.metadata->>'workload' = $${paramIdx}
-          OR l.service_id IN (SELECT id FROM workloads WHERE name = $${paramIdx})
-          OR l.pod_id IN (SELECT p.id FROM pods p JOIN workloads w ON p.workload_id = w.id WHERE w.name = $${paramIdx})
+          OR l.service_id::text IN (SELECT id::text FROM workloads WHERE name = $${paramIdx})
+          OR l.pod_id::text IN (SELECT p.id::text FROM pods p JOIN workloads w ON p.workload_id = w.id WHERE w.name = $${paramIdx})
         )`);
       }
       params.push(dep);
@@ -249,7 +252,7 @@ export class LogModel {
       const isUuid = uuidRegex.test(pod);
       if (isUuid) {
         conditions.push(`(
-          l.pod_id = $${paramIdx}
+          l.pod_id::text = $${paramIdx}
           OR l.metadata->>'pod_id' = $${paramIdx}
           OR l.metadata->>'pod_name' = $${paramIdx}
         )`);
@@ -257,7 +260,7 @@ export class LogModel {
         conditions.push(`(
           l.metadata->>'pod_id' = $${paramIdx}
           OR l.metadata->>'pod_name' = $${paramIdx}
-          OR l.pod_id IN (SELECT id FROM pods WHERE name = $${paramIdx})
+          OR l.pod_id::text IN (SELECT id::text FROM pods WHERE name = $${paramIdx})
         )`);
       }
       params.push(pod);
@@ -292,6 +295,27 @@ export class LogModel {
       params.push(options.clusterId);
     }
 
+    // Tenant Isolation Scope [S4][PB17] 3.5
+    if (Array.isArray(options.allowedOrgIds) && options.allowedOrgIds.length > 0) {
+      conditions.push(`(
+        l.cluster_id::text IN (
+          SELECT c.id::text FROM clusters c 
+          JOIN environments env ON c.environment_id = env.id 
+          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
+        )
+        OR l.service_id::text IN (
+          SELECT s.id::text FROM services s 
+          JOIN clusters c ON s.cluster_id = c.id
+          JOIN environments env ON c.environment_id = env.id 
+          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
+        )
+        OR (l.metadata->>'organization_id') = ANY($${paramIdx}::text[])
+        OR (l.metadata->>'org_id') = ANY($${paramIdx}::text[])
+      )`);
+      params.push(options.allowedOrgIds);
+      paramIdx++;
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // 1. Get total count
@@ -322,10 +346,10 @@ export class LogModel {
         l.occurred_at,
         l.metadata
       FROM logs l
-      LEFT JOIN services s ON l.service_id = s.id
-      LEFT JOIN workloads w ON l.service_id = w.id
-      LEFT JOIN namespaces ns ON l.namespace_id = ns.id
-      LEFT JOIN pods p ON l.pod_id = p.id
+      LEFT JOIN services s ON l.service_id::text = s.id::text
+      LEFT JOIN workloads w ON l.service_id::text = w.id::text
+      LEFT JOIN namespaces ns ON l.namespace_id::text = ns.id::text
+      LEFT JOIN pods p ON l.pod_id::text = p.id::text
       ${whereClause}
       ORDER BY l.occurred_at DESC, l.id DESC
       LIMIT $${paramIdx++} OFFSET $${paramIdx++};

@@ -30,6 +30,14 @@ import {
 export const ApmPage = ({ onNavigate }) => {
   const { currentOrg, currentEnv } = useDashboard();
 
+  const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
+  const isClusterOnline = Boolean(
+    (currentEnv?.agentStatus === 'ONLINE' || currentEnv?.status === 'Healthy' || currentEnv?.status === 'Ready') &&
+    activeClusterId &&
+    activeClusterId !== 'null' &&
+    !String(activeClusterId).startsWith('sandbox-')
+  );
+
   const [servicesList, setServicesList] = useState([]);
   const [selectedService, setSelectedService] = useState('hello-minikube');
   const [timeRange, setTimeRange] = useState('15m');
@@ -48,10 +56,20 @@ export const ApmPage = ({ onNavigate }) => {
   const abortControllerRef = useRef(null);
   const requestSeqRef = useRef(0);
 
-  // 1. Fetch APM services list
+  // 1. Fetch APM services list scoped by Organization & Cluster
   const loadServices = useCallback(async () => {
+    if (!currentOrg?.id || !isClusterOnline) {
+      setServicesList([]);
+      setRawSequence([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const list = await telemetryService.getApmServices(60);
+      const list = await telemetryService.getApmServices(60, {
+        organizationId: currentOrg.id,
+        clusterId: activeClusterId,
+      });
       if (Array.isArray(list) && list.length > 0) {
         setServicesList(list);
         setSelectedService((prev) => {
@@ -60,11 +78,16 @@ export const ApmPage = ({ onNavigate }) => {
           }
           return list[0].service_id || list[0].service_name || 'hello-minikube';
         });
+      } else {
+        setServicesList([]);
+        setRawSequence([]);
       }
     } catch (err) {
       console.warn('[ApmPage] Không thể tải danh sách APM services:', err.message);
+      setServicesList([]);
+      setRawSequence([]);
     }
-  }, []);
+  }, [currentOrg?.id, activeClusterId, isClusterOnline]);
 
   useEffect(() => {
     loadServices();
@@ -92,10 +115,18 @@ export const ApmPage = ({ onNavigate }) => {
           APM_TIME_RANGE_PRESETS.find((p) => p.id === timeRange) ||
           APM_TIME_RANGE_PRESETS[1];
 
+        if (!isClusterOnline) {
+          setRawSequence([]);
+          setIsLoading(false);
+          return;
+        }
+
         const sequence = await telemetryService.getMetricsSequence(selectedService, {
           limit: preset.limit,
           bucket_seconds: preset.bucketSeconds,
           range: preset.id,
+          cluster_id: activeClusterId,
+          organization_id: currentOrg?.id,
           signal: controller.signal,
         });
 
@@ -378,7 +409,7 @@ export const ApmPage = ({ onNavigate }) => {
               }}
             >
               {servicesList.length === 0 ? (
-                <option value="hello-minikube">hello-minikube (Mặc định)</option>
+                <option value="">{isClusterOnline ? '-- Chưa có dịch vụ nào --' : '-- Cụm chưa kết nối tác tử --'}</option>
               ) : (
                 servicesList.map((s) => (
                   <option key={s.service_id} value={s.service_id}>
@@ -723,7 +754,7 @@ export const ApmPage = ({ onNavigate }) => {
         chartModel={chartModel}
         serviceName={selectedService}
         isLoading={isLoading}
-        errorMessage={errorMessage}
+        errorMessage={!isClusterOnline ? 'Cụm Kubernetes chưa kết nối hoặc Tác tử eBPF đang ngoại tuyến tại tổ chức này.' : errorMessage}
         onRetry={() => fetchServiceMetrics(false)}
       />
 
@@ -891,7 +922,9 @@ export const ApmPage = ({ onNavigate }) => {
               {filteredAndSortedServices.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
-                    Không tìm thấy dịch vụ nào phù hợp với tìm kiếm
+                    {!isClusterOnline
+                      ? 'Chưa có dữ liệu do Cụm Kubernetes chưa kết nối hoặc Tác tử eBPF đang ngoại tuyến tại tổ chức này.'
+                      : 'Không tìm thấy dịch vụ nào phù hợp với tìm kiếm'}
                   </td>
                 </tr>
               ) : (

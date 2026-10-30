@@ -1,6 +1,19 @@
 import React from 'react';
-import { Layers, ArrowUpRight, Radio, Users, Ban, CheckCircle2 } from 'lucide-react';
+import { ArrowUpRight, Radio, Users, Ban, CheckCircle2 } from 'lucide-react';
 import OrganizationStatusBadge from './OrganizationStatusBadge';
+
+const getAgentHealthStyle = (health) => {
+  if (!health || health === 'Chưa kết nối') {
+    return { color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+  }
+  if (health.includes('100%') || health === 'ONLINE') {
+    return { color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' };
+  }
+  if (health.includes('%') || health.includes('Degraded')) {
+    return { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' };
+  }
+  return { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' };
+};
 
 export const OrganizationTable = ({
   organizations = [],
@@ -73,19 +86,18 @@ export const OrganizationTable = ({
       <table className="dash-table" style={{ width: '100%', fontSize: '0.8125rem' }}>
         <thead>
           <tr>
-            <th style={{ minWidth: '220px' }}>Tổ Chức & Tên Miền</th>
-            <th style={{ minWidth: '130px' }}>Gói Dịch Vụ</th>
-            <th style={{ minWidth: '110px' }}>Thành Viên</th>
+            <th style={{ minWidth: '240px' }}>Tổ Chức & Tên Miền</th>
+            <th style={{ minWidth: '120px' }}>Thành Viên</th>
             <th style={{ minWidth: '140px' }}>Cụm K8s & Pods</th>
             <th style={{ minWidth: '130px' }}>Tác Tử eBPF</th>
             <th style={{ minWidth: '120px' }}>Trạng Thái</th>
-            <th style={{ minWidth: '100px' }}>Ngày Tạo</th>
+            <th style={{ minWidth: '110px' }}>Ngày Tạo</th>
             <th style={{ minWidth: '170px', textAlign: 'right' }}>Thao Tác Quản Trị</th>
           </tr>
         </thead>
         <tbody>
           {organizations.map((org) => {
-            const initial = org.name.charAt(0).toUpperCase();
+            const initial = org.name ? org.name.charAt(0).toUpperCase() : 'O';
 
             return (
               <tr key={org.id} style={{ transition: 'background-color 0.15s ease' }}>
@@ -111,7 +123,24 @@ export const OrganizationTable = ({
                       {initial}
                     </div>
                     <div>
-                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{org.name}</div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          color: 'var(--dash-text-primary)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleSelect(org)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSelect(org);
+                          }
+                        }}
+                      >
+                        {org.name}
+                      </div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {org.domain}
                       </div>
@@ -119,29 +148,11 @@ export const OrganizationTable = ({
                   </div>
                 </td>
 
-                {/* Plan Tier */}
-                <td>
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      fontSize: '0.6875rem',
-                      fontWeight: 700,
-                      backgroundColor: org.plan.includes('Enterprise') ? '#FAF5FF' : org.plan.includes('Pro') ? '#EFF6FF' : '#F1F5F9',
-                      color: org.plan.includes('Enterprise') ? '#7E22CE' : org.plan.includes('Pro') ? '#1D4ED8' : '#475569',
-                      border: org.plan.includes('Enterprise') ? '1px solid #E9D5FF' : org.plan.includes('Pro') ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
-                    }}
-                  >
-                    {org.plan}
-                  </span>
-                </td>
-
                 {/* Members Count */}
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
                     <Users size={13} />
-                    <span>{org.membersCount || 6} người</span>
+                    <span>{org.membersCount || 1} người</span>
                   </div>
                 </td>
 
@@ -157,30 +168,34 @@ export const OrganizationTable = ({
 
                 {/* eBPF Agent Status */}
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Radio
-                      size={13}
-                      style={{
-                        color: org.agentHealth.includes('100%')
-                          ? '#059669'
-                          : org.agentHealth.includes('Degraded')
-                          ? '#D97706'
-                          : '#DC2626',
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontWeight: 600,
-                        color: org.agentHealth.includes('100%')
-                          ? '#059669'
-                          : org.agentHealth.includes('Degraded')
-                          ? '#D97706'
-                          : '#DC2626',
-                      }}
-                    >
-                      {org.agentHealth}
-                    </span>
-                  </div>
+                  {(() => {
+                    const health = org.agentHealth || 'Chưa kết nối';
+                    const style = getAgentHealthStyle(health);
+                    return (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: style.bg,
+                          border: `1px solid ${style.border}`,
+                        }}
+                      >
+                        <Radio size={12} style={{ color: style.color }} />
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            fontSize: '0.75rem',
+                            color: style.color,
+                          }}
+                        >
+                          {health}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </td>
 
                 {/* Status */}

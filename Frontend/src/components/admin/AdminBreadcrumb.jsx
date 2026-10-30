@@ -18,7 +18,6 @@ const PATH_NAME_MAP = {
   monitoring: 'Giám Sát Hệ Thống',
   alerts: 'Sự Cố & Cảnh Báo',
   incidents: 'Sự Cố & Cảnh Báo',
-  'system-logs': 'Nhật Ký Hệ Thống',
   'audit-logs': 'Nhật Ký Kiểm Toán',
   activity: 'Hoạt Động Người Dùng',
   settings: 'Cài Đặt Hệ Thống',

@@ -589,6 +589,7 @@ export const getAuditLogs = async (filters = {}, pagination = { page: 1, pageSiz
       if (filters.resourceType && filters.resourceType !== 'ALL') params.set('resource_type', filters.resourceType);
       if (filters.organization && filters.organization !== 'ALL') params.set('organization_id', filters.organization);
       if (filters.search) params.set('search', filters.search);
+      if (filters.user_id || filters.userId) params.set('user_id', filters.user_id || filters.userId);
 
       if (filters.dateRange && filters.dateRange !== 'ALL') {
         const now = new Date();

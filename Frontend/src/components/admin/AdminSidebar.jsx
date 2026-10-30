@@ -176,7 +176,7 @@ export const SME_OWNER_NAV_GROUPS = [
       },
       {
         id: 'reports',
-        label: 'Báo cáo SLA & Chi phí',
+        label: 'Báo cáo SLA & Vận hành',
         path: '/dashboard/reports',
         icon: TrendingUp,
       },
@@ -355,12 +355,6 @@ export const ADMIN_NAV_GROUPS = [
         icon: AlertTriangle,
         badge: 'Cảnh báo',
         badgeColor: '#EF4444',
-      },
-      {
-        id: 'system-logs',
-        label: 'Nhật Ký Hệ Thống',
-        path: '/admin/system-logs',
-        icon: FileCode,
       },
     ],
   },

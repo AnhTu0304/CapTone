@@ -1,7 +1,5 @@
 import React, { useState, useRef } from 'react';
-import {
-  ScrollText
-} from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 
 /**
  * AuditDistributionChart
@@ -16,19 +14,22 @@ export const AuditDistributionChart = ({
   subtitle = 'Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật',
   className = '',
   height = 220,
+  data = null,
 }) => {
   const [hoverIndex, setHoverIndex] = useState(null);
   const svgRef = useRef(null);
 
-  const days = [
-    { day: '13/09', autonomous: 14, hitl: 2, policy: 1, auth: 8 },
-    { day: '14/09', autonomous: 19, hitl: 1, policy: 3, auth: 12 },
-    { day: '15/09', autonomous: 22, hitl: 4, policy: 0, auth: 15 },
-    { day: '16/09', autonomous: 16, hitl: 2, policy: 2, auth: 11 },
-    { day: '17/09', autonomous: 25, hitl: 3, policy: 4, auth: 14 },
-    { day: '18/09', autonomous: 18, hitl: 1, policy: 1, auth: 9 },
-    { day: '19/09 (Hôm nay)', autonomous: 21, hitl: 2, policy: 2, auth: 10 },
+  const fallbackDays = [
+    { day: '22/10', autonomous: 5, hitl: 1, policy: 0, auth: 4 },
+    { day: '23/10', autonomous: 8, hitl: 2, policy: 1, auth: 6 },
+    { day: '24/10', autonomous: 12, hitl: 0, policy: 2, auth: 8 },
+    { day: '25/10', autonomous: 6, hitl: 1, policy: 0, auth: 5 },
+    { day: '26/10', autonomous: 15, hitl: 3, policy: 2, auth: 10 },
+    { day: '27/10', autonomous: 10, hitl: 2, policy: 1, auth: 7 },
+    { day: '28/10 (Hôm nay)', autonomous: 4, hitl: 1, policy: 1, auth: 3 },
   ];
+
+  const activeDays = (data && Array.isArray(data) && data.length > 0) ? data : fallbackDays;
 
   const categories = [
     { key: 'autonomous', label: 'AI Tự Trị (MAPE-K)', color: '#059669' },
@@ -42,8 +43,13 @@ export const AuditDistributionChart = ({
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  const maxTotal = 45; // Max events per day scale
-  const getX = (i) => padding.left + (i / (days.length - 1)) * chartWidth;
+  const maxVal = Math.max(
+    ...activeDays.map((d) => (d.autonomous || 0) + (d.hitl || 0) + (d.policy || 0) + (d.auth || 0)),
+    10
+  );
+  const maxTotal = Math.max(15, Math.ceil(maxVal * 1.25));
+
+  const getX = (i) => padding.left + (i / Math.max(1, activeDays.length - 1)) * chartWidth;
   const getY = (val) => padding.top + chartHeight - (val / maxTotal) * chartHeight;
 
   const handleMouseMove = (e) => {
@@ -57,9 +63,9 @@ export const AuditDistributionChart = ({
       return;
     }
 
-    const colWidth = chartWidth / (days.length - 1);
+    const colWidth = chartWidth / Math.max(1, activeDays.length - 1);
     const index = Math.round((relativeX - padding.left) / colWidth);
-    const clampedIndex = Math.max(0, Math.min(days.length - 1, index));
+    const clampedIndex = Math.max(0, Math.min(activeDays.length - 1, index));
     setHoverIndex(clampedIndex);
   };
 
@@ -67,7 +73,9 @@ export const AuditDistributionChart = ({
     setHoverIndex(null);
   };
 
-  const hoveredData = hoverIndex !== null ? days[hoverIndex] : null;
+  const hoveredData = hoverIndex !== null ? activeDays[hoverIndex] : null;
+
+  const gridValues = [0, Math.round(maxTotal / 3), Math.round((maxTotal * 2) / 3), maxTotal];
 
   return (
     <div
@@ -115,7 +123,7 @@ export const AuditDistributionChart = ({
           onMouseLeave={handleMouseLeave}
         >
           {/* Horizontal Grid */}
-          {[0, 15, 30, 45].map((val) => {
+          {gridValues.map((val) => {
             const y = getY(val);
             return (
               <g key={`grid-${val}`}>
@@ -142,7 +150,7 @@ export const AuditDistributionChart = ({
           })}
 
           {/* Stacked Bars per Day */}
-          {days.map((d, i) => {
+          {activeDays.map((d, i) => {
             const cx = getX(i);
             const barW = 24;
             const isHovered = hoverIndex === i;
@@ -150,7 +158,7 @@ export const AuditDistributionChart = ({
             // Stack heights
             let currentBase = 0;
             const barSegments = categories.map((cat) => {
-              const val = d[cat.key];
+              const val = d[cat.key] || 0;
               const segH = (val / maxTotal) * chartHeight;
               const segY = padding.top + chartHeight - ((currentBase + val) / maxTotal) * chartHeight;
               currentBase += val;
@@ -164,7 +172,7 @@ export const AuditDistributionChart = ({
             });
 
             return (
-              <g key={`col-${d.day}`}>
+              <g key={`col-${d.day}-${i}`}>
                 {/* Hover Column Background */}
                 <rect
                   x={cx - barW / 2 - 4}
@@ -182,7 +190,7 @@ export const AuditDistributionChart = ({
                     x={cx - barW / 2}
                     y={seg.y}
                     width={barW}
-                    height={Math.max(1, seg.height)}
+                    height={Math.max(0, seg.height)}
                     fill={seg.color}
                     opacity={isHovered ? 1 : 0.85}
                   />
@@ -237,24 +245,24 @@ export const AuditDistributionChart = ({
             }}
           >
             <div style={{ fontWeight: 800, color: '#34D399', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '3px' }}>
-              Ngày {hoveredData.day} &bull; Tổng: {hoveredData.autonomous + hoveredData.hitl + hoveredData.policy + hoveredData.auth} bản ghi
+              Ngày {hoveredData.day} &bull; Tổng: {(hoveredData.autonomous || 0) + (hoveredData.hitl || 0) + (hoveredData.policy || 0) + (hoveredData.auth || 0)} bản ghi
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', lineHeight: 1.3 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#A7F3D0' }}>AI Tự Trị (MAPE-K):</span>
-                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.autonomous}</strong>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.autonomous || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#93C5FD' }}>Con Người Phê Duyệt:</span>
-                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.hitl}</strong>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.hitl || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#FDE68A' }}>Thay Đổi Chính Sách:</span>
-                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.policy}</strong>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.policy || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#CBD5E1' }}>Xác Thực & Truy Cập:</span>
-                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.auth}</strong>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.auth || 0}</strong>
               </div>
             </div>
           </div>

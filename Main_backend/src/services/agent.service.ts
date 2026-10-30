@@ -103,7 +103,7 @@ export class AgentService {
     if (clusterId && serviceId) {
       try {
         const nsRes = await pool.query(
-          `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id IN (SELECT id FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
+          `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
           [clusterId, namespaceName]
         );
         const namespaceId = nsRes.rows[0]?.id || null;
@@ -854,12 +854,12 @@ export class AgentService {
   }
 
   /**
-   * Store Kubernetes Events & Pod Status with boundary validation and sanitization
+   * Store Kubernetes Events & Pod Status with boundary validation, sanitization and idempotent upsert [S4][PB18] 4.2
    */
   public static async storeK8sEvent(
     agent: AuthenticatedAgent,
     data: AgentK8sEventPayload
-  ): Promise<{ id: number | string }> {
+  ): Promise<{ id: number | string; count?: number; is_new?: boolean }> {
     const rawDate = new Date(data.timestamp);
     const eventTime = isNaN(rawDate.getTime()) ? new Date() : rawDate;
 
@@ -868,20 +868,36 @@ export class AgentService {
     const safeMessage = (data.event.message || '').slice(0, 10000);
     const safePodId = (data.pod_id || 'unknown-pod').slice(0, 255);
     const safePodName = (data.pod_name || 'unknown-pod').slice(0, 255);
+    const safeResourceType = (data.resource_type || 'Pod').slice(0, 100);
+    const safeNamespace = (data.namespace || 'default').slice(0, 100);
+    const eventUid = (data.event_uid || data.event.uid || data.event.event_uid || null)?.slice(0, 255) || null;
+    const sourceComponent = (data.source_component || data.event.source_component || 'k8s-agent').slice(0, 100);
+    const reportingController = (data.reporting_controller || data.event.reporting_controller || null)?.slice(0, 100) || null;
+    const action = (data.action || data.event.action || null)?.slice(0, 100) || null;
 
-    const result = await KubernetesEventModel.create({
+    const rawFirst = data.first_seen_at || data.event.first_timestamp ? new Date(data.first_seen_at || data.event.first_timestamp!) : eventTime;
+    const rawLast = data.last_seen_at || data.event.last_timestamp ? new Date(data.last_seen_at || data.event.last_timestamp!) : eventTime;
+    const firstSeen = isNaN(rawFirst.getTime()) ? eventTime : rawFirst;
+    const lastSeen = isNaN(rawLast.getTime()) ? eventTime : rawLast;
+    const count = data.count || data.event.count || 1;
+
+    const result = await KubernetesEventModel.upsertEvent({
       cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 255) : null,
-      resource_type: 'Pod',
+      event_uid: eventUid,
+      resource_type: safeResourceType,
       resource_uid: safePodId,
       event_type: safeType,
       reason: safeReason,
       message: safeMessage,
-      source_component: 'k8s-agent',
-      first_seen_at: eventTime,
-      last_seen_at: eventTime,
-      count: 1,
+      source_component: sourceComponent,
+      reporting_controller: reportingController,
+      action: action,
+      first_seen_at: firstSeen,
+      last_seen_at: lastSeen,
+      count: count,
       metadata: {
         service_id: data.service_id.slice(0, 100),
+        namespace: safeNamespace,
         pod_name: safePodName,
         pod_status: (data.status || 'Running').slice(0, 50),
         agent_id: agent.id,

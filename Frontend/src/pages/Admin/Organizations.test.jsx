@@ -5,9 +5,13 @@ import OrganizationsListPage from './Organizations/OrganizationsListPage';
 import OrganizationDetailsPage from './Organizations/OrganizationDetailsPage';
 import OrganizationStatusBadge from '../../components/admin/organizations/OrganizationStatusBadge';
 import OrganizationMembers from '../../components/admin/organizations/OrganizationMembers';
+import OrganizationFilters from '../../components/admin/organizations/OrganizationFilters';
+import OrganizationTable from '../../components/admin/organizations/OrganizationTable';
 import {
   getOrganizations,
   getOrganization,
+  createOrganization,
+  updateOrganizationStatus,
   getOrganizationMembers,
   getOrganizationEnvironments,
   getOrganizationClusters,
@@ -25,7 +29,6 @@ describe('Platform Admin Organizations Service & Components', () => {
       const first = orgs[0];
       expect(first).toHaveProperty('id');
       expect(first).toHaveProperty('name');
-      expect(first).toHaveProperty('plan');
       expect(first).toHaveProperty('status');
       expect(first).toHaveProperty('clustersCount');
     });
@@ -35,6 +38,25 @@ describe('Platform Admin Organizations Service & Components', () => {
       expect(org).toBeDefined();
       expect(org.id).toBe('org-acme-01');
       expect(org.name).toBe('Acme Infrastructure Corp');
+    });
+
+    test('createOrganization adds new organization', async () => {
+      const newOrg = await createOrganization({
+        name: 'Test Innovation Hub',
+        slug: 'test-hub',
+        contactEmail: 'contact@testhub.vn',
+        domain: 'testhub.vn',
+        clustersLimit: 2,
+      });
+      expect(newOrg).toBeDefined();
+      expect(newOrg.name).toBe('Test Innovation Hub');
+      expect(newOrg.status).toBe('ACTIVE');
+    });
+
+    test('updateOrganizationStatus updates status in dataset', async () => {
+      const result = await updateOrganizationStatus('org-health-05', 'ACTIVE');
+      expect(result).toBeDefined();
+      expect(result.status).toBe('ACTIVE');
     });
 
     test('getOrganizationMembers returns SME members with segregated scopeNote', async () => {
@@ -118,13 +140,70 @@ describe('Platform Admin Organizations Service & Components', () => {
     });
   });
 
+  describe('Service Filter & Plan Column Removal Verification', () => {
+    test('OrganizationFilters renders search and status filter without service/plan filter dropdown', () => {
+      const onSearchChange = jest.fn();
+      const onStatusChange = jest.fn();
+
+      render(
+        <OrganizationFilters
+          search=""
+          onSearchChange={onSearchChange}
+          status="ALL"
+          onStatusChange={onStatusChange}
+          totalCount={5}
+        />
+      );
+
+      // Search input is present
+      expect(screen.getByLabelText('Tìm kiếm tổ chức')).toBeInTheDocument();
+      // Status filter is present
+      expect(screen.getByLabelText('Lọc theo trạng thái')).toBeInTheDocument();
+      // Service / Plan filter dropdown is NOT present
+      expect(screen.queryByLabelText(/Lọc theo gói cước/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Lọc theo dịch vụ/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Mọi Gói Dịch Vụ/i)).not.toBeInTheDocument();
+    });
+
+    test('OrganizationTable renders without Gói Dịch Vụ column header and without plan badges', () => {
+      const sampleOrgs = [
+        {
+          id: 'org-test-1',
+          name: 'SME Retail Enterprise',
+          slug: 'sme-retail',
+          domain: 'sme-retail.com',
+          status: 'ACTIVE',
+          createdAt: '26/10/2026',
+          clustersCount: 1,
+          clustersLimit: 3,
+          podsCount: 24,
+          podsLimit: 100,
+          agentHealth: '100% Online',
+          membersCount: 1,
+        },
+      ];
+
+      render(<OrganizationTable organizations={sampleOrgs} />);
+
+      // Column headers
+      expect(screen.queryByText('Gói Dịch Vụ')).not.toBeInTheDocument();
+      expect(screen.queryByText(/SME Pro/i)).not.toBeInTheDocument();
+      expect(screen.getByText('Tổ Chức & Tên Miền')).toBeInTheDocument();
+      expect(screen.getByText('Thành Viên')).toBeInTheDocument();
+      expect(screen.getByText('Cụm K8s & Pods')).toBeInTheDocument();
+      expect(screen.getByText('Tác Tử eBPF')).toBeInTheDocument();
+      expect(screen.getByText('100% Online')).toBeInTheDocument();
+      expect(screen.getByText('SME Retail Enterprise')).toBeInTheDocument();
+    });
+  });
+
   describe('OrganizationsListPage', () => {
-    test('renders page title, summary cards, and organization table', async () => {
+    test('renders page title, summary cards, and organization table without Gói Dịch Vụ', async () => {
       const mockNavigate = jest.fn();
       render(<OrganizationsListPage onNavigate={mockNavigate} />);
 
-      expect(screen.getByText(/Quản Lý Tổ Chức & Doanh Nghiệp \(Tenants\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/TỔNG SỐ TỔ CHỨC/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: /Quản Lý Doanh Nghiệp/i })).toBeInTheDocument();
+      expect(screen.getByText(/TỔNG DOANH NGHIỆP/i)).toBeInTheDocument();
 
       // Wait for table to load
       await waitFor(() => {
@@ -132,6 +211,11 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
 
       expect(screen.getByText('Fintech Payments Group')).toBeInTheDocument();
+
+      // Confirm service filter dropdown and column are absent
+      expect(screen.queryByLabelText(/Lọc theo gói cước/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Mọi Gói Dịch Vụ/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('Gói Dịch Vụ')).not.toBeInTheDocument();
     });
 
     test('triggers onNavigate when clicking on an organization', async () => {
@@ -163,10 +247,26 @@ describe('Platform Admin Organizations Service & Components', () => {
         expect(screen.queryByText('Acme Infrastructure Corp')).not.toBeInTheDocument();
       });
     });
+
+    test('create modal contains required fields and no service selector', async () => {
+      render(<OrganizationsListPage onNavigate={jest.fn()} />);
+
+      const createBtn = screen.getByRole('button', { name: /Tạo Company Mới/i });
+      fireEvent.click(createBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Đăng Ký / Tạo Company Mới')).toBeInTheDocument();
+      });
+
+      expect(screen.getByPlaceholderText(/Ví dụ: VNG Cloud Technology/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/admin@vngcloud.vn/i)).toBeInTheDocument();
+      // No service selector in create modal
+      expect(screen.queryByText(/Gói Dịch Vụ Thuê Bao/i)).not.toBeInTheDocument();
+    });
   });
 
   describe('OrganizationDetailsPage', () => {
-    test('renders organization details, tabs, and switches views', async () => {
+    test('renders organization details, tabs, and switches views without plan badge', async () => {
       const mockNavigate = jest.fn();
       render(<OrganizationDetailsPage orgId="org-acme-01" onNavigate={mockNavigate} />);
 
@@ -183,7 +283,7 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
 
       // Check tabs
-      const membersTab = screen.getByText(/Nhân Sự SME/i);
+      const membersTab = screen.getByRole('tab', { name: /Nhân Sự SME/i });
       expect(membersTab).toBeInTheDocument();
 
       fireEvent.click(membersTab);
@@ -194,11 +294,59 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
 
       // Click clusters tab
-      const clustersTab = screen.getByText(/Cụm K8s/i);
+      const clustersTab = screen.getByRole('tab', { name: /Cụm K8s/i });
       fireEvent.click(clustersTab);
 
       await waitFor(() => {
-        expect(screen.getByText(/Cụm Kubernetes Đã Đăng Ký/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 3, name: /Cụm Kubernetes Đã Đăng Ký/i })).toBeInTheDocument();
+      });
+    });
+
+    test('sub-navigation buttons (Môi Trường, Cụm K8s, Tác Tử eBPF, Sự Cố & MTTR, Nhật Ký Kiểm Toán) connect and render data correctly', async () => {
+      render(<OrganizationDetailsPage orgId="org-acme-01" onNavigate={jest.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Acme Infrastructure Corp')).toBeInTheDocument();
+      });
+
+      // 1. Môi Trường tab
+      const envsTab = screen.getByRole('tab', { name: /Môi Trường/i });
+      expect(envsTab).toBeInTheDocument();
+      fireEvent.click(envsTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Môi Trường Triển Khai/i })).toBeInTheDocument();
+      });
+
+      // 2. Cụm K8s tab
+      const clustersTab = screen.getByRole('tab', { name: /Cụm K8s/i });
+      expect(clustersTab).toBeInTheDocument();
+      fireEvent.click(clustersTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Cụm Kubernetes Đã Đăng Ký/i })).toBeInTheDocument();
+      });
+
+      // 3. Tác Tử eBPF tab
+      const agentsTab = screen.getByRole('tab', { name: /Tác Tử eBPF/i });
+      expect(agentsTab).toBeInTheDocument();
+      fireEvent.click(agentsTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Tác Tử Giám Sát eBPF/i })).toBeInTheDocument();
+      });
+
+      // 4. Sự Cố & MTTR tab
+      const incidentsTab = screen.getByRole('tab', { name: /Sự Cố & MTTR/i });
+      expect(incidentsTab).toBeInTheDocument();
+      fireEvent.click(incidentsTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Lịch Sử Sự Cố & Cứu Hộ Tự Động/i })).toBeInTheDocument();
+      });
+
+      // 5. Nhật Ký Kiểm Toán tab
+      const auditTab = screen.getByRole('tab', { name: /Nhật Ký Kiểm Toán/i });
+      expect(auditTab).toBeInTheDocument();
+      fireEvent.click(auditTab);
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 3, name: /Nhật Ký Kiểm Toán Cấp Quản Trị Hệ Thống/i })).toBeInTheDocument();
       });
     });
 

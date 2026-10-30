@@ -1,4 +1,5 @@
-import { request } from './apiClient';
+import { request, getAuthToken } from './apiClient';
+import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
 /**
  * @file personalPortalService.js
  * @description Dịch vụ quản lý dữ liệu Tầng Cá Nhân (Personal Space / User Portal)
@@ -22,90 +23,11 @@ const STORAGE_ACTIVITIES_KEY = 'selfheal_personal_activities_v1';
 const STORAGE_NOTIF_SETTINGS_KEY = 'selfheal_personal_notif_settings_v1';
 const STORAGE_PERSONAL_NOTIFS_KEY = 'selfheal_personal_notifications_v1';
 
-// Dữ liệu mẫu danh sách Company tham gia
-export const INITIAL_COMPANIES = [
-  {
-    id: 'org-acme-01',
-    name: 'Acme Corporation',
-    slug: 'acme-corp',
-    plan: 'Enterprise Cloud',
-    status: 'ACTIVE',
-    role: 'SME_OWNER',
-    roleTitle: 'Chủ Doanh Nghiệp (Owner)',
-    joinedAt: '15/01/2026',
-    clustersCount: 4,
-    membersCount: 18,
-    activeWorkloads: 32,
-    domain: 'acmecorp.vn',
-    isPrimary: true,
-    lastAccessedAt: '10 phút trước',
-    healthStatus: 'HEALTHY',
-  },
-  {
-    id: 'org-vng-fintech',
-    name: 'VNG Fintech Gateway',
-    slug: 'vng-fintech',
-    plan: 'SME Pro',
-    status: 'ACTIVE',
-    role: 'DEVOPS',
-    roleTitle: 'Kỹ Sư Vận Hành Hạ Tầng (DevOps)',
-    joinedAt: '02/03/2026',
-    clustersCount: 2,
-    membersCount: 8,
-    activeWorkloads: 14,
-    domain: 'fintech.vng.vn',
-    isPrimary: false,
-    lastAccessedAt: '2 giờ trước',
-    healthStatus: 'WARNING',
-  },
-  {
-    id: 'org-retail-asia',
-    name: 'Smart Retail Logistics',
-    slug: 'smart-retail',
-    plan: 'SME Starter',
-    status: 'ACTIVE',
-    role: 'VIEWER',
-    roleTitle: 'Người Giám Sát (Viewer)',
-    joinedAt: '12/04/2026',
-    clustersCount: 1,
-    membersCount: 5,
-    activeWorkloads: 6,
-    domain: 'smartretail.asia',
-    isPrimary: false,
-    lastAccessedAt: 'Hôm qua',
-    healthStatus: 'HEALTHY',
-  },
-];
+// Danh sách Company tham gia mặc định (Rỗng khi database chưa có dữ liệu)
+export const INITIAL_COMPANIES = [];
 
-// Lời mời tham gia Company đang chờ
-export const INITIAL_INVITATIONS = [
-  {
-    id: 'inv-2026-901',
-    organizationId: 'org-data-stream',
-    organizationName: 'DataStream AI Analytics',
-    inviterName: 'Trần Minh Đức (CTO)',
-    inviterEmail: 'duc.tran@datastream.ai',
-    invitedRole: 'DEVOPS',
-    invitedRoleTitle: 'Kỹ Sư DevOps / SRE',
-    createdAt: '20/10/2026',
-    expiresAt: '27/10/2026',
-    status: 'PENDING',
-    clustersCount: 3,
-  },
-  {
-    id: 'inv-2026-902',
-    organizationId: 'org-nexus-cloud',
-    organizationName: 'Nexus Global Cloud',
-    inviterName: 'Lê Hoàng Yến (HR Manager)',
-    inviterEmail: 'yen.le@nexuscloud.io',
-    invitedRole: 'VIEWER',
-    invitedRoleTitle: 'Người Quan Sát Báo Cáo',
-    createdAt: '21/10/2026',
-    expiresAt: '28/10/2026',
-    status: 'PENDING',
-    clustersCount: 1,
-  },
-];
+// Lời mời tham gia Company đang chờ mặc định
+export const INITIAL_INVITATIONS = [];
 
 // Các phiên đăng nhập đang hoạt động
 export const INITIAL_SESSIONS = [
@@ -191,50 +113,8 @@ export const INITIAL_LOGIN_HISTORY = [
   },
 ];
 
-// Thông báo cá nhân
-export const INITIAL_PERSONAL_NOTIFS = [
-  {
-    id: 'pnotif-1',
-    type: 'INVITATION',
-    title: 'Lời mời tham gia Company: DataStream AI Analytics',
-    message: 'Trần Minh Đức (CTO) đã mời bạn tham gia tổ chức với vai trò Kỹ Sư DevOps / SRE.',
-    createdAt: '22/10/2026 02:15',
-    read: false,
-    severity: 'INFO',
-    actionType: 'INVITATION',
-    invitationId: 'inv-2026-901',
-  },
-  {
-    id: 'pnotif-2',
-    type: 'SECURITY',
-    title: 'Cảnh báo đăng nhập mới từ thiết bị lạ',
-    message: 'Tài khoản vừa đăng nhập thành công từ IP 118.70.12.84 (Hà Nội, Chrome Windows).',
-    createdAt: '22/10/2026 03:00',
-    read: false,
-    severity: 'WARNING',
-    actionType: 'SECURITY',
-  },
-  {
-    id: 'pnotif-3',
-    type: 'ROLE',
-    title: 'Quyền hạn thành viên được nâng cấp',
-    message: 'Bạn đã được chỉ định vai trò Kỹ sư DevOps Lead tại công ty VNG Fintech Gateway.',
-    createdAt: '21/10/2026 16:40',
-    read: true,
-    severity: 'SUCCESS',
-    actionType: 'ROLE_UPDATE',
-  },
-  {
-    id: 'pnotif-4',
-    type: 'SYSTEM',
-    title: 'Hệ thống AI Self-Healing cập nhật bản vá v2.4',
-    message: 'Động cơ dự báo RCA và cơ chế tự động drain pod đã được nâng cấp độ chính xác lên 98.4%.',
-    createdAt: '20/10/2026 09:00',
-    read: true,
-    severity: 'INFO',
-    actionType: 'SYSTEM',
-  },
-];
+// Thông báo cá nhân mặc định
+export const INITIAL_PERSONAL_NOTIFS = [];
 
 // Lịch sử hoạt động cá nhân
 export const INITIAL_ACTIVITIES = [
@@ -259,16 +139,6 @@ export const INITIAL_ACTIVITIES = [
     status: 'SUCCESS',
   },
   {
-    id: 'act-3',
-    actionType: 'COMPANY_SWITCH',
-    title: 'Truy cập Workspace Doanh nghiệp',
-    description: 'Chuyển sang làm việc tại công ty Acme Corporation (K8s Cluster #1)',
-    timestamp: '21/10/2026 15:10:30',
-    ipAddress: '118.70.12.84',
-    category: 'COMPANY',
-    status: 'SUCCESS',
-  },
-  {
     id: 'act-4',
     actionType: 'SECURITY_2FA',
     title: 'Bật xác thực hai yếu tố (2FA)',
@@ -286,16 +156,6 @@ export const INITIAL_ACTIVITIES = [
     timestamp: '18/10/2026 14:05:00',
     ipAddress: '27.72.63.190',
     category: 'SECURITY',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'act-6',
-    actionType: 'COMPANY_JOIN',
-    title: 'Tham gia công ty VNG Fintech Gateway',
-    description: 'Chấp nhận lời mời và được cấp quyền vai trò Kỹ sư DevOps',
-    timestamp: '15/10/2026 10:00:00',
-    ipAddress: '14.162.144.12',
-    category: 'COMPANY',
     status: 'SUCCESS',
   },
 ];
@@ -566,32 +426,92 @@ export const personalPortalService = {
     };
   },
 
+  async fetchDashboardSummary() {
+    const [companies, invitations] = await Promise.all([
+      this.fetchMyCompanies(),
+      this.fetchMyInvitations(),
+    ]);
+
+    const activeCompanies = companies.filter((c) => c.status === 'ACTIVE').length;
+    const notifs = this.getNotifications();
+    const unreadNotifs = notifs.filter((n) => !n.read).length;
+    const pendingInvitations = invitations.filter((i) => i.status === 'PENDING').length;
+
+    const recentCompany = companies[0] || null;
+    const recentActivities = this.getActivityHistory().slice(0, 5);
+
+    return {
+      companies,
+      invitations,
+      summary: {
+        totalCompanies: companies.length,
+        activeCompanies,
+        unreadNotifs,
+        pendingInvitations,
+        recentCompany,
+        recentActivities,
+      },
+    };
+  },
+
   // ================= 2. MY COMPANIES =================
   getMyCompanies() {
     try {
       const raw = localStorage.getItem(STORAGE_COMPANIES_KEY);
-      if (!raw) return INITIAL_COMPANIES;
-      return JSON.parse(raw);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (c) =>
+            !['org-acme-01', 'org-vng-fintech', 'org-retail-asia', 'org-acme'].includes(c.id) &&
+            !c.name?.includes('Acme Corporation')
+        );
+      }
+      return [];
     } catch {
-      return INITIAL_COMPANIES;
+      return [];
     }
   },
 
   saveCompanies(list) {
     try {
       localStorage.setItem(STORAGE_COMPANIES_KEY, JSON.stringify(list));
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('selfheal_companies_changed', { detail: list }));
+      }
+      try {
+        multiTabSync.broadcast(SYNC_EVENTS.ORG_SWITCHED, { count: (list || []).length });
+      } catch {
+        // Safe fallback in test or non-browser environments
+      }
       return true;
     } catch {
       return false;
     }
   },
 
-  createCompany({ name, slug, plan = 'SME Starter', domain, description }) {
+  async createCompany({ name, slug, plan = 'SME Starter', domain, description }) {
+    const token = getAuthToken();
+    if (token) {
+      const res = await request('/organizations', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          slug: slug ? slug.trim().toLowerCase() : undefined,
+          description: description || '',
+          website: domain || undefined,
+        }),
+      });
+      await this.fetchMyCompanies();
+      this.logActivity('COMPANY_CREATE', 'Tạo mới Company', `Đã tạo công ty ${name} thành công`, 'COMPANY');
+      return res?.data;
+    }
+
     const current = this.getMyCompanies();
     const newOrg = {
       id: `org-${Date.now().toString(36)}`,
       name: name.trim(),
-      slug: slug.trim().toLowerCase(),
+      slug: (slug || name).trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
       plan,
       status: 'ACTIVE',
       role: 'SME_OWNER',
@@ -600,7 +520,7 @@ export const personalPortalService = {
       clustersCount: 0,
       membersCount: 1,
       activeWorkloads: 0,
-      domain: domain ? domain.trim() : `${slug.trim().toLowerCase()}.com`,
+      domain: domain ? domain.trim() : `${slug || 'company'}.com`,
       isPrimary: false,
       lastAccessedAt: 'Vừa xong',
       healthStatus: 'HEALTHY',
@@ -624,98 +544,85 @@ export const personalPortalService = {
   },
 
   async fetchMyInvitations() {
-    try {
-      const token =
-        localStorage.getItem('selfheal_auth_token') ||
-        sessionStorage.getItem('admin_access_token');
-      if (!token) {
-        return this.getInvitations();
-      }
-      const response = await request('/organizations/me/invitations');
-      if (response && Array.isArray(response.data)) {
-        const mapped = response.data.map((inv) => {
-          const orgId = inv.organization?.id || inv.organization_id;
-          const orgName = inv.organization?.name || inv.organization_name || 'Tổ chức';
-          const roleCode = inv.role?.code || inv.invitedRole || 'DEVOPS';
-          const roleTitle =
-            inv.role?.name ||
-            (roleCode === 'SME_OWNER'
-              ? 'Chủ Doanh Nghiệp (Owner)'
-              : roleCode === 'DEVOPS'
-              ? 'Kỹ Sư DevOps / SRE'
-              : 'Người Quan Sát (Viewer)');
-
-          return {
-            id: inv.id,
-            organizationId: orgId,
-            organizationName: orgName,
-            inviterName: inv.inviter?.full_name || 'Quản trị viên',
-            inviterEmail: inv.inviter?.email || '',
-            invitedRole: roleCode,
-            invitedRoleTitle: roleTitle,
-            createdAt: inv.created_at ? formatVnDate(new Date(inv.created_at)) : 'Gần đây',
-            expiresAt: inv.expires_at ? formatVnDate(new Date(inv.expires_at)) : '7 ngày sau',
-            status: 'PENDING',
-            clustersCount: 1,
-          };
-        });
-
-        localStorage.setItem(STORAGE_INVITATIONS_KEY, JSON.stringify(mapped));
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('[personalPortalService] fetchMyInvitations failed, using local cache:', err.message);
+    const token = getAuthToken();
+    if (!token) {
+      return [];
     }
-    return this.getInvitations();
+    const response = await request('/organizations/me/invitations');
+    if (response && Array.isArray(response.data)) {
+      const mapped = response.data.map((inv) => {
+        const orgId = inv.organization?.id || inv.organization_id;
+        const orgName = inv.organization?.name || inv.organization_name || 'Tổ chức';
+        const roleCode = inv.role?.code || inv.invitedRole || 'DEVOPS';
+        const roleTitle =
+          inv.role?.name ||
+          (roleCode === 'SME_OWNER'
+            ? 'Chủ Doanh Nghiệp (Owner)'
+            : roleCode === 'DEVOPS'
+            ? 'Kỹ Sư DevOps / SRE'
+            : 'Người Quan Sát (Viewer)');
+
+        return {
+          id: inv.id,
+          organizationId: orgId,
+          organizationName: orgName,
+          inviterName: inv.inviter?.full_name || 'Quản trị viên',
+          inviterEmail: inv.inviter?.email || '',
+          invitedRole: roleCode,
+          invitedRoleTitle: roleTitle,
+          createdAt: inv.created_at ? formatVnDate(new Date(inv.created_at)) : 'Gần đây',
+          expiresAt: inv.expires_at ? formatVnDate(new Date(inv.expires_at)) : '7 ngày sau',
+          status: 'PENDING',
+          clustersCount: 0,
+        };
+      });
+
+      localStorage.setItem(STORAGE_INVITATIONS_KEY, JSON.stringify(mapped));
+      return mapped;
+    }
+    throw new Error(response?.message || 'Không thể tải danh sách lời mời');
   },
 
   async fetchMyCompanies() {
-    try {
-      const token =
-        localStorage.getItem('selfheal_auth_token') ||
-        sessionStorage.getItem('admin_access_token');
-      if (!token) {
-        return this.getMyCompanies();
-      }
-      const response = await request('/organizations/me/list');
-      if (response && Array.isArray(response.data)) {
-        const mapped = response.data.map((org, index) => {
-          const roleCode = org.role_in_org || 'SME_OWNER';
-          const roleTitle =
-            roleCode === 'SME_OWNER'
-              ? 'Chủ Doanh Nghiệp (Owner)'
-              : roleCode === 'DEVOPS'
-              ? 'Kỹ Sư Vận Hành Hạ Tầng (DevOps)'
-              : 'Người Giám Sát (Viewer)';
-
-          return {
-            id: org.id,
-            name: org.name,
-            slug: org.slug,
-            plan: 'Enterprise Cloud',
-            status: org.status || 'ACTIVE',
-            role: roleCode,
-            roleTitle: roleTitle,
-            joinedAt: org.created_at ? formatVnDate(new Date(org.created_at)) : '15/01/2026',
-            clustersCount: 2,
-            membersCount: 5,
-            activeWorkloads: 10,
-            domain: `${org.slug}.com`,
-            isPrimary: index === 0,
-            lastAccessedAt: 'Vừa xong',
-            healthStatus: 'HEALTHY',
-          };
-        });
-
-        if (mapped.length > 0) {
-          this.saveCompanies(mapped);
-          return mapped;
-        }
-      }
-    } catch (err) {
-      console.warn('[personalPortalService] fetchMyCompanies failed, using local cache:', err.message);
+    const token = getAuthToken();
+    if (!token) {
+      return [];
     }
-    return this.getMyCompanies();
+    const response = await request('/organizations/me/list');
+    if (response && Array.isArray(response.data)) {
+      const mapped = response.data.map((org, index) => {
+        const roleCode = org.role_in_org || 'SME_OWNER';
+        const roleTitle =
+          roleCode === 'SME_OWNER'
+            ? 'Chủ Doanh Nghiệp (Owner)'
+            : roleCode === 'DEVOPS'
+            ? 'Kỹ Sư Vận Hành Hạ Tầng (DevOps)'
+            : 'Người Giám Sát (Viewer)';
+
+        return {
+          id: org.id,
+          name: org.name,
+          slug: org.slug,
+          plan: 'Enterprise Cloud',
+          status: org.status || 'ACTIVE',
+          role: roleCode,
+          roleTitle: roleTitle,
+          joinedAt: org.created_at ? formatVnDate(new Date(org.created_at)) : 'Vừa xong',
+          clustersCount: typeof org.clusters_count === 'number' ? org.clusters_count : 0,
+          membersCount: typeof org.members_count === 'number' ? org.members_count : 1,
+          activeWorkloads: 0,
+          domain: org.profile?.website || (org.slug ? `${org.slug}.com` : ''),
+          isPrimary: index === 0,
+          lastAccessedAt: 'Vừa xong',
+          healthStatus: org.status === 'ACTIVE' ? 'HEALTHY' : 'INACTIVE',
+          description: org.description || '',
+        };
+      });
+
+      this.saveCompanies(mapped);
+      return mapped;
+    }
+    throw new Error(response?.message || 'Phản hồi từ máy chủ không hợp lệ');
   },
 
   async acceptBackendInvitation(invitationId, orgId) {
@@ -738,10 +645,14 @@ export const personalPortalService = {
   getInvitations() {
     try {
       const raw = localStorage.getItem(STORAGE_INVITATIONS_KEY);
-      if (!raw) return INITIAL_INVITATIONS;
-      return JSON.parse(raw);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((i) => !['inv-2026-901', 'inv-2026-902'].includes(i.id));
+      }
+      return [];
     } catch {
-      return INITIAL_INVITATIONS;
+      return [];
     }
   },
 
@@ -855,10 +766,16 @@ export const personalPortalService = {
   getNotifications() {
     try {
       const raw = localStorage.getItem(STORAGE_PERSONAL_NOTIFS_KEY);
-      if (!raw) return INITIAL_PERSONAL_NOTIFS;
-      return JSON.parse(raw);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (n) => !['pnotif-1', 'pnotif-2'].includes(n.id) && !n.title?.includes('DataStream')
+        );
+      }
+      return [];
     } catch {
-      return INITIAL_PERSONAL_NOTIFS;
+      return [];
     }
   },
 

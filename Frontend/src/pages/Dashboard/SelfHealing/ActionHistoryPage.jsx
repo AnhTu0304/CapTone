@@ -52,8 +52,26 @@ export const ActionHistoryPage = () => {
     const mttrSec = item.elapsed_seconds ? `${item.elapsed_seconds}s` : `${(durMs / 1000).toFixed(1)}s`;
 
     const targetName = item.target_name || item.target_id || 'Chưa xác định';
-    const actionTypeName = item.action_type_name || item.action_type_code || 'Tự phục hồi';
-    const title = item.result?.message || `Thực thi ${actionTypeName} trên ${targetName}`;
+    const actionTypeCode = item.action_type_code || item.action_type_name || 'Tự phục hồi';
+    const rawMsg = String(item.result?.message || item.error_message || '');
+    let title = rawMsg || `Thực thi ${actionTypeCode} trên ${targetName}`;
+    const rbacMatch = rawMsg.match(
+      /User\\?\s*"([^"\\]+)\\?"\s+cannot\s+(\w+)\s+resource\s+\\?"([^"\\]+)\\?"(?:\s+in API group\s+\\?"([^"\\]*)\\?")?(?:\s+in the namespace\s+\\?"([^"\\]+)\\?")?/i
+    );
+    if (rbacMatch || rawMsg.includes('(403)') || rawMsg.includes('Forbidden')) {
+      const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
+      const verb = rbacMatch ? rbacMatch[2] : 'patch';
+      const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
+      const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : (item.namespace || 'default');
+      title = `Thực thi ${actionTypeCode} trên "${targetName}" thất bại [Lỗi 403 Forbidden]: ServiceAccount "${saUser}" thiếu quyền "${verb}" tài nguyên "${resource}" tại namespace "${targetNs}"`;
+    } else if (rawMsg.includes('Self-healing mitigate action')) {
+      title =
+        actionTypeCode === 'NO_ACTION'
+          ? `Giám sát an toàn (NO_ACTION): "${targetName}" ổn định trong ngưỡng an toàn`
+          : `Đã thực thi thành công ${actionTypeCode} trên dịch vụ "${targetName}"`;
+    } else if (rawMsg.includes('HTTPHeaderDict')) {
+      title = rawMsg.split('HTTP response headers:')[0].trim();
+    }
     const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
     const verified = item.verification?.verification_type || (item.execution_status === 'SUCCEEDED' ? 'SLO Health Probe' : 'Hệ thống K8s');
 

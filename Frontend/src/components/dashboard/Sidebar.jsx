@@ -120,7 +120,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
         { name: 'Cổng Cá Nhân', path: '/portal', icon: Sparkles },
         { name: 'Hồ sơ cá nhân', path: '/portal/profile', icon: User },
         { name: 'Nhật ký kiểm toán', path: '/dashboard/audit-logs', icon: ScrollText },
-        { name: 'Báo cáo SLA & Chi phí', path: '/dashboard/reports', icon: BarChart3 },
+        { name: 'Báo cáo SLA & Vận hành', path: '/dashboard/reports', icon: BarChart3 },
         { name: 'Cài đặt hệ thống', path: '/dashboard/settings', icon: Settings },
       ],
     },

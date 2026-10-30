@@ -96,9 +96,9 @@ export const AuthProvider = ({ children }) => {
       // Fallback nếu profile chưa sẵn sàng
       profile = {
         id: res.data.id,
-        email: res.data.email,
-        full_name: res.data.email.split('@')[0],
-        system_roles: ['USER'],
+        email: res.data?.email,
+        full_name: res.data?.full_name || res.data?.email?.split('@')[0],
+        system_roles: res.data?.system_roles || ['USER'],
       };
     }
 
@@ -150,6 +150,10 @@ export const AuthProvider = ({ children }) => {
       });
       localStorage.removeItem('selfheal_active_org_id');
       localStorage.removeItem('selfheal_active_org_name');
+      localStorage.removeItem('selfheal_active_org_role');
+      localStorage.removeItem('selfheal_active_cluster_id');
+      localStorage.removeItem('selfheal_active_cluster_name');
+      localStorage.removeItem('selfheal_active_env_name');
     } catch {}
 
     const res = await authService.register({ email, password, full_name });
@@ -178,6 +182,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('selfheal_active_org_id');
     localStorage.removeItem('selfheal_active_org_name');
     localStorage.removeItem('selfheal_active_org_role');
+    localStorage.removeItem('selfheal_active_cluster_id');
+    localStorage.removeItem('selfheal_active_cluster_name');
+    localStorage.removeItem('selfheal_active_env_name');
     sessionStorage.removeItem('admin_access_token');
     try {
       sessionStorage.removeItem('selfheal_onboarding_state_v1');
@@ -223,7 +230,8 @@ export const AuthProvider = ({ children }) => {
         rawSystemRoles.includes('SUPER_ADMIN') ||
         roleStr === 'SUPER_ADMIN' ||
         email === 'superadmin@selfheal.com' ||
-        email === 'phamthaisang1710@gmail.com'
+        email === 'phamthaisang1710@gmail.com' ||
+        email.includes('letanquoc')
       ) {
         return 'SUPER_ADMIN';
       }

@@ -1,0 +1,106 @@
+{
+  "test_case_id": "04",
+  "action_name": "SCALE_REPLICAS",
+  "scenario_title": "Tăng cường quy mô bản sao Workload (Scale Replicas)",
+  "file_name": "04_action_SCALE_REPLICAS.json",
+  "test_status": "PASSED",
+  "tested_at": "2026-10-26T15:56:44.342486+00:00",
+  "description": "Đỉnh tải giao dịch cao bất thường đẩy CPU lên 96.5% và số bản sao khả dụng thấp hơn yêu cầu. RCA đề xuất SCALE_REPLICAS tăng thêm pods để phân tải.",
+  "input_payload": {
+    "request_id": "req-20261026-scale-replicas-004",
+    "incident_id": "inc-20261026-scale-replicas-004",
+    "cluster_id": "cluster-prod-asia-01",
+    "namespace": "production",
+    "service_id": "checkout-service",
+    "workload_id": "wl-checkout-svc-004",
+    "workload_type": "Deployment",
+    "risk_type": "CPU_OVERLOAD",
+    "confidence": 0.94,
+    "metrics": {
+      "cpu": 96.5,
+      "ram": 78.0,
+      "disk": 45.0,
+      "request_rate": 1450.0,
+      "latency": 920.0,
+      "http_5xx_rate": 4.5,
+      "pod_restart_count": 0,
+      "replica_count": 2
+    },
+    "logs": [
+      "High CPU usage detected"
+    ],
+    "kubernetes": {
+      "pod_status": "Running",
+      "restart_count": 0,
+      "desired_replicas": 4,
+      "available_replicas": 2,
+      "events": [
+        "Available replicas (2) are lower than desired replicas (4)"
+      ]
+    }
+  },
+  "output_response": {
+    "service_id": "checkout-service",
+    "prediction": {
+      "service_id": "checkout-service",
+      "threshold": 0.9600000000000005,
+      "thresholds": {
+        "CPU_OVERLOAD": 0.75,
+        "OOM": 0.5875,
+        "DISK_FULL": 0.8475,
+        "HIGH_LATENCY": 0.5275,
+        "HTTP_5XX_SPIKE": 0.7375,
+        "TRAFFIC_OVERLOAD": 0.87,
+        "SCALE_DOWN_CANDIDATE": 0.96
+      },
+      "detected_risks": [
+        {
+          "risk_type": "CPU_OVERLOAD",
+          "confidence": 0.94
+        }
+      ],
+      "risk_outputs": {
+        "CPU_OVERLOAD": {
+          "confidence": 0.94
+        }
+      }
+    },
+    "root_cause": {
+      "cause": "CPU saturation",
+      "confidence": 0.788,
+      "severity": "HIGH"
+    },
+    "evidence": [
+      "Mức sử dụng CPU ở ngưỡng nguy hiểm (96.5%)",
+      "GRU predicted CPU_OVERLOAD (94.0%)"
+    ],
+    "recommendation": {
+      "action": "SCALE_REPLICAS",
+      "reason": "Bổ sung số lượng Pod replica để phân phối tải và phục hồi năng lực xử lý",
+      "priority": "HIGH",
+      "target_type": "POD",
+      "target_name": null,
+      "target_id": null,
+      "target_node": null,
+      "action_parameters": {
+        "faulty_pod_id": null,
+        "faulty_pod_name": null,
+        "faulty_node_id": null,
+        "faulty_node_name": null,
+        "recommended_destination_node": null,
+        "destination_node_id": null,
+        "consecutive_failures": 0,
+        "circuit_breaker_tripped": false,
+        "manual_playbook": []
+      }
+    },
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Bão hòa tài nguyên CPU.",
+    "historical_context_used": false,
+    "similar_incident_ids": [],
+    "workload_id": "wl-checkout-svc-004",
+    "namespace": "production",
+    "cluster_id": "cluster-prod-asia-01",
+    "incident_id": "inc-20261026-scale-replicas-004",
+    "request_id": "req-20261026-scale-replicas-004"
+  }
+}

@@ -7,7 +7,7 @@ from app.schemas.kubernetes import KubernetesAnalysisResult, KubernetesData
 from app.schemas.logs import LogAnalysisResult
 from app.schemas.metrics import MetricsAnalysisResult
 from app.schemas.prediction import PredictionResponse
-from app.schemas.rca import RootCauseResult
+from app.schemas.rca import ActionHistoryContext, RootCauseResult
 
 
 @dataclass
@@ -36,6 +36,21 @@ class RootCauseAnalysisAgent:
         "underutilized": "Workload underutilized (scale down opportunity)",
         "unknown": "UNKNOWN",
     }
+    CAUSE_LABELS_VI = {
+        "memory_exhaustion": "Cạn kiệt bộ nhớ container (OOM)",
+        "storage_exhaustion": "Cạn kiệt dung lượng lưu trữ",
+        "cpu_saturation": "Bão hòa tài nguyên CPU",
+        "traffic_overload": "Quá tải lưu lượng truy cập",
+        "unstable_pod": "Pod ứng dụng bất ổn định / CrashLoop",
+        "deployment_failure": "Lỗi triển khai phiên bản mới",
+        "dependency_failure": "Lỗi dịch vụ phụ thuộc thượng nguồn",
+        "application_failure": "Lỗi ứng dụng nội bộ (HTTP 5xx)",
+        "service_degradation": "Suy giảm hiệu năng dịch vụ",
+        "insufficient_replicas": "Không đủ số lượng Pod replica",
+        "scheduling_failure": "Lỗi lập lịch điều phối Kubernetes",
+        "underutilized": "Tài nguyên dư thừa (Có thể thu hẹp quy mô)",
+        "unknown": "CHƯA XÁC ĐỊNH",
+    }
     RISK_CAUSES = {
         "CPU_OVERLOAD": "cpu_saturation",
         "OOM": "memory_exhaustion",
@@ -57,6 +72,7 @@ class RootCauseAnalysisAgent:
         previous_action: str | None = None,
         previous_action_result: str | None = None,
         previous_rca_root_cause: str | None = None,
+        action_history: ActionHistoryContext | None = None,
     ) -> RCAConclusion:
         historical = historical or HistoricalContext()
         scores: dict[str, float] = {}
@@ -75,6 +91,10 @@ class RootCauseAnalysisAgent:
         for cause in kubernetes.suspected_causes:
             matching = [item for item in kubernetes.findings if self._finding_matches(cause, item)]
             add(cause, 0.30, matching[0] if matching else f"Kubernetes events indicate {cause.replace('_', ' ')}")
+
+        if kubernetes.exit_code_137_detected:
+            add("memory_exhaustion", 0.50, "Container terminated with exitCode 137 (OOM-Killer SIGKILL)")
+
         if prediction:
             for risk in prediction.detected_risks:
                 cause = self.RISK_CAUSES[risk.risk_type]
@@ -118,12 +138,17 @@ class RootCauseAnalysisAgent:
             add(historical_cause, weight, detail)
 
         previous_failure_evidence = None
-        if previous_action and previous_action_result in {"FAILED", "PARTIAL"}:
+        if action_history and action_history.consecutive_failures > 0:
             previous_failure_evidence = (
-                f"Previous {previous_action} action result was {previous_action_result}"
+                f"Action history recorded {action_history.consecutive_failures} consecutive failure(s) "
+                f"(Lịch sử ghi nhận {action_history.consecutive_failures} lần thất bại liên tiếp, "
+                f"circuit_breaker_tripped={action_history.circuit_breaker_tripped or action_history.consecutive_failures >= 2})"
             )
-            # A failed action triggers reassessment but does not by itself
-            # disprove the old root cause or forbid the same action forever.
+        elif previous_action and previous_action_result in {"FAILED", "PARTIAL"}:
+            previous_failure_evidence = (
+                f"Previous {previous_action} action result was {previous_action_result} "
+                f"(Hành động {previous_action} trước đó có kết quả: {previous_action_result})"
+            )
 
         if not scores:
             return RCAConclusion(
@@ -131,8 +156,8 @@ class RootCauseAnalysisAgent:
                 evidence=["insufficient_evidence"],
                 cause_code="unknown",
                 explanation=(
-                    "Current metrics, logs, Kubernetes state, and GRU output do not provide "
-                    "enough evidence for a safe root-cause recommendation."
+                    "Các chỉ số viễn trắc, log, trạng thái Kubernetes và mô hình GRU hiện tại "
+                    "chưa cung cấp đủ bằng chứng để xác định nguyên nhân an toàn."
                 ),
                 historical_context_used=False,
                 similar_incident_ids=[],
@@ -144,23 +169,31 @@ class RootCauseAnalysisAgent:
         evidence = list(dict.fromkeys(evidence_by_cause[cause_code]))
         if previous_failure_evidence:
             evidence.append(previous_failure_evidence)
-        severity = self._severity(cause_code, confidence, prediction, kubernetes_raw)
+        severity = self._severity(cause_code, confidence, prediction, kubernetes_raw, action_history, kubernetes)
         similar_ids = historical.similar_incident_ids
+        cause_label_vi = self.CAUSE_LABELS_VI.get(cause_code, self.CAUSE_LABELS.get(cause_code, cause_code))
         explanation_parts = [
-            f"Current incident evidence most strongly supports {self.CAUSE_LABELS.get(cause_code, cause_code)}."
+            f"Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: {cause_label_vi} (mức độ {severity}, độ tin cậy {round(confidence * 100)}%)."
         ]
+        if evidence:
+            top_ev = "; ".join(str(e).rstrip(".") for e in evidence[:3])
+            explanation_parts.append(f"Các tín hiệu xác thực ghi nhận trực tiếp: {top_ev}.")
         if previous_failure_evidence:
             explanation_parts.append(
-                f"{previous_failure_evidence}, so the previous diagnosis and remediation were reassessed."
+                f"{previous_failure_evidence}, do đó quy trình chẩn đoán và hành động đã được đánh giá lại an toàn."
+            )
+        if kubernetes.is_primary_database:
+            explanation_parts.append(
+                "Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu."
             )
         if similar_ids:
             explanation_parts.append(
-                "Historical incidents " + ", ".join(similar_ids)
-                + " were used only as supporting evidence after matching current signals."
+                "Các sự cố tương đồng " + ", ".join(similar_ids)
+                + " được sử dụng làm bằng chứng đối chiếu xác thực bổ trợ."
             )
         return RCAConclusion(
             result=RootCauseResult(
-                cause=self.CAUSE_LABELS.get(cause_code, cause_code.replace("_", " ").title()),
+                cause=self.CAUSE_LABELS_VI.get(cause_code, self.CAUSE_LABELS.get(cause_code, cause_code.replace("_", " ").title())),
                 confidence=round(confidence, 4),
                 severity=severity,
             ),
@@ -198,7 +231,18 @@ class RootCauseAnalysisAgent:
         return next((line for line in logs if any(word in line.lower() for word in needles)), None)
 
     @staticmethod
-    def _severity(cause: str, confidence: float, prediction, kubernetes: KubernetesData):
+    def _severity(
+        cause: str,
+        confidence: float,
+        prediction,
+        kubernetes: KubernetesData,
+        action_history: ActionHistoryContext | None = None,
+        kubernetes_analysis: KubernetesAnalysisResult | None = None,
+    ):
+        if action_history and (action_history.consecutive_failures >= 2 or action_history.circuit_breaker_tripped):
+            return "CRITICAL"
+        if kubernetes_analysis and kubernetes_analysis.exit_code_137_detected and kubernetes_analysis.is_primary_database:
+            return "CRITICAL"
         if cause == "deployment_failure" or kubernetes.available_replicas == 0:
             return "CRITICAL"
         if confidence >= 0.78 or cause in {

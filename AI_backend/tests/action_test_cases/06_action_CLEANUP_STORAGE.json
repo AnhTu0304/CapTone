@@ -1,0 +1,80 @@
+{
+  "test_case_id": "06",
+  "action_name": "CLEANUP_STORAGE",
+  "scenario_title": "Dọn dẹp dung lượng ổ đĩa / PVC (Cleanup Storage)",
+  "file_name": "06_action_CLEANUP_STORAGE.json",
+  "test_status": "PASSED",
+  "tested_at": "2026-10-26T15:56:44.397604+00:00",
+  "description": "Ổ đĩa hoặc PersistentVolumeClaim đạt ngưỡng cạn kiệt nghiêm trọng (98.5%), không thể ghi file log. RCA đề xuất CLEANUP_STORAGE dọn dẹp dung lượng.",
+  "input_payload": {
+    "request_id": "req-20261026-cleanup-storage-006",
+    "incident_id": "inc-20261026-cleanup-storage-006",
+    "cluster_id": "cluster-prod-asia-01",
+    "namespace": "production",
+    "service_id": "logging-service",
+    "workload_id": "wl-logging-svc-006",
+    "workload_type": "StatefulSet",
+    "suspected_pod_name": "logging-service-es-0",
+    "metrics": {
+      "cpu": 38.0,
+      "ram": 55.0,
+      "disk": 98.5,
+      "request_rate": 250.0,
+      "latency": 150.0,
+      "http_5xx_rate": 0.5,
+      "pod_restart_count": 0,
+      "replica_count": 2
+    },
+    "logs": [
+      "ERROR No space left on device while writing application log"
+    ],
+    "kubernetes": {
+      "pod_status": "Running",
+      "restart_count": 0,
+      "events": [
+        "Storage capacity critical on PVC /data"
+      ]
+    }
+  },
+  "output_response": {
+    "service_id": "logging-service",
+    "prediction": null,
+    "root_cause": {
+      "cause": "Storage capacity exhausted",
+      "confidence": 0.775,
+      "severity": "HIGH"
+    },
+    "evidence": [
+      "Metrics indicate storage exhaustion",
+      "ERROR No space left on device while writing application log"
+    ],
+    "recommendation": {
+      "action": "CLEANUP_STORAGE",
+      "reason": "Dung lượng ổ đĩa đã cạn kiệt hoặc sắp chạm ngưỡng tới hạn; cần dọn dẹp lưu trữ",
+      "priority": "HIGH",
+      "target_type": "POD",
+      "target_name": null,
+      "target_id": null,
+      "target_node": null,
+      "action_parameters": {
+        "faulty_pod_id": null,
+        "faulty_pod_name": null,
+        "faulty_node_id": null,
+        "faulty_node_name": null,
+        "recommended_destination_node": null,
+        "destination_node_id": null,
+        "consecutive_failures": 0,
+        "circuit_breaker_tripped": false,
+        "manual_playbook": []
+      }
+    },
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Cạn kiệt dung lượng lưu trữ.",
+    "historical_context_used": false,
+    "similar_incident_ids": [],
+    "workload_id": "wl-logging-svc-006",
+    "namespace": "production",
+    "cluster_id": "cluster-prod-asia-01",
+    "incident_id": "inc-20261026-cleanup-storage-006",
+    "request_id": "req-20261026-cleanup-storage-006"
+  }
+}

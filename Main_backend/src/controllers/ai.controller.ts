@@ -19,18 +19,51 @@ const ACTION_CODE_MAP: Record<string, string> = {
   'Scale Replicas': 'SCALE_REPLICAS',
   'Rollback Deployment': 'ROLLBACK_DEPLOYMENT',
   'Cleanup Temporary Files': 'CLEANUP_STORAGE',
+  'Cleanup Storage': 'CLEANUP_STORAGE',
   'Temporary IP Block': 'TEMPORARY_IP_BLOCK',
+  'Block IP': 'TEMPORARY_IP_BLOCK',
   'Restart Deployment': 'RESTART_DEPLOYMENT',
   'No Action': 'NO_ACTION',
+  RESTART_POD: 'RESTART_POD',
+  REPLACE_POD: 'REPLACE_POD',
+  SCALE_REPLICAS: 'SCALE_REPLICAS',
+  ROLLBACK_DEPLOYMENT: 'ROLLBACK_DEPLOYMENT',
+  CLEANUP_STORAGE: 'CLEANUP_STORAGE',
+  TEMPORARY_IP_BLOCK: 'TEMPORARY_IP_BLOCK',
+  BLOCK_IP: 'TEMPORARY_IP_BLOCK',
+  BLOCK_IP_TEMP: 'TEMPORARY_IP_BLOCK',
+  BLOCK_SUSPICIOUS_IP: 'TEMPORARY_IP_BLOCK',
+  RESTART_DEPLOYMENT: 'RESTART_DEPLOYMENT',
+  NO_ACTION: 'NO_ACTION',
 };
 
 export class AiController {
   /**
+   * Helper: Check if user has Platform Super Admin or Admin privileges
+   */
+  private static isUserSuperAdmin(user: any): boolean {
+    if (!user) return false;
+    const r = String(user.role || '').toUpperCase();
+    if (r === 'SUPER_ADMIN' || r === 'ADMIN' || r === 'SYSTEM_ADMIN') return true;
+    if (Array.isArray(user.roles)) {
+      if (user.roles.some((x: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(x).toUpperCase()))) {
+        return true;
+      }
+    }
+    if (Array.isArray(user.systemRoles)) {
+      if (user.systemRoles.some((x: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(x).toUpperCase()))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Helper: Check if user belongs to requested organization and if cluster belongs to that organization
    */
   private static async validateUserOrgAndCluster(user: any, orgId?: string, clusterId?: string): Promise<string | null> {
-    if (user?.role === 'SUPER_ADMIN') {
-      return orgId || null;
+    if (this.isUserSuperAdmin(user)) {
+      return (orgId && orgId !== 'all') ? orgId : null;
     }
     const effectiveOrgId = orgId || user?.organization_id;
     if (!effectiveOrgId) {
@@ -59,7 +92,7 @@ export class AiController {
     if (!incident) {
       throw new ApiError(404, 'Sự cố không tồn tại (Incident not found)');
     }
-    if (user?.role === 'SUPER_ADMIN') {
+    if (this.isUserSuperAdmin(user)) {
       return incident;
     }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
@@ -77,7 +110,7 @@ export class AiController {
    */
   private static async validateIncidentManageAccess(user: any, incidentId: string): Promise<any> {
     const incident = await this.validateIncidentAccess(user, incidentId);
-    if (user?.role === 'SUPER_ADMIN') {
+    if (this.isUserSuperAdmin(user)) {
       return incident;
     }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
@@ -289,7 +322,7 @@ export class AiController {
       const params: any[] = [];
       let idx = 1;
       if (cluster_id && cluster_id !== 'ALL' && cluster_id !== 'all') {
-        query += ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT name FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx}) OR w.cluster_id IN (SELECT id::text FROM clusters WHERE name = $${idx}))`;
+        query += ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
         params.push(cluster_id);
         idx++;
       }
@@ -639,7 +672,10 @@ export class AiController {
           action: rec.recommendation,
           target: targetName,
           applied_by: user?.email || 'admin@example.com',
-          message: `Self-healing mitigate action '${rec.recommendation}' executed successfully on ${targetName}.`,
+          message:
+            String(rec.recommendation || '').toUpperCase().includes('NO_ACTION') || String(rec.recommendation || '').toUpperCase() === 'NO ACTION'
+              ? `AI đánh giá dịch vụ ${targetName} đang ổn định trong ngưỡng an toàn, quyết định giữ nguyên trạng thái (NO_ACTION) và tiếp tục giám sát viễn trắc 12 bước.`
+              : `Đã khởi chạy lệnh tự phục hồi '${rec.recommendation}' trên dịch vụ ${targetName} và gửi tới Kubernetes Agent thực thi.`,
           timestamp: new Date().toISOString(),
         },
       });
@@ -675,12 +711,47 @@ export class AiController {
       // 6. Dispatch action to connected K8s Agent for real cluster remediation
       const targetPod = rec.target_id || (rec.incident_title?.includes(' on ') ? rec.incident_title.split(' on ')[1]?.trim() : undefined);
       const actionType = ACTION_CODE_MAP[rec.recommendation] || (rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation);
+
+      // Extract parameters & playbook from RCA analysis_result if available
+      let rcaParams: any = {};
+      let manualPlaybook: string[] = [];
+      try {
+        const rcaRes = await pool.query(
+          'SELECT analysis_result FROM rca_analyses WHERE incident_id = $1 ORDER BY created_at DESC LIMIT 1;',
+          [rec.incident_id]
+        );
+        if (rcaRes.rows.length > 0 && rcaRes.rows[0].analysis_result) {
+          const parsed = typeof rcaRes.rows[0].analysis_result === 'string'
+            ? JSON.parse(rcaRes.rows[0].analysis_result)
+            : rcaRes.rows[0].analysis_result;
+          rcaParams = parsed?.recommendation?.action_parameters || {};
+          manualPlaybook = rcaParams?.manual_playbook || [];
+        }
+      } catch (err) {
+        console.warn('[AiController] Could not parse rca action_parameters:', err);
+      }
+
+      if (actionType === 'NO_ACTION') {
+        console.log(`🛡️ [AiController] Recommendation '${rec.recommendation}' is NO_ACTION (Circuit Breaker / Manual Playbook). Skipping agent dispatch.`);
+        return ApiResponse.success(
+          res,
+          `Applied acknowledgement for recommendation '${rec.recommendation}'. Circuit breaker active - manual intervention requested via playbook.`,
+          {
+            recommendation: updatedRec,
+            healing_action: healingAction,
+            manual_playbook: manualPlaybook,
+          },
+          200
+        );
+      }
+
       dispatchHealingActionToAgent({
         action_id: healingAction.id,
         action_type: actionType,
         target_name: targetName,
         namespace: targetNamespace,
         params: {
+          ...rcaParams,
           ...(req.body?.params || {}),
           ...(req.body || {}),
           pod_name: targetPod || req.body?.pod_name,

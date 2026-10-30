@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
@@ -120,6 +120,46 @@ class SecurityPolicyContext(BaseModel):
     )
 
 
+class ActionHistoryItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    action_id: str | None = None
+    action: str
+    target_type: str | None = None
+    target_name: str | None = None
+    target_id: str | None = None
+    target_node: str | None = None
+    executed_at: str | None = None
+    result: ActionResult | str | None = None
+    verification_result: Any | None = None
+    failure_reason: Any | None = None
+
+
+class ActionHistoryContext(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    total_actions_recorded: int = 0
+    consecutive_failures: int = 0
+    last_successful_action: str | None = None
+    circuit_breaker_tripped: bool = False
+    blocked_actions: list[str] = Field(default_factory=list)
+    history: list[ActionHistoryItem] = Field(default_factory=list)
+
+
+class ActionParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    faulty_pod_id: str | None = None
+    faulty_pod_name: str | None = None
+    faulty_node_id: str | None = None
+    faulty_node_name: str | None = None
+    recommended_destination_node: str | None = None
+    destination_node_id: str | None = None
+    consecutive_failures: int | None = None
+    circuit_breaker_tripped: bool | None = None
+    manual_playbook: list[str] = Field(default_factory=list)
+
+
 class RCARequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -140,6 +180,13 @@ class RCARequest(BaseModel):
         },
     )
 
+    request_id: str | None = None
+    incident_id: str | None = None
+    cluster_id: str | None = None
+    namespace: str | None = None
+    workload_id: str | None = None
+    workload_type: str | None = None
+    suspected_pod_name: str | None = None
     service_id: str = Field(min_length=1, max_length=200)
     risk_type: RiskType | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
@@ -159,6 +206,7 @@ class RCARequest(BaseModel):
     previous_action_result: ActionResult | None = None
     previous_action_result_source: ActionResultSource | None = None
     previous_rca_root_cause: str | None = None
+    action_history: ActionHistoryContext | None = None
     historical_incidents: list[HistoricalIncident] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
@@ -196,9 +244,16 @@ class RecommendationResult(BaseModel):
     action: Action
     reason: str
     priority: Severity
+    target_type: str | None = None
+    target_name: str | None = None
+    target_id: str | None = None
+    target_node: str | None = None
+    action_parameters: ActionParameters | None = None
 
 
 class RCAResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     service_id: str
     prediction: PredictionResponse | None
     root_cause: RootCauseResult
@@ -207,6 +262,12 @@ class RCAResponse(BaseModel):
     explanation: str
     historical_context_used: bool
     similar_incident_ids: list[str]
+    workload_id: str | None = None
+    namespace: str | None = None
+    cluster_id: str | None = None
+    incident_id: str | None = None
+    request_id: str | None = None
+    engine: str = "Deterministic Multi-Agent SRE"
 
 
 class LLMRCAResult(BaseModel):

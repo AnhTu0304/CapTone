@@ -140,6 +140,35 @@ export class SystemRoleModel {
     }
 
     /**
+     * Xóa toàn bộ vai trò hệ thống của người dùng
+     */
+    public static async removeAllRoles(userId: string, client?: PoolClient): Promise<void> {
+        const db = client || pool;
+        await db.query('DELETE FROM user_system_roles WHERE user_id = $1', [userId]);
+    }
+
+    /**
+     * Đếm số lượng người dùng đang giữ vai trò hệ thống cụ thể và tài khoản vẫn đang ACTIVE
+     */
+    public static async countUsersWithRole(
+        roleName: string,
+        client?: PoolClient
+    ): Promise<number> {
+        const db = client || pool;
+        const sql = `
+            SELECT COUNT(DISTINCT usr.user_id) AS total
+            FROM user_system_roles usr
+            JOIN system_roles sr ON usr.system_role_id = sr.id
+            JOIN users u ON usr.user_id = u.id
+            WHERE UPPER(sr.name) = UPPER($1)
+              AND u.status = 'ACTIVE'
+              AND u.deleted_at IS NULL
+        `;
+        const result = await db.query(sql, [roleName]);
+        return parseInt(result.rows[0]?.total || '0', 10);
+    }
+
+    /**
      * Kiểm tra người dùng có một trong các vai trò được chỉ định không
      */
     public static async hasAnyRole(

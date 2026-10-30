@@ -38,31 +38,41 @@ export class SystemRoleController {
 
   /**
    * [POST] /api/v1/roles/assign (hoặc /api/v1/users/:id/roles)
-   * Gán vai trò hệ thống cho người dùng
-   * Body: { userId, role } hoặc params :id và body { role }
+   * Gán vai trò hệ thống hoặc tổ chức cho người dùng
+   * Body: { userId, role, reason } hoặc params :id và body { role, reason }
    */
   public static async assignRole(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.body.userId || req.params.id;
       const role = req.body.role || req.body.roleName || req.body.roleId;
+      const reason = req.body.reason || 'Cập nhật vai trò qua Admin Dashboard';
       const assignedBy = (req as any).user?.id;
 
       if (!userId) {
         throw new ApiError(400, 'Thiếu thông tin ID người dùng (userId)');
       }
       if (!role) {
-        throw new ApiError(400, 'Thiếu thông tin vai trò cần cấp (role: SUPER_ADMIN, SYSTEM_ADMIN, ADMIN, USER)');
+        throw new ApiError(400, 'Thiếu thông tin vai trò cần cấp (role: SUPER_ADMIN, ADMIN, SME_OWNER, DEVOPS, VIEWER)');
       }
 
+      const beforeRoles = await SystemRoleService.getUserRoles(userId).catch(() => []);
+      const beforeRoleNames = beforeRoles.map((r) => r.role_name);
+
       await SystemRoleService.assignRole(userId, role, assignedBy);
-      AuditService.recordFromRequest(req, {
+
+      await AuditService.recordFromRequest(req, {
         action: 'SYSTEM_ROLE_ASSIGNED',
         status: 'SUCCESS',
         target_type: 'USER',
         target_id: userId,
-        description: `Cấp vai trò hệ thống [${role}] cho người dùng`,
-        metadata: { role, assigned_by: assignedBy },
-      }).catch(() => {});
+        description: `Cấp vai trò [${role}] cho người dùng`,
+        before_data: { roles: beforeRoleNames },
+        after_data: { role },
+        metadata: { role, assigned_by: assignedBy, reason },
+      }).catch((auditErr) => {
+        console.warn('[SystemRoleController] Ghi audit log thất bại:', auditErr?.message);
+      });
+
       return ApiResponse.success(res, `Cấp vai trò [${role}] cho người dùng thành công`, { userId, role }, 201);
     } catch (error) {
       next(error);
@@ -77,6 +87,7 @@ export class SystemRoleController {
     try {
       const userId = req.body.userId || req.params.id;
       const role = req.body.role || req.params.role;
+      const revokedBy = (req as any).user?.id;
 
       if (!userId) {
         throw new ApiError(400, 'Thiếu thông tin ID người dùng (userId)');
@@ -86,6 +97,20 @@ export class SystemRoleController {
       }
 
       await SystemRoleService.revokeRole(userId, role);
+
+      await AuditService.recordFromRequest(req, {
+        action: 'SYSTEM_ROLE_REVOKED',
+        status: 'SUCCESS',
+        target_type: 'USER',
+        target_id: userId,
+        description: `Thu hồi vai trò [${role}] của người dùng`,
+        before_data: { role },
+        after_data: { roles: [] },
+        metadata: { role, revoked_by: revokedBy },
+      }).catch((auditErr) => {
+        console.warn('[SystemRoleController] Ghi audit log thu hồi thất bại:', auditErr?.message);
+      });
+
       return ApiResponse.success(res, `Thu hồi vai trò [${role}] của người dùng thành công`, { userId, role }, 200);
     } catch (error) {
       next(error);

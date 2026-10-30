@@ -45,7 +45,14 @@ class OpenAIRCAService:
         kubernetes_data["events"] = kubernetes_data.get("events", [])[-100:]
         incident_data = {
             "CURRENT_INCIDENT": {
+                "request_id": payload.request_id,
+                "incident_id": payload.incident_id,
+                "cluster_id": payload.cluster_id,
+                "namespace": payload.namespace,
                 "service_id": payload.service_id,
+                "workload_id": payload.workload_id,
+                "workload_type": payload.workload_type,
+                "suspected_pod_name": payload.suspected_pod_name,
                 "pod_id": payload.pod_id,
                 "metrics": payload.metrics.model_dump(),
                 "metric_sequence": [
@@ -63,6 +70,7 @@ class OpenAIRCAService:
             },
             "DEPLOYMENT": payload.deployment.model_dump() if payload.deployment else None,
             "HEALTH_CHECK": payload.health_check.model_dump() if payload.health_check else None,
+            "ACTION_HISTORY": payload.action_history.model_dump() if payload.action_history else None,
             "PREVIOUS_ACTION": {
                 "action": payload.previous_action,
                 "result": payload.previous_action_result,
@@ -133,17 +141,33 @@ class OpenAIRCAService:
             and payload.previous_action_result in {"FAILED", "PARTIAL"}
         ):
             previous_failure_evidence = (
-                f"Previous {payload.previous_action} action result was "
-                f"{payload.previous_action_result}"
+                f"Previous {payload.previous_action} action result was {payload.previous_action_result} "
+                f"(Lần thực thi hành động {payload.previous_action} trước đó có kết quả: {payload.previous_action_result})"
             )
             if previous_failure_evidence not in result.evidence:
                 result.evidence.append(previous_failure_evidence)
+
+        # Circuit Breaker & Blocked Actions Enforcement
+        if payload.action_history:
+            ah = payload.action_history
+            if ah.consecutive_failures >= 2 or ah.circuit_breaker_tripped:
+                result.recommendation.action = "NO_ACTION"
+                result.recommendation.priority = "CRITICAL"
+                result.recommendation.reason = (
+                    f"Phát hiện lặp sự cố liên tiếp ({ah.consecutive_failures} lần thử trước đó đều thất bại). "
+                    "Kích hoạt Circuit Breaker chuyển quyền điều khiển cho kỹ sư vận hành (Human-in-the-Loop)."
+                )
+            elif result.recommendation.action in set(ah.blocked_actions):
+                result.recommendation.action = "NO_ACTION"
+                result.recommendation.reason = (
+                    f"Hành động '{result.recommendation.action}' nằm trong danh sách blocked_actions do lịch sử thất bại gần đây."
+                )
 
         action = result.recommendation.action
         if action == "ROLLBACK_DEPLOYMENT" and payload.deployment is None:
             result.recommendation = RecommendationResult(
                 action="NO_ACTION",
-                reason="Deployment evidence is required before recommending rollback",
+                reason="Cần có bằng chứng về bản triển khai (Deployment) trước khi đề xuất rollback",
                 priority="LOW",
             )
         security = payload.security
@@ -166,8 +190,8 @@ class OpenAIRCAService:
                 result.recommendation = RecommendationResult(
                     action="NO_ACTION",
                     reason=(
-                        "Temporary IP blocking lacks sufficient security evidence, and no "
-                        "other action is supported by current evidence"
+                        "Hành động chặn IP tạm thời chưa có đủ bằng chứng bảo mật và không có "
+                        "hành động nào khác được hỗ trợ bởi bằng chứng hiện tại"
                     ),
                     priority="LOW",
                 )
@@ -189,6 +213,7 @@ class OpenAIRCAService:
                 item for item in result.evidence
                 if not item.startswith("Similar incident")
                 and not item.startswith("Previous ")
+                and not item.startswith("Lần thực thi")
             ]
             strong_new_evidence = (
                 result.root_cause.confidence >= 0.75 and len(current_evidence) >= 2
@@ -197,10 +222,26 @@ class OpenAIRCAService:
                 result.recommendation = RecommendationResult(
                     action="NO_ACTION",
                     reason=(
-                        f"Previous {payload.previous_action} result was "
-                        f"{payload.previous_action_result}; it is not prioritized "
-                        "because current evidence is not strong enough to repeat it"
+                        f"Hành động {payload.previous_action} trước đó có kết quả là "
+                        f"{payload.previous_action_result}; không tiếp tục lặp lại hành động này "
+                        "do chưa có bằng chứng mới đủ mạnh để xác thực an toàn"
                     ),
                     priority="LOW",
                 )
+
+        # Preserve target metadata and action parameters from fallback if missing
+        if fallback_recommendation is not None:
+            rec = result.recommendation
+            fb = fallback_recommendation
+            if not rec.target_type and fb.target_type:
+                rec.target_type = fb.target_type
+            if not rec.target_name and fb.target_name:
+                rec.target_name = fb.target_name
+            if not rec.target_id and fb.target_id:
+                rec.target_id = fb.target_id
+            if not rec.target_node and fb.target_node:
+                rec.target_node = fb.target_node
+            if not rec.action_parameters and fb.action_parameters:
+                rec.action_parameters = fb.action_parameters
+
         return result

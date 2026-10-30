@@ -57,12 +57,37 @@ async def analyze_root_cause(
         )
         prediction = generated
 
-    kubernetes_raw = payload.kubernetes.model_copy(update={
+    update_dict: dict[str, Any] = {
         "events": list(dict.fromkeys([
             *payload.kubernetes.events,
             *payload.kubernetes_events,
-        ]))
-    })
+        ])),
+    }
+    if not payload.kubernetes.workload_name:
+        update_dict["workload_name"] = payload.service_id
+    if not payload.kubernetes.workload_id and payload.workload_id:
+        update_dict["workload_id"] = payload.workload_id
+    if not payload.kubernetes.workload_type and payload.workload_type:
+        update_dict["workload_type"] = payload.workload_type
+    if not payload.kubernetes.cluster_id and payload.cluster_id:
+        update_dict["cluster_id"] = payload.cluster_id
+    if not payload.kubernetes.namespace and payload.namespace:
+        update_dict["namespace"] = payload.namespace
+
+    effective_pod_name = payload.suspected_pod_name or payload.pod_id
+    if not payload.kubernetes.all_pods and effective_pod_name:
+        from app.schemas.kubernetes import PodInfo
+        update_dict["all_pods"] = [
+            PodInfo(
+                pod_name=effective_pod_name,
+                pod_id=payload.pod_id or effective_pod_name,
+                status=payload.kubernetes.pod_status or "Running",
+                ready=payload.kubernetes.pod_status == "Running",
+                restart_count=payload.kubernetes.restart_count,
+            )
+        ]
+
+    kubernetes_raw = payload.kubernetes.model_copy(update=update_dict)
     metrics = MetricsAnalysisAgent().analyze(payload.metrics, payload.metric_sequence)
     logs = LogAnalysisAgent().analyze(payload.logs)
     kubernetes = KubernetesEventAgent().analyze(kubernetes_raw)
@@ -81,6 +106,7 @@ async def analyze_root_cause(
         payload.previous_action,
         payload.previous_action_result,
         payload.previous_rca_root_cause,
+        payload.action_history,
     )
     recommendation = RecommendationAgent().recommend(
         conclusion,
@@ -88,6 +114,10 @@ async def analyze_root_cause(
         historical,
         payload.previous_action,
         payload.previous_action_result,
+        payload.action_history,
+        kubernetes,
+        payload.security,
+        payload.security_policy,
     )
 
     if openai_rca_service is not None:
@@ -110,6 +140,12 @@ async def analyze_root_cause(
                 explanation=llm_result.explanation,
                 historical_context_used=llm_result.historical_context_used,
                 similar_incident_ids=llm_result.similar_incident_ids,
+                workload_id=payload.workload_id,
+                namespace=payload.namespace,
+                cluster_id=payload.cluster_id,
+                incident_id=payload.incident_id,
+                request_id=payload.request_id,
+                engine="OpenAI GPT-4o-mini",
             )
         except Exception as exc:
             # Availability of an external model must not make incident analysis unavailable.
@@ -124,4 +160,10 @@ async def analyze_root_cause(
         explanation=conclusion.explanation,
         historical_context_used=conclusion.historical_context_used,
         similar_incident_ids=conclusion.similar_incident_ids or [],
+        workload_id=payload.workload_id,
+        namespace=payload.namespace,
+        cluster_id=payload.cluster_id,
+        incident_id=payload.incident_id,
+        request_id=payload.request_id,
+        engine="Deterministic Multi-Agent SRE",
     )

@@ -81,7 +81,7 @@ export class IncidentModel {
       SELECT id, status, created_at
       FROM incidents
       WHERE environment_id = $1
-        AND (target_id = $2 OR target_id IS NULL)
+        AND ($2::text IS NULL OR target_id = $2::text OR target_id IS NULL)
         AND incident_type = $3
         AND status IN ('OPEN', 'INVESTIGATING')
         AND created_at >= NOW() - ($4 || ' minutes')::interval
@@ -124,7 +124,7 @@ export class IncidentModel {
       if (clusterMatches.rows.length > 0) {
         const cRow = clusterMatches.rows[0];
         const validIds = Array.from(new Set([params.cluster_id, String(cRow.id), cRow.name, cRow.cluster_uid].filter(Boolean)));
-        conditions.push(`i.cluster_id = ANY($${idx})`);
+        conditions.push(`i.cluster_id::text = ANY($${idx})`);
         values.push(validIds);
         idx++;
       } else {
@@ -159,7 +159,7 @@ export class IncidentModel {
         i.title ILIKE $${idx} OR 
         i.description ILIKE $${idx} OR 
         i.incident_type ILIKE $${idx} OR 
-        i.target_id ILIKE $${idx} OR
+        i.target_id::text ILIKE $${idx} OR
         i.id::text ILIKE $${idx}
       )`);
       values.push(`%${params.search.trim()}%`);
@@ -200,28 +200,29 @@ export class IncidentModel {
         r.analysis_method,
         r.analysis_result,
         COALESCE(ns.name, 'default') AS namespace,
-        COALESCE(nd.name, 'minikube') AS node_name
+        COALESCE(nd.name, 'minikube') AS node_name,
+        ha.id AS healing_action_id,
+        ha.execution_status AS healing_status,
+        ha.target_name AS healing_target_name,
+        ha.action_name AS healing_action_name,
+        ha.completed_at AS healing_completed_at,
+        CASE 
+          WHEN i.resolved_at IS NOT NULL AND i.detected_at IS NOT NULL 
+            THEN EXTRACT(EPOCH FROM (i.resolved_at - i.detected_at))::int
+          WHEN ha.completed_at IS NOT NULL AND i.detected_at IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (ha.completed_at - i.detected_at))::int
+          ELSE NULL 
+        END AS mttr_seconds
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN LATERAL (
-        SELECT c.id, c.name
-        FROM clusters c
-        WHERE (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-        ORDER BY (c.id::text = i.cluster_id) DESC, c.created_at DESC
-        LIMIT 1
-      ) c ON true
-      LEFT JOIN LATERAL (
-        SELECT w.id, w.name, w.namespace_id
-        FROM workloads w
-        WHERE (w.id::text = i.target_id OR w.name = i.target_id)
-        LIMIT 1
-      ) w ON true
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+      LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
       LEFT JOIN LATERAL (
         SELECT nd.name
         FROM nodes nd
-        WHERE (nd.cluster_id::text = i.cluster_id OR nd.cluster_id IN (SELECT id FROM clusters WHERE name = i.cluster_id))
+        WHERE nd.cluster_id::text = i.cluster_id
         LIMIT 1
       ) nd ON true
       LEFT JOIN LATERAL (
@@ -231,6 +232,14 @@ export class IncidentModel {
         ORDER BY r.analyzed_at DESC
         LIMIT 1
       ) r ON true
+      LEFT JOIN LATERAL (
+        SELECT ha.id, ha.execution_status, ha.target_name, hat.name AS action_name, ha.completed_at
+        FROM healing_actions ha
+        LEFT JOIN healing_action_types hat ON hat.id = ha.action_type_id
+        WHERE ha.incident_id = i.id
+        ORDER BY ha.created_at DESC
+        LIMIT 1
+      ) ha ON true
       ${whereClause}
       ORDER BY i.detected_at DESC
       LIMIT $${idx++} OFFSET $${idx++};
@@ -282,24 +291,13 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN LATERAL (
-        SELECT c.id, c.name
-        FROM clusters c
-        WHERE (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-        ORDER BY (c.id::text = i.cluster_id) DESC, c.created_at DESC
-        LIMIT 1
-      ) c ON true
-      LEFT JOIN LATERAL (
-        SELECT w.id, w.name, w.namespace_id
-        FROM workloads w
-        WHERE (w.id::text = i.target_id OR w.name = i.target_id)
-        LIMIT 1
-      ) w ON true
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+      LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
       LEFT JOIN LATERAL (
         SELECT nd.name
         FROM nodes nd
-        WHERE (nd.cluster_id::text = i.cluster_id OR nd.cluster_id IN (SELECT id FROM clusters WHERE name = i.cluster_id))
+        WHERE nd.cluster_id::text = i.cluster_id
         LIMIT 1
       ) nd ON true
       LEFT JOIN LATERAL (

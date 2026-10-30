@@ -35,14 +35,87 @@ const formatRelativeTime = (dateStr) => {
   return `${days} ngày trước`;
 };
 
+// Chuẩn hóa confidence: không tự gán mặc định, giữ nguyên giá trị 0, trả về null nếu không hợp lệ
+const parseConfidence = (val) => {
+  if (val === null || val === undefined || val === '') {
+    return null;
+  }
+  const num = Number(val);
+  if (!Number.isFinite(num) || num < 0 || num > 100) {
+    return null;
+  }
+  return Math.round(num <= 1 ? num * 100 : num);
+};
+
+// Helper chuyển ngữ tiêu đề sự cố và mức độ sang tiếng Việt
+export const translateIncidentTitle = (rawTitle) => {
+  if (!rawTitle) return '';
+  let title = String(rawTitle);
+
+  title = title.replace(/\[AI Alert\]/gi, '[Cảnh báo AI]');
+  title = title.replace(/\[Alert\]/gi, '[Cảnh báo]');
+
+  const causeTranslations = [
+    { en: /Unstable application pod/gi, vi: 'Pod ứng dụng bất ổn định' },
+    { en: /Container memory exhausted/gi, vi: 'Cạn kiệt bộ nhớ container (OOM)' },
+    { en: /Storage capacity exhausted/gi, vi: 'Cạn kiệt dung lượng lưu trữ' },
+    { en: /CPU saturation/gi, vi: 'Bão hòa tài nguyên CPU' },
+    { en: /Traffic overload/gi, vi: 'Quá tải lưu lượng truy cập' },
+    { en: /Deployment failure/gi, vi: 'Lỗi triển khai phiên bản mới' },
+    { en: /Upstream dependency failure/gi, vi: 'Lỗi dịch vụ phụ thuộc thượng nguồn' },
+    { en: /Application errors/gi, vi: 'Lỗi ứng dụng nội bộ (5xx)' },
+    { en: /Service performance degradation/gi, vi: 'Suy giảm hiệu năng dịch vụ' },
+    { en: /Insufficient available replicas/gi, vi: 'Không đủ số lượng Pod replica' },
+    { en: /Kubernetes scheduling failure/gi, vi: 'Lỗi lập lịch điều phối Kubernetes' },
+    { en: /Workload underutilized/gi, vi: 'Tài nguyên làm việc dư thừa' },
+    { en: /High latency detected/gi, vi: 'Độ trễ phản hồi tăng cao' },
+    { en: /Memory leak detected/gi, vi: 'Phát hiện rò rỉ bộ nhớ' },
+    { en: /Pod crash loop back-off/gi, vi: 'Pod bị kẹt vòng lặp CrashLoopBackOff' },
+    { en: /OOMKilled/gi, vi: 'Tiến trình bị hủy do tràn RAM (OOMKilled)' },
+  ];
+
+  for (const { en, vi } of causeTranslations) {
+    title = title.replace(en, vi);
+  }
+
+  title = title.replace(/\s+on\s+/gi, ' trên ');
+  return title;
+};
+
+export const translateSeverity = (sev) => {
+  if (!sev) return 'TRUNG BÌNH';
+  const s = String(sev).toUpperCase();
+  if (s === 'CRITICAL') return 'KHẨN CẤP';
+  if (s === 'HIGH') return 'CAO';
+  if (s === 'MEDIUM') return 'TRUNG BÌNH';
+  if (s === 'LOW') return 'THẤP';
+  return s;
+};
+
+// Danh sách trắng cho phép loại rủi ro dự báo hợp lệ (ngăn chặn việc lấy tên hành động thay cho rủi ro)
+const VALID_RISKS = new Set([
+  'OOM',
+  'CPU_OVERLOAD',
+  'DISK_FULL',
+  'HIGH_LATENCY',
+  'HTTP_5XX_SPIKE',
+  'TRAFFIC_OVERLOAD',
+  'UNSTABLE_POD',
+  'SCALE_DOWN_CANDIDATE',
+]);
+
 const mapBackendIncidentToUI = (item) => {
   const shortId = item.id.length > 12 ? `INC-${item.id.slice(0, 8).toUpperCase()}` : item.id;
   const isResolved = item.status === 'RESOLVED';
   const isRecovering = item.status === 'INVESTIGATING';
 
   let serviceName = item.target_id;
-  if (!serviceName && item.title && item.title.includes(' on ')) {
-    serviceName = item.title.split(' on ')[1].trim();
+  if (!serviceName && item.title) {
+    if (item.title.includes(' trên ')) {
+      serviceName = item.title.split(' trên ')[1].trim();
+    } else if (item.title.includes(' on ')) {
+      serviceName = item.title.split(' on ')[1].trim();
+    }
   }
   if (!serviceName) {
     serviceName = 'ứng dụng hệ thống';
@@ -61,18 +134,41 @@ const mapBackendIncidentToUI = (item) => {
   const recAction = rcaParsed?.recommendation?.action || item.recommendation || (item.title?.includes('UNKNOWN') ? 'NO_ACTION' : 'RESTART_POD & RESCALE');
   const isNoAction = recAction === 'NO_ACTION' || (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
 
-  let statusLabel = 'Chờ phê duyệt HITL';
-  if (isResolved) statusLabel = 'Đã khắc phục hoàn tất';
-  else if (isNoAction) statusLabel = 'Tự động an toàn (NO_ACTION)';
-  else if (isRecovering) statusLabel = 'Đang tự phục hồi';
+  // Trạng thái vòng đời sự cố lấy từ backend status, không tự suy ra sự cố an toàn chỉ từ NO_ACTION
+  let statusLabel = 'Đang theo dõi';
+  if (isResolved) {
+    statusLabel = 'Đã khắc phục hoàn tất';
+  } else if (isRecovering) {
+    statusLabel = 'Đang tự phục hồi';
+  } else if (item.status === 'OPEN') {
+    statusLabel = isNoAction ? 'Chưa đủ bằng chứng (NO_ACTION)' : 'Chờ phê duyệt HITL';
+  } else if (item.status) {
+    statusLabel = item.status;
+  }
   const recReason = rcaParsed?.recommendation?.reason || 'Tự động giải phóng tiến trình và điều chỉnh ngưỡng tài nguyên an toàn theo MAPE-K';
+
+  // Chuẩn hóa confidence an toàn, giữ nguyên 0 và không fallback về 92%
+  const rcaConfidence = parseConfidence(item.rca_confidence);
+
+  // Chỉ chấp nhận predictedRisk khi thuộc VALID_RISKS, không lấy tên hành động thay cho rủi ro
+  let predictedRisk = null;
+  const rawRiskCandidate = rcaParsed?.prediction?.detected_risks?.[0]?.risk_type
+    || item.prediction?.detected_risks?.[0]?.risk_type
+    || item.prediction_type
+    || item.incident_type;
+
+  if (rawRiskCandidate && VALID_RISKS.has(String(rawRiskCandidate).toUpperCase())) {
+    predictedRisk = String(rawRiskCandidate).toUpperCase();
+  }
 
   let evidencesList = [
     {
       type: 'AI_TELEMETRY',
       ref: serviceName,
-      summary: `Mô hình AI phát hiện nguy cơ ${item.incident_type || 'bất thường'} với độ tin cậy ${Math.round(Number(item.rca_confidence || 0.95) * 100)}%`,
-      score: `${Math.round(Number(item.rca_confidence || 0.95) * 100)}%`,
+      summary: predictedRisk
+        ? `Mô hình AI phát hiện nguy cơ ${predictedRisk}${rcaConfidence !== null ? ` với độ tin cậy ${rcaConfidence}%` : ''}`
+        : 'Mô hình AI theo dõi chuỗi viễn trắc telemetry',
+      score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
     },
     {
       type: 'K8S_EVENT',
@@ -87,7 +183,7 @@ const mapBackendIncidentToUI = (item) => {
       type: idx === 0 ? 'AI_TELEMETRY' : 'K8S_EVENT',
       ref: serviceName,
       summary: typeof ev === 'string' ? ev : (ev.summary || JSON.stringify(ev)),
-      score: `${Math.round(Number(item.rca_confidence || 0.92) * 100)}%`,
+      score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
     }));
   }
 
@@ -98,7 +194,7 @@ const mapBackendIncidentToUI = (item) => {
     cluster: item.cluster_name || item.cluster_id,
     clusterId: item.cluster_id,
     clusterName: item.cluster_name,
-    title: item.title,
+    title: translateIncidentTitle(item.title),
     service: serviceName,
     namespace: item.namespace || 'default',
     node: item.node_name || (item.cluster_name ? `${item.cluster_name}-node-1` : (item.cluster_id || 'worker-01')),
@@ -108,9 +204,11 @@ const mapBackendIncidentToUI = (item) => {
     detectedAt: item.detected_at || item.created_at,
     impact: item.description || `Ảnh hưởng hiệu năng dịch vụ ${serviceName}`,
     rootCause: item.root_cause_description || item.description || 'Hệ thống tự động phát hiện mẫu hành vi bất thường từ chuỗi viễn trắc AI.',
-    rootCauseType: item.root_cause_type || item.incident_type || 'Bất thường dịch vụ',
-    confidence: Math.round(Number(item.rca_confidence || 0.92) * 100),
-    primaryRisk: `${item.incident_type || 'RỦI RO'} (${Math.round(Number(item.rca_confidence || 0.92) * 100)}%)`,
+    rootCauseType: item.root_cause_type || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Bất thường dịch vụ'),
+    confidence: rcaConfidence,
+    rcaConfidence: rcaConfidence,
+    predictedRisk: predictedRisk,
+    primaryRisk: predictedRisk ? `${predictedRisk}${rcaConfidence !== null ? ` (${rcaConfidence}%)` : ''}` : null,
     mttr: isResolved ? 'Đã khắc phục hoàn tất' : 'Đang chạy (1.4s)',
     recommendationAction: recAction,
     recommendationReason: recReason,
@@ -323,13 +421,18 @@ export const IncidentsPage = ({ onNavigate }) => {
       }
     });
 
+    const rawWorkloadNames = (registeredWorkloads || [])
+      .map((w) => (typeof w === 'string' ? w : (w?.name || '')))
+      .filter(Boolean);
+
     const allServiceNames = new Set([
       ...Object.keys(counts),
-      ...(registeredWorkloads || []),
+      ...rawWorkloadNames,
     ]);
 
     return Array.from(allServiceNames)
-      .filter((s) => s && s !== 'selfheal-agent' && !s.includes('-0000-') && s !== 'order-service')
+      .map((s) => (typeof s === 'string' ? s : (s?.name || '')))
+      .filter((s) => typeof s === 'string' && s && s !== 'selfheal-agent' && !s.includes('-0000-') && s !== 'order-service')
       .map((name) => ({
         name,
         count: counts[name] || 0,
@@ -860,7 +963,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                               backgroundColor: isCrit ? '#E11D48' : isHigh ? '#EA580C' : isMed ? '#D97706' : '#2563EB',
                             }}
                           />
-                          {item.severity}
+                          {translateSeverity(item.severity)}
                         </span>
                       </td>
 
@@ -869,7 +972,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                           {item.service}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '2px' }}>
-                          ns: {item.namespace} &bull; {item.node}
+                          <span style={{ color: "#94A3B8" }}>Namespace:</span> {item.namespace} &bull; <span style={{ color: "#94A3B8" }}>Node:</span> {item.node}
                         </div>
                       </td>
 
@@ -890,7 +993,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                             wordBreak: 'break-word',
                           }}
                         >
-                          {item.title}
+                          {translateIncidentTitle(item.title)}
                         </div>
                       </td>
 
