@@ -47,8 +47,8 @@ jest.mock('../../pages/Dashboard/context/DashboardContext', () => ({
   }),
 }));
 
-describe('TopHeader Component - Profile Dropdown Suite', () => {
-  test('TC01: Khi mở menu cá nhân, hiển thị đúng họ tên và email, KHÔNG hiển thị Role Badge', () => {
+describe('TopHeader Component - Profile Dropdown Suite (Đồng bộ theo /admin)', () => {
+  test('TC01: Khi mở menu cá nhân, hiển thị đúng họ tên, email, avatar monogram và Role Badge chuẩn /admin', () => {
     render(<TopHeader />);
 
     // Click profile avatar button via initials
@@ -61,8 +61,8 @@ describe('TopHeader Component - Profile Dropdown Suite', () => {
     expect(nameMatches.length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('sme.owner@company.vn')).toBeInTheDocument();
 
-    // Verify role badge is removed
-    expect(screen.queryByText(/SME OWNER/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Chủ Doanh Nghiệp/i)).not.toBeInTheDocument();
+    // Verify role badge is displayed matching /admin standard
+    expect(screen.getByText(/SME OWNER/i)).toBeInTheDocument();
+    expect(screen.getByText(/Chủ Sở Hữu Doanh Nghiệp/i)).toBeInTheDocument();
   });
 });

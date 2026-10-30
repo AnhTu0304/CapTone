@@ -67,11 +67,11 @@ describe('PersonalHeader Component - Remove "Về Dashboard" Button Suite', () =
     // Profile dropdown items appear
     expect(screen.getByText('Xem Hồ Sơ Cá Nhân')).toBeInTheDocument();
     expect(screen.getByText('Bảo Mật & Đổi Mật Khẩu')).toBeInTheDocument();
-    expect(screen.getByText('Bàn Điều Khiển Doanh Nghiệp')).toBeInTheDocument();
+    expect(screen.getByText('Bảng Điều Khiển Doanh Nghiệp (Owner / User)')).toBeInTheDocument();
     expect(screen.getByText('Đăng Xuất Tài Khoản')).toBeInTheDocument();
 
-    // Click Bàn Điều Khiển Doanh Nghiệp inside dropdown
-    fireEvent.click(screen.getByText('Bàn Điều Khiển Doanh Nghiệp'));
+    // Click Bảng Điều Khiển Doanh Nghiệp (Owner / User) inside dropdown
+    fireEvent.click(screen.getByText('Bảng Điều Khiển Doanh Nghiệp (Owner / User)'));
     expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
   });
 });
