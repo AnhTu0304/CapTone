@@ -11,3 +11,56 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+
+/* ==========================================================================
+   Print / Export PDF Optimization Styles
+   ========================================================================== */
+@media print {
+  .dashboard-desktop-sidebar,
+  .dashboard-mobile-sidebar-drawer,
+  .dashboard-mobile-header,
+  .dashboard-topbar,
+  .no-print,
+  .dash-export-actions,
+  button {
+    display: none !important;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt !important;
+  }
+
+  .dashboard-root-layout,
+  .dashboard-main-content {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .dashboard-reports-page {
+    padding: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .dash-card, .dash-table-container {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    margin-bottom: 16px !important;
+  }
+}

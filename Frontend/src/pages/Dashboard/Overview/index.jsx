@@ -41,6 +41,11 @@ export const OverviewPage = () => {
 
   const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
 
+  // Realtime Telemetry & Live Cluster State
+  const [telemetry, setTelemetry] = useState(null);
+  const [telemetrySequence, setTelemetrySequence] = useState([]);
+  const [clusterInfo, setClusterInfo] = useState(null);
+
   // Kiểm tra trạng thái Agent của Cụm Kubernetes đang chọn
   const isClusterOnline = Boolean(
     currentEnv?.agentStatus === 'ONLINE' ||
@@ -48,11 +53,6 @@ export const OverviewPage = () => {
     clusterInfo?.status === 'HEALTHY' ||
     (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
   );
-
-  // Realtime Telemetry & Live Cluster State
-  const [telemetry, setTelemetry] = useState(null);
-  const [telemetrySequence, setTelemetrySequence] = useState([]);
-  const [clusterInfo, setClusterInfo] = useState(null);
   const [isWsLive, setIsWsLive] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [aiRecommendations, setAiRecommendations] = useState([]);

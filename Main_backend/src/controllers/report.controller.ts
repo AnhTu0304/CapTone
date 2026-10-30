@@ -18,6 +18,7 @@ export class ReportController {
         user?.organizationId ||
         null;
       const environmentId = (req.query.environmentId as string) || null;
+      const clusterId = (req.query.clusterId as string) || null;
       const timeRange = (req.query.timeRange as string) || '6M';
 
       if (!organizationId) {
@@ -49,6 +50,7 @@ export class ReportController {
       const reportData = await ReportModel.getOrganizationSLAReport(
         organizationId,
         environmentId,
+        clusterId,
         timeRange
       );
 
