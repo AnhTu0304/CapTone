@@ -6,11 +6,12 @@
 
 import { request } from './apiClient';
 
-export const fetchOrganizationSLAReport = async ({ organizationId, environmentId, timeRange = '6M' } = {}) => {
+export const fetchOrganizationSLAReport = async ({ organizationId, environmentId, clusterId, timeRange = '6M' } = {}) => {
   try {
     const params = new URLSearchParams();
     if (organizationId) params.append('organizationId', organizationId);
     if (environmentId) params.append('environmentId', environmentId);
+    if (clusterId) params.append('clusterId', clusterId);
     if (timeRange) params.append('timeRange', timeRange);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
