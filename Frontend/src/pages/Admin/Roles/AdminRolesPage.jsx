@@ -137,10 +137,12 @@ export const resolveUserRole = (u) => {
     if (u.system_roles.includes('ADMIN') || u.system_roles.includes('SYSTEM_ADMIN')) return 'ADMIN';
   }
   if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
-    const code = u.organization_roles[0].role_code || u.organization_roles[0].role_name;
-    if (['SME_OWNER', 'DEVOPS', 'VIEWER'].includes(code)) return code;
+    const codes = u.organization_roles.map((r) => (r.role_code || r.role_name || '').toUpperCase());
+    if (codes.includes('SME_OWNER')) return 'SME_OWNER';
+    if (codes.includes('DEVOPS')) return 'DEVOPS';
+    if (codes.includes('VIEWER')) return 'VIEWER';
   }
-  return u.currentRole || (u.system_roles?.[0]) || 'VIEWER';
+  return u.currentRole || 'VIEWER';
 };
 
 /**
@@ -154,7 +156,12 @@ export const resolveUserOrg = (u) => {
     return 'Platform Operations';
   }
   if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
-    return u.organization_roles[0].organization_name || 'Doanh nghiệp liên kết';
+    if (u.organization_roles.length === 1) {
+      return u.organization_roles[0].organization_name || 'Doanh nghiệp liên kết';
+    }
+    const ownerOrg = u.organization_roles.find((r) => (r.role_code || r.role_name) === 'SME_OWNER');
+    const primaryName = (ownerOrg || u.organization_roles[0]).organization_name || 'Doanh nghiệp liên kết';
+    return primaryName + ' (+' + (u.organization_roles.length - 1) + ' khác)';
   }
   return u.org || 'Chưa liên kết tổ chức';
 };

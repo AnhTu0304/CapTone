@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AuthContext from '../../../context/AuthContext';
-import { AdminRolesPage } from './AdminRolesPage';
+import { AdminRolesPage, resolveUserRole, resolveUserOrg } from './AdminRolesPage';
 import adminUsersService from '../../../services/adminUsersService';
 import { getAuditLogs } from '../../../services/adminAuditLogsService';
 
@@ -279,5 +279,54 @@ describe('AdminRolesPage Component Suite', () => {
     });
 
     expect(screen.getByText(/RBAC Audit Trail/i)).toBeInTheDocument();
+  });
+  test('9. resolveUserRole prioritizes system roles and highest organization roles', () => {
+    // SuperAdmin
+    expect(resolveUserRole({ system_roles: ['SUPER_ADMIN'] })).toBe('SUPER_ADMIN');
+    // Admin
+    expect(resolveUserRole({ system_roles: ['ADMIN'] })).toBe('ADMIN');
+    // Multiple org roles: SME_OWNER beats VIEWER
+    expect(
+      resolveUserRole({
+        system_roles: [],
+        organization_roles: [
+          { organization_name: 'Org A', role_code: 'VIEWER' },
+          { organization_name: 'Org B', role_code: 'SME_OWNER' },
+        ],
+      })
+    ).toBe('SME_OWNER');
+    // User with system_roles: ['USER'] and SME_OWNER in org
+    expect(
+      resolveUserRole({
+        system_roles: ['USER'],
+        organization_roles: [{ organization_name: 'Org C', role_code: 'SME_OWNER' }],
+      })
+    ).toBe('SME_OWNER');
+    // Default fallback
+    expect(resolveUserRole({})).toBe('VIEWER');
+  });
+
+  test('10. resolveUserOrg formats platform and multi-tenant org strings correctly', () => {
+    // SuperAdmin platform root
+    expect(resolveUserOrg({ system_roles: ['SUPER_ADMIN'] })).toBe('Toàn Hệ Thống (Platform Root)');
+    // Admin operations
+    expect(resolveUserOrg({ system_roles: ['ADMIN'] })).toBe('Platform Operations');
+    // Single org
+    expect(
+      resolveUserOrg({
+        organization_roles: [{ organization_name: 'Acme Cloud Corp', role_code: 'SME_OWNER' }],
+      })
+    ).toBe('Acme Cloud Corp');
+    // Multiple orgs
+    expect(
+      resolveUserOrg({
+        organization_roles: [
+          { organization_name: 'Org A', role_code: 'VIEWER' },
+          { organization_name: 'Acme Cloud Corp', role_code: 'SME_OWNER' },
+        ],
+      })
+    ).toBe('Acme Cloud Corp (+1 khác)');
+    // No org
+    expect(resolveUserOrg({})).toBe('Chưa liên kết tổ chức');
   });
 });
