@@ -384,4 +384,73 @@ describe('AdminRolesPage Component Suite', () => {
     });
     expect(screen.getByText('SYSTEM_ROLE_ASSIGNED')).toBeInTheDocument();
   });
+
+  test('13. Search input filters user list by name, email, or company name', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+      expect(screen.getByText('Tran Kiem Dinh')).toBeInTheDocument();
+      expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText('Tìm tên, email, công ty...');
+    fireEvent.change(searchInput, { target: { value: 'FinFlow' } });
+
+    // Should filter table to only show Le Thi Owner (org: FinFlow Pay)
+    expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    expect(screen.queryByText('Nguyen Van Admin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
+  });
+
+  test('14. Role select filter filters user list by specific role code', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    const roleSelect = screen.getByDisplayValue('Tất cả vai trò');
+    fireEvent.change(roleSelect, { target: { value: 'SUPER_ADMIN' } });
+
+    // Only Nguyen Van Admin should remain
+    expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
+    expect(screen.queryByText('Le Thi Owner')).not.toBeInTheDocument();
+  });
+
+  test('15. Clicking "Xóa bộ lọc" button clears search and role filters', async () => {
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText('Tìm tên, email, công ty...');
+    fireEvent.change(searchInput, { target: { value: 'nonexistent-user-keyword' } });
+
+    // Empty state should be visible
+    expect(screen.getByText(/Không tìm thấy người dùng phù hợp/i)).toBeInTheDocument();
+
+    // Click "Xóa bộ lọc" or "Đặt lại bộ lọc"
+    const clearBtn = screen.getAllByRole('button', { name: /(Xóa bộ lọc|Đặt lại bộ lọc)/i })[0];
+    fireEvent.click(clearBtn);
+
+    // All users restored
+    expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    expect(screen.getByText('Tran Kiem Dinh')).toBeInTheDocument();
+    expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+  });
 });

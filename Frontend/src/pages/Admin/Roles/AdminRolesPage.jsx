@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -181,11 +181,25 @@ export const AdminRolesPage = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [userError, setUserError] = useState(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+
+  // Debounce search input (300ms) để tối ưu hiệu năng và tránh spam API
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Reset page về 1 khi từ khóa tìm kiếm hoặc bộ lọc thay đổi
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedRoleFilter]);
 
   // Tab 3: Audit Logs state
   const [auditLogs, setAuditLogs] = useState([]);
@@ -227,7 +241,7 @@ export const AdminRolesPage = () => {
       const res = await adminUsersService.getUsers({
         page,
         limit: pageSize,
-        search: search.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
       });
 
       const rawItems = res?.items || (Array.isArray(res) ? res : []);
@@ -256,7 +270,7 @@ export const AdminRolesPage = () => {
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, debouncedSearch]);
 
   /**
    * Tải nhật ký kiểm toán phân quyền thực tế từ API
@@ -378,11 +392,21 @@ export const AdminRolesPage = () => {
     }
   };
 
-  // Lọc người dùng tại client theo vai trò (nếu cần)
-  const filteredUsers = users.filter((u) => {
-    const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
-    return matchRole;
-  });
+  // Lọc người dùng kết hợp đa chiều: vai trò + từ khóa tìm kiếm (tên, email, công ty, mã người dùng)
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
+      if (!matchRole) return false;
+      if (!search.trim()) return true;
+      const term = search.toLowerCase().trim();
+      const matchName = (u.name || '').toLowerCase().includes(term);
+      const matchEmail = (u.email || '').toLowerCase().includes(term);
+      const matchOrg = (u.org || '').toLowerCase().includes(term);
+      const matchId = (u.id || '').toLowerCase().includes(term);
+      const matchRoleCode = (u.currentRole || '').toLowerCase().includes(term);
+      return matchName || matchEmail || matchOrg || matchId || matchRoleCode;
+    });
+  }, [users, selectedRoleFilter, search]);
 
   return (
     <div
@@ -716,12 +740,12 @@ export const AdminRolesPage = () => {
               </p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Search
                   size={14}
                   color="var(--dash-text-muted)"
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
+                  style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
                 />
                 <input
                   type="text"
@@ -729,7 +753,7 @@ export const AdminRolesPage = () => {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   style={{
-                    padding: '6px 12px 6px 30px',
+                    padding: '6px 28px 6px 30px',
                     borderRadius: '8px',
                     border: '1px solid var(--dash-border)',
                     fontSize: '0.8125rem',
@@ -737,6 +761,29 @@ export const AdminRolesPage = () => {
                     minWidth: '220px',
                   }}
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      setDebouncedSearch('');
+                    }}
+                    title="Xóa từ khóa tìm kiếm"
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      color: 'var(--dash-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
               <select
@@ -759,6 +806,47 @@ export const AdminRolesPage = () => {
                 <option value="DEVOPS">DEVOPS</option>
                 <option value="VIEWER">VIEWER</option>
               </select>
+
+              {(search.trim() || selectedRoleFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setDebouncedSearch('');
+                    setSelectedRoleFilter('ALL');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #FECACA',
+                    backgroundColor: '#FEF2F2',
+                    color: '#DC2626',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={12} />
+                  <span>Xóa bộ lọc</span>
+                </button>
+              )}
+
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--dash-text-muted)',
+                  fontWeight: 600,
+                  padding: '4px 8px',
+                  backgroundColor: 'var(--dash-bg-subtle)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                }}
+              >
+                Tìm thấy {filteredUsers.length} người dùng
+              </span>
             </div>
           </div>
 
@@ -815,8 +903,40 @@ export const AdminRolesPage = () => {
                 <tbody>
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
-                        Không tìm thấy người dùng nào phù hợp với bộ lọc hiện tại.
+                      <td colSpan={5} style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                          <Search size={24} style={{ opacity: 0.4 }} />
+                          <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', fontSize: '0.875rem' }}>
+                            Không tìm thấy người dùng phù hợp
+                          </div>
+                          <div style={{ fontSize: '0.75rem' }}>
+                            {search.trim() ? `Không có kết quả khớp với từ khóa "${search}"` : 'Không có người dùng nào khớp với bộ lọc'}
+                            {selectedRoleFilter !== 'ALL' ? ` (Vai trò: ${selectedRoleFilter})` : ''}
+                          </div>
+                          {(search.trim() || selectedRoleFilter !== 'ALL') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearch('');
+                                setDebouncedSearch('');
+                                setSelectedRoleFilter('ALL');
+                              }}
+                              style={{
+                                marginTop: '6px',
+                                padding: '5px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--dash-border)',
+                                backgroundColor: '#FFFFFF',
+                                color: 'var(--dash-primary)',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Đặt lại bộ lọc
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (

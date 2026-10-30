@@ -157,10 +157,14 @@ export class UserService {
         const conditions: string[] = ['deleted_at IS NULL'];
         const params: unknown[] = [];
 
-        // 2.1. Tìm kiếm tổng hợp (search: tìm kiếm trên cả email, họ tên hoặc ID)
+        // 2.1. Tìm kiếm tổng hợp (search: tìm kiếm trên cả email, họ tên, ID hoặc tên tổ chức liên kết)
         if (query.search && query.search.trim()) {
             params.push(`%${query.search.trim()}%`);
-            conditions.push(`(email ILIKE $${params.length} OR full_name ILIKE $${params.length} OR id::text ILIKE $${params.length})`);
+            conditions.push(
+                `(email ILIKE $${params.length} OR full_name ILIKE $${params.length} OR id::text ILIKE $${params.length} OR EXISTS (` +
+                `SELECT 1 FROM organization_members om JOIN organizations o ON om.organization_id = o.id ` +
+                `WHERE om.user_id = users.id AND om.status != 'REMOVED' AND o.name ILIKE $${params.length}))`
+            );
         }
 
         // 2.2. Tìm kiếm theo họ tên (name)
