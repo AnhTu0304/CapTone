@@ -984,18 +984,64 @@ export const OverviewPage = () => {
         <div className="dash-card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Trạng thái Tác tử</span>
-            <Radio size={16} color="var(--dash-primary)" />
+            <Radio
+              size={16}
+              color={
+                !isClusterOnline
+                  ? 'var(--dash-danger)'
+                  : isDataStale || telemetrySequence.length === 0
+                  ? 'var(--dash-warning-text)'
+                  : 'var(--dash-primary)'
+              }
+            />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              Trực tuyến
+            <span
+              style={{
+                fontSize: '1.625rem',
+                fontWeight: 800,
+                color:
+                  !isClusterOnline
+                    ? 'var(--dash-text-muted)'
+                    : isDataStale || telemetrySequence.length === 0
+                    ? 'var(--dash-warning-text)'
+                    : 'var(--dash-text-primary)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {!isClusterOnline
+                ? 'Ngoại tuyến'
+                : isDataStale || telemetrySequence.length === 0
+                ? 'Chờ viễn trắc'
+                : 'Trực tuyến'}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-success)', fontWeight: 600 }}>
-              &lt; 1.2ms
+            <span
+              style={{
+                fontSize: '0.75rem',
+                color:
+                  !isClusterOnline
+                    ? 'var(--dash-danger)'
+                    : isDataStale || telemetrySequence.length === 0
+                    ? 'var(--dash-warning-text)'
+                    : 'var(--dash-success)',
+                fontWeight: 600,
+              }}
+            >
+              {!isClusterOnline
+                ? 'Mất kết nối'
+                : isDataStale || telemetrySequence.length === 0
+                ? 'Chưa có mẫu'
+                : telemetry?.latency
+                ? `${telemetry.latency}ms`
+                : '< 1.2ms'}
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Nhân eBPF {clusterInfo?.kubernetes_version || 'v1.37.0'} đang chạy
+            {!isClusterOnline
+              ? 'Tác tử eBPF chưa kết nối tới máy chủ'
+              : isDataStale || telemetrySequence.length === 0
+              ? 'Chưa nhận được mẫu viễn trắc trong khung giờ chọn'
+              : `Nhân eBPF ${clusterInfo?.kubernetes_version || 'v1.37.0'} đang chạy`}
           </div>
         </div>
 
