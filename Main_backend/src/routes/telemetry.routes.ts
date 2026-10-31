@@ -22,6 +22,24 @@ telemetryRoutes.get(
   TelemetryController.getNodeMetrics
 );
 
+// GET /api/v1/telemetry/timeseries
+// Query downsampled time-series node metrics (CPU, RAM, Disk, Network) [S5][PBI20 Task 2.2]
+telemetryRoutes.get(
+  '/timeseries',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getNodeTimeseries
+);
+
+// GET /api/v1/telemetry/nodes/:nodeId/timeseries
+// Node-scoped time-series metrics query [S5][PBI20 Task 2.2]
+telemetryRoutes.get(
+  '/nodes/:nodeId/timeseries',
+  authenticateToken,
+  requireRoles('VIEWER', 'DEVOPS', 'ADMIN', 'USER'),
+  TelemetryController.getNodeTimeseries
+);
+
 // GET /api/v1/telemetry/services
 // Danh sách các dịch vụ đang được giám sát APM kèm tổng hợp chỉ số
 telemetryRoutes.get(

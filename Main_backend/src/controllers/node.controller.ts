@@ -74,6 +74,27 @@ export class NodeController {
     }
   }
 
+  public static async getNodeTimeseries(req: Request, res: Response, next: NextFunction) {
+    try {
+      const orgId = req.params.orgId || req.params.id;
+      const clusterId = req.params.clusterId;
+      const nodeId = req.params.nodeId;
+
+      const result = await AgentService.queryNodeTimeseriesScoped({
+        user: (req as any).user,
+        orgMember: (req as any).orgMember,
+        orgId,
+        clusterId,
+        nodeId,
+        query: req.query as Record<string, any>,
+      });
+
+      return ApiResponse.success(res, `Lấy dữ liệu chuỗi thời gian (${result.metricType}) thành công`, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async drainNode(req: Request, res: Response, next: NextFunction) {
     try {
       const user = (req as any).user;

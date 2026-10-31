@@ -116,6 +116,23 @@ export interface INodeMetricQueryFilter {
   order?: 'asc' | 'desc';
 }
 
+export interface INodeMetricsTimeseriesFilter {
+  organizationId?: string;
+  organizationIds?: string[];
+  environmentId?: string;
+  agentId?: string;
+  clusterId?: string;
+  nodeId?: string;
+  nodeName?: string;
+  startTime?: Date;
+  endTime?: Date;
+  range?: string;
+  intervalSeconds?: number;
+  metricType?: 'ALL' | 'CPU' | 'RAM' | 'DISK' | 'NETWORK';
+  aggregation?: 'AVG' | 'MIN' | 'MAX' | 'SUM' | 'LAST';
+  limit?: number;
+}
+
 export class MetricModel {
   private static nodeTableEnsured = false;
   private static agentMetricsSchemaEnsured = false;
@@ -532,6 +549,72 @@ export class MetricModel {
   public static async queryNodeMetrics(filter: INodeMetricQueryFilter) {
     const result = await this.queryNodeMetricsPaginated(filter);
     return result.items;
+  }
+
+  /**
+   * Query downsampled time-series node metrics (CPU, RAM, Disk, Network) [S5][PBI20 Task 2.2]
+   */
+  public static async queryNodeMetricsTimeseries(filter: INodeMetricsTimeseriesFilter) {
+    await this.ensureNodeMetricsTable();
+
+    const intervalSeconds = Math.max(5, Math.min(86400, filter.intervalSeconds || 60));
+    const safeLimit = Math.max(1, Math.min(10000, filter.limit || 5000));
+
+    const { whereClause, params } = this.buildNodeMetricsWhere({
+      organizationId: filter.organizationId,
+      organizationIds: filter.organizationIds,
+      environmentId: filter.environmentId,
+      agentId: filter.agentId,
+      clusterId: filter.clusterId,
+      nodeId: filter.nodeId,
+      nodeName: filter.nodeName,
+      startTime: filter.startTime,
+      endTime: filter.endTime,
+    });
+
+    const intervalParamIdx = params.length + 1;
+    const limitParamIdx = params.length + 2;
+    const queryParams = [...params, intervalSeconds, safeLimit];
+
+    const sql = `
+      SELECT
+        to_timestamp(floor(extract(epoch from nm.collected_at) / $${intervalParamIdx}) * $${intervalParamIdx}) AS time_bucket,
+        ROUND(AVG(nm.cpu_usage_percent)::numeric, 2)::float AS cpu_avg,
+        ROUND(MIN(nm.cpu_usage_percent)::numeric, 2)::float AS cpu_min,
+        ROUND(MAX(nm.cpu_usage_percent)::numeric, 2)::float AS cpu_max,
+        ROUND(AVG(nm.cpu_cores)::numeric, 0)::int AS cpu_cores,
+
+        ROUND(AVG(nm.ram_usage_percent)::numeric, 2)::float AS ram_usage_percent_avg,
+        ROUND(MIN(nm.ram_usage_percent)::numeric, 2)::float AS ram_usage_percent_min,
+        ROUND(MAX(nm.ram_usage_percent)::numeric, 2)::float AS ram_usage_percent_max,
+        ROUND(AVG(nm.ram_used_bytes)::numeric, 0)::bigint AS ram_used_bytes_avg,
+        ROUND(AVG(nm.ram_total_bytes)::numeric, 0)::bigint AS ram_total_bytes_avg,
+        ROUND(AVG(nm.ram_available_bytes)::numeric, 0)::bigint AS ram_available_bytes_avg,
+
+        ROUND(AVG(nm.disk_usage_percent)::numeric, 2)::float AS disk_usage_percent_avg,
+        ROUND(MIN(nm.disk_usage_percent)::numeric, 2)::float AS disk_usage_percent_min,
+        ROUND(MAX(nm.disk_usage_percent)::numeric, 2)::float AS disk_usage_percent_max,
+        ROUND(AVG(nm.disk_used_bytes)::numeric, 0)::bigint AS disk_used_bytes_avg,
+        ROUND(AVG(nm.disk_total_bytes)::numeric, 0)::bigint AS disk_total_bytes_avg,
+        ROUND(AVG(nm.disk_available_bytes)::numeric, 0)::bigint AS disk_available_bytes_avg,
+
+        ROUND(AVG(nm.net_rx_bytes_per_sec)::numeric, 2)::float AS net_rx_rate_avg,
+        ROUND(AVG(nm.net_tx_bytes_per_sec)::numeric, 2)::float AS net_tx_rate_avg,
+        ROUND(MAX(nm.net_rx_bytes_per_sec)::numeric, 2)::float AS net_rx_rate_max,
+        ROUND(MAX(nm.net_tx_bytes_per_sec)::numeric, 2)::float AS net_tx_rate_max,
+        ROUND(AVG(nm.net_rx_bytes)::numeric, 0)::bigint AS net_rx_bytes_avg,
+        ROUND(AVG(nm.net_tx_bytes)::numeric, 0)::bigint AS net_tx_bytes_avg,
+
+        COUNT(*)::int AS sample_count
+      FROM node_metrics nm
+      WHERE ${whereClause}
+      GROUP BY time_bucket
+      ORDER BY time_bucket ASC
+      LIMIT $${limitParamIdx};
+    `;
+
+    const res = await pool.query(sql, queryParams);
+    return res.rows;
   }
   /**
    * Get distinct active service IDs from agent_metrics within recent time window

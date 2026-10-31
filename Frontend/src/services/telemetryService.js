@@ -125,6 +125,67 @@ export const telemetryService = {
   },
 
   /**
+   * Fetch downsampled time-series node metrics (CPU, RAM, Disk, Network) [S5][PBI20 Task 2.1 & 2.2]
+   * @param {Object} options
+   * @param {string} [options.nodeId] - Node ID
+   * @param {string} [options.nodeName] - Node name
+   * @param {string} [options.clusterId] - Cluster ID
+   * @param {string} [options.organizationId] - Organization ID
+   * @param {string} [options.range] - '15m' | '1h' | '6h' | '24h' | '7d' | '30d'
+   * @param {string|number} [options.interval] - '15s', '60s', '300s', etc.
+   * @param {string} [options.metricType] - 'ALL' | 'CPU' | 'RAM' | 'DISK' | 'NETWORK'
+   * @param {string} [options.aggregation] - 'AVG' | 'MIN' | 'MAX' | 'SUM' | 'LAST'
+   * @param {Date|string} [options.startTime]
+   * @param {Date|string} [options.endTime]
+   * @param {AbortSignal} [options.signal]
+   * @returns {Promise<Object>}
+   */
+  async getNodeTimeseries(options = {}) {
+    const {
+      nodeId,
+      nodeName,
+      clusterId,
+      organizationId,
+      range = '1h',
+      interval,
+      metricType = 'ALL',
+      aggregation = 'AVG',
+      startTime,
+      endTime,
+      signal,
+    } = options;
+
+    const queryParams = new URLSearchParams();
+    if (range) queryParams.set('range', range);
+    if (interval) queryParams.set('interval', String(interval));
+    if (metricType) queryParams.set('metricType', metricType);
+    if (aggregation) queryParams.set('aggregation', aggregation);
+    if (clusterId) queryParams.set('clusterId', clusterId);
+    if (nodeName) queryParams.set('nodeName', nodeName);
+    if (organizationId) queryParams.set('organizationId', organizationId);
+    if (startTime) {
+      queryParams.set('startTime', startTime instanceof Date ? startTime.toISOString() : startTime);
+    }
+    if (endTime) {
+      queryParams.set('endTime', endTime instanceof Date ? endTime.toISOString() : endTime);
+    }
+
+    const endpoint = nodeId
+      ? `/telemetry/nodes/${encodeURIComponent(nodeId)}/timeseries`
+      : `/telemetry/timeseries`;
+
+    const qs = queryParams.toString();
+    const fullEndpoint = qs ? `${endpoint}?${qs}` : endpoint;
+
+    const res = await request(fullEndpoint, {
+      method: 'GET',
+      signal,
+    });
+
+    return res?.data || res || {};
+  },
+
+  /**
    * Fetch comprehensive real-time telemetry summary
    */
   async getLiveSummary(serviceId = 'sme-order-service') {
