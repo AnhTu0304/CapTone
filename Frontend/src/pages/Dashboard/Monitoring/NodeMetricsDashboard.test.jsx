@@ -8,6 +8,8 @@ import {
   formatThroughput,
   downsampleSeries,
   transformNodeMetricsForCharts,
+  convertTimeseriesToUnifiedRows,
+  TIME_RANGE_PRESETS,
 } from '../../../utils/nodeMetricsChartUtils';
 import { NodeMetricsChartsPanel } from '../../../components/dashboard/NodeMetricsChartsPanel';
 import { telemetryService } from '../../../services/telemetryService';
@@ -20,10 +22,25 @@ const mockApplyOptions = jest.fn();
 const mockRemove = jest.fn();
 const mockSubscribeCrosshairMove = jest.fn();
 const mockUnsubscribeCrosshairMove = jest.fn();
+const mockSeriesApplyOptions = jest.fn();
+const mockGetVisibleLogicalRange = jest.fn(() => ({ from: 10, to: 50 }));
+const mockSetVisibleLogicalRange = jest.fn();
+const mockSubscribeVisibleLogicalRangeChange = jest.fn();
+const mockUnsubscribeVisibleLogicalRangeChange = jest.fn();
+
 const mockAddSeries = jest.fn(() => ({
   setData: mockSetData,
   update: jest.fn(),
+  applyOptions: mockSeriesApplyOptions,
 }));
+
+const mockTimeScale = () => ({
+  fitContent: mockFitContent,
+  getVisibleLogicalRange: mockGetVisibleLogicalRange,
+  setVisibleLogicalRange: mockSetVisibleLogicalRange,
+  subscribeVisibleLogicalRangeChange: mockSubscribeVisibleLogicalRangeChange,
+  unsubscribeVisibleLogicalRangeChange: mockUnsubscribeVisibleLogicalRangeChange,
+});
 
 jest.mock('lightweight-charts', () => ({
   createChart: jest.fn(() => ({
@@ -32,9 +49,7 @@ jest.mock('lightweight-charts', () => ({
     remove: mockRemove,
     subscribeCrosshairMove: mockSubscribeCrosshairMove,
     unsubscribeCrosshairMove: mockUnsubscribeCrosshairMove,
-    timeScale: () => ({
-      fitContent: mockFitContent,
-    }),
+    timeScale: mockTimeScale,
   })),
   AreaSeries: 'AreaSeriesDefinition',
   LineSeries: 'LineSeriesDefinition',
@@ -46,6 +61,7 @@ jest.mock('lightweight-charts', () => ({
 jest.mock('../../../services/telemetryService', () => ({
   telemetryService: {
     getNodeMetrics: jest.fn(),
+    getNodeTimeseries: jest.fn(),
   },
 }));
 
@@ -73,6 +89,7 @@ describe('Task 4.4 – Node Metrics Dashboard Charts & Utilities Suite', () => {
     mockAddSeries.mockImplementation(() => ({
       setData: mockSetData,
       update: jest.fn(),
+      applyOptions: mockSeriesApplyOptions,
     }));
     createChart.mockImplementation(() => ({
       addSeries: mockAddSeries,
@@ -80,10 +97,10 @@ describe('Task 4.4 – Node Metrics Dashboard Charts & Utilities Suite', () => {
       remove: mockRemove,
       subscribeCrosshairMove: mockSubscribeCrosshairMove,
       unsubscribeCrosshairMove: mockUnsubscribeCrosshairMove,
-      timeScale: () => ({
-        fitContent: mockFitContent,
-      }),
+      timeScale: mockTimeScale,
     }));
+    mockGetVisibleLogicalRange.mockImplementation(() => ({ from: 10, to: 50 }));
+    telemetryService.getNodeTimeseries = jest.fn().mockResolvedValue(null);
     nodeService.getNodesByCluster.mockResolvedValue([
       { id: 'node-uuid-1', name: 'k8s-worker-01', status: 'Ready' },
       { id: 'node-uuid-2', name: 'k8s-worker-02', status: 'Ready' },
@@ -296,6 +313,7 @@ describe('Task 4.4 – Node Metrics Dashboard Charts & Utilities Suite', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('chart-panel-cpu')).toBeInTheDocument();
+      expect(screen.getByTestId('node-metrics-refresh-btn')).not.toBeDisabled();
     });
 
     expect(screen.getByTestId('chart-panel-ram')).toBeInTheDocument();
@@ -382,6 +400,7 @@ describe('Task 4.4 – Node Metrics Dashboard Charts & Utilities Suite', () => {
   });
 
   test('7. Switching Node cancels/ignores stale in-flight response so old Node data never overwrites active Node', async () => {
+    telemetryService.getNodeTimeseries = undefined;
     let resolveFirstRequest;
     const firstPromise = new Promise((resolve) => {
       resolveFirstRequest = resolve;
@@ -466,5 +485,275 @@ describe('Task 4.4 – Node Metrics Dashboard Charts & Utilities Suite', () => {
 
     // Active summary card must still show 88.8% (k8s-worker-02), NOT overwritten by stale 11.1%
     expect(screen.getByTestId('summary-card-cpu')).toHaveTextContent('88.8%');
+  });
+
+  // =========================================================================
+  // 3. PBI20 TASK 2.3 & 2.4 — PRESETS, ZOOM/PAN, TIME-SCALE SYNC & TOGGLES
+  // =========================================================================
+  test('8. Renders 5 time-range presets (15m, 1h, 6h, 24h, 7d) and triggers fetch on preset switch', async () => {
+    telemetryService.getNodeMetrics.mockResolvedValue({
+      items: [
+        {
+          id: '101',
+          node_name: 'k8s-worker-01',
+          cpu_usage_percent: 25.0,
+          ram_usage_percent: 40.0,
+          disk_usage_percent: 30.0,
+          net_rx_bytes_per_sec: 100,
+          net_tx_bytes_per_sec: 50,
+          collected_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(
+      <NodeMetricsChartsPanel
+        orgId="11111111-1111-4111-8111-111111111111"
+        clusterId="22222222-2222-4222-8222-222222222222"
+        nodesOverride={[{ id: 'node-uuid-1', name: 'k8s-worker-01', status: 'Ready' }]}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('node-metrics-range-15m')).toBeInTheDocument();
+      expect(screen.getByTestId('node-metrics-range-1h')).toBeInTheDocument();
+      expect(screen.getByTestId('node-metrics-range-6h')).toBeInTheDocument();
+      expect(screen.getByTestId('node-metrics-range-24h')).toBeInTheDocument();
+      expect(screen.getByTestId('node-metrics-range-7d')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('node-metrics-range-15m')).toHaveClass('active');
+
+    fireEvent.click(screen.getByTestId('node-metrics-range-1h'));
+    expect(screen.getByTestId('node-metrics-range-1h')).toHaveClass('active');
+
+    fireEvent.click(screen.getByTestId('node-metrics-range-7d'));
+    expect(screen.getByTestId('node-metrics-range-7d')).toHaveClass('active');
+  });
+
+  test('9. Zoom & Pan toolbar controls trigger chart timeScale methods and sync across charts', async () => {
+    telemetryService.getNodeMetrics.mockResolvedValue({
+      items: [
+        {
+          id: '101',
+          node_name: 'k8s-worker-01',
+          cpu_usage_percent: 30.0,
+          ram_usage_percent: 45.0,
+          disk_usage_percent: 35.0,
+          net_rx_bytes_per_sec: 200,
+          net_tx_bytes_per_sec: 100,
+          collected_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(
+      <NodeMetricsChartsPanel
+        orgId="11111111-1111-4111-8111-111111111111"
+        clusterId="22222222-2222-4222-8222-222222222222"
+        nodesOverride={[{ id: 'node-uuid-1', name: 'k8s-worker-01', status: 'Ready' }]}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chart-panel-cpu')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-zoom-in')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-zoom-out')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-pan-left')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-pan-right')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-reset-zoom')).toBeInTheDocument();
+    });
+
+    expect(mockSubscribeVisibleLogicalRangeChange).toHaveBeenCalledTimes(4);
+
+    fireEvent.click(screen.getByTestId('chart-zoom-in'));
+    expect(mockSetVisibleLogicalRange).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('chart-zoom-out'));
+    expect(mockSetVisibleLogicalRange).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('chart-pan-left'));
+    expect(mockSetVisibleLogicalRange).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('chart-pan-right'));
+    expect(mockSetVisibleLogicalRange).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('chart-reset-zoom'));
+    expect(mockFitContent).toHaveBeenCalled();
+  });
+
+  test('10. Network RX and TX series toggle buttons update visibility via series.applyOptions', async () => {
+    telemetryService.getNodeMetrics.mockResolvedValue({
+      items: [
+        {
+          id: '101',
+          node_name: 'k8s-worker-01',
+          cpu_usage_percent: 20.0,
+          ram_usage_percent: 40.0,
+          disk_usage_percent: 30.0,
+          net_rx_bytes_per_sec: 1024,
+          net_tx_bytes_per_sec: 512,
+          collected_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(
+      <NodeMetricsChartsPanel
+        orgId="11111111-1111-4111-8111-111111111111"
+        clusterId="22222222-2222-4222-8222-222222222222"
+        nodesOverride={[{ id: 'node-uuid-1', name: 'k8s-worker-01', status: 'Ready' }]}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('toggle-net-rx')).toBeInTheDocument();
+      expect(screen.getByTestId('toggle-net-tx')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('toggle-net-rx'));
+    expect(mockSeriesApplyOptions).toHaveBeenCalledWith(expect.objectContaining({ visible: false }));
+
+    fireEvent.click(screen.getByTestId('toggle-net-rx'));
+    expect(mockSeriesApplyOptions).toHaveBeenCalledWith(expect.objectContaining({ visible: true }));
+
+    fireEvent.click(screen.getByTestId('toggle-net-tx'));
+    expect(mockSeriesApplyOptions).toHaveBeenCalledWith(expect.objectContaining({ visible: false }));
+  });
+
+  test('11. Preserves user zoom logical range during silent auto-refresh without snapping via fitContent', async () => {
+    telemetryService.getNodeMetrics.mockResolvedValue({
+      items: [
+        {
+          id: '101',
+          node_name: 'k8s-worker-01',
+          cpu_usage_percent: 20.0,
+          ram_usage_percent: 40.0,
+          disk_usage_percent: 30.0,
+          net_rx_bytes_per_sec: 100,
+          net_tx_bytes_per_sec: 50,
+          collected_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(
+      <NodeMetricsChartsPanel
+        orgId="11111111-1111-4111-8111-111111111111"
+        clusterId="22222222-2222-4222-8222-222222222222"
+        nodesOverride={[{ id: 'node-uuid-1', name: 'k8s-worker-01', status: 'Ready' }]}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chart-panel-cpu')).toBeInTheDocument();
+    });
+
+    const initialFitCalls = mockFitContent.mock.calls.length;
+
+    telemetryService.getNodeMetrics.mockResolvedValueOnce({
+      items: [
+        {
+          id: '102',
+          node_name: 'k8s-worker-01',
+          cpu_usage_percent: 22.0,
+          ram_usage_percent: 42.0,
+          disk_usage_percent: 30.0,
+          net_rx_bytes_per_sec: 120,
+          net_tx_bytes_per_sec: 60,
+          collected_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    expect(mockFitContent.mock.calls.length).toBe(initialFitCalls);
+  });
+
+  test('12. Ingests downsampled backend timeseries API via convertTimeseriesToUnifiedRows', async () => {
+    const rawTimeseries = {
+      clusterId: '22222222-2222-4222-8222-222222222222',
+      nodeId: 'node-uuid-1',
+      nodeName: 'k8s-worker-01',
+      range: '1h',
+      pointsCount: 2,
+      cpu: [
+        { bucket_time: '2026-10-31T08:00:00.000Z', cpu_usage_percent: 45.0, cpu_cores: 4 },
+        { bucket_time: '2026-10-31T08:05:00.000Z', cpu_usage_percent: 55.0, cpu_cores: 4 },
+      ],
+      memory: [
+        {
+          bucket_time: '2026-10-31T08:00:00.000Z',
+          ram_usage_percent: 60.0,
+          ram_total_bytes: 17179869184,
+          ram_used_bytes: 10307921510,
+          ram_available_bytes: 6871947674,
+        },
+        {
+          bucket_time: '2026-10-31T08:05:00.000Z',
+          ram_usage_percent: 62.0,
+          ram_total_bytes: 17179869184,
+          ram_used_bytes: 10651518894,
+          ram_available_bytes: 6528350290,
+        },
+      ],
+      disk: [
+        {
+          bucket_time: '2026-10-31T08:00:00.000Z',
+          disk_usage_percent: 35.0,
+          disk_total_bytes: 107374182400,
+          disk_used_bytes: 37580963840,
+          disk_available_bytes: 69793218560,
+        },
+        {
+          bucket_time: '2026-10-31T08:05:00.000Z',
+          disk_usage_percent: 36.0,
+          disk_total_bytes: 107374182400,
+          disk_used_bytes: 38654705664,
+          disk_available_bytes: 68719476736,
+        },
+      ],
+      network: [
+        {
+          bucket_time: '2026-10-31T08:00:00.000Z',
+          net_rx_bytes_per_sec: 10240,
+          net_tx_bytes_per_sec: 5120,
+        },
+        {
+          bucket_time: '2026-10-31T08:05:00.000Z',
+          net_rx_bytes_per_sec: 20480,
+          net_tx_bytes_per_sec: 10240,
+        },
+      ],
+    };
+
+    const converted = convertTimeseriesToUnifiedRows(rawTimeseries);
+    expect(converted).toHaveLength(2);
+    expect(converted[0].cpu_usage_percent).toBe(45.0);
+    expect(converted[0].ram_usage_percent).toBe(60.0);
+    expect(converted[0].disk_usage_percent).toBe(35.0);
+    expect(converted[0].net_rx_bytes_per_sec).toBe(10240);
+    expect(converted[0].net_tx_bytes_per_sec).toBe(5120);
+
+    const chartModel = transformNodeMetricsForCharts(converted);
+    expect(chartModel.cpuSeries).toHaveLength(2);
+    expect(chartModel.ramSeries).toHaveLength(2);
+    expect(chartModel.diskSeries).toHaveLength(2);
+    expect(chartModel.netRxSeries).toHaveLength(2);
+    expect(chartModel.netTxSeries).toHaveLength(2);
+
+    telemetryService.getNodeTimeseries.mockResolvedValueOnce(rawTimeseries);
+
+    render(
+      <NodeMetricsChartsPanel
+        orgId="11111111-1111-4111-8111-111111111111"
+        clusterId="22222222-2222-4222-8222-222222222222"
+        nodesOverride={[{ id: 'node-uuid-1', name: 'k8s-worker-01', status: 'Ready' }]}
+      />
+    );
+
+    await waitFor(() => {
+      expect(telemetryService.getNodeTimeseries).toHaveBeenCalled();
+      expect(screen.getByTestId('chart-panel-cpu')).toBeInTheDocument();
+    });
   });
 });

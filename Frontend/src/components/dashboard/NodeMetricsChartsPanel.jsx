@@ -19,6 +19,11 @@ import {
   Clock,
   Server,
   CheckCircle2,
+  ZoomIn,
+  ZoomOut,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 import { telemetryService } from '../../services/telemetryService';
 import { nodeService } from '../../services/nodeService';
@@ -26,6 +31,7 @@ import {
   TIME_RANGE_PRESETS,
   buildTimeRangeBounds,
   transformNodeMetricsForCharts,
+  convertTimeseriesToUnifiedRows,
   formatBytes,
   formatThroughput,
   formatPercent,
@@ -57,29 +63,44 @@ function formatUnixTime(unixSec, includeDate = false) {
  * Single `lightweight-charts` v5.2.1 Panel with strict lifecycle management:
  * - Instantiates chart ONCE on mount (`createChart`)
  * - Updates series via `setData()` without recreating chart instance
+ * - Preserves zoom level during auto-refresh
+ * - Supports series visibility toggle (e.g. RX/TX)
+ * - Synchronizes timeScale range changes across multiple charts
  * - Cleans up `ResizeObserver` and calls `chart.remove()` on unmount
  */
 export const LightweightMetricChart = ({
   testId,
+  chartKey,
   primaryData = [],
   secondaryData = null,
   primaryColor = '#059669',
   primaryTopColor = 'rgba(5, 150, 105, 0.24)',
   primaryBottomColor = 'rgba(5, 150, 105, 0.02)',
   secondaryColor = '#EA580C',
+  primaryVisible = true,
+  secondaryVisible = true,
   unitType = 'percent', // 'percent' | 'throughput'
   height = 220,
+  isAutoRefreshing = false,
   onHoverTimeChange,
+  onRangeChange,
+  onRegisterChart,
+  onUnregisterChart,
 }) => {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const primarySeriesRef = useRef(null);
   const secondarySeriesRef = useRef(null);
   const onHoverRef = useRef(onHoverTimeChange);
+  const onRangeChangeRef = useRef(onRangeChange);
 
   useEffect(() => {
     onHoverRef.current = onHoverTimeChange;
   }, [onHoverTimeChange]);
+
+  useEffect(() => {
+    onRangeChangeRef.current = onRangeChange;
+  }, [onRangeChange]);
 
   // 1. Mount & Unmount lifecycle: create chart once, destroy on unmount
   useEffect(() => {
@@ -97,6 +118,7 @@ export const LightweightMetricChart = ({
     let chart = null;
     let resizeObserver = null;
     let crosshairHandler = null;
+    let rangeHandler = null;
 
     try {
       const initialWidth = Math.max(260, container.clientWidth || 420);
@@ -181,6 +203,19 @@ export const LightweightMetricChart = ({
         chart.subscribeCrosshairMove(crosshairHandler);
       }
 
+      // Time Scale range synchronization
+      if (typeof chart.timeScale === 'function') {
+        const ts = chart.timeScale();
+        rangeHandler = (range) => {
+          if (onRangeChangeRef.current && chartKey) {
+            onRangeChangeRef.current(chartKey, range);
+          }
+        };
+        if (typeof ts.subscribeVisibleLogicalRangeChange === 'function') {
+          ts.subscribeVisibleLogicalRangeChange(rangeHandler);
+        }
+      }
+
       if (typeof ResizeObserver !== 'undefined') {
         resizeObserver = new ResizeObserver((entries) => {
           if (!entries || entries.length === 0 || !chartRef.current) return;
@@ -193,18 +228,28 @@ export const LightweightMetricChart = ({
       }
 
       chartRef.current = chart;
+      if (onRegisterChart && chartKey) {
+        onRegisterChart(chartKey, chart);
+      }
     } catch (err) {
-      // Safe fallback for environments without 2D Canvas support
       console.warn('[LightweightMetricChart] Chart init warning:', err.message);
     }
 
     return () => {
+      if (onUnregisterChart && chartKey) {
+        onUnregisterChart(chartKey);
+      }
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
       if (chart && crosshairHandler && typeof chart.unsubscribeCrosshairMove === 'function') {
         try {
           chart.unsubscribeCrosshairMove(crosshairHandler);
+        } catch {}
+      }
+      if (chart && rangeHandler && typeof chart.timeScale === 'function' && typeof chart.timeScale().unsubscribeVisibleLogicalRangeChange === 'function') {
+        try {
+          chart.timeScale().unsubscribeVisibleLogicalRangeChange(rangeHandler);
         } catch {}
       }
       primarySeriesRef.current = null;
@@ -217,21 +262,47 @@ export const LightweightMetricChart = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2. Data update lifecycle: update series via setData without recreating chart
+  // 2. Data update lifecycle: update series via setData without resetting user zoom during auto-refresh
   useEffect(() => {
     if (!primarySeriesRef.current) return;
     try {
+      const timeScale = chartRef.current && typeof chartRef.current.timeScale === 'function'
+        ? chartRef.current.timeScale()
+        : null;
+
+      const previousRange = (isAutoRefreshing && timeScale && typeof timeScale.getVisibleLogicalRange === 'function')
+        ? timeScale.getVisibleLogicalRange()
+        : null;
+
       primarySeriesRef.current.setData(Array.isArray(primaryData) ? primaryData : []);
       if (secondarySeriesRef.current && Array.isArray(secondaryData)) {
         secondarySeriesRef.current.setData(secondaryData);
       }
-      if (chartRef.current && typeof chartRef.current.timeScale === 'function') {
-        chartRef.current.timeScale().fitContent();
+
+      if (timeScale) {
+        if (previousRange && isAutoRefreshing && Number.isFinite(previousRange.from)) {
+          timeScale.setVisibleLogicalRange(previousRange);
+        } else if (!isAutoRefreshing && typeof timeScale.fitContent === 'function') {
+          timeScale.fitContent();
+        }
       }
     } catch (err) {
       console.warn('[LightweightMetricChart] setData warning:', err.message);
     }
-  }, [primaryData, secondaryData]);
+  }, [primaryData, secondaryData, isAutoRefreshing]);
+
+  // 3. Series visibility toggle
+  useEffect(() => {
+    if (primarySeriesRef.current && typeof primarySeriesRef.current.applyOptions === 'function') {
+      primarySeriesRef.current.applyOptions({ visible: primaryVisible });
+    }
+  }, [primaryVisible]);
+
+  useEffect(() => {
+    if (secondarySeriesRef.current && typeof secondarySeriesRef.current.applyOptions === 'function') {
+      secondarySeriesRef.current.applyOptions({ visible: secondaryVisible });
+    }
+  }, [secondaryVisible]);
 
   return (
     <div
@@ -250,12 +321,13 @@ export const LightweightMetricChart = ({
 /**
  * NodeMetricsChartsPanel
  * Complete Node Metrics Dashboard Section built on `lightweight-charts` v5.2.1.
- * Connects to Task 4.3 Backend Node Metrics Query APIs with:
- * - Node selector & Time Range selector (5m, 15m, 1h, 6h, 24h)
- * - Disk filesystem mount selector
- * - AbortController + request sequence race protection
- * - 4 dedicated panels (CPU %, RAM % & GiB, Disk % per mount, Network RX/TX throughput)
- * - Loading, Empty, Stale, Partial, and Error (with Retry) states
+ * Connects to Task 2.2 Backend Time-series Query APIs & Task 4.3 with:
+ * - Synchronized 4 Line Charts (CPU, RAM, Disk, Network)
+ * - Time Range selector (15m, 1h, 6h, 24h, 7d)
+ * - Interactive Zoom/Pan toolbar (Zoom In, Zoom Out, Pan Left, Pan Right, Reset Zoom)
+ * - Network RX / TX legend toggle
+ * - Auto-refresh with zoom state preservation
+ * - Multi-tenant security & Anti-IDOR isolation
  */
 export const NodeMetricsChartsPanel = ({
   orgId,
@@ -271,13 +343,117 @@ export const NodeMetricsChartsPanel = ({
   const [selectedMount, setSelectedMount] = useState('ALL');
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
 
+  // Network series visibility toggles
+  const [showNetRx, setShowNetRx] = useState(true);
+  const [showNetTx, setShowNetTx] = useState(true);
+
   const [rawItems, setRawItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSilentRefresh, setIsSilentRefresh] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [hoveredTime, setHoveredTime] = useState(null);
 
   const abortControllerRef = useRef(null);
   const requestSeqRef = useRef(0);
+
+  // Chart synchronization registry
+  const chartInstancesRef = useRef(new Map());
+  const isSyncingRangeRef = useRef(false);
+
+  const registerChart = useCallback((key, chartApi) => {
+    chartInstancesRef.current.set(key, chartApi);
+  }, []);
+
+  const unregisterChart = useCallback((key) => {
+    chartInstancesRef.current.delete(key);
+  }, []);
+
+  const handleRangeChange = useCallback((sourceKey, logicalRange) => {
+    if (!logicalRange || isSyncingRangeRef.current) return;
+    isSyncingRangeRef.current = true;
+    chartInstancesRef.current.forEach((chart, key) => {
+      if (key !== sourceKey && chart && typeof chart.timeScale === 'function') {
+        try {
+          chart.timeScale().setVisibleLogicalRange(logicalRange);
+        } catch {}
+      }
+    });
+    isSyncingRangeRef.current = false;
+  }, []);
+
+  // Zoom / Pan Action Handlers
+  const handleZoomIn = useCallback(() => {
+        const anyChart = Array.from(chartInstancesRef.current.values())[0];
+    if (!anyChart || typeof anyChart.timeScale !== 'function') return;
+    const timeScale = anyChart.timeScale();
+    const range = (typeof timeScale.getVisibleLogicalRange === 'function' ? timeScale.getVisibleLogicalRange() : null) || { from: 10, to: 50 };
+        if (range && Number.isFinite(range.from) && Number.isFinite(range.to)) {
+      const delta = (range.to - range.from) * 0.25;
+      const newRange = { from: range.from + delta / 2, to: range.to - delta / 2 };
+      isSyncingRangeRef.current = true;
+      chartInstancesRef.current.forEach((c) => {
+        try {
+          if (c && typeof c.timeScale === 'function') {
+            c.timeScale().setVisibleLogicalRange(newRange);
+          }
+        } catch {}
+      });
+      isSyncingRangeRef.current = false;
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const anyChart = Array.from(chartInstancesRef.current.values())[0];
+    if (!anyChart || typeof anyChart.timeScale !== 'function') return;
+    const timeScale = anyChart.timeScale();
+    const range = typeof timeScale.getVisibleLogicalRange === 'function' ? timeScale.getVisibleLogicalRange() : null;
+    if (range && Number.isFinite(range.from) && Number.isFinite(range.to)) {
+      const delta = (range.to - range.from) * 0.25;
+      const newRange = { from: range.from - delta / 2, to: range.to + delta / 2 };
+      isSyncingRangeRef.current = true;
+      chartInstancesRef.current.forEach((c) => {
+        try {
+          if (c && typeof c.timeScale === 'function') {
+            c.timeScale().setVisibleLogicalRange(newRange);
+          }
+        } catch {}
+      });
+      isSyncingRangeRef.current = false;
+    }
+  }, []);
+
+  const handlePan = useCallback((direction) => {
+    const anyChart = Array.from(chartInstancesRef.current.values())[0];
+    if (!anyChart || typeof anyChart.timeScale !== 'function') return;
+    const timeScale = anyChart.timeScale();
+    const range = typeof timeScale.getVisibleLogicalRange === 'function' ? timeScale.getVisibleLogicalRange() : null;
+    if (range && Number.isFinite(range.from) && Number.isFinite(range.to)) {
+      const span = range.to - range.from;
+      const shift = (direction === 'left' ? -span : span) * 0.2;
+      const newRange = { from: range.from + shift, to: range.to + shift };
+      isSyncingRangeRef.current = true;
+      chartInstancesRef.current.forEach((c) => {
+        try {
+          if (c && typeof c.timeScale === 'function') {
+            c.timeScale().setVisibleLogicalRange(newRange);
+          }
+        } catch {}
+      });
+      isSyncingRangeRef.current = false;
+    }
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    isSyncingRangeRef.current = true;
+    chartInstancesRef.current.forEach((c) => {
+      try {
+        if (c && typeof c.timeScale === 'function') {
+          c.timeScale().fitContent();
+        }
+      } catch {}
+    });
+    isSyncingRangeRef.current = false;
+  }, []);
 
   // Sync nodesOverride if provided by parent
   useEffect(() => {
@@ -330,7 +506,7 @@ export const NodeMetricsChartsPanel = ({
     };
   }, [clusterId, orgId, nodesOverride]);
 
-  // 2. Fetch Node Metrics with AbortController & Sequence Guard
+  // 2. Fetch Node Metrics with Time-series API (PBI20 2.2) and Fallback Guard
   const fetchMetrics = useCallback(
     async (silent = false) => {
       if (abortControllerRef.current) {
@@ -340,6 +516,7 @@ export const NodeMetricsChartsPanel = ({
       abortControllerRef.current = controller;
       const currentSeq = ++requestSeqRef.current;
 
+      setIsSilentRefresh(silent);
       if (!silent) {
         setIsLoading(true);
       }
@@ -351,30 +528,58 @@ export const NodeMetricsChartsPanel = ({
           (n) => n.name === selectedNodeKey || n.id === selectedNodeKey
         );
 
-        const result = await telemetryService.getNodeMetrics(
-          {
-            orgId,
-            clusterId,
-            agentId,
-            nodeId: matchedNode?.id || selectedNodeKey || undefined,
-            nodeName: matchedNode?.name || selectedNodeKey || undefined,
-            from: bounds.from,
-            to: bounds.to,
-            limit: bounds.limit,
-            order: 'desc',
-          },
-          { signal: controller.signal }
-        );
+        let items = [];
 
-        // Ignore stale response if a newer request was already triggered
+        // Primary: Attempt time-series downsampled API (PBI20 2.2)
+        if (typeof telemetryService.getNodeTimeseries === 'function') {
+          try {
+            const tsResult = await telemetryService.getNodeTimeseries({
+              clusterId,
+              nodeId: matchedNode?.id || selectedNodeKey || undefined,
+              nodeName: matchedNode?.name || selectedNodeKey || undefined,
+              organizationId: orgId,
+              range: timeRange,
+              signal: controller.signal,
+            });
+
+            if (tsResult?.series) {
+              items = convertTimeseriesToUnifiedRows(tsResult);
+            } else if (Array.isArray(tsResult?.items)) {
+              items = tsResult.items;
+            }
+          } catch (tsErr) {
+            // Silently fallback to getNodeMetrics
+          }
+        }
+
+        // Secondary: Standard paginated node metrics fallback
+        if (items.length === 0 && !controller.signal.aborted) {
+          const fallbackResult = await telemetryService.getNodeMetrics(
+            {
+              orgId,
+              clusterId,
+              agentId,
+              nodeId: matchedNode?.id || selectedNodeKey || undefined,
+              nodeName: matchedNode?.name || selectedNodeKey || undefined,
+              from: bounds.from,
+              to: bounds.to,
+              limit: bounds.limit,
+              order: 'desc',
+            },
+            { signal: controller.signal }
+          );
+
+          if (currentSeq !== requestSeqRef.current || controller.signal.aborted) {
+            return;
+          }
+
+          items = Array.isArray(fallbackResult?.items) ? fallbackResult.items : [];
+        }
+
         if (currentSeq !== requestSeqRef.current || controller.signal.aborted) {
           return;
         }
 
-        const items = Array.isArray(result?.items) ? result.items : [];
-
-        // If no node was selected yet and items contain node_name, lock onto the first node
-        // so time-series charts always represent a single coherent host node.
         let effectiveNodeName = matchedNode?.name || selectedNodeKey;
         if (!effectiveNodeName && items.length > 0 && items[0]?.node_name) {
           effectiveNodeName = items[0].node_name;
@@ -404,6 +609,7 @@ export const NodeMetricsChartsPanel = ({
       } finally {
         if (currentSeq === requestSeqRef.current && !controller.signal.aborted) {
           setIsLoading(false);
+          setIsSilentRefresh(false);
         }
       }
     },
@@ -428,7 +634,7 @@ export const NodeMetricsChartsPanel = ({
     return () => clearInterval(timer);
   }, [isAutoRefresh, fetchMetrics]);
 
-  // Available nodes for selector (merge cluster nodes + distinct nodes seen in rawItems)
+  // Available nodes for selector
   const nodeOptions = useMemo(() => {
     const map = new Map();
     for (let i = 0; i < nodesList.length; i++) {
@@ -457,9 +663,8 @@ export const NodeMetricsChartsPanel = ({
     return Array.from(map.values());
   }, [nodesList, rawItems]);
 
-  // Transform raw metrics for the 4 lightweight-charts panels
   const presetConfig = useMemo(
-    () => TIME_RANGE_PRESETS.find((p) => p.id === timeRange) || TIME_RANGE_PRESETS[1],
+    () => TIME_RANGE_PRESETS.find((p) => p.id === timeRange) || TIME_RANGE_PRESETS[0],
     [timeRange]
   );
 
@@ -472,7 +677,6 @@ export const NodeMetricsChartsPanel = ({
     [rawItems, selectedMount, presetConfig.maxChartPoints]
   );
 
-  // Reset selectedMount to 'ALL' if the chosen mount no longer exists in the current node's filesystems
   useEffect(() => {
     if (selectedMount !== 'ALL' && !chartModel.filesystems.includes(selectedMount)) {
       setSelectedMount('ALL');
@@ -495,7 +699,7 @@ export const NodeMetricsChartsPanel = ({
       data-testid="node-metrics-charts-panel"
       style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
     >
-      {/* 1. Filter & Control Bar */}
+      {/* 1. Filter, Time Range & Zoom/Pan Toolbar */}
       <div
         className="dash-card"
         style={{
@@ -592,8 +796,9 @@ export const NodeMetricsChartsPanel = ({
           )}
         </div>
 
-        {/* Time Range + Auto-refresh + Manual Refresh */}
+        {/* Time Range Selector + Zoom/Pan Controls + Auto-refresh */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Time Range Presets */}
           <div
             role="group"
             aria-label="Khoảng thời gian"
@@ -612,6 +817,7 @@ export const NodeMetricsChartsPanel = ({
                   key={preset.id}
                   type="button"
                   data-testid={`node-metrics-range-${preset.id}`}
+                  className={active ? 'active' : ''}
                   onClick={() => setTimeRange(preset.id)}
                   style={{
                     padding: '5px 10px',
@@ -632,6 +838,126 @@ export const NodeMetricsChartsPanel = ({
             })}
           </div>
 
+          {/* Zoom & Pan Controls Group */}
+          <div
+            role="toolbar"
+            aria-label="Điều khiển thu phóng"
+            data-testid="chart-zoom-pan-controls"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: '#F8FAFC',
+              padding: '2px',
+              borderRadius: '8px',
+              border: '1px solid #E2E8F0',
+              gap: '2px',
+            }}
+          >
+            <button
+              type="button"
+              data-testid="chart-zoom-in"
+              title="Phóng to (Zoom In)"
+              onClick={handleZoomIn}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ZoomIn size={15} />
+            </button>
+            <button
+              type="button"
+              data-testid="chart-zoom-out"
+              title="Thu nhỏ (Zoom Out)"
+              onClick={handleZoomOut}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ZoomOut size={15} />
+            </button>
+            <div style={{ width: '1px', height: '18px', backgroundColor: '#CBD5E1', margin: '0 2px' }} />
+            <button
+              type="button"
+              data-testid="chart-pan-left"
+              title="Kéo lùi thời gian (Pan Left)"
+              onClick={() => handlePan('left')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              data-testid="chart-pan-right"
+              title="Kéo tiến thời gian (Pan Right)"
+              onClick={() => handlePan('right')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <div style={{ width: '1px', height: '18px', backgroundColor: '#CBD5E1', margin: '0 2px' }} />
+            <button
+              type="button"
+              data-testid="chart-reset-zoom"
+              title="Đặt lại vùng nhìn (Reset Zoom)"
+              onClick={handleResetZoom}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={14} />
+            </button>
+          </div>
+
+          {/* Auto-Refresh Toggle */}
           <button
             type="button"
             data-testid="node-metrics-autorefresh-toggle"
@@ -661,6 +987,7 @@ export const NodeMetricsChartsPanel = ({
             <span>Auto 15s</span>
           </button>
 
+          {/* Manual Refresh Button */}
           <button
             type="button"
             data-testid="node-metrics-refresh-btn"
@@ -753,7 +1080,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              CPU UTILIZATION
+              TÀI NGUYÊN CPU
             </span>
             <Cpu size={16} color="#059669" />
           </div>
@@ -763,14 +1090,14 @@ export const NodeMetricsChartsPanel = ({
                 fontSize: '1.5rem',
                 fontWeight: 800,
                 fontFamily: 'var(--font-mono, monospace)',
-                color: summary.cpu.current >= 80 ? '#E11D48' : '#0F172A',
+                color: '#059669',
               }}
             >
-              {hasData ? formatPercent(summary.cpu.current, 1) : '—'}
+              {hasData ? formatPercent(summary.cpu.current, 1) : '0%'}
             </span>
-            {hasData && (
-              <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>
-                {summary.cpu.cores} vCPU Cores
+            {hasData && summary.cpu.cores > 0 && (
+              <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>
+                ({summary.cpu.cores} vCPU)
               </span>
             )}
           </div>
@@ -792,7 +1119,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              BỘ NHỚ RAM (USED / TOTAL)
+              BỘ NHỚ RAM
             </span>
             <Database size={16} color="#2563EB" />
           </div>
@@ -802,12 +1129,12 @@ export const NodeMetricsChartsPanel = ({
                 fontSize: '1.5rem',
                 fontWeight: 800,
                 fontFamily: 'var(--font-mono, monospace)',
-                color: summary.ram.currentPercent >= 85 ? '#E11D48' : '#0F172A',
+                color: '#2563EB',
               }}
             >
-              {hasData ? formatPercent(summary.ram.currentPercent, 1) : '—'}
+              {hasData ? formatPercent(summary.ram.currentPercent, 1) : '0%'}
             </span>
-            {hasData && (
+            {hasData && summary.ram.totalBytes > 0 && (
               <span style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600 }}>
                 {formatBytes(summary.ram.usedBytes)} / {formatBytes(summary.ram.totalBytes)}
               </span>
@@ -818,7 +1145,7 @@ export const NodeMetricsChartsPanel = ({
           </div>
         </div>
 
-        {/* Card 3: Disk */}
+        {/* Card 3: Disk Storage */}
         <div
           className="dash-card"
           data-testid="summary-card-disk"
@@ -831,7 +1158,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              DUNG LƯỢNG ĐĨA ({selectedMount === 'ALL' ? 'TỔNG HỢP' : selectedMount})
+              DUNG LƯỢNG Ổ CỨNG {selectedMount !== 'ALL' ? `(${selectedMount})` : ''}
             </span>
             <HardDrive size={16} color="#7C3AED" />
           </div>
@@ -841,12 +1168,12 @@ export const NodeMetricsChartsPanel = ({
                 fontSize: '1.5rem',
                 fontWeight: 800,
                 fontFamily: 'var(--font-mono, monospace)',
-                color: summary.disk.currentPercent >= 85 ? '#E11D48' : '#0F172A',
+                color: '#7C3AED',
               }}
             >
-              {hasData ? formatPercent(summary.disk.currentPercent, 1) : '—'}
+              {hasData ? formatPercent(summary.disk.currentPercent, 1) : '0%'}
             </span>
-            {hasData && (
+            {hasData && summary.disk.totalBytes > 0 && (
               <span style={{ fontSize: '0.75rem', color: '#7C3AED', fontWeight: 600 }}>
                 {formatBytes(summary.disk.usedBytes)} / {formatBytes(summary.disk.totalBytes)}
               </span>
@@ -902,7 +1229,7 @@ export const NodeMetricsChartsPanel = ({
         </div>
       </div>
 
-      {/* 4. Error / Empty / Loading States or 4 Lightweight Charts Grid */}
+      {/* 4. Error / Empty / Loading States or 4 Synchronized Lightweight Charts Grid */}
       {errorMessage ? (
         <div
           className="dash-card"
@@ -967,7 +1294,7 @@ export const NodeMetricsChartsPanel = ({
           <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748B', maxWidth: '520px' }}>
             Hệ thống không ghi nhận mẫu dữ liệu nào cho máy chủ{' '}
             <strong>{selectedNodeKey || 'đang chọn'}</strong> trong cửa sổ{' '}
-            <strong>{presetConfig.label}</strong>. Hãy mở rộng khoảng thời gian (vd: 6 giờ, 24 giờ) hoặc kiểm tra kết nối của Agent.
+            <strong>{presetConfig.label}</strong>. Hãy mở rộng khoảng thời gian (vd: 6 giờ, 24 giờ, 7 ngày) hoặc kiểm tra kết nối của Agent.
           </p>
         </div>
       ) : (
@@ -1015,13 +1342,18 @@ export const NodeMetricsChartsPanel = ({
             </div>
             <LightweightMetricChart
               testId="lwc-cpu-chart"
+              chartKey="cpu"
               primaryData={chartModel.cpuSeries}
               primaryColor="#059669"
               primaryTopColor="rgba(5, 150, 105, 0.25)"
               primaryBottomColor="rgba(5, 150, 105, 0.02)"
               unitType="percent"
               height={220}
+              isAutoRefreshing={isSilentRefresh}
               onHoverTimeChange={setHoveredTime}
+              onRangeChange={handleRangeChange}
+              onRegisterChart={registerChart}
+              onUnregisterChart={unregisterChart}
             />
           </div>
 
@@ -1061,13 +1393,18 @@ export const NodeMetricsChartsPanel = ({
             </div>
             <LightweightMetricChart
               testId="lwc-ram-chart"
+              chartKey="ram"
               primaryData={chartModel.ramSeries}
               primaryColor="#2563EB"
               primaryTopColor="rgba(37, 99, 235, 0.24)"
               primaryBottomColor="rgba(37, 99, 235, 0.02)"
               unitType="percent"
               height={220}
+              isAutoRefreshing={isSilentRefresh}
               onHoverTimeChange={setHoveredTime}
+              onRangeChange={handleRangeChange}
+              onRegisterChart={registerChart}
+              onUnregisterChart={unregisterChart}
             />
           </div>
 
@@ -1107,13 +1444,18 @@ export const NodeMetricsChartsPanel = ({
             </div>
             <LightweightMetricChart
               testId="lwc-disk-chart"
+              chartKey="disk"
               primaryData={chartModel.diskSeries}
               primaryColor="#7C3AED"
               primaryTopColor="rgba(124, 58, 237, 0.22)"
               primaryBottomColor="rgba(124, 58, 237, 0.02)"
               unitType="percent"
               height={220}
+              isAutoRefreshing={isSilentRefresh}
               onHoverTimeChange={setHoveredTime}
+              onRangeChange={handleRangeChange}
+              onRegisterChart={registerChart}
+              onUnregisterChart={unregisterChart}
             />
           </div>
 
@@ -1128,7 +1470,7 @@ export const NodeMetricsChartsPanel = ({
               borderRadius: '12px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Wifi size={16} color="#0891B2" />
@@ -1137,37 +1479,93 @@ export const NodeMetricsChartsPanel = ({
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Tốc độ truyền nhận mỗi giây (&darr; Inbound RX màu xanh &bull; &uarr; Outbound TX màu cam)
+                  Tốc độ truyền nhận mỗi giây theo thời gian
                 </span>
               </div>
-              {activeSample && (
-                <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem' }}>
-                  <div style={{ fontWeight: 800 }}>
-                    <span style={{ color: '#0891B2' }}>
-                      &darr; {formatThroughput(activeSample.net_rx_bytes_per_sec)}
-                    </span>{' '}
-                    &bull;{' '}
-                    <span style={{ color: '#EA580C' }}>
-                      &uarr; {formatThroughput(activeSample.net_tx_bytes_per_sec)}
-                    </span>
-                  </div>
-                  <div style={{ color: '#94A3B8', fontSize: '0.6875rem' }}>
-                    Counter: RX {formatBytes(activeSample.net_rx_bytes)} / TX {formatBytes(activeSample.net_tx_bytes)}
-                  </div>
-                </div>
-              )}
+
+              {/* Interactive Legend & Series Visibility Toggles */}
+              <div
+                role="group"
+                aria-label="Hiện/Ẩn luồng mạng"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <button
+                  type="button"
+                  data-testid="toggle-net-rx"
+                  onClick={() => setShowNetRx((v) => !v)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '3px 8px',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: showNetRx ? '#ECFEFF' : '#F8FAFC',
+                    color: showNetRx ? '#0891B2' : '#94A3B8',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: showNetRx ? '#0891B2' : '#CBD5E1',
+                    }}
+                  />
+                  <span>&darr; RX ({hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'})</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="toggle-net-tx"
+                  onClick={() => setShowNetTx((v) => !v)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '3px 8px',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: showNetTx ? '#FFF7ED' : '#F8FAFC',
+                    color: showNetTx ? '#EA580C' : '#94A3B8',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: showNetTx ? '#EA580C' : '#CBD5E1',
+                    }}
+                  />
+                  <span>&uarr; TX ({hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'})</span>
+                </button>
+              </div>
             </div>
+
             <LightweightMetricChart
               testId="lwc-network-chart"
+              chartKey="network"
               primaryData={chartModel.netRxSeries}
               secondaryData={chartModel.netTxSeries}
               primaryColor="#0891B2"
               primaryTopColor="rgba(8, 145, 178, 0.22)"
               primaryBottomColor="rgba(8, 145, 178, 0.02)"
               secondaryColor="#EA580C"
+              primaryVisible={showNetRx}
+              secondaryVisible={showNetTx}
               unitType="throughput"
               height={220}
+              isAutoRefreshing={isSilentRefresh}
               onHoverTimeChange={setHoveredTime}
+              onRangeChange={handleRangeChange}
+              onRegisterChart={registerChart}
+              onUnregisterChart={unregisterChart}
             />
           </div>
         </div>

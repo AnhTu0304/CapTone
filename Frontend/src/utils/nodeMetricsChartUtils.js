@@ -13,11 +13,11 @@
  */
 
 export const TIME_RANGE_PRESETS = [
-  { id: '5m', label: '5 phút', durationMs: 5 * 60 * 1000, limit: 300, maxChartPoints: 120 },
-  { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, limit: 600, maxChartPoints: 200 },
-  { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, limit: 1500, maxChartPoints: 360 },
+  { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, limit: 600, maxChartPoints: 120 },
+  { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, limit: 1500, maxChartPoints: 240 },
   { id: '6h', label: '6 giờ', durationMs: 6 * 60 * 60 * 1000, limit: 3000, maxChartPoints: 360 },
   { id: '24h', label: '24 giờ', durationMs: 24 * 60 * 60 * 1000, limit: 6000, maxChartPoints: 400 },
+  { id: '7d', label: '7 ngày', durationMs: 7 * 24 * 60 * 60 * 1000, limit: 10000, maxChartPoints: 500 },
 ];
 
 export const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
@@ -548,4 +548,99 @@ export function transformNodeMetricsForCharts(rawItems = [], options = {}) {
       },
     },
   };
+}
+
+
+/**
+ * Convert backend time-series response (PBI20 Task 2.2 series object) into unified row items
+ * compatible with transformNodeMetricsForCharts and dashboard summaries.
+ * @param {Object} tsData - Time-series response data
+ * @returns {Array<Object>}
+ */
+export function convertTimeseriesToUnifiedRows(tsData) {
+  if (!tsData) return [];
+  const seriesObj = tsData.series || tsData;
+  const cpuPoints = seriesObj.cpu?.dataPoints || seriesObj.cpu || [];
+  const ramPoints = seriesObj.ram?.dataPoints || seriesObj.memory?.dataPoints || seriesObj.ram || seriesObj.memory || [];
+  const diskPoints = seriesObj.disk?.dataPoints || seriesObj.disk || [];
+  const netPoints = seriesObj.network?.dataPoints || seriesObj.network || [];
+
+  const timeMap = new Map();
+
+  const getPointTime = (p) => {
+    if (typeof p.time === 'number' && Number.isFinite(p.time)) return p.time;
+    const iso = p.timestamp || p.bucket_time || p.collected_at;
+    return toUnixSeconds(iso);
+  };
+
+  const getPointIso = (p) => {
+    return p.timestamp || p.bucket_time || p.collected_at || new Date((getPointTime(p) || 0) * 1000).toISOString();
+  };
+
+  cpuPoints.forEach((p) => {
+    const t = getPointTime(p);
+    if (!Number.isFinite(t)) return;
+    timeMap.set(t, {
+      id: String(t),
+      collected_at: getPointIso(p),
+      time: t,
+      node_name: tsData.nodeName || 'k8s-node',
+      node_id: tsData.nodeId,
+      cpu_usage_percent: p.value ?? p.cpu_usage_percent ?? 0,
+      cpu_cores: p.cores ?? p.cpu_cores ?? 1,
+    });
+  });
+
+  ramPoints.forEach((p) => {
+    const t = getPointTime(p);
+    if (!Number.isFinite(t)) return;
+    const existing = timeMap.get(t) || {
+      id: String(t),
+      collected_at: getPointIso(p),
+      time: t,
+      node_name: tsData.nodeName || 'k8s-node',
+      node_id: tsData.nodeId,
+    };
+    existing.ram_usage_percent = p.value ?? p.ram_usage_percent ?? 0;
+    existing.ram_used_bytes = p.ram_used_bytes;
+    existing.ram_total_bytes = p.ram_total_bytes;
+    existing.ram_available_bytes = p.ram_available_bytes;
+    timeMap.set(t, existing);
+  });
+
+  diskPoints.forEach((p) => {
+    const t = getPointTime(p);
+    if (!Number.isFinite(t)) return;
+    const existing = timeMap.get(t) || {
+      id: String(t),
+      collected_at: getPointIso(p),
+      time: t,
+      node_name: tsData.nodeName || 'k8s-node',
+      node_id: tsData.nodeId,
+    };
+    existing.disk_usage_percent = p.value ?? p.disk_usage_percent ?? 0;
+    existing.disk_used_bytes = p.disk_used_bytes;
+    existing.disk_total_bytes = p.disk_total_bytes;
+    existing.disk_available_bytes = p.disk_available_bytes;
+    timeMap.set(t, existing);
+  });
+
+  netPoints.forEach((p) => {
+    const t = getPointTime(p);
+    if (!Number.isFinite(t)) return;
+    const existing = timeMap.get(t) || {
+      id: String(t),
+      collected_at: getPointIso(p),
+      time: t,
+      node_name: tsData.nodeName || 'k8s-node',
+      node_id: tsData.nodeId,
+    };
+    existing.net_rx_bytes_per_sec = p.rx_rate ?? p.net_rx_bytes_per_sec ?? p.rxBytesPerSec ?? 0;
+    existing.net_tx_bytes_per_sec = p.tx_rate ?? p.net_tx_bytes_per_sec ?? p.txBytesPerSec ?? 0;
+    existing.net_rx_bytes = p.rx_bytes ?? p.net_rx_bytes;
+    existing.net_tx_bytes = p.tx_bytes ?? p.net_tx_bytes;
+    timeMap.set(t, existing);
+  });
+
+  return Array.from(timeMap.values()).sort((a, b) => a.time - b.time);
 }
