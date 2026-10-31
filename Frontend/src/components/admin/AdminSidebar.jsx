@@ -18,7 +18,6 @@ import {
   FileCode,
   Bell,
   TrendingUp,
-  UserCheck,
   Server,
   Box,
   Sparkles,
@@ -185,12 +184,6 @@ export const SME_OWNER_NAV_GROUPS = [
         label: 'Nhật ký kiểm toán',
         path: '/dashboard/audit-logs',
         icon: ShieldCheck,
-      },
-      {
-        id: 'profile',
-        label: 'Hồ sơ cá nhân',
-        path: '/portal/profile',
-        icon: UserCheck,
       },
       {
         id: 'settings',

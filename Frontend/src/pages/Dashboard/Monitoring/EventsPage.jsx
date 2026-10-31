@@ -132,7 +132,7 @@ export const EventsPage = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const clusterId = selectedCluster?.id || selectedCluster?.name || (currentEnv?.cluster_id ? currentEnv.cluster_id : undefined);
+  const clusterId = selectedCluster?.id || selectedCluster?.name || currentEnv?.clusterId || currentEnv?.id || currentEnv?.cluster_id || undefined;
 
   // 2. Fetch events function
   const fetchEvents = useCallback(

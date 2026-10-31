@@ -1,3 +1,4 @@
+import { HitlNotificationService } from '../services/hitlNotification.service';
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
 
@@ -447,8 +448,9 @@ export class HealingActionModel {
 
     const executionMode = (data.execution_mode === 'AUTO' || data.execution_mode === 'AUTONOMOUS') ? 'AUTO' : 'MANUAL';
     const isHighRisk = riskLevel === 'HIGH' || riskLevel === 'CRITICAL';
-    const approvalStatus = isHighRisk ? 'PENDING' : 'NOT_REQUIRED';
-    const executionStatus = isHighRisk ? 'PENDING' : (executionMode === 'AUTO' ? 'RUNNING' : 'PENDING');
+    const needsApproval = isHighRisk || (data as any).requires_approval === true || (data as any).approval_status === 'PENDING';
+    const approvalStatus = needsApproval ? 'PENDING' : 'NOT_REQUIRED';
+    const executionStatus = needsApproval ? 'PENDING' : (executionMode === 'AUTO' ? 'RUNNING' : 'PENDING');
 
     const query = `
       INSERT INTO healing_actions (
@@ -493,8 +495,8 @@ export class HealingActionModel {
 
     const createdAction = res.rows[0];
 
-    // If High/Critical Risk, create approval record
-    if (isHighRisk) {
+    // If High/Critical Risk or Policy requires approval, create approval record
+    if (needsApproval) {
       await pool.query(
         `INSERT INTO approvals (healing_action_id, requested_by, status, reason, requested_at, expires_at)
          VALUES ($1, (SELECT id FROM users WHERE id::text = $2 LIMIT 1), 'PENDING', $3, NOW(), NOW() + interval '24 hours');`,
@@ -504,6 +506,11 @@ export class HealingActionModel {
           `Hành động rủi ro mức ${riskLevel} cần phê duyệt trước khi tác động lên ${data.target_name || 'hạ tầng'}.`,
         ]
       );
+
+      // Tự động kích hoạt gửi Email thông báo tới các kỹ sư có quyền
+      HitlNotificationService.notifyApproversForAction(createdAction.id).catch((err) => {
+        console.warn('[HealingActionModel] Gửi email HITL thất bại:', err.message);
+      });
     }
 
     return createdAction;
@@ -1058,12 +1065,22 @@ export class HealingActionModel {
   }
 
   /**
+   * 10c. Soft-delete policy
+   */
+  public static async deletePolicy(id: string): Promise<boolean> {
+    const query = 'UPDATE healing_policies SET deleted_at = NOW(), updated_at = NOW(), is_active = false WHERE id = $1 AND deleted_at IS NULL RETURNING id;';
+    const res = await pool.query(query, [id]);
+    return (res.rowCount || 0) > 0;
+  }
+
+  /**
    * 11. Approvals: List, Approve, Reject
    */
   public static async findApprovals(filters: {
     organization_id?: string;
     cluster_id?: string;
     status?: string;
+    search?: string;
     limit?: number;
     offset?: number;
   } = {}): Promise<{ items: any[]; total: number }> {
@@ -1092,6 +1109,19 @@ export class HealingActionModel {
       values.push(filters.status.toUpperCase());
     }
 
+    if (filters.search && filters.search.trim()) {
+      conditions.push(`(
+        h.target_name ILIKE '%' || $${idx} || '%'
+        OR i.title ILIKE '%' || $${idx} || '%'
+        OR t.code ILIKE '%' || $${idx} || '%'
+        OR ap.id::text ILIKE '%' || $${idx} || '%'
+        OR h.id::text ILIKE '%' || $${idx} || '%'
+        OR rec.id::text ILIKE '%' || $${idx} || '%'
+      )`);
+      values.push(filters.search.trim());
+      idx++;
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countSql = `
@@ -1100,6 +1130,8 @@ export class HealingActionModel {
       JOIN healing_actions h ON h.id = ap.healing_action_id
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN incidents i ON i.id = h.incident_id
+      LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+      LEFT JOIN ai_recommendations rec ON rec.id = h.recommendation_id
       ${whereClause};
     `;
     const countRes = await pool.query(countSql, values);
@@ -1118,18 +1150,31 @@ export class HealingActionModel {
         i.title AS incident_title,
         i.severity AS incident_severity,
         env.name AS environment_name,
+        cl.name AS cluster_name,
         ap.status,
         ap.reason,
         ap.requested_at,
         ap.decided_at,
         ap.expires_at,
         u_req.email AS requested_by_email,
-        u_app.email AS approved_by_email
+        u_app.email AS approved_by_email,
+        rec.id AS recommendation_id,
+        rec.recommendation AS ai_recommendation,
+        rec.reasoning AS ai_reasoning,
+        rca.root_cause_type,
+        rca.root_cause_description,
+        rca.confidence_score,
+        p.name AS policy_name,
+        h.result AS action_result
       FROM approvals ap
       JOIN healing_actions h ON h.id = ap.healing_action_id
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
+      LEFT JOIN ai_recommendations rec ON rec.id = h.recommendation_id
+      LEFT JOIN rca_analyses rca ON rca.id = rec.rca_analysis_id
+      LEFT JOIN healing_policies p ON p.id = h.policy_id
       LEFT JOIN environments env ON env.id = h.environment_id
+      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
       LEFT JOIN users u_req ON u_req.id = ap.requested_by
       LEFT JOIN users u_app ON u_app.id = ap.approved_by
       ${whereClause}
@@ -1158,7 +1203,34 @@ export class HealingActionModel {
       [actionId]
     );
 
-    return res.rows[0] || null;
+    const action = res.rows[0];
+    if (action) {
+      if (action.recommendation_id) {
+        await pool.query(
+          `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
+          [action.recommendation_id]
+        );
+      }
+      if (action.incident_id || action.target_name) {
+        await pool.query(
+          `UPDATE ai_recommendations r
+           SET status = 'APPLIED'
+           FROM incidents i
+           WHERE r.incident_id = i.id
+             AND (r.incident_id = $1 OR i.target_id = $2 OR i.title LIKE '%' || $2 || '%')
+             AND r.status = 'PROPOSED';`,
+          [action.incident_id, action.target_name]
+        );
+      }
+      if (action.incident_id) {
+        await pool.query(
+          `UPDATE incidents SET status = 'RESOLVED', resolved_at = NOW() WHERE id = $1;`,
+          [action.incident_id]
+        );
+      }
+    }
+
+    return action || null;
   }
 
   public static async rejectAction(actionId: string, rejectedBy: string, reason?: string): Promise<any> {
@@ -1177,7 +1249,21 @@ export class HealingActionModel {
       [actionId]
     );
 
-    return res.rows[0] || null;
+    const action = res.rows[0];
+    if (action && action.recommendation_id) {
+      await pool.query(
+        `UPDATE ai_recommendations SET status = 'DISMISSED' WHERE id = $1;`,
+        [action.recommendation_id]
+      );
+    }
+    if (action && action.incident_id) {
+      await pool.query(
+        `UPDATE incidents SET status = 'RESOLVED' WHERE id = $1;`,
+        [action.incident_id]
+      );
+    }
+
+    return action || null;
   }
 
   /**

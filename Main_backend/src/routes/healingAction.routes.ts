@@ -5,6 +5,12 @@ import { requireRoles } from '../middlewares/rbac.middleware';
 
 const healingActionRoutes = Router();
 
+// GET /api/v1/healing/approvals/quick-approve?token=...
+// Đặt TRƯỚC authenticateToken vì người dùng click từ Email không có Authorization header
+// GET /api/v1/healing/approvals/quick-approve?token=... & quick-reject?token=...
+healingActionRoutes.get('/approvals/quick-approve', HealingActionController.quickApproveFromEmail);
+healingActionRoutes.get('/approvals/quick-reject', HealingActionController.quickRejectFromEmail);
+
 // Toàn bộ các API Healing Actions yêu cầu xác thực JWT
 healingActionRoutes.use(authenticateToken);
 
@@ -51,6 +57,8 @@ healingActionRoutes.get('/policies', HealingActionController.getPolicies);
 
 // POST /api/v1/healing/policies - Create new policy
 healingActionRoutes.post('/policies', devopsOrAdmin, HealingActionController.createPolicy);
+// DELETE /api/v1/healing/policies/:id - Delete policy
+healingActionRoutes.delete('/policies/:id', devopsOrAdmin, HealingActionController.deletePolicy);
 
 // PUT /api/v1/healing/policies/:id - Update policy config
 healingActionRoutes.put('/policies/:id', devopsOrAdmin, HealingActionController.updatePolicyConfig);
@@ -75,5 +83,8 @@ healingActionRoutes.post('/actions/:id/reject', devopsOrAdmin, HealingActionCont
 // ==========================================
 // GET /api/v1/healing/analytics - Get stats from DB
 healingActionRoutes.get('/analytics', HealingActionController.getAnalytics);
+
+// POST /api/v1/healing/actions/:id/notify - Gửi lại email thông báo
+healingActionRoutes.post('/actions/:id/notify', devopsOrAdmin, HealingActionController.resendNotification);
 
 export { healingActionRoutes };

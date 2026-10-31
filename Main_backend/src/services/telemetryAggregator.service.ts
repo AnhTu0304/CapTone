@@ -113,11 +113,13 @@ export class TelemetryAggregatorService {
   public static async buildRcaContext(
     serviceId: string,
     options?: {
+      clusterId?: string;
       windowMinutes?: number;
       logLimit?: number;
       eventLimit?: number;
     }
   ): Promise<RcaContext> {
+    const clusterId = options?.clusterId;
     const windowMinutes = options?.windowMinutes ?? 30;
     const logLimit = Math.min(Math.max(options?.logLimit ?? 30, 5), 100);
     const eventLimit = Math.min(Math.max(options?.eventLimit ?? 20, 5), 100);
@@ -161,8 +163,7 @@ export class TelemetryAggregatorService {
     let allPods: any[] = [];
 
     try {
-      const podsRes = await pool.query(
-        `SELECT 
+      let podQuery = `SELECT 
            p.id AS pod_id,
            p.name AS pod_name,
            p.status,
@@ -179,10 +180,14 @@ export class TelemetryAggregatorService {
          LEFT JOIN nodes n ON n.id = p.node_id
          LEFT JOIN namespaces ns ON ns.id = p.namespace_id
          WHERE (w.name = $1 OR p.name LIKE $2 OR p.labels->>'app' = $1)
-           AND p.deleted_at IS NULL
-         ORDER BY p.restart_count DESC, p.created_at DESC`,
-        [serviceId, `${serviceId}%`]
-      );
+           AND p.deleted_at IS NULL`;
+      const queryParams: any[] = [serviceId, `${serviceId}%`];
+      if (clusterId) {
+        podQuery += ` AND (p.cluster_id = $3 OR p.cluster_id IS NULL)`;
+        queryParams.push(clusterId);
+      }
+      podQuery += ` ORDER BY p.created_at DESC, p.restart_count DESC`;
+      const podsRes = await pool.query(podQuery, queryParams);
 
       if (podsRes.rows.length > 0) {
         const primary = podsRes.rows[0];
@@ -192,7 +197,7 @@ export class TelemetryAggregatorService {
         workloadType = primary.workload_type || 'Deployment';
         workloadName = primary.workload_name || serviceId;
         namespaceName = primary.namespace_name || 'default';
-        workloadClusterId = primary.cluster_id;
+        workloadClusterId = clusterId || primary.cluster_id;
 
         // Inspect events and logs for pod termination signals (e.g. exit code 137, OOMKilled)
         const combinedLogAndEventText = `${formattedEvents.join(' ')} ${formattedLogs.join(' ')}`;
@@ -393,6 +398,7 @@ export class TelemetryAggregatorService {
       });
 
     const rcaContextPromise = this.buildRcaContext(serviceId, {
+      clusterId: options?.clusterId,
       windowMinutes,
     });
 
@@ -477,7 +483,7 @@ export class TelemetryAggregatorService {
           suspected_pod_name: rcaContext.pod_id,
           metric_sequence: sequence,
           kubernetes: {
-            cluster_id: rcaContext.cluster_id || options?.clusterId,
+            cluster_id: options?.clusterId || rcaContext.cluster_id,
             namespace: rcaContext.namespace,
             workload_type: rcaContext.workload_type,
             workload_name: rcaContext.workload_name,
@@ -503,7 +509,7 @@ export class TelemetryAggregatorService {
           logs: rcaContext.logs,
           kubernetes_events: rcaContext.kubernetes_events,
           prediction_id: gruPrediction?.prediction_id,
-          cluster_id: rcaContext.cluster_id || options?.clusterId,
+          cluster_id: options?.clusterId || rcaContext.cluster_id,
         });
       } catch (error) {
         console.warn(`[TelemetryAggregator] AI Backend RCA failed for ${serviceId}:`, error);
