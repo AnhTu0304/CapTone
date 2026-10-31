@@ -116,7 +116,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           badge: unreadNotifsCount > 0 ? `${unreadNotifsCount}` : null,
           badgeType: 'info',
         },
-        { name: 'Cổng Cá Nhân', path: '/portal', icon: Sparkles },
         { name: 'Nhật ký kiểm toán', path: '/dashboard/audit-logs', icon: ScrollText },
         { name: 'Báo cáo SLA & Vận hành', path: '/dashboard/reports', icon: BarChart3 },
         { name: 'Cài đặt hệ thống', path: '/dashboard/settings', icon: Settings },

@@ -531,7 +531,7 @@ export const HealingActionsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Phân quyền Multi-tenant cách ly nghiêm ngặt
+            Giám sát tiến trình điều phối tự phục hồi MAPE-K và thực thi hành động theo thời gian thực
           </p>
         </div>
 

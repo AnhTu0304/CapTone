@@ -106,12 +106,12 @@ export const ActionHistoryPage = () => {
     if (timeFilterMode === 'date') {
       if (!selectedDate) return 'Chọn ngày';
       const parts = selectedDate.split('-');
-      return `Ngày ${parts[2]}/${parts[1]}/${parts[0]}`;
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
     if (timeFilterMode === 'month') {
       if (!selectedMonth) return 'Chọn tháng';
       const parts = selectedMonth.split('-');
-      return `Tháng ${parts[1]}/${parts[0]}`;
+      return `${parts[1]}/${parts[0]}`;
     }
     if (timeFilterMode === 'year') {
       return `Năm ${selectedYear}`;
@@ -572,7 +572,7 @@ export const ActionHistoryPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Dữ liệu lưu vết thực tế từ cơ sở dữ liệu
+            Theo dõi toàn diện nhật ký thực thi, đối soát thời gian phục hồi MTTR và cam kết chất lượng dịch vụ (SLA)
           </p>
         </div>
 
@@ -600,514 +600,439 @@ export const ActionHistoryPage = () => {
         </div>
       </div>
 
-      {/* UNIFIED FILTER BAR - BỘ LỌC ĐẸP MẮT CHUẨN NHƯ TRANG SỰ CỐ */}
+      {/* UNIFIED COMPACT FILTER TOOLBAR */}
       <div
         className="dash-card"
         style={{
-          padding: '14px 18px',
+          padding: '10px 14px',
           backgroundColor: '#FFFFFF',
           border: '1px solid var(--dash-border)',
-          borderRadius: '12px',
+          borderRadius: '10px',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
         }}
       >
-        {/* Row 1: Time Range Selection (Bộ Lọc Lịch) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8125rem', fontWeight: 700, color: '#334155' }}>
-              <Calendar size={15} color="var(--dash-primary)" />
-              <span>Thời Gian:</span>
-            </div>
-
-            {/* Nút 1: Chọn ngày là đầu tiên (Nút Hôm Nay) */}
+        {/* Nhóm Bộ Lọc Trái: Lịch + Dịch vụ + Trạng thái + Loại hành động */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          {/* Nút Lịch mở Popover chọn Ngày, Tháng, Năm */}
+          <div style={{ position: 'relative' }} ref={calendarRef}>
             <button
               type="button"
-              onClick={() => {
-                setTimeFilterMode('today');
-                setSelectedDate(getTodayStr());
-                setIsCalendarOpen(false);
-              }}
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
               style={{
                 height: '32px',
-                padding: '0 12px',
+                padding: '0 10px',
                 fontSize: '0.75rem',
-                fontWeight: 700,
+                fontWeight: 600,
                 borderRadius: '6px',
-                border: timeFilterMode === 'today' ? '1px solid #10B981' : '1px solid var(--dash-border)',
-                backgroundColor: timeFilterMode === 'today' ? 'rgba(16, 185, 129, 0.12)' : '#F8FAFC',
-                color: timeFilterMode === 'today' ? '#047857' : 'var(--dash-text-primary)',
+                border: isCalendarOpen || timeFilterMode !== 'today' ? '1px solid #3B82F6' : '1px solid var(--dash-border)',
+                backgroundColor: timeFilterMode !== 'today' ? '#EFF6FF' : '#FFFFFF',
+                color: timeFilterMode !== 'today' ? '#1D4ED8' : 'var(--dash-text-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 cursor: 'pointer',
+                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none',
                 transition: 'all 0.15s ease',
-                boxShadow: timeFilterMode === 'today' ? '0 1px 2px rgba(16, 185, 129, 0.15)' : 'none',
               }}
-              title="Lọc nhanh toàn bộ hành động tự phục hồi trong ngày hôm nay"
+              title="Mở bảng lịch chọn ngày, tháng hoặc năm"
             >
-              <span
-                style={{
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
-                  backgroundColor: timeFilterMode === 'today' ? '#10B981' : '#94A3B8',
-                  boxShadow: timeFilterMode === 'today' ? '0 0 6px #10B981' : 'none',
-                }}
-              />
-              Hôm nay
+              <Calendar size={14} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-primary)'} />
+              <span>{currentFilterLabel}</span>
+              <ChevronDown size={12} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-text-secondary)'} />
             </button>
 
-            {/* Nút 2: Logo Lịch bên cạnh mở Popover chọn Ngày, Tháng, Năm */}
-            <div style={{ position: 'relative' }} ref={calendarRef}>
-              <button
-                type="button"
-                onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+            {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
+            {isCalendarOpen && (
+              <div
                 style={{
-                  height: '32px',
-                  padding: '0 10px',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  borderRadius: '6px',
-                  border: isCalendarOpen || timeFilterMode !== 'today' ? '1px solid #3B82F6' : '1px solid var(--dash-border)',
-                  backgroundColor: timeFilterMode !== 'today' ? '#EFF6FF' : '#FFFFFF',
-                  color: timeFilterMode !== 'today' ? '#1D4ED8' : 'var(--dash-text-primary)',
+                  position: 'absolute',
+                  top: '38px',
+                  left: '0',
+                  zIndex: 100,
+                  width: '330px',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  padding: '14px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  boxShadow: isCalendarOpen ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none',
-                  transition: 'all 0.15s ease',
+                  flexDirection: 'column',
+                  gap: '12px',
                 }}
-                title="Mở bảng lịch chọn ngày, tháng hoặc năm"
               >
-                <Calendar size={14} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-primary)'} />
-                <span>{currentFilterLabel}</span>
-                <ChevronDown size={12} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-text-secondary)'} />
-              </button>
+                {/* Tabs Chế Độ: Ngày | Tháng | Năm | Tất Cả */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFilterMode('date')}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📅 Ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFilterMode('month')}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'month' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'month' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🗓️ Tháng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFilterMode('year')}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'year' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'year' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📆 Năm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeFilterMode('all');
+                      setIsCalendarOpen(false);
+                    }}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'all' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'all' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🌐 Tất cả
+                  </button>
+                </div>
 
-              {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
-              {isCalendarOpen && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '38px',
-                    left: '0',
-                    zIndex: 100,
-                    width: '330px',
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: '10px',
-                    border: '1px solid #E2E8F0',
-                    boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                    padding: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                  }}
-                >
-                  {/* Tabs Chế Độ: Ngày | Tháng | Năm | Tất Cả */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setTimeFilterMode('date')}
-                      style={{
-                        padding: '6px 2px',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        borderRadius: '6px',
-                        border: 'none',
-                        backgroundColor: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#FFFFFF' : 'transparent',
-                        color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#0F172A' : '#64748B',
-                        boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      📅 Ngày
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTimeFilterMode('month')}
-                      style={{
-                        padding: '6px 2px',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        borderRadius: '6px',
-                        border: 'none',
-                        backgroundColor: timeFilterMode === 'month' ? '#FFFFFF' : 'transparent',
-                        color: timeFilterMode === 'month' ? '#0F172A' : '#64748B',
-                        boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      🗓️ Tháng
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTimeFilterMode('year')}
-                      style={{
-                        padding: '6px 2px',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        borderRadius: '6px',
-                        border: 'none',
-                        backgroundColor: timeFilterMode === 'year' ? '#FFFFFF' : 'transparent',
-                        color: timeFilterMode === 'year' ? '#0F172A' : '#64748B',
-                        boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      📆 Năm
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTimeFilterMode('all');
-                        setIsCalendarOpen(false);
+                {/* Tab Body: CHỌN NGÀY */}
+                {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                      Chọn ngày cụ thể:
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setTimeFilterMode('date');
                       }}
                       style={{
-                        padding: '6px 2px',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
+                        width: '100%',
+                        height: '36px',
+                        padding: '0 10px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        border: '1px solid #CBD5E1',
                         borderRadius: '6px',
-                        border: 'none',
-                        backgroundColor: timeFilterMode === 'all' ? '#FFFFFF' : 'transparent',
-                        color: timeFilterMode === 'all' ? '#0F172A' : '#64748B',
-                        boxShadow: timeFilterMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                        cursor: 'pointer',
+                        backgroundColor: '#F8FAFC',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box',
                       }}
-                    >
-                      🌐 Tất cả
-                    </button>
-                  </div>
+                    />
 
-                  {/* Tab Body: CHỌN NGÀY */}
-                  {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
-                    <div>
-                      <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                        Chọn ngày cụ thể:
-                      </label>
-                      <input
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => {
-                          setSelectedDate(e.target.value);
-                          setTimeFilterMode('date');
-                        }}
-                        style={{
-                          width: '100%',
-                          height: '36px',
-                          padding: '0 10px',
-                          fontSize: '0.8125rem',
-                          fontWeight: 600,
-                          border: '1px solid #CBD5E1',
-                          borderRadius: '6px',
-                          backgroundColor: '#F8FAFC',
-                          color: '#0F172A',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                        }}
-                      />
-
-                      {/* Quick presets for recent days */}
-                      <div style={{ marginTop: '10px' }}>
-                        <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                          Ngày có hành động gần đây:
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {['2026-10-31', '2026-10-30', '2026-10-29', '2026-10-28', '2026-10-27'].map((dStr) => {
-                            const dParts = dStr.split('-');
-                            const isToday = dStr === getTodayStr();
-                            const isSelected = (timeFilterMode === 'today' && isToday) || (timeFilterMode === 'date' && selectedDate === dStr);
-                            return (
-                              <button
-                                key={dStr}
-                                type="button"
-                                onClick={() => {
-                                  if (isToday) {
-                                    setTimeFilterMode('today');
-                                  } else {
-                                    setTimeFilterMode('date');
-                                  }
-                                  setSelectedDate(dStr);
-                                  setIsCalendarOpen(false);
-                                }}
-                                style={{
-                                  padding: '4px 8px',
-                                  fontSize: '0.6875rem',
-                                  fontWeight: isSelected ? 700 : 500,
-                                  borderRadius: '4px',
-                                  border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
-                                  backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
-                                  color: isSelected ? '#047857' : '#334155',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
-                              </button>
-                            );
-                          })}
-                        </div>
+                    {/* Quick presets for recent days */}
+                    <div style={{ marginTop: '10px' }}>
+                      <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
+                        Ngày có hành động gần đây:
                       </div>
-                    </div>
-                  )}
-
-                  {/* Tab Body: CHỌN THÁNG */}
-                  {timeFilterMode === 'month' && (
-                    <div>
-                      <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                        Chọn tháng & năm:
-                      </label>
-                      <input
-                        type="month"
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        style={{
-                          width: '100%',
-                          height: '36px',
-                          padding: '0 10px',
-                          fontSize: '0.8125rem',
-                          fontWeight: 600,
-                          border: '1px solid #CBD5E1',
-                          borderRadius: '6px',
-                          backgroundColor: '#F8FAFC',
-                          color: '#0F172A',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                        }}
-                      />
-
-                      {/* Quick Month Grid */}
-                      <div style={{ marginTop: '10px' }}>
-                        <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                          Chọn nhanh các tháng trong năm:
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
-                            const mStr = `${selectedYear || getThisYearStr()}-${String(mNum).padStart(2, '0')}`;
-                            const isSelected = selectedMonth === mStr;
-                            return (
-                              <button
-                                key={mNum}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedMonth(mStr);
-                                  setIsCalendarOpen(false);
-                                }}
-                                style={{
-                                  padding: '6px 2px',
-                                  fontSize: '0.6875rem',
-                                  fontWeight: isSelected ? 700 : 500,
-                                  borderRadius: '4px',
-                                  border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                                  backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
-                                  color: isSelected ? '#1D4ED8' : '#334155',
-                                  cursor: 'pointer',
-                                  textAlign: 'center',
-                                }}
-                              >
-                                Tháng {mNum}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tab Body: CHỌN NĂM */}
-                  {timeFilterMode === 'year' && (
-                    <div>
-                      <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                        Chọn năm khảo sát:
-                      </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                        {availableYears.map((yr) => {
-                          const isSelected = selectedYear === yr;
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {['2026-10-31', '2026-10-30', '2026-10-29', '2026-10-28', '2026-10-27'].map((dStr) => {
+                          const dParts = dStr.split('-');
+                          const isToday = dStr === getTodayStr();
+                          const isSelected = (timeFilterMode === 'today' && isToday) || (timeFilterMode === 'date' && selectedDate === dStr);
                           return (
                             <button
-                              key={yr}
+                              key={dStr}
                               type="button"
                               onClick={() => {
-                                setSelectedYear(yr);
+                                if (isToday) {
+                                  setTimeFilterMode('today');
+                                } else {
+                                  setTimeFilterMode('date');
+                                }
+                                setSelectedDate(dStr);
                                 setIsCalendarOpen(false);
                               }}
                               style={{
-                                padding: '10px 4px',
-                                fontSize: '0.8125rem',
-                                fontWeight: isSelected ? 700 : 600,
-                                borderRadius: '6px',
-                                border: isSelected ? '1px solid #7C3AED' : '1px solid #E2E8F0',
-                                backgroundColor: isSelected ? '#F5F3FF' : '#F8FAFC',
-                                color: isSelected ? '#6D28D9' : '#334155',
+                                padding: '4px 8px',
+                                fontSize: '0.6875rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                borderRadius: '4px',
+                                border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                                backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                                color: isSelected ? '#047857' : '#334155',
                                 cursor: 'pointer',
-                                textAlign: 'center',
                               }}
                             >
-                              Năm {yr}
+                              {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
                             </button>
                           );
                         })}
                       </div>
                     </div>
-                  )}
-
-                  {/* Popover Footer */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTimeFilterMode('today');
-                        setSelectedDate(getTodayStr());
-                        setIsCalendarOpen(false);
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        fontSize: '0.7rem',
-                        color: '#10B981',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      Về hôm nay
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsCalendarOpen(false)}
-                      style={{
-                        padding: '4px 12px',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        backgroundColor: '#0F172A',
-                        color: '#FFFFFF',
-                        borderRadius: '4px',
-                        border: 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Áp dụng
-                    </button>
                   </div>
+                )}
+
+                {/* Tab Body: CHỌN THÁNG */}
+                {timeFilterMode === 'month' && (
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                      Chọn tháng & năm:
+                    </label>
+                    <input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        padding: '0 10px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        backgroundColor: '#F8FAFC',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        marginBottom: '10px',
+                      }}
+                    />
+
+                    {/* 12 Months grid */}
+                    <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
+                      Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
+                        const mStr = `${selectedMonth?.split('-')[0] || '2026'}-${String(mNum).padStart(2, '0')}`;
+                        const isSelected = selectedMonth === mStr;
+                        return (
+                          <button
+                            key={mNum}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMonth(mStr);
+                              setIsCalendarOpen(false);
+                            }}
+                            style={{
+                              padding: '6px 2px',
+                              fontSize: '0.6875rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              borderRadius: '4px',
+                              border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
+                              color: isSelected ? '#1D4ED8' : '#334155',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                            }}
+                          >
+                            Tháng {mNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Body: CHỌN NĂM */}
+                {timeFilterMode === 'year' && (
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
+                      Chọn năm khảo sát:
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                      {availableYears.map((yr) => {
+                        const isSelected = selectedYear === yr;
+                        return (
+                          <button
+                            key={yr}
+                            type="button"
+                            onClick={() => {
+                              setSelectedYear(yr);
+                              setIsCalendarOpen(false);
+                            }}
+                            style={{
+                              padding: '10px 4px',
+                              fontSize: '0.8125rem',
+                              fontWeight: isSelected ? 700 : 600,
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #7C3AED' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#F5F3FF' : '#F8FAFC',
+                              color: isSelected ? '#6D28D9' : '#334155',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                            }}
+                          >
+                            Năm {yr}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Popover Footer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeFilterMode('today');
+                      setSelectedDate(getTodayStr());
+                      setIsCalendarOpen(false);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '0.7rem',
+                      color: '#10B981',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    Về hôm nay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCalendarOpen(false)}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      backgroundColor: '#0F172A',
+                      color: '#FFFFFF',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Áp dụng
+                  </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {isFiltered && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #FECACA',
-                  backgroundColor: '#FEF2F2',
-                  color: '#B91C1C',
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <RotateCcw size={12} />
-                <span>Đặt lại</span>
-              </button>
-            )}
+          {/* Service Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Server size={14} color="#64748B" />
+            <select
+              value={selectedService}
+              onChange={(e) => setSelectedService(e.target.value)}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                border: '1px solid #CBD5E1',
+                borderRadius: '6px',
+                backgroundColor: '#FFFFFF',
+                color: '#1E293B',
+                fontWeight: 500,
+                outline: 'none',
+              }}
+            >
+              <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
+              {uniqueServices.map((svc) => (
+                <option key={svc} value={svc}>Dịch vụ: {svc}</option>
+              ))}
+            </select>
+          </div>
 
-            <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-              Khớp: <strong style={{ color: 'var(--dash-primary)' }}>{filteredHistory.length}</strong> / {actions.length} ca
-            </div>
+          {/* Status Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Zap size={14} color="#64748B" />
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                border: '1px solid #CBD5E1',
+                borderRadius: '6px',
+                backgroundColor: '#FFFFFF',
+                color: '#1E293B',
+                fontWeight: 500,
+                outline: 'none',
+              }}
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="SUCCEEDED">Thành công (SUCCEEDED)</option>
+              <option value="PENDING">Chờ duyệt (PENDING)</option>
+              <option value="FAILED">Thất bại (FAILED)</option>
+              <option value="CANCELLED">Đã hủy bỏ (CANCELLED)</option>
+              <option value="RUNNING">Đang thực thi (RUNNING)</option>
+            </select>
+          </div>
+
+          {/* Action Type Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Filter size={14} color="#64748B" />
+            <select
+              value={selectedActionType}
+              onChange={(e) => setSelectedActionType(e.target.value)}
+              style={{
+                height: '32px',
+                padding: '0 8px',
+                fontSize: '0.75rem',
+                border: '1px solid #CBD5E1',
+                borderRadius: '6px',
+                backgroundColor: '#FFFFFF',
+                color: '#1E293B',
+                fontWeight: 500,
+                outline: 'none',
+                maxWidth: '220px',
+              }}
+            >
+              <option value="ALL">Tất cả hành động ({allActionTypes.length} loại chuẩn)</option>
+              {allActionTypes.map((t) => (
+                <option key={t.code} value={t.code}>{t.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Row 2: Criteria Filters (Service, Status, Action Type, Search) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '10px', borderTop: '1px dashed #E2E8F0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            {/* Service Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Server size={14} color="#64748B" />
-              <select
-                value={selectedService}
-                onChange={(e) => setSelectedService(e.target.value)}
-                style={{
-                  height: '32px',
-                  padding: '0 8px',
-                  fontSize: '0.75rem',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#1E293B',
-                  fontWeight: 500,
-                  outline: 'none',
-                }}
-              >
-                <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
-                {uniqueServices.map((svc) => (
-                  <option key={svc} value={svc}>Dịch vụ: {svc}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Zap size={14} color="#64748B" />
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                style={{
-                  height: '32px',
-                  padding: '0 8px',
-                  fontSize: '0.75rem',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#1E293B',
-                  fontWeight: 500,
-                  outline: 'none',
-                }}
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="SUCCEEDED">Thành công (SUCCEEDED)</option>
-                <option value="PENDING">Chờ duyệt (PENDING)</option>
-                <option value="FAILED">Thất bại (FAILED)</option>
-                <option value="CANCELLED">Đã hủy bỏ (CANCELLED)</option>
-                <option value="RUNNING">Đang thực thi (RUNNING)</option>
-              </select>
-            </div>
-
-            {/* Action Type Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Filter size={14} color="#64748B" />
-              <select
-                value={selectedActionType}
-                onChange={(e) => setSelectedActionType(e.target.value)}
-                style={{
-                  height: '32px',
-                  padding: '0 8px',
-                  fontSize: '0.75rem',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#1E293B',
-                  fontWeight: 500,
-                  outline: 'none',
-                  maxWidth: '220px',
-                }}
-              >
-                <option value="ALL">Tất cả hành động ({allActionTypes.length} loại chuẩn)</option>
-                {allActionTypes.map((t) => (
-                  <option key={t.code} value={t.code}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
+        {/* Nhóm Bên Phải: Tìm kiếm + Đặt lại + Số lượng khớp */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           {/* Search Box */}
           <div style={{ position: 'relative' }}>
             <input
@@ -1117,7 +1042,7 @@ export const ActionHistoryPage = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 height: '32px',
-                width: '240px',
+                width: '210px',
                 padding: '0 10px 0 28px',
                 fontSize: '0.75rem',
                 border: '1px solid var(--dash-border)',
@@ -1128,6 +1053,34 @@ export const ActionHistoryPage = () => {
             />
             <Search size={13} style={{ position: 'absolute', left: '8px', top: '9px', color: 'var(--dash-text-muted)' }} />
           </div>
+
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '0 8px',
+                height: '32px',
+                borderRadius: '6px',
+                border: '1px solid #FECACA',
+                backgroundColor: '#FEF2F2',
+                color: '#B91C1C',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={12} />
+              <span>Đặt lại</span>
+            </button>
+          )}
+
+          <div style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap' }}>
+            Khớp: <strong style={{ color: 'var(--dash-primary)' }}>{filteredHistory.length}</strong> / {actions.length} ca
+          </div>
         </div>
       </div>
 
@@ -1136,6 +1089,10 @@ export const ActionHistoryPage = () => {
         actions={filteredHistory}
         analytics={dynamicAnalytics}
         title={`Xu Hướng Phục Hồi Tự Động & Thời Gian MTTR (${currentFilterLabel})`}
+        timeFilterMode={timeFilterMode}
+        selectedDate={selectedDate}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
       />
 
       {/* History Records Table (Được đồng bộ bộ lọc) */}

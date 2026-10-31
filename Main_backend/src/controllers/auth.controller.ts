@@ -46,12 +46,18 @@ export class AuthController {
       }
 
       const result = await AuthService.login({ email, password });
+      const primaryOrgId = result.organization_roles?.[0]?.organization_id || null;
       await AuditService.recordFromRequest(req, {
+        organization_id: primaryOrgId,
         action: 'AUTH_LOGIN_SUCCESS',
         status: 'SUCCESS',
         user_id: result.id,
-        description: 'Người dùng đăng nhập thành công',
-        metadata: { email: result.email, has_organization: result.has_organization },
+        description: `Người dùng [${result.email}] đăng nhập thành công vào hệ thống`,
+        metadata: {
+          email: result.email,
+          has_organization: result.has_organization,
+          organization_name: result.organization_roles?.[0]?.organization_name || null,
+        },
       }).catch(() => {});
       return ApiResponse.success(res, 'Đăng nhập thành công', result, 200);
     } catch (error) {

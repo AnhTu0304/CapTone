@@ -36,6 +36,19 @@ export type AuditAction =
   // Dangerous / Sensitive Remediation
   | 'REMEDIATION_NODE_DRAINED'
   | 'REMEDIATION_POD_RESTARTED'
+  | 'REMEDIATION_COMPLETED'
+  | 'REMEDIATION_FAILED'
+  | 'REMEDIATION_ABORTED'
+  | 'HITL_APPROVAL_GRANTED'
+  | 'HITL_APPROVAL_REJECTED'
+  | 'AUTONOMOUS_HEALING_TRIGGERED'
+  | 'CIRCUIT_BREAKER_TRIPPED'
+  // Policy Governance
+  | 'POLICY_CREATED'
+  | 'POLICY_UPDATED'
+  | 'POLICY_THRESHOLD_MODIFIED'
+  | 'POLICY_STATUS_CHANGED'
+  | 'POLICY_DELETED'
   // Data Retention
   | 'SYSTEM_AUDIT_PURGED';
 
@@ -61,6 +74,7 @@ export interface IAuditLog {
   user_id?: string | null;
   user_name?: string | null;
   user_email?: string | null;
+  actor_role?: string | null;
   actor_type: AuditActorType;
   action: AuditAction | string;
   resource_type?: string | null;
@@ -104,6 +118,7 @@ export interface IAuditLogFilter {
   user_id?: string;
   action?: string;
   status?: string;
+  role?: string;
   resource_type?: string;
   resource_id?: string;
   request_id?: string;

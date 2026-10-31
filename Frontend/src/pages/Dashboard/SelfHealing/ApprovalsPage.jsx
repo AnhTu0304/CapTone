@@ -363,7 +363,7 @@ export const ApprovalsPage = () => {
             </h1>
           </div>
 <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '3px', margin: 0 }}>
-            {currentOrg?.name || 'Tổ chức hiện tại'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm'}</span> &bull; Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
+            Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
           </p>
         </div>
 
@@ -762,31 +762,6 @@ export const ApprovalsPage = () => {
                         <span>Xem trước Diff (YAML)</span>
                       </button>
 
-                      {/* Nút Gửi Email Thông Báo */}
-                      <button
-                        type="button"
-                        onClick={() => handleSendEmail(req)}
-                        disabled={sendingEmailId === req.id}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                          padding: "5px 12px",
-                          backgroundColor: "#F0FDF4",
-                          border: "1px solid #BBF7D0",
-                          borderRadius: "6px",
-                          fontSize: "0.75rem",
-                          fontWeight: 700,
-                          color: "#15803D",
-                          cursor: sendingEmailId === req.id ? "not-allowed" : "pointer",
-                          transition: "all 0.15s ease",
-                          opacity: sendingEmailId === req.id ? 0.6 : 1,
-                        }}
-                        title="Gửi ngay thông báo kèm nút bấm phê duyệt 1-Click tới email cá nhân của kỹ sư phụ trách"
-                      >
-                        <Mail size={13} />
-                        <span>{sendingEmailId === req.id ? "Đang gửi..." : "Gửi Email Thông Báo"}</span>
-                      </button>
 
 
                     </div>

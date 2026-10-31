@@ -1,3 +1,4 @@
+import { AuditService } from './audit.service';
 import { HitlNotificationService } from './hitlNotification.service';
 import { TelemetryAggregatorService } from './telemetryAggregator.service';
 import { MetricModel } from '../models/metric.model';
@@ -231,6 +232,20 @@ export class TelemetryPipelineService {
       let recAction = rca.recommendation.action || 'Restart Pod';
       if (recAction === 'NO_ACTION') {
         console.log(`🛡️ [PolicyEngine] Recommendation is NO_ACTION (Circuit Breaker). Bypassing automated healing dispatch.`);
+        AuditService.record({
+          organization_id: null,
+          actor_type: 'SYSTEM',
+          action: 'CIRCUIT_BREAKER_TRIPPED',
+          resource_type: 'HEALING_ACTION',
+          target_type: 'WORKLOAD',
+          description: `Rào chắn tự ngắt (Circuit Breaker) được kích hoạt cho dịch vụ [${serviceId}] nhằm ngăn chặn lặp sự cố hoặc quá tải hành động liên tiếp.`,
+          status: 'SUCCESS',
+          metadata: {
+            service_id: serviceId,
+            incident_id: rca.incident_id,
+            recommendation_id: rca.recommendation_id,
+          },
+        }).catch(() => {});
         return;
       }
       if (recAction === 'CLEANUP_STORAGE') recAction = 'CLEANUP_TEMP_FILES';
@@ -241,6 +256,7 @@ export class TelemetryPipelineService {
       const query = `
         SELECT 
           p.id AS policy_id,
+          p.organization_id,
           p.name AS policy_name,
           p.execution_mode,
           p.risk_level,
@@ -291,18 +307,23 @@ export class TelemetryPipelineService {
       // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold)
       if (!isAuto || policy.requires_approval || confidence < threshold) {
         console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires HITL approval (Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
-        // Anti-spam deduplication: If there is already a PENDING action for the same target and action type within the last 15 minutes, skip creating duplicates
+        // Chống spam & chồng chất yêu cầu: Nếu dịch vụ này ĐÃ CÓ 1 hành động cùng loại đang CHỜ DUYỆT (PENDING),
+        // tuyệt đối KHÔNG tạo thêm yêu cầu mới mà chỉ cập nhật lại thời gian để người vận hành biết lỗi vẫn tiếp diễn.
         const existingPending = await pool.query(
           `SELECT id FROM healing_actions 
            WHERE target_name = $1 
              AND action_type_id = $2 
              AND approval_status = 'PENDING' 
-             AND requested_at > NOW() - interval '15 minutes' 
+             AND execution_status = 'PENDING'
            LIMIT 1;`,
           [serviceId, policy.action_type_id]
         );
         if (existingPending.rows.length > 0) {
-          console.log(`⏳ [PolicyEngine] '${serviceId}' already has a pending approval (ID: ${existingPending.rows[0].id}). Skipping duplicate pending action.`);
+          console.log(`⏳ [PolicyEngine] '${serviceId}' đã có yêu cầu phê duyệt đang chờ (ID: ${existingPending.rows[0].id}). Bỏ qua không tạo ca trùng lặp.`);
+          await pool.query(
+            `UPDATE healing_actions SET requested_at = NOW() WHERE id = $1;`,
+            [existingPending.rows[0].id]
+          );
           return;
         }
 
@@ -410,6 +431,32 @@ export class TelemetryPipelineService {
       ]);
 
       const actionId = actInsert.rows[0].id;
+
+      // Ghi nhận sự kiện kích hoạt tự lành tự động vào Sổ cái kiểm toán bất biến
+      AuditService.record({
+        organization_id: policy.organization_id || null,
+        actor_type: 'SYSTEM',
+        action: 'AUTONOMOUS_HEALING_TRIGGERED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: actionId,
+        target_type: 'WORKLOAD',
+        description: `Tác vụ tự phục hồi hoàn toàn tự động được kích hoạt cho [${serviceId}] theo chính sách [${policy.policy_name}]. Độ tin cậy AI: ${(confidence * 100).toFixed(0)}%`,
+        status: 'SUCCESS',
+        before_data: { execution_status: 'PENDING' },
+        after_data: { execution_status: 'RUNNING', execution_mode: 'AUTO', policy_id: policy.policy_id },
+        metadata: {
+          policy_id: policy.policy_id,
+          policy_name: policy.policy_name,
+          action_type: policy.action_name,
+          action_code: policy.action_code,
+          target_service: serviceId,
+          confidence,
+          threshold,
+          incident_id: rca.incident_id,
+        },
+      }).catch((err) => {
+        console.warn('[TelemetryPipelineService] Ghi audit log autonomous trigger thất bại:', err);
+      });
 
       // Broadcast real-time execution trigger to UI
       broadcastTelemetryToUi({

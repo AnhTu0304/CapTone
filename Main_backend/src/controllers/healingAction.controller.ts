@@ -211,7 +211,8 @@ export class HealingActionController {
   public static async updatePolicyConfig(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const updated = await HealingActionService.updatePolicyConfig(id, req.body);
+      const user = (req as any).user;
+      const updated = await HealingActionService.updatePolicyConfig(id, req.body, user);
       return ApiResponse.success(res, 'Cập nhật cấu hình chính sách thành công', updated, 200);
     } catch (error) {
       next(error);
@@ -225,7 +226,8 @@ export class HealingActionController {
   public static async togglePolicyActive(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const updated = await HealingActionService.togglePolicyActive(id);
+      const user = (req as any).user;
+      const updated = await HealingActionService.togglePolicyActive(id, user);
       return ApiResponse.success(res, 'Chuyển đổi trạng thái kích hoạt chính sách thành công', updated, 200);
     } catch (error) {
       next(error);
@@ -244,7 +246,7 @@ export class HealingActionController {
         created_by: user?.id,
         organization_id: req.body.organization_id || user?.organization_id,
       };
-      const created = await HealingActionService.createPolicy(policyData);
+      const created = await HealingActionService.createPolicy(policyData, user);
       return ApiResponse.success(res, 'Tạo chính sách tự phục hồi mới thành công', created, 201);
     } catch (error) {
       next(error);
@@ -258,7 +260,8 @@ export class HealingActionController {
   public static async deletePolicy(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const result = await HealingActionService.deletePolicy(id);
+      const user = (req as any).user;
+      const result = await HealingActionService.deletePolicy(id, user);
       return ApiResponse.success(res, 'Xóa chính sách tự phục hồi thành công', result, 200);
     } catch (error) {
       next(error);
