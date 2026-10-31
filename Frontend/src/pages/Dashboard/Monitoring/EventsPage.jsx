@@ -241,8 +241,7 @@ export const EventsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường'}</span>
-            {selectedCluster ? ` • Cụm: ${selectedCluster.name || selectedCluster.id}` : ''} &bull; Giám sát toàn diện vòng đời Pod, Node, Deployment và các cảnh báo hệ thống
+            Giám sát toàn diện vòng đời Pod, Node, Deployment và các cảnh báo hệ thống
           </p>
         </div>
 

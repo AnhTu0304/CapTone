@@ -234,7 +234,7 @@ export const ClustersPage = ({ onNavigate }) => {
             </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Doanh Nghiệp'} &bull; Dữ liệu thời gian thực từ Database PostgreSQL & Tác tử eBPF
+            Dữ liệu thời gian thực từ Database PostgreSQL & Tác tử eBPF
           </p>
         </div>
 

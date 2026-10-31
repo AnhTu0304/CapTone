@@ -193,7 +193,7 @@ export const InfrastructurePage = () => {
             </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Cụm Kubernetes: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{currentEnv?.name}</span> &bull; Quản lý tài nguyên vCPU, Bộ nhớ RAM và dung lượng Pods của từng máy chủ riêng biệt
+            Quản lý tài nguyên vCPU, Bộ nhớ RAM và dung lượng Pods của từng máy chủ riêng biệt
           </p>
         </div>
 

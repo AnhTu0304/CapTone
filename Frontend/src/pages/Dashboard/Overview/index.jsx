@@ -475,7 +475,7 @@ export const OverviewPage = () => {
               Tổng Quan Vận Hành Hạ Tầng
             </h1>
             <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-              {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span>
+              Giám sát trạng thái vận hành và kết nối tác tử hạ tầng Kubernetes
             </p>
           </div>
           <button
@@ -625,12 +625,8 @@ export const OverviewPage = () => {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
             Tổng Quan Vận Hành Hạ Tầng
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}>
-            <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'Chưa chọn Tổ chức'}</span>
-            <span>&bull;</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span>
-            <span>&bull;</span>
-            <span style={{ color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Clock size={12} /> Cập nhật gần nhất: {lastDataTimestamp || lastUpdated}
             </span>
           </div>

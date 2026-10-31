@@ -1787,7 +1787,7 @@ export const PredictionsPage = () => {
                 AI Dự Báo Nguy Cơ Sớm & Đề Xuất Phòng Ngừa
               </h1>
               <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-                {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{currentEnv?.name || 'Môi trường mặc định'}</span> &bull; Phân loại rủi ro đa nhãn thời gian thực bằng mô hình GRU PyTorch
+                Phân loại rủi ro đa nhãn thời gian thực bằng mô hình GRU PyTorch
               </p>
             </div>
           </div>

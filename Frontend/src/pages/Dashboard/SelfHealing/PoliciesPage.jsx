@@ -404,8 +404,7 @@ export const PoliciesPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Vị trí Cụm K8s:{' '}
-            <span style={{ fontWeight: 700, color: 'var(--dash-primary)' }}>{currentEnv?.cluster || currentEnv?.name || 'Tất cả cụm'}</span> ({currentEnv?.envName || 'Môi trường hiện tại'}) &bull; Quản lý chính sách tự động và an toàn MAPE-K
+            Quản lý chính sách tự động và an toàn MAPE-K
           </p>
         </div>
 

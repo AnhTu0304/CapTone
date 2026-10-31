@@ -92,7 +92,7 @@ export const SettingsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span> &bull; Quản lý Webhook thông báo Slack, API Keys, chính sách bảo mật 2FA và cấu hình môi trường
+            Quản lý Webhook thông báo Slack, API Keys, chính sách bảo mật 2FA và cấu hình môi trường
           </p>
         </div>
 

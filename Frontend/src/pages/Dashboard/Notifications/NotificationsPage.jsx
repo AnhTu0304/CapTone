@@ -119,7 +119,7 @@ export const NotificationsPage = () => {
             )}
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span> &bull; Quản trị kênh truyền thông báo, cảnh báo khẩn cấp và các yêu cầu can thiệp HITL
+            Quản trị kênh truyền thông báo, cảnh báo khẩn cấp và các yêu cầu can thiệp HITL
           </p>
         </div>
 

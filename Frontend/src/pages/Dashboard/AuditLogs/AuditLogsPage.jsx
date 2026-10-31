@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../../../context/ToastContext';
 import { exportToCsv, exportToJson } from '../../../utils/exportUtils';
@@ -17,19 +17,20 @@ import {
   Check,
   FileJson,
   FileSpreadsheet,
+  Download,
+  ChevronDown,
+  Printer,
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
   Bot,
   UserCheck,
-  Activity,
   X,
-  ExternalLink,
   Code2
 } from 'lucide-react';
 
 export const AuditLogsPage = () => {
-  const { currentOrg, currentEnv } = useDashboard();
+  const { currentOrg } = useDashboard();
   const { success: toastSuccess, error: toastError } = useToast();
 
   // Data states
@@ -39,6 +40,18 @@ export const AuditLogsPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Pagination states (10 items/page)
   const [page, setPage] = useState(1);
@@ -162,6 +175,16 @@ export const AuditLogsPage = () => {
     setTimeout(() => setExportNotice(false), 3000);
   };
 
+  // Print / Save PDF
+  const handlePrintPdf = () => {
+    setExportNotice(true);
+    toastSuccess('Đang mở hộp thoại In / Lưu PDF của trình duyệt...', 'In / Lưu PDF');
+    setTimeout(() => {
+      window.print();
+    }, 250);
+    setTimeout(() => setExportNotice(false), 4000);
+  };
+
   // Summary KPI Cards
   const summaryKpis = useMemo(() => {
     const s = stats?.summary || {};
@@ -221,7 +244,7 @@ export const AuditLogsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Tổ chức mặc định'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường Kubernetes'}</span> &bull; Bản ghi chuỗi khối SHA-256 chống chỉnh sửa theo chuẩn tuân thủ SOC 2 và ISO 27001 cho SME
+            Bản ghi chuỗi khối SHA-256 chống chỉnh sửa theo chuẩn tuân thủ SOC 2 và ISO 27001 cho SME
           </p>
         </div>
 
@@ -248,47 +271,215 @@ export const AuditLogsPage = () => {
             <span>{isVerifying ? 'Đang xác thực...' : 'Xác thực sổ cái'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              color: 'var(--dash-text-primary)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <FileSpreadsheet size={14} color="#059669" />
-            <span>Xuất CSV</span>
-          </button>
+          {/* Danh Sách Chọn Định Dạng Xuất Sổ Cái */}
+          <div ref={exportMenuRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setIsExportMenuOpen((prev) => !prev)}
+              aria-haspopup="true"
+              aria-expanded={isExportMenuOpen}
+              aria-label="Tùy chọn xuất sổ cái"
+              title="Chọn định dạng file xuất sổ cái kiểm toán (CSV, JSON, PDF)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 14px',
+                backgroundColor: 'var(--dash-primary)',
+                border: 'none',
+                borderRadius: 'var(--dash-radius-md)',
+                color: '#FFFFFF',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: 'var(--dash-shadow-xs)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Download size={15} />
+              <span>Xuất Sổ Cái</span>
+              <ChevronDown
+                size={14}
+                style={{
+                  transform: isExportMenuOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.2s ease',
+                }}
+              />
+            </button>
 
-          <button
-            type="button"
-            onClick={handleExportJson}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: 'var(--dash-primary)',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
-              color: '#FFFFFF',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <FileJson size={14} />
-            <span>Xuất JSON</span>
-          </button>
+            {/* Danh sách định dạng file để chọn */}
+            <div
+              role="menu"
+              aria-label="Danh sách định dạng xuất sổ cái"
+              style={{
+                display: isExportMenuOpen ? 'flex' : 'none',
+                flexDirection: 'column',
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '6px',
+                width: '230px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid var(--dash-border)',
+                borderRadius: 'var(--dash-radius-md)',
+                boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.06)',
+                padding: '6px',
+                zIndex: 50,
+                gap: '2px',
+              }}
+            >
+              <div
+                style={{
+                  padding: '6px 8px 4px 8px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  color: 'var(--dash-text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Chọn Định Dạng File
+              </div>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  handleExportCsv();
+                  setIsExportMenuOpen(false);
+                }}
+                aria-label="Xuất CSV"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  width: '100%',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: 'var(--dash-radius-sm)',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F0FDF4')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    backgroundColor: '#DCFCE7',
+                  }}
+                >
+                  <FileSpreadsheet size={16} color="#059669" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>Xuất CSV</span>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>Bảng tính Excel (.csv)</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  handleExportJson();
+                  setIsExportMenuOpen(false);
+                }}
+                aria-label="Xuất JSON"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  width: '100%',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: 'var(--dash-radius-sm)',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F0F9FF')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    backgroundColor: '#E0F2FE',
+                  }}
+                >
+                  <FileJson size={16} color="#0284C7" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>Xuất JSON</span>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>Cấu trúc đối tượng (.json)</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  handlePrintPdf();
+                  setIsExportMenuOpen(false);
+                }}
+                aria-label="In hoặc Lưu PDF"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  width: '100%',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: 'var(--dash-radius-sm)',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    backgroundColor: '#F1F5F9',
+                  }}
+                >
+                  <Printer size={16} color="#475569" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>In / Lưu PDF</span>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>In hoặc tài liệu PDF A4</span>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

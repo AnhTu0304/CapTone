@@ -166,6 +166,25 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     return navGroups;
   }, [isViewerUser, isDevOpsUser, navGroups]);
 
+  const activeItemPath = React.useMemo(() => {
+    const cleanPath = (currentPath || '').split('?')[0].split('#')[0];
+    const allItems = filteredNavGroups.flatMap((g) => g.items);
+
+    // 1. Exact match has top priority
+    const exact = allItems.find((it) => it.path === cleanPath);
+    if (exact) return exact.path;
+
+    // 2. Longest prefix match with trailing slash (ignoring root '/dashboard')
+    const prefixMatches = allItems.filter(
+      (it) => it.path !== '/dashboard' && cleanPath.startsWith(`${it.path}/`)
+    );
+    if (prefixMatches.length > 0) {
+      prefixMatches.sort((a, b) => b.path.length - a.path.length);
+      return prefixMatches[0].path;
+    }
+    return null;
+  }, [filteredNavGroups, currentPath]);
+
   const handleItemClick = (path) => {
     if (onNavigate) {
       onNavigate(path);
@@ -268,7 +287,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {group.items.map((item, iIdx) => {
                 const Icon = item.icon;
-                const isActive = currentPath === item.path || (item.path !== '/dashboard' && currentPath.startsWith(item.path));
+                const isActive = item.path === activeItemPath;
 
                 return (
                   <button

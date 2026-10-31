@@ -218,7 +218,7 @@ export const WorkloadsPage = () => {
             </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Cụm Kubernetes: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{currentEnv?.name}</span> &bull; Giám sát chu kỳ sống của ứng dụng, số lần restart và phân phối containers theo từng Namespace
+            Giám sát chu kỳ sống của ứng dụng, số lần restart và phân phối containers theo từng Namespace
           </p>
         </div>
 
