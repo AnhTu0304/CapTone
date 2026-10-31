@@ -485,8 +485,11 @@ export const AdminSidebar = ({
     if (normTarget === '/admin/ai/models') {
       return normCurrent.startsWith('/admin/ai');
     }
-    if (normTarget === '/admin/alerts') {
+        if (normTarget === '/admin/alerts') {
       return normCurrent === '/admin/alerts' || normCurrent.startsWith('/admin/incidents');
+    }
+    if (normTarget === '/dashboard/organization') {
+      return normCurrent === '/dashboard/organization';
     }
     return normCurrent === normTarget || normCurrent.startsWith(`${normTarget}/`);
   };

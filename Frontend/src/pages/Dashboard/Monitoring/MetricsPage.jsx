@@ -125,8 +125,7 @@ export const MetricsPage = ({ onNavigate }) => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Chưa chọn Tổ chức'} &bull;{' '}
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Môi trường mặc định'}</span> &bull; Biểu đồ chuỗi thời gian CPU, RAM, Disk &amp; Network I/O (Lightweight Charts)
+            Biểu đồ chuỗi thời gian CPU, RAM, Disk &amp; Network I/O (Lightweight Charts)
           </p>
         </div>
 

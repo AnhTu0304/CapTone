@@ -167,7 +167,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name} &bull; Cụm: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{currentEnv?.name}</span> &bull; Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF
+            Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF
           </p>
         </div>
 

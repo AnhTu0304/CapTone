@@ -390,7 +390,7 @@ export const HealingActionsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Tổ chức: <strong>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Cụm K8s: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm'}</span> &bull; Phân quyền Multi-tenant cách ly nghiêm ngặt
+            Phân quyền Multi-tenant cách ly nghiêm ngặt
           </p>
         </div>
 

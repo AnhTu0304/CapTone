@@ -214,6 +214,36 @@ describe('TASK [S2][PB07] 3.1 — Organization Switcher Suite', () => {
       expect(screen.getByText('TỔ CHỨC')).toBeInTheDocument();
       expect(screen.getByText('Thành viên & Phân quyền')).toBeInTheDocument();
     });
+
+    test('4.3. Only one item is active when navigating between /dashboard/organization and /dashboard/organization/members', () => {
+      localStorage.setItem('selfheal_active_org_role', 'SME_OWNER');
+
+      const { rerender } = render(
+        <DashboardProvider>
+          <Sidebar currentPath="/dashboard/organization/members" />
+        </DashboardProvider>
+      );
+
+      const orgInfoBtn = screen.getByText('Thông tin Tổ chức').closest('button');
+      const membersBtn = screen.getByText('Thành viên & Phân quyền').closest('button');
+
+      // Members must be active
+      expect(membersBtn).toHaveStyle({ backgroundColor: 'var(--dash-primary-light)' });
+      // Org Info must NOT be active
+      expect(orgInfoBtn).toHaveStyle({ backgroundColor: 'transparent' });
+
+      // Rerender on /dashboard/organization
+      rerender(
+        <DashboardProvider>
+          <Sidebar currentPath="/dashboard/organization" />
+        </DashboardProvider>
+      );
+
+      // Org Info must now be active
+      expect(orgInfoBtn).toHaveStyle({ backgroundColor: 'var(--dash-primary-light)' });
+      // Members must NOT be active
+      expect(membersBtn).toHaveStyle({ backgroundColor: 'transparent' });
+    });
   });
 
   describe('5. Dynamic K8s Cluster Synchronization & Zero Mock Data', () => {

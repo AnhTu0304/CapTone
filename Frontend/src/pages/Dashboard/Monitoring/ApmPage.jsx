@@ -306,11 +306,7 @@ export const ApmPage = ({ onNavigate }) => {
                   margin: '4px 0 0 0',
                 }}
               >
-                {currentOrg?.name || 'Tổ chức'} &bull;{' '}
-                <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>
-                  {currentEnv?.name || 'Môi trường'}
-                </span>{' '}
-                &bull; Độ trễ thời gian thực, thông lượng truy vấn &amp; tỷ lệ lỗi ứng dụng
+                Độ trễ thời gian thực, thông lượng truy vấn &amp; tỷ lệ lỗi ứng dụng
               </p>
             </div>
           </div>

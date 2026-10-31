@@ -159,8 +159,7 @@ export const ActionHistoryPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Cụm K8s:{' '}
-            <span style={{ fontWeight: 600, color: 'var(--dash-primary)' }}>{currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm'}</span> &bull; Dữ liệu lưu vết thực tế từ cơ sở dữ liệu
+            Dữ liệu lưu vết thực tế từ cơ sở dữ liệu
           </p>
         </div>
 

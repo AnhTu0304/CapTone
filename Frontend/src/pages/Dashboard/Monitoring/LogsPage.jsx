@@ -486,7 +486,7 @@ export const LogsPage = () => {
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            {currentOrg?.name || 'Tổ chức'} &bull; <span style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Production'}</span> &bull; Thu thập nhật ký container từ DaemonSet eBPF Agent thời gian thực
+            Thu thập nhật ký container từ DaemonSet eBPF Agent thời gian thực
           </p>
         </div>
 
