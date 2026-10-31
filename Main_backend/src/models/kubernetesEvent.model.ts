@@ -241,8 +241,19 @@ export class KubernetesEventModel {
 
     // Filter by Resource Type
     if (options.resourceType && options.resourceType.toUpperCase() !== 'ALL') {
-      conditions.push(`e.resource_type ILIKE $${paramIdx++}`);
-      params.push(options.resourceType.trim());
+      const rType = options.resourceType.trim();
+      if (rType.toLowerCase() === 'deployment') {
+        conditions.push(`(
+          e.resource_type ILIKE ${paramIdx}
+          OR e.reason ILIKE '%Deploy%'
+          OR e.message ILIKE '%Deployment%'
+        )`);
+        params.push(rType);
+        paramIdx++;
+      } else {
+        conditions.push(`e.resource_type ILIKE ${paramIdx++}`);
+        params.push(rType);
+      }
     }
 
     // Filter by Resource UID or Pod/Node

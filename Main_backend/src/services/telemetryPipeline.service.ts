@@ -1,3 +1,4 @@
+import { HitlNotificationService } from './hitlNotification.service';
 import { TelemetryAggregatorService } from './telemetryAggregator.service';
 import { MetricModel } from '../models/metric.model';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
@@ -290,6 +291,21 @@ export class TelemetryPipelineService {
       // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold)
       if (!isAuto || policy.requires_approval || confidence < threshold) {
         console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires HITL approval (Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
+        // Anti-spam deduplication: If there is already a PENDING action for the same target and action type within the last 15 minutes, skip creating duplicates
+        const existingPending = await pool.query(
+          `SELECT id FROM healing_actions 
+           WHERE target_name = $1 
+             AND action_type_id = $2 
+             AND approval_status = 'PENDING' 
+             AND requested_at > NOW() - interval '15 minutes' 
+           LIMIT 1;`,
+          [serviceId, policy.action_type_id]
+        );
+        if (existingPending.rows.length > 0) {
+          console.log(`⏳ [PolicyEngine] '${serviceId}' already has a pending approval (ID: ${existingPending.rows[0].id}). Skipping duplicate pending action.`);
+          return;
+        }
+
         const hitlActInsert = await pool.query(
           `INSERT INTO healing_actions (
             incident_id, recommendation_id, policy_id, environment_id, action_type_id,
@@ -320,14 +336,23 @@ export class TelemetryPipelineService {
         );
         const pendingActionId = hitlActInsert.rows[0]?.id;
         if (pendingActionId) {
+          const hitlReason = confidence < threshold
+            ? `Độ tin cậy chẩn đoán AI (${(confidence * 100).toFixed(0)}%) thấp hơn ngưỡng tự động (${(threshold * 100).toFixed(0)}%) của chính sách ${policy.policy_name}, kích hoạt rào chắn an toàn HITL.`
+            : `Chính sách ${policy.policy_name} (Mức rủi ro: ${effectiveRisk}) yêu cầu phê duyệt con người (HITL) trước khi thực thi ${policy.action_name} trên dịch vụ ${serviceId}.`;
+
           await pool.query(
             `INSERT INTO approvals (healing_action_id, status, reason, requested_at, expires_at)
              VALUES ($1, 'PENDING', $2, NOW(), NOW() + interval '24 hours');`,
             [
               pendingActionId,
-              `Chính sách ${policy.policy_name} (Mức rủi ro: ${effectiveRisk}) yêu cầu phê duyệt con người (HITL) trước khi thực thi ${policy.action_name} trên dịch vụ ${serviceId}.`,
+              hitlReason,
             ]
           );
+
+          // Tự động kích hoạt gửi Email thông báo tới các kỹ sư có quyền
+          HitlNotificationService.notifyApproversForAction(pendingActionId).catch((err) => {
+            console.warn('[TelemetryPipelineService] Gửi email HITL thất bại:', err.message);
+          });
         }
         return;
       }

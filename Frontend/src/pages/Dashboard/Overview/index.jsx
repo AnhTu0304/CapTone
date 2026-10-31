@@ -77,7 +77,6 @@ export const OverviewPage = () => {
     fetchOverviewStats();
   }, [fetchOverviewStats]);
 
-
   // Realtime Telemetry & Live Cluster State
   const [telemetry, setTelemetry] = useState(null);
   const [telemetrySequence, setTelemetrySequence] = useState([]);
@@ -94,12 +93,12 @@ export const OverviewPage = () => {
   const activeChartRequestRef = useRef(0);
 
   // Kiểm tra trạng thái Agent của Cụm Kubernetes đang chọn
-  const isClusterOnline = Boolean(
+  const isClusterOnline = useMemo(() => Boolean(
     currentEnv?.agentStatus === 'ONLINE' ||
     clusterInfo?.status === 'ACTIVE' ||
     clusterInfo?.status === 'HEALTHY' ||
     (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
-  );
+  ), [currentEnv?.agentStatus, clusterInfo?.status, clusterInfo?.nodes]);
 
   // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn với race-condition guard
   const loadClusterTrend = useCallback(async (range) => {

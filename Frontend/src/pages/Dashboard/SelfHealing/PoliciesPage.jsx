@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { selfHealingService } from '../../../services/selfHealingService';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
+import { useToast } from '../../../context/ToastContext';
 import usePermissions from '../../../hooks/usePermissions';
 import NewPolicyModal from './NewPolicyModal';
 import {
@@ -22,11 +23,13 @@ import {
   AlertTriangle,
   Building,
   Server,
-  UserCheck
+  UserCheck,
+  Trash2
 } from 'lucide-react';
 
 export const PoliciesPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
+  const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
   const { user } = useAuth();
   const { role, isOwner, isDevOps, isViewer, canManagePolicies } = usePermissions();
 
@@ -229,7 +232,7 @@ export const PoliciesPage = () => {
 
   const handleSelectAutomationMode = (mode) => {
     if (!canManagePolicies) {
-      alert('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.');
+      toastWarning('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.', 'Quyền Hạn');
       return;
     }
     setGlobalMode(mode);
@@ -251,9 +254,44 @@ export const PoliciesPage = () => {
     setPolicies(updatedList);
   };
 
+  const [deletingPolicyId, setDeletingPolicyId] = useState(null);
+  const [policyToDelete, setPolicyToDelete] = useState(null);
+
+  const handleDeletePolicy = (policy) => {
+    if (!canManagePolicies) {
+      toastWarning("Chỉ SME Owner và DevOps mới có quyền xóa chính sách tự phục hồi.", "Quyền Hạn");
+      return;
+    }
+    setPolicyToDelete(policy);
+  };
+
+  const confirmExecuteDelete = async () => {
+    if (!policyToDelete) return;
+    setDeletingPolicyId(policyToDelete.id);
+    try {
+      await selfHealingService.deletePolicy(policyToDelete.id);
+      setPolicies((prev) => prev.filter((p) => p.id !== policyToDelete.id));
+      try {
+        const savedPoliciesRaw = localStorage.getItem(`selfheal_policies_${clusterKey}`);
+        if (savedPoliciesRaw) {
+          const map = JSON.parse(savedPoliciesRaw);
+          delete map[policyToDelete.id];
+          if (policyToDelete.code) delete map[policyToDelete.code];
+          localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(map));
+        }
+      } catch (e) {}
+      toastSuccess(`Đã xóa thành công quy tắc "${policyToDelete.name}"!`, "Đã Xóa Quy Tắc");
+      setPolicyToDelete(null);
+    } catch (err) {
+      toastError(err?.message || "Lỗi kết nối máy chủ khi xóa chính sách", "Xóa Thất Bại");
+    } finally {
+      setDeletingPolicyId(null);
+    }
+  };
+
   const handleTogglePolicy = (id) => {
     if (!canManagePolicies) {
-      alert('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.');
+      toastWarning('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.', 'Quyền Hạn');
       return;
     }
     const target = policies.find((p) => p.id === id);
@@ -267,7 +305,7 @@ export const PoliciesPage = () => {
 
   const handleToggleHitl = (id) => {
     if (!canManagePolicies) {
-      alert('Chỉ SME Owner và DevOps mới có quyền cấu hình cổng HITL.');
+      toastWarning('Chỉ SME Owner và DevOps mới có quyền cấu hình cổng HITL.', 'Quyền Hạn');
       return;
     }
     const target = policies.find((p) => p.id === id);
@@ -281,7 +319,7 @@ export const PoliciesPage = () => {
 
   const handleSaveSettings = async () => {
     if (!canManagePolicies) {
-      alert('Chỉ SME Owner và DevOps mới có quyền lưu cấu hình ngưỡng an toàn.');
+      toastWarning('Chỉ SME Owner và DevOps mới có quyền lưu cấu hình ngưỡng an toàn.', 'Quyền Hạn');
       return;
     }
 
@@ -333,7 +371,7 @@ export const PoliciesPage = () => {
   const handleAddRule = async (e) => {
     e.preventDefault();
     if (!canManagePolicies) {
-      alert('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.');
+      toastWarning('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.', 'Quyền Hạn');
       return;
     }
     if (!newRule.name || !newRule.condition || !newRule.action) return;
@@ -431,7 +469,7 @@ export const PoliciesPage = () => {
           <button
             onClick={() => {
               if (!canManagePolicies) {
-                alert('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.');
+                toastWarning('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.', 'Quyền Hạn');
                 return;
               }
               setShowAddModal(true);
@@ -810,12 +848,13 @@ export const PoliciesPage = () => {
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Rủi Ro</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Cần Duyệt (HITL)</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Bật / Tắt</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
               {policies.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
+                  <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
                     <ShieldCheck size={40} color="#10B981" style={{ margin: '0 auto 12px auto' }} />
                     <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
                       {isLoading ? 'Đang tải chính sách từ Database...' : 'Chưa có chính sách tự phục hồi nào'}
@@ -1049,6 +1088,34 @@ export const PoliciesPage = () => {
                         </span>
                       </div>
                     </td>
+                    <td style={{ padding: "14px 16px", verticalAlign: "top", textAlign: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePolicy(p)}
+                        disabled={!canManagePolicies || deletingPolicyId === p.id}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          border: "1px solid #FECACA",
+                          backgroundColor: "#FEF2F2",
+                          color: "#DC2626",
+                          cursor: canManagePolicies ? "pointer" : "not-allowed",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          transition: "all 0.15s ease",
+                          opacity: !canManagePolicies ? 0.5 : 1,
+                        }}
+                        onMouseEnter={(e) => { if (canManagePolicies) e.currentTarget.style.backgroundColor = "#FEE2E2"; }}
+                        onMouseLeave={(e) => { if (canManagePolicies) e.currentTarget.style.backgroundColor = "#FEF2F2"; }}
+                        title={!canManagePolicies ? "Chỉ SME Owner và DevOps mới có quyền xóa quy tắc" : "Xóa vĩnh viễn quy tắc này"}
+                      >
+                        <Trash2 size={13} />
+                        <span>{deletingPolicyId === p.id ? "Đang xóa..." : "Xóa"}</span>
+                      </button>
+                    </td>
                   </tr>
                 );
               }))}
@@ -1065,6 +1132,158 @@ export const PoliciesPage = () => {
         currentOrg={currentOrg}
         currentEnv={currentEnv}
       />
+
+      {/* Modal Xác Nhận Xóa Quy Tắc (Custom In-App Confirm Dialog) */}
+      {policyToDelete && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            zIndex: 1050,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={() => !deletingPolicyId && setPolicyToDelete(null)}
+        >
+          <div
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              maxWidth: "490px",
+              width: "100%",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid #E2E8F0",
+              overflow: "hidden",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: "20px 24px 14px 24px", display: "flex", alignItems: "flex-start", gap: "14px" }}>
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "12px",
+                  backgroundColor: "#FEE2E2",
+                  border: "1px solid #FECACA",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#DC2626",
+                  flexShrink: 0,
+                }}
+              >
+                <Trash2 size={22} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 800, color: "#0F172A" }}>
+                  Xác nhận xóa quy tắc tự phục hồi
+                </h3>
+                <p style={{ margin: "6px 0 0 0", fontSize: "0.84375rem", color: "#64748B", lineHeight: 1.5 }}>
+                  Bạn có chắc chắn muốn xóa quy tắc <strong style={{ color: "#0F172A" }}>"{policyToDelete.name}"</strong> (<code style={{ color: "#0284C7", fontWeight: 700 }}>{policyToDelete.code || policyToDelete.id?.slice(0, 8)}</code>) không?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPolicyToDelete(null)}
+                disabled={!!deletingPolicyId}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#94A3B8",
+                  cursor: "pointer",
+                  padding: "4px",
+                  borderRadius: "6px",
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Warning Box */}
+            <div style={{ padding: "0 24px 18px 24px" }}>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  backgroundColor: "#FEF2F2",
+                  border: "1px solid #FECACA",
+                  borderLeft: "4px solid #DC2626",
+                  fontSize: "0.8125rem",
+                  color: "#991B1B",
+                  lineHeight: 1.5,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px",
+                }}
+              >
+                <AlertTriangle size={16} color="#DC2626" style={{ flexShrink: 0, marginTop: "2px" }} />
+                <span>
+                  <strong>Cảnh báo an toàn:</strong> Sau khi xóa, AI sẽ dừng kích hoạt hành động này trên cụm Kubernetes. Hành động này không thể hoàn tác.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div
+              style={{
+                padding: "14px 24px",
+                backgroundColor: "#F8FAFC",
+                borderTop: "1px solid #E2E8F0",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setPolicyToDelete(null)}
+                disabled={!!deletingPolicyId}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid #CBD5E1",
+                  backgroundColor: "#FFFFFF",
+                  color: "#475569",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Hủy bỏ
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmExecuteDelete}
+                disabled={!!deletingPolicyId}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "1px solid #DC2626",
+                  backgroundColor: "#DC2626",
+                  color: "#FFFFFF",
+                  fontSize: "0.8125rem",
+                  fontWeight: 700,
+                  cursor: deletingPolicyId ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 4px rgba(220, 38, 38, 0.25)",
+                }}
+              >
+                <Trash2 size={14} />
+                <span>{deletingPolicyId ? "Đang xóa..." : "Xác nhận xóa"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

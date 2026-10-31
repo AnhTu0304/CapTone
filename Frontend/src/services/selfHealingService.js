@@ -18,6 +18,8 @@ export const selfHealingService = {
       if (params.limit) search.append('limit', String(params.limit));
       if (params.offset) search.append('offset', String(params.offset));
       if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      if (params.search) search.append('search', params.search);
+      if (params.target && !params.search) search.append('search', params.target);
       if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
       if (params.risk_level && params.risk_level !== 'all') search.append('risk_level', params.risk_level);
       if (params.execution_mode && params.execution_mode !== 'all') search.append('execution_mode', params.execution_mode);
@@ -149,6 +151,16 @@ export const selfHealingService = {
    * 7b. Tạo mới chính sách tự phục hồi
    * POST /api/v1/healing/policies
    */
+  /**
+   * 7c. Xóa chính sách tự phục hồi
+   * DELETE /api/v1/healing/policies/:id
+   */
+  async deletePolicy(id) {
+    return await request(`/healing/policies/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   async createPolicy(data) {
     return await request('/healing/policies', {
       method: 'POST',
@@ -197,6 +209,16 @@ export const selfHealingService = {
     return await request(`/healing/actions/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
+    });
+  },
+
+  /**
+   * Gửi lại email thông báo phê duyệt tới các kỹ sư có quyền
+   * POST /api/v1/healing/actions/:id/notify
+   */
+  async resendNotification(id) {
+    return await request(`/healing/actions/${id}/notify`, {
+      method: 'POST',
     });
   },
 

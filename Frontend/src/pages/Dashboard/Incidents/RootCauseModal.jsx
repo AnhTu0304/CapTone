@@ -963,10 +963,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              <GitBranch size={20} color="#A7F3D0" />
+              <GitBranch size={16} color="#A7F3D0" />
             </div>
             <div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '0.9125rem', fontWeight: 800, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '8px', lineHeight: 1.2 }}>
                 <span>Chi Tiết Sự Cố &amp; Phân Tích Nguyên Nhân Gốc Rễ (RCA)</span>
                 <span
                   style={{
@@ -982,7 +982,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   {incidentIdStr}
                 </span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#D1FAE5', marginTop: '2px', fontWeight: 500 }}>
+              <div style={{ fontSize: '0.6875rem', color: '#D1FAE5', marginTop: '1px', fontWeight: 500 }}>
                 Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{serviceDisplayName}</strong> &bull; Cụm K8s:{' '}
                 <strong style={{ color: '#FFFFFF' }}>{incidentDetail?.cluster_name || incident.cluster || 'k8s-cluster'}</strong> &bull; Độ tin cậy:{' '}
                 <span
@@ -1017,7 +1017,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
               transition: 'all 0.15s ease',
             }}
           >
-            <X size={18} />
+            <X size={15} />
           </button>
         </div>
 
@@ -1102,7 +1102,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto' }}>
+        <div style={{ padding: '10px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', flex: '1 1 auto' }}>
           {isLoadingDetail && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '6px 12px', borderRadius: '6px', border: '1px solid #A7F3D0' }}>
               <RefreshCw size={12} className="animate-spin" />
@@ -1125,7 +1125,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: isResolved ? '#166534' : isUnknownOrNoAction ? '#334155' : '#991B1B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: isResolved ? '#166534' : isUnknownOrNoAction ? '#334155' : '#991B1B', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <Sparkles size={15} />
                     <span>3. KẾT LUẬN NGUYÊN NHÂN GỐC RỄ (ROOT CAUSE ANALYSIS)</span>
                   </div>
@@ -1159,7 +1159,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   </div>
                 </div>
 
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: isResolved ? '#15803D' : isUnknownOrNoAction ? '#334155' : '#B91C1C', marginBottom: '8px', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.875rem', color: isResolved ? '#15803D' : isUnknownOrNoAction ? '#334155' : '#B91C1C', marginBottom: '4px', fontFamily: 'var(--font-mono)' }}>
                   {rootCauseTypeVi}
                 </div>
 
@@ -1219,7 +1219,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.78125rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontSize: '0.71875rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <FileText size={15} color="#059669" />
                     <span>6. GIẢI TRÌNH CHI TIẾT BÁO CÁO SỰ CỐ (SRE INCIDENT REPORT)</span>
                   </div>
@@ -1271,9 +1271,9 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
                   <div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <Zap size={16} color="#059669" />
                       <span>5. ĐỀ XUẤT HÀNH ĐỘNG: {recActionVi}</span>
                       <span style={{ fontSize: '0.6875rem', backgroundColor: '#FEF2F2', color: '#B91C1C', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FECACA', fontWeight: 700 }}>
@@ -1288,7 +1288,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.8125rem', color: '#334155', marginTop: '6px', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '2px', lineHeight: 1.35 }}>
                       {recReasonVi}
                     </div>
                   </div>
@@ -1380,14 +1380,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 </div>
 
                 {/* BẢNG THAM SỐ KỸ THUẬT CHI TIẾT (ACTION PARAMETERS GRID) */}
-                <div style={{ marginTop: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1E40AF', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ marginTop: '6px', borderTop: '1px solid #E2E8F0', paddingTop: '6px' }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#1E40AF', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Sliders size={13} color="#2563EB" />
                     <span>THAM SỐ KỸ THUẬT ĐIỀU PHỐI (ACTION PARAMETERS):</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '8px' }}>
-                    <div style={{ padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>POD LỖI (TARGET POD)</div>
                       <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
                         {faultyPodName}
@@ -1397,7 +1397,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                       </div>
                     </div>
 
-                    <div style={{ padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE &amp; VAI TRÒ REPLICA SET</div>
                       <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>{faultyNodeName}</span>
@@ -1410,7 +1410,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                       </div>
                     </div>
 
-                    <div style={{ padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE AN TOÀN DỰ PHÒNG</div>
                       <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669', fontFamily: 'var(--font-mono)' }}>
                         {recDestNodeName}
@@ -1509,30 +1509,36 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                       7. LIÊN KẾT TRI THỨC LỊCH SỬ (KNOWLEDGE BASE RETRIEVAL)
                     </div>
                     <div style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                      Đối soát sự cố tương đồng từ vector database: <strong style={{ color: '#059669' }}>{historicalContextUsed ? 'KÍCH HOẠT (ACTIVE)' : 'KHÔNG'}</strong>
+                      Đối soát sự cố tương đồng từ vector database: <strong style={{ color: historicalContextUsed ? '#059669' : '#64748B' }}>{historicalContextUsed ? 'KÍCH HOẠT (ACTIVE)' : 'KHÔNG (Chẩn đoán độc lập từ tín hiệu trực tiếp)'}</strong>
                     </div>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>Sự cố đối chiếu:</span>
-                  {similarIncidentIds.map((simId, idx) => (
-                    <span
-                      key={idx}
-                      style={{
-                        padding: '3px 8px',
-                        backgroundColor: '#EEF2FF',
-                        color: '#4F46E5',
-                        border: '1px solid #C7D2FE',
-                        borderRadius: '4px',
-                        fontSize: '0.6875rem',
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {simId}
+                  {similarIncidentIds && similarIncidentIds.length > 0 ? (
+                    similarIncidentIds.map((simId, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          padding: '2px 6px',
+                          backgroundColor: '#EEF2FF',
+                          color: '#4F46E5',
+                          border: '1px solid #C7D2FE',
+                          borderRadius: '4px',
+                          fontSize: '0.65rem',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {simId}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontStyle: 'italic' }}>
+                      Không có tiền lệ tương tự (Sự cố mới xuất hiện)
                     </span>
-                  ))}
+                  )}
                 </div>
               </div>
             </>
@@ -1625,7 +1631,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                             #{idx + 1}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#1E293B', lineHeight: 1.5 }}>
+                        <div style={{ fontSize: '0.7rem', color: '#1E293B', lineHeight: 1.35 }}>
                           {meta.desc}
                         </div>
                       </div>
@@ -1763,7 +1769,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   </span>
                 </div>
 
-                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {/* Tóm tắt các rủi ro vượt ngưỡng */}
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
@@ -1883,7 +1889,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {metricSummary && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#15803D', textTransform: 'uppercase' }}>CPU (%)</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.cpu.current}%
@@ -1891,7 +1897,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         <div style={{ fontSize: '0.625rem', color: '#166534' }}>Max: {metricSummary.cpu.max}%</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#EFF6FF', border: '1px solid #DBEAFE' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#EFF6FF', border: '1px solid #DBEAFE' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>RAM (%)</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.ram.current}%
@@ -1899,7 +1905,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         <div style={{ fontSize: '0.625rem', color: '#1E40AF' }}>Max: {metricSummary.ram.max}%</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase' }}>DISK (%)</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.disk.current}%
@@ -1907,7 +1913,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         <div style={{ fontSize: '0.625rem', color: '#92400E' }}>Max: {metricSummary.disk.max}%</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#F5F3FF', border: '1px solid #EDE9FE' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#F5F3FF', border: '1px solid #EDE9FE' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#6D28D9', textTransform: 'uppercase' }}>ĐỘ TRỄ (MS)</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.latency.current} ms
@@ -1915,7 +1921,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         <div style={{ fontSize: '0.625rem', color: '#5B21B6' }}>Max: {metricSummary.latency.max} ms</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#0E7490', textTransform: 'uppercase' }}>REQ RATE</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.request_rate.current} <span style={{ fontSize: '0.6875rem' }}>req/s</span>
@@ -1931,7 +1937,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         <div style={{ fontSize: '0.625rem', color: '#B91C1C' }}>Đỉnh: {metricSummary.http_5xx_rate.max}%</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#FDF2F8', border: '1px solid #FCE7F3' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#FDF2F8', border: '1px solid #FCE7F3' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#BE185D', textTransform: 'uppercase' }}>RESTARTS</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.pod_restart_count}
@@ -1939,7 +1945,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         <div style={{ fontSize: '0.625rem', color: '#9D174D' }}>K8s Restarts</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: '#EEF2FF', border: '1px solid #E0E7FF' }}>
+                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#EEF2FF', border: '1px solid #E0E7FF' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#4338CA', textTransform: 'uppercase' }}>REPLICAS</div>
                         <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           {metricSummary.replica_count}
@@ -1955,16 +1961,16 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'center' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
-                            <th style={{ padding: '6px 8px' }}>Mốc</th>
-                            <th style={{ padding: '6px 8px' }}>Thời Điểm</th>
-                            <th style={{ padding: '6px 8px' }}>CPU (%)</th>
-                            <th style={{ padding: '6px 8px' }}>RAM (%)</th>
-                            <th style={{ padding: '6px 8px' }}>Disk (%)</th>
-                            <th style={{ padding: '6px 8px' }}>Req Rate</th>
-                            <th style={{ padding: '6px 8px' }}>Độ Trễ</th>
-                            <th style={{ padding: '6px 8px' }}>5xx (%)</th>
-                            <th style={{ padding: '6px 8px' }}>Restarts</th>
-                            <th style={{ padding: '6px 8px' }}>Replicas</th>
+                            <th style={{ padding: '3px 5px' }}>Mốc</th>
+                            <th style={{ padding: '3px 5px' }}>Thời Điểm</th>
+                            <th style={{ padding: '3px 5px' }}>CPU (%)</th>
+                            <th style={{ padding: '3px 5px' }}>RAM (%)</th>
+                            <th style={{ padding: '3px 5px' }}>Disk (%)</th>
+                            <th style={{ padding: '3px 5px' }}>Req Rate</th>
+                            <th style={{ padding: '3px 5px' }}>Độ Trễ</th>
+                            <th style={{ padding: '3px 5px' }}>5xx (%)</th>
+                            <th style={{ padding: '3px 5px' }}>Restarts</th>
+                            <th style={{ padding: '3px 5px' }}>Replicas</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1977,18 +1983,18 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                                 fontFamily: 'var(--font-mono)',
                               }}
                             >
-                              <td style={{ padding: '6px 8px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
+                              <td style={{ padding: '3px 5px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
                                 {row.stepLabel}
                               </td>
-                              <td style={{ padding: '6px 8px', color: '#64748B' }}>{row.displayTime || '-'}</td>
-                              <td style={{ padding: '6px 8px', color: row.cpu > 70 ? '#DC2626' : '#10B981', fontWeight: row.cpu > 70 ? 700 : 400 }}>{row.cpu}%</td>
-                              <td style={{ padding: '6px 8px', color: '#3B82F6' }}>{row.ram}%</td>
-                              <td style={{ padding: '6px 8px', color: '#F59E0B' }}>{row.disk}%</td>
-                              <td style={{ padding: '6px 8px', color: '#06B6D4' }}>{row.request_rate}</td>
-                              <td style={{ padding: '6px 8px', color: row.latency > 100 ? '#D97706' : '#8B5CF6' }}>{row.latency} ms</td>
-                              <td style={{ padding: '6px 8px', color: row.http_5xx_rate > 0 ? '#DC2626' : '#64748B' }}>{row.http_5xx_rate}%</td>
-                              <td style={{ padding: '6px 8px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>{row.pod_restart_count}</td>
-                              <td style={{ padding: '6px 8px', color: '#4338CA' }}>{row.replica_count}</td>
+                              <td style={{ padding: '3px 5px', color: '#64748B' }}>{row.displayTime || '-'}</td>
+                              <td style={{ padding: '3px 5px', color: row.cpu > 70 ? '#DC2626' : '#10B981', fontWeight: row.cpu > 70 ? 700 : 400 }}>{row.cpu}%</td>
+                              <td style={{ padding: '3px 5px', color: '#3B82F6' }}>{row.ram}%</td>
+                              <td style={{ padding: '3px 5px', color: '#F59E0B' }}>{row.disk}%</td>
+                              <td style={{ padding: '3px 5px', color: '#06B6D4' }}>{row.request_rate}</td>
+                              <td style={{ padding: '3px 5px', color: row.latency > 100 ? '#D97706' : '#8B5CF6' }}>{row.latency} ms</td>
+                              <td style={{ padding: '3px 5px', color: row.http_5xx_rate > 0 ? '#DC2626' : '#64748B' }}>{row.http_5xx_rate}%</td>
+                              <td style={{ padding: '3px 5px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>{row.pod_restart_count}</td>
+                              <td style={{ padding: '3px 5px', color: '#4338CA' }}>{row.replica_count}</td>
                             </tr>
                           ))}
                         </tbody>

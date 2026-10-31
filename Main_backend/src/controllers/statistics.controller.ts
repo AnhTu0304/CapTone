@@ -11,7 +11,7 @@ export class StatisticsController {
     try {
       const parsed = overviewStatisticsQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        const issues = parsed.error.issues || parsed.error.errors || [];
+        const issues = parsed.error.issues || [];
         return res.status(400).json({
           success: false,
           message: 'Tham số truy vấn thống kê không hợp lệ',

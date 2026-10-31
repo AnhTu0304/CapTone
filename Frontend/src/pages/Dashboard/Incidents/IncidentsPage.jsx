@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { aiService } from '../../../services/aiService';
 import { clusterService } from '../../../services/clusterService';
@@ -14,14 +14,36 @@ import {
   Eye,
   Database,
   ShieldCheck,
-  Server,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 
 const INITIAL_INCIDENTS = [];
+
+// Helper lấy chuỗi ngày tháng năm theo giờ địa phương
+const getTodayStr = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getThisMonthStr = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+};
+
+const getThisYearStr = () => {
+  return String(new Date().getFullYear());
+};
+
 
 const formatRelativeTime = (dateStr) => {
   if (!dateStr) return 'Vừa xong';
@@ -104,22 +126,91 @@ const VALID_RISKS = new Set([
   'SCALE_DOWN_CANDIDATE',
 ]);
 
-const mapBackendIncidentToUI = (item) => {
+// Danh sách các workload kinh doanh chuẩn của hệ thống
+const KNOWN_SERVICES = [
+  'attack-injector-app',
+  'chaos-testagent2',
+  'ecommerce-store-app',
+  'mongodb-init',
+  'mongodb',
+  'selfheal-test-app',
+  'sme-order-service',
+];
+
+const cleanServiceName = (raw) => {
+  if (!raw || typeof raw !== 'string') return null;
+  let s = raw.trim();
+  s = s.replace(/^dịch vụ\s+/i, '').replace(/^service\s+/i, '').replace(/^pod[\/:]\s*/i, '');
+  s = s.replace(/['".,;:)]+$/, '').replace(/^['"(]+/, '').trim();
+  if (KNOWN_SERVICES.includes(s.toLowerCase())) {
+    return s.toLowerCase();
+  }
+  // Loại bỏ các câu văn mô tả dài hoặc chứa khoảng trắng
+  if (/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,40}$/.test(s)) {
+    // Không nhận chuỗi UUID làm tên dịch vụ hiển thị
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+      return null;
+    }
+    return s;
+  }
+  return null;
+};
+
+const resolveServiceName = (item, registeredWorkloads = []) => {
+  // 1. Kiểm tra trường do Backend cung cấp
+  const candidate = item.service_name || item.workload_name || item.target_name || item.service;
+  const cleaned = cleanServiceName(candidate);
+  if (cleaned) return cleaned;
+
+  // 2. Tra cứu qua registeredWorkloads nếu item.target_id khớp id hoặc name
+  if (item.target_id && Array.isArray(registeredWorkloads)) {
+    const matched = registeredWorkloads.find(
+      (w) => (w?.id && w.id === item.target_id) || (w?.name && w.name === item.target_id)
+    );
+    if (matched?.name) {
+      const c = cleanServiceName(matched.name);
+      if (c) return c;
+    }
+  }
+
+  // 3. Quét tiêu đề với danh sách KNOWN_SERVICES (ưu tiên từ khoá sau 'trên' hoặc 'on')
+  const title = item.title || '';
+  for (const kw of KNOWN_SERVICES) {
+    const targetRegex = new RegExp('(?:trên|on)\\s+(?:dịch vụ\\s+)?' + kw + '(?![a-zA-Z0-9_-])', 'i');
+    if (targetRegex.test(title)) {
+      return kw;
+    }
+  }
+  for (const kw of KNOWN_SERVICES) {
+    if (title.toLowerCase().includes(kw)) {
+      return kw;
+    }
+  }
+
+  // 4. Fallback tìm token cuối cùng sau 'trên' hoặc 'on'
+  const regex = /(?:trên|on)\s+(?:dịch vụ\s+)?([a-zA-Z0-9_-]+)/gi;
+  let match;
+  let lastFound = null;
+  while ((match = regex.exec(title)) !== null) {
+    const word = match[1];
+    if (word && !['pod', 'dịch', 'các', 'nhiều', 'hệ'].includes(word.toLowerCase())) {
+      lastFound = word;
+    }
+  }
+  if (lastFound) {
+    const c = cleanServiceName(lastFound);
+    if (c) return c;
+  }
+
+  return 'ứng dụng hệ thống';
+};
+
+const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const shortId = item.id.length > 12 ? `INC-${item.id.slice(0, 8).toUpperCase()}` : item.id;
   const isResolved = item.status === 'RESOLVED';
   const isRecovering = item.status === 'INVESTIGATING';
 
-  let serviceName = item.target_id;
-  if (!serviceName && item.title) {
-    if (item.title.includes(' trên ')) {
-      serviceName = item.title.split(' trên ')[1].trim();
-    } else if (item.title.includes(' on ')) {
-      serviceName = item.title.split(' on ')[1].trim();
-    }
-  }
-  if (!serviceName) {
-    serviceName = 'ứng dụng hệ thống';
-  }
+  const serviceName = resolveServiceName(item, registeredWorkloads);
 
   // Phân tích kết quả RCA lưu trong DB (nếu có)
   let rcaParsed = null;
@@ -234,24 +325,57 @@ export const IncidentsPage = ({ onNavigate }) => {
     }
   }, [currentEnv?.cluster, currentEnv?.clusterId]);
 
-  // Xử lý khi người dùng chọn cụm trên bộ lọc trong trang (đồng bộ ngược lên Header)
-  const handleSelectCluster = (clusterNameOrId) => {
-    setSelectedCluster(clusterNameOrId);
-    setSelectedService('all');
-    setIncidents([]);
-    if (clusterNameOrId !== 'all') {
-      const match = envList?.find(
-        (e) => e.cluster === clusterNameOrId || e.id === clusterNameOrId || e.clusterId === clusterNameOrId
-      );
-      if (match && setCurrentEnv) {
-        setCurrentEnv(match);
-      }
-    }
-  };
   const [selectedSeverity, setSelectedSeverity] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedService, setSelectedService] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Bộ lọc thời gian: mặc định là 'today' (ngày hôm nay) theo yêu cầu người dùng
+  const [timeFilterMode, setTimeFilterMode] = useState('today'); // 'today' | 'date' | 'month' | 'year' | 'all'
+  const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
+  const [selectedMonth, setSelectedMonth] = useState(() => getThisMonthStr());
+  const [selectedYear, setSelectedYear] = useState(() => getThisYearStr());
+  
+  // Trạng thái mở Popover Lịch
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const calendarRef = useRef(null);
+
+  // Đóng Popover Lịch khi bấm ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target)) {
+        setIsCalendarOpen(false);
+      }
+    };
+    if (isCalendarOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCalendarOpen]);
+
+  // Nhãn hiển thị trực quan trên nút Lịch
+  const currentFilterLabel = useMemo(() => {
+    if (timeFilterMode === 'today') {
+      const parts = getTodayStr().split('-');
+      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
+    }
+    if (timeFilterMode === 'date') {
+      if (!selectedDate) return 'Chọn ngày';
+      const parts = selectedDate.split('-');
+      return `Ngày ${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    if (timeFilterMode === 'month') {
+      if (!selectedMonth) return 'Chọn tháng';
+      const parts = selectedMonth.split('-');
+      return `Tháng ${parts[1]}/${parts[0]}`;
+    }
+    if (timeFilterMode === 'year') {
+      return `Năm ${selectedYear}`;
+    }
+    return 'Tất cả thời gian';
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
   
   // Trạng thái phân trang (Pagination)
   const [page, setPage] = useState(1);
@@ -260,7 +384,7 @@ export const IncidentsPage = ({ onNavigate }) => {
   // Tự động chuyển về trang 1 khi thay đổi bất kỳ bộ lọc nào
   useEffect(() => {
     setPage(1);
-  }, [selectedCluster, selectedSeverity, selectedStatus, selectedService, searchQuery]);
+  }, [selectedCluster, selectedSeverity, selectedStatus, selectedService, searchQuery, timeFilterMode, selectedDate, selectedMonth, selectedYear]);
 
   const [incidents, setIncidents] = useState([]);
   const [clusterList, setClusterList] = useState([]);
@@ -302,7 +426,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       const activeOrgId = currentOrg?.id;
 
       const params = {
-        limit: 50,
+        limit: 2000,
         cluster_id: selectedCluster === 'all' ? undefined : selectedCluster,
         organization_id: activeOrgId,
         status: selectedStatus,
@@ -313,7 +437,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       const res = await aiService.getIncidents(params);
       const items = res?.items || (Array.isArray(res) ? res : []);
 
-      setIncidents(items.map(mapBackendIncidentToUI));
+      setIncidents(items.map((it) => mapBackendIncidentToUI(it, registeredWorkloads)));
       setIsUsingLiveDb(true);
     } catch (err) {
       console.warn('[IncidentsPage] Không thể kết nối API sự cố:', err.message);
@@ -416,13 +540,17 @@ export const IncidentsPage = ({ onNavigate }) => {
     });
 
     clusterIncidents.forEach((i) => {
-      if (i.service) {
-        counts[i.service] = (counts[i.service] || 0) + 1;
+      if (i.service && i.service !== 'ứng dụng hệ thống') {
+        const cleaned = cleanServiceName(i.service);
+        if (cleaned) {
+          counts[cleaned] = (counts[cleaned] || 0) + 1;
+        }
       }
     });
 
     const rawWorkloadNames = (registeredWorkloads || [])
       .map((w) => (typeof w === 'string' ? w : (w?.name || '')))
+      .map(cleanServiceName)
       .filter(Boolean);
 
     const allServiceNames = new Set([
@@ -430,15 +558,34 @@ export const IncidentsPage = ({ onNavigate }) => {
       ...rawWorkloadNames,
     ]);
 
+    // Các dịch vụ hạ tầng / agent hệ thống không phải ứng dụng nghiệp vụ
+    const SYSTEM_IGNORED = new Set([
+      'coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-apiserver-minikube',
+      'kube-controller', 'kube-controller-manager-minikube', 'kube-scheduler-minikube',
+      'metrics-server', 'selfheal-agent', 'storage-provisioner', 'order-service'
+    ]);
+
     return Array.from(allServiceNames)
-      .map((s) => (typeof s === 'string' ? s : (s?.name || '')))
-      .filter((s) => typeof s === 'string' && s && s !== 'selfheal-agent' && !s.includes('-0000-') && s !== 'order-service')
+      .filter((s) => s && !SYSTEM_IGNORED.has(s) && !s.includes('-0000-'))
       .map((name) => ({
         name,
         count: counts[name] || 0,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [incidents, registeredWorkloads, selectedCluster]);
+
+  // Danh sách các năm có sự cố
+  const availableYears = useMemo(() => {
+    const currentY = getThisYearStr();
+    const years = new Set([currentY, '2026', '2025']);
+    incidents.forEach((inc) => {
+      if (inc.detectedAt) {
+        const y = new Date(inc.detectedAt).getFullYear();
+        if (!isNaN(y)) years.add(String(y));
+      }
+    });
+    return Array.from(years).sort().reverse();
+  }, [incidents]);
 
   // Thống kê nhanh
   const stats = useMemo(() => {
@@ -696,34 +843,377 @@ export const IncidentsPage = ({ onNavigate }) => {
         }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
-          {/* Cluster Select */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Server size={13} color="#2563EB" /> Cụm K8s:
-            </span>
-            <select
-              value={selectedCluster}
-              onChange={(e) => handleSelectCluster(e.target.value)}
+          {/* Bộ Lọc Ngày / Tháng / Năm Đẹp Mắt */}
+          {/* Nút 1: Chọn ngày là đầu tiên (Nút Hôm Nay) */}
+          <button
+            type="button"
+            onClick={() => {
+              setTimeFilterMode('today');
+              setSelectedDate(getTodayStr());
+              setIsCalendarOpen(false);
+            }}
+            style={{
+              height: '32px',
+              padding: '0 12px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              borderRadius: '6px',
+              border: timeFilterMode === 'today' ? '1px solid #10B981' : '1px solid var(--dash-border)',
+              backgroundColor: timeFilterMode === 'today' ? 'rgba(16, 185, 129, 0.12)' : '#F8FAFC',
+              color: timeFilterMode === 'today' ? '#047857' : 'var(--dash-text-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: timeFilterMode === 'today' ? '0 1px 2px rgba(16, 185, 129, 0.15)' : 'none',
+            }}
+            title="Lọc nhanh toàn bộ sự cố phát sinh trong ngày hôm nay"
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: timeFilterMode === 'today' ? '#10B981' : '#94A3B8',
+                boxShadow: timeFilterMode === 'today' ? '0 0 6px #10B981' : 'none',
+              }}
+            />
+            Hôm nay
+          </button>
+
+          {/* Nút 2: Logo Lịch bên cạnh mở Popover chọn Ngày, Tháng, Năm */}
+          <div style={{ position: 'relative' }} ref={calendarRef}>
+            <button
+              type="button"
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
               style={{
                 height: '32px',
-                padding: '0 8px',
+                padding: '0 10px',
                 fontSize: '0.75rem',
                 fontWeight: 600,
-                border: '1px solid #BFDBFE',
                 borderRadius: '6px',
-                backgroundColor: '#EFF6FF',
-                color: '#1E40AF',
-                outline: 'none',
+                border: isCalendarOpen || timeFilterMode !== 'today' ? '1px solid #3B82F6' : '1px solid var(--dash-border)',
+                backgroundColor: timeFilterMode !== 'today' ? '#EFF6FF' : '#FFFFFF',
+                color: timeFilterMode !== 'today' ? '#1D4ED8' : 'var(--dash-text-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
                 cursor: 'pointer',
+                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none',
+                transition: 'all 0.15s ease',
               }}
+              title="Mở bảng lịch chọn ngày, tháng hoặc năm"
             >
-              <option value="all">Tất cả cụm K8s ({availableClusters.length})</option>
-              {availableClusters.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              <Calendar size={14} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-primary)'} />
+              <span>{currentFilterLabel}</span>
+              <ChevronDown size={12} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-text-secondary)'} />
+            </button>
+
+            {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
+            {isCalendarOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '38px',
+                  left: '0',
+                  zIndex: 100,
+                  width: '330px',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                {/* Tabs Chế Độ: Ngày | Tháng | Năm | Tất Cả */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFilterMode('date')}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📅 Ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFilterMode('month')}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'month' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'month' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🗓️ Tháng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFilterMode('year')}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'year' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'year' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📆 Năm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeFilterMode('all');
+                      setIsCalendarOpen(false);
+                    }}
+                    style={{
+                      padding: '6px 2px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: timeFilterMode === 'all' ? '#FFFFFF' : 'transparent',
+                      color: timeFilterMode === 'all' ? '#0F172A' : '#64748B',
+                      boxShadow: timeFilterMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🌐 Tất cả
+                  </button>
+                </div>
+
+                {/* Tab Body: CHỌN NGÀY */}
+                {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                      Chọn ngày cụ thể:
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setTimeFilterMode('date');
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        padding: '0 10px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        backgroundColor: '#F8FAFC',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+
+                    {/* Quick presets for days with incidents */}
+                    <div style={{ marginTop: '10px' }}>
+                      <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
+                        Ngày có sự cố gần đây:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {['2026-10-31', '2026-10-30', '2026-10-29', '2026-10-28', '2026-10-27'].map((dStr) => {
+                          const dParts = dStr.split('-');
+                          const isToday = dStr === getTodayStr();
+                          const isSelected = (timeFilterMode === 'today' && isToday) || (timeFilterMode === 'date' && selectedDate === dStr);
+                          return (
+                            <button
+                              key={dStr}
+                              type="button"
+                              onClick={() => {
+                                if (isToday) {
+                                  setTimeFilterMode('today');
+                                } else {
+                                  setTimeFilterMode('date');
+                                }
+                                setSelectedDate(dStr);
+                                setIsCalendarOpen(false);
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '0.6875rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                borderRadius: '4px',
+                                border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                                backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                                color: isSelected ? '#047857' : '#334155',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Body: CHỌN THÁNG */}
+                {timeFilterMode === 'month' && (
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                      Chọn tháng & năm:
+                    </label>
+                    <input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '36px',
+                        padding: '0 10px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '6px',
+                        backgroundColor: '#F8FAFC',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        marginBottom: '10px',
+                      }}
+                    />
+
+                    {/* 12 Months grid */}
+                    <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
+                      Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
+                        const mStr = `${selectedMonth?.split('-')[0] || '2026'}-${String(mNum).padStart(2, '0')}`;
+                        const isSelected = selectedMonth === mStr;
+                        return (
+                          <button
+                            key={mNum}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMonth(mStr);
+                              setIsCalendarOpen(false);
+                            }}
+                            style={{
+                              padding: '6px 2px',
+                              fontSize: '0.6875rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              borderRadius: '4px',
+                              border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
+                              color: isSelected ? '#1D4ED8' : '#334155',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                            }}
+                          >
+                            Tháng {mNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Body: CHỌN NĂM */}
+                {timeFilterMode === 'year' && (
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
+                      Chọn năm khảo sát:
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                      {availableYears.map((yr) => {
+                        const isSelected = selectedYear === yr;
+                        return (
+                          <button
+                            key={yr}
+                            type="button"
+                            onClick={() => {
+                              setSelectedYear(yr);
+                              setIsCalendarOpen(false);
+                            }}
+                            style={{
+                              padding: '10px 4px',
+                              fontSize: '0.8125rem',
+                              fontWeight: isSelected ? 700 : 600,
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #7C3AED' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#F5F3FF' : '#F8FAFC',
+                              color: isSelected ? '#6D28D9' : '#334155',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                            }}
+                          >
+                            Năm {yr}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Popover Footer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeFilterMode('today');
+                      setSelectedDate(getTodayStr());
+                      setIsCalendarOpen(false);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '0.7rem',
+                      color: '#10B981',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    Về hôm nay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCalendarOpen(false)}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      backgroundColor: '#0F172A',
+                      color: '#FFFFFF',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Áp dụng
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Severity Select */}

@@ -1,3 +1,4 @@
+import { HitlNotificationService } from '../services/hitlNotification.service';
 import { Request, Response, NextFunction } from 'express';
 import { HealingActionService } from '../services/healingAction.service';
 import { ApiResponse } from '../utils/apiResponse';
@@ -251,6 +252,20 @@ export class HealingActionController {
   }
 
   /**
+   * DELETE /api/v1/healing/policies/:id
+   * Xóa chính sách tự phục hồi
+   */
+  public static async deletePolicy(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const result = await HealingActionService.deletePolicy(id);
+      return ApiResponse.success(res, 'Xóa chính sách tự phục hồi thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/healing/approvals
    * Lấy danh sách yêu cầu phê duyệt hành động (HITL)
    */
@@ -262,6 +277,7 @@ export class HealingActionController {
       const organization_id = (req.query.organization_id as string | undefined) || user?.organization_id;
       const cluster_id = req.query.cluster_id as string | undefined;
       const status = req.query.status as string | undefined;
+      const search = (req.query.search as string) || (req.query.target as string) || undefined;
 
       const approvals = await HealingActionService.getApprovals(
         {
@@ -270,6 +286,7 @@ export class HealingActionController {
           organization_id,
           cluster_id,
           status,
+          search,
         },
         user
       );
@@ -330,4 +347,57 @@ export class HealingActionController {
       next(error);
     }
   }
+
+  /**
+   * GET /api/v1/healing/approvals/quick-approve?token=...
+   * Phê duyệt nhanh 1-Click an toàn từ Email thông báo (không yêu cầu Bearer token trong header)
+   */
+  public static async quickApproveFromEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = req.query.token as string;
+      if (!token) {
+        return res.status(400).send('<h1>Thiếu mã xác thực token phê duyệt</h1>');
+      }
+
+      const result = await HitlNotificationService.processQuickApprove(token);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(result.statusCode).send(result.html);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/healing/approvals/quick-reject?token=...
+   * Từ chối nhanh 1-Click an toàn từ Email thông báo (không yêu cầu Bearer token trong header)
+   */
+  public static async quickRejectFromEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = req.query.token as string;
+      if (!token) {
+        return res.status(400).send('<h1>Thiếu mã xác thực token</h1>');
+      }
+
+      const result = await HitlNotificationService.processQuickReject(token);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(result.statusCode).send(result.html);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/healing/actions/:id/notify
+   * Gửi lại email thông báo phê duyệt tới các kỹ sư có quyền
+   */
+  public static async resendNotification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const result = await HitlNotificationService.notifyApproversForAction(id);
+      return ApiResponse.success(res, `Đã gửi thông báo phê duyệt tới ${result.notifiedCount} kỹ sư có quyền`, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }

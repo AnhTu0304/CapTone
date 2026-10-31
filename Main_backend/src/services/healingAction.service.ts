@@ -430,6 +430,20 @@ export class HealingActionService {
   }
 
   /**
+   * 10c. Soft-delete policy
+   */
+  public static async deletePolicy(id: string) {
+    if (!id) {
+      throw new ApiError(400, 'Mã chính sách không hợp lệ');
+    }
+    const deleted = await HealingActionModel.deletePolicy(id);
+    if (!deleted) {
+      throw new ApiError(404, 'Không tìm thấy chính sách hoặc đã bị xóa');
+    }
+    return { success: true, id };
+  }
+
+  /**
    * 11. Approvals: List, Approve, Reject
    */
   public static async getApprovals(
@@ -437,6 +451,7 @@ export class HealingActionService {
       organization_id?: string;
       cluster_id?: string;
       status?: string;
+      search?: string;
       limit?: number;
       offset?: number;
     } = {},

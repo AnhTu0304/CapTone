@@ -25,7 +25,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  User,
 } from 'lucide-react';
 
 export const Sidebar = ({ currentPath = '/dashboard' }) => {
@@ -118,7 +117,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           badgeType: 'info',
         },
         { name: 'Cổng Cá Nhân', path: '/portal', icon: Sparkles },
-        { name: 'Hồ sơ cá nhân', path: '/portal/profile', icon: User },
         { name: 'Nhật ký kiểm toán', path: '/dashboard/audit-logs', icon: ScrollText },
         { name: 'Báo cáo SLA & Vận hành', path: '/dashboard/reports', icon: BarChart3 },
         { name: 'Cài đặt hệ thống', path: '/dashboard/settings', icon: Settings },

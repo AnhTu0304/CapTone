@@ -389,4 +389,203 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Gửi email thông báo yêu cầu phê duyệt hành động tự phục hồi (HITL) kèm nút 1-Click Approve
+   */
+  public static async sendHitlApprovalNotification(payload: {
+    toEmail: string;
+    recipientName: string;
+    recipientRole?: string;
+    approvalId: string;
+    healingActionId: string;
+    targetName: string;
+    targetType: string;
+    actionCode: string;
+    actionName: string;
+    riskLevel: string;
+    policyName?: string;
+    clusterName?: string;
+    environmentName?: string;
+    organizationName?: string;
+    incidentTitle?: string;
+    incidentSeverity?: string;
+    incidentDescription?: string;
+    actionReasoning?: string;
+    namespace?: string;
+    podName?: string;
+    nodeName?: string;
+    rootCauseType?: string;
+    rootCauseDescription?: string;
+    confidenceScore?: number;
+    token: string;
+    expiresAt?: Date | string;
+  }): Promise<boolean> {
+    const transporter = this.getTransporter();
+    const quickApproveUrl = `http://localhost:${config.port}${config.apiPrefix}/healing/approvals/quick-approve?token=${encodeURIComponent(payload.token)}`;
+    const quickRejectUrl = `http://localhost:${config.port}${config.apiPrefix}/healing/approvals/quick-reject?token=${encodeURIComponent(payload.token)}`;
+    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const dashboardUrl = `${clientUrl}/dashboard/self-healing/approvals`;
+
+    const hitlCode = `REQ-HITL-${payload.approvalId.slice(0, 8).toUpperCase()}`;
+    const riskColor = payload.riskLevel?.toUpperCase() === 'CRITICAL' ? '#DC2626' : (payload.riskLevel?.toUpperCase() === 'HIGH' ? '#EA580C' : '#D97706');
+    const riskLabel = payload.riskLevel?.toUpperCase() === 'CRITICAL' ? 'NGUY HIỂM (CRITICAL)' : (payload.riskLevel?.toUpperCase() === 'HIGH' ? 'RỦI RO CAO' : 'TRUNG BÌNH');
+
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log('🚨 [EMAIL SERVICE - DEV MODE] YÊU CẦU PHÊ DUYỆT TỰ PHỤC HỒI (HITL)');
+      console.log(`➡️  Gửi tới: ${payload.recipientName} (${payload.recipientRole || 'SME/DevOps'}) <${payload.toEmail}>`);
+      console.log(`🏢  Tổ chức: ${payload.organizationName || 'N/A'} | Cụm K8s: ${payload.clusterName || 'cluster-k8s'}`);
+      console.log(`📦  Dịch vụ / Pod: ${payload.targetName} (${payload.targetType})`);
+      console.log(`⚡  Hành động: ${payload.actionName} (${payload.actionCode}) | Rủi ro: ${riskLabel}`);
+      console.log(`🔬  Nguyên nhân: ${payload.rootCauseType || 'Bất thường dịch vụ'} (Tin cậy: ${payload.confidenceScore || 70}%)`);
+      console.log(`🔑  Mã phiếu: ${hitlCode}`);
+      console.log(`✅  LINK 1-CLICK PHÊ DUYỆT NGAY: ${quickApproveUrl}`);
+      console.log(`❌  LINK 1-CLICK TỪ CHỐI: ${quickRejectUrl}`);
+      console.log(`🌐  LINK XEM CHI TIẾT TRÊN WEB: ${dashboardUrl}`);
+      console.log('============================================================\n');
+      return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Yêu Cầu Phê Duyệt Tự Phục Hồi - ${hitlCode}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; color: #1e293b; }
+        .wrapper { max-width: 640px; margin: 30px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 26px 28px; color: #ffffff; border-bottom: 3px solid #3b82f6; }
+        .header-tag { display: inline-block; background-color: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 4px 10px; border-radius: 9999px; letter-spacing: 0.5px; margin-bottom: 12px; }
+        .header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+        .header p { margin: 6px 0 0 0; font-size: 13px; color: #94a3b8; }
+        .content { padding: 28px; }
+        .alert-box { background-color: #fef2f2; border: 1px solid #fee2e2; border-left: 4px solid #ef4444; border-radius: 6px; padding: 14px 16px; margin-bottom: 22px; font-size: 13px; color: #991b1b; }
+        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+        .info-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }
+        .info-table td.label { width: 35%; color: #64748b; font-weight: 600; }
+        .info-table td.value { width: 65%; color: #0f172a; font-weight: 700; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+        .actions-box { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 20px; text-align: center; margin: 24px 0; }
+        .btn-approve { display: inline-block; background: #059669; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 13px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); margin-right: 8px; }
+        .btn-dashboard { display: inline-block; background: #ffffff; color: #2563eb !important; border: 1px solid #bfdbfe; font-weight: 600; font-size: 14px; padding: 12px 22px; border-radius: 8px; text-decoration: none; }
+        .footer { background-color: #f8fafc; padding: 20px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5; }
+      </style>
+    </head>
+    <body>
+      <div class="wrapper">
+        <div class="header">
+          <div class="header-tag">🚨 HITL Human-In-The-Loop Cần Phê Duyệt</div>
+          <h1>Yêu Cầu Phê Duyệt Hành Động Khắc Phục</h1>
+          <p>Mã kiểm toán: <strong>${hitlCode}</strong> &bull; Tổ chức: <strong>${payload.organizationName || 'SME Organization'}</strong></p>
+        </div>
+        <div class="content">
+          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${payload.recipientName}</strong> (${payload.recipientRole || 'SME/DevOps'}),</p>
+          <div class="alert-box">
+            <strong>Cảnh báo giám sát MAPE-K:</strong> Hệ thống tự phục hồi phát hiện nguy cơ bất thường dịch vụ và chuẩn bị thực thi hành động can thiệp có mức độ rủi ro cần sự phê duyệt của con người trước khi áp dụng.
+          </div>
+          
+          <table class="info-table">
+            <tr>
+              <td class="label">🚨 Sự cố phát hiện</td>
+              <td class="value" style="color: #dc2626;">${payload.incidentTitle || '[AI Alert] Pod ứng dụng bất ổn định / CrashLoop'}</td>
+            </tr>
+            <tr>
+              <td class="label">📦 Dịch vụ & Đối tượng</td>
+              <td class="value"><span style="color: #2563eb; font-weight: 800;">${payload.targetName}</span> (${payload.targetType || 'POD'})${payload.namespace ? ` &bull; Namespace: <code>${payload.namespace}</code>` : ''}</td>
+            </tr>
+            <tr>
+              <td class="label">🔬 Nguyên nhân gốc (RCA)</td>
+              <td class="value">${payload.rootCauseType || 'Pod ứng dụng bất ổn định / CrashLoop'} (Độ tin cậy AI: <strong>${payload.confidenceScore || 70}%</strong>)</td>
+            </tr>
+            ${payload.actionReasoning ? `
+            <tr>
+              <td class="label">💡 Lập luận khuyến nghị AI</td>
+              <td class="value" style="color: #334155; font-style: italic;">${payload.actionReasoning}</td>
+            </tr>` : ''}
+            <tr>
+              <td class="label">⚡ Hành động tự khắc phục</td>
+              <td class="value">
+                <span class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px;">
+                  ${payload.actionName} (${payload.actionCode})
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td class="label">🛡️ Chính sách an toàn</td>
+              <td class="value"><code>${payload.policyName || 'POL-SAFETY-DEFAULT'}</code></td>
+            </tr>
+            <tr>
+              <td class="label">⚠️ Mức độ rủi ro</td>
+              <td class="value">
+                <span class="badge" style="background: #fef2f2; color: ${riskColor}; border: 1px solid #fecaca;">
+                  ${riskLabel}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td class="label">☸️ Cụm K8s & Môi trường</td>
+              <td class="value">${payload.clusterName || 'Cụm Production K8s'} (${payload.environmentName || 'Production'}) &bull; ${payload.organizationName || 'Tổ chức CapTone'}</td>
+            </tr>
+            <tr>
+              <td class="label">⏱️ Thời hạn xử lý</td>
+              <td class="value" style="color: #64748b; font-size: 12px;">Trong vòng 24 giờ kể từ khi kích hoạt</td>
+            </tr>
+          </table>
+
+          <div class="actions-box">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #0f172a;">
+              ⚡ Kỹ sư có thể phê duyệt hoặc từ chối trực tiếp ngay tại Email này:
+            </div>
+            <div style="margin-bottom: 12px;">
+              <a href="${quickApproveUrl}" class="btn-approve" target="_blank">
+                ✅ Phê Duyệt Ngay (1-Click)
+              </a>
+              <a href="${quickRejectUrl}" style="display: inline-block; background: #dc2626; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 13px 24px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3); margin-right: 8px;" target="_blank">
+                ❌ Từ Chối Yêu Cầu
+              </a>
+              <a href="${dashboardUrl}" class="btn-dashboard" target="_blank">
+                🔍 Xem Bảng Chứng & Diff YAML
+              </a>
+            </div>
+            <div style="font-size: 12px; color: #64748b;">
+              (Bấm nút phía trên sẽ tự động xác thực và thực thi an toàn mà không cần đăng nhập lại)
+            </div>
+          </div>
+
+          <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">
+            * Lưu ý: Nút <strong>Phê Duyệt Ngay</strong> sử dụng liên kết bảo mật có ký số JWT kèm thời hạn TTL. Khi bạn bấm nút, hệ thống sẽ tự động xác thực quyền hạn RBAC của bạn đối với tổ chức <strong>${payload.organizationName}</strong> và thực thi can thiệp lên cụm Kubernetes.
+          </p>
+        </div>
+
+        <div class="footer">
+          <p style="margin: 0 0 6px 0;">
+            Email này được gửi tự động từ <strong>CapTone AI Autonomous Self-Healing Platform</strong> theo quy chuẩn an toàn HITL.
+          </p>
+          <p style="margin: 0;">
+            Bảo mật nhiều bên thuê (Multi-Tenancy Isolation) &bull; Kiểm soát truy cập RBAC &bull; Sổ kiểm toán Audit Trails
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
+        to: payload.toEmail,
+        subject: `🚨 [CẢNH BÁO SỰ CỐ & CẦN PHÊ DUYỆT] ${payload.incidentTitle || payload.actionName} trên ${payload.targetName} (${hitlCode})`,
+        html: htmlContent,
+      });
+      console.log(`✅ [EMAIL HITL] Đã gửi thông báo phê duyệt tới ${payload.recipientName} <${payload.toEmail}>`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL HITL ERROR] Gửi thông báo phê duyệt tới ${payload.toEmail} thất bại:`, (error as Error).message);
+      return false;
+    }
+  }
+
 }
