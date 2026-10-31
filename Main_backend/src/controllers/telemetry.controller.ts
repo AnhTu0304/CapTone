@@ -11,6 +11,7 @@ import {
   GetLogsQuerySchema,
   StreamLogsQuerySchema,
   GetKubernetesEventsQuerySchema,
+  GetNodeMetricsTimeseriesQuerySchema,
 } from '../schemas/telemetry.schema';
 import { MetricModel } from '../models/metric.model';
 import { LogModel } from '../models/log.model';
@@ -237,6 +238,51 @@ export class TelemetryController {
       return ApiResponse.success(
         res,
         `Retrieved ${result.count} node metric records`,
+        result,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/telemetry/timeseries
+   * GET /api/v1/telemetry/nodes/:nodeId/timeseries
+   * Downsampled time-series query for CPU, RAM, Disk, Network [S5][PBI20 Task 2.2]
+   */
+  public static async getNodeTimeseries(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<any> {
+    try {
+      const parsedQuery = GetNodeMetricsTimeseriesQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return ApiResponse.error(
+          res,
+          'Validation failed: Invalid query parameters for time-series',
+          400,
+          parsedQuery.error.format()
+        );
+      }
+
+      const orgId = req.params.orgId || (req.headers['x-organization-id'] as string) || undefined;
+      const clusterId = req.params.clusterId || undefined;
+      const nodeId = req.params.nodeId || undefined;
+
+      const result = await AgentService.queryNodeTimeseriesScoped({
+        user: (req as any).user,
+        orgMember: (req as any).orgMember,
+        orgId,
+        clusterId,
+        nodeId,
+        query: req.query as Record<string, any>,
+      });
+
+      return ApiResponse.success(
+        res,
+        `Retrieved time-series metrics (${result.metricType})`,
         result,
         200
       );

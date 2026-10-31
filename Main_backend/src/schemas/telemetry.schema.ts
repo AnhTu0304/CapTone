@@ -186,3 +186,57 @@ export const GetKubernetesEventsQuerySchema = z
 
 export type GetKubernetesEventsQuery = z.infer<typeof GetKubernetesEventsQuerySchema>;
 
+/**
+ * Validation schema cho API truy vấn chuỗi thời gian Node Metrics (CPU, RAM, Disk, Network) [S5][PBI20 Task 2.2]
+ */
+export const GetNodeMetricsTimeseriesQuerySchema = z
+  .object({
+    organizationId: z.string().optional(),
+    organization_id: z.string().optional(),
+    orgId: z.string().optional(),
+    clusterId: z.string().optional(),
+    cluster_id: z.string().optional(),
+    agentId: z.string().optional(),
+    agent_id: z.string().optional(),
+    nodeId: z.string().optional(),
+    node_id: z.string().optional(),
+    nodeName: z.string().optional(),
+    node_name: z.string().optional(),
+    range: z.string().optional(),
+    interval: z.string().optional(),
+    intervalSeconds: z.coerce.number().optional(),
+    interval_seconds: z.coerce.number().optional(),
+    metricType: z.enum(['ALL', 'CPU', 'RAM', 'DISK', 'NETWORK', 'all', 'cpu', 'ram', 'disk', 'network']).optional(),
+    metric_type: z.enum(['ALL', 'CPU', 'RAM', 'DISK', 'NETWORK', 'all', 'cpu', 'ram', 'disk', 'network']).optional(),
+    aggregation: z.enum(['AVG', 'MIN', 'MAX', 'SUM', 'LAST', 'avg', 'min', 'max', 'sum', 'last']).optional(),
+    agg: z.enum(['AVG', 'MIN', 'MAX', 'SUM', 'LAST', 'avg', 'min', 'max', 'sum', 'last']).optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+    start_time: z.string().optional(),
+    end_time: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+    limit: z.coerce.number().int().min(1).max(10000).optional(),
+  })
+  .refine(
+    (data) => {
+      const start = data.startTime || data.start_time || data.from;
+      const end = data.endTime || data.end_time || data.to;
+      if (start && end) {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+          return startDate.getTime() <= endDate.getTime();
+        }
+      }
+      return true;
+    },
+    {
+      message: 'startTime phải nhỏ hơn hoặc bằng endTime',
+      path: ['startTime'],
+    }
+  );
+
+export type GetNodeMetricsTimeseriesQuery = z.infer<typeof GetNodeMetricsTimeseriesQuerySchema>;
+
+

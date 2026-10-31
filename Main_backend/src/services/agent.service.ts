@@ -726,6 +726,377 @@ export class AgentService {
   }
 
   /**
+   * Helper to map query range or interval string to interval seconds [S5][PBI20 Task 2.2]
+   */
+  public static resolveIntervalSeconds(
+    intervalInput: string | number | undefined,
+    rangeInput: string | undefined,
+    windowMs: number
+  ): number {
+    if (intervalInput !== undefined && String(intervalInput).trim() !== '') {
+      const str = String(intervalInput).trim().toLowerCase();
+      if (str.endsWith('s')) {
+        const s = parseInt(str.slice(0, -1), 10);
+        if (!isNaN(s) && s > 0) return Math.min(86400, Math.max(5, s));
+      } else if (str.endsWith('m')) {
+        const m = parseInt(str.slice(0, -1), 10);
+        if (!isNaN(m) && m > 0) return Math.min(86400, Math.max(5, m * 60));
+      } else if (str.endsWith('h')) {
+        const h = parseInt(str.slice(0, -1), 10);
+        if (!isNaN(h) && h > 0) return Math.min(86400, Math.max(5, h * 3600));
+      } else {
+        const n = parseInt(str, 10);
+        if (!isNaN(n) && n > 0) return Math.min(86400, Math.max(5, n));
+      }
+    }
+
+    const normalizedRange = String(rangeInput || '').toLowerCase().trim();
+    if (normalizedRange === '15m') return 15;
+    if (normalizedRange === '1h') return 60;
+    if (normalizedRange === '6h') return 120;
+    if (normalizedRange === '24h') return 300;
+    if (normalizedRange === '7d') return 1800;
+    if (normalizedRange === '30d') return 3600;
+
+    if (windowMs <= 15 * 60 * 1000) return 15;
+    if (windowMs <= 60 * 60 * 1000) return 60;
+    if (windowMs <= 6 * 3600 * 1000) return 120;
+    if (windowMs <= 24 * 3600 * 1000) return 300;
+    if (windowMs <= 7 * 24 * 3600 * 1000) return 1800;
+    return 3600;
+  }
+
+  /**
+   * Query downsampled time-series node metrics (CPU, RAM, Disk, Network) with tenant isolation [S5][PBI20 Task 2.2]
+   */
+  public static async queryNodeTimeseriesScoped(params: {
+    user: any;
+    orgMember?: any;
+    orgId?: string;
+    clusterId?: string;
+    nodeId?: string;
+    query: Record<string, any>;
+  }) {
+    const { user, orgMember, query } = params;
+    const rawRoles: string[] = Array.isArray(user?.roles) ? user.roles : user?.roles ? [user.roles] : [];
+    const isPlatformAdmin =
+      orgMember?.roleCode === 'SUPER_ADMIN' ||
+      rawRoles.some((r) => ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(String(r).toUpperCase()));
+
+    // 1. Validate time range
+    const fromRaw = (query.from ?? query.start_time ?? query.startTime) as string | undefined;
+    const toRaw = (query.to ?? query.end_time ?? query.endTime) as string | undefined;
+
+    let startTime: Date | undefined;
+    let endTime: Date | undefined;
+    const now = new Date();
+
+    if (fromRaw !== undefined && String(fromRaw).trim() !== '') {
+      const d = new Date(String(fromRaw));
+      if (isNaN(d.getTime())) {
+        throw ApiError.badRequest('Định dạng thời gian bắt đầu (startTime) không hợp lệ');
+      }
+      startTime = d;
+    }
+
+    if (toRaw !== undefined && String(toRaw).trim() !== '') {
+      const d = new Date(String(toRaw));
+      if (isNaN(d.getTime())) {
+        throw ApiError.badRequest('Định dạng thời gian kết thúc (endTime) không hợp lệ');
+      }
+      endTime = d;
+    }
+
+    const range = (query.range ? String(query.range).toLowerCase().trim() : undefined);
+
+    if (!startTime) {
+      const baseEnd = endTime ? endTime.getTime() : now.getTime();
+      if (range === '15m') {
+        startTime = new Date(baseEnd - 15 * 60 * 1000);
+      } else if (range === '6h') {
+        startTime = new Date(baseEnd - 6 * 3600 * 1000);
+      } else if (range === '24h') {
+        startTime = new Date(baseEnd - 24 * 3600 * 1000);
+      } else if (range === '7d') {
+        startTime = new Date(baseEnd - 7 * 24 * 3600 * 1000);
+      } else if (range === '30d') {
+        startTime = new Date(baseEnd - 30 * 24 * 3600 * 1000);
+      } else {
+        // Default 1h
+        startTime = new Date(baseEnd - 60 * 60 * 1000);
+      }
+    }
+
+    if (!endTime) {
+      endTime = now;
+    }
+
+    if (startTime.getTime() > endTime.getTime()) {
+      throw ApiError.badRequest('Khoảng thời gian không hợp lệ: startTime phải nhỏ hơn hoặc bằng endTime');
+    }
+
+    if (endTime.getTime() - startTime.getTime() > 31 * 24 * 3600 * 1000) {
+      throw ApiError.badRequest('Khoảng thời gian truy vấn tối đa không được vượt quá 30 ngày');
+    }
+
+    // 2. Validate metricType
+    const rawMetricType = String(query.metricType ?? query.metric_type ?? 'ALL').trim().toUpperCase();
+    const validMetricTypes = ['ALL', 'CPU', 'RAM', 'DISK', 'NETWORK'];
+    if (!validMetricTypes.includes(rawMetricType)) {
+      throw ApiError.badRequest(`metricType không hợp lệ. Chỉ chấp nhận: ${validMetricTypes.join(', ')}`);
+    }
+    const metricType = rawMetricType as 'ALL' | 'CPU' | 'RAM' | 'DISK' | 'NETWORK';
+
+    // 3. Validate aggregation
+    const rawAgg = String(query.aggregation ?? query.agg ?? 'AVG').trim().toUpperCase();
+    const validAggs = ['AVG', 'MIN', 'MAX', 'SUM', 'LAST'];
+    if (!validAggs.includes(rawAgg)) {
+      throw ApiError.badRequest(`aggregation không hợp lệ. Chỉ chấp nhận: ${validAggs.join(', ')}`);
+    }
+    const aggregation = rawAgg as 'AVG' | 'MIN' | 'MAX' | 'SUM' | 'LAST';
+
+    // 4. Resolve Interval Seconds
+    const intervalSeconds = this.resolveIntervalSeconds(
+      query.interval ?? query.intervalSeconds ?? query.interval_seconds,
+      range,
+      endTime.getTime() - startTime.getTime()
+    );
+
+    // 5. Tenant Scope & Anti-IDOR
+    const requestedOrgId = params.orgId || (query.organizationId as string) || (query.organization_id as string) || (query.orgId as string) || orgMember?.organizationId;
+    let allowedOrgIds: string[] = [];
+
+    if (!isPlatformAdmin) {
+      if (!user?.id) {
+        throw ApiError.unauthorized('Yêu cầu xác thực người dùng');
+      }
+      const memberRes = await pool.query(
+        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+        [user.id]
+      );
+      allowedOrgIds = memberRes.rows.map((r: any) => r.organization_id);
+
+      if (requestedOrgId) {
+        if (!allowedOrgIds.includes(requestedOrgId)) {
+          throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền truy cập dữ liệu của tổ chức này');
+        }
+      } else if (allowedOrgIds.length === 0) {
+        throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+      }
+    }
+
+    const effectiveOrgId = requestedOrgId;
+    const clusterId = params.clusterId || (query.clusterId as string) || (query.cluster_id as string);
+    const nodeId = (params.nodeId && params.nodeId !== 'all') ? params.nodeId : ((query.nodeId as string) || (query.node_id as string));
+    const nodeName = (query.nodeName as string) || (query.node_name as string);
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // Verify Cluster resource existence & tenant ownership if clusterId is provided
+    if (clusterId && !clusterId.startsWith('org-') && !clusterId.startsWith('sandbox-')) {
+      const clusterRes = await pool.query(
+        `SELECT c.id, e.organization_id
+         FROM clusters c
+         LEFT JOIN environments e ON c.environment_id = e.id
+         WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
+         LIMIT 1`,
+        [clusterId]
+      );
+      if (!clusterRes.rows[0]) {
+        throw ApiError.notFound('Không tìm thấy cụm Kubernetes yêu cầu');
+      }
+      const clusterOrgId = clusterRes.rows[0].organization_id;
+      if (effectiveOrgId && clusterOrgId && clusterOrgId !== effectiveOrgId) {
+        throw ApiError.forbidden('Từ chối truy cập: Cụm Kubernetes không thuộc tổ chức được yêu cầu');
+      }
+      if (!isPlatformAdmin && clusterOrgId && !allowedOrgIds.includes(clusterOrgId)) {
+        throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền xem metrics của cụm thuộc tổ chức khác');
+      }
+    }
+
+    // Verify Node resource existence & tenant ownership if nodeId is provided
+    let resolvedNodeName = nodeName;
+    if (nodeId) {
+      const nodeRes = await pool.query(
+        `SELECT n.id, n.name, n.cluster_id, e.organization_id
+         FROM nodes n
+         JOIN clusters c ON n.cluster_id = c.id
+         LEFT JOIN environments e ON c.environment_id = e.id
+         WHERE (n.id::text = $1 OR n.name = $1) AND c.deleted_at IS NULL`,
+        [nodeId]
+      );
+
+      if (nodeRes.rows.length > 0) {
+        const matchingTenantNode = nodeRes.rows.find((row: any) => {
+          if (effectiveOrgId && row.organization_id && row.organization_id !== effectiveOrgId) return false;
+          if (!isPlatformAdmin && row.organization_id && !allowedOrgIds.includes(row.organization_id)) return false;
+          return true;
+        });
+
+        if (!matchingTenantNode) {
+          throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
+        }
+        if (!resolvedNodeName) {
+          resolvedNodeName = matchingTenantNode.name;
+        }
+      } else {
+        if (uuidRegex.test(nodeId)) {
+          throw ApiError.notFound('Không tìm thấy Node máy chủ yêu cầu');
+        }
+        const metricNodeCheck = await pool.query(
+          `SELECT organization_id FROM node_metrics WHERE node_name = $1 LIMIT 1`,
+          [nodeId]
+        );
+        if (metricNodeCheck.rows.length === 0) {
+          throw ApiError.notFound('Không tìm thấy Node máy chủ yêu cầu');
+        }
+        const metricOrgId = metricNodeCheck.rows[0].organization_id;
+        if (effectiveOrgId && metricOrgId && metricOrgId !== effectiveOrgId) {
+          throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
+        }
+        if (!isPlatformAdmin && metricOrgId && !allowedOrgIds.includes(metricOrgId)) {
+          throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
+        }
+      }
+    }
+
+    // 6. Execute aggregation query
+    const rows = await MetricModel.queryNodeMetricsTimeseries({
+      organizationId: effectiveOrgId,
+      organizationIds: !isPlatformAdmin && !effectiveOrgId ? allowedOrgIds : undefined,
+      clusterId,
+      nodeId,
+      nodeName: resolvedNodeName,
+      startTime,
+      endTime,
+      intervalSeconds,
+      metricType,
+      aggregation,
+      limit: query.limit ? Number(query.limit) : 5000,
+    });
+
+    // 7. Format series & dataPoints
+    const cpuPoints = rows.map((r: any) => {
+      const d = new Date(r.time_bucket);
+      return {
+        timestamp: d.toISOString(),
+        time: Math.floor(d.getTime() / 1000),
+        value: aggregation === 'MAX' ? Number(r.cpu_max ?? 0) : aggregation === 'MIN' ? Number(r.cpu_min ?? 0) : Number(r.cpu_avg ?? 0),
+        min: Number(r.cpu_min ?? 0),
+        max: Number(r.cpu_max ?? 0),
+        cores: Number(r.cpu_cores ?? 1),
+        sampleCount: Number(r.sample_count ?? 1),
+      };
+    });
+
+    const ramPoints = rows.map((r: any) => {
+      const d = new Date(r.time_bucket);
+      return {
+        timestamp: d.toISOString(),
+        time: Math.floor(d.getTime() / 1000),
+        value: aggregation === 'MAX' ? Number(r.ram_usage_percent_max ?? 0) : aggregation === 'MIN' ? Number(r.ram_usage_percent_min ?? 0) : Number(r.ram_usage_percent_avg ?? 0),
+        min: Number(r.ram_usage_percent_min ?? 0),
+        max: Number(r.ram_usage_percent_max ?? 0),
+        ram_used_bytes: Number(r.ram_used_bytes_avg ?? 0),
+        ram_total_bytes: Number(r.ram_total_bytes_avg ?? 0),
+        ram_available_bytes: Number(r.ram_available_bytes_avg ?? 0),
+        sampleCount: Number(r.sample_count ?? 1),
+      };
+    });
+
+    const diskPoints = rows.map((r: any) => {
+      const d = new Date(r.time_bucket);
+      return {
+        timestamp: d.toISOString(),
+        time: Math.floor(d.getTime() / 1000),
+        value: aggregation === 'MAX' ? Number(r.disk_usage_percent_max ?? 0) : aggregation === 'MIN' ? Number(r.disk_usage_percent_min ?? 0) : Number(r.disk_usage_percent_avg ?? 0),
+        min: Number(r.disk_usage_percent_min ?? 0),
+        max: Number(r.disk_usage_percent_max ?? 0),
+        disk_used_bytes: Number(r.disk_used_bytes_avg ?? 0),
+        disk_total_bytes: Number(r.disk_total_bytes_avg ?? 0),
+        disk_available_bytes: Number(r.disk_available_bytes_avg ?? 0),
+        sampleCount: Number(r.sample_count ?? 1),
+      };
+    });
+
+    const networkPoints = rows.map((r: any) => {
+      const d = new Date(r.time_bucket);
+      return {
+        timestamp: d.toISOString(),
+        time: Math.floor(d.getTime() / 1000),
+        rx_rate: Number(r.net_rx_rate_avg ?? 0),
+        tx_rate: Number(r.net_tx_rate_avg ?? 0),
+        max_rx_rate: Number(r.net_rx_rate_max ?? 0),
+        max_tx_rate: Number(r.net_tx_rate_max ?? 0),
+        rx_bytes: Number(r.net_rx_bytes_avg ?? 0),
+        tx_bytes: Number(r.net_tx_bytes_avg ?? 0),
+        sampleCount: Number(r.sample_count ?? 1),
+      };
+    });
+
+    const meta = {
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      count: rows.length,
+      intervalSeconds,
+      aggregation,
+    };
+
+    const commonBase = {
+      clusterId: clusterId || null,
+      nodeId: nodeId || null,
+      nodeName: resolvedNodeName || null,
+      intervalSeconds,
+      aggregation,
+      meta,
+    };
+
+    if (metricType === 'CPU') {
+      return {
+        ...commonBase,
+        metricType: 'CPU',
+        unit: '%',
+        dataPoints: cpuPoints,
+      };
+    }
+    if (metricType === 'RAM') {
+      return {
+        ...commonBase,
+        metricType: 'RAM',
+        unit: '%',
+        dataPoints: ramPoints,
+      };
+    }
+    if (metricType === 'DISK') {
+      return {
+        ...commonBase,
+        metricType: 'DISK',
+        unit: '%',
+        dataPoints: diskPoints,
+      };
+    }
+    if (metricType === 'NETWORK') {
+      return {
+        ...commonBase,
+        metricType: 'NETWORK',
+        unit: 'bytes/sec',
+        dataPoints: networkPoints,
+      };
+    }
+
+    return {
+      ...commonBase,
+      metricType: 'ALL',
+      series: {
+        cpu: { metric: 'CPU', unit: '%', dataPoints: cpuPoints },
+        ram: { metric: 'RAM', unit: '%', dataPoints: ramPoints },
+        disk: { metric: 'DISK', unit: '%', dataPoints: diskPoints },
+        network: { metric: 'NETWORK', unit: 'bytes/sec', dataPoints: networkPoints },
+      },
+    };
+  }
+
+
+  /**
    * Store Agent Logs with boundary validation and sanitization
    */
   public static async storeLog(
