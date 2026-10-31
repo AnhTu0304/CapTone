@@ -18,6 +18,7 @@ import { aiModelRegistryRoutes } from './aiModelRegistry.routes';
 import { adminRoutes } from './admin.routes';
 import { reportRoutes } from './report.routes';
 import { statisticsRoutes } from './statistics.routes';
+import { alertRuleRoutes } from './alertRule.routes';
 
 const apiRouter = Router();
 
@@ -41,5 +42,6 @@ apiRouter.use('/audit-logs', auditRoutes);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/statistics', statisticsRoutes);
+apiRouter.use('/alert-rules', alertRuleRoutes);
 
 export default apiRouter;
