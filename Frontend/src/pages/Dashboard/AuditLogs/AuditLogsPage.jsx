@@ -6,8 +6,10 @@ import AuditDistributionChart from '../../../components/dashboard/AuditDistribut
 import {
   fetchOrgAuditLogs,
   fetchOrgAuditStats,
+  verifyOrgAuditIntegrity,
 } from '../../../services/dashboardAuditLogsService';
 import {
+  Calendar,
   ScrollText,
   Search,
   RefreshCw,
@@ -29,15 +31,55 @@ import {
   Code2
 } from 'lucide-react';
 
+// Helpers định dạng ngày tháng cục bộ an toàn theo múi giờ client
+const getTodayStr = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getThisMonthStr = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
+const getThisYearStr = () => {
+  return String(new Date().getFullYear());
+};
+
+const parseLogDate = (log) => {
+  if (!log) return null;
+  const raw = log.created_at || log.raw_created_at || log.rawItem?.created_at;
+  if (raw) {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const ts = log.timestamp || log.rawItem?.timestamp;
+  if (ts && typeof ts === 'string') {
+    const parts = ts.split(' ');
+    if (parts[0] && parts[0].includes('/')) {
+      const [d, m, y] = parts[0].split('/').map(Number);
+      const [hh, mm, ss] = (parts[1] || '0:0:0').split(':').map(Number);
+      const res = new Date(y, m - 1, d, hh || 0, mm || 0, ss || 0);
+      if (!isNaN(res.getTime())) return res;
+    }
+    const d = new Date(ts);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+};
+
 export const AuditLogsPage = () => {
   const { currentOrg } = useDashboard();
   const { success: toastSuccess, error: toastError } = useToast();
 
   // Data states
-  const [logs, setLogs] = useState([]);
+  const [rawLogs, setRawLogs] = useState([]);
   const [stats, setStats] = useState(null);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -60,9 +102,77 @@ export const AuditLogsPage = () => {
   // Filter states
   const [selectedRole, setSelectedRole] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [selectedDateRange, setSelectedDateRange] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Time Filter States (Đồng bộ chuẩn Lịch sử phục hồi)
+  const [timeFilterMode, setTimeFilterMode] = useState('all'); // 'today' | 'date' | 'month' | 'year' | 'all'
+  const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
+  const [selectedMonth, setSelectedMonth] = useState(() => getThisMonthStr());
+  const [selectedYear, setSelectedYear] = useState(() => getThisYearStr());
+
+  // Trạng thái Popover Lịch
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const calendarRef = useRef(null);
+
+  // Đóng Popover Lịch khi bấm ra ngoài
+  useEffect(() => {
+    const handleClickOutsideCalendar = (e) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target)) {
+        setIsCalendarOpen(false);
+      }
+    };
+    if (isCalendarOpen) {
+      document.addEventListener('mousedown', handleClickOutsideCalendar);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideCalendar);
+    };
+  }, [isCalendarOpen]);
+
+  // Nhãn hiển thị trực quan trên nút Lịch
+  const currentFilterLabel = useMemo(() => {
+    if (timeFilterMode === 'today') {
+      const parts = getTodayStr().split('-');
+      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
+    }
+    if (timeFilterMode === 'date') {
+      if (!selectedDate) return 'Chọn ngày';
+      const parts = selectedDate.split('-');
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    if (timeFilterMode === 'month') {
+      if (!selectedMonth) return 'Chọn tháng';
+      const parts = selectedMonth.split('-');
+      return `${parts[1]}/${parts[0]}`;
+    }
+    if (timeFilterMode === 'year') {
+      return `Năm ${selectedYear}`;
+    }
+    return 'Tất cả thời gian';
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+
+  // Danh sách các năm khả dụng
+  const availableYears = useMemo(() => {
+    const currentY = getThisYearStr();
+    const years = new Set([currentY, '2026', '2025']);
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, []);
+
+  // Danh sách các ngày gần đây để chọn nhanh
+  const recentActiveDays = useMemo(() => {
+    const days = [];
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const dy = String(d.getDate()).padStart(2, '0');
+      days.push(`${yr}-${mo}-${dy}`);
+    }
+    return days;
+  }, []);
 
   // UI interaction states
   const [copiedHash, setCopiedHash] = useState(null);
@@ -78,7 +188,7 @@ export const AuditLogsPage = () => {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // Load audit data from backend
+  // Load toàn bộ dữ liệu audit data từ backend (tối đa 2000 bản ghi để biểu đồ và bảng lọc đồng bộ mượt mà)
   const loadAuditData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -87,20 +197,13 @@ export const AuditLogsPage = () => {
       const [logsRes, statsRes] = await Promise.all([
         fetchOrgAuditLogs(
           orgId,
-          {
-            role: selectedRole,
-            status: selectedStatus,
-            dateRange: selectedDateRange,
-            search: debouncedSearch,
-          },
-          { page, pageSize }
+          {},
+          { page: 1, pageSize: 2000 }
         ),
         fetchOrgAuditStats(orgId),
       ]);
 
-      setLogs(logsRes.data || []);
-      setTotal(logsRes.total || 0);
-      setTotalPages(logsRes.totalPages || 1);
+      setRawLogs(logsRes.data || []);
       if (statsRes) {
         setStats(statsRes);
       }
@@ -110,7 +213,65 @@ export const AuditLogsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg?.id, page, pageSize, selectedRole, selectedStatus, selectedDateRange, debouncedSearch, toastError]);
+  }, [currentOrg?.id, toastError]);
+
+  // Bộ lọc dữ liệu tập trung theo Thời gian, Vai trò, Trạng thái và Từ khóa tìm kiếm
+  const filteredLogs = useMemo(() => {
+    return rawLogs.filter((item) => {
+      // 1. Lọc theo thời gian (Ngày, Tháng, Năm, Tất cả)
+      if (timeFilterMode !== 'all') {
+        const d = parseLogDate(item);
+        if (d && !isNaN(d.getTime())) {
+          const itemDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const itemMonthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const itemYearStr = String(d.getFullYear());
+
+          if (timeFilterMode === 'today') {
+            if (itemDateStr !== getTodayStr()) return false;
+          } else if (timeFilterMode === 'date') {
+            if (selectedDate && itemDateStr !== selectedDate) return false;
+          } else if (timeFilterMode === 'month') {
+            if (selectedMonth && itemMonthStr !== selectedMonth) return false;
+          } else if (timeFilterMode === 'year') {
+            if (selectedYear && itemYearStr !== selectedYear) return false;
+          }
+        }
+      }
+
+      // 2. Lọc theo Vai trò
+      if (selectedRole !== 'ALL') {
+        if (item.role !== selectedRole) return false;
+      }
+
+      // 3. Lọc theo Trạng thái
+      if (selectedStatus !== 'ALL') {
+        if (item.status !== selectedStatus) return false;
+      }
+
+      // 4. Lọc theo Tìm kiếm
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase().trim();
+        const idMatch = (item.id || '').toLowerCase().includes(q);
+        const actorMatch = (item.actor || '').toLowerCase().includes(q);
+        const eventMatch = (item.event || '').toLowerCase().includes(q);
+        const descMatch = (item.description || '').toLowerCase().includes(q);
+        const ipMatch = (item.ip || '').toLowerCase().includes(q);
+        const hashMatch = (item.sha256 || '').toLowerCase().includes(q);
+        if (!idMatch && !actorMatch && !eventMatch && !descMatch && !ipMatch && !hashMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [rawLogs, timeFilterMode, selectedDate, selectedMonth, selectedYear, selectedRole, selectedStatus, debouncedSearch]);
+
+  const total = filteredLogs.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const logs = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredLogs.slice(start, start + pageSize);
+  }, [filteredLogs, page, pageSize]);
 
   useEffect(() => {
     loadAuditData();
@@ -127,12 +288,28 @@ export const AuditLogsPage = () => {
 
   // Verify Ledger Button
   const handleVerifyLedger = async () => {
-    setIsVerifying(true);
-    await loadAuditData();
-    setTimeout(() => {
+    try {
+      setIsVerifying(true);
+      const orgId = currentOrg?.id || null;
+      const verification = await verifyOrgAuditIntegrity(orgId);
+      await loadAuditData();
+      if (verification && verification.verified) {
+        const count = verification.totalChecked || verification.validCount || logs.length;
+        toastSuccess(
+          `Đã đối soát mật mã ${count} bản ghi kiểm toán bằng thuật toán SHA-256. Toàn bộ chuỗi sổ cái đạt chuẩn toàn vẹn 100%!`,
+          'Sổ Cái Bất Biến Hợp Lệ'
+        );
+      } else {
+        toastError(
+          `Cảnh báo phát hiện ${verification?.tamperedCount || 0} bản ghi có sai lệch chữ ký băm!`,
+          'Cảnh Báo Giả Mạo Sổ Cái'
+        );
+      }
+    } catch (err) {
+      toastError(err?.message || 'Không thể kết nối dịch vụ xác thực sổ cái', 'Lỗi Xác Thực');
+    } finally {
       setIsVerifying(false);
-      toastSuccess('Toàn bộ chuỗi khối nhật ký kiểm toán SHA-256 đã được xác thực 100% toàn vẹn!', 'Xác Thực Sổ Cái');
-    }, 600);
+    }
   };
 
   // Export CSV
@@ -185,13 +362,21 @@ export const AuditLogsPage = () => {
     setTimeout(() => setExportNotice(false), 4000);
   };
 
-  // Summary KPI Cards
+  // Summary KPI Cards tính toán động theo bộ lọc thời gian
   const summaryKpis = useMemo(() => {
-    const s = stats?.summary || {};
+    const totalCount = filteredLogs.length;
+    const autonomousCount = filteredLogs.filter(
+      (l) => l.role === 'SYSTEM_AI' || l.actorType === 'SYSTEM' || l.actorType === 'AGENT' || (l.event && (l.event.includes('AUTONOMOUS') || l.event.includes('REMEDIATION') || l.event.includes('AGENT_')))
+    ).length;
+    const hitlCount = filteredLogs.filter(
+      (l) => (l.event && (l.event.includes('HITL') || l.event.includes('APPROV')))
+    ).length;
+    const blockedCount = filteredLogs.filter((l) => l.status === 'DENIED').length;
+
     return [
       {
         title: 'Tổng Bản Ghi Sổ Cái',
-        value: total || s.totalLogs || logs.length,
+        value: totalCount,
         sub: 'Bất biến (Append-only)',
         icon: ScrollText,
         color: '#2563EB',
@@ -199,7 +384,7 @@ export const AuditLogsPage = () => {
       },
       {
         title: 'AI MAPE-K Tự Hành',
-        value: s.autonomousActions ?? Math.floor((total || logs.length) * 0.4),
+        value: autonomousCount,
         sub: 'Khởi động & Scale Pods',
         icon: Bot,
         color: '#059669',
@@ -207,7 +392,7 @@ export const AuditLogsPage = () => {
       },
       {
         title: 'Cổng Phê Duyệt HITL',
-        value: s.hitlApprovals ?? 1,
+        value: hitlCount,
         sub: 'Con người xác nhận',
         icon: UserCheck,
         color: '#D97706',
@@ -215,7 +400,7 @@ export const AuditLogsPage = () => {
       },
       {
         title: 'Vi Phạm Bị Chặn (RBAC)',
-        value: s.blockedViolations ?? logs.filter((l) => l.status === 'DENIED').length,
+        value: blockedCount,
         sub: 'Từ chối quyền truy cập',
         icon: ShieldAlert,
         color: '#DC2626',
@@ -230,7 +415,362 @@ export const AuditLogsPage = () => {
         bg: '#ECFDF5',
       },
     ];
-  }, [stats, total, logs]);
+  }, [filteredLogs]);
+
+    // Nút Lịch & Popover đặt trên góc phải của Biểu đồ
+  const calendarFilterControl = (
+    <div style={{ position: 'relative' }} ref={calendarRef}>
+      <button
+        type="button"
+        onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+        style={{
+          height: '32px',
+          padding: '0 10px',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          borderRadius: '6px',
+          border: isCalendarOpen || timeFilterMode !== 'all' ? '1px solid #10B981' : '1px solid var(--dash-border)',
+          backgroundColor: timeFilterMode !== 'all' ? '#ECFDF5' : '#FFFFFF',
+          color: timeFilterMode !== 'all' ? '#047857' : 'var(--dash-text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          boxShadow: isCalendarOpen ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : 'none',
+          transition: 'all 0.15s ease',
+        }}
+        title="Mở bảng lịch chọn ngày, tháng hoặc năm"
+      >
+        <Calendar size={14} color="#059669" />
+        <span>{currentFilterLabel}</span>
+        <ChevronDown size={12} color="#059669" />
+      </button>
+
+      {/* Cửa Sổ Popover Lịch Đa Chế Độ */}
+      {isCalendarOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '38px',
+            right: '0',
+            zIndex: 100,
+            width: '330px',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '10px',
+            border: '1px solid #E2E8F0',
+            boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            padding: '14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          {/* Tabs Chế Độ: Ngày | Tháng | Năm | Tất Cả */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setTimeFilterMode('date');
+                setPage(1);
+              }}
+              style={{
+                padding: '6px 2px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#FFFFFF' : 'transparent',
+                color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#0F172A' : '#64748B',
+                boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              📅 Ngày
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTimeFilterMode('month');
+                setPage(1);
+              }}
+              style={{
+                padding: '6px 2px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: timeFilterMode === 'month' ? '#FFFFFF' : 'transparent',
+                color: timeFilterMode === 'month' ? '#0F172A' : '#64748B',
+                boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              🗓️ Tháng
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTimeFilterMode('year');
+                setPage(1);
+              }}
+              style={{
+                padding: '6px 2px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: timeFilterMode === 'year' ? '#FFFFFF' : 'transparent',
+                color: timeFilterMode === 'year' ? '#0F172A' : '#64748B',
+                boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              📆 Năm
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTimeFilterMode('all');
+                setPage(1);
+                setIsCalendarOpen(false);
+              }}
+              style={{
+                padding: '6px 2px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: timeFilterMode === 'all' ? '#FFFFFF' : 'transparent',
+                color: timeFilterMode === 'all' ? '#0F172A' : '#64748B',
+                boxShadow: timeFilterMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              🌐 Tất cả
+            </button>
+          </div>
+
+          {/* Tab Body: CHỌN NGÀY */}
+          {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
+            <div>
+              <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                Chọn ngày cụ thể:
+              </label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setTimeFilterMode('date');
+                  setPage(1);
+                }}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  padding: '0 10px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  backgroundColor: '#F8FAFC',
+                  color: '#0F172A',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+
+              {/* Quick presets for recent days */}
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
+                  Ngày có bản ghi gần đây:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {recentActiveDays.map((dStr) => {
+                    const dParts = dStr.split('-');
+                    const isToday = dStr === getTodayStr();
+                    const isSelected = (timeFilterMode === 'today' && isToday) || (timeFilterMode === 'date' && selectedDate === dStr);
+                    return (
+                      <button
+                        key={dStr}
+                        type="button"
+                        onClick={() => {
+                          if (isToday) {
+                            setTimeFilterMode('today');
+                          } else {
+                            setTimeFilterMode('date');
+                          }
+                          setSelectedDate(dStr);
+                          setPage(1);
+                          setIsCalendarOpen(false);
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '0.6875rem',
+                          fontWeight: isSelected ? 700 : 500,
+                          borderRadius: '4px',
+                          border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                          backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                          color: isSelected ? '#047857' : '#334155',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab Body: CHỌN THÁNG */}
+          {timeFilterMode === 'month' && (
+            <div>
+              <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
+                Chọn tháng & năm:
+              </label>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => {
+                  setSelectedMonth(e.target.value);
+                  setPage(1);
+                }}
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  padding: '0 10px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  backgroundColor: '#F8FAFC',
+                  color: '#0F172A',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  marginBottom: '10px',
+                }}
+              />
+
+              {/* 12 Months grid */}
+              <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
+                Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
+                  const mStr = `${selectedMonth?.split('-')[0] || '2026'}-${String(mNum).padStart(2, '0')}`;
+                  const isSelected = selectedMonth === mStr;
+                  return (
+                    <button
+                      key={mNum}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMonth(mStr);
+                        setPage(1);
+                        setIsCalendarOpen(false);
+                      }}
+                      style={{
+                        padding: '6px 2px',
+                        fontSize: '0.6875rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        borderRadius: '4px',
+                        border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                        backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
+                        color: isSelected ? '#1D4ED8' : '#334155',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      Tháng {mNum}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tab Body: CHỌN NĂM */}
+          {timeFilterMode === 'year' && (
+            <div>
+              <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
+                Chọn năm khảo sát:
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                {availableYears.map((yr) => {
+                  const isSelected = selectedYear === yr;
+                  return (
+                    <button
+                      key={yr}
+                      type="button"
+                      onClick={() => {
+                        setSelectedYear(yr);
+                        setPage(1);
+                        setIsCalendarOpen(false);
+                      }}
+                      style={{
+                        padding: '10px 4px',
+                        fontSize: '0.8125rem',
+                        fontWeight: isSelected ? 700 : 600,
+                        borderRadius: '6px',
+                        border: isSelected ? '1px solid #7C3AED' : '1px solid #E2E8F0',
+                        backgroundColor: isSelected ? '#F5F3FF' : '#F8FAFC',
+                        color: isSelected ? '#6D28D9' : '#334155',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      Năm {yr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Popover Footer */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setTimeFilterMode('today');
+                setSelectedDate(getTodayStr());
+                setPage(1);
+                setIsCalendarOpen(false);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '0.7rem',
+                color: '#10B981',
+                fontWeight: 700,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              Về hôm nay
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCalendarOpen(false)}
+              style={{
+                padding: '4px 12px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                backgroundColor: '#0F172A',
+                color: '#FFFFFF',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Áp dụng
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
 
   return (
     <div className="dashboard-audit-logs-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -547,10 +1087,21 @@ export const AuditLogsPage = () => {
         })}
       </div>
 
-      {/* 3. Distribution Chart */}
-      <AuditDistributionChart height={220} data={stats?.days} />
+      {/* 3. Distribution Chart với Bộ chọn Thời Gian được tích hợp ngay trên Card Biểu Đồ */}
+      <AuditDistributionChart
+        height={230}
+        title={`Phân Bổ Sự Kiện Kiểm Toán (${currentFilterLabel})`}
+        subtitle="Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật"
+        logs={rawLogs}
+        fallbackData={stats?.days}
+        timeFilterMode={timeFilterMode}
+        selectedDate={selectedDate}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        filterControl={calendarFilterControl}
+      />
 
-      {/* 4. Filter and Search Bar */}
+      {/* 4. Filter and Search Bar (Thanh tìm kiếm và bộ lọc vai trò, trạng thái gọn gàng) */}
       <div
         className="dash-card"
         style={{
@@ -560,16 +1111,15 @@ export const AuditLogsPage = () => {
           gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          {/* Search box */}
+        <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          {/* Search box rộng rãi */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
               flex: '1',
-              minWidth: '260px',
-              padding: '6px 12px',
+              padding: '8px 12px',
               border: '1px solid var(--dash-border)',
               borderRadius: 'var(--dash-radius-md)',
               backgroundColor: '#FAFAFA',
@@ -599,38 +1149,6 @@ export const AuditLogsPage = () => {
                 <X size={14} color="#94A3B8" />
               </button>
             )}
-          </div>
-
-          {/* Quick Date Range Filters */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Thời Gian:</span>
-            {[
-              { key: 'ALL', label: 'Tất cả' },
-              { key: '24H', label: '24 Giờ' },
-              { key: '7D', label: '7 Ngày' },
-              { key: '30D', label: '30 Ngày' },
-            ].map((dr) => (
-              <button
-                key={dr.key}
-                type="button"
-                onClick={() => {
-                  setSelectedDateRange(dr.key);
-                  setPage(1);
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  border: '1px solid var(--dash-border)',
-                  backgroundColor: selectedDateRange === dr.key ? 'var(--dash-primary)' : '#FFFFFF',
-                  color: selectedDateRange === dr.key ? '#FFFFFF' : 'var(--dash-text-secondary)',
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                {dr.label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -753,7 +1271,8 @@ export const AuditLogsPage = () => {
               ) : (
                 logs.map((log) => {
                   const isSystem = log.role === 'SYSTEM_AI' || log.actorType === 'SYSTEM';
-                  const isOwner = log.role === 'SME_OWNER';
+                  const isOwner = log.role === 'SME_OWNER' || log.role === 'SUPER_ADMIN';
+                  const isDevOps = log.role === 'DEVOPS' || log.role === 'SYSTEM_ADMIN';
                   const isDenied = log.status === 'DENIED';
 
                   return (

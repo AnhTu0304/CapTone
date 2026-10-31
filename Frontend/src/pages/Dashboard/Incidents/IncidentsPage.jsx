@@ -562,7 +562,7 @@ export const IncidentsPage = ({ onNavigate }) => {
     const SYSTEM_IGNORED = new Set([
       'coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-apiserver-minikube',
       'kube-controller', 'kube-controller-manager-minikube', 'kube-scheduler-minikube',
-      'metrics-server', 'selfheal-agent', 'storage-provisioner', 'order-service'
+      'metrics-server', 'selfheal-agent', 'storage-provisioner', 'order-service', 'mongodb-init'
     ]);
 
     return Array.from(allServiceNames)
@@ -844,45 +844,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
           {/* Bộ Lọc Ngày / Tháng / Năm Đẹp Mắt */}
-          {/* Nút 1: Chọn ngày là đầu tiên (Nút Hôm Nay) */}
-          <button
-            type="button"
-            onClick={() => {
-              setTimeFilterMode('today');
-              setSelectedDate(getTodayStr());
-              setIsCalendarOpen(false);
-            }}
-            style={{
-              height: '32px',
-              padding: '0 12px',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              borderRadius: '6px',
-              border: timeFilterMode === 'today' ? '1px solid #10B981' : '1px solid var(--dash-border)',
-              backgroundColor: timeFilterMode === 'today' ? 'rgba(16, 185, 129, 0.12)' : '#F8FAFC',
-              color: timeFilterMode === 'today' ? '#047857' : 'var(--dash-text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: timeFilterMode === 'today' ? '0 1px 2px rgba(16, 185, 129, 0.15)' : 'none',
-            }}
-            title="Lọc nhanh toàn bộ sự cố phát sinh trong ngày hôm nay"
-          >
-            <span
-              style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: timeFilterMode === 'today' ? '#10B981' : '#94A3B8',
-                boxShadow: timeFilterMode === 'today' ? '0 0 6px #10B981' : 'none',
-              }}
-            />
-            Hôm nay
-          </button>
-
-          {/* Nút 2: Logo Lịch bên cạnh mở Popover chọn Ngày, Tháng, Năm */}
+          {/* Nút Logo Lịch mở Popover chọn Ngày, Tháng, Năm */}
           <div style={{ position: 'relative' }} ref={calendarRef}>
             <button
               type="button"

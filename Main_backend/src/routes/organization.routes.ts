@@ -312,4 +312,17 @@ router.get(
   AuditController.getOrganizationAuditStats
 );
 
-export const organizationRoutes = router;
+  router.get(
+    '/:id/audit-logs/verify',
+    requireOrgMember,
+    requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
+    AuditController.verifyOrganizationAuditLogs
+  );
+  router.get(
+    '/:orgId/audit-logs/verify',
+    requireOrgMember,
+    requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
+    AuditController.verifyOrganizationAuditLogs
+  );
+
+  export const organizationRoutes = router;

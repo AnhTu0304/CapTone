@@ -1,3 +1,5 @@
+import { AuditService } from './audit.service';
+import { AuditAction } from '../models/auditLog.model';
 import { pool } from '../config/database';
 import { HealingActionModel, IHealingActionFilter } from '../models/healingAction.model';
 import { ApiError } from '../utils/apiError';
@@ -241,6 +243,41 @@ export class HealingActionService {
       console.warn('[HealingActionService] Warning broadcasting complete event:', wsErr);
     }
 
+    // Ghi sổ cái kiểm toán bất biến (Immutable Audit Log)
+    try {
+      const actStatus = result.action?.execution_status || 'SUCCEEDED';
+      const isSuccess = actStatus === 'SUCCEEDED';
+      await AuditService.record({
+        organization_id: action.organization_id || null,
+        user_id: user?.id || (executedBy && !executedBy.includes('@') && executedBy.length > 30 ? executedBy : null),
+        actor_type: executedBy ? 'USER' : 'SYSTEM',
+        action: isSuccess ? 'REMEDIATION_COMPLETED' : 'REMEDIATION_FAILED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: actionId,
+        target_type: 'WORKLOAD',
+        target_id: null,
+        description: isSuccess
+          ? `Thực thi thành công tự phục hồi [${actionCode}] cho mục tiêu ${targetWorkloadName} (${targetNamespace})`
+          : `Thực thi tự phục hồi [${actionCode}] cho mục tiêu ${targetWorkloadName} không thành công`,
+        status: isSuccess ? 'SUCCESS' : 'FAILURE',
+        before_data: { execution_status: 'RUNNING' },
+        after_data: {
+          execution_status: actStatus,
+          result: result.action?.result,
+        },
+        metadata: {
+          action_type: actionCode,
+          target_name: targetWorkloadName,
+          namespace: targetNamespace,
+          cluster_id: action.cluster_id,
+          cluster_name: action.cluster_name,
+          executed_by: user?.email || executedBy || 'SYSTEM',
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log thất bại:', auditErr);
+    }
+
     return result;
   }
 
@@ -276,6 +313,33 @@ export class HealingActionService {
     }
 
     const aborted = await HealingActionModel.abortAction(actionId, userId, reason);
+
+    // Ghi audit log dừng khẩn cấp
+    try {
+      await AuditService.record({
+        organization_id: action.organization_id || null,
+        user_id: user?.id || (userId && userId.length > 30 ? userId : null),
+        actor_type: 'USER',
+        action: 'REMEDIATION_ABORTED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: actionId,
+        target_type: 'WORKLOAD',
+        target_id: null,
+        description: `Dừng khẩn cấp hành động tự phục hồi trên [${action.target_name || 'Workload'}]: ${reason || 'Người vận hành yêu cầu hủy bỏ'}`,
+        status: 'SUCCESS',
+        before_data: { execution_status: action.execution_status },
+        after_data: { execution_status: 'CANCELLED', reason },
+        metadata: {
+          target_name: action.target_name,
+          cluster_id: action.cluster_id,
+          cluster_name: action.cluster_name,
+          aborted_by: user?.email || userId,
+          reason,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log abort thất bại:', auditErr);
+    }
 
     // Phát thông báo thời gian thực tới tất cả Frontend qua WebSocket
     try {
@@ -375,31 +439,109 @@ export class HealingActionService {
       is_active?: boolean;
       execution_mode?: string;
       risk_level?: string;
-    }
+    },
+    user?: any
   ) {
     if (!id) {
       throw new ApiError(400, 'Mã chính sách không hợp lệ');
     }
 
+    const beforeRes = await pool.query('SELECT * FROM healing_policies WHERE id = $1', [id]);
+    const beforePolicy = beforeRes.rows[0];
+
     const updated = await HealingActionModel.updatePolicyConfig(id, data);
     if (!updated) {
       throw new ApiError(404, 'Không tìm thấy chính sách tự phục hồi để cập nhật');
     }
+
+    try {
+      const isThresholdModified = data.confidence_threshold !== undefined && Number(data.confidence_threshold) !== Number(beforePolicy?.confidence_threshold);
+      const auditAction: AuditAction = isThresholdModified ? 'POLICY_THRESHOLD_MODIFIED' : 'POLICY_UPDATED';
+
+      await AuditService.record({
+        organization_id: updated.organization_id || beforePolicy?.organization_id || null,
+        user_id: user?.id || null,
+        actor_type: 'USER',
+        action: auditAction,
+        resource_type: 'POLICY',
+        resource_id: id,
+        target_type: 'POLICY',
+        target_id: id,
+        description: isThresholdModified
+          ? `Điều chỉnh ngưỡng tin cậy chính sách [${updated.name}] từ ${(Number(beforePolicy?.confidence_threshold || 0) * 100).toFixed(0)}% sang ${(Number(updated.confidence_threshold || 0) * 100).toFixed(0)}%`
+          : `Cập nhật cấu hình chính sách tự phục hồi [${updated.name}]`,
+        status: 'SUCCESS',
+        before_data: beforePolicy ? {
+          name: beforePolicy.name,
+          confidence_threshold: beforePolicy.confidence_threshold,
+          requires_approval: beforePolicy.requires_approval,
+          execution_mode: beforePolicy.execution_mode,
+          risk_level: beforePolicy.risk_level,
+          is_active: beforePolicy.is_active,
+        } : null,
+        after_data: {
+          name: updated.name,
+          confidence_threshold: updated.confidence_threshold,
+          requires_approval: updated.requires_approval,
+          execution_mode: updated.execution_mode,
+          risk_level: updated.risk_level,
+          is_active: updated.is_active,
+        },
+        metadata: {
+          policy_id: id,
+          policy_name: updated.name,
+          changed_fields: Object.keys(data),
+          updated_by: user?.email || user?.id,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log update policy thất bại:', auditErr);
+    }
+
     return updated;
   }
 
   /**
    * 10. Toggle policy active
    */
-  public static async togglePolicyActive(id: string) {
+  public static async togglePolicyActive(id: string, user?: any) {
     if (!id) {
       throw new ApiError(400, 'Mã chính sách không hợp lệ');
     }
+
+    const beforeRes = await pool.query('SELECT * FROM healing_policies WHERE id = $1', [id]);
+    const beforePolicy = beforeRes.rows[0];
 
     const updated = await HealingActionModel.togglePolicyActive(id);
     if (!updated) {
       throw new ApiError(404, 'Không tìm thấy chính sách tự phục hồi');
     }
+
+    try {
+      await AuditService.record({
+        organization_id: updated.organization_id || beforePolicy?.organization_id || null,
+        user_id: user?.id || null,
+        actor_type: 'USER',
+        action: 'POLICY_STATUS_CHANGED',
+        resource_type: 'POLICY',
+        resource_id: id,
+        target_type: 'POLICY',
+        target_id: id,
+        description: `Thay đổi trạng thái chính sách [${updated.name}] thành ${updated.is_active ? 'HOẠT ĐỘNG (ACTIVE)' : 'TẠM DỪNG (INACTIVE)'}`,
+        status: 'SUCCESS',
+        before_data: { is_active: beforePolicy?.is_active },
+        after_data: { is_active: updated.is_active },
+        metadata: {
+          policy_id: id,
+          policy_name: updated.name,
+          is_active: updated.is_active,
+          updated_by: user?.email || user?.id,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log toggle policy thất bại:', auditErr);
+    }
+
     return updated;
   }
 
@@ -422,24 +564,79 @@ export class HealingActionService {
     is_active?: boolean;
     action_type_id?: string;
     created_by?: string;
-  }) {
+  }, user?: any) {
     if (!data.name || !data.organization_id) {
       throw new ApiError(400, 'Tên chính sách và tổ chức là bắt buộc');
     }
-    return await HealingActionModel.createPolicy(data);
+    const created = await HealingActionModel.createPolicy(data);
+
+    try {
+      await AuditService.record({
+        organization_id: data.organization_id,
+        user_id: user?.id || (data.created_by && data.created_by.length > 30 ? data.created_by : null),
+        actor_type: 'USER',
+        action: 'POLICY_CREATED',
+        resource_type: 'POLICY',
+        resource_id: created?.id,
+        target_type: 'POLICY',
+        target_id: created?.id,
+        description: `Khởi tạo chính sách tự phục hồi mới [${data.name}] với chế độ [${data.execution_mode || 'SUPERVISED'}]`,
+        status: 'SUCCESS',
+        after_data: data,
+        metadata: {
+          policy_id: created?.id,
+          policy_name: data.name,
+          execution_mode: data.execution_mode,
+          risk_level: data.risk_level,
+          confidence_threshold: data.confidence_threshold,
+          created_by: user?.email || data.created_by,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log create policy thất bại:', auditErr);
+    }
+
+    return created;
   }
 
   /**
    * 10c. Soft-delete policy
    */
-  public static async deletePolicy(id: string) {
+  public static async deletePolicy(id: string, user?: any) {
     if (!id) {
       throw new ApiError(400, 'Mã chính sách không hợp lệ');
     }
+    const beforeRes = await pool.query('SELECT * FROM healing_policies WHERE id = $1', [id]);
+    const beforePolicy = beforeRes.rows[0];
+
     const deleted = await HealingActionModel.deletePolicy(id);
     if (!deleted) {
       throw new ApiError(404, 'Không tìm thấy chính sách hoặc đã bị xóa');
     }
+
+    try {
+      await AuditService.record({
+        organization_id: beforePolicy?.organization_id || null,
+        user_id: user?.id || null,
+        actor_type: 'USER',
+        action: 'POLICY_DELETED',
+        resource_type: 'POLICY',
+        resource_id: id,
+        target_type: 'POLICY',
+        target_id: id,
+        description: `Xóa chính sách tự phục hồi [${beforePolicy?.name || id}]`,
+        status: 'SUCCESS',
+        before_data: beforePolicy ? { name: beforePolicy.name, is_active: beforePolicy.is_active } : null,
+        metadata: {
+          policy_id: id,
+          policy_name: beforePolicy?.name,
+          deleted_by: user?.email || user?.id,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log delete policy thất bại:', auditErr);
+    }
+
     return { success: true, id };
   }
 
@@ -467,16 +664,42 @@ export class HealingActionService {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
-    if (user) {
-      const action = await HealingActionModel.findActionById(actionId);
-      if (action) {
-        await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      }
+    const action = await HealingActionModel.findActionById(actionId);
+    if (user && action) {
+      await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
     }
     const approved = await HealingActionModel.approveAction(actionId, approvedBy, reason);
     if (!approved) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể phê duyệt');
     }
+
+    try {
+      await AuditService.record({
+        organization_id: action?.organization_id || null,
+        user_id: user?.id || (approvedBy && !approvedBy.includes('@') && approvedBy.length > 30 ? approvedBy : null),
+        actor_type: 'USER',
+        action: 'HITL_APPROVAL_GRANTED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: actionId,
+        target_type: 'WORKLOAD',
+        target_id: null,
+        description: `Phê duyệt hành động tự phục hồi [${action?.action_type_code || 'REMEDIATION'}] cho mục tiêu ${action?.target_name || 'Workload'}${reason ? `: ${reason}` : ''}`,
+        status: 'SUCCESS',
+        before_data: { approval_status: action?.approval_status || 'PENDING', execution_status: action?.execution_status },
+        after_data: { approval_status: 'APPROVED', approved_by: approvedBy, reason },
+        metadata: {
+          action_type: action?.action_type_code,
+          cluster_id: action?.cluster_id,
+          cluster_name: action?.cluster_name,
+          target_name: action?.target_name,
+          approved_by: user?.email || approvedBy,
+          reason,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log HITL approval granted thất bại:', auditErr);
+    }
+
     // Sau khi phê duyệt HITL thành công, tự động kích hoạt thực thi xuống K8s Agent
     try {
       await this.executeAction(actionId, approvedBy, user);
@@ -490,16 +713,42 @@ export class HealingActionService {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
-    if (user) {
-      const action = await HealingActionModel.findActionById(actionId);
-      if (action) {
-        await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      }
+    const action = await HealingActionModel.findActionById(actionId);
+    if (user && action) {
+      await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
     }
     const rejected = await HealingActionModel.rejectAction(actionId, rejectedBy, reason);
     if (!rejected) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể từ chối');
     }
+
+    try {
+      await AuditService.record({
+        organization_id: action?.organization_id || null,
+        user_id: user?.id || (rejectedBy && !rejectedBy.includes('@') && rejectedBy.length > 30 ? rejectedBy : null),
+        actor_type: 'USER',
+        action: 'HITL_APPROVAL_REJECTED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: actionId,
+        target_type: 'WORKLOAD',
+        target_id: null,
+        description: `Từ chối hành động tự phục hồi [${action?.action_type_code || 'REMEDIATION'}] cho mục tiêu ${action?.target_name || 'Workload'}${reason ? `: ${reason}` : ''}`,
+        status: 'SUCCESS',
+        before_data: { approval_status: action?.approval_status || 'PENDING' },
+        after_data: { approval_status: 'REJECTED', rejected_by: rejectedBy, reason },
+        metadata: {
+          action_type: action?.action_type_code,
+          cluster_id: action?.cluster_id,
+          cluster_name: action?.cluster_name,
+          target_name: action?.target_name,
+          rejected_by: user?.email || rejectedBy,
+          reason,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealingActionService] Ghi audit log HITL approval rejected thất bại:', auditErr);
+    }
+
     return rejected;
   }
 

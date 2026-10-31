@@ -1,3 +1,4 @@
+import { AuditService } from '../services/audit.service';
 import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import url from 'url';
@@ -387,7 +388,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                      completed_at = NOW(),
                      result = $3::jsonb
                  WHERE id = $1
-                 RETURNING incident_id, recommendation_id, target_name;`,
+                 RETURNING incident_id, recommendation_id, target_name, policy_id, environment_id;`,
                 [
                   action_id,
                   status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
@@ -462,6 +463,43 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                   );
                 }
               }
+
+              // Ghi audit log kết quả thực thi từ K8s Agent
+              let agentOrgId = ws.agent?.organization_id || null;
+              if (!agentOrgId && row?.policy_id) {
+                try {
+                  const polRes = await pool.query('SELECT organization_id FROM healing_policies WHERE id = $1', [row.policy_id]);
+                  agentOrgId = polRes.rows[0]?.organization_id || null;
+                } catch {}
+              }
+              if (!agentOrgId && row?.environment_id) {
+                try {
+                  const envRes = await pool.query('SELECT organization_id FROM environments WHERE id = $1', [row.environment_id]);
+                  agentOrgId = envRes.rows[0]?.organization_id || null;
+                } catch {}
+              }
+              AuditService.record({
+                organization_id: agentOrgId,
+                actor_type: 'AGENT',
+                action: status === 'SUCCEEDED' ? 'REMEDIATION_COMPLETED' : 'REMEDIATION_FAILED',
+                resource_type: 'HEALING_ACTION',
+                resource_id: action_id,
+                target_type: 'WORKLOAD',
+                description: status === 'SUCCEEDED'
+                  ? `Tác vụ tự phục hồi hoàn tất thành công bởi Agent ${ws.agent.name}: ${message}`
+                  : `Tác vụ tự phục hồi thất bại bởi Agent ${ws.agent.name}: ${message}`,
+                status: status === 'SUCCEEDED' ? 'SUCCESS' : 'FAILURE',
+                before_data: { execution_status: 'RUNNING' },
+                after_data: { execution_status: status, message, duration_ms },
+                metadata: {
+                  agent_id: ws.agent.id,
+                  agent_name: ws.agent.name,
+                  cluster_id: ws.agent.cluster_id,
+                  target_name: row?.target_name,
+                  duration_ms,
+                  incident_id: row?.incident_id,
+                },
+              }).catch(() => {});
 
               // Broadcast live event to UI
               broadcastTelemetryToUi({

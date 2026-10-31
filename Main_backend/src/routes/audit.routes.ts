@@ -13,6 +13,14 @@ auditRoutes.get(
   AuditController.getPlatformAuditLogs
 );
 
+// Platform Verify: SUPER_ADMIN, ADMIN
+auditRoutes.get(
+  '/verify',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'ADMIN'),
+  AuditController.verifyPlatformAuditLogs
+);
+
 // Platform Stats: SUPER_ADMIN, ADMIN
 auditRoutes.get(
   '/stats',

@@ -21,6 +21,7 @@ export class AuditController {
         user_id: req.query.user_id as string,
         action: req.query.action as string,
         status: req.query.status as string,
+        role: req.query.role as string,
         resource_type: req.query.resource_type as string,
         resource_id: req.query.resource_id as string,
         request_id: req.query.request_id as string,
@@ -62,6 +63,7 @@ export class AuditController {
         user_id: req.query.user_id as string,
         action: req.query.action as string,
         status: req.query.status as string,
+        role: req.query.role as string,
         resource_type: req.query.resource_type as string,
         resource_id: req.query.resource_id as string,
         request_id: req.query.request_id as string,
@@ -152,6 +154,44 @@ export class AuditController {
       const orgId = (req.query.organization_id as string) || null;
       const stats = await AuditService.getStatsByOrganization(orgId);
       return ApiResponse.success(res, 'Lấy thống kê kiểm toán hệ thống thành công', stats, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+  /**
+   * [GET] /api/v1/organizations/:id/audit-logs/verify (hoặc :orgId)
+   * Xác thực tính toàn vẹn của chuỗi sổ cái kiểm toán bất biến
+   */
+  public static async verifyOrganizationAuditLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const orgMember = (req as any).orgMember;
+
+      if (!user) {
+        throw new ApiError(401, 'Yêu cầu đăng nhập trước khi truy cập');
+      }
+
+      const orgId = orgMember?.organizationId || req.params.orgId || req.params.id;
+      if (!orgId) {
+        throw new ApiError(400, 'Không tìm thấy định danh tổ chức');
+      }
+
+      const verification = await AuditService.verifyIntegrity(orgId);
+      return ApiResponse.success(res, 'Xác thực sổ cái kiểm toán thành công', verification, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [GET] /api/v1/audit-logs/verify
+   * Xác thực toàn hệ thống cho Platform Admin
+   */
+  public static async verifyPlatformAuditLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const orgId = (req.query.organization_id as string) || null;
+      const verification = await AuditService.verifyIntegrity(orgId);
+      return ApiResponse.success(res, 'Xác thực sổ cái kiểm toán toàn hệ thống thành công', verification, 200);
     } catch (error) {
       next(error);
     }

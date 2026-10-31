@@ -427,10 +427,27 @@ export const personalPortalService = {
   },
 
   async fetchDashboardSummary() {
-    const [companies, invitations] = await Promise.all([
+    let companies = [];
+    let invitations = [];
+
+    const [companiesRes, invitationsRes] = await Promise.allSettled([
       this.fetchMyCompanies(),
       this.fetchMyInvitations(),
     ]);
+
+    if (companiesRes.status === 'fulfilled') {
+      companies = companiesRes.value || [];
+    } else {
+      console.warn('[personalPortalService] fetchMyCompanies lỗi:', companiesRes.reason);
+      companies = this.getMyCompanies();
+    }
+
+    if (invitationsRes.status === 'fulfilled') {
+      invitations = invitationsRes.value || [];
+    } else {
+      console.warn('[personalPortalService] fetchMyInvitations lỗi:', invitationsRes.reason);
+      invitations = this.getMyInvitations();
+    }
 
     const activeCompanies = companies.filter((c) => c.status === 'ACTIVE').length;
     const notifs = this.getNotifications();
