@@ -114,13 +114,12 @@ export class ClusterModel {
     }
 
     const clusterUid = `cluster-${Date.now().toString(36)}`;
-    const endpoint = `https://api.${cleanName}.local:6443`;
     const res = await db.query<ICluster>(
       `INSERT INTO clusters (
         environment_id, name, cluster_uid, provider, endpoint, kubernetes_version, status, created_at, updated_at
-      ) VALUES ($1, $2, $3, 'MINIKUBE', $4, 'v1.29.4', 'CONNECTED', NOW(), NOW())
+      ) VALUES ($1, $2, $3, 'MINIKUBE', NULL, NULL, 'PENDING', NOW(), NOW())
       RETURNING id, environment_id, name, cluster_uid, provider, endpoint, kubernetes_version, status`,
-      [environmentId, cleanName, clusterUid, endpoint]
+      [environmentId, cleanName, clusterUid]
     );
     const newCluster = res.rows[0];
 
@@ -146,9 +145,9 @@ export class ClusterModel {
         e.organization_id,
         COALESCE(c.provider, 'MINIKUBE') AS provider,
         c.cluster_uid,
-        COALESCE(c.endpoint, 'https://api.' || c.name || '.local:6443') AS endpoint,
-        COALESCE(c.kubernetes_version, 'v1.29.4') AS kubernetes_version,
-        COALESCE(c.status, 'CONNECTED') AS status,
+        c.endpoint,
+        c.kubernetes_version,
+        c.status,
         c.created_at,
         c.updated_at,
         COUNT(DISTINCT n.id)::int AS nodes_count,
@@ -195,9 +194,9 @@ export class ClusterModel {
         o.name AS organization_name,
         COALESCE(c.provider, 'MINIKUBE') AS provider,
         c.cluster_uid,
-        COALESCE(c.endpoint, 'https://api.' || c.name || '.local:6443') AS endpoint,
-        COALESCE(c.kubernetes_version, 'v1.29.4') AS kubernetes_version,
-        COALESCE(c.status, 'CONNECTED') AS status,
+        c.endpoint,
+        c.kubernetes_version,
+        c.status,
         c.created_at,
         c.updated_at,
         COUNT(DISTINCT n.id)::int AS nodes_count,
@@ -297,16 +296,16 @@ export class ClusterModel {
         o.name AS organization_name,
         COALESCE(c.provider, 'MINIKUBE') AS provider,
         c.cluster_uid,
-        COALESCE(c.endpoint, 'https://api.' || c.name || '.local:6443') AS endpoint,
-        COALESCE(c.kubernetes_version, 'v1.29.4') AS kubernetes_version,
-        COALESCE(c.status, 'CONNECTED') AS status,
+        c.endpoint,
+        c.kubernetes_version,
+        c.status,
         c.created_at,
         c.updated_at,
         a.id AS agent_id,
         a.name AS agent_name,
         a.agent_uid,
         COALESCE(a.status, 'PENDING') AS agent_status,
-        COALESCE(a.version, 'v2.4.1') AS agent_version,
+        a.version AS agent_version,
         a.last_seen_at
       FROM clusters c
       JOIN environments e ON c.environment_id = e.id
@@ -338,16 +337,16 @@ export class ClusterModel {
           o.name AS organization_name,
           COALESCE(c.provider, 'MINIKUBE') AS provider,
           c.cluster_uid,
-          COALESCE(c.endpoint, 'https://api.' || c.name || '.local:6443') AS endpoint,
-          COALESCE(c.kubernetes_version, 'v1.29.4') AS kubernetes_version,
-          COALESCE(c.status, 'CONNECTED') AS status,
+          c.endpoint,
+          c.kubernetes_version,
+          c.status,
           c.created_at,
           c.updated_at,
           a.id AS agent_id,
           a.name AS agent_name,
           a.agent_uid,
           COALESCE(a.status, 'PENDING') AS agent_status,
-          COALESCE(a.version, 'v2.4.1') AS agent_version,
+          a.version AS agent_version,
           a.last_seen_at
         FROM clusters c
         JOIN environments e ON c.environment_id = e.id
@@ -367,7 +366,7 @@ export class ClusterModel {
     if (!cluster.agent_id) {
       const agentRes = await db.query(
         `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
+         VALUES ($1, $2, $3, $4, NULL, 'PENDING', NOW(), NOW())
          RETURNING id, name, agent_uid, status, version`,
         [
           `${cluster.name}-ebpf-agent`,
@@ -561,7 +560,7 @@ export class ClusterModel {
     if (!agentId) {
       const agentRes = await db.query(
         `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
+         VALUES ($1, $2, $3, $4, NULL, 'PENDING', NOW(), NOW())
          RETURNING id`,
         [
           `${cluster.name}-ebpf-agent`,
@@ -904,9 +903,9 @@ export class ClusterModel {
     const cleanName = data.name.trim();
     const clusterUid = `cluster-${Date.now().toString(36)}`;
     const provider = data.provider || 'MINIKUBE';
-    const status = data.status || 'CONNECTED';
-    const k8sVersion = data.kubernetes_version || 'v1.29.4';
-    const endpoint = data.endpoint || `https://api.${cleanName}.local:6443`;
+    const status = data.status || 'PENDING';
+    const k8sVersion = data.kubernetes_version || null;
+    const endpoint = data.endpoint || null;
 
     // 1. Tạo cụm trong bảng clusters
     const res = await db.query<ICluster>(
@@ -924,7 +923,7 @@ export class ClusterModel {
     // 3. TỰ ĐỘNG TẠO 1 AGENT DUY NHẤT CHO CỤM
     const agentRes = await db.query(
       `INSERT INTO agents (name, agent_uid, environment_id, cluster_id, version, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'v2.4.1', 'PENDING', NOW(), NOW())
+       VALUES ($1, $2, $3, $4, NULL, 'PENDING', NOW(), NOW())
        RETURNING id, name, agent_uid, status, version`,
       [
         `${cleanName}-ebpf-agent`,
