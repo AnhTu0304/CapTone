@@ -1,0 +1,197 @@
+{
+  "name": "PBI22 Alert History Test Fixture",
+  "version": "1.0.0",
+  "description": "Six diverse alert scenarios spanning different severities, statuses, categories and resources for verifying Alert History API & UI [S5][PBI22 Task 4.1 & 4.2]",
+  "scenarios": [
+    {
+      "scenario_id": "HIST-CRIT-RES-001",
+      "rule": {
+        "name": "High CPU Usage on Worker Node 01",
+        "description": "Cảnh báo quá tải CPU trên máy chủ worker-node-01",
+        "category": "RESOURCE",
+        "metric_type": "CPU",
+        "operator": "GREATER_THAN",
+        "threshold": 85.0,
+        "unit": "%",
+        "severity": "CRITICAL",
+        "evaluation_window": "60s",
+        "duration": 60,
+        "cooldown_seconds": 120
+      },
+      "resource": {
+        "resource_type": "node",
+        "resource_name": "worker-node-01",
+        "cluster_name": "k8s-pods-cluster-v2"
+      },
+      "target_status": "RESOLVED",
+      "target_severity": "CRITICAL",
+      "observed_value": 98.4,
+      "message": "Sử dụng CPU trên node worker-node-01 đạt 98.4%, vượt ngưỡng cấu hình 85%",
+      "resolution_note": "Tự động hạ nhiệt sau khi hoàn tất batch processing job",
+      "telemetry_points": [
+        { "offset_seconds": -90, "value": 97.5 },
+        { "offset_seconds": -45, "value": 98.1 },
+        { "offset_seconds": 0, "value": 98.4 }
+      ]
+    },
+    {
+      "scenario_id": "HIST-WARN-RES-002",
+      "rule": {
+        "name": "Memory Pressure on Worker Node 02",
+        "description": "Cảnh báo áp lực bộ nhớ RAM trên máy chủ worker-node-02",
+        "category": "RESOURCE",
+        "metric_type": "RAM",
+        "operator": "GREATER_THAN",
+        "threshold": 80.0,
+        "unit": "%",
+        "severity": "WARNING",
+        "evaluation_window": "60s",
+        "duration": 60,
+        "cooldown_seconds": 120
+      },
+      "resource": {
+        "resource_type": "node",
+        "resource_name": "worker-node-02",
+        "cluster_name": "k8s-pods-cluster-v2"
+      },
+      "target_status": "ACTIVE",
+      "target_severity": "WARNING",
+      "observed_value": 88.5,
+      "message": "Sử dụng bộ nhớ RAM trên node worker-node-02 đạt 88.5%, vượt ngưỡng an toàn 80%",
+      "telemetry_points": [
+        { "offset_seconds": -90, "value": 87.2 },
+        { "offset_seconds": -45, "value": 88.0 },
+        { "offset_seconds": 0, "value": 88.5 }
+      ]
+    },
+    {
+      "scenario_id": "HIST-CRIT-K8S-003",
+      "rule": {
+        "name": "Payment Service Repeated CrashLoopBackOff",
+        "description": "Cảnh báo Pod khởi động lại liên tục trong namespace payment",
+        "category": "KUBERNETES",
+        "metric_type": "POD_CRASH_LOOP",
+        "operator": "GREATER_THAN_OR_EQUAL",
+        "threshold": 4.0,
+        "unit": "restarts",
+        "severity": "CRITICAL",
+        "evaluation_window": "120s",
+        "duration": 60,
+        "cooldown_seconds": 120
+      },
+      "resource": {
+        "resource_type": "pod",
+        "resource_name": "payment-service-7d9c8b6f4-x2k9p",
+        "namespace": "payment",
+        "cluster_name": "k8s-pods-cluster-v2"
+      },
+      "target_status": "ACKNOWLEDGED",
+      "target_severity": "CRITICAL",
+      "observed_value": 8.0,
+      "message": "Pod payment-service-7d9c8b6f4-x2k9p gặp lỗi CrashLoopBackOff và đã restart 8 lần trong namespace payment",
+      "acknowledge_note": "DevOps on-call đã nhận thông báo và đang kiểm tra crash logs container",
+      "kubernetes_signal": {
+        "pod_name": "payment-service-7d9c8b6f4-x2k9p",
+        "namespace": "payment",
+        "restart_count": 8,
+        "status": "CrashLoopBackOff",
+        "event_reason": "CrashLoopBackOff",
+        "event_message": "Back-off 5m0s restarting failed container in pod payment-service-7d9c8b6f4-x2k9p"
+      }
+    },
+    {
+      "scenario_id": "HIST-INFO-K8S-004",
+      "rule": {
+        "name": "Network Inbound Surge on Ingress Gateway",
+        "description": "Lưu lượng mạng đầu vào tăng cao bất thường trên ingress",
+        "category": "RESOURCE",
+        "metric_type": "NETWORK_RECEIVE",
+        "operator": "GREATER_THAN",
+        "threshold": 50000000.0,
+        "unit": "B/s",
+        "severity": "INFO",
+        "evaluation_window": "60s",
+        "duration": 60,
+        "cooldown_seconds": 120
+      },
+      "resource": {
+        "resource_type": "node",
+        "resource_name": "worker-node-01",
+        "cluster_name": "k8s-pods-cluster-v2"
+      },
+      "target_status": "RESOLVED",
+      "target_severity": "INFO",
+      "observed_value": 65000000.0,
+      "message": "Băng thông mạng nhận (RX) trên worker-node-01 vượt 50MB/s trong giờ cao điểm",
+      "resolution_note": "Đã tự động định tuyến lại lưu lượng qua cluster secondary",
+      "telemetry_points": [
+        { "offset_seconds": -90, "value": 61000000.0 },
+        { "offset_seconds": -45, "value": 63000000.0 },
+        { "offset_seconds": 0, "value": 65000000.0 }
+      ]
+    },
+    {
+      "scenario_id": "HIST-CRIT-APM-005",
+      "rule": {
+        "name": "Severe HTTP 5xx Rate on Order API",
+        "description": "Tỷ lệ phản hồi lỗi máy chủ HTTP 5xx tăng cao trên Order API",
+        "category": "APM",
+        "metric_type": "HTTP_5XX_RATE",
+        "operator": "GREATER_THAN",
+        "threshold": 5.0,
+        "unit": "%",
+        "severity": "CRITICAL",
+        "evaluation_window": "60s",
+        "duration": 60,
+        "cooldown_seconds": 120
+      },
+      "resource": {
+        "resource_type": "service",
+        "resource_name": "order-api",
+        "namespace": "production",
+        "cluster_name": "k8s-pods-cluster-v2"
+      },
+      "target_status": "ACTIVE",
+      "target_severity": "CRITICAL",
+      "observed_value": 14.8,
+      "message": "Dịch vụ order-api phát sinh tỷ lệ lỗi HTTP 5xx là 14.8%, vượt ngưỡng nghiêm trọng 5%",
+      "apm_points": [
+        { "offset_seconds": -90, "http_5xx_rate": 13.5, "latency": 350 },
+        { "offset_seconds": -45, "http_5xx_rate": 14.2, "latency": 380 },
+        { "offset_seconds": 0, "http_5xx_rate": 14.8, "latency": 410 }
+      ]
+    },
+    {
+      "scenario_id": "HIST-WARN-APM-006",
+      "rule": {
+        "name": "Elevated P95 Latency on Auth Service",
+        "description": "Độ trễ phản hồi P95 vượt mức khuyến nghị trên Auth Service",
+        "category": "APM",
+        "metric_type": "LATENCY",
+        "operator": "GREATER_THAN",
+        "threshold": 250.0,
+        "unit": "ms",
+        "severity": "WARNING",
+        "evaluation_window": "60s",
+        "duration": 60,
+        "cooldown_seconds": 120
+      },
+      "resource": {
+        "resource_type": "service",
+        "resource_name": "auth-service",
+        "namespace": "auth",
+        "cluster_name": "k8s-pods-cluster-v2"
+      },
+      "target_status": "RESOLVED",
+      "target_severity": "WARNING",
+      "observed_value": 420.0,
+      "message": "Độ trễ P95 của dịch vụ auth-service đạt 420ms, vượt ngưỡng phản hồi nhanh 250ms",
+      "resolution_note": "Tự động kích hoạt cơ chế Redis cache warming giúp giảm latency xuống 45ms",
+      "apm_points": [
+        { "offset_seconds": -90, "http_5xx_rate": 0.2, "latency": 390 },
+        { "offset_seconds": -45, "http_5xx_rate": 0.3, "latency": 410 },
+        { "offset_seconds": 0, "http_5xx_rate": 0.2, "latency": 420 }
+      ]
+    }
+  ]
+}

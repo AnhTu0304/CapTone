@@ -43,6 +43,9 @@ jest.mock('../../../services/alertService', () => {
       updateAlertRule: jest.fn(),
       toggleAlertRuleStatus: jest.fn(),
       deleteAlertRule: jest.fn(),
+      getAlertTimeline: jest.fn().mockResolvedValue([]),
+      getAlertHistory: jest.fn().mockResolvedValue({ items: [], pagination: {} }),
+      getAlertHistorySummary: jest.fn().mockResolvedValue({}),
     },
   };
 });

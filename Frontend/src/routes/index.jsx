@@ -181,6 +181,9 @@ export const RouteRenderer = ({
   if (path === '/alerts' || path === '/alert-rules') {
     return <DashboardPage currentPath="/dashboard/alerts" onNavigate={onNavigate} />;
   }
+  if (path === '/alerts/history' || path === '/dashboard/alerts/history') {
+    return <DashboardPage currentPath="/dashboard/alerts/history" onNavigate={onNavigate} />;
+  }
 
   // Handle all admin routes
   if (path.startsWith('/admin')) {
