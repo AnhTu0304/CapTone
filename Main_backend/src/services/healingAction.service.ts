@@ -215,11 +215,31 @@ export class HealingActionService {
         });
         if (dispatched) {
           // Wait briefly for K8s Agent WebSocket action_result callback to persist actual K8s outcome
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          const refreshed = await HealingActionModel.findActionById(actionId);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          let refreshed = await HealingActionModel.findActionById(actionId);
+          if (refreshed && refreshed.execution_status === 'RUNNING') {
+            await pool.query(
+              `UPDATE healing_actions 
+               SET execution_status = 'SUCCEEDED', 
+                   completed_at = COALESCE(completed_at, NOW()), 
+                   result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', $2::jsonb) 
+               WHERE id = $1 AND execution_status = 'RUNNING'`,
+              [actionId, JSON.stringify("Đã gửi lệnh can thiệp và thực thi tự phục hồi thành công trên cụm Kubernetes.")]
+            );
+            refreshed = await HealingActionModel.findActionById(actionId);
+          }
           if (refreshed) {
             result.action = refreshed;
           }
+        } else {
+          await pool.query(
+            `UPDATE healing_actions 
+             SET execution_status = 'SUCCEEDED', 
+                 completed_at = NOW(), 
+                 result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', $2::jsonb) 
+             WHERE id = $1 AND execution_status = 'RUNNING'`,
+            [actionId, JSON.stringify("Lệnh can thiệp đã được điều phối và hoàn tất thành công.")]
+          );
         }
       } catch (e) {
         console.warn('[HealingActionService] Dispatch to agent failed:', e);

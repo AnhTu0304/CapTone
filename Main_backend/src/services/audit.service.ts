@@ -350,9 +350,17 @@ export class AuditService {
         a.organization_id,
         o.name AS organization_name,
         a.user_id,
-        u.full_name AS user_name,
+        CASE
+          WHEN a.actor_type IN ('SYSTEM', 'AGENT') THEN 'MAPE-K Autonomous Engine'
+          ELSE COALESCE(u.full_name, u.email, 'Ng??i d?ng h? th?ng')
+        END AS user_name,
         u.email AS user_email,
-        COALESCE(mem_role.member_role, sys_role.sys_role, 'VIEWER') AS actor_role,
+        CASE
+          WHEN a.actor_type IN ('SYSTEM', 'AGENT') THEN 'SYSTEM_AI'
+          WHEN sys_role.sys_role = 'SUPER_ADMIN' OR mem_role.member_role = 'SME_OWNER' THEN 'SME_OWNER'
+          WHEN sys_role.sys_role = 'SYSTEM_ADMIN' OR mem_role.member_role = 'DEVOPS' THEN 'DEVOPS'
+          ELSE COALESCE(mem_role.member_role, sys_role.sys_role, 'VIEWER')
+        END AS actor_role,
         a.actor_type,
         a.action,
         a.resource_type,

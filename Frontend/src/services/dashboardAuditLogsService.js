@@ -128,16 +128,27 @@ const mapBackendLog = (raw) => {
 
   // Tác tử
   let actor = raw.user_name || raw.user_email || 'Hệ Thống Tự Động (System)';
-  let role = raw.actor_role || raw.role || raw.member_role || 'VIEWER';
+  let role = raw.actor_role || raw.role || raw.member_role || 'SME_OWNER';
   if (raw.actor_type === 'SYSTEM' || raw.actor_type === 'AGENT') {
     actor = 'MAPE-K Autonomous Engine';
     role = 'SYSTEM_AI';
-  } else if (!raw.actor_role || raw.actor_role === 'VIEWER') {
-    if (raw.user_name && (raw.user_name.toLowerCase().includes('admin') || raw.user_name.toLowerCase().includes('owner'))) {
+  } else {
+    const lowerActor = String(actor).toLowerCase();
+    const lowerRole = String(role).toLowerCase();
+    if (
+      lowerRole.includes('owner') ||
+      lowerRole.includes('admin') ||
+      lowerActor.includes('sang') ||
+      lowerActor.includes('admin') ||
+      lowerActor.includes('owner') ||
+      (raw.action && raw.action.includes('HITL'))
+    ) {
       role = 'SME_OWNER';
-    } else if (raw.action && raw.action.includes('HITL')) {
-      role = 'SME_OWNER';
-    } else if (raw.action && (raw.action.includes('POLICY') || raw.action.includes('DRAIN'))) {
+    } else if (
+      lowerRole.includes('devops') ||
+      lowerActor.includes('tuan') ||
+      (raw.action && (raw.action.includes('POLICY') || raw.action.includes('DRAIN')))
+    ) {
       role = 'DEVOPS';
     }
   }

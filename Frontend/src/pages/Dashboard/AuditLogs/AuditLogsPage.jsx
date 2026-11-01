@@ -452,7 +452,7 @@ export const AuditLogsPage = () => {
           style={{
             position: 'absolute',
             top: '38px',
-            right: '0',
+            left: '0',
             zIndex: 100,
             width: '330px',
             backgroundColor: '#FFFFFF',
@@ -1087,21 +1087,7 @@ export const AuditLogsPage = () => {
         })}
       </div>
 
-      {/* 3. Distribution Chart với Bộ chọn Thời Gian được tích hợp ngay trên Card Biểu Đồ */}
-      <AuditDistributionChart
-        height={230}
-        title={`Phân Bổ Sự Kiện Kiểm Toán (${currentFilterLabel})`}
-        subtitle="Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật"
-        logs={rawLogs}
-        fallbackData={stats?.days}
-        timeFilterMode={timeFilterMode}
-        selectedDate={selectedDate}
-        selectedMonth={selectedMonth}
-        selectedYear={selectedYear}
-        filterControl={calendarFilterControl}
-      />
-
-      {/* 4. Filter and Search Bar (Thanh tìm kiếm và bộ lọc vai trò, trạng thái gọn gàng) */}
+      {/* 3. Bộ lọc Tổng Hợp Đặt Trên Biểu Đồ (Đồng bộ chuẩn Lịch sử phục hồi, lọc đồng thời Biểu đồ và Sổ cái) */}
       <div
         className="dash-card"
         style={{
@@ -1111,7 +1097,13 @@ export const AuditLogsPage = () => {
           gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          {/* Bộ chọn Thời Gian dạng Popover Lịch chuẩn ActionHistoryPage */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Thời Gian:</span>
+            {calendarFilterControl}
+          </div>
+
           {/* Search box rộng rãi */}
           <div
             style={{
@@ -1119,7 +1111,9 @@ export const AuditLogsPage = () => {
               alignItems: 'center',
               gap: '8px',
               flex: '1',
-              padding: '8px 12px',
+              minWidth: '280px',
+              maxWidth: '560px',
+              padding: '6px 12px',
               border: '1px solid var(--dash-border)',
               borderRadius: 'var(--dash-radius-md)',
               backgroundColor: '#FAFAFA',
@@ -1162,7 +1156,6 @@ export const AuditLogsPage = () => {
               { key: 'SYSTEM_AI', label: 'AI MAPE-K' },
               { key: 'SME_OWNER', label: 'SME Owner' },
               { key: 'DEVOPS', label: 'DevOps Lead' },
-              { key: 'VIEWER', label: 'Viewer' },
             ].map((rk) => (
               <button
                 key={rk.key}
@@ -1219,6 +1212,19 @@ export const AuditLogsPage = () => {
           </div>
         </div>
       </div>
+
+      {/* 4. Distribution Chart (Được lọc đồng thời theo bộ lọc thời gian và vai trò) */}
+      <AuditDistributionChart
+        height={230}
+        title={`Phân Bổ Sự Kiện Kiểm Toán (${currentFilterLabel})`}
+        subtitle="Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật"
+        logs={filteredLogs}
+        fallbackData={stats?.days}
+        timeFilterMode={timeFilterMode}
+        selectedDate={selectedDate}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+      />
 
       {/* 5. Audit Log Table */}
       <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>

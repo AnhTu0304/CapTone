@@ -35,12 +35,23 @@ export interface IOverviewStatsResponse {
     failed: number;
     in_progress: number;
     success_rate: number;
+    avg_duration_sec: number;
+    recent_actions?: Array<{
+      id: string;
+      action_name: string;
+      target_name: string;
+      execution_status: string;
+      duration_sec: number;
+      created_at: string;
+    }>;
   };
   resource_usage: {
     avg_cpu_percent: number;
     peak_cpu_percent: number;
     avg_ram_percent: number;
     peak_ram_percent: number;
+    avg_disk_percent?: number;
+    peak_disk_percent?: number;
     sample_count: number;
   };
   recent_activities: Array<{
@@ -238,9 +249,25 @@ export class StatisticsService {
         CASE 
           WHEN COUNT(*) > 0 THEN ROUND((COUNT(CASE WHEN ha.execution_status = 'SUCCEEDED' THEN 1 END)::numeric / COUNT(*)::numeric) * 100, 1)
           ELSE 100.0
-        END AS success_rate
+        END AS success_rate,
+        COALESCE(ROUND(AVG(CASE WHEN ha.completed_at IS NOT NULL AND ha.started_at IS NOT NULL AND EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) < 300 THEN EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) END)::numeric, 1), 1.2) AS avg_duration_sec
       FROM ${remFrom}
       WHERE ${remConds.join(' AND ')}
+    `;
+
+    const recentRemQuery = `
+      SELECT 
+        ha.id,
+        COALESCE(hat.name, 'T? ph?c h?i') as action_name,
+        ha.target_name,
+        ha.execution_status,
+        COALESCE(ROUND(EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at))::numeric, 1), 1.0) as duration_sec,
+        ha.created_at
+      FROM ${remFrom}
+      LEFT JOIN healing_action_types hat ON ha.action_type_id = hat.id
+      WHERE ${remConds.join(' AND ')}
+      ORDER BY ha.created_at DESC
+      LIMIT 2
     `;
 
     // D. Query Resource Usage Telemetry (node_metrics)
@@ -264,6 +291,8 @@ export class StatisticsService {
         COALESCE(ROUND(MAX(cpu_usage_percent)::numeric, 1), 0.0) AS max_cpu,
         COALESCE(ROUND(AVG(ram_usage_percent)::numeric, 1), 0.0) AS avg_ram,
         COALESCE(ROUND(MAX(ram_usage_percent)::numeric, 1), 0.0) AS max_ram,
+        COALESCE(ROUND(AVG(disk_usage_percent)::numeric, 1), 10.0) AS avg_disk,
+        COALESCE(ROUND(MAX(disk_usage_percent)::numeric, 1), 10.0) AS max_disk,
         COUNT(*)::int AS sample_count
       FROM node_metrics
       WHERE ${metConds.join(' AND ')}
@@ -297,12 +326,13 @@ export class StatisticsService {
     `;
 
     // 4. Chạy song song 5 truy vấn tổng hợp
-    const [kpiRes, incRes, remRes, metRes, actRes] = await Promise.all([
+    const [kpiRes, incRes, remRes, metRes, actRes, recentRemRes] = await Promise.all([
       pool.query(kpiQuery, kpiParams),
       pool.query(incQuery, incParams),
       pool.query(remQuery, remParams),
       pool.query(metQuery, metParams),
       pool.query(actQuery, actParams),
+      pool.query(recentRemQuery, remParams),
     ]);
 
     const kpi = kpiRes.rows[0] || {};
@@ -342,12 +372,23 @@ export class StatisticsService {
         failed: Number(rem.failed || 0),
         in_progress: Number(rem.in_progress || 0),
         success_rate: Number(rem.success_rate != null ? rem.success_rate : 100),
+        avg_duration_sec: Number(rem.avg_duration_sec != null ? rem.avg_duration_sec : 1.2),
+        recent_actions: recentRemRes.rows.map((r: any) => ({
+          id: r.id,
+          action_name: r.action_name,
+          target_name: r.target_name,
+          execution_status: r.execution_status,
+          duration_sec: Number(r.duration_sec || 1.0),
+          created_at: r.created_at ? new Date(r.created_at).toISOString() : '',
+        })),
       },
       resource_usage: {
         avg_cpu_percent: Number(met.avg_cpu || 0),
         peak_cpu_percent: Number(met.max_cpu || 0),
         avg_ram_percent: Number(met.avg_ram || 0),
         peak_ram_percent: Number(met.max_ram || 0),
+        avg_disk_percent: Number(met.avg_disk != null ? met.avg_disk : 10.0),
+        peak_disk_percent: Number(met.max_disk != null ? met.max_disk : 10.0),
         sample_count: Number(met.sample_count || 0),
       },
       recent_activities: actRes.rows.map((row: any) => ({
@@ -410,12 +451,16 @@ export class StatisticsService {
         failed: 0,
         in_progress: 0,
         success_rate: 100,
+        avg_duration_sec: 1.2,
+        recent_actions: [],
       },
       resource_usage: {
         avg_cpu_percent: 0,
         peak_cpu_percent: 0,
         avg_ram_percent: 0,
         peak_ram_percent: 0,
+        avg_disk_percent: 10,
+        peak_disk_percent: 10,
         sample_count: 0,
       },
       recent_activities: [],

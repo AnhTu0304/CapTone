@@ -345,7 +345,7 @@ export const OverviewPage = () => {
   // Tính toán số liệu phần cứng và K8s Inventory THẬT
   const nodeCount = clusterInfo?.nodes?.length || currentEnv?.nodes || 1;
   const rawPods = useMemo(() => clusterInfo?.pods || [], [clusterInfo?.pods]);
-  const podCount = rawPods.length || currentEnv?.pods || 12;
+  const podCount = rawPods.length || currentEnv?.pods || 0;
   const runningPodsCount = rawPods.length > 0
     ? rawPods.filter((p) => p.status === 'Running' || p.phase === 'Running').length
     : podCount;
@@ -355,10 +355,10 @@ export const OverviewPage = () => {
       const set = new Set(rawPods.map((p) => p.namespace).filter(Boolean));
       return Array.from(set);
     }
-    return ['default', 'kube-system', 'selfheal-system'];
+    return [];
   }, [rawPods]);
 
-  const namespacesCount = namespacesList.length || 3;
+  const namespacesCount = namespacesList.length;
   const firstNode = clusterInfo?.nodes?.[0];
 
   // Node hardware capacity - Tổng hợp dung lượng thực tế từ toàn bộ nodes của cụm
@@ -391,11 +391,11 @@ export const OverviewPage = () => {
   }, [clusterInfo?.nodes]);
 
   // Metrics telemetry values
-  const cpuVal = telemetry?.cpu !== undefined ? Number(telemetry.cpu) : 0.28;
+  const cpuVal = telemetry?.cpu !== undefined ? Number(telemetry.cpu) : 0;
   const allocatedCpu = ((cpuVal / 100) * totalCpuCores).toFixed(2);
   const cpuDiff = prevCpu !== null ? (cpuVal - prevCpu).toFixed(1) : '0.0';
 
-  const ramVal = telemetry?.ram !== undefined ? Number(telemetry.ram) : 15.05; // MB RSS
+  const ramVal = telemetry?.ram !== undefined ? Number(telemetry.ram) : 0; // MB RSS
   const ramUsagePercent = Math.max(
     1,
     Math.min(100, Math.round(((ramVal / (parseFloat(totalRamGb) * 1024)) * 100) * 10) / 10)
@@ -407,7 +407,7 @@ export const OverviewPage = () => {
     ? Number(overviewStats.resource_usage.avg_cpu_percent).toFixed(1)
     : (telemetry?.node_cpu_percent !== undefined && telemetry.node_cpu_percent !== null && Number(telemetry.node_cpu_percent) > 0
         ? Number(telemetry.node_cpu_percent).toFixed(1)
-        : ((567 / (totalCpuCores * 1000)) * 100).toFixed(1));
+        : '0.0');
 
   const nodeCpuCores = telemetry?.node_cpu_cores !== undefined && telemetry.node_cpu_cores !== null && Number(telemetry.node_cpu_cores) > 0
     ? Number(telemetry.node_cpu_cores).toFixed(2)
@@ -417,19 +417,33 @@ export const OverviewPage = () => {
     ? Number(overviewStats.resource_usage.avg_ram_percent).toFixed(1)
     : (telemetry?.node_ram_percent !== undefined && telemetry.node_ram_percent !== null && Number(telemetry.node_ram_percent) > 0
         ? Number(telemetry.node_ram_percent).toFixed(1)
-        : (14.2).toFixed(1));
+        : '0.0');
 
   const nodeRamGb = telemetry?.node_ram_gb !== undefined && telemetry.node_ram_gb !== null && Number(telemetry.node_ram_gb) > 0
     ? Number(telemetry.node_ram_gb).toFixed(2)
     : ((Number(nodeRamPercent) / 100) * parseFloat(totalRamGb)).toFixed(2);
 
-  const diskVal = telemetry?.disk !== undefined ? Math.round(Number(telemetry.disk)) : 10;
+  const diskVal = overviewStats?.resource_usage?.avg_disk_percent !== undefined
+    ? Math.round(Number(overviewStats.resource_usage.avg_disk_percent))
+    : (telemetry?.disk !== undefined ? Math.round(Number(telemetry.disk)) : 10);
+  const diskStatusText = diskVal > 85 ? 'Cảnh báo đầy' : diskVal > 70 ? 'Cần theo dõi' : 'Bình thường';
   const diskUsedGb = Math.round((diskVal / 100) * parseFloat(totalDiskTb) * 1024);
 
-  // Status & Agent health
-  const activeIncidentsCount = activeIncidents.filter(
-    (i) => i.status === 'OPEN' || i.status === 'INVESTIGATING' || !i.status
-  ).length;
+  // Lọc sự cố đang diễn ra thực tế (chỉ OPEN hoặc INVESTIGATING) - Loại bỏ tuyệt đối các sự cố đã RESOLVED
+  const activeIncidentsList = useMemo(() => {
+    return activeIncidents.filter(
+      (i) => i.status === 'OPEN' || i.status === 'INVESTIGATING'
+    );
+  }, [activeIncidents]);
+
+  const activeIncidentsCount = activeIncidentsList.length;
+
+  // Lọc khuyến nghị AI: Chỉ hiển thị các dự báo/khuyến nghị chưa phê duyệt (PROPOSED/PENDING)
+  const pendingRecommendations = useMemo(() => {
+    return aiRecommendations.filter(
+      (rec) => rec.status === 'PROPOSED' || rec.status === 'PENDING'
+    );
+  }, [aiRecommendations]);
 
   // Biến đổi sequence cho biểu đồ với cả giá trị % và đơn vị vật lý (MB/GB)
   const chartTelemetryData = useMemo(() => {
@@ -933,7 +947,7 @@ export const OverviewPage = () => {
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
               {diskVal}%
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>Ổn định</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: diskVal > 85 ? 'var(--dash-danger)' : diskVal > 70 ? 'var(--dash-warning)' : 'var(--dash-success)' }}>{diskStatusText}</span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
             Ổ đĩa PV: {diskUsedGb} GB / {totalDiskTb} TB
@@ -955,7 +969,7 @@ export const OverviewPage = () => {
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Trên {namespacesCount} Namespaces ({namespacesList.slice(0, 3).join(', ')})
+            {namespacesCount > 0 ? `Trên ${namespacesCount} Namespaces (${namespacesList.slice(0, 3).join(', ')})` : 'Chưa có workload'}
           </div>
         </div>
 
@@ -975,7 +989,7 @@ export const OverviewPage = () => {
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
             {activeIncidentsCount > 0
-              ? `Mới nhất: ${activeIncidents[0]?.title ? activeIncidents[0].title.slice(0, 22) + '...' : 'Vừa xong'}`
+              ? `Mới nhất: ${activeIncidentsList[0]?.title ? activeIncidentsList[0].title.slice(0, 22) + '...' : 'Vừa xong'}`
               : 'Hệ thống K8s an toàn'}
           </div>
         </div>
@@ -1041,7 +1055,7 @@ export const OverviewPage = () => {
               ? 'Tác tử eBPF chưa kết nối tới máy chủ'
               : isDataStale || telemetrySequence.length === 0
               ? 'Chưa nhận được mẫu viễn trắc trong khung giờ chọn'
-              : `Nhân eBPF ${clusterInfo?.kubernetes_version || 'v1.37.0'} đang chạy`}
+              : `Nhân eBPF ${clusterInfo?.kubernetes_version || 'K8s Cluster'} đang chạy`}
           </div>
         </div>
 
@@ -1053,14 +1067,14 @@ export const OverviewPage = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {overviewStats?.remediations?.total !== undefined ? overviewStats.remediations.total : (aiRecommendations.length > 0 ? aiRecommendations.length : 12)}
+              {overviewStats?.remediations?.total !== undefined ? overviewStats.remediations.total : 0}
             </span>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
               {overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}% Thành công` : '100% Thành công'}
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Thời gian phục hồi TB: 1.8s
+            Thời gian phục hồi TB: {overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '0.3s'}
           </div>
         </div>
 
@@ -1349,8 +1363,8 @@ export const OverviewPage = () => {
             </span>
           </div>
 
-          {/* Prediction Item THẬT từ CSDL / WebSocket */}
-          {aiRecommendations.length > 0 ? (
+          {/* Prediction Item THẬT từ CSDL / WebSocket - Chỉ hiển thị khi có đề xuất đang chờ phê duyệt */}
+          {pendingRecommendations.length > 0 ? (
             <div
               style={{
                 padding: '12px',
@@ -1362,7 +1376,7 @@ export const OverviewPage = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                  {aiRecommendations[0]?.recommendation || 'Đề xuất Tự Khắc Phục AI'}
+                  {pendingRecommendations[0]?.recommendation || 'Đề xuất Tự Khắc Phục AI'}
                 </span>
                 <span
                   style={{
@@ -1375,14 +1389,14 @@ export const OverviewPage = () => {
                     border: '1px solid var(--dash-warning-border)',
                   }}
                 >
-                  Ưu tiên: {aiRecommendations[0]?.risk_level || 'HIGH'}
+                  Ưu tiên: {pendingRecommendations[0]?.risk_level || 'HIGH'}
                 </span>
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5 }}>
-                {aiRecommendations[0]?.reasoning || 'Hệ thống AI đề xuất xử lý tối ưu cho workload.'}
+                {pendingRecommendations[0]?.reasoning || 'Hệ thống AI đề xuất xử lý tối ưu cho workload.'}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                <span>Trạng thái: {aiRecommendations[0]?.status || 'PROPOSED'}</span>
+                <span>Trạng thái: {pendingRecommendations[0]?.status || 'PROPOSED'}</span>
                 <span style={{ color: 'var(--dash-primary)', fontWeight: 600, cursor: 'pointer' }} onClick={() => onNavigate && onNavigate('/dashboard/ai/predictions')}>
                   Xem khuyến nghị &rarr;
                 </span>
@@ -1391,40 +1405,25 @@ export const OverviewPage = () => {
           ) : (
             <div
               style={{
-                padding: '12px',
-                border: '1px solid var(--dash-border)',
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px 16px',
+                textAlign: 'center',
+                backgroundColor: 'var(--dash-bg-canvas)',
                 borderRadius: 'var(--dash-radius-md)',
-                backgroundColor: '#FFFFFF',
-                marginBottom: '10px',
+                border: '1px dashed var(--dash-border)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                  Rủi ro Bão hòa Bộ nhớ (RAM Exhaustion)
-                </span>
-                <span
-                  style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: 'var(--dash-radius-full)',
-                    backgroundColor: 'var(--dash-warning-bg)',
-                    color: 'var(--dash-warning-text)',
-                    border: '1px solid var(--dash-warning-border)',
-                  }}
-                >
-                  Độ tin cậy 87%
-                </span>
+              <ShieldCheck size={28} color="var(--dash-success)" style={{ marginBottom: '6px' }} />
+              <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
+                Không Phát Hiện Rủi Ro Tiềm Ẩn
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5 }}>
-                Dịch vụ: <code style={{ color: 'var(--dash-text-primary)', fontWeight: 600 }}>sme-order-service</code> trong namespace <code style={{ color: 'var(--dash-text-muted)' }}>default</code>.
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                <span>Dự kiến xảy ra: ~15 phút tới</span>
-                <span style={{ color: 'var(--dash-primary)', fontWeight: 600, cursor: 'pointer' }} onClick={() => onNavigate && onNavigate('/dashboard/ai/predictions')}>
-                  Xem khuyến nghị &rarr;
-                </span>
-              </div>
+              <p style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
+                Mô hình AI dự báo chuỗi thời gian chưa ghi nhận nguy cơ quá tải hay bất thường.
+              </p>
             </div>
           )}
         </div>
@@ -1468,7 +1467,7 @@ export const OverviewPage = () => {
 
           {activeIncidentsCount > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-              {activeIncidents.slice(0, 3).map((inc, i) => (
+              {activeIncidentsList.slice(0, 3).map((inc, i) => (
                 <div
                   key={inc.id || i}
                   style={{
@@ -1570,14 +1569,18 @@ export const OverviewPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
             <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Tỷ Lệ Thành Công</div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-success)', marginTop: '2px' }}>100%</div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-success)', marginTop: '2px' }}>
+                {overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}%` : '100%'}
+              </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>
-                {aiRecommendations.length > 0 ? `${aiRecommendations.length}/${aiRecommendations.length} Hành động` : '12/12 Hành động'}
+                {overviewStats?.remediations?.succeeded !== undefined ? `${overviewStats.remediations.succeeded}/${overviewStats.remediations.total || 0} Hành động` : (overviewStats?.remediations?.total ? `${overviewStats.remediations.total} Hành động` : 'Chưa có')}
               </div>
             </div>
             <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Thời Gian Phục Hồi TB</div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>1.8s</div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
+                {overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '0.3s'}
+              </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>Không gián đoạn</div>
             </div>
           </div>
@@ -1586,14 +1589,20 @@ export const OverviewPage = () => {
             Hành Động Tự Động Gần Đây:
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-xs)' }}>
-              <span style={{ color: 'var(--dash-text-secondary)' }}>Khởi động lại cuốn chiếu: sme-order-service</span>
-              <span style={{ color: 'var(--dash-success)', fontWeight: 600 }}>Tự động trong 1.4s</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-xs)' }}>
-              <span style={{ color: 'var(--dash-text-secondary)' }}>Tự đồng bộ cấu hình K8s: minikube</span>
-              <span style={{ color: 'var(--dash-success)', fontWeight: 600 }}>Xử lý trong 0.8s</span>
-            </div>
+            {overviewStats?.remediations?.recent_actions && overviewStats.remediations.recent_actions.length > 0 ? (
+              overviewStats.remediations.recent_actions.map((act) => (
+                <div key={act.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-xs)' }}>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>
+                    {act.action_name}: <strong style={{ color: 'var(--dash-text-primary)' }}>{act.target_name}</strong>
+                  </span>
+                  <span style={{ color: 'var(--dash-success)', fontWeight: 600 }}>Tự động trong {act.duration_sec}s</span>
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '8px', textAlign: 'center', color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>
+                Chưa có hành động tự phục hồi nào trong chu kỳ này.
+              </div>
+            )}
           </div>
         </div>
       </div>
