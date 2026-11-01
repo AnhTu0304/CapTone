@@ -4,6 +4,7 @@ import { AlertSeverity } from '../schemas/alertRule.schema';
 import { ApiError } from '../utils/apiError';
 import { pool } from '../config/database';
 import { ConditionEvaluator } from './evaluators/conditionEvaluator.service';
+import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
 
 export interface IAlertTriggerInput {
   organization_id: string;
@@ -176,6 +177,20 @@ export class AlertLifecycleService {
       }
 
       await client.query('COMMIT');
+      try {
+        broadcastTelemetryToUi({
+          type: 'alert_updated',
+          action: isNew ? 'TRIGGERED' : 'UPDATED',
+          organization_id: input.organization_id,
+          cluster_id: input.cluster_id || null,
+          alert_id: event.id,
+          severity: event.severity,
+          status: event.status,
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        // Non-blocking
+      }
       return { event, isNew, cooldownActive };
     } catch (err) {
       await client.query('ROLLBACK');
@@ -206,7 +221,23 @@ export class AlertLifecycleService {
       data.metric_type
     );
     await ConditionEvaluator.clearPendingState(fingerprint);
-    return AlertEventModel.resolveOpenEvent(data);
+    const resolved = await AlertEventModel.resolveOpenEvent(data);
+    if (resolved) {
+      try {
+        broadcastTelemetryToUi({
+          type: 'alert_updated',
+          action: 'AUTO_RESOLVED',
+          organization_id: data.organization_id,
+          cluster_id: data.cluster_id || null,
+          alert_id: resolved.id,
+          status: 'RESOLVED',
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        // Non-blocking
+      }
+    }
+    return resolved;
   }
 
   /**
@@ -235,6 +266,18 @@ export class AlertLifecycleService {
     if (!updated) {
       throw ApiError.internal('Lỗi khi cập nhật trạng thái xác nhận sự kiện cảnh báo');
     }
+    try {
+      broadcastTelemetryToUi({
+        type: 'alert_updated',
+        action: 'ACKNOWLEDGED',
+        organization_id: organizationId,
+        alert_id: updated.id,
+        status: 'ACKNOWLEDGED',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // Non-blocking
+    }
     return updated;
   }
 
@@ -259,6 +302,18 @@ export class AlertLifecycleService {
     const updated = await AlertEventModel.resolveEventById(id, organizationId, userId, note);
     if (!updated) {
       throw ApiError.internal('Lỗi khi giải quyết sự kiện cảnh báo');
+    }
+    try {
+      broadcastTelemetryToUi({
+        type: 'alert_updated',
+        action: 'RESOLVED',
+        organization_id: organizationId,
+        alert_id: updated.id,
+        status: 'RESOLVED',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // Non-blocking
     }
     return updated;
   }

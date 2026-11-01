@@ -2,6 +2,7 @@ import { pool } from '../../config/database';
 import { IAlertRule } from '../../models/alertRule.model';
 import { AlertLifecycleService } from '../alertLifecycle.service';
 import { evaluateOperator, parseWindowToSeconds } from './ruleEvaluationHelper';
+import { ConditionEvaluator } from './conditionEvaluator.service';
 
 export class KubernetesRuleEvaluator {
   /**
@@ -49,10 +50,14 @@ export class KubernetesRuleEvaluator {
         p.cluster_id,
         p.name AS pod_name,
         p.status,
-        p.restart_count
+        p.restart_count,
+        COALESCE(np.name, nw.name, 'default') AS namespace_name
       FROM pods p
       JOIN clusters c ON p.cluster_id = c.id
       JOIN environments e ON c.environment_id = e.id
+      LEFT JOIN namespaces np ON p.namespace_id = np.id
+      LEFT JOIN workloads w ON p.workload_id = w.id
+      LEFT JOIN namespaces nw ON w.namespace_id = nw.id
       WHERE e.organization_id = $1
         AND p.deleted_at IS NULL
         ${clusterFilter}
@@ -72,6 +77,22 @@ export class KubernetesRuleEvaluator {
 
       const isViolating = isStatusCrashLoop || (restartCount > 0 && isThresholdBreached);
 
+      const { severity, isEscalated } = ConditionEvaluator.determineSeverity(
+        rule.severity,
+        restartCount,
+        Number(rule.threshold_value),
+        'POD_CRASH_LOOP'
+      );
+
+      const fingerprint = ConditionEvaluator.computeFingerprint(
+        rule.organization_id,
+        pod.cluster_id,
+        rule.id,
+        'pod',
+        pod.pod_name,
+        'POD_CRASH_LOOP'
+      );
+
       if (isViolating) {
         await AlertLifecycleService.recordAlertTrigger({
           organization_id: rule.organization_id,
@@ -82,17 +103,21 @@ export class KubernetesRuleEvaluator {
           metric_type: 'POD_CRASH_LOOP',
           resource_type: 'pod',
           resource_id: pod.pod_name,
-          severity: rule.severity,
+          severity,
           observed_value: restartCount,
           threshold_value: Number(rule.threshold_value),
           unit: rule.unit || 'restarts',
           message: `Pod '${pod.pod_name}' rơi vào trạng thái CrashLoopBackOff (khởi động lại: ${restartCount} lần, trạng thái: ${pod.status})`,
           details: {
             pod_name: pod.pod_name,
+            namespace: pod.namespace_name || 'default',
             pod_status: pod.status,
             restart_count: restartCount,
+            evaluation_state: 'FIRING',
+            is_escalated: isEscalated,
           },
           cooldown_seconds: rule.cooldown_seconds,
+          fingerprint,
         });
         triggered++;
       } else if (pod.status === 'Running') {
@@ -108,6 +133,7 @@ export class KubernetesRuleEvaluator {
             resolved_by: 'K8S_POD_HEALTHY',
             resolved_at: new Date().toISOString(),
             pod_status: pod.status,
+            namespace: pod.namespace_name || 'default',
             message: `Pod '${pod.pod_name}' đã hoạt động ổn định trở lại (Running)`,
           },
         });

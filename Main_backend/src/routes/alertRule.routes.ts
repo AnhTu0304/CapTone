@@ -59,6 +59,13 @@ alertRuleRoutes.get(
   AlertRuleController.list
 );
 
+// 1b. GET /api/v1/alert-rules/metadata - Danh sách metric_type, operator, unit được hỗ trợ
+alertRuleRoutes.get(
+  '/metadata',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertRuleController.getMetadata
+);
+
 // 2. GET /api/v1/alert-rules/:id - Xem chi tiết cấu hình cảnh báo
 alertRuleRoutes.get(
   '/:id',

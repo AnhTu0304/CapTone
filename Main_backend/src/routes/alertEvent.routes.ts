@@ -15,6 +15,13 @@ alertEventRoutes.post(
   AlertEventController.triggerEvaluation
 );
 
+// 1b. POST /api/v1/alerts/demo-ingest - Dev/Test fixture telemetry ingestion & evaluation adapter
+alertEventRoutes.post(
+  '/demo-ingest',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.demoIngest
+);
+
 // 2. GET /api/v1/alert-events - List alert events with pagination & filters
 alertEventRoutes.get(
   '/',

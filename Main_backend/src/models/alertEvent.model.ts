@@ -31,6 +31,12 @@ export interface IAlertEvent {
   updated_at: Date;
   // Joined fields
   cluster_name?: string | null;
+  organization_name?: string | null;
+  rule_description?: string | null;
+  rule_operator?: string | null;
+  rule_evaluation_window?: string | null;
+  rule_duration?: number | null;
+  rule_cooldown_seconds?: number | null;
   acknowledger_name?: string | null;
   acknowledger_email?: string | null;
 }
@@ -68,10 +74,15 @@ export class AlertEventModel {
    * Format raw SQL row to typed IAlertEvent
    */
   private static formatRow(row: any): IAlertEvent {
+    const observedValue = row.observed_value !== null ? Number(row.observed_value) : null;
+    const thresholdValue = row.threshold_value !== null ? Number(row.threshold_value) : null;
     return {
       ...row,
-      observed_value: row.observed_value !== null ? Number(row.observed_value) : null,
-      threshold_value: row.threshold_value !== null ? Number(row.threshold_value) : null,
+      observed_value: observedValue,
+      threshold_value: thresholdValue,
+      metric_value: observedValue,
+      threshold: thresholdValue,
+      resource_name: row.resource_id || row.details?.resource_name || null,
       details: typeof row.details === 'object' && row.details !== null ? row.details : {},
       occurrence_count:
         row.occurrence_count !== null && row.occurrence_count !== undefined
@@ -283,10 +294,18 @@ export class AlertEventModel {
       SELECT 
         ae.*,
         c.name AS cluster_name,
+        o.name AS organization_name,
+        ar.description AS rule_description,
+        ar.operator AS rule_operator,
+        ar.evaluation_window AS rule_evaluation_window,
+        ar.duration AS rule_duration,
+        ar.cooldown_seconds AS rule_cooldown_seconds,
         u.full_name AS acknowledger_name,
         u.email AS acknowledger_email
       FROM alert_events ae
       LEFT JOIN clusters c ON ae.cluster_id = c.id
+      LEFT JOIN organizations o ON ae.organization_id = o.id
+      LEFT JOIN alert_rules ar ON ae.rule_id = ar.id
       LEFT JOIN users u ON ae.acknowledged_by = u.id
       WHERE ae.id = $1
     `;
@@ -354,7 +373,7 @@ export class AlertEventModel {
     }
 
     if (filters.resource_type) {
-      conditions.push(`ae.resource_type = $${paramIndex++}`);
+      conditions.push(`LOWER(ae.resource_type) = LOWER($${paramIndex++})`);
       params.push(filters.resource_type);
     }
 
@@ -397,6 +416,7 @@ export class AlertEventModel {
       severity: 'ae.severity',
       status: 'ae.status',
       created_at: 'ae.created_at',
+      occurrence_count: 'ae.occurrence_count',
     };
     const sortCol = allowedSortFields[filters.sort_by || 'last_seen_at'] || 'ae.last_seen_at';
     const sortOrder = filters.order === 'asc' ? 'ASC' : 'DESC';
@@ -405,10 +425,18 @@ export class AlertEventModel {
       SELECT 
         ae.*,
         c.name AS cluster_name,
+        o.name AS organization_name,
+        ar.description AS rule_description,
+        ar.operator AS rule_operator,
+        ar.evaluation_window AS rule_evaluation_window,
+        ar.duration AS rule_duration,
+        ar.cooldown_seconds AS rule_cooldown_seconds,
         u.full_name AS acknowledger_name,
         u.email AS acknowledger_email
       FROM alert_events ae
       LEFT JOIN clusters c ON ae.cluster_id = c.id
+      LEFT JOIN organizations o ON ae.organization_id = o.id
+      LEFT JOIN alert_rules ar ON ae.rule_id = ar.id
       LEFT JOIN users u ON ae.acknowledged_by = u.id
       WHERE ${whereClause}
       ORDER BY ${sortCol} ${sortOrder}
@@ -514,6 +542,10 @@ export class AlertEventModel {
     total_active: number;
     total_acknowledged: number;
     total_resolved: number;
+    critical: number;
+    warning: number;
+    info: number;
+    resolved: number;
     by_severity: { INFO: number; WARNING: number; CRITICAL: number };
     by_category: { RESOURCE: number; KUBERNETES: number; APM: number };
     by_cluster: Array<{ cluster_id: string; cluster_name: string; active_count: number }>;
@@ -572,6 +604,10 @@ export class AlertEventModel {
       total_active: parseInt(r.total_active || '0', 10),
       total_acknowledged: parseInt(r.total_acknowledged || '0', 10),
       total_resolved: parseInt(r.total_resolved || '0', 10),
+      critical: parseInt(r.critical_count || '0', 10),
+      warning: parseInt(r.warning_count || '0', 10),
+      info: parseInt(r.info_count || '0', 10),
+      resolved: parseInt(r.total_resolved || '0', 10),
       by_severity: {
         CRITICAL: parseInt(r.critical_count || '0', 10),
         WARNING: parseInt(r.warning_count || '0', 10),

@@ -43,7 +43,8 @@
     "test:role-security": "tsx --test src/test/roleAssignmentSecurity.test.ts",
     "worker:rule-engine": "tsx src/workers/ruleEngine.worker.ts",
     "test:rule-engine": "tsx --test src/test/ruleEngineEvaluation.test.ts",
-    "test:alert-management": "tsx --test src/test/alertManagementTask33.test.ts"
+    "test:alert-management": "tsx --test src/test/alertManagementTask33.test.ts",
+    "test:alert-demo": "tsx --test src/test/alertDemoTask34.test.ts"
   },
   "keywords": [
     "nodejs",

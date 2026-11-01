@@ -11,6 +11,19 @@ import { ApiError } from '../utils/apiError';
 
 export class AlertRuleController {
   /**
+   * GET /api/v1/alert-rules/metadata
+   * Lấy metadata cấu hình cảnh báo (metric_types, operators, units, severities)
+   */
+  public static async getMetadata(req: Request, res: Response, next: NextFunction) {
+    try {
+      const metadata = AlertRuleService.getSupportedMetadata();
+      return ApiResponse.success(res, 'Lấy metadata cấu hình cảnh báo thành công', metadata, 200);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/alert-rules
    * Tạo mới cấu hình cảnh báo
    */
@@ -28,7 +41,11 @@ export class AlertRuleController {
       }
 
       const user = (req as any).user;
-      const rule = await AlertRuleService.createRule(user, parseResult.data);
+      const requestedOrgId = parseResult.data.organization_id || AlertRuleService.extractRequestedOrgId(req);
+      const rule = await AlertRuleService.createRule(user, {
+        ...parseResult.data,
+        organization_id: requestedOrgId,
+      });
 
       return ApiResponse.success(res, 'Tạo cấu hình cảnh báo thành công', rule, 201);
     } catch (error) {
@@ -54,7 +71,11 @@ export class AlertRuleController {
       }
 
       const user = (req as any).user;
-      const result = await AlertRuleService.listRules(user, parseResult.data as any);
+      const requestedOrgId = parseResult.data.organization_id || AlertRuleService.extractRequestedOrgId(req);
+      const result = await AlertRuleService.listRules(user, {
+        ...(parseResult.data as any),
+        organization_id: requestedOrgId,
+      });
 
       return ApiResponse.success(res, 'Lấy danh sách cấu hình cảnh báo thành công', result, 200);
     } catch (error) {

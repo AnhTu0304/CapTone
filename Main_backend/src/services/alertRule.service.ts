@@ -4,6 +4,7 @@ import {
   AlertMetricType,
   AlertOperator,
   AlertSeverity,
+  METRIC_UNITS_MAP,
   validateMetricThresholdAndUnit,
 } from '../schemas/alertRule.schema';
 import { ApiError } from '../utils/apiError';
@@ -47,6 +48,67 @@ export class AlertRuleService {
       isSuperAdmin: false,
       allowedOrgIds,
       defaultOrgId: allowedOrgIds[0] || undefined,
+    };
+  }
+
+  /**
+   * Extract requested organization ID from query, body, or X-Organization-Id header
+   */
+  public static extractRequestedOrgId(req: any): string | undefined {
+    const explicit =
+      (req?.query?.organization_id as string) ||
+      (req?.body?.organization_id as string) ||
+      undefined;
+    if (explicit && typeof explicit === 'string' && explicit.trim()) {
+      return explicit.trim();
+    }
+
+    const headerOrg = req?.headers?.['x-organization-id'];
+    if (
+      typeof headerOrg === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(headerOrg.trim())
+    ) {
+      return headerOrg.trim();
+    }
+    return undefined;
+  }
+
+  /**
+   * Return supported Alert Rule configuration metadata (metric types, units, operators, severities)
+   */
+  public static getSupportedMetadata() {
+    return {
+      metric_types: [
+        { code: 'CPU', label: 'CPU Usage (Mức sử dụng CPU)', category: 'RESOURCE', units: METRIC_UNITS_MAP.CPU, default_unit: '%' },
+        { code: 'RAM', label: 'RAM Usage (Mức sử dụng Bộ nhớ)', category: 'RESOURCE', units: METRIC_UNITS_MAP.RAM, default_unit: '%' },
+        { code: 'DISK', label: 'Disk Usage (Dung lượng Lưu trữ)', category: 'RESOURCE', units: METRIC_UNITS_MAP.DISK, default_unit: '%' },
+        { code: 'NETWORK_RECEIVE', label: 'Network Receive Rate (Băng thông nhận RX)', category: 'RESOURCE', units: METRIC_UNITS_MAP.NETWORK_RECEIVE, default_unit: 'MB/s' },
+        { code: 'NETWORK_TRANSMIT', label: 'Network Transmit Rate (Băng thông gửi TX)', category: 'RESOURCE', units: METRIC_UNITS_MAP.NETWORK_TRANSMIT, default_unit: 'MB/s' },
+        { code: 'HTTP_5XX_RATE', label: 'HTTP 5xx Error Rate (Tỷ lệ lỗi máy chủ 5xx)', category: 'APM', units: METRIC_UNITS_MAP.HTTP_5XX_RATE, default_unit: '%' },
+        { code: 'ERROR_RATE', label: 'Application Error Rate (Tỷ lệ lỗi ứng dụng)', category: 'APM', units: METRIC_UNITS_MAP.ERROR_RATE, default_unit: '%' },
+        { code: 'LATENCY', label: 'Response Latency (Độ trễ phản hồi)', category: 'APM', units: METRIC_UNITS_MAP.LATENCY, default_unit: 'ms' },
+        { code: 'REQUEST_RATE', label: 'Request Throughput (Lưu lượng truy cập)', category: 'APM', units: METRIC_UNITS_MAP.REQUEST_RATE, default_unit: 'req/s' },
+        { code: 'POD_CRASH_LOOP', label: 'Pod CrashLoopBackOff (Khởi động lại liên tục)', category: 'KUBERNETES', units: METRIC_UNITS_MAP.POD_CRASH_LOOP, default_unit: 'restarts' },
+        { code: 'POD_FAILED', label: 'Pod Failed State (Pod lỗi khởi chạy)', category: 'KUBERNETES', units: METRIC_UNITS_MAP.POD_FAILED, default_unit: 'count' },
+        { code: 'CONTAINER_OOM', label: 'Container OOMKilled (Tràn bộ nhớ Container)', category: 'KUBERNETES', units: METRIC_UNITS_MAP.CONTAINER_OOM, default_unit: 'count' },
+        { code: 'NODE_NOT_READY', label: 'Node NotReady (Máy chủ K8s mất sẵn sàng)', category: 'KUBERNETES', units: METRIC_UNITS_MAP.NODE_NOT_READY, default_unit: 'count' },
+        { code: 'DEPLOYMENT_UNAVAILABLE', label: 'Deployment Unavailable (Thiếu hụt Replica)', category: 'KUBERNETES', units: METRIC_UNITS_MAP.DEPLOYMENT_UNAVAILABLE, default_unit: 'replicas' },
+      ],
+      operators: [
+        { code: 'GREATER_THAN', symbol: '>', label: 'Lớn hơn (>)' },
+        { code: 'GREATER_THAN_OR_EQUAL', symbol: '>=', label: 'Lớn hơn hoặc bằng (>=)' },
+        { code: 'LESS_THAN', symbol: '<', label: 'Nhỏ hơn (<)' },
+        { code: 'LESS_THAN_OR_EQUAL', symbol: '<=', label: 'Nhỏ hơn hoặc bằng (<=)' },
+        { code: 'EQUAL', symbol: '=', label: 'Bằng (=)' },
+        { code: 'NOT_EQUAL', symbol: '!=', label: 'Khác (!=)' },
+      ],
+      severities: [
+        { code: 'INFO', label: 'INFO — Thông tin' },
+        { code: 'WARNING', label: 'WARNING — Cảnh báo' },
+        { code: 'CRITICAL', label: 'CRITICAL — Khẩn cấp' },
+      ],
+      evaluation_windows: ['30s', '1m', '5m', '15m', '30m', '1h', '6h', '24h'],
+      units_map: METRIC_UNITS_MAP,
     };
   }
 

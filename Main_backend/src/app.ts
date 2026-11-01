@@ -58,6 +58,9 @@ app.get("/", (req, res) => {
 
 // API Routes
 app.use(config.apiPrefix, apiRouter);
+if (config.apiPrefix !== "/api") {
+  app.use("/api", apiRouter);
+}
 
 // Error Handling Middlewares
 app.use(notFoundHandler);

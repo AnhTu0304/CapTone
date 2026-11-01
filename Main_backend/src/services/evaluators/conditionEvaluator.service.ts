@@ -287,10 +287,11 @@ export class ConditionEvaluator {
     }
 
     // Dynamic escalation policy:
+    // Escalate to CRITICAL when saturation is >= 96.5% OR when threshold is <= 80 and value >= 95%
     if (observedValue !== null && observedValue !== undefined) {
       const val = Number(observedValue);
-      // 1. Extreme CPU / RAM / Disk saturation (>= 95%)
-      if (['CPU', 'RAM', 'DISK'].includes(metricType) && val >= 95) {
+      // 1. Extreme CPU / RAM / Disk saturation
+      if (['CPU', 'RAM', 'DISK'].includes(metricType) && (val >= 96.5 || (thresholdValue <= 80 && val >= 95))) {
         return { severity: 'CRITICAL', isEscalated: true };
       }
       // 2. Catastrophic APM HTTP 5xx rate (>= 25%)
