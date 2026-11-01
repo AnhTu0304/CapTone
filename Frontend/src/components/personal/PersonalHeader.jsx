@@ -1,18 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Building2,
-  ChevronDown,
   Bell,
-  User,
-  ShieldCheck,
-  LogOut,
-  LayoutDashboard,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
 import { personalPortalService } from '../../services/personalPortalService';
+import UserProfileDropdown from '../common/UserProfileDropdown';
 
 export const PersonalHeader = ({
   currentPath = '/portal',
@@ -21,22 +15,8 @@ export const PersonalHeader = ({
   onToggleCollapse,
   onToggleMobileDrawer,
 }) => {
-  const { user, logout, isSuperAdmin, isAdmin } = useAuth();
-  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-  const profileDropdownRef = useRef(null);
-
   const notifs = personalPortalService.getNotifications();
   const unreadCount = notifs.filter((n) => !n.read).length;
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target)) {
-        setIsProfileDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Compute breadcrumb title based on path
   const getPageTitle = () => {
@@ -49,17 +29,6 @@ export const PersonalHeader = ({
     if (currentPath.includes('/help')) return 'Trợ Giúp & Hỗ Trợ (Help & Support)';
     return 'Bảng Điều Khiển Cá Nhân';
   };
-
-  const userDisplayName = user?.full_name || user?.name || 'Nguyễn Văn An';
-  const userInitials = userDisplayName
-    .split(' ')
-    .filter(Boolean)
-    .map((w) => w[0])
-    .slice(-2)
-    .join('')
-    .toUpperCase() || 'NA';
-
-  const canAccessAdmin = (isSuperAdmin && isSuperAdmin(user)) || (isAdmin && isAdmin(user));
 
   return (
     <header
@@ -181,201 +150,8 @@ export const PersonalHeader = ({
           )}
         </button>
 
-        {/* User Profile Dropdown */}
-        <div ref={profileDropdownRef} style={{ position: 'relative' }}>
-          <button
-            type="button"
-            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '4px 6px',
-              borderRadius: '9px',
-              border: '1px solid #E2E8F0',
-              backgroundColor: '#FFFFFF',
-              cursor: 'pointer',
-            }}
-          >
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
-                color: '#FFFFFF',
-                fontWeight: 700,
-                fontSize: '0.8125rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {userInitials}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', minWidth: '90px' }}>
-              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
-                {userDisplayName}
-              </span>
-              <span style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600 }}>Tài Khoản Cá Nhân</span>
-            </div>
-            <ChevronDown size={14} color="#64748B" />
-          </button>
-
-          {/* Profile Dropdown */}
-          {isProfileDropdownOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                right: 0,
-                top: '100%',
-                marginTop: '6px',
-                width: '240px',
-                backgroundColor: '#FFFFFF',
-                borderRadius: '10px',
-                border: '1px solid #E2E8F0',
-                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.08)',
-                padding: '8px',
-                zIndex: 100,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileDropdownOpen(false);
-                  onNavigate && onNavigate('/portal/profile');
-                }}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: 'transparent',
-                  color: '#334155',
-                  cursor: 'pointer',
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  textAlign: 'left',
-                }}
-              >
-                <User size={16} color="#059669" />
-                <span>Xem Hồ Sơ Cá Nhân</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileDropdownOpen(false);
-                  onNavigate && onNavigate('/portal/security');
-                }}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: 'transparent',
-                  color: '#334155',
-                  cursor: 'pointer',
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  textAlign: 'left',
-                }}
-              >
-                <ShieldCheck size={16} color="#0284C7" />
-                <span>Bảo Mật & Đổi Mật Khẩu</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileDropdownOpen(false);
-                  onNavigate && onNavigate('/dashboard');
-                }}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: 'transparent',
-                  color: '#334155',
-                  cursor: 'pointer',
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  textAlign: 'left',
-                }}
-              >
-                <LayoutDashboard size={16} color="#059669" />
-                <span>Bàn Điều Khiển Doanh Nghiệp</span>
-              </button>
-
-              {canAccessAdmin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProfileDropdownOpen(false);
-                    onNavigate && onNavigate('/admin');
-                  }}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: '#334155',
-                    cursor: 'pointer',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    textAlign: 'left',
-                  }}
-                >
-                  <Building2 size={16} color="#8B5CF6" />
-                  <span>Cổng Quản Trị Hệ Thống</span>
-                </button>
-              )}
-
-              <div style={{ height: '1px', backgroundColor: '#E2E8F0', margin: '6px 0' }} />
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileDropdownOpen(false);
-                  if (logout) logout();
-                  if (onNavigate) onNavigate('/login');
-                }}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: '#FEF2F2',
-                  color: '#DC2626',
-                  cursor: 'pointer',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  textAlign: 'left',
-                }}
-              >
-                <LogOut size={16} color="#DC2626" />
-                <span>Đăng Xuất Tài Khoản</span>
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Đồng bộ User Profile Dropdown chuẩn /admin */}
+        <UserProfileDropdown onNavigate={onNavigate} />
       </div>
     </header>
   );

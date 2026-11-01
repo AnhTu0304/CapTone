@@ -50,6 +50,8 @@ export interface ILoginResult {
     full_name?: string;
     token: string;
     system_roles?: string[];
+    systemRole?: string | null;
+    system_role?: string | null;
     has_organization?: boolean;
     organization_roles?: IUserOrgRole[];
 }

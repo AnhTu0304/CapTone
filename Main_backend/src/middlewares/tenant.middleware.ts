@@ -19,15 +19,6 @@ export const requireTenantAccess = (getOrgId: (req: Request) => string | undefin
         return next(new ApiError(400, 'Thiếu thông tin định danh tổ chức (organization_id)'));
       }
 
-      // System-level administrators can manage across all tenants
-      const userRoles: string[] = Array.isArray(user.roles)
-        ? user.roles.map((r: string) => r.trim().toUpperCase())
-        : [];
-
-      if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SYSTEM_ADMIN')) {
-        return next();
-      }
-
       // Check if user has explicit tenant claim in token
       const userOrg = (user as any).organization_id || (user as any).company_id;
       if (userOrg) {

@@ -62,16 +62,13 @@ export class AiController {
    * Helper: Check if user belongs to requested organization and if cluster belongs to that organization
    */
   private static async validateUserOrgAndCluster(user: any, orgId?: string, clusterId?: string): Promise<string | null> {
-    if (this.isUserSuperAdmin(user)) {
-      return (orgId && orgId !== 'all') ? orgId : null;
-    }
-    const effectiveOrgId = orgId || user?.organization_id;
+    const effectiveOrgId = (orgId && orgId !== 'all') ? orgId : user?.organization_id;
     if (!effectiveOrgId) {
       return null;
     }
     if (user?.id) {
       const membership = await OrganizationMemberModel.findByOrgAndUser(effectiveOrgId, user.id);
-      if (!membership) {
+      if (!membership || membership.status !== 'ACTIVE') {
         throw new ApiError(403, 'Bạn không thuộc tổ chức được yêu cầu (User does not belong to the requested organization)');
       }
     }
@@ -92,13 +89,10 @@ export class AiController {
     if (!incident) {
       throw new ApiError(404, 'Sự cố không tồn tại (Incident not found)');
     }
-    if (this.isUserSuperAdmin(user)) {
-      return incident;
-    }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
     if (orgId && user?.id) {
       const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
-      if (!membership) {
+      if (!membership || membership.status !== 'ACTIVE') {
         throw new ApiError(403, 'Bạn không có quyền truy cập sự cố thuộc tổ chức này');
       }
     }
@@ -110,13 +104,10 @@ export class AiController {
    */
   private static async validateIncidentManageAccess(user: any, incidentId: string): Promise<any> {
     const incident = await this.validateIncidentAccess(user, incidentId);
-    if (this.isUserSuperAdmin(user)) {
-      return incident;
-    }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
     if (orgId && user?.id) {
       const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
-      if (!membership) {
+      if (!membership || membership.status !== 'ACTIVE') {
         throw new ApiError(403, 'Bạn không có quyền quản lý sự cố thuộc tổ chức này');
       }
       const roleCode = (membership.role_code || '').toUpperCase();
@@ -357,9 +348,9 @@ export class AiController {
       }
 
       const user = (req as any).user;
-      if (prediction.organization_id && user?.id && user.role !== 'SUPER_ADMIN') {
+      if (prediction.organization_id && user?.id) {
         const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
-        if (!membership) {
+        if (!membership || membership.status !== 'ACTIVE') {
           return ApiResponse.error(res, 'Bạn không có quyền truy cập dự đoán thuộc tổ chức này', 403);
         }
       }
@@ -386,9 +377,9 @@ export class AiController {
       }
 
       const user = (req as any).user;
-      if (prediction.organization_id && user?.id && user.role !== 'SUPER_ADMIN') {
+      if (prediction.organization_id && user?.id) {
         const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
-        if (!membership) {
+        if (!membership || membership.status !== 'ACTIVE') {
           return ApiResponse.error(res, 'Bạn không có quyền truy cập dữ liệu chuỗi thời gian của tổ chức này', 403);
         }
       }

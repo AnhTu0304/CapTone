@@ -181,8 +181,19 @@ export class ClusterModel {
   /**
    * Lấy tất cả cụm Kubernetes toàn sàn (Dành cho Platform Admin)
    */
-  public static async findAll(client?: PoolClient): Promise<IClusterDetail[]> {
+  public static async findAll(allowedOrgIds?: string[], client?: PoolClient): Promise<IClusterDetail[]> {
     const db = client || pool;
+    const conditions = ['c.deleted_at IS NULL'];
+    const params: any[] = [];
+
+    if (allowedOrgIds) {
+      if (allowedOrgIds.length === 0) {
+        return [];
+      }
+      params.push(allowedOrgIds);
+      conditions.push(`e.organization_id = ANY($${params.length}::uuid[])`);
+    }
+
     const res = await db.query<IClusterDetail>(
       `SELECT 
         c.id,
@@ -219,9 +230,10 @@ export class ClusterModel {
           last_seen_at DESC NULLS LAST
         LIMIT 1
       ) a ON true
-      WHERE c.deleted_at IS NULL
+      WHERE ${conditions.join(' AND ')}
       GROUP BY c.id, e.id, e.name, e.environment_type, e.organization_id, o.name, a.id, a.name, a.status, a.last_seen_at
-      ORDER BY c.created_at DESC`
+      ORDER BY c.created_at DESC`,
+      params
     );
     return res.rows;
   }

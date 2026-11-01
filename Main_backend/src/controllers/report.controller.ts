@@ -25,26 +25,17 @@ export class ReportController {
         return ApiResponse.error(res, 'Yêu cầu định danh tổ chức (organizationId)', 400);
       }
 
-      // RBAC Validation: Nếu không phải Admin hệ thống, bắt buộc phải là thành viên ACTIVE của tổ chức này
-      const userRoles: string[] = Array.isArray(user?.roles)
-        ? user.roles.map((r: string) => r.trim().toUpperCase())
-        : [String(user?.role || '').trim().toUpperCase()];
+      if (!user?.id) {
+        return next(new ApiError(401, 'Yêu cầu đăng nhập trước khi xem báo cáo tổ chức'));
+      }
 
-      const isSystemAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('ADMIN') || userRoles.includes('SYSTEM_ADMIN');
-
-      if (!isSystemAdmin) {
-        if (!user?.id) {
-          return next(new ApiError(401, 'Yêu cầu đăng nhập trước khi xem báo cáo tổ chức'));
-        }
-
-        const member = await OrganizationMemberModel.findByOrgAndUser(organizationId, user.id);
-        if (!member || member.status !== 'ACTIVE') {
-          return ApiResponse.error(
-            res,
-            'Từ chối truy cập: Bạn không thuộc tổ chức này hoặc chưa được kích hoạt quyền thành viên theo chính sách RBAC',
-            403
-          );
-        }
+      const member = await OrganizationMemberModel.findByOrgAndUser(organizationId, user.id);
+      if (!member || member.status !== 'ACTIVE') {
+        return ApiResponse.error(
+          res,
+          'Từ chối truy cập: Bạn không thuộc tổ chức này hoặc chưa được kích hoạt quyền thành viên theo chính sách RBAC',
+          403
+        );
       }
 
       const reportData = await ReportModel.getOrganizationSLAReport(
