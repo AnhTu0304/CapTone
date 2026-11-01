@@ -1317,15 +1317,15 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     </p>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       {scriptOs === 'linux' ? (
-                        <code>curl -sSL http://localhost/agent/install.sh | bash -s -- --token {tokenCopyValue}</code>
+                        <code>curl -sSL {typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.sh | bash -s -- --token {tokenCopyValue}</code>
                       ) : (
-                        <code>irm http://localhost/agent/install.ps1 | iex</code>
+                        <code>irm {typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.ps1 | iex</code>
                       )}
                       <button
                         onClick={() => handleCopy(
                           scriptOs === 'linux'
-                            ? `curl -sSL http://localhost/agent/install.sh | bash -s -- --token ${tokenCopyValue}`
-                            : `irm http://localhost/agent/install.ps1 | iex`,
+                            ? `curl -sSL ${typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.sh | bash -s -- --token ${tokenCopyValue}`
+                            : `irm ${typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.ps1 | iex`,
                           'oneliner_install'
                         )}
                         style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}

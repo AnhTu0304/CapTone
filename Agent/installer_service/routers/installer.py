@@ -90,6 +90,13 @@ async def get_bash_installer(request: Request):
     if ws_url:
         content = content.replace('CONFIGURED_SERVER_URL="__SELFHEAL_BACKEND_URL__"', f'CONFIGURED_SERVER_URL="{ws_url}"')
 
+    if settings.DOCKER_IMAGE and settings.DOCKER_IMAGE.strip():
+        content = content.replace('AGENT_IMAGE="__SELFHEAL_DOCKER_IMAGE__"', f'AGENT_IMAGE="{settings.DOCKER_IMAGE.strip()}"')
+        content = content.replace('image: captone-agent:1.0.0', f'image: {settings.DOCKER_IMAGE.strip()}')
+
+    # Normalize Windows CRLF to Unix LF for Linux/macOS bash execution
+    content = content.replace('\r\n', '\n').replace('\r', '\n')
+
     return Response(
         content=content,
         media_type="text/x-shellscript; charset=utf-8",
@@ -111,6 +118,10 @@ async def get_powershell_installer(request: Request):
     ws_url = resolve_backend_url(request)
     if ws_url:
         content = content.replace('$CONFIGURED_SERVER_URL = "__SELFHEAL_BACKEND_URL__"', f'$CONFIGURED_SERVER_URL = "{ws_url}"')
+
+    if settings.DOCKER_IMAGE and settings.DOCKER_IMAGE.strip():
+        content = content.replace('$AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"', f'$AGENT_IMAGE = "{settings.DOCKER_IMAGE.strip()}"')
+        content = content.replace('image: captone-agent:1.0.0', f'image: {settings.DOCKER_IMAGE.strip()}')
 
     return Response(
         content=content,

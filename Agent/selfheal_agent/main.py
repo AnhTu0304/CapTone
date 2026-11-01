@@ -457,21 +457,117 @@ class AgentService:
                 logger.info("✅ %s", msg_str)
 
             elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
-                blocked_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or "203.0.113.10"
-                details["strategy"] = "security_ip_filter"
-                details["blocked_ip"] = blocked_ip
+                raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or "203.0.113.10"
+                clean_ip = str(raw_ip).strip()
+                ip_cidr = clean_ip if "/" in clean_ip else (f"{clean_ip}/128" if ":" in clean_ip else f"{clean_ip}/32")
+                policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+                target_ns = namespace or "default"
+                duration_minutes = (cmd.params or {}).get("duration_minutes") or 15
+
+                details["strategy"] = "k8s_native_network_policy_filter"
+                details["blocked_ip"] = clean_ip
+                details["ip_cidr"] = ip_cidr
+                details["network_policy"] = policy_name
+                details["namespace"] = target_ns
+                details["duration_minutes"] = duration_minutes
+
+                # Determine target pod labels
+                target_pod_labels = {"app": target_name}
+                if getattr(self, "apps_v1", None):
+                    try:
+                        dep = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=target_ns)
+                        if dep.spec and dep.spec.selector and dep.spec.selector.match_labels:
+                            target_pod_labels = dep.spec.selector.match_labels
+                    except Exception:
+                        pass
+
+                details["target_labels"] = target_pod_labels
+
                 if getattr(self, "networking_v1", None):
                     try:
-                        policy_name = f"block-ip-{blocked_ip.replace('.', '-').replace(':', '-')}"
-                        details["network_policy"] = policy_name
-                        msg_str = f"NetworkPolicy '{policy_name}' deployed: IP '{blocked_ip}' blocked from accessing {target_name} in namespace '{namespace}'"
+                        net_policy = client.V1NetworkPolicy(
+                            metadata=client.V1ObjectMeta(
+                                name=policy_name,
+                                namespace=target_ns,
+                                labels={
+                                    "app.kubernetes.io/name": "selfheal-agent-security",
+                                    "app.kubernetes.io/managed-by": "selfheal-agent",
+                                    "selfheal.io/action": "TEMPORARY_IP_BLOCK",
+                                    "selfheal.io/target": target_name,
+                                },
+                                annotations={
+                                    "selfheal.io/blocked-ip": clean_ip,
+                                    "selfheal.io/blocked-at": datetime.now(timezone.utc).isoformat(),
+                                    "selfheal.io/duration-minutes": str(duration_minutes),
+                                }
+                            ),
+                            spec=client.V1NetworkPolicySpec(
+                                pod_selector=client.V1LabelSelector(match_labels=target_pod_labels),
+                                policy_types=["Ingress"],
+                                ingress=[
+                                    client.V1NetworkPolicyIngressRule(
+                                        _from=[
+                                            client.V1NetworkPolicyPeer(namespace_selector=client.V1LabelSelector()),
+                                            client.V1NetworkPolicyPeer(pod_selector=client.V1LabelSelector()),
+                                            client.V1NetworkPolicyPeer(ip_block=client.V1IPBlock(cidr="0.0.0.0/0", _except=[ip_cidr])),
+                                        ]
+                                    )
+                                ]
+                            )
+                        )
+                        try:
+                            self.networking_v1.create_namespaced_network_policy(namespace=target_ns, body=net_policy)
+                            msg_str = f"NetworkPolicy '{policy_name}' deployed successfully: IP '{clean_ip}' blocked from accessing {target_name} in namespace '{target_ns}' (TTL: {duration_minutes}m)"
+                        except Exception as create_err:
+                            if "already exists" in str(create_err).lower() or getattr(create_err, "status", None) == 409:
+                                self.networking_v1.replace_namespaced_network_policy(name=policy_name, namespace=target_ns, body=net_policy)
+                                msg_str = f"NetworkPolicy '{policy_name}' updated successfully: IP '{clean_ip}' blocked from accessing {target_name} in namespace '{target_ns}' (TTL: {duration_minutes}m)"
+                            else:
+                                raise create_err
+
                         logger.info("🛡️ %s", msg_str)
+
+                        # Schedule background TTL auto-unblock
+                        ttl_sec = int((cmd.params or {}).get("ttl_seconds", 0)) or (int(duration_minutes) * 60)
+                        async def _auto_unblock(pol_name=policy_name, pol_ns=target_ns, delay=ttl_sec):
+                            try:
+                                await asyncio.sleep(delay)
+                                if getattr(self, "networking_v1", None):
+                                    self.networking_v1.delete_namespaced_network_policy(name=pol_name, namespace=pol_ns)
+                                    logger.info("⏰ [Auto-TTL] Successfully removed temporary NetworkPolicy '%s' in namespace '%s'", pol_name, pol_ns)
+                            except Exception as unblock_err:
+                                logger.warning("[Auto-TTL] NetworkPolicy '%s' cleanup status: %s", pol_name, unblock_err)
+                        
+                        asyncio.create_task(_auto_unblock())
+
                     except Exception as net_err:
-                        msg_str = f"Temporary security filter applied: IP '{blocked_ip}' blocked from accessing {target_name} ({net_err})"
-                        logger.info("🛡️ %s", msg_str)
+                        logger.error("❌ Failed to deploy NetworkPolicy '%s': %s", policy_name, net_err)
+                        msg_str = f"Failed to deploy NetworkPolicy for IP '{clean_ip}' on {target_name}: {net_err}"
+                        status = "FAILED"
                 else:
-                    msg_str = f"Temporary security filter applied: IP '{blocked_ip}' blocked from accessing {target_name}"
-                    logger.info("🛡️ %s", msg_str)
+                    msg_str = f"Kubernetes Networking API unavailable: IP '{clean_ip}' could not be blocked on {target_name}"
+                    status = "FAILED"
+
+            elif action_type in ["UNBLOCK_IP", "REMOVE_IP_BLOCK", "DELETE_IP_BLOCK"]:
+                raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or ""
+                clean_ip = str(raw_ip).strip()
+                policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+                target_ns = namespace or "default"
+                details["strategy"] = "k8s_native_unblock"
+                details["unblocked_ip"] = clean_ip
+
+                if getattr(self, "networking_v1", None):
+                    try:
+                        self.networking_v1.delete_namespaced_network_policy(name=policy_name, namespace=target_ns)
+                        msg_str = f"NetworkPolicy '{policy_name}' removed: IP '{clean_ip}' unblocked successfully in namespace '{target_ns}'"
+                        logger.info("🛡️ %s", msg_str)
+                    except Exception as unblock_err:
+                        if "not found" in str(unblock_err).lower() or getattr(unblock_err, "status", None) == 404:
+                            msg_str = f"NetworkPolicy '{policy_name}' not found or already removed"
+                        else:
+                            raise unblock_err
+                else:
+                    msg_str = f"Kubernetes Networking API unavailable to unblock IP '{clean_ip}'"
 
             elif action_type in ["NO_ACTION", "NO ACTION"]:
                 details["strategy"] = "zero_impact_observation"

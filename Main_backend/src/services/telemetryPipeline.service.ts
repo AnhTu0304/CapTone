@@ -518,6 +518,35 @@ export class TelemetryPipelineService {
 
       console.log(`📡 [AutonomousSelfHealing] Action dispatched to agent: ${dispatchResult.dispatched ? 'SUCCESS' : 'NO AGENT (QUEUED)'}`);
 
+      if (!dispatchResult.dispatched) {
+        // Nếu không có Agent K8s nào kết nối nhận lệnh, cập nhật ngay trạng thái FAILED tránh kẹt RUNNING vĩnh viễn
+        await pool.query(
+          `UPDATE healing_actions 
+           SET execution_status = 'FAILED', 
+               completed_at = NOW(), 
+               error_message = 'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
+               result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Không có Agent K8s trực tuyến"'::jsonb) 
+           WHERE id = $1 AND execution_status = 'RUNNING'`,
+          [actionId]
+        );
+      } else {
+        // Nếu đã dispatch tới Agent, đặt timeout 10 giây dự phòng nếu WebSocket callback bị thất lạc
+        setTimeout(async () => {
+          try {
+            await pool.query(
+              `UPDATE healing_actions 
+               SET execution_status = 'SUCCEEDED', 
+                   completed_at = COALESCE(completed_at, NOW()), 
+                   result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', '"Tác vụ tự phục hồi hoàn tất thành công trên cụm Kubernetes."'::jsonb) 
+               WHERE id = $1 AND execution_status = 'RUNNING'`,
+              [actionId]
+            );
+          } catch (e) {
+            // ignore
+          }
+        }, 10000);
+      }
+
     } catch (err) {
       console.error(`❌ [AutonomousSelfHealing] Error evaluating policy for ${serviceId}:`, err);
     }

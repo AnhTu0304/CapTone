@@ -19,6 +19,8 @@ SERVER_URL=""
 AGENT_TOKEN=""
 AGENT_NAMESPACE="selfheal-system"
 RELEASE_NAME="selfheal-agent"
+AGENT_IMAGE="__SELFHEAL_DOCKER_IMAGE__"
+ENABLE_HEALING="true"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd || echo "")"
 HELM_CHART_DIR="${SCRIPT_DIR}/../deploy/helm/selfheal-agent"
@@ -42,6 +44,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --namespace)
       AGENT_NAMESPACE="$2"
+      shift 2
+      ;;
+    --image)
+      AGENT_IMAGE="$2"
+      shift 2
+      ;;
+    --enable-healing)
+      ENABLE_HEALING="$2"
       shift 2
       ;;
     -h|--help)
@@ -86,6 +96,10 @@ fi
 # 2. Xử lý địa chỉ Backend tự động (Không bắt người dùng nhập)
 # ------------------------------------------------------------------------------
 CONFIGURED_SERVER_URL="__SELFHEAL_BACKEND_URL__"
+
+if [ -z "${AGENT_IMAGE}" ] || [[ "${AGENT_IMAGE}" == "__"* ]]; then
+  AGENT_IMAGE="captone-agent:1.0.0"
+fi
 
 if [ -z "${SERVER_URL}" ]; then
   if [ -n "${CONFIGURED_SERVER_URL}" ] && [[ "${CONFIGURED_SERVER_URL}" != "__"* ]]; then
@@ -185,6 +199,9 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -228,7 +245,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: selfheal-agent
-          image: captone-agent:1.0.0
+          image: ${AGENT_IMAGE}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http-health
@@ -248,7 +265,7 @@ spec:
             - name: LOG_LEVEL
               value: "INFO"
             - name: ENABLE_HEALING_ACTIONS
-              value: "false"
+              value: "${ENABLE_HEALING}"
             - name: HEALTH_PORT
               value: "8080"
             - name: PYTHONUNBUFFERED

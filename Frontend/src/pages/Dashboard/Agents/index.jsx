@@ -129,8 +129,9 @@ export const AgentsPage = () => {
       : 'Chưa có tác tử';
 
   // Câu lệnh cài đặt thật
-  const psCommand = `irm http://localhost/agent/install.ps1 | iex`;
-  const bashCommand = `curl -sSL http://localhost/agent/install.sh | bash`;
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  const psCommand = `irm ${originUrl}/agent/install.ps1 | iex`;
+  const bashCommand = `curl -sSL ${originUrl}/agent/install.sh | bash`;
   const helmCommand = `helm repo add selfheal http://localhost/agent/charts
 helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
   --namespace selfheal-system \\
