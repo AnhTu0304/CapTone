@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserService } from '../services/user.service';
+import { AuditService } from '../services/audit.service';
 import { UserModel } from '../models/user.model';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
@@ -21,6 +22,13 @@ export class UserController {
       }
 
       const updatedProfile = await UserService.updateMyProfile(userId, req.body);
+      AuditService.recordFromRequest(req, {
+        action: 'USER_PROFILE_UPDATED',
+        target_type: 'USER',
+        target_id: userId,
+        description: 'Cập nhật thông tin hồ sơ cá nhân',
+        status: 'SUCCESS',
+      });
       return ApiResponse.success(res, 'Cập nhật hồ sơ cá nhân thành công', updatedProfile, 200);
     } catch (error) {
       next(error);
@@ -161,6 +169,13 @@ export class UserController {
       }
 
       await UserService.changePassword(userId, { old_password, new_password });
+      AuditService.recordFromRequest(req, {
+        action: 'USER_PASSWORD_CHANGED',
+        target_type: 'USER',
+        target_id: userId,
+        description: 'Đổi mật khẩu tài khoản thành công',
+        status: 'SUCCESS',
+      });
       return ApiResponse.success(res, 'Đổi mật khẩu thành công', null, 200);
     } catch (error) {
       next(error);
@@ -254,4 +269,61 @@ export class UserController {
       next(error);
     }
   }
+
+  /**
+   * [GET] /api/v1/users/me/activities
+   * Lấy lịch sử hoạt động cá nhân của người dùng
+   */
+  public static async getMyActivities(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
+
+      const { category, search, limit, page } = req.query;
+      const result = await UserService.getMyActivities(userId, {
+        category: category as string,
+        search: search as string,
+        limit: limit ? parseInt(limit as string, 10) : 50,
+        page: page ? parseInt(page as string, 10) : 1,
+      });
+
+      return ApiResponse.success(res, 'Lấy lịch sử hoạt động thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
+  /**
+   * [POST] /api/v1/users/me/activities
+   * Ghi nhận một hành động của người dùng vào audit_logs
+   */
+  public static async recordMyActivity(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
+
+      const { action, description, category } = req.body;
+      const cleanAction = action ? String(action).toUpperCase() : 'USER_ACTION';
+      const cleanDesc = description ? String(description) : 'Người dùng thực hiện thao tác';
+
+      const log = await AuditService.recordFromRequest(req, {
+        action: cleanAction,
+        description: cleanDesc,
+        status: 'SUCCESS',
+        target_type: 'USER',
+        target_id: userId,
+        metadata: { category: category || 'GENERAL' },
+      });
+
+      return ApiResponse.success(res, 'Ghi nhận nhật ký hoạt động thành công', log, 201);
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }

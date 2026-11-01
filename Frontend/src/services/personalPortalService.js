@@ -116,49 +116,8 @@ export const INITIAL_LOGIN_HISTORY = [
 // Thông báo cá nhân mặc định
 export const INITIAL_PERSONAL_NOTIFS = [];
 
-// Lịch sử hoạt động cá nhân
-export const INITIAL_ACTIVITIES = [
-  {
-    id: 'act-1',
-    actionType: 'LOGIN',
-    title: 'Đăng nhập vào hệ thống',
-    description: 'Đăng nhập thành công từ trình duyệt Chrome trên Windows 11',
-    timestamp: '22/10/2026 03:00:15',
-    ipAddress: '118.70.12.84',
-    category: 'AUTH',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'act-2',
-    actionType: 'PROFILE_UPDATE',
-    title: 'Cập nhật hồ sơ cá nhân',
-    description: 'Chỉnh sửa chức danh chuyên môn và cập nhật số điện thoại liên hệ',
-    timestamp: '21/10/2026 19:42:00',
-    ipAddress: '118.70.12.84',
-    category: 'PROFILE',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'act-4',
-    actionType: 'SECURITY_2FA',
-    title: 'Bật xác thực hai yếu tố (2FA)',
-    description: 'Kích hoạt thành công mã xác thực TOTP Authenticator cho tài khoản',
-    timestamp: '20/10/2026 11:25:10',
-    ipAddress: '118.70.12.84',
-    category: 'SECURITY',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'act-5',
-    actionType: 'PASSWORD_CHANGE',
-    title: 'Đổi mật khẩu tài khoản',
-    description: 'Thay đổi mật khẩu đăng nhập định kỳ bảo mật',
-    timestamp: '18/10/2026 14:05:00',
-    ipAddress: '27.72.63.190',
-    category: 'SECURITY',
-    status: 'SUCCESS',
-  },
-];
+// Lịch sử hoạt động cá nhân mặc định (Rỗng khi database chưa có dữ liệu)
+export const INITIAL_ACTIVITIES = [];
 
 
 const STORAGE_PREFERENCES_KEY = 'selfheal_personal_preferences_v1';
@@ -850,6 +809,43 @@ export const personalPortalService = {
   },
 
   // ================= 6. ACTIVITY HISTORY =================
+  async fetchActivityHistory(params = {}) {
+    const token = getAuthToken();
+    if (!token) {
+      return this.getActivityHistory();
+    }
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.category && params.category !== 'ALL') {
+        queryParams.set('category', params.category);
+      }
+      if (params.search && params.search.trim()) {
+        queryParams.set('search', params.search.trim());
+      }
+      if (params.limit) {
+        queryParams.set('limit', String(params.limit));
+      }
+      if (params.page) {
+        queryParams.set('page', String(params.page));
+      }
+
+      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
+      const response = await request(`/users/me/activities${queryStr}`);
+      if (response && response.success) {
+        const items = response.data?.items || (Array.isArray(response.data) ? response.data : []);
+        if (!params.category || params.category === 'ALL') {
+          if (!params.search) {
+            localStorage.setItem(STORAGE_ACTIVITIES_KEY, JSON.stringify(items));
+          }
+        }
+        return items;
+      }
+      return this.getActivityHistory();
+    } catch (err) {
+      console.warn('Failed to fetch activity history from server:', err);
+      return this.getActivityHistory();
+    }
+  },
   getActivityHistory() {
     try {
       const raw = localStorage.getItem(STORAGE_ACTIVITIES_KEY);
@@ -1004,12 +1000,30 @@ export const personalPortalService = {
       category,
       status: 'SUCCESS',
     };
-    const updated = [newAct, ...list].slice(0, 50); // Giữ 50 hoạt động gần nhất
+    const updated = [newAct, ...list].slice(0, 50);
     try {
       localStorage.setItem(STORAGE_ACTIVITIES_KEY, JSON.stringify(updated));
     } catch (e) {
       console.warn('Cannot write activity log:', e);
     }
+
+    try {
+      const token = getAuthToken();
+      if (token) {
+        request('/users/me/activities', {
+          method: 'POST',
+          body: JSON.stringify({
+            action: actionType,
+            title,
+            description,
+            category,
+          }),
+        }).catch((err) => {
+          console.warn('[personalPortalService] Không thể đồng bộ activity lên server:', err?.message || err);
+        });
+      }
+    } catch (e) {}
+
     return newAct;
   },
 };

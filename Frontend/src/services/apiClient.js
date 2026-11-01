@@ -30,6 +30,7 @@ const PUBLIC_OR_GLOBAL_ENDPOINTS = [
   '/organizations/me/invitations',
   '/users/me/organizations',
   '/users/me/invitations',
+  '/users/me/activities',
 ];
 
 const isPublicOrGlobalEndpoint = (endpoint = '') => {
@@ -177,7 +178,7 @@ export const request = async (endpoint, options = {}) => {
  */
 export const executeWithFallback = async (apiCall, fallbackMockCall) => {
   // Nếu có biến môi trường yêu cầu buộc dùng mock
-  if (process.env.REACT_APP_USE_MOCK === 'true' || !process.env.REACT_APP_API_URL) {
+  if (process.env.REACT_APP_USE_MOCK === 'true') {
     return fallbackMockCall();
   }
 

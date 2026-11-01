@@ -14,7 +14,6 @@ import {
   Layers,
   Activity,
   Globe,
-  ShieldCheck,
   AlertCircle,
   ArrowRight,
   Building2,
@@ -23,23 +22,7 @@ import {
   Check
 } from 'lucide-react';
 
-const FALLBACK_CLUSTERS = [
-  {
-    id: 'k8s-prod-cluster-01',
-    name: 'k8s-prod-cluster-01',
-    environment: 'production',
-    environmentName: 'Production Environment',
-    region: 'Local Minikube Sandbox',
-    version: 'v1.29.4',
-    nodes: 3,
-    pods: 12,
-    agentStatus: 'Chờ kết nối (Pending)',
-    controlPlaneHealth: 'Healthy (100%)',
-    apiEndpoint: 'https://api.k8s-prod-cluster-01.local:6443',
-    status: 'CONNECTED',
-    createdAt: new Date().toISOString(),
-  },
-];
+
 
 export const ClustersPage = ({ onNavigate }) => {
   const { currentOrg, setCurrentOrg, orgList, isRefreshing: isGlobalRefreshing, triggerRefresh: triggerGlobalRefresh } = useDashboard();
@@ -77,23 +60,36 @@ export const ClustersPage = ({ onNavigate }) => {
       displayAgentStatus = `${c.agent_name} (${c.agent_status || 'Chờ tín hiệu'})`;
     }
 
+    const nodesCount = typeof c.nodes_count === 'number' ? c.nodes_count : (parseInt(c.nodes_count, 10) || 0);
+    const podsCount = typeof c.pods_count === 'number' ? c.pods_count : (parseInt(c.pods_count, 10) || 0);
+
+    // Tính trạng thái Control Plane thật theo kết nối thực tế
+    let controlPlaneHealth = 'Chờ kiểm tra';
+    if (c.agent_status === 'ONLINE' && nodesCount > 0) {
+      controlPlaneHealth = 'Healthy (100%)';
+    } else if (c.agent_status === 'PENDING' || nodesCount === 0) {
+      controlPlaneHealth = 'Chờ kết nối (0%)';
+    } else if (c.agent_status === 'OFFLINE') {
+      controlPlaneHealth = 'Ngoại tuyến (Offline)';
+    } else if (c.status) {
+      controlPlaneHealth = c.status;
+    }
+
     return {
       id: c.id,
       name: c.name,
       environment: isProd ? 'production' : (isStaging ? 'staging' : 'development'),
       environmentName: c.environment_name || (isProd ? 'Production' : 'Staging'),
       region: c.provider === 'MINIKUBE' ? 'Minikube (Local Baremetal)' : (c.provider || 'Kubernetes Cluster'),
-      // Phiên bản K8s thật từ bảng clusters
-      version: c.kubernetes_version || 'v1.29.4',
-      // Số lượng Nodes & Pods thật 100% từ bảng nodes và pods trong DB
-      nodes: typeof c.nodes_count === 'number' ? c.nodes_count : (parseInt(c.nodes_count, 10) || 0),
-      pods: typeof c.pods_count === 'number' ? c.pods_count : (parseInt(c.pods_count, 10) || 0),
+      version: c.kubernetes_version || 'Chưa cập nhật',
+      nodes: nodesCount,
+      pods: podsCount,
       agentStatus: displayAgentStatus,
       rawAgentStatus: c.agent_status,
       tokenPrefix: c.token_prefix,
-      controlPlaneHealth: c.status === 'CONNECTED' ? 'Healthy (100%)' : (c.status || 'Chờ kiểm tra'),
-      apiEndpoint: c.endpoint || `https://api.${c.name}.local:6443`,
-      status: c.status || 'CONNECTED',
+      controlPlaneHealth,
+      apiEndpoint: c.endpoint || null,
+      status: c.status || 'PENDING',
       createdAt: c.created_at || new Date().toISOString(),
       agentName: c.agent_name,
     };
@@ -124,7 +120,7 @@ export const ClustersPage = ({ onNavigate }) => {
         setClusters((rawData || []).map(normalizeCluster));
       } else {
         // Dữ liệu mẫu ban đầu cho mock organization
-        setClusters(FALLBACK_CLUSTERS.map(normalizeCluster));
+        setClusters([]);
       }
     } catch (err) {
       console.warn('[ClustersPage] Lỗi kết nối API cụm K8s:', err);
@@ -234,7 +230,7 @@ export const ClustersPage = ({ onNavigate }) => {
             </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Dữ liệu thời gian thực từ Database PostgreSQL & Tác tử eBPF
+            Theo dõi trạng thái hoạt động, tài nguyên và cấu hình các cụm Kubernetes
           </p>
         </div>
 
@@ -287,61 +283,6 @@ export const ClustersPage = ({ onNavigate }) => {
           )}
         </div>
       </div>
-
-      {/* Thanh Chọn Công Ty / Tổ Chức để xem cụm K8s tương ứng */}
-      {orgList && orgList.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            padding: '12px 18px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: 'var(--dash-radius-md)',
-            border: '1px solid var(--dash-border)',
-            boxShadow: 'var(--dash-shadow-sm)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Building2 size={16} color="var(--dash-primary)" />
-              Xem Cụm K8s theo Doanh Nghiệp:
-            </span>
-            <select
-              value={currentOrg?.id || ''}
-              onChange={(e) => {
-                const selected = orgList.find((o) => o.id === e.target.value);
-                if (selected && setCurrentOrg) {
-                  setCurrentOrg(selected);
-                }
-              }}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                border: '1px solid var(--dash-border)',
-                backgroundColor: '#F8FAFC',
-                color: 'var(--dash-text-primary)',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              {orgList.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-            Đang hiển thị toàn bộ Cụm K8s đăng ký thuộc tổ chức <strong>{currentOrg?.name || 'Doanh Nghiệp'}</strong>
-          </div>
-        </div>
-      )}
 
       {/* Thông báo lỗi nếu có */}
       {error && (
@@ -568,7 +509,7 @@ export const ClustersPage = ({ onNavigate }) => {
                     border: '1px solid #A7F3D0',
                     fontWeight: 700,
                   }}>
-                    {cls.tokenPrefix ? `${cls.tokenPrefix}••••••••` : 'sh_live_sec_••••••••'}
+                    {cls.tokenPrefix ? `${cls.tokenPrefix}••••••••` : 'Chưa cấp Token'}
                   </span>
                 </div>
 
@@ -576,31 +517,17 @@ export const ClustersPage = ({ onNavigate }) => {
                   <span style={{ color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Activity size={14} color="var(--dash-text-muted)" /> Control Plane:
                   </span>
-                  <span style={{ color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle2 size={13} /> {cls.controlPlaneHealth}
+                  <span style={{
+                    color: cls.controlPlaneHealth === 'Healthy (100%)' ? '#059669' : (cls.controlPlaneHealth.includes('Chờ') ? '#D97706' : '#64748B'),
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    {cls.controlPlaneHealth === 'Healthy (100%)' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                    {cls.controlPlaneHealth}
                   </span>
                 </div>
-              </div>
-
-              {/* Endpoint Footer */}
-              <div
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  fontSize: '0.75rem',
-                  color: 'var(--dash-text-secondary)',
-                  fontFamily: 'var(--font-mono)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  overflow: 'hidden',
-                }}
-              >
-                <ShieldCheck size={14} color="var(--dash-primary)" style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {cls.apiEndpoint}
-                </span>
               </div>
 
               {/* Action Button: Chi Tiết Cụm */}

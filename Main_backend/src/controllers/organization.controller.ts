@@ -65,6 +65,19 @@ export class OrganizationController {
       const user = (req as any).user;
       const orgId = req.params.id;
       const result = await OrganizationService.update(orgId, user.id, user.roles || [], req.body);
+      AuditService.recordFromRequest(req, {
+        organization_id: orgId,
+        action: 'ORG_UPDATED',
+        status: 'SUCCESS',
+        target_type: 'ORGANIZATION',
+        target_id: orgId,
+        description: 'Cập nhật thông tin hồ sơ tổ chức: ' + result.name,
+        metadata: {
+          name: result.name,
+          email: req.body.email,
+          website: req.body.website,
+        },
+      }).catch((err) => console.warn('[AuditService] Lỗi ghi audit log cập nhật tổ chức:', err));
       return ApiResponse.success(res, 'Cập nhật thông tin tổ chức thành công', result, 200);
     } catch (error) {
       next(error);
