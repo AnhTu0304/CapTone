@@ -1,7 +1,8 @@
 import { pool } from '../../config/database';
 import { IAlertRule } from '../../models/alertRule.model';
 import { AlertLifecycleService } from '../alertLifecycle.service';
-import { evaluateOperator, parseWindowToSeconds } from './ruleEvaluationHelper';
+import { parseWindowToSeconds } from './ruleEvaluationHelper';
+import { ConditionEvaluator } from './conditionEvaluator.service';
 
 export class ApmRuleEvaluator {
   /**
@@ -74,25 +75,34 @@ export class ApmRuleEvaluator {
 
       observedValue = Math.round(observedValue * 100) / 100;
 
-      const isBreached = evaluateOperator(
+      // Evaluate condition state (NORMAL, PENDING, FIRING, NO_DATA, ERROR)
+      const evalResult = await ConditionEvaluator.evaluate({
+        organizationId: rule.organization_id,
+        clusterId,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        resourceType: 'service',
+        resourceId: serviceId,
+        metricType: rule.metric_type,
+        operator: rule.operator,
+        thresholdValue: Number(rule.threshold_value),
+        duration: rule.duration,
         observedValue,
-        rule.operator,
-        Number(rule.threshold_value)
+        sampleCount: Number(row.sample_count || 1),
+        sampleEarliestAt: row.min_collected_at ? new Date(row.min_collected_at) : null,
+        sampleLatestAt: row.max_collected_at ? new Date(row.max_collected_at) : null,
+        evaluationWindowSeconds: windowSeconds,
+      });
+
+      // Severity classification & dynamic escalation
+      const { severity, isEscalated } = ConditionEvaluator.determineSeverity(
+        rule.severity,
+        observedValue,
+        Number(rule.threshold_value),
+        rule.metric_type
       );
 
-      // Verify duration persistence if required
-      let durationSatisfied = true;
-      if (isBreached && rule.duration > 0) {
-        if (row.min_collected_at && row.max_collected_at) {
-          const sampleSpreadSeconds =
-            (new Date(row.max_collected_at).getTime() - new Date(row.min_collected_at).getTime()) / 1000;
-          if (sampleSpreadSeconds < rule.duration && Number(row.sample_count) <= 1) {
-            durationSatisfied = false;
-          }
-        }
-      }
-
-      if (isBreached && durationSatisfied) {
+      if (evalResult.state === 'FIRING') {
         await AlertLifecycleService.recordAlertTrigger({
           organization_id: rule.organization_id,
           cluster_id: clusterId,
@@ -102,7 +112,7 @@ export class ApmRuleEvaluator {
           metric_type: rule.metric_type,
           resource_type: 'service',
           resource_id: serviceId,
-          severity: rule.severity,
+          severity,
           observed_value: observedValue,
           threshold_value: Number(rule.threshold_value),
           unit: rule.unit,
@@ -113,11 +123,16 @@ export class ApmRuleEvaluator {
             evaluation_window: rule.evaluation_window,
             duration: rule.duration,
             sample_count: Number(row.sample_count),
+            evaluation_state: 'FIRING',
+            is_escalated: isEscalated,
+            configured_severity: rule.severity,
+            pending_since: evalResult.pendingSince?.toISOString() || null,
           },
           cooldown_seconds: rule.cooldown_seconds,
+          fingerprint: evalResult.fingerprint,
         });
         triggered++;
-      } else if (!isBreached) {
+      } else if (evalResult.state === 'NORMAL') {
         const autoResolved = await AlertLifecycleService.autoResolveAlert({
           organization_id: rule.organization_id,
           cluster_id: clusterId,
@@ -130,6 +145,7 @@ export class ApmRuleEvaluator {
             resolved_at: new Date().toISOString(),
             observed_value: observedValue,
             threshold_value: Number(rule.threshold_value),
+            evaluation_state: 'NORMAL',
             message: `Chỉ số APM ${rule.metric_type} của dịch vụ '${serviceId}' đã bình thường trở lại (${observedValue} ${rule.unit})`,
           },
         });

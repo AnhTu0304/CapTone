@@ -20,6 +20,8 @@ export interface IAlertEvent {
   unit?: string | null;
   message: string;
   details?: Record<string, any>;
+  occurrence_count: number;
+  fingerprint?: string | null;
   first_detected_at: Date;
   last_seen_at: Date;
   resolved_at?: Date | null;
@@ -71,12 +73,17 @@ export class AlertEventModel {
       observed_value: row.observed_value !== null ? Number(row.observed_value) : null,
       threshold_value: row.threshold_value !== null ? Number(row.threshold_value) : null,
       details: typeof row.details === 'object' && row.details !== null ? row.details : {},
+      occurrence_count:
+        row.occurrence_count !== null && row.occurrence_count !== undefined
+          ? Number(row.occurrence_count)
+          : 1,
+      fingerprint: row.fingerprint || null,
     };
   }
 
   /**
    * Create or update open alert event (Deduplication)
-   * If an active/acknowledged alert event already exists for this rule & resource, update last_seen_at & observed_value.
+   * If an active/acknowledged alert event already exists for this rule & resource, update last_seen_at, observed_value & increment occurrence_count.
    * If none exists, insert a new active event.
    */
   public static async createOrUpdateOpenEvent(
@@ -95,6 +102,7 @@ export class AlertEventModel {
       unit?: string | null;
       message: string;
       details?: Record<string, any>;
+      fingerprint?: string | null;
     },
     client?: PoolClient
   ): Promise<{ event: IAlertEvent; isNew: boolean }> {
@@ -102,7 +110,7 @@ export class AlertEventModel {
 
     // First check if an open event already exists
     const findQuery = `
-      SELECT id, first_detected_at, status
+      SELECT id, first_detected_at, last_seen_at, status, occurrence_count
       FROM alert_events
       WHERE organization_id = $1
         AND COALESCE(cluster_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2, '00000000-0000-0000-0000-000000000000'::uuid)
@@ -133,6 +141,7 @@ export class AlertEventModel {
             threshold_value = $2,
             message = $3,
             details = $4,
+            occurrence_count = occurrence_count + 1,
             updated_at = NOW()
         WHERE id = $5
         RETURNING *;
@@ -165,11 +174,13 @@ export class AlertEventModel {
         unit,
         message,
         details,
+        fingerprint,
+        occurrence_count,
         first_detected_at,
         last_seen_at,
         created_at,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, $13, $14, NOW(), NOW(), NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, $13, $14, $15, 1, NOW(), NOW(), NOW(), NOW())
       ON CONFLICT (
         organization_id,
         COALESCE(cluster_id, '00000000-0000-0000-0000-000000000000'::uuid),
@@ -184,6 +195,7 @@ export class AlertEventModel {
         threshold_value = EXCLUDED.threshold_value,
         message = EXCLUDED.message,
         details = EXCLUDED.details,
+        occurrence_count = alert_events.occurrence_count + 1,
         updated_at = NOW()
       RETURNING *;
     `;
@@ -203,6 +215,7 @@ export class AlertEventModel {
       data.unit || null,
       data.message,
       JSON.stringify(data.details || {}),
+      data.fingerprint || null,
     ];
 
     const insertRes = await db.query(insertQuery, insertParams);
@@ -488,5 +501,92 @@ export class AlertEventModel {
     `;
     const res = await db.query(query, [ruleId, organizationId]);
     return res.rows.map((r) => this.formatRow(r));
+  }
+
+  /**
+   * Aggregate alert summary metrics for Dashboard
+   */
+  public static async getAlertSummary(
+    organizationId: string,
+    options: { clusterId?: string; from?: string; to?: string } = {},
+    client?: PoolClient
+  ): Promise<{
+    total_active: number;
+    total_acknowledged: number;
+    total_resolved: number;
+    by_severity: { INFO: number; WARNING: number; CRITICAL: number };
+    by_category: { RESOURCE: number; KUBERNETES: number; APM: number };
+    by_cluster: Array<{ cluster_id: string; cluster_name: string; active_count: number }>;
+  }> {
+    const db = client || pool;
+    const params: any[] = [organizationId];
+    let clusterFilter = '';
+    let timeFilter = '';
+    let paramIndex = 2;
+
+    if (options.clusterId) {
+      clusterFilter = ` AND ae.cluster_id = $${paramIndex++}`;
+      params.push(options.clusterId);
+    }
+    if (options.from) {
+      timeFilter += ` AND ae.last_seen_at >= $${paramIndex++}`;
+      params.push(new Date(options.from));
+    }
+    if (options.to) {
+      timeFilter += ` AND ae.last_seen_at <= $${paramIndex++}`;
+      params.push(new Date(options.to));
+    }
+
+    const countsQuery = `
+      SELECT
+        COUNT(CASE WHEN ae.status = 'ACTIVE' THEN 1 END) AS total_active,
+        COUNT(CASE WHEN ae.status = 'ACKNOWLEDGED' THEN 1 END) AS total_acknowledged,
+        COUNT(CASE WHEN ae.status = 'RESOLVED' THEN 1 END) AS total_resolved,
+        COUNT(CASE WHEN ae.severity = 'CRITICAL' AND ae.status != 'RESOLVED' THEN 1 END) AS critical_count,
+        COUNT(CASE WHEN ae.severity = 'WARNING' AND ae.status != 'RESOLVED' THEN 1 END) AS warning_count,
+        COUNT(CASE WHEN ae.severity = 'INFO' AND ae.status != 'RESOLVED' THEN 1 END) AS info_count,
+        COUNT(CASE WHEN ae.category = 'RESOURCE' AND ae.status != 'RESOLVED' THEN 1 END) AS resource_count,
+        COUNT(CASE WHEN ae.category = 'KUBERNETES' AND ae.status != 'RESOLVED' THEN 1 END) AS k8s_count,
+        COUNT(CASE WHEN ae.category = 'APM' AND ae.status != 'RESOLVED' THEN 1 END) AS apm_count
+      FROM alert_events ae
+      WHERE ae.organization_id = $1 ${clusterFilter} ${timeFilter};
+    `;
+    const countsRes = await db.query(countsQuery, params);
+    const r = countsRes.rows[0] || {};
+
+    // Group by cluster
+    const clusterQuery = `
+      SELECT 
+        ae.cluster_id,
+        COALESCE(c.name, 'Org-Wide') AS cluster_name,
+        COUNT(ae.id) AS active_count
+      FROM alert_events ae
+      LEFT JOIN clusters c ON ae.cluster_id = c.id
+      WHERE ae.organization_id = $1 AND ae.status != 'RESOLVED' ${clusterFilter} ${timeFilter}
+      GROUP BY ae.cluster_id, c.name
+      ORDER BY active_count DESC;
+    `;
+    const clusterRes = await db.query(clusterQuery, params);
+
+    return {
+      total_active: parseInt(r.total_active || '0', 10),
+      total_acknowledged: parseInt(r.total_acknowledged || '0', 10),
+      total_resolved: parseInt(r.total_resolved || '0', 10),
+      by_severity: {
+        CRITICAL: parseInt(r.critical_count || '0', 10),
+        WARNING: parseInt(r.warning_count || '0', 10),
+        INFO: parseInt(r.info_count || '0', 10),
+      },
+      by_category: {
+        RESOURCE: parseInt(r.resource_count || '0', 10),
+        KUBERNETES: parseInt(r.k8s_count || '0', 10),
+        APM: parseInt(r.apm_count || '0', 10),
+      },
+      by_cluster: clusterRes.rows.map((row) => ({
+        cluster_id: row.cluster_id || 'org-wide',
+        cluster_name: row.cluster_name,
+        active_count: parseInt(row.active_count || '0', 10),
+      })),
+    };
   }
 }

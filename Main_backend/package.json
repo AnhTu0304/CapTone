@@ -42,7 +42,8 @@
     "test:apm": "tsx --test src/test/apmApi.test.ts",
     "test:role-security": "tsx --test src/test/roleAssignmentSecurity.test.ts",
     "worker:rule-engine": "tsx src/workers/ruleEngine.worker.ts",
-    "test:rule-engine": "tsx --test src/test/ruleEngineEvaluation.test.ts"
+    "test:rule-engine": "tsx --test src/test/ruleEngineEvaluation.test.ts",
+    "test:alert-management": "tsx --test src/test/alertManagementTask33.test.ts"
   },
   "keywords": [
     "nodejs",

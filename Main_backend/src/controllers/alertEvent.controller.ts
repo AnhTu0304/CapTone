@@ -2,15 +2,60 @@ import { Request, Response, NextFunction } from 'express';
 import { AlertLifecycleService } from '../services/alertLifecycle.service';
 import { RuleEngineExecutionService } from '../services/ruleEngineExecution.service';
 import { AlertRuleService } from '../services/alertRule.service';
+import { AlertRuleModel } from '../models/alertRule.model';
 import {
   ListAlertEventsQuerySchema,
   AcknowledgeAlertEventSchema,
   ResolveAlertEventSchema,
+  AlertSummaryQuerySchema,
 } from '../schemas/alertEvent.schema';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 
 export class AlertEventController {
+  /**
+   * GET /api/v1/alerts/summary or GET /api/v1/alert-events/summary
+   * Aggregated metrics for dashboard
+   */
+  public static async getSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parseResult = AlertSummaryQuerySchema.safeParse(req.query);
+      if (!parseResult.success) {
+        return next(
+          new ApiError(
+            400,
+            parseResult.error.issues[0]?.message || 'Tham số truy vấn tổng hợp cảnh báo không hợp lệ',
+            parseResult.error.format()
+          )
+        );
+      }
+
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        (req.query.organization_id as string) || undefined
+      );
+
+      // Verify cluster ownership if cluster_id provided
+      if (parseResult.data.cluster_id) {
+        const belongs = await AlertRuleModel.verifyClusterOwnership(parseResult.data.cluster_id, targetOrgId);
+        if (!belongs) {
+          throw ApiError.forbidden('Cụm máy chủ không thuộc phạm vi tổ chức của bạn');
+        }
+      }
+
+      const summary = await AlertLifecycleService.getSummary(targetOrgId, {
+        clusterId: parseResult.data.cluster_id,
+        from: parseResult.data.from,
+        to: parseResult.data.to,
+      });
+
+      return ApiResponse.success(res, 'Lấy tổng hợp cảnh báo thành công', summary, 200);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   /**
    * GET /api/v1/alert-events
    * List alert events with pagination and filters

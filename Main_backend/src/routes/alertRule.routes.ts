@@ -24,6 +24,13 @@ alertRuleRoutes.get(
   AlertEventController.list
 );
 
+// GET /api/v1/alert-rules/events/summary - Tổng hợp sự kiện cảnh báo
+alertRuleRoutes.get(
+  '/events/summary',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getSummary
+);
+
 // GET /api/v1/alert-rules/events/:id - Xem chi tiết sự kiện cảnh báo
 alertRuleRoutes.get(
   '/events/:id',

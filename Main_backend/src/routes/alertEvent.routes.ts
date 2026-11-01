@@ -22,6 +22,13 @@ alertEventRoutes.get(
   AlertEventController.list
 );
 
+// 2b. GET /api/v1/alert-events/summary - Dashboard alert summary metrics
+alertEventRoutes.get(
+  '/summary',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getSummary
+);
+
 // 3. GET /api/v1/alert-events/:id - Get alert event details by ID
 alertEventRoutes.get(
   '/:id',

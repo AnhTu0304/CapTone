@@ -2,11 +2,11 @@ import { pool } from '../../config/database';
 import { IAlertRule } from '../../models/alertRule.model';
 import { AlertLifecycleService } from '../alertLifecycle.service';
 import {
-  evaluateOperator,
   parseWindowToSeconds,
   convertBytesToUnit,
   convertRateToUnit,
 } from './ruleEvaluationHelper';
+import { ConditionEvaluator } from './conditionEvaluator.service';
 
 export interface IEvaluationResult {
   evaluatedCount: number;
@@ -112,24 +112,36 @@ export class ResourceMetricEvaluator {
       // Round to 2 decimal places
       observedValue = Math.round(observedValue * 100) / 100;
 
-      // Check if threshold is breached
-      const isBreached = evaluateOperator(observedValue, rule.operator, Number(rule.threshold_value));
+      // Evaluate condition state (NORMAL, PENDING, FIRING, NO_DATA, ERROR)
+      const evalResult = await ConditionEvaluator.evaluate({
+        organizationId: rule.organization_id,
+        clusterId,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        resourceType: 'node',
+        resourceId: nodeName,
+        metricType: rule.metric_type,
+        operator: rule.operator,
+        thresholdValue: Number(rule.threshold_value),
+        duration: rule.duration,
+        observedValue,
+        sampleCount: Number(row.sample_count || 1),
+        sampleEarliestAt: row.min_collected_at ? new Date(row.min_collected_at) : null,
+        sampleLatestAt: row.max_collected_at ? new Date(row.max_collected_at) : null,
+        evaluationWindowSeconds: windowSeconds,
+      });
 
-      // Verify duration persistence if required
-      let durationSatisfied = true;
-      if (isBreached && rule.duration > 0) {
-        if (row.min_collected_at && row.max_collected_at) {
-          const sampleSpreadSeconds =
-            (new Date(row.max_collected_at).getTime() - new Date(row.min_collected_at).getTime()) / 1000;
-          if (sampleSpreadSeconds < rule.duration && Number(row.sample_count) <= 1) {
-            durationSatisfied = false;
-          }
-        }
-      }
+      // Severity classification & dynamic escalation
+      const { severity, isEscalated } = ConditionEvaluator.determineSeverity(
+        rule.severity,
+        observedValue,
+        Number(rule.threshold_value),
+        rule.metric_type
+      );
 
-      if (isBreached && durationSatisfied) {
+      if (evalResult.state === 'FIRING') {
         // Trigger or update alert event
-        const triggerResult = await AlertLifecycleService.recordAlertTrigger({
+        await AlertLifecycleService.recordAlertTrigger({
           organization_id: rule.organization_id,
           cluster_id: clusterId,
           rule_id: rule.id,
@@ -138,7 +150,7 @@ export class ResourceMetricEvaluator {
           metric_type: rule.metric_type,
           resource_type: 'node',
           resource_id: nodeName,
-          severity: rule.severity,
+          severity,
           observed_value: observedValue,
           threshold_value: Number(rule.threshold_value),
           unit: rule.unit,
@@ -149,13 +161,18 @@ export class ResourceMetricEvaluator {
             evaluation_window: rule.evaluation_window,
             duration: rule.duration,
             sample_count: Number(row.sample_count),
+            evaluation_state: 'FIRING',
+            is_escalated: isEscalated,
+            configured_severity: rule.severity,
+            pending_since: evalResult.pendingSince?.toISOString() || null,
           },
           cooldown_seconds: rule.cooldown_seconds,
+          fingerprint: evalResult.fingerprint,
         });
 
         triggered++;
-      } else if (!isBreached) {
-        // Condition is healthy: Auto-resolve if an open alert exists
+      } else if (evalResult.state === 'NORMAL') {
+        // Condition is confirmed healthy: Auto-resolve if an open alert exists
         const resolvedEvent = await AlertLifecycleService.autoResolveAlert({
           organization_id: rule.organization_id,
           cluster_id: clusterId,
@@ -168,6 +185,7 @@ export class ResourceMetricEvaluator {
             resolved_at: new Date().toISOString(),
             observed_value: observedValue,
             threshold_value: Number(rule.threshold_value),
+            evaluation_state: 'NORMAL',
             message: `Chỉ số ${rule.metric_type} của máy chủ '${nodeName}' đã hồi phục về mức an toàn (${observedValue} ${rule.unit})`,
           },
         });
@@ -176,6 +194,7 @@ export class ResourceMetricEvaluator {
           resolved++;
         }
       }
+      // Note: If state is PENDING, NO_DATA, or ERROR, we do NOT fire and do NOT auto-resolve!
     }
 
     return { triggered, resolved };

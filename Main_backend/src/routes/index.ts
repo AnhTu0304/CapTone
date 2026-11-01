@@ -45,5 +45,6 @@ apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/statistics', statisticsRoutes);
 apiRouter.use('/alert-rules', alertRuleRoutes);
 apiRouter.use('/alert-events', alertEventRoutes);
+apiRouter.use('/alerts', alertEventRoutes);
 
 export default apiRouter;
