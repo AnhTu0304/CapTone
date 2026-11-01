@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
 import {
     IUserResponse,
@@ -17,6 +18,15 @@ import { EmailQueue } from './emailQueue.service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export const resolvePrimarySystemRole = (roles: string[]): string | null => {
+    if (!roles || roles.length === 0) return null;
+    const hierarchy = ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'USER'];
+    for (const h of hierarchy) {
+        if (roles.includes(h)) return h;
+    }
+    return roles[0] || null;
+};
+
 export class UserService {
     // 0. Lấy thông tin hồ sơ người dùng đang đăng nhập (GET /api/v1/users/me)
     public static async getMyProfile(userId: string): Promise<IUserProfileResponse> {
@@ -33,7 +43,8 @@ export class UserService {
             throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
         }
 
-        const systemRoles = await UserModel.getUserRoles(userId.trim());
+        const systemRoles = await UserModel.getUserSystemRoles(userId.trim());
+        const primarySystemRole = resolvePrimarySystemRole(systemRoles);
 
         let primaryOrg: { id: string; name: string; slug: string; role_in_org?: string } | null = null;
         try {
@@ -63,7 +74,8 @@ export class UserService {
             status: user.status,
             accountStatus: user.status,
             system_roles: systemRoles,
-            systemRole: systemRoles.length > 0 ? systemRoles[0] : 'USER',
+            systemRole: primarySystemRole,
+            system_role: primarySystemRole,
             organization: primaryOrg ? { id: primaryOrg.id, name: primaryOrg.name, slug: primaryOrg.slug } : null,
             organization_role: primaryOrg?.role_in_org || null,
             organizationRole: primaryOrg?.role_in_org || null,
@@ -142,7 +154,9 @@ export class UserService {
             throw new ApiError(404, 'Không tìm thấy người dùng với ID này');
         }
 
-        user.system_roles = await UserModel.getUserRoles(userId.trim());
+        user.system_roles = await UserModel.getUserSystemRoles(userId.trim());
+        user.systemRole = resolvePrimarySystemRole(user.system_roles);
+        user.system_role = user.systemRole;
         user.organization_roles = await UserModel.getUserOrganizations(userId.trim());
         user.has_organization = (user.organization_roles || []).length > 0;
         return user;
@@ -424,5 +438,94 @@ export class UserService {
         if (affected === 0) {
             throw new ApiError(404, 'Không tìm thấy người dùng để xóa');
         }
+    }
+
+    // 9. Lấy nhật ký hoạt động cá nhân của người dùng từ audit_logs (bao gồm cả hoạt động trong Organization của họ)
+    public static async getMyActivities(
+        userId: string,
+        query: { category?: string; search?: string; limit?: number; page?: number }
+    ): Promise<{ items: any[]; total: number; page: number; limit: number }> {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.max(1, Math.min(100, Number(query.limit) || 50));
+        const offset = (page - 1) * limit;
+
+        const conditions: string[] = [
+            "(a.user_id = $1 OR (a.target_type = 'USER' AND a.target_id = $1) OR (a.organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = $1)))"
+        ];
+        const params: any[] = [userId];
+        let pIndex = 2;
+
+        if (query.category && query.category !== 'ALL') {
+            const cat = query.category.toUpperCase();
+            if (cat === 'AUTH') {
+                conditions.push("a.action IN ('AUTH_LOGIN_SUCCESS', 'AUTH_LOGIN_FAILURE', 'USER_LOGOUT', 'USER_REGISTERED', 'LOGIN')");
+            } else if (cat === 'PROFILE') {
+                conditions.push("a.action IN ('USER_PROFILE_UPDATED', 'PROFILE_UPDATED', 'PROFILE_UPDATE', 'EMAIL_VERIFIED', 'USER_UPDATE', 'PROFILE')");
+            } else if (cat === 'COMPANY') {
+                conditions.push("a.action IN ('ORG_CREATED', 'ORG_UPDATED', 'ORG_STATUS_CHANGED', 'INVITATION_SENT', 'INVITATION_ACCEPTED', 'MEMBER_JOINED', 'MEMBER_REMOVED', 'COMPANY', 'CLUSTER_CREATED', 'CLUSTER_DELETED', 'CONFIG_UPDATED')");
+            } else if (cat === 'SECURITY') {
+                conditions.push("a.action IN ('2FA_ENABLED', '2FA_DISABLED', 'USER_PASSWORD_CHANGED', 'PASSWORD_RESET', 'TOKEN_ROTATED', 'SECURITY')");
+            }
+        }
+
+        if (query.search && query.search.trim()) {
+            conditions.push("(a.description ILIKE $" + pIndex + " OR a.action ILIKE $" + pIndex + " OR a.ip_address::text ILIKE $" + pIndex + ")");
+            params.push("%" + query.search.trim() + "%");
+            pIndex++;
+        }
+
+        const whereSql = conditions.join(' AND ');
+        const countRes = await pool.query<{ total: number }>('SELECT COUNT(*)::int AS total FROM audit_logs a WHERE ' + whereSql, params);
+        const total = countRes.rows[0]?.total || 0;
+
+        const limitIndex = pIndex++;
+        const offsetIndex = pIndex++;
+        const dataQuery = 'SELECT a.id, a.action, a.description, a.status, a.ip_address, a.created_at, a.metadata, a.actor_type ' +
+            'FROM audit_logs a WHERE ' + whereSql + ' ' +
+            'ORDER BY a.created_at DESC ' +
+            'LIMIT $' + limitIndex + ' OFFSET $' + offsetIndex;
+
+        const dataParams = [...params, limit, offset];
+        const dataRes = await pool.query(dataQuery, dataParams);
+
+        const items = dataRes.rows.map((r: any) => {
+            const action = (r.action || '').toUpperCase();
+            let category = 'GENERAL';
+            let title = r.description || action;
+
+            if (action.includes('AUTH') || action.includes('LOGIN') || action.includes('LOGOUT')) {
+                category = 'AUTH';
+                title = action.includes('SUCCESS') ? 'Đăng nhập vào hệ thống' : (action.includes('FAILURE') ? 'Đăng nhập thất bại' : 'Xác thực tài khoản');
+            } else if (action.includes('PROFILE') || action.includes('EMAIL')) {
+                category = 'PROFILE';
+                title = 'Cập nhật hồ sơ cá nhân';
+            } else if (action.includes('2FA') || action.includes('PASSWORD') || action.includes('TOKEN')) {
+                category = 'SECURITY';
+                title = action.includes('2FA') ? 'Bảo mật xác thực hai yếu tố (2FA)' : (action.includes('PASSWORD') ? 'Đổi mật khẩu tài khoản' : (action.includes('TOKEN') ? 'Xoay vòng Token Agent' : 'Bảo mật tài khoản'));
+            } else if (action.includes('ORG') || action.includes('MEMBER') || action.includes('INVITATION') || action.includes('CLUSTER') || action.includes('CONFIG') || action.includes('AGENT')) {
+                category = 'COMPANY';
+                title = action.includes('ORG_CREATED') ? 'Khởi tạo Company mới' : (action.includes('ORG_UPDATED') ? 'Cập nhật hồ sơ tổ chức' : (action.includes('CLUSTER_CREATED') ? 'Đăng ký Cụm Kubernetes' : (action.includes('CONFIG') ? 'Cập nhật cấu hình Agent' : (action.includes('AGENT') ? 'Kết nối Tác tử Agent' : 'Thao tác tổ chức & hạ tầng'))));
+            }
+
+            const d = new Date(r.created_at);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const timestamp = pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+
+            let ip = r.ip_address ? String(r.ip_address) : '127.0.0.1';
+            if (ip === '::1' || ip === '::ffff:127.0.0.1') ip = '127.0.0.1';
+
+            return {
+                id: String(r.id),
+                actionType: r.action,
+                title,
+                description: r.description || title,
+                timestamp,
+                ipAddress: ip,
+                category,
+                status: r.status === 'SUCCESS' ? 'SUCCESS' : (r.status === 'FAILURE' ? 'FAILED' : r.status),
+            };
+        });
+
+        return { items, total, page, limit };
     }
 }

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
-import { useAuth } from '../../context/AuthContext';
-import { getStoredProfile } from '../../mocks/profileMockData';
+import UserProfileDropdown from '../common/UserProfileDropdown';
 import {
   Building2,
   Loader2,
@@ -11,15 +10,10 @@ import {
   ChevronDown,
   Check,
   Clock,
-  ShieldCheck,
   Menu,
-  LogOut,
-  User,
-  Sparkles,
 } from 'lucide-react';
 
 export const TopHeader = () => {
-  const { user, logout, getInitials, isAdmin } = useAuth();
   const {
     currentOrg,
     orgList,
@@ -80,12 +74,10 @@ export const TopHeader = () => {
   };
   const [isEnvDropdownOpen, setIsEnvDropdownOpen] = useState(false);
   const [isNotifPopoverOpen, setIsNotifPopoverOpen] = useState(false);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const orgRef = useRef(null);
   const envRef = useRef(null);
   const notifRef = useRef(null);
-  const profileRef = useRef(null);
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -93,33 +85,10 @@ export const TopHeader = () => {
       if (orgRef.current && !orgRef.current.contains(e.target)) setIsOrgDropdownOpen(false);
       if (envRef.current && !envRef.current.contains(e.target)) setIsEnvDropdownOpen(false);
       if (notifRef.current && !notifRef.current.contains(e.target)) setIsNotifPopoverOpen(false);
-      if (profileRef.current && !profileRef.current.contains(e.target)) setIsProfileMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const [profileData, setProfileData] = useState(() => {
-    try {
-      return getStoredProfile();
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    const handleProfileUpdate = (e) => {
-      if (e.detail) {
-        setProfileData(e.detail);
-      }
-    };
-    window.addEventListener('selfheal_profile_updated', handleProfileUpdate);
-    return () => window.removeEventListener('selfheal_profile_updated', handleProfileUpdate);
-  }, []);
-
-  const displayName = user?.full_name || profileData?.fullName || user?.email?.split('@')[0] || 'Tài khoản';
-  const displayEmail = user?.email || profileData?.email || 'user@example.com';
-  const displayAvatar = profileData?.avatar || null;
 
   return (
     <header
@@ -793,208 +762,8 @@ export const TopHeader = () => {
           )}
         </div>
 
-        {/* User Profile Menu */}
-        <div ref={profileRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '4px 8px',
-              borderRadius: 'var(--dash-radius-md)',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: 'var(--dash-bg-canvas)',
-              cursor: 'pointer',
-            }}
-          >
-            {displayAvatar ? (
-              <img
-                src={displayAvatar}
-                alt={displayName}
-                style={{
-                  width: '26px',
-                  height: '26px',
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  border: '1.5px solid var(--dash-mint-200)',
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: '26px',
-                  height: '26px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--dash-primary)',
-                  color: '#28E99F',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >
-                {getInitials(displayName)}
-              </div>
-            )}
-            <div style={{ textAlign: 'left', display: 'none', md: 'block' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-primary)', lineHeight: 1.2 }}>
-                {displayName}
-              </div>
-            </div>
-            <ChevronDown size={12} color="var(--dash-text-muted)" />
-          </button>
-
-          {isProfileMenuOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '8px',
-                width: '220px',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-md)',
-                boxShadow: 'var(--dash-shadow-dropdown)',
-                padding: '6px',
-                zIndex: 60,
-              }}
-            >
-              <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--dash-border)' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
-                  {displayName}
-                </div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', wordBreak: 'break-all' }}>
-                  {displayEmail}
-                </div>
-              </div>
-              {(isAdmin(user) || user?.system_roles?.some((r) => ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(r))) && (
-                <button
-                  onClick={() => {
-                    setIsProfileMenuOpen(false);
-                    if (onNavigate) onNavigate('/admin');
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    border: 'none',
-                    background: 'none',
-                    color: '#059669',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    borderRadius: 'var(--dash-radius-sm)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <ShieldCheck size={13} color="#059669" />
-                  <span>Bảng Quản Trị Hệ Thống (Admin)</span>
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setIsProfileMenuOpen(false);
-                  if (onNavigate) onNavigate('/portal');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  background: 'none',
-                  color: '#059669',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <Sparkles size={13} color="#059669" />
-                <span>Không Gian Cá Nhân (Portal)</span>
-              </button>
-              <button
-                onClick={() => {
-                  setIsProfileMenuOpen(false);
-                  if (onNavigate) onNavigate('/portal/profile');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  background: 'none',
-                  color: 'var(--dash-text-secondary)',
-                  fontSize: '0.8125rem',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <User size={13} color="var(--dash-primary)" />
-                <span>Hồ sơ cá nhân</span>
-              </button>
-              <button
-                onClick={() => {
-                  setIsProfileMenuOpen(false);
-                  if (onNavigate) onNavigate('/dashboard/settings');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  background: 'none',
-                  color: 'var(--dash-text-secondary)',
-                  fontSize: '0.8125rem',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  borderRadius: 'var(--dash-radius-sm)',
-                }}
-              >
-                Cài đặt tài khoản
-              </button>
-              <button
-                onClick={() => {
-                  setIsProfileMenuOpen(false);
-                  logout();
-                  if (onNavigate) {
-                    onNavigate('/login');
-                  } else {
-                    window.history.pushState({}, '', '/login');
-                    window.dispatchEvent(new PopStateEvent('popstate'));
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  background: 'none',
-                  color: 'var(--dash-critical)',
-                  fontSize: '0.8125rem',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <LogOut size={13} color="var(--dash-critical)" />
-                <span>Đăng xuất</span>
-              </button>
-            </div>
-          )}
-        </div>
+        {/* User Profile Menu đồng bộ chuẩn /admin */}
+        <UserProfileDropdown onNavigate={onNavigate} />
       </div>
     </header>
   );

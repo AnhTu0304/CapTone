@@ -1,6 +1,7 @@
 import { ClusterModel, IClusterDetail } from '../models/cluster.model';
 import { EnvironmentModel } from '../models/environment.model';
 import { ApiError } from '../utils/apiError';
+import { pool } from '../config/database';
 
 export class ClusterService {
   public static async getClustersByOrg(orgId: string): Promise<IClusterDetail[]> {
@@ -11,13 +12,44 @@ export class ClusterService {
     return clusters;
   }
 
-  public static async getAllClusters(): Promise<IClusterDetail[]> {
+  public static async getAllClusters(userId?: string): Promise<IClusterDetail[]> {
+    if (userId) {
+      const memberRes = await pool.query(
+        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+        [userId]
+      );
+      const userOrgIds = memberRes.rows.map((r) => r.organization_id);
+      return ClusterModel.findAll(userOrgIds);
+    }
     return ClusterModel.findAll();
   }
 
-  public static async getClusterDetail(clusterId: string, orgId?: string): Promise<any> {
+  public static async getClusterDetail(clusterId: string, orgId?: string, userId?: string): Promise<any> {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
+    }
+    if (userId) {
+      const memberRes = await pool.query(
+        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+        [userId]
+      );
+      const userOrgIds = memberRes.rows.map((r) => r.organization_id);
+      if (orgId && !userOrgIds.includes(orgId)) {
+        throw new ApiError(403, 'Từ chối truy cập: Bạn không thuộc tổ chức này');
+      }
+      if (userOrgIds.length === 0) {
+        throw new ApiError(403, 'Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+      }
+      const clusterRes = await pool.query(
+        `SELECT c.id, e.organization_id FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL LIMIT 1`,
+        [clusterId]
+      );
+      if (clusterRes.rows[0]) {
+        const clusterOrg = clusterRes.rows[0].organization_id;
+        if (!userOrgIds.includes(clusterOrg)) {
+          throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền truy cập cụm Kubernetes của tổ chức khác');
+        }
+      }
     }
     const detail = await ClusterModel.findFullDetailById(clusterId, orgId);
     if (!detail) {
@@ -29,23 +61,24 @@ export class ClusterService {
   public static async rotateAgentToken(
     clusterId: string,
     data: { expires_in_days?: number | null; revoke_previous?: boolean },
-    orgId?: string
+    orgId?: string,
+    userId?: string
   ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
-    if (orgId) {
-      await this.getClusterDetail(clusterId, orgId);
+    if (orgId || userId) {
+      await this.getClusterDetail(clusterId, orgId, userId);
     }
     return await ClusterModel.rotateAgentToken(clusterId, data, orgId);
   }
 
-  public static async revokeAgentToken(clusterId: string, tokenId: string, orgId?: string) {
+  public static async revokeAgentToken(clusterId: string, tokenId: string, orgId?: string, userId?: string) {
     if (!clusterId || !tokenId) {
       throw new ApiError(400, 'Mã cụm hoặc mã Token không hợp lệ');
     }
-    if (orgId) {
-      await this.getClusterDetail(clusterId, orgId);
+    if (orgId || userId) {
+      await this.getClusterDetail(clusterId, orgId, userId);
     }
     const revoked = await ClusterModel.revokeAgentToken(clusterId, tokenId, orgId);
     if (!revoked) {
@@ -54,42 +87,42 @@ export class ClusterService {
     return revoked;
   }
 
-  public static async updateAgentConfig(clusterId: string, configData: any, orgId?: string) {
+  public static async updateAgentConfig(clusterId: string, configData: any, orgId?: string, userId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
-    if (orgId) {
-      await this.getClusterDetail(clusterId, orgId);
+    if (orgId || userId) {
+      await this.getClusterDetail(clusterId, orgId, userId);
     }
     return await ClusterModel.updateAgentConfig(clusterId, configData);
   }
 
-  public static async connectAgent(clusterId: string, orgId?: string) {
+  public static async connectAgent(clusterId: string, orgId?: string, userId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
-    if (orgId) {
-      await this.getClusterDetail(clusterId, orgId);
+    if (orgId || userId) {
+      await this.getClusterDetail(clusterId, orgId, userId);
     }
     return await ClusterModel.connectAgent(clusterId);
   }
 
-  public static async disconnectAgent(clusterId: string, orgId?: string) {
+  public static async disconnectAgent(clusterId: string, orgId?: string, userId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
-    if (orgId) {
-      await this.getClusterDetail(clusterId, orgId);
+    if (orgId || userId) {
+      await this.getClusterDetail(clusterId, orgId, userId);
     }
     return await ClusterModel.disconnectAgent(clusterId);
   }
 
-  public static async removeCluster(clusterId: string, orgId?: string, force?: boolean) {
+  public static async removeCluster(clusterId: string, orgId?: string, force?: boolean, userId?: string) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
-    if (orgId) {
-      await this.getClusterDetail(clusterId, orgId);
+    if (orgId || userId) {
+      await this.getClusterDetail(clusterId, orgId, userId);
     }
     try {
       return await ClusterModel.removeCluster(clusterId, orgId, force);

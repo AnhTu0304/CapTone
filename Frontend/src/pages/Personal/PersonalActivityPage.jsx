@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   History,
   Search,
@@ -8,21 +8,49 @@ import {
   Building2,
   Download,
   CheckCircle2,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
 
 export const PersonalActivityPage = () => {
-  const [activities] = useState(() => personalPortalService.getActivityHistory());
+  const [activities, setActivities] = useState(() => personalPortalService.getActivityHistory());
+  const [isLoading, setIsLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL' | 'AUTH' | 'PROFILE' | 'COMPANY' | 'SECURITY'
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter logic
+  // Tải dữ liệu từ database thông qua personalPortalService
+  const loadActivities = useCallback(async (cat, search) => {
+    setIsLoading(true);
+    try {
+      const data = await personalPortalService.fetchActivityHistory({
+        category: cat !== 'ALL' ? cat : undefined,
+        search: search && search.trim() ? search.trim() : undefined,
+      });
+      setActivities(data || []);
+    } catch (err) {
+      console.error('Error fetching activities:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadActivities(categoryFilter, searchTerm);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [categoryFilter, searchTerm, loadActivities]);
+
+  // Client-side filter safeguard
   const filtered = activities.filter((act) => {
     const matchesCategory = categoryFilter === 'ALL' || act.category === categoryFilter;
+    const searchLower = searchTerm.toLowerCase().trim();
+    if (!searchLower) return matchesCategory;
     const matchesSearch =
-      act.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      act.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      act.ipAddress.includes(searchTerm);
+      (act.title && act.title.toLowerCase().includes(searchLower)) ||
+      (act.description && act.description.toLowerCase().includes(searchLower)) ||
+      (act.ipAddress && String(act.ipAddress).includes(searchLower));
     return matchesCategory && matchesSearch;
   });
 
@@ -31,10 +59,10 @@ export const PersonalActivityPage = () => {
     const rows = filtered
       .map(
         (a) =>
-          `"${a.id}","${a.title}","${a.description}","${a.timestamp}","${a.ipAddress}","${a.category}","${a.status}"`
+          `"${a.id || ''}","${(a.title || '').replace(/"/g, '""')}","${(a.description || '').replace(/"/g, '""')}","${a.timestamp || ''}","${a.ipAddress || ''}","${a.category || ''}","${a.status || ''}"`
       )
       .join('\n');
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -51,9 +79,9 @@ export const PersonalActivityPage = () => {
       case 'PROFILE':
         return { label: 'Cập nhật hồ sơ', bg: '#F5F3FF', text: '#7C3AED', icon: UserCheck };
       case 'COMPANY':
-        return { label: 'Tổ chức Company', bg: '#ECFDF5', text: '#059669', icon: Building2 };
+        return { label: 'Tổ chức & Hạ tầng', bg: '#ECFDF5', text: '#059669', icon: Building2 };
       case 'SECURITY':
-        return { label: 'Bảo mật & 2FA', bg: '#FEF3C7', text: '#D97706', icon: ShieldCheck };
+        return { label: 'Bảo mật & Token', bg: '#FEF3C7', text: '#D97706', icon: ShieldCheck };
       default:
         return { label: 'Chung', bg: '#F1F5F9', text: '#475569', icon: Activity };
     }
@@ -61,6 +89,13 @@ export const PersonalActivityPage = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <style>{`
+        @keyframes spinSlow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
       {/* Header bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -68,30 +103,60 @@ export const PersonalActivityPage = () => {
             Activity History — Lịch Sử Hoạt Động Cá Nhân
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-            Nhật ký kiểm toán toàn diện ghi nhận các thao tác đăng nhập, đổi bảo mật và tham gia/rời Company của bạn.
+            Nhật ký kiểm toán toàn diện ghi nhận các thao tác đăng nhập, đổi bảo mật, xoay vòng Token và cụm K8s của bạn.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCSV}
-          style={{
-            padding: '8px 14px',
-            borderRadius: '8px',
-            backgroundColor: '#FFFFFF',
-            color: '#334155',
-            border: '1px solid #CBD5E1',
-            fontSize: '0.78125rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
-          <Download size={15} />
-          <span>Xuất Báo Cáo CSV</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => loadActivities(categoryFilter, searchTerm)}
+            disabled={isLoading}
+            title="Làm mới dữ liệu từ Database"
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              border: '1px solid #CBD5E1',
+              fontSize: '0.78125rem',
+              fontWeight: 600,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <RefreshCw
+              size={15}
+              style={{
+                animation: isLoading ? 'spinSlow 1s linear infinite' : 'none',
+              }}
+            />
+            <span>Làm mới</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              border: '1px solid #CBD5E1',
+              fontSize: '0.78125rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Download size={15} />
+            <span>Xuất Báo Cáo CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -143,11 +208,11 @@ export const PersonalActivityPage = () => {
             outline: 'none',
           }}
         >
-          <option value="ALL">Tất cả hành động</option>
+          <option value="ALL">Tất cả hành động ({activities.length})</option>
           <option value="AUTH">Đăng nhập / Đăng xuất</option>
           <option value="PROFILE">Cập nhật hồ sơ</option>
-          <option value="COMPANY">Tham gia / Rời Company</option>
-          <option value="SECURITY">Thay đổi bảo mật (Mật khẩu, 2FA)</option>
+          <option value="COMPANY">Tổ chức & Cụm K8s</option>
+          <option value="SECURITY">Bảo mật & Token Agent</option>
         </select>
       </div>
 
@@ -212,22 +277,41 @@ export const PersonalActivityPage = () => {
                     <td style={{ padding: '14px 16px', color: '#64748B' }}>{act.timestamp}</td>
 
                     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                      <span
-                        style={{
-                          fontSize: '0.6875rem',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '9999px',
-                          backgroundColor: '#ECFDF5',
-                          color: '#059669',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <CheckCircle2 size={12} />
-                        <span>Hoàn thành</span>
-                      </span>
+                      {act.status === 'FAILED' ? (
+                        <span
+                          style={{
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '9999px',
+                            backgroundColor: '#FEF2F2',
+                            color: '#DC2626',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <AlertTriangle size={12} />
+                          <span>Thất bại</span>
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '9999px',
+                            backgroundColor: '#ECFDF5',
+                            color: '#059669',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <CheckCircle2 size={12} />
+                          <span>Hoàn thành</span>
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -236,7 +320,29 @@ export const PersonalActivityPage = () => {
           </table>
         </div>
 
-        {filtered.length === 0 && (
+        {isLoading && filtered.length === 0 && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '48px 24px',
+              color: '#64748B',
+            }}
+          >
+            <RefreshCw
+              size={28}
+              style={{
+                margin: '0 auto 12px auto',
+                color: '#3B82F6',
+                animation: 'spinSlow 1s linear infinite',
+              }}
+            />
+            <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}>
+              Đang tải lịch sử hoạt động từ Database...
+            </div>
+          </div>
+        )}
+
+        {!isLoading && filtered.length === 0 && (
           <div
             style={{
               textAlign: 'center',

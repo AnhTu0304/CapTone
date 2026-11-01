@@ -126,12 +126,11 @@ router.get(
 
 /**
  * [GET] /api/v1/organizations/:id - Xem chi tiết tổ chức & profile
- * Bảo vệ: Chỉ thành viên tổ chức hoặc SUPER_ADMIN mới được xem
+ * Bảo vệ: Quản trị viên hệ thống hoặc thành viên ACTIVE của tổ chức (kiểm tra phân quyền tại Service)
  */
 router.get(
   '/:id',
   validate(orgIdParamSchema),
-  requireOrgMember,
   OrganizationController.getById
 );
 

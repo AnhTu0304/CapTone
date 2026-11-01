@@ -198,6 +198,11 @@ export async function getRedisHealth(): Promise<RedisHealth> {
   }
 }
 
+export function getRedisClient(): Redis | null {
+  if (!config.redis.enabled) return null;
+  return redisClient;
+}
+
 export async function closeRedis(): Promise<void> {
   try {
     if (redisClient.status !== 'end') {

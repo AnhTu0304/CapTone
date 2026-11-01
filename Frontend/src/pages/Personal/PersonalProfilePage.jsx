@@ -10,6 +10,7 @@ import { personalPortalService } from '../../services/personalPortalService';
 import { profileService, formatVnDate, formatVnDateTime } from '../../services/profileService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { resolveUserSystemRole } from '../../components/common/UserProfileDropdown';
 
 export const PersonalProfilePage = () => {
   const { user } = useAuth();
@@ -157,12 +158,8 @@ export const PersonalProfilePage = () => {
     .join('')
     .toUpperCase();
 
-  const highestRole = (
-    user?.system_roles?.[0] ||
-    profile.systemRole ||
-    (user?.roles && user.roles[0]) ||
-    'SUPER_ADMIN'
-  ).toUpperCase();
+  const resolvedSystemRole = resolveUserSystemRole(user);
+  const highestRole = resolvedSystemRole || 'Chưa được gán System Role';
 
   const accountStatus = (profile.accountStatus || user?.status || 'ACTIVE').toUpperCase();
   const joinedDate = profile.createdAt || (user?.created_at ? formatVnDate(user.created_at) : '21/10/2026');

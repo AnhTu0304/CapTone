@@ -24,6 +24,11 @@ router.use(authenticateToken);
 // [GET] /api/v1/users/me -> Xem thông tin hồ sơ của người dùng đang đăng nhập
 router.get('/me', UserController.getMe);
 
+// [GET] /api/v1/users/me/activities -> Xem lịch sử hoạt động cá nhân từ audit_logs
+router.get('/me/activities', UserController.getMyActivities);
+// [POST] /api/v1/users/me/activities -> Ghi nhận nhật ký thao tác người dùng
+router.post('/me/activities', UserController.recordMyActivity);
+
 // [PUT] /api/v1/users/me -> Cập nhật thông tin hồ sơ của người dùng đang đăng nhập
 router.put('/me', validate(updateMyProfileSchema), UserController.updateMe);
 

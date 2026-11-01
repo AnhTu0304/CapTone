@@ -598,23 +598,21 @@ export class AgentService {
     const requestedOrgId = params.orgId || (query.organization_id as string) || (query.orgId as string) || orgMember?.organizationId;
     let allowedOrgIds: string[] = [];
 
-    if (!isPlatformAdmin) {
-      if (!user?.id) {
-        throw ApiError.unauthorized('Yêu cầu xác thực người dùng');
-      }
-      const memberRes = await pool.query(
-        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-        [user.id]
-      );
-      allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
+    if (!user?.id) {
+      throw ApiError.unauthorized('Yêu cầu xác thực người dùng');
+    }
+    const memberRes = await pool.query(
+      `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+      [user.id]
+    );
+    allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
 
-      if (requestedOrgId) {
-        if (!allowedOrgIds.includes(requestedOrgId)) {
-          throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền truy cập dữ liệu của tổ chức này');
-        }
-      } else if (allowedOrgIds.length === 0) {
-        throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+    if (requestedOrgId) {
+      if (!allowedOrgIds.includes(requestedOrgId)) {
+        throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền truy cập dữ liệu của tổ chức này');
       }
+    } else if (allowedOrgIds.length === 0) {
+      throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
     }
 
     const effectiveOrgId = requestedOrgId;
@@ -638,7 +636,7 @@ export class AgentService {
       if (effectiveOrgId && agentOrgId && agentOrgId !== effectiveOrgId) {
         throw ApiError.forbidden('Từ chối truy cập: Agent không thuộc tổ chức được yêu cầu');
       }
-      if (!isPlatformAdmin && agentOrgId && !allowedOrgIds.includes(agentOrgId)) {
+      if (agentOrgId && !allowedOrgIds.includes(agentOrgId)) {
         throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền xem metrics của Agent thuộc tổ chức khác');
       }
       resolvedAgentId = agentRow.id;
@@ -661,7 +659,7 @@ export class AgentService {
       if (effectiveOrgId && clusterOrgId && clusterOrgId !== effectiveOrgId) {
         throw ApiError.forbidden('Từ chối truy cập: Cụm Kubernetes không thuộc tổ chức được yêu cầu');
       }
-      if (!isPlatformAdmin && clusterOrgId && !allowedOrgIds.includes(clusterOrgId)) {
+      if (clusterOrgId && !allowedOrgIds.includes(clusterOrgId)) {
         throw ApiError.forbidden('Từ chối truy cập: Bạn không có quyền xem metrics của cụm thuộc tổ chức khác');
       }
     }
@@ -680,7 +678,7 @@ export class AgentService {
       if (nodeRes.rows.length > 0) {
         const matchingTenantNode = nodeRes.rows.find((row) => {
           if (effectiveOrgId && row.organization_id && row.organization_id !== effectiveOrgId) return false;
-          if (!isPlatformAdmin && row.organization_id && !allowedOrgIds.includes(row.organization_id)) return false;
+          if (row.organization_id && !allowedOrgIds.includes(row.organization_id)) return false;
           return true;
         });
 
@@ -703,7 +701,7 @@ export class AgentService {
         if (effectiveOrgId && metricOrgId && metricOrgId !== effectiveOrgId) {
           throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
         }
-        if (!isPlatformAdmin && metricOrgId && !allowedOrgIds.includes(metricOrgId)) {
+        if (metricOrgId && !allowedOrgIds.includes(metricOrgId)) {
           throw ApiError.forbidden('Từ chối truy cập: Node không thuộc phạm vi tổ chức của bạn');
         }
       }
@@ -711,7 +709,7 @@ export class AgentService {
 
     return await MetricModel.queryNodeMetricsPaginated({
       organizationId: effectiveOrgId,
-      organizationIds: !isPlatformAdmin && !effectiveOrgId ? allowedOrgIds : undefined,
+      organizationIds: !effectiveOrgId ? allowedOrgIds : undefined,
       agentId: resolvedAgentId,
       clusterId,
       nodeId,

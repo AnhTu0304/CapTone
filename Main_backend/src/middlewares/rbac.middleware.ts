@@ -21,7 +21,6 @@ export const expandRoles = (roles: string[]): string[] => {
     if (role === 'SUPER_ADMIN') {
       expanded.add('ADMIN');
       expanded.add('SYSTEM_ADMIN');
-      expanded.add('SME_OWNER');
       expanded.add('DEVOPS');
       expanded.add('VIEWER');
       expanded.add('USER');

@@ -375,7 +375,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     : (isDegraded ? '#F59E0B' : (isConnecting ? '#3B82F6' : '#EF4444'));
 
   // Chỉ hiển thị độ trễ thực tế khi Agent đã Online thật
-  const latestLatency = isOnline && heartbeats[0] ? (heartbeats[0]?.latency_ms ?? 1.2) : null;
+  const latestLatency = isOnline && heartbeats[0]?.latency_ms != null ? heartbeats[0].latency_ms : null;
+  const isControlPlaneHealthy = isOnline && (nodes.length > 0 || (clusterData.nodes_count && clusterData.nodes_count > 0));
+  const isControlPlanePending = isConnecting || clusterData.status === 'PENDING' || nodes.length === 0;
+  const controlPlaneText = isControlPlaneHealthy ? 'Healthy (100%)' : (isControlPlanePending ? 'Chờ kết nối (0%)' : 'Ngoại tuyến');
+  const controlPlaneColor = isControlPlaneHealthy ? '#059669' : (isControlPlanePending ? '#D97706' : '#64748B');
 
   // Filter pods with phase and crashLoopOnly support
   const filteredPods = pods.filter((p) => {
@@ -557,7 +561,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 <span>&bull;</span>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>UUID: {clusterData.id?.slice(0, 18)}...</span>
                 <span>&bull;</span>
-                <span>K8s: <strong style={{ color: 'var(--dash-text-primary)' }}>{clusterData.kubernetes_version}</strong></span>
+                <span>K8s: <strong style={{ color: 'var(--dash-text-primary)' }}>{clusterData.kubernetes_version || 'Chưa cập nhật'}</strong></span>
                 <span>&bull;</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Clock size={13} /> Khởi tạo: {new Date(clusterData.created_at).toLocaleDateString('vi-VN')}
@@ -567,30 +571,32 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
           </div>
 
           {/* Endpoint box */}
-          <div
-            style={{
-              padding: '10px 14px',
-              backgroundColor: '#F8FAFC',
-              borderRadius: '8px',
-              border: '1px solid #E2E8F0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              maxWidth: '420px',
-            }}
-          >
-            <ShieldCheck size={16} color="var(--dash-primary)" style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#334155' }}>
-              {clusterData.endpoint}
-            </span>
-            <button
-              onClick={() => handleCopy(clusterData.endpoint, 'endpoint')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748B' }}
-              title="Sao chép Endpoint"
+          {clusterData.endpoint && (
+            <div
+              style={{
+                padding: '10px 14px',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                maxWidth: '420px',
+              }}
             >
-              {copiedField === 'endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-            </button>
-          </div>
+              <ShieldCheck size={16} color="var(--dash-primary)" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#334155' }}>
+                {clusterData.endpoint}
+              </span>
+              <button
+                onClick={() => handleCopy(clusterData.endpoint, 'endpoint')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748B' }}
+                title="Sao chép Endpoint"
+              >
+                {copiedField === 'endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Polling Error Banner */}
@@ -611,7 +617,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={16} />
               <span>
-                Kh?ng th? l?m m?i tr?ng th?i t?i nguy?n t? ??ng ({pollingError.message}). D? li?u ?ang hi?n th? t? l?n quan s?t tr??c.
+                Không thể làm mới trạng thái tài nguyên tự động ({pollingError.message}). Dữ liệu đang hiển thị từ lần quan sát trước.
               </span>
             </div>
             <button
@@ -628,7 +634,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 fontSize: '0.75rem',
               }}
             >
-              Th? L?i
+              Thử Lại
             </button>
           </div>
         )}
@@ -659,10 +665,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', paddingTop: '10px', borderTop: '1px solid var(--dash-border)' }}>
           <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Activity size={14} color="#059669" /> Control Plane:
+              <Activity size={14} color={controlPlaneColor} /> Control Plane:
             </span>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle2 size={16} /> {clusterData.status === 'CONNECTED' ? 'Healthy (100%)' : 'S?n s?ng'}
+            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: controlPlaneColor, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {isControlPlaneHealthy ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+              <span>{controlPlaneText}</span>
             </div>
           </div>
 
@@ -673,7 +680,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: statusColor, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusDot }} />
               <span>
-                {isOnline ? `Online (${latestLatency || 1.2} ms)` : (isConnecting ? 'Ch? k?t n?i...' : 'Offline')}
+                {isOnline ? `Online${latestLatency ? ` (${latestLatency} ms)` : ''}` : (isConnecting ? 'Chờ kết nối...' : 'Offline')}
               </span>
             </div>
           </div>
@@ -830,7 +837,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--dash-text-secondary)' }}>Phiên bản Agent:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{clusterData.agent_version || 'v2.4.1'}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{clusterData.agent_version || 'Chưa cập nhật'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--dash-text-secondary)' }}>Môi trường triển khai:</span>
@@ -1681,9 +1688,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </thead>
                   <tbody>
                     {nodes.map((node, index) => {
-                      const ramCapGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : (node.memory_capacity || '8.0Gi');
+                      const ramCapGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : (node.memory_capacity || '--');
                       const ramAllocGb = node.memory_allocatable_bytes ? (node.memory_allocatable_bytes / (1024 ** 3)).toFixed(1) : (node.memory_allocatable || '-');
-                      const cpuCap = node.cpu_capacity_millicores ? `${(node.cpu_capacity_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_capacity || '4');
+                      const cpuCap = node.cpu_capacity_millicores ? `${(node.cpu_capacity_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_capacity || '--');
                       const cpuAlloc = node.cpu_allocatable_millicores ? `${(node.cpu_allocatable_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_allocatable || '-');
                       const rolesArr = typeof node.roles === 'string' ? JSON.parse(node.roles || '[]') : (node.roles || []);
                       const roleLabel = rolesArr.includes('control-plane') ? 'control-plane' : 'worker';
@@ -2037,7 +2044,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                             {log.message}
                           </td>
                           <td style={{ padding: '12px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#64748B' }}>
-                            {log.source_ip || log.node_name || '10.244.0.12'}
+                            {log.source_ip || log.node_name || 'N/A'}
                           </td>
                         </tr>
                       );

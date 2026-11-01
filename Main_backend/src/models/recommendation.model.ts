@@ -373,13 +373,13 @@ export class RecommendationModel {
     let idx = 1;
 
     if (organizationId && organizationId !== 'ALL' && organizationId !== 'all') {
-      conditions.push(`(i.organization_id = $${idx} OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id = $${idx}))`);
+      conditions.push(`(i.organization_id::text = $${idx} OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id::text = $${idx}))`);
       params.push(organizationId);
       idx++;
     }
 
     if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
-      conditions.push(`i.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
+      conditions.push(`i.cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
       params.push(clusterId);
       idx++;
     }
@@ -397,15 +397,15 @@ export class RecommendationModel {
           COALESCE(w.name, NULLIF(i.target_id::text, ''), '') as target_id,
           i.title as incident_title,
           rca.analysis_result,
-          CASE WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result != '' THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters') ELSE NULL END AS action_parameters,
-          CASE WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result != '' THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters'->'manual_playbook') ELSE NULL END AS manual_playbook,
+          CASE WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result::text != '' THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters') ELSE NULL END AS action_parameters,
+          CASE WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result::text != '' THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters'->'manual_playbook') ELSE NULL END AS manual_playbook,
           rca.root_cause_type,
           rca.confidence_score AS rca_confidence,
           ROW_NUMBER() OVER (PARTITION BY r.recommendation, r.status, COALESCE(w.name, i.target_id::text, '') ORDER BY r.created_at DESC) as rn
         FROM ai_recommendations r
         LEFT JOIN healing_action_types h ON h.id = r.action_type_id
         LEFT JOIN incidents i ON r.incident_id = i.id
-        LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
+        LEFT JOIN workloads w ON (w.id::text = i.target_id::text OR w.name = i.target_id::text)
         LEFT JOIN rca_analyses rca ON rca.id = r.rca_analysis_id
         ${whereClause}
       )
@@ -580,7 +580,7 @@ export class RecommendationModel {
     }
 
     if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
-      conditions.push(`i.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
+      conditions.push(`i.cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
       params.push(clusterId);
       idx++;
     }

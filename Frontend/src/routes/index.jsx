@@ -98,6 +98,7 @@ export const ROUTES = {
   ONBOARDING_COMPLETE: '/onboarding/complete',
   PROFILE: '/portal/profile',
   NOTIFICATIONS: '/dashboard/notifications',
+  ALERTS: '/dashboard/alerts',
   FORBIDDEN: '/403',
 };
 
@@ -173,9 +174,12 @@ export const RouteRenderer = ({
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle standalone notifications paths
+  // Handle standalone notifications / alerts paths
   if (path === '/notifications') {
     return <DashboardPage currentPath="/dashboard/notifications" onNavigate={onNavigate} />;
+  }
+  if (path === '/alerts' || path === '/alert-rules') {
+    return <DashboardPage currentPath="/dashboard/alerts" onNavigate={onNavigate} />;
   }
 
   // Handle all admin routes
