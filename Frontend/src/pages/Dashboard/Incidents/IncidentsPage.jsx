@@ -74,8 +74,7 @@ export const translateIncidentTitle = (rawTitle) => {
   if (!rawTitle) return '';
   let title = String(rawTitle);
 
-  title = title.replace(/\[AI Alert\]/gi, '[Cảnh báo AI]');
-  title = title.replace(/\[Alert\]/gi, '[Cảnh báo]');
+  title = title.replace(/\[(Cảnh báo AI|AI Alert|Alert|Cảnh báo)\]\s*/gi, '').trim();
 
   const causeTranslations = [
     { en: /Unstable application pod/gi, vi: 'Pod ứng dụng bất ổn định' },
@@ -1430,8 +1429,7 @@ export const IncidentsPage = ({ onNavigate }) => {
 
                       {/* CỘT TIÊU ĐỀ: ĐỘ RỘNG VỪA PHẢI, NẰM NGANG, HIỂN THỊ 2 HÀNG RỒI MỚI ... */}
                       <td style={{ padding: '14px 18px', minWidth: '380px', maxWidth: '420px' }}>
-                        <div
-                          title={item.title}
+                        <div title={translateIncidentTitle(item.title)}
                           style={{
                             fontWeight: 600,
                             color: '#0F172A',

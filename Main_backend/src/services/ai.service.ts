@@ -678,7 +678,7 @@ export class AiService {
       }
 
       // 3. Delegate incident creation to IncidentModel (with deduplication)
-      const incidentTitle = `[AI Alert] ${aiResponse.root_cause.cause} on ${input.service_id}`;
+      const incidentTitle = `${aiResponse.root_cause.cause} on ${input.service_id}`;
       const incidentSeverity = aiResponse.root_cause.severity || 'HIGH';
       const incidentType = input.risk_type || aiResponse.root_cause.cause || 'AI_ALERT';
       const targetType = aiResponse.target?.type || 'WORKLOAD';

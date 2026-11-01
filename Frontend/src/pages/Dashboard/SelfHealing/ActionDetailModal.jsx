@@ -428,7 +428,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                   <div>
                     <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Tiêu đề sự cố:</div>
                     <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
-                      {detail?.incident_title || '[AI Alert] Sự cố hiệu năng hệ thống'}
+                      {detail?.incident_title?.replace(/\[(Cảnh báo AI|AI Alert|Alert|Cảnh báo)\]\s*/gi, '') || 'Sự cố hiệu năng hệ thống'}
                     </div>
                   </div>
 

@@ -490,7 +490,7 @@ export class EmailService {
           <table class="info-table">
             <tr>
               <td class="label">🚨 Sự cố phát hiện</td>
-              <td class="value" style="color: #dc2626;">${payload.incidentTitle || '[AI Alert] Pod ứng dụng bất ổn định / CrashLoop'}</td>
+              <td class="value" style="color: #dc2626;">${payload.incidentTitle || 'Pod ứng dụng bất ổn định / CrashLoop'}</td>
             </tr>
             <tr>
               <td class="label">📦 Dịch vụ & Đối tượng</td>
