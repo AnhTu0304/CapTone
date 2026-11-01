@@ -116,6 +116,7 @@ export class TelemetryAggregatorService {
       windowMinutes?: number;
       logLimit?: number;
       eventLimit?: number;
+      organizationId?: string;
     }
   ): Promise<RcaContext> {
     const windowMinutes = options?.windowMinutes ?? 30;
@@ -344,6 +345,7 @@ export class TelemetryAggregatorService {
       providedSequence?: GRUMetricPoint[];
       clusterId?: string;
       onGruPrediction?: (pred: PredictionResult) => void;
+      organizationId?: string;
     }
   ): Promise<ServiceEvaluationResult> {
     const bucketSeconds = options?.bucketSeconds ?? 5;

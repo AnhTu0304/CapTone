@@ -41,6 +41,8 @@ export interface IUserOrgRole {
 
 export type IUserResponse = Omit<IUser, 'password_hash'> & {
     system_roles?: string[];
+    system_role?: string | null;
+    systemRole?: string | null;
     organization_roles?: IUserOrgRole[];
     has_organization?: boolean;
 };
@@ -58,7 +60,8 @@ export interface IUserProfileResponse {
     status: UserStatus;
     accountStatus: UserStatus;
     system_roles: string[];
-    systemRole: string;
+    systemRole: string | null;
+    system_role?: string | null;
     organization: {
         id: string;
         name: string;
@@ -140,24 +143,27 @@ export class UserModel {
     }
 
     /**
-     * Lấy danh sách tên vai trò hệ thống của người dùng
+     * Lấy danh sách tên vai trò hệ thống của người dùng (từ bảng user_system_roles và system_roles)
+     * Tuyệt đối không gộp chung với vai trò cấp tổ chức (organization_members)
      */
-    public static async getUserRoles(userId: string, client?: PoolClient): Promise<string[]> {
+    public static async getUserSystemRoles(userId: string, client?: PoolClient): Promise<string[]> {
         const db = client || pool;
         const rolesRes = await db.query<{ name: string }>(
             `SELECT sr.name 
              FROM user_system_roles usr 
              JOIN system_roles sr ON usr.system_role_id = sr.id 
              WHERE usr.user_id = $1 
-             UNION 
-             SELECT r.code AS name 
-             FROM organization_members om 
-             JOIN roles r ON om.role_id = r.id 
-             WHERE om.user_id = $1 AND om.status != 'REMOVED' 
-             ORDER BY name ASC`,
+             ORDER BY usr.assigned_at ASC`,
             [userId]
         );
         return rolesRes.rows.map((r) => r.name);
+    }
+
+    /**
+     * Lấy danh sách tên vai trò hệ thống của người dùng
+     */
+    public static async getUserRoles(userId: string, client?: PoolClient): Promise<string[]> {
+        return this.getUserSystemRoles(userId, client);
     }
 
     /**
@@ -475,18 +481,10 @@ export class UserModel {
                 u.deleted_at,
                 COALESCE(
                   (
-                    SELECT json_agg(DISTINCT r_name)
-                    FROM (
-                      SELECT sr.name AS r_name
-                      FROM user_system_roles usr
-                      JOIN system_roles sr ON usr.system_role_id = sr.id
-                      WHERE usr.user_id = u.id
-                      UNION
-                      SELECT r.code AS r_name
-                      FROM organization_members om
-                      JOIN roles r ON om.role_id = r.id
-                      WHERE om.user_id = u.id AND om.status != 'REMOVED'
-                    ) all_r
+                    SELECT json_agg(DISTINCT sr.name)
+                    FROM user_system_roles usr
+                    JOIN system_roles sr ON usr.system_role_id = sr.id
+                    WHERE usr.user_id = u.id
                   ),
                   '[]'::json
                 ) AS roles

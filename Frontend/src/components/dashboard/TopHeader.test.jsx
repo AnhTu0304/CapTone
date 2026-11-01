@@ -61,8 +61,8 @@ describe('TopHeader Component - Profile Dropdown Suite (Đồng bộ theo /admin
     expect(nameMatches.length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('sme.owner@company.vn')).toBeInTheDocument();
 
-    // Verify role badge is displayed matching /admin standard
-    expect(screen.getByText(/SME OWNER/i)).toBeInTheDocument();
-    expect(screen.getByText(/Chủ Sở Hữu Doanh Nghiệp/i)).toBeInTheDocument();
+    // Verify role badge is displayed matching /admin standard with System Role
+    expect(screen.getAllByText('Chưa được gán System Role').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Chủ Sở Hữu Doanh Nghiệp')).not.toBeInTheDocument();
   });
 });

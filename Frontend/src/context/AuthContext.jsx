@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
         id: res.data.id,
         email: res.data?.email,
         full_name: res.data?.full_name || res.data?.email?.split('@')[0],
-        system_roles: res.data?.system_roles || ['USER'],
+        system_roles: res.data?.system_roles || [],
       };
     }
 
@@ -129,7 +129,7 @@ export const AuthProvider = ({ children }) => {
           id: res.data?.id,
           email: res.data?.email,
           full_name: res.data?.email?.split('@')[0],
-          system_roles: ['USER'],
+          system_roles: res.data?.system_roles || [],
         };
       }
     }
@@ -222,26 +222,25 @@ export const AuthProvider = ({ children }) => {
       const rawSystemRoles = (u.system_roles || []).map((r) =>
         typeof r === 'object' && r !== null ? r.role_name || r.name || r.role_id : r
       ).map((r) => String(r).toUpperCase());
-      const email = String(u.email || '').toLowerCase();
-      const roleStr = String(u.role || u.systemRole || '').toUpperCase();
+      const roleStr = String(u.role || u.systemRole || u.system_role || '').toUpperCase();
 
       // 1. Quản trị viên tối cao (SUPER_ADMIN)
       if (
         rawSystemRoles.includes('SUPER_ADMIN') ||
         roleStr === 'SUPER_ADMIN' ||
-        email === 'superadmin@selfheal.com' ||
-        email === 'phamthaisang1710@gmail.com' ||
-        email.includes('letanquoc')
+        u.systemRole === 'SUPER_ADMIN' ||
+        u.system_role === 'SUPER_ADMIN'
       ) {
         return 'SUPER_ADMIN';
       }
 
-      // 2. Quản trị viên vận hành (ADMIN)
+      // 2. Quản trị viên vận hành (ADMIN / SYSTEM_ADMIN)
       if (
         rawSystemRoles.includes('ADMIN') ||
         rawSystemRoles.includes('SYSTEM_ADMIN') ||
-        roleStr === 'ADMIN' ||
-        email === 'admin@selfheal.com'
+        ['ADMIN', 'SYSTEM_ADMIN'].includes(roleStr) ||
+        ['ADMIN', 'SYSTEM_ADMIN'].includes(u.systemRole) ||
+        ['ADMIN', 'SYSTEM_ADMIN'].includes(u.system_role)
       ) {
         return 'ADMIN';
       }
@@ -270,7 +269,11 @@ export const AuthProvider = ({ children }) => {
         return 'SME_OWNER';
       }
 
-      return 'SME_OWNER';
+      if (rawSystemRoles.includes('USER') || roleStr === 'USER' || u.systemRole === 'USER' || u.system_role === 'USER') {
+        return 'USER';
+      }
+
+      return 'USER';
     }
 
     // Fallback cho tài khoản mẫu mock profile
@@ -290,7 +293,7 @@ export const AuthProvider = ({ children }) => {
       // Ignore
     }
 
-    return 'SME_OWNER';
+    return 'USER';
   }, []);
 
   const baseRole = useMemo(() => getActualBaseRole(user), [user, getActualBaseRole]);
@@ -336,10 +339,11 @@ export const AuthProvider = ({ children }) => {
   const getPrimaryRole = useCallback((u) => {
     const role = u ? getActualBaseRole(u) : baseRole;
     if (role === 'SUPER_ADMIN') return 'SUPER ADMIN';
-    if (role === 'ADMIN') return 'ADMIN';
+    if (role === 'ADMIN' || role === 'SYSTEM_ADMIN') return 'ADMIN';
     if (role === 'SME_OWNER') return 'SME OWNER';
     if (role === 'DEVOPS') return 'DEVOPS';
-    return 'VIEWER';
+    if (role === 'VIEWER') return 'VIEWER';
+    return 'USER';
   }, [baseRole, getActualBaseRole]);
 
   const value = {

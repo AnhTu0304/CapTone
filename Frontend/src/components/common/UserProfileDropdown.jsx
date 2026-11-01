@@ -12,6 +12,40 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { getStoredProfile } from '../../mocks/profileMockData';
 
+/**
+ * Phân giải System Role chuẩn hóa từ cơ sở dữ liệu (system_roles / user_system_roles)
+ * Tuân thủ phân cấp ưu tiên: SUPER_ADMIN > SYSTEM_ADMIN > ADMIN > USER
+ * Nếu tài khoản không có System Role (ví dụ chỉ có Company Role như SME_OWNER, DEVOPS), trả về null.
+ * Tuyệt đối không fallback sang Company Role hoặc giá trị mặc định nào khác.
+ */
+export const resolveUserSystemRole = (u) => {
+  if (!u) return null;
+
+  // 1. Kiểm tra danh sách system_roles dạng mảng từ API / Database
+  const rawRoles = Array.isArray(u.system_roles)
+    ? u.system_roles.map((r) =>
+        typeof r === 'object' && r !== null ? r.role_name || r.name || r.code || r.role_id : r
+      )
+    : [];
+  const normalized = rawRoles.map((r) => String(r).toUpperCase().trim());
+
+  // Phân cấp ưu tiên System Role: SUPER_ADMIN > SYSTEM_ADMIN > ADMIN > USER
+  if (normalized.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
+  if (normalized.includes('SYSTEM_ADMIN')) return 'SYSTEM_ADMIN';
+  if (normalized.includes('ADMIN')) return 'ADMIN';
+  if (normalized.includes('USER')) return 'USER';
+
+  // 2. Kiểm tra trường đơn lẻ systemRole / system_role trả về trực tiếp từ API backend
+  const directRole = (u.systemRole || u.system_role || '').toString().toUpperCase().trim();
+  if (directRole === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (directRole === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
+  if (directRole === 'ADMIN') return 'ADMIN';
+  if (directRole === 'USER') return 'USER';
+
+  // Không có System Role trong Database
+  return null;
+};
+
 export const UserProfileDropdown = ({
   onNavigate,
   variant = 'default',
@@ -70,80 +104,31 @@ export const UserProfileDropdown = ({
     return 'AD';
   }, [auth, displayName]);
 
-  // Xác định vai trò chuẩn hóa thực tế
-  const rawRole = useMemo(() => {
-    if (auth?.getPrimaryRole) {
-      return auth.getPrimaryRole(user);
-    }
-    const sysRoles = user?.system_roles || [];
-    if (sysRoles.includes('SUPER_ADMIN')) return 'SUPER ADMIN';
-    if (sysRoles.includes('ADMIN') || sysRoles.includes('SYSTEM_ADMIN')) return 'ADMIN';
-    const orgRoles = (user?.organization_roles || []).map((r) =>
-      typeof r === 'object' && r !== null ? r.role_code || r.code : r
-    );
-    const userRoles = Array.isArray(user?.roles) ? user.roles : [];
-    if (
-      orgRoles.includes('SME_OWNER') ||
-      userRoles.includes('SME_OWNER') ||
-      user?.role === 'SME_OWNER' ||
-      user?.organization_role === 'SME_OWNER'
-    ) {
-      return 'SME OWNER';
-    }
-    if (
-      orgRoles.includes('DEVOPS') ||
-      userRoles.includes('DEVOPS') ||
-      user?.role === 'DEVOPS' ||
-      user?.organization_role === 'DEVOPS'
-    ) {
-      return 'DEVOPS';
-    }
-    if (
-      orgRoles.includes('VIEWER') ||
-      userRoles.includes('VIEWER') ||
-      user?.role === 'VIEWER' ||
-      user?.organization_role === 'VIEWER'
-    ) {
-      return 'VIEWER';
-    }
-    return 'USER';
-  }, [auth, user]);
+  // Xác định System Role từ database theo đúng phân cấp
+  const activeSystemRole = useMemo(() => {
+    return resolveUserSystemRole(user);
+  }, [user]);
 
   const isSuperAdmin = useMemo(() => {
-    if (auth?.isSuperAdmin) return auth.isSuperAdmin(user);
-    return user?.system_roles?.includes('SUPER_ADMIN') || rawRole.includes('SUPER');
-  }, [auth, user, rawRole]);
+    return activeSystemRole === 'SUPER_ADMIN';
+  }, [activeSystemRole]);
 
   const isAdmin = useMemo(() => {
-    if (auth?.isAdmin) return auth.isAdmin(user);
-    return (
-      isSuperAdmin ||
-      user?.system_roles?.some((r) => ['ADMIN', 'SYSTEM_ADMIN'].includes(r)) ||
-      ['ADMIN', 'SUPER ADMIN'].includes(rawRole)
-    );
-  }, [auth, user, isSuperAdmin, rawRole]);
+    return ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(activeSystemRole);
+  }, [activeSystemRole]);
 
   const canAccessAdmin = isSuperAdmin || isAdmin;
 
-  // Subtitle trên nút Header
-  const roleSubtitle = useMemo(() => {
-    if (isSuperAdmin) return 'SUPER ADMIN';
-    if (isAdmin) return 'ADMIN';
-    if (rawRole === 'SME OWNER' || rawRole === 'SME_OWNER') return 'SME OWNER';
-    if (rawRole === 'DEVOPS') return 'DEVOPS';
-    if (rawRole === 'VIEWER') return 'VIEWER';
-    return 'THÀNH VIÊN';
-  }, [isSuperAdmin, isAdmin, rawRole]);
+  // Nhãn hiển thị System Role cho Menu cá nhân (Header trigger & Card Badge)
+  const roleDisplay = useMemo(() => {
+    if (!activeSystemRole) {
+      return 'Chưa được gán System Role';
+    }
+    return activeSystemRole;
+  }, [activeSystemRole]);
 
-  // Nhãn Role Badge trên Card trong Dropdown
-  const roleBadgeText = useMemo(() => {
-    if (isSuperAdmin) return 'Toàn Quyền Cụm & Chính Sách';
-    if (isAdmin) return 'Quản Trị Hệ Thống';
-    if (rawRole === 'SME OWNER' || rawRole === 'SME_OWNER') return 'Chủ Sở Hữu Doanh Nghiệp';
-    if (rawRole === 'DEVOPS') return 'Kỹ Sư Vận Hành';
-    if (rawRole === 'VIEWER') return 'Người Xem Báo Cáo';
-    return 'Người Dùng Cá Nhân';
-  }, [isSuperAdmin, isAdmin, rawRole]);
+  const roleSubtitle = roleDisplay;
+  const roleBadgeText = roleDisplay;
 
   // Xử lý đóng khi click bên ngoài và khi nhấn Escape
   useEffect(() => {
@@ -200,13 +185,13 @@ export const UserProfileDropdown = ({
     const list = [
       {
         id: 'switch_to_portal',
-        label: 'Không Gian Cá Nhân (Personal Portal)',
+        label: 'Không Gian Cá Nhân',
         icon: User,
         path: '/portal',
       },
       {
         id: 'switch_to_dashboard',
-        label: 'Bảng Điều Khiển Doanh Nghiệp (Owner / User)',
+        label: 'Bảng Điều Khiển Doanh Nghiệp',
         icon: LayoutDashboard,
         path: '/dashboard',
       },
@@ -215,7 +200,7 @@ export const UserProfileDropdown = ({
     if (canAccessAdmin) {
       list.push({
         id: 'switch_to_admin',
-        label: 'Bảng Quản Trị Hệ Thống (Admin)',
+        label: 'Bảng Quản Trị Hệ Thống',
         icon: Shield,
         path: '/admin',
       });
@@ -348,7 +333,7 @@ export const UserProfileDropdown = ({
           <div
             style={{
               fontSize: '0.6875rem',
-              color: '#059669',
+              color: activeSystemRole ? '#059669' : '#64748B',
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
@@ -356,7 +341,7 @@ export const UserProfileDropdown = ({
               marginTop: '1px',
             }}
           >
-            <Shield size={10} color="#059669" />
+            <Shield size={10} color={activeSystemRole ? '#059669' : '#64748B'} />
             <span>{roleSubtitle}</span>
           </div>
         </div>
@@ -427,13 +412,13 @@ export const UserProfileDropdown = ({
                 gap: '4px',
                 padding: '2px 8px',
                 borderRadius: '9999px',
-                backgroundColor: 'rgba(5, 150, 105, 0.15)',
-                color: '#065F46',
+                backgroundColor: activeSystemRole ? 'rgba(5, 150, 105, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                color: activeSystemRole ? '#065F46' : '#475569',
                 fontSize: '0.6875rem',
                 fontWeight: 700,
               }}
             >
-              <Shield size={11} color="#059669" />
+              <Shield size={11} color={activeSystemRole ? '#059669' : '#64748B'} />
               <span>{roleBadgeText}</span>
             </div>
           </div>
@@ -473,8 +458,8 @@ export const UserProfileDropdown = ({
                     e.currentTarget.style.color = 'var(--dash-text-primary, #0F172A)';
                   }}
                 >
-                  <ItemIcon size={16} color="#64748B" />
-                  <span>{item.label}</span>
+                  <ItemIcon size={16} color="#64748B" style={{ flexShrink: 0 }} />
+                  <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
                 </button>
               );
             })}

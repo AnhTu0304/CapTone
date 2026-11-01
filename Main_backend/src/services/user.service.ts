@@ -17,6 +17,15 @@ import { EmailQueue } from './emailQueue.service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export const resolvePrimarySystemRole = (roles: string[]): string | null => {
+    if (!roles || roles.length === 0) return null;
+    const hierarchy = ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'USER'];
+    for (const h of hierarchy) {
+        if (roles.includes(h)) return h;
+    }
+    return roles[0] || null;
+};
+
 export class UserService {
     // 0. Lấy thông tin hồ sơ người dùng đang đăng nhập (GET /api/v1/users/me)
     public static async getMyProfile(userId: string): Promise<IUserProfileResponse> {
@@ -33,7 +42,8 @@ export class UserService {
             throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
         }
 
-        const systemRoles = await UserModel.getUserRoles(userId.trim());
+        const systemRoles = await UserModel.getUserSystemRoles(userId.trim());
+        const primarySystemRole = resolvePrimarySystemRole(systemRoles);
 
         let primaryOrg: { id: string; name: string; slug: string; role_in_org?: string } | null = null;
         try {
@@ -63,7 +73,8 @@ export class UserService {
             status: user.status,
             accountStatus: user.status,
             system_roles: systemRoles,
-            systemRole: systemRoles.length > 0 ? systemRoles[0] : 'USER',
+            systemRole: primarySystemRole,
+            system_role: primarySystemRole,
             organization: primaryOrg ? { id: primaryOrg.id, name: primaryOrg.name, slug: primaryOrg.slug } : null,
             organization_role: primaryOrg?.role_in_org || null,
             organizationRole: primaryOrg?.role_in_org || null,
@@ -142,7 +153,9 @@ export class UserService {
             throw new ApiError(404, 'Không tìm thấy người dùng với ID này');
         }
 
-        user.system_roles = await UserModel.getUserRoles(userId.trim());
+        user.system_roles = await UserModel.getUserSystemRoles(userId.trim());
+        user.systemRole = resolvePrimarySystemRole(user.system_roles);
+        user.system_role = user.systemRole;
         user.organization_roles = await UserModel.getUserOrganizations(userId.trim());
         user.has_organization = (user.organization_roles || []).length > 0;
         return user;

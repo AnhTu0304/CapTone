@@ -244,6 +244,8 @@ export class TelemetryController {
 
       const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId, orgId);
 
+      const user = (req as any).user;
+      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
       const expanded = expandRoles(userRoles);
       const isPrivileged = expanded.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'DEVOPS'].includes(r));
 

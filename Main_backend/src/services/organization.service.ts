@@ -197,7 +197,7 @@ export class OrganizationService {
     }
 
     // SUPER_ADMIN nếu không thuộc organization_members thì role_in_org luôn là null (không có quyền SME_OWNER)
-    const userRoleInOrg = isMember ? member.role_code : null;
+    const userRoleInOrg = isMember && member ? member.role_code : null;
 
     const cacheKey = RedisCacheService.organizationKey(orgId);
 

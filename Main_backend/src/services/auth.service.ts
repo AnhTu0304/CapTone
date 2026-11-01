@@ -15,6 +15,7 @@ import {
 import { UserModel } from '../models/user.model';
 import { SystemRoleService } from './systemRole.service';
 import { EmailQueue } from './emailQueue.service';
+import { resolvePrimarySystemRole } from './user.service';
 
 export class AuthService {
     /**
@@ -115,17 +116,20 @@ export class AuthService {
 
         await UserModel.updateLastLogin(user.id);
 
-        // Lấy danh sách các vai trò hệ thống hiện có của người dùng qua UserModel
-        const roles = await UserModel.getUserRoles(user.id);
+        // Lấy danh sách các vai trò hệ thống hiện có của người dùng qua UserModel (thuần túy từ user_system_roles)
+        const systemRoles = await UserModel.getUserSystemRoles(user.id);
         const orgRoles = await UserModel.getUserOrganizations(user.id);
+        const primarySystemRole = resolvePrimarySystemRole(systemRoles);
 
-        const token = this.generateToken(user, roles);
+        const token = this.generateToken(user, systemRoles);
         return {
             id: user.id,
             email: user.email,
             full_name: user.full_name,
             token,
-            system_roles: roles,
+            system_roles: systemRoles,
+            systemRole: primarySystemRole,
+            system_role: primarySystemRole,
             has_organization: orgRoles.length > 0,
             organization_roles: orgRoles,
         };
@@ -299,9 +303,10 @@ export class AuthService {
             }
         }
 
-        const roles = await UserModel.getUserRoles(user.id);
+        const systemRoles = await UserModel.getUserSystemRoles(user.id);
         const orgRoles = await UserModel.getUserOrganizations(user.id);
-        const jwtToken = this.generateToken(user, roles);
+        const primarySystemRole = resolvePrimarySystemRole(systemRoles);
+        const jwtToken = this.generateToken(user, systemRoles);
 
         return {
             user: {
@@ -310,7 +315,9 @@ export class AuthService {
                 full_name: user.full_name,
                 avatar_url: user.avatar_url,
                 status: user.status,
-                system_roles: roles,
+                system_roles: systemRoles,
+                systemRole: primarySystemRole,
+                system_role: primarySystemRole,
                 organization_roles: orgRoles,
                 has_organization: orgRoles.length > 0,
             },
