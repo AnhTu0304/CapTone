@@ -43,6 +43,13 @@ alertEventRoutes.get(
   AlertEventController.getTimeline
 );
 
+// 1e-2. GET /api/v1/alerts/history/:id/audit-trail - Paginated audit trail (PBI22 Task 4.3)
+alertEventRoutes.get(
+  '/history/:id/audit-trail',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getAuditTrail
+);
+
 // 1f. GET /api/v1/alerts/history/:id - Alert history detail by ID (PBI22 Task 4.2)
 alertEventRoutes.get(
   '/history/:id',
@@ -55,6 +62,13 @@ alertEventRoutes.get(
   '/:id/timeline',
   requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
   AlertEventController.getTimeline
+);
+
+// 1h. GET /api/v1/alerts/:id/audit-trail - Paginated audit trail for alert event (PBI22 Task 4.3)
+alertEventRoutes.get(
+  '/:id/audit-trail',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getAuditTrail
 );
 
 // 2. GET /api/v1/alert-events - List alert events with pagination & filters
@@ -90,4 +104,18 @@ alertEventRoutes.patch(
   '/:id/resolve',
   requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
   AlertEventController.resolve
+);
+
+// 6. PATCH /api/v1/alerts/:id/assign - Assign or reassign alert owner (PBI22 Task 4.3)
+alertEventRoutes.patch(
+  '/:id/assign',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.assign
+);
+
+// 7. PATCH /api/v1/alerts/:id/unassign - Unassign alert owner (PBI22 Task 4.3)
+alertEventRoutes.patch(
+  '/:id/unassign',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.unassign
 );

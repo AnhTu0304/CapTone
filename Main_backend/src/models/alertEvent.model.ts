@@ -45,8 +45,13 @@ export interface IAlertEvent {
   last_seen_at: Date;
   resolved_at?: Date | null;
   resolved_by?: string | null;
+  resolution_note?: string | null;
   acknowledged_at?: Date | null;
   acknowledged_by?: string | null;
+  assigned_to?: string | null;
+  assigned_by?: string | null;
+  assigned_at?: Date | null;
+  version?: number;
   created_at: Date;
   updated_at: Date;
   // Joined fields
@@ -61,6 +66,10 @@ export interface IAlertEvent {
   acknowledger_email?: string | null;
   resolver_name?: string | null;
   resolver_email?: string | null;
+  assignee_name?: string | null;
+  assignee_email?: string | null;
+  assigner_name?: string | null;
+  assigner_email?: string | null;
   duration_seconds?: number;
   duration_formatted?: string;
   // Aliases for Frontend compatibility
@@ -120,6 +129,8 @@ export class AlertEventModel {
       title: row.rule_name || row.message,
       first_occurred_at: row.first_detected_at ? new Date(row.first_detected_at) : new Date(row.created_at),
       namespace: row.namespace || row.details?.namespace || null,
+      resolution_note: row.resolution_note ?? row.details?.resolution_note ?? null,
+      version: row.version !== null && row.version !== undefined ? Number(row.version) : 1,
       duration_seconds: Math.max(
         0,
         Math.round(
@@ -355,13 +366,19 @@ export class AlertEventModel {
         u.full_name AS acknowledger_name,
         u.email AS acknowledger_email,
         ur.full_name AS resolver_name,
-        ur.email AS resolver_email
+        ur.email AS resolver_email,
+        ua.full_name AS assignee_name,
+        ua.email AS assignee_email,
+        ub.full_name AS assigner_name,
+        ub.email AS assigner_email
       FROM alert_events ae
       LEFT JOIN clusters c ON ae.cluster_id = c.id
       LEFT JOIN organizations o ON ae.organization_id = o.id
       LEFT JOIN alert_rules ar ON ae.rule_id = ar.id
       LEFT JOIN users u ON ae.acknowledged_by = u.id
       LEFT JOIN users ur ON ae.resolved_by = ur.id
+      LEFT JOIN users ua ON ae.assigned_to = ua.id
+      LEFT JOIN users ub ON ae.assigned_by = ub.id
       WHERE ae.id = $1
     `;
     const params: any[] = [id];
@@ -489,15 +506,21 @@ export class AlertEventModel {
         u.full_name AS acknowledger_name,
         u.email AS acknowledger_email,
         ur.full_name AS resolver_name,
-        ur.email AS resolver_email
+        ur.email AS resolver_email,
+        ua.full_name AS assignee_name,
+        ua.email AS assignee_email,
+        ub.full_name AS assigner_name,
+        ub.email AS assigner_email
       FROM alert_events ae
       LEFT JOIN clusters c ON ae.cluster_id = c.id
       LEFT JOIN organizations o ON ae.organization_id = o.id
       LEFT JOIN alert_rules ar ON ae.rule_id = ar.id
       LEFT JOIN users u ON ae.acknowledged_by = u.id
       LEFT JOIN users ur ON ae.resolved_by = ur.id
+      LEFT JOIN users ua ON ae.assigned_to = ua.id
+      LEFT JOIN users ub ON ae.assigned_by = ub.id
       WHERE ${whereClause}
-      ORDER BY ${sortCol} ${sortOrder}
+      ORDER BY ${sortCol} ${sortOrder}, ae.id DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
 
@@ -588,6 +611,7 @@ export class AlertEventModel {
       limit: number;
       total: number;
       totalPages: number;
+      total_pages: number;
     };
   }> {
     const db = client || pool;
@@ -626,6 +650,15 @@ export class AlertEventModel {
     if (filters.resourceType && filters.resourceType !== 'ALL' && filters.resourceType !== 'all') {
       conditions.push(`LOWER(ae.resource_type) = LOWER($${paramIndex++})`);
       params.push(filters.resourceType);
+    }
+
+    if (filters.assignedTo && filters.assignedTo !== 'ALL' && filters.assignedTo !== 'all') {
+      if (filters.assignedTo === 'UNASSIGNED' || filters.assignedTo === 'unassigned' || filters.assignedTo === 'null') {
+        conditions.push('ae.assigned_to IS NULL');
+      } else {
+        conditions.push(`ae.assigned_to = $${paramIndex++}`);
+        params.push(filters.assignedTo);
+      }
     }
 
     if (filters.startDate) {
@@ -683,15 +716,21 @@ export class AlertEventModel {
         u.full_name AS acknowledger_name,
         u.email AS acknowledger_email,
         ur.full_name AS resolver_name,
-        ur.email AS resolver_email
+        ur.email AS resolver_email,
+        ua.full_name AS assignee_name,
+        ua.email AS assignee_email,
+        ub.full_name AS assigner_name,
+        ub.email AS assigner_email
       FROM alert_events ae
       LEFT JOIN clusters c ON ae.cluster_id = c.id
       LEFT JOIN organizations o ON ae.organization_id = o.id
       LEFT JOIN alert_rules ar ON ae.rule_id = ar.id
       LEFT JOIN users u ON ae.acknowledged_by = u.id
       LEFT JOIN users ur ON ae.resolved_by = ur.id
+      LEFT JOIN users ua ON ae.assigned_to = ua.id
+      LEFT JOIN users ub ON ae.assigned_by = ub.id
       WHERE ${whereClause}
-      ORDER BY ${sortCol} ${sortDir}
+      ORDER BY ${sortCol} ${sortDir}, ae.id DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
 
@@ -704,6 +743,7 @@ export class AlertEventModel {
         limit,
         total,
         totalPages,
+        total_pages: totalPages,
       },
     };
   }

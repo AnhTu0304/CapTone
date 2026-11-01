@@ -1,19 +1,6 @@
 /**
  * @file alertService.js
- * @description Real Backend API Client for Alert Management & Alert Rule Configuration [S5][PBI21 Task 3.4].
- * Connects directly to:
- * - GET /api/v1/alerts
- * - GET /api/v1/alerts/summary
- * - GET /api/v1/alerts/:id
- * - PATCH /api/v1/alerts/:id/acknowledge
- * - PATCH /api/v1/alerts/:id/resolve
- * - POST /api/v1/alerts/evaluate
- * - GET /api/v1/alert-rules
- * - GET /api/v1/alert-rules/metadata
- * - POST /api/v1/alert-rules
- * - PUT /api/v1/alert-rules/:id
- * - PATCH /api/v1/alert-rules/:id/status
- * - DELETE /api/v1/alert-rules/:id
+ * @description Real Backend API Client for Alert Management, History, Assignment & Audit Trail [S5][PBI21 & PBI22].
  */
 
 import { request } from './apiClient';
@@ -67,6 +54,26 @@ export const DEFAULT_RULE_METADATA = {
   },
 };
 
+export function formatAlertApiError(err, fallbackMsg = 'Đã xảy ra lỗi khi xử lý yêu cầu cảnh báo') {
+  const status = err?.status;
+  if (status === 401) {
+    return 'Phiên đăng nhập đã hết hạn (401). Vui lòng đăng nhập lại.';
+  }
+  if (status === 403) {
+    return 'Từ chối truy cập (403): Bạn không có quyền thực hiện thao tác này.';
+  }
+  if (status === 404) {
+    return err?.message || 'Không tìm thấy cảnh báo hoặc bạn không có quyền truy cập (404).';
+  }
+  if (status === 409) {
+    return `Xung đột trạng thái (409): ${err?.message || 'Cảnh báo đã bị thay đổi bởi thao tác khác. Vui lòng tải lại dữ liệu.'}`;
+  }
+  if (status === 400) {
+    return err?.message || 'Dữ liệu đầu vào không hợp lệ (400).';
+  }
+  return err?.message || fallbackMsg;
+}
+
 function buildQueryString(params = {}) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, val]) => {
@@ -117,25 +124,30 @@ export const alertService = {
 
   /**
    * GET /api/v1/alerts/history
-   * Query alert history with filters, search and pagination [S5][PBI22 Task 4.2]
+   * Query alert history with filters, search, sorting and pagination [S5][PBI22 Task 4.2 & 4.4]
    */
   async getAlertHistory(params = {}) {
     const qs = buildQueryString(params);
     const res = await request(`/alerts/history${qs}`);
+    const items = Array.isArray(res?.data) ? res.data : Array.isArray(res?.items) ? res.items : [];
+    const p = res?.pagination || {};
+    const limit = Number(p.limit ?? params.limit ?? 10);
+    const total = Number(p.total ?? items.length);
+    const totalPages = Number(p.total_pages ?? p.totalPages ?? (Math.ceil(total / limit) || 1));
     return {
-      items: Array.isArray(res?.data) ? res.data : [],
-      pagination: res?.pagination || {
-        page: Number(params.page || 1),
-        limit: Number(params.limit || 10),
-        total: Array.isArray(res?.data) ? res.data.length : 0,
-        total_pages: 1,
+      items,
+      pagination: {
+        page: Number(p.page ?? params.page ?? 1),
+        limit,
+        total,
+        total_pages: totalPages,
+        totalPages,
       },
     };
   },
 
   /**
    * GET /api/v1/alerts/history/summary
-   * Summary counts for alert history [S5][PBI22 Task 4.2]
    */
   async getAlertHistorySummary(params = {}) {
     const qs = buildQueryString(params);
@@ -145,7 +157,6 @@ export const alertService = {
 
   /**
    * GET /api/v1/alerts/history/:id/timeline
-   * Chronological lifecycle timeline [S5][PBI22 Task 4.2]
    */
   async getAlertTimeline(alertId) {
     if (!alertId) throw new Error('Thiếu ID cảnh báo');
@@ -154,11 +165,96 @@ export const alertService = {
   },
 
   /**
+   * GET /api/v1/alerts/:id/audit-trail
+   * Paginated audit trail with actor, old_value, new_value, note [S5][PBI22 Task 4.3 & 4.4]
+   */
+  async getAlertAuditTrail(alertId, params = { page: 1, limit: 50, order: 'asc' }) {
+    if (!alertId) throw new Error('Thiếu ID cảnh báo');
+    const qs = buildQueryString(params);
+    const res = await request(`/alerts/${encodeURIComponent(alertId)}/audit-trail${qs}`);
+    const payload = res?.data || res;
+    const items = Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload)
+      ? payload
+      : [];
+    return {
+      items,
+      pagination: payload?.pagination || {
+        page: 1,
+        limit: items.length || 20,
+        total: items.length,
+        total_pages: 1,
+      },
+    };
+  },
+
+  /**
+   * GET /api/v1/organizations/:orgId/members?status=ACTIVE&limit=100
+   * Real active organization members for assignment (no mock fallback)
+   */
+  async getAssignableMembers(orgId) {
+    if (!orgId) return [];
+    const res = await request(
+      `/organizations/${encodeURIComponent(orgId)}/members?status=ACTIVE&limit=100`
+    );
+    const payload = res?.data || res;
+    const rawItems = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+    return rawItems
+      .filter((m) => !m.status || String(m.status).toUpperCase() === 'ACTIVE')
+      .map((m) => ({
+        id: m.user_id || m.user?.id || m.id,
+        full_name: m.full_name || m.user?.full_name || m.email || m.user?.email || 'Thành viên',
+        email: m.email || m.user?.email || '',
+        role: m.role_code || m.role?.code || m.role || '',
+      }))
+      .filter((m) => Boolean(m.id));
+  },
+
+  /**
+   * PATCH /api/v1/alerts/:id/assign
+   */
+  async assignAlert(alertId, { assignedTo, note = '', expectedVersion } = {}) {
+    if (!alertId) throw new Error('Thiếu ID cảnh báo');
+    const body = { assignedTo };
+    if (note && String(note).trim()) body.note = String(note).trim();
+    if (expectedVersion !== undefined && expectedVersion !== null) {
+      body.expectedVersion = Number(expectedVersion);
+    }
+    const res = await request(`/alerts/${encodeURIComponent(alertId)}/assign`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    return res?.data || res;
+  },
+
+  /**
+   * PATCH /api/v1/alerts/:id/unassign
+   */
+  async unassignAlert(alertId, { note = '', expectedVersion } = {}) {
+    if (!alertId) throw new Error('Thiếu ID cảnh báo');
+    const body = {};
+    if (note && String(note).trim()) body.note = String(note).trim();
+    if (expectedVersion !== undefined && expectedVersion !== null) {
+      body.expectedVersion = Number(expectedVersion);
+    }
+    const res = await request(`/alerts/${encodeURIComponent(alertId)}/unassign`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    return res?.data || res;
+  },
+
+  /**
    * PATCH /api/v1/alerts/:id/acknowledge
    */
-  async acknowledgeAlert(alertId, note = '') {
+  async acknowledgeAlert(alertId, note = '', expectedVersion) {
     if (!alertId) throw new Error('Thiếu ID cảnh báo');
-    const body = note && String(note).trim() ? { note: String(note).trim() } : {};
+    const body = {};
+    if (note && String(note).trim()) body.note = String(note).trim();
+    if (expectedVersion !== undefined && expectedVersion !== null) {
+      body.expectedVersion = Number(expectedVersion);
+    }
     const res = await request(`/alerts/${encodeURIComponent(alertId)}/acknowledge`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -169,12 +265,17 @@ export const alertService = {
   /**
    * PATCH /api/v1/alerts/:id/resolve
    */
-  async resolveAlert(alertId, resolutionNote = '') {
+  async resolveAlert(alertId, resolutionNote = '', expectedVersion) {
     if (!alertId) throw new Error('Thiếu ID cảnh báo');
-    const body =
-      resolutionNote && String(resolutionNote).trim()
-        ? { resolution_note: String(resolutionNote).trim() }
-        : {};
+    const body = {};
+    if (resolutionNote && String(resolutionNote).trim()) {
+      const cleanNote = String(resolutionNote).trim();
+      body.resolutionNote = cleanNote;
+      body.resolution_note = cleanNote;
+    }
+    if (expectedVersion !== undefined && expectedVersion !== null) {
+      body.expectedVersion = Number(expectedVersion);
+    }
     const res = await request(`/alerts/${encodeURIComponent(alertId)}/resolve`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -234,7 +335,6 @@ export const alertService = {
 
   /**
    * POST /api/v1/alert-rules
-   * Note: Does NOT hardcode organization_id from client; Backend resolves from auth/header context.
    */
   async createAlertRule(ruleData) {
     const cleanPayload = {

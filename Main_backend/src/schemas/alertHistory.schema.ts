@@ -36,6 +36,7 @@ export const alertHistoryQuerySchema = z
     clusterId: z.string().optional(),
     ruleId: z.string().optional(),
     resourceType: z.string().optional(),
+    assignedTo: z.string().optional(),
     page: z
       .preprocess((val) => (val !== undefined && val !== null ? Number(val) : 1), z.number().int().min(1))
       .default(1),

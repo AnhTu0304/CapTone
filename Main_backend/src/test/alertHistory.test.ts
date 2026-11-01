@@ -5,7 +5,7 @@ import { AddressInfo } from 'node:net';
 import jwt from 'jsonwebtoken';
 import app from '../app';
 import { pool } from '../config/database';
-import { testRedisConnection } from '../config/redis';
+import { testRedisConnection, closeRedis } from '../config/redis';
 import { config } from '../config/env';
 
 describe('[S5][PBI22] Alert History & Query API Test Suite (Task 4.1 & 4.2)', () => {
@@ -255,6 +255,8 @@ describe('[S5][PBI22] Alert History & Query API Test Suite (Task 4.1 & 4.2)', ()
     await pool.query('DELETE FROM organization_members WHERE organization_id IN ($1, $2)', [testOrgAId, testOrgBId]);
     await pool.query('DELETE FROM organizations WHERE id IN ($1, $2)', [testOrgAId, testOrgBId]);
     await pool.query('DELETE FROM users WHERE id IN ($1, $2, $3)', [userDevOpsId, userOrgBId, userViewerId]);
+    await closeRedis();
+    await pool.end();
   });
 
   it('1. [API-01] GET /api/v1/alerts/history returns all alerts with pagination and formatted duration', async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   X,
   ShieldAlert,
@@ -9,8 +9,10 @@ import {
   RefreshCw,
   Check,
   AlertCircle,
+  UserPlus,
+  UserMinus,
 } from 'lucide-react';
-import { alertService } from '../../../services/alertService';
+import { alertService, formatAlertApiError } from '../../../services/alertService';
 
 export const OPERATOR_SYMBOLS = {
   GREATER_THAN: '>',
@@ -98,14 +100,25 @@ export const AlertDetailDrawer = ({
   isOpen,
   onClose,
   canManageAlerts = false,
+  currentOrgId = '',
   currentOrgName = '',
   onAlertUpdated,
 }) => {
   const [detailData, setDetailData] = useState(alertItem || null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState(null);
+
   const [timeline, setTimeline] = useState([]);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
+  const [timelineError, setTimelineError] = useState(null);
+
+  const [members, setMembers] = useState([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
+  const [assignNote, setAssignNote] = useState('');
+  const [pendingReassignConfirm, setPendingReassignConfirm] = useState(false);
+  const [isSubmittingAssign, setIsSubmittingAssign] = useState(false);
 
   const [ackNote, setAckNote] = useState('');
   const [resolveNote, setResolveNote] = useState('');
@@ -114,44 +127,97 @@ export const AlertDetailDrawer = ({
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
 
+  const fetchAuditTrail = useCallback(async (alertId) => {
+    if (!alertId) return;
+    setIsLoadingTimeline(true);
+    setTimelineError(null);
+    try {
+      if (typeof alertService.getAlertAuditTrail === 'function') {
+        const res = await alertService.getAlertAuditTrail(alertId, {
+          page: 1,
+          limit: 50,
+          order: 'asc',
+        });
+        setTimeline(Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : []);
+      } else if (typeof alertService.getAlertTimeline === 'function') {
+        const tl = await alertService.getAlertTimeline(alertId);
+        setTimeline(Array.isArray(tl) ? tl : []);
+      } else {
+        setTimeline([]);
+      }
+    } catch (err) {
+      setTimelineError(formatAlertApiError(err, 'Không thể tải nhật ký kiểm toán (Audit Trail)'));
+    } finally {
+      setIsLoadingTimeline(false);
+    }
+  }, []);
+
   useEffect(() => {
     setDetailData(alertItem || null);
     setActionError(null);
     setActionSuccess(null);
     setAckNote('');
     setResolveNote('');
+    setAssignNote('');
+    setMemberSearch('');
+    setPendingReassignConfirm(false);
+    setSelectedAssigneeId(alertItem?.assigned_to || '');
 
     if (isOpen && alertItem?.id) {
       let mounted = true;
       setIsLoadingDetail(true);
       setDetailError(null);
-      setIsLoadingTimeline(true);
-      Promise.all([
-        alertService.getAlertById(alertItem.id),
-        (typeof alertService.getAlertTimeline === 'function' ? Promise.resolve(alertService.getAlertTimeline(alertItem.id)).catch(() => []) : Promise.resolve([])),
-      ])
-        .then(([fresh, timelineData]) => {
-          if (mounted) {
-            if (fresh) setDetailData(fresh);
-            if (Array.isArray(timelineData)) setTimeline(timelineData);
+
+      alertService
+        .getAlertById(alertItem.id)
+        .then((fresh) => {
+          if (mounted && fresh) {
+            setDetailData(fresh);
+            setSelectedAssigneeId(fresh.assigned_to || '');
           }
         })
         .catch((err) => {
           if (mounted) {
-            setDetailError(err.message || 'Không thể tải chi tiết sự kiện cảnh báo');
+            setDetailError(formatAlertApiError(err, 'Không thể tải chi tiết sự kiện cảnh báo'));
           }
         })
         .finally(() => {
-          if (mounted) {
-            setIsLoadingDetail(false);
-            setIsLoadingTimeline(false);
-          }
+          if (mounted) setIsLoadingDetail(false);
         });
+
+      fetchAuditTrail(alertItem.id);
+
+      if (canManageAlerts && currentOrgId && typeof alertService.getAssignableMembers === 'function') {
+        setIsLoadingMembers(true);
+        Promise.resolve(alertService.getAssignableMembers(currentOrgId))
+          .then((list) => {
+            if (mounted && Array.isArray(list)) setMembers(list);
+          })
+          .catch(() => {
+            if (mounted) setMembers([]);
+          })
+          .finally(() => {
+            if (mounted) setIsLoadingMembers(false);
+          });
+      }
+
       return () => {
         mounted = false;
       };
     }
-  }, [isOpen, alertItem?.id]);
+    return undefined;
+  }, [isOpen, alertItem?.id, canManageAlerts, currentOrgId, fetchAuditTrail]);
+
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter(
+      (m) =>
+        (m.full_name || '').toLowerCase().includes(q) ||
+        (m.email || '').toLowerCase().includes(q) ||
+        (m.role || '').toLowerCase().includes(q)
+    );
+  }, [members, memberSearch]);
 
   if (!isOpen || !detailData) return null;
 
@@ -159,33 +225,91 @@ export const AlertDetailDrawer = ({
   const stStyle = getStatusStyle(detailData.status);
   const SevIcon = sevStyle.icon;
 
-  const operatorCode =
-    detailData.rule_operator || detailData.details?.operator || 'GREATER_THAN';
+  const operatorCode = detailData.rule_operator || detailData.details?.operator || 'GREATER_THAN';
   const opSymbol = OPERATOR_SYMBOLS[operatorCode] || operatorCode;
   const unitStr = detailData.unit ? ` ${detailData.unit}` : '';
-  const namespaceVal =
-    detailData.details?.namespace ||
-    detailData.namespace ||
-    null;
+  const namespaceVal = detailData.details?.namespace || detailData.namespace || null;
+  const resolutionNoteVal =
+    detailData.resolution_note || detailData.details?.resolution_note || null;
+
+  const executeAssign = async () => {
+    if (!canManageAlerts || !selectedAssigneeId || isSubmittingAssign) return;
+    setIsSubmittingAssign(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await alertService.assignAlert(detailData.id, {
+        assignedTo: selectedAssigneeId,
+        note: assignNote,
+        ...(detailData.version !== undefined ? { expectedVersion: detailData.version } : {}),
+      });
+      const merged = { ...detailData, ...updated };
+      setDetailData(merged);
+      setSelectedAssigneeId(merged.assigned_to || selectedAssigneeId);
+      setPendingReassignConfirm(false);
+      setAssignNote('');
+      setActionSuccess('Đã cập nhật người phụ trách cảnh báo thành công.');
+      fetchAuditTrail(detailData.id);
+      if (onAlertUpdated) onAlertUpdated(merged);
+    } catch (err) {
+      setActionError(formatAlertApiError(err, 'Lỗi khi phân công người phụ trách cảnh báo'));
+    } finally {
+      setIsSubmittingAssign(false);
+    }
+  };
+
+  const handleAssignSubmit = (e) => {
+    e.preventDefault();
+    if (!canManageAlerts || !selectedAssigneeId || isSubmittingAssign) return;
+    if (detailData.assigned_to && detailData.assigned_to !== selectedAssigneeId && !pendingReassignConfirm) {
+      setPendingReassignConfirm(true);
+      return;
+    }
+    executeAssign();
+  };
+
+  const handleUnassign = async () => {
+    if (!canManageAlerts || !detailData.assigned_to || isSubmittingAssign) return;
+    setIsSubmittingAssign(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await alertService.unassignAlert(detailData.id, {
+        ...(detailData.version !== undefined ? { expectedVersion: detailData.version } : {}),
+      });
+      const merged = { ...detailData, ...updated, assigned_to: null, assignee_name: null };
+      setDetailData(merged);
+      setSelectedAssigneeId('');
+      setPendingReassignConfirm(false);
+      setActionSuccess('Đã hủy phân công cảnh báo thành công.');
+      fetchAuditTrail(detailData.id);
+      if (onAlertUpdated) onAlertUpdated(merged);
+    } catch (err) {
+      setActionError(formatAlertApiError(err, 'Lỗi khi hủy phân công cảnh báo'));
+    } finally {
+      setIsSubmittingAssign(false);
+    }
+  };
 
   const handleAcknowledge = async (e) => {
     e.preventDefault();
-    if (!canManageAlerts || detailData.status !== 'ACTIVE') return;
+    if (!canManageAlerts || detailData.status !== 'ACTIVE' || isSubmittingAck) return;
     setIsSubmittingAck(true);
     setActionError(null);
     setActionSuccess(null);
     try {
-      const updated = await alertService.acknowledgeAlert(
-        detailData.id,
-        ackNote || 'Đã tiếp nhận và kiểm tra cảnh báo trên Dashboard'
-      );
+      const notePayload = ackNote || 'Đã tiếp nhận và kiểm tra cảnh báo trên Dashboard';
+      const updated =
+        detailData.version !== undefined
+          ? await alertService.acknowledgeAlert(detailData.id, notePayload, detailData.version)
+          : await alertService.acknowledgeAlert(detailData.id, notePayload);
       const merged = { ...detailData, ...updated, status: 'ACKNOWLEDGED' };
       setDetailData(merged);
       setActionSuccess('Đã xác nhận (ACKNOWLEDGED) sự kiện cảnh báo thành công.');
-      if (typeof alertService.getAlertTimeline === 'function') { alertService.getAlertTimeline(detailData.id).then((tl) => { if (Array.isArray(tl)) setTimeline(tl); }).catch(() => {}); }
+      fetchAuditTrail(detailData.id);
       if (onAlertUpdated) onAlertUpdated(merged);
     } catch (err) {
-      setActionError(err.message || 'Lỗi khi xác nhận sự kiện cảnh báo');
+      setActionError(formatAlertApiError(err, 'Lỗi khi xác nhận sự kiện cảnh báo'));
     } finally {
       setIsSubmittingAck(false);
     }
@@ -193,21 +317,27 @@ export const AlertDetailDrawer = ({
 
   const handleResolve = async (e) => {
     e.preventDefault();
-    if (!canManageAlerts || detailData.status === 'RESOLVED') return;
+    if (!canManageAlerts || detailData.status === 'RESOLVED' || isSubmittingResolve) return;
+    if (resolveNote && resolveNote.length > 2000) {
+      setActionError('Ghi chú giải quyết không được vượt quá 2000 ký tự.');
+      return;
+    }
     setIsSubmittingResolve(true);
     setActionError(null);
     setActionSuccess(null);
     try {
-      const updated = await alertService.resolveAlert(
-        detailData.id,
-        resolveNote || 'Đã xử lý và giải quyết thủ công từ Dashboard'
-      );
+      const notePayload = resolveNote || 'Đã xử lý và giải quyết thủ công từ Dashboard';
+      const updated =
+        detailData.version !== undefined
+          ? await alertService.resolveAlert(detailData.id, notePayload, detailData.version)
+          : await alertService.resolveAlert(detailData.id, notePayload);
       const merged = { ...detailData, ...updated, status: 'RESOLVED' };
       setDetailData(merged);
       setActionSuccess('Đã chuyển trạng thái cảnh báo sang RESOLVED thành công.');
+      fetchAuditTrail(detailData.id);
       if (onAlertUpdated) onAlertUpdated(merged);
     } catch (err) {
-      setActionError(err.message || 'Lỗi khi giải quyết sự kiện cảnh báo');
+      setActionError(formatAlertApiError(err, 'Lỗi khi giải quyết sự kiện cảnh báo'));
     } finally {
       setIsSubmittingResolve(false);
     }
@@ -232,7 +362,7 @@ export const AlertDetailDrawer = ({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '620px',
+          maxWidth: '640px',
           height: '100%',
           backgroundColor: '#FFFFFF',
           boxShadow: '-8px 0 32px rgba(15, 23, 42, 0.16)',
@@ -327,7 +457,7 @@ export const AlertDetailDrawer = ({
                 wordBreak: 'break-word',
               }}
             >
-              {detailData.rule_name || 'Cảnh báo hệ thống'}
+              {detailData.rule_name || detailData.title || 'Cảnh báo hệ thống'}
             </h2>
             <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'monospace' }}>
               Alert ID: <span data-testid="detail-alert-id">{detailData.id}</span>
@@ -354,7 +484,10 @@ export const AlertDetailDrawer = ({
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {isLoadingDetail && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}>
+            <div
+              data-testid="detail-loading-state"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}
+            >
               <RefreshCw size={14} className="animate-spin" />
               <span>Đang đồng bộ chi tiết cảnh báo mới nhất từ máy chủ...</span>
             </div>
@@ -362,6 +495,7 @@ export const AlertDetailDrawer = ({
 
           {detailError && (
             <div
+              data-testid="detail-error-state"
               style={{
                 padding: '12px 14px',
                 borderRadius: '8px',
@@ -468,7 +602,7 @@ export const AlertDetailDrawer = ({
                   : 'N/A'}
               </div>
               <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', marginTop: '2px' }}>
-                Metric: {detailData.metric_type}
+                Metric: {detailData.metric_type || '—'}
               </div>
             </div>
 
@@ -538,7 +672,7 @@ export const AlertDetailDrawer = ({
                 textTransform: 'uppercase',
               }}
             >
-              Thông tin Nguồn & Phạm vi Tài nguyên
+              Thông tin Nguồn, Phụ trách & Xử lý
             </div>
 
             <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '0.8125rem' }}>
@@ -585,7 +719,7 @@ export const AlertDetailDrawer = ({
               </div>
 
               <div>
-                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Phát hiện lần đầu (First Seen)</div>
+                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Phát hiện lần đầu (First Occurred)</div>
                 <div data-testid="detail-first-seen" style={{ fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
                   {formatDateTime(detailData.first_detected_at)}
                 </div>
@@ -599,24 +733,237 @@ export const AlertDetailDrawer = ({
               </div>
 
               <div>
+                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Người phụ trách (Assigned To)</div>
+                <div data-testid="detail-assigned-to" style={{ fontWeight: 700, color: detailData.assigned_to ? '#1D4ED8' : 'var(--dash-text-muted)', marginTop: '2px' }}>
+                  {detailData.assignee_name || detailData.assignee_email || (detailData.assigned_to ? detailData.assigned_to : 'Chưa phân công')}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Tiếp nhận bởi (Acknowledged By)</div>
+                <div data-testid="detail-acknowledged-by" style={{ fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
+                  {detailData.acknowledger_name || detailData.acknowledger_email || '—'}
+                </div>
+                {detailData.acknowledged_at && (
+                  <div data-testid="detail-acknowledged-at" style={{ fontSize: '0.7rem', color: 'var(--dash-text-muted)' }}>
+                    {formatDateTime(detailData.acknowledged_at)}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Giải quyết bởi (Resolved By)</div>
+                <div data-testid="detail-resolved-by" style={{ fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
+                  {detailData.resolver_name || detailData.resolver_email || (detailData.resolved_at ? 'Rule Engine / Hệ thống' : '—')}
+                </div>
+              </div>
+
+              <div>
                 <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Thời điểm giải quyết (Resolved At)</div>
                 <div data-testid="detail-resolved-at" style={{ fontWeight: 600, color: detailData.resolved_at ? '#059669' : 'var(--dash-text-muted)', marginTop: '2px' }}>
                   {detailData.resolved_at ? formatDateTime(detailData.resolved_at) : 'Chưa giải quyết'}
                 </div>
               </div>
 
-              {detailData.fingerprint && (
-                <div>
-                  <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Mã định danh (Fingerprint)</div>
-                  <div style={{ fontWeight: 600, color: 'var(--dash-text-secondary)', marginTop: '2px', fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                    {detailData.fingerprint.slice(0, 16)}...
-                  </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>Ghi chú giải quyết (Resolution Note)</div>
+                <div
+                  data-testid="detail-resolution-note"
+                  style={{
+                    fontWeight: 600,
+                    color: resolutionNoteVal ? '#065F46' : 'var(--dash-text-muted)',
+                    marginTop: '4px',
+                    padding: resolutionNoteVal ? '8px 10px' : 0,
+                    backgroundColor: resolutionNoteVal ? '#ECFDF5' : 'transparent',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {resolutionNoteVal || 'Chưa có ghi chú giải quyết'}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* Event Lifecycle & Timeline [S5][PBI22 Task 4.2] */}
+          {/* Assignment Panel (RBAC-gated) */}
+          {canManageAlerts && (
+            <div
+              data-testid="detail-assignment-panel"
+              style={{
+                border: '1px solid var(--dash-border)',
+                borderRadius: '10px',
+                padding: '14px 16px',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', textTransform: 'uppercase' }}>
+                  Phân công Người phụ trách (Assign / Reassign)
+                </span>
+                {detailData.assigned_to && (
+                  <button
+                    type="button"
+                    data-testid="btn-unassign-alert"
+                    disabled={isSubmittingAssign}
+                    onClick={handleUnassign}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #FECACA',
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: isSubmittingAssign ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <UserMinus size={13} />
+                    <span>Hủy phân công</span>
+                  </button>
+                )}
+              </div>
+
+              <form onSubmit={handleAssignSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    data-testid="assign-member-search"
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder="Tìm tên hoặc email thành viên..."
+                    style={{
+                      flex: '1 1 180px',
+                      padding: '7px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.8125rem',
+                      backgroundColor: '#FFFFFF',
+                    }}
+                  />
+                  <select
+                    data-testid="assign-member-select"
+                    value={selectedAssigneeId}
+                    disabled={isLoadingMembers || isSubmittingAssign}
+                    onChange={(e) => {
+                      setSelectedAssigneeId(e.target.value);
+                      setPendingReassignConfirm(false);
+                    }}
+                    style={{
+                      flex: '1 1 220px',
+                      padding: '7px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.8125rem',
+                      backgroundColor: '#FFFFFF',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <option value="">-- Chọn thành viên phụ trách --</option>
+                    {filteredMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name} {m.email ? `(${m.email})` : ''} {m.role ? `[${m.role}]` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    data-testid="btn-submit-assign"
+                    disabled={!selectedAssigneeId || isSubmittingAssign}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid #2563EB',
+                      backgroundColor: '#2563EB',
+                      color: '#FFFFFF',
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      cursor: !selectedAssigneeId || isSubmittingAssign ? 'not-allowed' : 'pointer',
+                      opacity: !selectedAssigneeId || isSubmittingAssign ? 0.6 : 1,
+                    }}
+                  >
+                    <UserPlus size={14} />
+                    <span>
+                      {isSubmittingAssign
+                        ? 'Đang lưu...'
+                        : detailData.assigned_to && detailData.assigned_to !== selectedAssigneeId
+                        ? 'Chuyển giao'
+                        : 'Phân công'}
+                    </span>
+                  </button>
+                </div>
+
+                {pendingReassignConfirm && (
+                  <div
+                    data-testid="reassign-confirm-box"
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FDE68A',
+                      color: '#92400E',
+                      fontSize: '0.8125rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span>
+                      Cảnh báo này đang được phụ trách bởi{' '}
+                      <strong>{detailData.assignee_name || 'thành viên khác'}</strong>. Xác nhận chuyển giao?
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        data-testid="btn-cancel-reassign"
+                        onClick={() => setPendingReassignConfirm(false)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #CBD5E1',
+                          backgroundColor: '#FFFFFF',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="btn-confirm-reassign"
+                        disabled={isSubmittingAssign}
+                        onClick={executeAssign}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: '#D97706',
+                          color: '#FFFFFF',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Xác nhận chuyển giao
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </form>
+            </div>
+          )}
+
+          {/* Event Audit Trail & Timeline [S5][PBI22 Task 4.3 & 4.4] */}
           <div
             data-testid="detail-timeline-section"
             style={{
@@ -639,7 +986,7 @@ export const AlertDetailDrawer = ({
                 justifyContent: 'space-between',
               }}
             >
-              <span>Dòng thời gian sự kiện (Lifecycle Timeline)</span>
+              <span>Nhật ký Kiểm toán & Dòng thời gian (Audit Timeline)</span>
               {detailData.duration_formatted && (
                 <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, textTransform: 'none' }}>
                   Thời lượng: {detailData.duration_formatted}
@@ -648,20 +995,81 @@ export const AlertDetailDrawer = ({
             </div>
 
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.8125rem' }}>
-              {isLoadingTimeline && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)' }}>
+              {isLoadingTimeline ? (
+                <div
+                  data-testid="timeline-loading-state"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)' }}
+                >
                   <RefreshCw size={14} className="animate-spin" />
-                  <span>Đang tải dòng thời gian...</span>
+                  <span>Đang tải nhật ký kiểm toán...</span>
                 </div>
-              )}
-
-              {timeline.length > 0 ? (
+              ) : timelineError ? (
+                <div
+                  data-testid="timeline-error-state"
+                  style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#DC2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                  }}
+                >
+                  <span>{timelineError}</span>
+                  <button
+                    type="button"
+                    data-testid="timeline-btn-retry"
+                    onClick={() => fetchAuditTrail(detailData.id)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: '#DC2626',
+                      color: '#FFFFFF',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Thử lại
+                  </button>
+                </div>
+              ) : timeline.length === 0 ? (
+                <div
+                  data-testid="timeline-empty-state"
+                  style={{ color: 'var(--dash-text-muted)', textAlign: 'center', padding: '16px 0' }}
+                >
+                  Chưa có bản ghi lịch sử thay đổi cho sự kiện này.
+                </div>
+              ) : (
                 timeline.map((entry, idx) => {
                   const isActionResolved = entry.action === 'RESOLVED' || entry.action === 'AUTO_RESOLVED';
                   const isActionAck = entry.action === 'ACKNOWLEDGED';
-                  const isActionEsc = entry.action === 'ESCALATED';
-                  const actionColor = isActionResolved ? '#059669' : isActionAck ? '#D97706' : isActionEsc ? '#DC2626' : '#2563EB';
-                  const ActionIcon = isActionResolved ? CheckCircle2 : isActionAck ? Check : isActionEsc ? AlertTriangle : Clock;
+                  const isActionEsc = entry.action === 'ESCALATED' || entry.action === 'REOPENED';
+                  const isActionAssign =
+                    entry.action === 'ASSIGNED' || entry.action === 'REASSIGNED' || entry.action === 'UNASSIGNED';
+                  const actionColor = isActionResolved
+                    ? '#059669'
+                    : isActionAck
+                    ? '#D97706'
+                    : isActionEsc
+                    ? '#DC2626'
+                    : '#2563EB';
+                  const ActionIcon = isActionResolved
+                    ? CheckCircle2
+                    : isActionAck
+                    ? Check
+                    : isActionEsc
+                    ? AlertTriangle
+                    : isActionAssign
+                    ? UserPlus
+                    : Clock;
+
+                  const prevAssignee = entry.old_value?.assignee_name;
+                  const nextAssignee = entry.new_value?.assignee_name;
 
                   return (
                     <div
@@ -701,9 +1109,13 @@ export const AlertDetailDrawer = ({
                           </span>
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '2px' }}>
-                          Tác tử: <strong style={{ textTransform: 'uppercase' }}>{entry.actor_type || 'SYSTEM'}</strong>
-                          {entry.actor_name ? ` (${entry.actor_name})` : ''}
-                          {entry.old_status ? ` | Chuyển trạng thái: ${entry.old_status} -> ${entry.new_status}` : ''}
+                          Thực hiện bởi: <strong>{entry.actor_name || entry.actor_type || 'SYSTEM'}</strong>
+                          {entry.old_status && entry.old_status !== entry.new_status
+                            ? ` | Trạng thái: ${entry.old_status} → ${entry.new_status}`
+                            : ''}
+                          {isActionAssign && (prevAssignee || nextAssignee)
+                            ? ` | Phụ trách: ${prevAssignee || 'Chưa phân công'} → ${nextAssignee || 'Chưa phân công'}`
+                            : ''}
                         </div>
                         {entry.note && (
                           <div
@@ -724,67 +1136,11 @@ export const AlertDetailDrawer = ({
                     </div>
                   );
                 })
-              ) : (
-                /* Fallback if no timeline rows exist yet in table */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <Clock size={15} color="#DC2626" style={{ marginTop: '2px', flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                        Khởi phát cảnh báo (ACTIVE)
-                      </div>
-                      <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                        {formatDateTime(detailData.first_detected_at)} — Đã ghi nhận {detailData.occurrence_count || 1} chu kỳ vi phạm
-                      </div>
-                    </div>
-                  </div>
-
-                  {detailData.acknowledged_at && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                      <Check size={15} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontWeight: 700, color: '#B45309' }}>
-                          Đã tiếp nhận xử lý (ACKNOWLEDGED)
-                        </div>
-                        <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                          {formatDateTime(detailData.acknowledged_at)}
-                          {detailData.acknowledger_name ? ` bởi ${detailData.acknowledger_name}` : ''}
-                        </div>
-                        {detailData.details?.acknowledge_note && (
-                          <div style={{ marginTop: '4px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '6px', color: '#92400E', fontSize: '0.75rem' }}>
-                            Ghi chú: {detailData.details.acknowledge_note}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {detailData.resolved_at && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                      <CheckCircle2 size={15} color="#059669" style={{ marginTop: '2px', flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontWeight: 700, color: '#065F46' }}>
-                          Đã giải quyết (RESOLVED)
-                        </div>
-                        <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                          {formatDateTime(detailData.resolved_at)}
-                          {detailData.resolver_name ? ` bởi ${detailData.resolver_name}` : detailData.details?.resolved_by ? ` (${detailData.details.resolved_by})` : ''}
-                          {detailData.duration_formatted ? ` (Kéo dài: ${detailData.duration_formatted})` : ''}
-                        </div>
-                        {(detailData.details?.resolution_note || detailData.details?.message) && (
-                          <div style={{ marginTop: '4px', padding: '6px 10px', backgroundColor: '#ECFDF5', borderRadius: '6px', color: '#065F46', fontSize: '0.75rem' }}>
-                            {detailData.details?.resolution_note || detailData.details?.message}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
               )}
             </div>
           </div>
 
-          {/* Operations Section: Acknowledge & Resolve (Only shown if user has permission and status allows) */}
+          {/* Operations Section: Acknowledge & Resolve (Only shown if user has permission and status != RESOLVED) */}
           {canManageAlerts && detailData.status !== 'RESOLVED' && (
             <div
               data-testid="detail-operations-panel"
@@ -846,7 +1202,7 @@ export const AlertDetailDrawer = ({
 
               <form onSubmit={handleResolve} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
-                  Ghi chú giải quyết sự cố (Resolution Note):
+                  Ghi chú giải quyết sự cố (Resolution Note — tối đa 2000 ký tự):
                 </label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
@@ -879,7 +1235,7 @@ export const AlertDetailDrawer = ({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {isSubmittingResolve ? 'Đang xử lý...' : 'Giải quyết (Resolve)'}
+                    {isSubmittingResolve ? 'Đang xử lý...' : 'Đánh dấu Đã xử lý (Resolve)'}
                   </button>
                 </div>
               </form>

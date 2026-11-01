@@ -17,11 +17,13 @@ import {
   Power,
   Filter,
   Activity,
+  Check,
+  X,
 } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
-import { alertService, DEFAULT_RULE_METADATA } from '../../../services/alertService';
+import { alertService, DEFAULT_RULE_METADATA, formatAlertApiError } from '../../../services/alertService';
 import { getAuthToken, API_BASE_URL } from '../../../services/apiClient';
 import AlertDetailDrawer, {
   OPERATOR_SYMBOLS,
@@ -38,6 +40,7 @@ const TIME_RANGE_PRESETS = [
   { key: '6h', label: '6 giờ qua', ms: 6 * 60 * 60 * 1000 },
   { key: '24h', label: '24 giờ qua', ms: 24 * 60 * 60 * 1000 },
   { key: '7d', label: '7 ngày qua', ms: 7 * 24 * 60 * 60 * 1000 },
+  { key: '30d', label: '30 ngày qua', ms: 30 * 24 * 60 * 60 * 1000 },
 ];
 
 export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
@@ -67,8 +70,14 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
     return ['DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(effectiveRole);
   }, [effectiveRole]);
 
-  // Active View Tab: 'EVENTS' | 'RULES'
+  // Active View Tab: 'EVENTS' | 'HISTORY' | 'RULES'
   const [activeTab, setActiveTab] = useState(initialTab || 'EVENTS');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Summary State
   const [summary, setSummary] = useState({
@@ -113,10 +122,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
     critical_alerts: 0,
     warning_alerts: 0,
     info_alerts: 0,
+    active_alerts: 0,
     resolved_alerts: 0,
   });
 
-  // History Filters
+  // History Filters & Sorting
   const [historySearch, setHistorySearch] = useState('');
   const debouncedHistorySearch = useDebounce(historySearch, 300);
   const [historySeverity, setHistorySeverity] = useState('ALL');
@@ -126,8 +136,20 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
   const [historyTimePreset, setHistoryTimePreset] = useState('ALL');
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
+  const [historyDateValidationError, setHistoryDateValidationError] = useState(null);
+  const [historySortBy, setHistorySortBy] = useState('first_detected_at');
+  const [historySortOrder, setHistorySortOrder] = useState('desc');
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageSize, setHistoryPageSize] = useState(10);
+  const historyReqSeqRef = useRef(0);
+
+  // History Row Actions & Mark-as-Resolved Confirmation Modal
+  const [historyActionLoadingId, setHistoryActionLoadingId] = useState(null);
+  const [resolveModalTarget, setResolveModalTarget] = useState(null);
+  const [resolveModalNote, setResolveModalNote] = useState('');
+  const [resolveNoteError, setResolveNoteError] = useState(null);
+  const [resolveModalApiError, setResolveModalApiError] = useState(null);
+  const [isSubmittingModalResolve, setIsSubmittingModalResolve] = useState(false);
 
 
   // Filter States (Events)
@@ -282,8 +304,20 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
     fetchRulesAndMetadata();
   }, [fetchRulesAndMetadata, currentOrg?.id]);
 
-  // Fetch Alert History & Summary [S5][PBI22 Task 4.2]
+  // Fetch Alert History & Summary [S5][PBI22 Task 4.2 & 4.4]
   const fetchAlertHistoryAndSummary = useCallback(async () => {
+    if (historyTimePreset === 'CUSTOM' && historyStartDate && historyEndDate) {
+      const startMs = new Date(historyStartDate).getTime();
+      const endMs = new Date(historyEndDate).getTime();
+      if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs > endMs) {
+        setHistoryDateValidationError('Khoảng thời gian không hợp lệ: Ngày bắt đầu không được lớn hơn ngày kết thúc.');
+        setIsLoadingHistory(false);
+        return;
+      }
+    }
+    setHistoryDateValidationError(null);
+
+    const reqId = ++historyReqSeqRef.current;
     setIsLoadingHistory(true);
     setHistoryError(null);
     try {
@@ -310,8 +344,8 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
         resourceType: historyResourceType !== 'ALL' ? historyResourceType : undefined,
         startDate: startIso,
         endDate: endIso,
-        sortBy: 'first_detected_at',
-        sortOrder: 'desc',
+        sortBy: historySortBy,
+        sortOrder: historySortOrder,
       };
 
       const summaryParams = {
@@ -325,12 +359,15 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
         alertService.getAlertHistory(queryParams),
       ]);
 
+      if (reqId !== historyReqSeqRef.current) return;
+
       if (summaryRes) {
         setHistorySummary({
           total_alerts: Number(summaryRes.total_alerts || 0),
           critical_alerts: Number(summaryRes.critical_alerts || 0),
           warning_alerts: Number(summaryRes.warning_alerts || 0),
           info_alerts: Number(summaryRes.info_alerts || 0),
+          active_alerts: Number(summaryRes.active_alerts || 0),
           resolved_alerts: Number(summaryRes.resolved_alerts || 0),
         });
       }
@@ -338,20 +375,26 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
       if (historyRes) {
         setHistoryAlerts(historyRes.items || []);
         if (historyRes.pagination) {
+          const totalPages = Number(
+            historyRes.pagination.total_pages ?? historyRes.pagination.totalPages ?? 1
+          );
           setHistoryPagination({
             page: Number(historyRes.pagination.page || 1),
             limit: Number(historyRes.pagination.limit || 10),
             total: Number(historyRes.pagination.total || 0),
-            total_pages: Number(historyRes.pagination.total_pages || 1),
+            total_pages: totalPages,
           });
         }
       }
     } catch (err) {
+      if (reqId !== historyReqSeqRef.current) return;
       if (!err?.isAborted) {
-        setHistoryError(err.message || 'Không thể tải lịch sử cảnh báo');
+        setHistoryError(formatAlertApiError(err, 'Không thể tải lịch sử cảnh báo'));
       }
     } finally {
-      setIsLoadingHistory(false);
+      if (reqId === historyReqSeqRef.current) {
+        setIsLoadingHistory(false);
+      }
     }
   }, [
     historyPage,
@@ -364,7 +407,73 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
     historyTimePreset,
     historyStartDate,
     historyEndDate,
+    historySortBy,
+    historySortOrder,
   ]);
+
+  const handleHistoryQuickAcknowledge = async (item) => {
+    if (!canManageAlerts || !item || item.status !== 'ACTIVE' || historyActionLoadingId) return;
+    setHistoryActionLoadingId(item.id);
+    try {
+      await alertService.acknowledgeAlert(
+        item.id,
+        'Đã tiếp nhận xử lý từ bảng Lịch sử Cảnh báo',
+        item.version
+      );
+      showToast('success', `Đã tiếp nhận cảnh báo "${item.rule_name || item.title}".`);
+      fetchAlertHistoryAndSummary();
+      fetchAlertsAndSummary(true);
+    } catch (err) {
+      showToast('error', formatAlertApiError(err, 'Lỗi khi tiếp nhận cảnh báo'));
+    } finally {
+      setHistoryActionLoadingId(null);
+    }
+  };
+
+  const openResolveConfirmModal = (item) => {
+    if (!canManageAlerts || !item || item.status === 'RESOLVED') return;
+    setResolveModalTarget(item);
+    setResolveModalNote('');
+    setResolveNoteError(null);
+    setResolveModalApiError(null);
+  };
+
+  const handleConfirmResolveSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!canManageAlerts || !resolveModalTarget || isSubmittingModalResolve) return;
+
+    if (resolveModalNote && resolveModalNote.length > 2000) {
+      setResolveNoteError('Ghi chú giải quyết không được vượt quá 2000 ký tự.');
+      return;
+    }
+    setResolveNoteError(null);
+    setResolveModalApiError(null);
+    setIsSubmittingModalResolve(true);
+
+    try {
+      const noteText =
+        resolveModalNote && resolveModalNote.trim()
+          ? resolveModalNote.trim()
+          : 'Đã đánh dấu xử lý từ bảng Lịch sử Cảnh báo';
+      const updated = await alertService.resolveAlert(
+        resolveModalTarget.id,
+        noteText,
+        resolveModalTarget.version
+      );
+      setResolveModalTarget(null);
+      setResolveModalNote('');
+      if (selectedAlert?.id === resolveModalTarget.id) {
+        setSelectedAlert((prev) => ({ ...prev, ...updated, status: 'RESOLVED' }));
+      }
+      showToast('success', `Đã đánh dấu xử lý cảnh báo "${resolveModalTarget.rule_name || resolveModalTarget.title}".`);
+      fetchAlertHistoryAndSummary();
+      fetchAlertsAndSummary(true);
+    } catch (err) {
+      setResolveModalApiError(formatAlertApiError(err, 'Không thể cập nhật trạng thái Đã xử lý'));
+    } finally {
+      setIsSubmittingModalResolve(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'HISTORY') {
@@ -607,6 +716,9 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
             onClick={() => {
               fetchAlertsAndSummary(false);
               fetchRulesAndMetadata();
+              if (activeTab === 'HISTORY') {
+                fetchAlertHistoryAndSummary();
+              }
             }}
             style={{
               display: 'inline-flex',
@@ -1568,33 +1680,33 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
         </>
       )}
 
-            {/* TAB 2: ALERT HISTORY (PBI22 Task 4.1 & 4.2) */}
+      {/* TAB 2: ALERT HISTORY (PBI22 Task 4.1, 4.2, 4.3 & 4.4) */}
       {activeTab === 'HISTORY' && (
         <div data-testid="alert-history-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* History KPI Summary Cards */}
+          {/* History KPI Summary Cards (All 6 Metrics) */}
           <div
             data-testid="history-kpi-cards"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '16px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
+              gap: '14px',
             }}
           >
             <div
               style={{
-                padding: '16px 20px',
+                padding: '16px 18px',
                 borderRadius: '12px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
+                gap: '12px',
               }}
             >
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   backgroundColor: '#EFF6FF',
                   display: 'flex',
@@ -1603,11 +1715,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                   color: '#2563EB',
                 }}
               >
-                <Activity size={22} />
+                <Activity size={20} />
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)' }}>Tổng Lịch Sử</div>
-                <div data-testid="kpi-history-total" style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                <div data-testid="kpi-history-total" style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
                   {historySummary.total_alerts}
                 </div>
               </div>
@@ -1615,19 +1727,19 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
             <div
               style={{
-                padding: '16px 20px',
+                padding: '16px 18px',
                 borderRadius: '12px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #FECACA',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
+                gap: '12px',
               }}
             >
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   backgroundColor: '#FEF2F2',
                   display: 'flex',
@@ -1636,11 +1748,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                   color: '#DC2626',
                 }}
               >
-                <ShieldAlert size={22} />
+                <ShieldAlert size={20} />
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#DC2626' }}>Khẩn cấp (Critical)</div>
-                <div data-testid="kpi-history-critical" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#DC2626' }}>
+                <div data-testid="kpi-history-critical" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#DC2626' }}>
                   {historySummary.critical_alerts}
                 </div>
               </div>
@@ -1648,19 +1760,19 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
             <div
               style={{
-                padding: '16px 20px',
+                padding: '16px 18px',
                 borderRadius: '12px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #FDE68A',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
+                gap: '12px',
               }}
             >
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   backgroundColor: '#FFFBEB',
                   display: 'flex',
@@ -1669,11 +1781,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                   color: '#D97706',
                 }}
               >
-                <AlertTriangle size={22} />
+                <AlertTriangle size={20} />
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706' }}>Cảnh báo (Warning)</div>
-                <div data-testid="kpi-history-warning" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#D97706' }}>
+                <div data-testid="kpi-history-warning" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#D97706' }}>
                   {historySummary.warning_alerts}
                 </div>
               </div>
@@ -1681,19 +1793,85 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
             <div
               style={{
-                padding: '16px 20px',
+                padding: '16px 18px',
+                borderRadius: '12px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #BFDBFE',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#EFF6FF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#1D4ED8',
+                }}
+              >
+                <Info size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D4ED8' }}>Thông tin (Info)</div>
+                <div data-testid="kpi-history-info" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1D4ED8' }}>
+                  {historySummary.info_alerts}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '16px 18px',
+                borderRadius: '12px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #FED7AA',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FFF7ED',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C',
+                }}
+              >
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#EA580C' }}>Chưa giải quyết</div>
+                <div data-testid="kpi-history-active" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#EA580C' }}>
+                  {historySummary.active_alerts}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '16px 18px',
                 borderRadius: '12px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #A7F3D0',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
+                gap: '12px',
               }}
             >
               <div
                 style={{
-                  width: '42px',
-                  height: '42px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   backgroundColor: '#ECFDF5',
                   display: 'flex',
@@ -1702,18 +1880,18 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                   color: '#059669',
                 }}
               >
-                <CheckCircle2 size={22} />
+                <CheckCircle2 size={20} />
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>Đã giải quyết (Resolved)</div>
-                <div data-testid="kpi-history-resolved" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669' }}>
+                <div data-testid="kpi-history-resolved" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#059669' }}>
                   {historySummary.resolved_alerts}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* History Advanced Filter Bar */}
+          {/* History Advanced Filter & Sort Bar */}
           <div
             data-testid="history-filter-bar"
             style={{
@@ -1726,11 +1904,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
               gap: '12px',
             }}
           >
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
               {/* Search */}
               <div
                 style={{
-                  flex: '1 1 260px',
+                  flex: '1 1 240px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
@@ -1809,6 +1987,36 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                 <option value="RESOLVED">RESOLVED (Đã giải quyết)</option>
               </select>
 
+              {/* Cluster */}
+              <select
+                data-testid="history-filter-cluster"
+                value={historyCluster}
+                onChange={(e) => {
+                  setHistoryCluster(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                <option value="ALL">Tất cả Cụm K8s</option>
+                {(envList || []).map((env) => {
+                  const cid = env.cluster_id || env.id;
+                  const cname = env.cluster || env.name || cid;
+                  return (
+                    <option key={cid} value={cid}>
+                      {cname}
+                    </option>
+                  );
+                })}
+              </select>
+
               {/* Resource Type */}
               <select
                 data-testid="history-filter-resource-type"
@@ -1839,6 +2047,7 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                 value={historyTimePreset}
                 onChange={(e) => {
                   setHistoryTimePreset(e.target.value);
+                  setHistoryDateValidationError(null);
                   setHistoryPage(1);
                 }}
                 style={{
@@ -1859,6 +2068,53 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                 <option value="CUSTOM">Tùy chỉnh khoảng thời gian...</option>
               </select>
 
+              {/* Sort By */}
+              <select
+                data-testid="history-sort-by"
+                value={historySortBy}
+                onChange={(e) => {
+                  setHistorySortBy(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                <option value="first_detected_at">Sắp xếp: Phát hiện lần đầu</option>
+                <option value="last_seen_at">Sắp xếp: Ghi nhận gần nhất</option>
+                <option value="resolved_at">Sắp xếp: Thời gian xử lý</option>
+                <option value="severity">Sắp xếp: Mức độ nghiêm trọng</option>
+                <option value="status">Sắp xếp: Trạng thái</option>
+              </select>
+
+              {/* Sort Order */}
+              <select
+                data-testid="history-sort-order"
+                value={historySortOrder}
+                onChange={(e) => {
+                  setHistorySortOrder(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                <option value="desc">Mới nhất / Cao nhất (DESC)</option>
+                <option value="asc">Cũ nhất / Thấp nhất (ASC)</option>
+              </select>
+
               {/* Reset Filter Button */}
               <button
                 type="button"
@@ -1872,6 +2128,9 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                   setHistoryTimePreset('ALL');
                   setHistoryStartDate('');
                   setHistoryEndDate('');
+                  setHistorySortBy('first_detected_at');
+                  setHistorySortOrder('desc');
+                  setHistoryDateValidationError(null);
                   setHistoryPage(1);
                 }}
                 style={{
@@ -1891,43 +2150,61 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
             {/* Custom Date Pickers */}
             {historyTimePreset === 'CUSTOM' && (
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
-                  Từ ngày:
-                </span>
-                <input
-                  type="datetime-local"
-                  data-testid="history-start-date"
-                  value={historyStartDate}
-                  onChange={(e) => {
-                    setHistoryStartDate(e.target.value);
-                    setHistoryPage(1);
-                  }}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-                <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
-                  Đến ngày:
-                </span>
-                <input
-                  type="datetime-local"
-                  data-testid="history-end-date"
-                  value={historyEndDate}
-                  onChange={(e) => {
-                    setHistoryEndDate(e.target.value);
-                    setHistoryPage(1);
-                  }}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                    Từ ngày:
+                  </span>
+                  <input
+                    type="datetime-local"
+                    data-testid="history-start-date"
+                    value={historyStartDate}
+                    onChange={(e) => {
+                      setHistoryStartDate(e.target.value);
+                      setHistoryPage(1);
+                    }}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.8125rem',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                    Đến ngày:
+                  </span>
+                  <input
+                    type="datetime-local"
+                    data-testid="history-end-date"
+                    value={historyEndDate}
+                    onChange={(e) => {
+                      setHistoryEndDate(e.target.value);
+                      setHistoryPage(1);
+                    }}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.8125rem',
+                    }}
+                  />
+                </div>
+                {historyDateValidationError && (
+                  <div
+                    data-testid="history-date-validation-error"
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      color: '#DC2626',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {historyDateValidationError}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1943,16 +2220,23 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
             }}
           >
             {isLoadingHistory ? (
-              <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}>
+              <div
+                data-testid="history-loading-state"
+                style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}
+              >
                 <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px' }} />
                 <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>Đang tải danh sách lịch sử cảnh báo...</div>
               </div>
             ) : historyError ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center', color: '#DC2626' }}>
+              <div
+                data-testid="history-error-state"
+                style={{ padding: '40px 20px', textAlign: 'center', color: '#DC2626' }}
+              >
                 <AlertCircle size={28} style={{ margin: '0 auto 10px' }} />
                 <div style={{ fontSize: '0.875rem', fontWeight: 700 }}>{historyError}</div>
                 <button
                   type="button"
+                  data-testid="history-btn-retry"
                   onClick={fetchAlertHistoryAndSummary}
                   style={{
                     marginTop: '12px',
@@ -1969,7 +2253,10 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                 </button>
               </div>
             ) : historyAlerts.length === 0 ? (
-              <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+              <div
+                data-testid="history-empty-state"
+                style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}
+              >
                 <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 12px', opacity: 0.7 }} />
                 <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
                   Không tìm thấy sự kiện lịch sử nào
@@ -1979,7 +2266,7 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                 </div>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div data-testid="history-table-scroll" style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)' }}>
@@ -1993,16 +2280,19 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                         Trạng thái
                       </th>
                       <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                        Tài nguyên & Namespace
+                        Tài nguyên / Cụm K8s
                       </th>
                       <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
                         Giá trị đo / Ngưỡng
                       </th>
                       <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                        Thời lượng (Duration)
+                        Thời lượng
                       </th>
                       <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
                         Phát hiện lần đầu
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Người phụ trách
                       </th>
                       <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
                         Giải quyết lúc / Bởi
@@ -2017,6 +2307,9 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                       const sev = getSeverityStyle(item.severity);
                       const st = getStatusStyle(item.status);
                       const unitStr = item.unit ? ` ${item.unit}` : '';
+                      const hasObserved = item.observed_value !== null && item.observed_value !== undefined;
+                      const hasThreshold = item.threshold_value !== null && item.threshold_value !== undefined;
+                      const assigneeLabel = item.assignee_name || item.assignee_email || 'Chưa phân công';
 
                       return (
                         <tr
@@ -2031,8 +2324,8 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                             <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
                               {item.rule_name || item.title || 'Cảnh báo hệ thống'}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '2px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {item.message}
+                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '2px', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.message || '—'}
                             </div>
                           </td>
 
@@ -2051,7 +2344,7 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                                 fontWeight: 800,
                               }}
                             >
-                              {item.severity}
+                              {item.severity || 'INFO'}
                             </span>
                           </td>
 
@@ -2071,25 +2364,29 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                               }}
                             >
                               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: st.dot }} />
-                              {item.status}
+                              {item.status || 'ACTIVE'}
                             </span>
                           </td>
 
                           <td style={{ padding: '14px 14px' }}>
                             <div style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                              {item.resource_id}
+                              {item.resource_id || '—'}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
-                              {item.resource_type || '—'} {item.namespace ? `| ns: ${item.namespace}` : ''}
+                            <div style={{ fontSize: '0.72rem', color: 'var(--dash-text-muted)' }}>
+                              <span style={{ textTransform: 'uppercase' }}>{item.resource_type || '—'}</span>
+                              {item.namespace ? ` | ns: ${item.namespace}` : ''}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--dash-text-secondary)', fontWeight: 600, marginTop: '2px' }}>
+                              {item.cluster_name || 'Toàn tổ chức'}
                             </div>
                           </td>
 
                           <td style={{ padding: '14px 14px' }}>
                             <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                              {item.observed_value !== null ? `${item.observed_value}${unitStr}` : '—'}
+                              {hasObserved ? `${item.observed_value}${unitStr}` : '—'}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                              Ngưỡng: {item.threshold_value !== null ? `${item.threshold_value}${unitStr}` : '—'}
+                              Ngưỡng: {hasThreshold ? `${item.threshold_value}${unitStr}` : '—'}
                             </div>
                           </td>
 
@@ -2108,6 +2405,13 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                             {formatDateTime(item.first_detected_at)}
                           </td>
 
+                          <td
+                            data-testid={`history-assignee-${item.id}`}
+                            style={{ padding: '14px 14px', fontSize: '0.75rem', fontWeight: 600, color: item.assigned_to ? '#1D4ED8' : 'var(--dash-text-muted)' }}
+                          >
+                            {assigneeLabel}
+                          </td>
+
                           <td style={{ padding: '14px 14px', fontSize: '0.75rem' }}>
                             {item.resolved_at ? (
                               <div>
@@ -2121,27 +2425,67 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                             )}
                           </td>
 
-                          <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                            <button
-                              type="button"
-                              data-testid="history-btn-detail"
-                              onClick={() => {
-                                setSelectedAlert(item);
-                                setIsDetailOpen(true);
-                              }}
-                              style={{
-                                padding: '6px 12px',
-                                borderRadius: '6px',
-                                border: '1px solid var(--dash-border)',
-                                backgroundColor: '#FFFFFF',
-                                color: 'var(--dash-primary, #059669)',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Timeline
-                            </button>
+                          <td style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                data-testid="history-btn-detail"
+                                onClick={() => openAlertDetail(item)}
+                                style={{
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--dash-border)',
+                                  backgroundColor: '#FFFFFF',
+                                  color: 'var(--dash-text-primary)',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Chi tiết
+                              </button>
+
+                              {canManageAlerts && item.status === 'ACTIVE' && (
+                                <button
+                                  type="button"
+                                  data-testid={`history-btn-ack-${item.id}`}
+                                  disabled={historyActionLoadingId === item.id}
+                                  onClick={() => handleHistoryQuickAcknowledge(item)}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #FDE68A',
+                                    backgroundColor: '#FFFBEB',
+                                    color: '#B45309',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    cursor: historyActionLoadingId === item.id ? 'not-allowed' : 'pointer',
+                                  }}
+                                >
+                                  Tiếp nhận
+                                </button>
+                              )}
+
+                              {canManageAlerts && item.status !== 'RESOLVED' && (
+                                <button
+                                  type="button"
+                                  data-testid={`history-btn-resolve-${item.id}`}
+                                  onClick={() => openResolveConfirmModal(item)}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #A7F3D0',
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#059669',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Đã xử lý
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2166,11 +2510,12 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                 }}
               >
                 <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}>
-                  Trang <strong>{historyPagination.page}</strong> / <strong>{historyPagination.total_pages}</strong> (Tổng <strong>{historyPagination.total}</strong> bản ghi)
+                  Trang <strong>{historyPagination.page}</strong> / <strong>{historyPagination.total_pages || 1}</strong> (Tổng <strong>{historyPagination.total}</strong> bản ghi)
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <select
+                    data-testid="history-page-size-select"
                     value={historyPageSize}
                     onChange={(e) => {
                       setHistoryPageSize(Number(e.target.value));
@@ -2191,6 +2536,7 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
                   <button
                     type="button"
+                    data-testid="history-btn-prev-page"
                     disabled={historyPagination.page <= 1}
                     onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
                     style={{
@@ -2209,7 +2555,8 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
                   <button
                     type="button"
-                    disabled={historyPagination.page >= historyPagination.total_pages}
+                    data-testid="history-btn-next-page"
+                    disabled={historyPagination.page >= (historyPagination.total_pages || 1)}
                     onClick={() => setHistoryPage((p) => p + 1)}
                     style={{
                       padding: '4px 10px',
@@ -2218,8 +2565,8 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
                       backgroundColor: '#FFFFFF',
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      cursor: historyPagination.page >= historyPagination.total_pages ? 'not-allowed' : 'pointer',
-                      opacity: historyPagination.page >= historyPagination.total_pages ? 0.5 : 1,
+                      cursor: historyPagination.page >= (historyPagination.total_pages || 1) ? 'not-allowed' : 'pointer',
+                      opacity: historyPagination.page >= (historyPagination.total_pages || 1) ? 0.5 : 1,
                     }}
                   >
                     Sau
@@ -2476,12 +2823,221 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
         canManageAlerts={canManageAlerts}
+        currentOrgId={currentOrg?.id || ''}
         currentOrgName={currentOrg?.name || ''}
         onAlertUpdated={(updated) => {
           setSelectedAlert(updated);
           fetchAlertsAndSummary(true);
+          if (activeTab === 'HISTORY') {
+            fetchAlertHistoryAndSummary();
+          }
         }}
       />
+
+      {/* Modal: Mark as Resolved Confirmation Dialog (PBI22 Task 4.4) */}
+      {resolveModalTarget && (
+        <div
+          data-testid="resolve-confirm-modal"
+          onClick={() => {
+            if (!isSubmittingModalResolve) setResolveModalTarget(null);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+            padding: '16px',
+          }}
+        >
+          <form
+            onSubmit={handleConfirmResolveSubmit}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '14px',
+              border: '1px solid var(--dash-border)',
+              boxShadow: '0 20px 45px rgba(15, 23, 42, 0.2)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--dash-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#ECFDF5',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065F46', fontWeight: 800, fontSize: '0.95rem' }}>
+                <CheckCircle2 size={20} color="#059669" />
+                <span>Xác nhận Đánh dấu Đã xử lý (Mark as Resolved)</span>
+              </div>
+              <button
+                type="button"
+                disabled={isSubmittingModalResolve}
+                onClick={() => setResolveModalTarget(null)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: isSubmittingModalResolve ? 'not-allowed' : 'pointer',
+                  color: '#065F46',
+                  padding: '4px',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                <div style={{ fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                  {resolveModalTarget.rule_name || resolveModalTarget.title || 'Cảnh báo hệ thống'}
+                </div>
+                <div style={{ color: 'var(--dash-text-secondary)', marginTop: '4px', fontSize: '0.75rem' }}>
+                  Tài nguyên: <strong>{resolveModalTarget.resource_id || '—'}</strong> ({resolveModalTarget.resource_type || '—'}) • Cụm:{' '}
+                  <strong>{resolveModalTarget.cluster_name || 'Toàn tổ chức'}</strong>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="resolve-modal-note-input"
+                  style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}
+                >
+                  Ghi chú xử lý (Resolution Note) <span style={{ fontWeight: 500, color: 'var(--dash-text-muted)' }}>(tối đa 2000 ký tự)</span>
+                </label>
+                <textarea
+                  id="resolve-modal-note-input"
+                  data-testid="resolve-modal-note-input"
+                  rows={4}
+                  value={resolveModalNote}
+                  onChange={(e) => {
+                    setResolveModalNote(e.target.value);
+                    if (resolveNoteError) setResolveNoteError(null);
+                  }}
+                  placeholder="Mô tả nguyên nhân gốc rễ và hành động khắc phục đã thực hiện..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: resolveNoteError ? '1px solid #DC2626' : '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.72rem', color: 'var(--dash-text-muted)' }}>
+                  <span>Sẽ được lưu vào Audit Trail kèm người thực hiện & dấu thời gian</span>
+                  <span>{resolveModalNote.length} / 2000</span>
+                </div>
+              </div>
+
+              {resolveNoteError && (
+                <div
+                  data-testid="resolve-note-error"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#DC2626',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {resolveNoteError}
+                </div>
+              )}
+
+              {resolveModalApiError && (
+                <div
+                  data-testid="resolve-modal-error"
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#DC2626',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {resolveModalApiError}
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '14px 20px',
+                borderTop: '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+              }}
+            >
+              <button
+                type="button"
+                data-testid="btn-cancel-resolve-modal"
+                disabled={isSubmittingModalResolve}
+                onClick={() => setResolveModalTarget(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  color: 'var(--dash-text-secondary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: isSubmittingModalResolve ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Hủy bỏ
+              </button>
+
+              <button
+                type="submit"
+                data-testid="btn-confirm-resolve-submit"
+                disabled={isSubmittingModalResolve}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  cursor: isSubmittingModalResolve ? 'not-allowed' : 'pointer',
+                  opacity: isSubmittingModalResolve ? 0.7 : 1,
+                }}
+              >
+                <Check size={15} />
+                <span>{isSubmittingModalResolve ? 'Đang cập nhật...' : 'Xác nhận Đã xử lý'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Modal: Create / Edit Alert Rule */}
       <AlertRuleModal

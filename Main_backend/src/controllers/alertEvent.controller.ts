@@ -6,11 +6,16 @@ import { AlertRuleModel } from '../models/alertRule.model';
 import { AlertEventModel } from '../models/alertEvent.model';
 import {
   ListAlertEventsQuerySchema,
-  AcknowledgeAlertEventSchema,
-  ResolveAlertEventSchema,
   AlertSummaryQuerySchema,
 } from '../schemas/alertEvent.schema';
 import { alertHistoryQuerySchema } from '../schemas/alertHistory.schema';
+import {
+  assignAlertSchema,
+  unassignAlertSchema,
+  resolveAlertSchema,
+  acknowledgeAlertSchema,
+  auditTrailQuerySchema,
+} from '../schemas/alertAction.schema';
 import { AlertMetricType, AlertOperator, AlertSeverity } from '../schemas/alertRule.schema';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
@@ -272,7 +277,7 @@ export class AlertEventController {
         return next(ApiError.badRequest('Thiếu ID sự kiện cảnh báo'));
       }
 
-      const parseResult = AcknowledgeAlertEventSchema.safeParse(req.body);
+      const parseResult = acknowledgeAlertSchema.safeParse(req.body || {});
       if (!parseResult.success) {
         return next(
           new ApiError(
@@ -292,7 +297,8 @@ export class AlertEventController {
         id,
         targetOrgId,
         user.id || user.userId,
-        parseResult.data.note
+        parseResult.data.note,
+        parseResult.data.expectedVersion
       );
 
       return ApiResponse.success(res, 'Xác nhận sự kiện cảnh báo thành công', updated, 200);
@@ -312,7 +318,7 @@ export class AlertEventController {
         return next(ApiError.badRequest('Thiếu ID sự kiện cảnh báo'));
       }
 
-      const parseResult = ResolveAlertEventSchema.safeParse(req.body);
+      const parseResult = resolveAlertSchema.safeParse(req.body || {});
       if (!parseResult.success) {
         return next(
           new ApiError(
@@ -328,14 +334,141 @@ export class AlertEventController {
         user,
         AlertRuleService.extractRequestedOrgId(req)
       );
+      const resolutionNote =
+        parseResult.data.resolutionNote ??
+        parseResult.data.resolution_note ??
+        parseResult.data.note;
       const updated = await AlertLifecycleService.resolveAlertManually(
         id,
         targetOrgId,
         user.id || user.userId,
-        parseResult.data.resolution_note
+        resolutionNote,
+        parseResult.data.expectedVersion
       );
 
       return ApiResponse.success(res, 'Giải quyết sự kiện cảnh báo thành công', updated, 200);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/alerts/:id/assign
+   * Assign or reassign an alert to an active organization member
+   */
+  public static async assign(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        return next(ApiError.badRequest('Thiếu ID sự kiện cảnh báo'));
+      }
+
+      const parseResult = assignAlertSchema.safeParse(req.body || {});
+      if (!parseResult.success) {
+        return next(
+          new ApiError(
+            400,
+            parseResult.error.issues[0]?.message || 'Dữ liệu phân công không hợp lệ',
+            parseResult.error.format()
+          )
+        );
+      }
+
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+      const updated = await AlertLifecycleService.assignAlert(
+        id,
+        targetOrgId,
+        parseResult.data.assignedTo,
+        user.id || user.userId,
+        parseResult.data.note,
+        parseResult.data.expectedVersion
+      );
+
+      return ApiResponse.success(res, 'Phân công người phụ trách cảnh báo thành công', updated, 200);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/alerts/:id/unassign
+   * Remove current assignee from an alert
+   */
+  public static async unassign(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        return next(ApiError.badRequest('Thiếu ID sự kiện cảnh báo'));
+      }
+
+      const parseResult = unassignAlertSchema.safeParse(req.body || {});
+      if (!parseResult.success) {
+        return next(
+          new ApiError(
+            400,
+            parseResult.error.issues[0]?.message || 'Dữ liệu hủy phân công không hợp lệ',
+            parseResult.error.format()
+          )
+        );
+      }
+
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+      const updated = await AlertLifecycleService.unassignAlert(
+        id,
+        targetOrgId,
+        user.id || user.userId,
+        parseResult.data.note,
+        parseResult.data.expectedVersion
+      );
+
+      return ApiResponse.success(res, 'Hủy phân công cảnh báo thành công', updated, 200);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/alerts/:id/audit-trail or GET /api/v1/alerts/history/:id/audit-trail
+   * Paginated audit trail for an alert event
+   */
+  public static async getAuditTrail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        return next(ApiError.badRequest('Thiếu ID sự kiện cảnh báo'));
+      }
+
+      const parseResult = auditTrailQuerySchema.safeParse(req.query);
+      if (!parseResult.success) {
+        return next(
+          new ApiError(
+            400,
+            parseResult.error.issues[0]?.message || 'Tham số truy vấn audit trail không hợp lệ',
+            parseResult.error.format()
+          )
+        );
+      }
+
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+      const auditTrail = await AlertLifecycleService.getAlertAuditTrail(
+        id,
+        targetOrgId,
+        parseResult.data
+      );
+
+      return ApiResponse.success(res, 'Lấy nhật ký kiểm toán cảnh báo thành công', auditTrail, 200);
     } catch (error) {
       return next(error);
     }

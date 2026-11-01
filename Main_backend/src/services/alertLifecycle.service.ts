@@ -17,6 +17,7 @@ export interface IAlertTriggerInput {
   metric_type: string;
   resource_type: string;
   resource_id: string;
+  namespace?: string | null;
   severity: AlertSeverity;
   observed_value?: number | null;
   threshold_value?: number | null;
@@ -56,7 +57,7 @@ export class AlertLifecycleService {
       await client.query('BEGIN');
 
       const checkQuery = `
-        SELECT id, first_detected_at, last_seen_at, status, details, occurrence_count
+        SELECT id, first_detected_at, last_seen_at, status, severity, details, occurrence_count
         FROM alert_events
         WHERE organization_id = $1
           AND COALESCE(cluster_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2, '00000000-0000-0000-0000-000000000000'::uuid)
@@ -136,11 +137,14 @@ export class AlertLifecycleService {
           await AlertEventHistoryModel.createEntry(
             {
               alert_event_id: event.id,
+              organization_id: input.organization_id,
               old_status: row.status,
               new_status: row.status,
               action: 'ESCALATED',
               actor_type: 'SYSTEM',
               note: `Mức độ nghiêm trọng leo thang lên CRITICAL (giá trị: ${input.observed_value}${input.unit || ''})`,
+              old_value: { severity: row.severity },
+              new_value: { severity: input.severity, observed_value: input.observed_value },
               metadata: {
                 old_severity: row.severity,
                 new_severity: input.severity,
@@ -149,7 +153,7 @@ export class AlertLifecycleService {
             },
             client
           );
-        };
+        }
       } else {
         isNew = true;
         cooldownActive = false;
@@ -165,9 +169,9 @@ export class AlertLifecycleService {
           `
           INSERT INTO alert_events (
             organization_id, cluster_id, rule_id, rule_name, category, metric_type,
-            resource_type, resource_id, severity, status, observed_value, threshold_value,
+            resource_type, resource_id, namespace, severity, status, observed_value, threshold_value,
             unit, message, details, fingerprint, occurrence_count, first_detected_at, last_seen_at, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, $13, $14, $15, 1, NOW(), NOW(), NOW(), NOW())
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ACTIVE', $11, $12, $13, $14, $15, $16, 1, NOW(), NOW(), NOW(), NOW())
           RETURNING *;
           `,
           [
@@ -179,6 +183,7 @@ export class AlertLifecycleService {
             input.metric_type,
             input.resource_type,
             input.resource_id,
+            input.namespace || input.details?.namespace || null,
             input.severity,
             input.observed_value ?? null,
             input.threshold_value ?? null,
@@ -199,11 +204,19 @@ export class AlertLifecycleService {
         await AlertEventHistoryModel.createEntry(
           {
             alert_event_id: event.id,
+            organization_id: input.organization_id,
             old_status: null,
             new_status: 'ACTIVE',
             action: 'TRIGGERED',
             actor_type: 'SYSTEM',
             note: `Khởi phát cảnh báo: ${input.message}`,
+            old_value: {},
+            new_value: {
+              status: 'ACTIVE',
+              severity: input.severity,
+              observed_value: input.observed_value ?? null,
+              threshold_value: input.threshold_value ?? null,
+            },
             metadata: {
               observed_value: input.observed_value,
               threshold_value: input.threshold_value,
@@ -264,17 +277,18 @@ export class AlertLifecycleService {
       try {
         await AlertEventHistoryModel.createEntry({
           alert_event_id: resolved.id,
+          organization_id: data.organization_id,
           old_status: 'ACTIVE',
           new_status: 'RESOLVED',
           action: 'AUTO_RESOLVED',
           actor_type: 'SYSTEM',
           note: 'Rule Engine tự động giải quyết khi chỉ số trở lại bình thường',
+          old_value: { status: 'ACTIVE' },
+          new_value: { status: 'RESOLVED' },
         });
       } catch {
         // Non-blocking history
       }
-    }
-    if (resolved) {
       try {
         broadcastTelemetryToUi({
           type: 'alert_updated',
@@ -293,46 +307,88 @@ export class AlertLifecycleService {
   }
 
   /**
-   * Acknowledge an active alert
+   * Acknowledge an active alert with concurrency guard & audit trail
    */
   public static async acknowledgeAlert(
     id: string,
     organizationId: string,
     userId: string,
-    note?: string
+    note?: string,
+    expectedVersion?: number
   ): Promise<IAlertEvent> {
-    const existing = await AlertEventModel.findById(id, organizationId);
-    if (!existing) {
-      throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (existing.status === 'RESOLVED') {
-      throw ApiError.badRequest('Không thể xác nhận sự kiện cảnh báo đã được giải quyết (RESOLVED)');
-    }
+      const lockRes = await client.query(
+        `SELECT * FROM alert_events WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [id, organizationId]
+      );
+      if (lockRes.rows.length === 0) {
+        throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
+      }
 
-    if (existing.status === 'ACKNOWLEDGED') {
-      return existing;
-    }
+      const existing = lockRes.rows[0];
+      if (existing.status === 'RESOLVED') {
+        throw ApiError.badRequest('Không thể xác nhận sự kiện cảnh báo đã được giải quyết (RESOLVED)');
+      }
 
-    const updated = await AlertEventModel.acknowledgeEvent(id, organizationId, userId, note);
-    if (updated) {
-      try {
-        await AlertEventHistoryModel.createEntry({
+      const currentVersion = Number(existing.version || 1);
+      if (expectedVersion !== undefined && currentVersion !== expectedVersion) {
+        throw new ApiError(
+          409,
+          'Xung đột phiên bản: Cảnh báo đã bị thay đổi bởi thao tác khác. Vui lòng tải lại dữ liệu.'
+        );
+      }
+
+      if (existing.status === 'ACKNOWLEDGED') {
+        await client.query('COMMIT');
+        const current = await AlertEventModel.findById(id, organizationId);
+        return current!;
+      }
+
+      const detailsPatch = note ? { acknowledge_note: note } : {};
+      await client.query(
+        `UPDATE alert_events
+         SET status = 'ACKNOWLEDGED',
+             acknowledged_at = NOW(),
+             acknowledged_by = $3,
+             details = COALESCE(details, '{}'::jsonb) || $4::jsonb,
+             version = COALESCE(version, 1) + 1,
+             updated_at = NOW()
+         WHERE id = $1 AND organization_id = $2`,
+        [id, organizationId, userId, JSON.stringify(detailsPatch)]
+      );
+
+      await AlertEventHistoryModel.createEntry(
+        {
           alert_event_id: id,
-          old_status: 'ACTIVE',
+          organization_id: organizationId,
+          old_status: existing.status,
           new_status: 'ACKNOWLEDGED',
           action: 'ACKNOWLEDGED',
           actor_id: userId,
           actor_type: 'USER',
           note: note || 'Tiếp nhận xử lý cảnh báo',
-        });
-      } catch {
-        // Non-blocking history
-      }
+          old_value: { status: existing.status, acknowledged_by: existing.acknowledged_by || null },
+          new_value: { status: 'ACKNOWLEDGED', acknowledged_by: userId },
+        },
+        client
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
+
+    const updated = await AlertEventModel.findById(id, organizationId);
     if (!updated) {
-      throw ApiError.internal('Lỗi khi cập nhật trạng thái xác nhận sự kiện cảnh báo');
+      throw ApiError.internal('Lỗi khi tải lại sự kiện cảnh báo sau khi xác nhận');
     }
+
     try {
       broadcastTelemetryToUi({
         type: 'alert_updated',
@@ -349,42 +405,92 @@ export class AlertLifecycleService {
   }
 
   /**
-   * Manually resolve an alert
+   * Manually resolve an alert with concurrency guard, resolution_note & audit trail
    */
   public static async resolveAlertManually(
     id: string,
     organizationId: string,
     userId?: string,
-    note?: string
+    note?: string,
+    expectedVersion?: number
   ): Promise<IAlertEvent> {
-    const existing = await AlertEventModel.findById(id, organizationId);
-    if (!existing) {
-      throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (existing.status === 'RESOLVED') {
-      return existing;
-    }
+      const lockRes = await client.query(
+        `SELECT * FROM alert_events WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [id, organizationId]
+      );
+      if (lockRes.rows.length === 0) {
+        throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
+      }
 
-    const updated = await AlertEventModel.resolveEventById(id, organizationId, userId, note);
-    if (updated) {
-      try {
-        await AlertEventHistoryModel.createEntry({
+      const existing = lockRes.rows[0];
+      if (existing.status === 'RESOLVED') {
+        throw new ApiError(409, 'Sự kiện cảnh báo này đã được giải quyết (RESOLVED) trước đó');
+      }
+
+      const currentVersion = Number(existing.version || 1);
+      if (expectedVersion !== undefined && currentVersion !== expectedVersion) {
+        throw new ApiError(
+          409,
+          'Xung đột phiên bản: Cảnh báo đã bị thay đổi bởi thao tác khác. Vui lòng tải lại dữ liệu.'
+        );
+      }
+
+      const cleanNote = note?.trim() || null;
+      const detailsPatch = {
+        resolved_by: userId ? `USER_${userId}` : 'MANUAL',
+        resolution_note: cleanNote || 'Resolved by user',
+      };
+
+      await client.query(
+        `UPDATE alert_events
+         SET status = 'RESOLVED',
+             resolved_at = NOW(),
+             resolved_by = $3,
+             resolution_note = $4,
+             details = COALESCE(details, '{}'::jsonb) || $5::jsonb,
+             version = COALESCE(version, 1) + 1,
+             updated_at = NOW()
+         WHERE id = $1 AND organization_id = $2`,
+        [id, organizationId, userId || null, cleanNote, JSON.stringify(detailsPatch)]
+      );
+
+      await AlertEventHistoryModel.createEntry(
+        {
           alert_event_id: id,
+          organization_id: organizationId,
           old_status: existing.status,
           new_status: 'RESOLVED',
           action: 'RESOLVED',
           actor_id: userId,
           actor_type: 'USER',
-          note: note || 'Giải quyết cảnh báo thủ công từ giao diện',
-        });
-      } catch {
-        // Non-blocking history
-      }
+          note: cleanNote || 'Giải quyết cảnh báo thủ công từ giao diện',
+          old_value: { status: existing.status, resolved_by: existing.resolved_by || null },
+          new_value: {
+            status: 'RESOLVED',
+            resolved_by: userId || null,
+            resolution_note: cleanNote,
+          },
+        },
+        client
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
+
+    const updated = await AlertEventModel.findById(id, organizationId);
     if (!updated) {
-      throw ApiError.internal('Lỗi khi giải quyết sự kiện cảnh báo');
+      throw ApiError.internal('Lỗi khi tải lại sự kiện cảnh báo sau khi giải quyết');
     }
+
     try {
       broadcastTelemetryToUi({
         type: 'alert_updated',
@@ -398,6 +504,240 @@ export class AlertLifecycleService {
       // Non-blocking
     }
     return updated;
+  }
+
+  /**
+   * Assign or reassign an alert to an active organization member
+   */
+  public static async assignAlert(
+    id: string,
+    organizationId: string,
+    assignedTo: string,
+    actorId: string,
+    note?: string,
+    expectedVersion?: number
+  ): Promise<IAlertEvent> {
+    const memberCheck = await pool.query(
+      `SELECT u.id, u.full_name, u.email
+       FROM organization_members om
+       JOIN users u ON u.id = om.user_id
+       WHERE om.organization_id = $1
+         AND om.user_id = $2
+         AND om.status = 'ACTIVE'
+         AND u.status = 'ACTIVE'
+         AND u.deleted_at IS NULL
+       LIMIT 1`,
+      [organizationId, assignedTo]
+    );
+    if (memberCheck.rows.length === 0) {
+      throw ApiError.badRequest(
+        'Người dùng được phân công không tồn tại hoặc không thuộc tổ chức đang hoạt động'
+      );
+    }
+    const targetMember = memberCheck.rows[0];
+
+    let actionType: 'ASSIGNED' | 'REASSIGNED' = 'ASSIGNED';
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const lockRes = await client.query(
+        `SELECT ae.*, ua.full_name AS prev_assignee_name, ua.email AS prev_assignee_email
+         FROM alert_events ae
+         LEFT JOIN users ua ON ae.assigned_to = ua.id
+         WHERE ae.id = $1 AND ae.organization_id = $2
+         FOR UPDATE OF ae`,
+        [id, organizationId]
+      );
+      if (lockRes.rows.length === 0) {
+        throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
+      }
+
+      const existing = lockRes.rows[0];
+      const currentVersion = Number(existing.version || 1);
+      if (expectedVersion !== undefined && currentVersion !== expectedVersion) {
+        throw new ApiError(
+          409,
+          'Xung đột phiên bản: Cảnh báo đã bị thay đổi bởi thao tác khác. Vui lòng tải lại dữ liệu.'
+        );
+      }
+
+      actionType = existing.assigned_to ? 'REASSIGNED' : 'ASSIGNED';
+
+      await client.query(
+        `UPDATE alert_events
+         SET assigned_to = $3,
+             assigned_by = $4,
+             assigned_at = NOW(),
+             version = COALESCE(version, 1) + 1,
+             updated_at = NOW()
+         WHERE id = $1 AND organization_id = $2`,
+        [id, organizationId, assignedTo, actorId]
+      );
+
+      await AlertEventHistoryModel.createEntry(
+        {
+          alert_event_id: id,
+          organization_id: organizationId,
+          old_status: existing.status,
+          new_status: existing.status,
+          action: actionType,
+          actor_id: actorId,
+          actor_type: 'USER',
+          note:
+            note?.trim() ||
+            (actionType === 'REASSIGNED'
+              ? `Chuyển giao phụ trách sang ${targetMember.full_name || targetMember.email}`
+              : `Phân công phụ trách cho ${targetMember.full_name || targetMember.email}`),
+          old_value: {
+            assigned_to: existing.assigned_to || null,
+            assignee_name: existing.prev_assignee_name || existing.prev_assignee_email || null,
+          },
+          new_value: {
+            assigned_to: assignedTo,
+            assignee_name: targetMember.full_name || targetMember.email,
+          },
+        },
+        client
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const updated = await AlertEventModel.findById(id, organizationId);
+    if (!updated) {
+      throw ApiError.internal('Lỗi khi tải lại cảnh báo sau khi phân công');
+    }
+
+    try {
+      broadcastTelemetryToUi({
+        type: 'alert_updated',
+        action: actionType,
+        organization_id: organizationId,
+        alert_id: updated.id,
+        status: updated.status,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // Non-blocking
+    }
+    return updated;
+  }
+
+  /**
+   * Unassign an alert and record audit trail
+   */
+  public static async unassignAlert(
+    id: string,
+    organizationId: string,
+    actorId: string,
+    note?: string,
+    expectedVersion?: number
+  ): Promise<IAlertEvent> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const lockRes = await client.query(
+        `SELECT ae.*, ua.full_name AS prev_assignee_name, ua.email AS prev_assignee_email
+         FROM alert_events ae
+         LEFT JOIN users ua ON ae.assigned_to = ua.id
+         WHERE ae.id = $1 AND ae.organization_id = $2
+         FOR UPDATE OF ae`,
+        [id, organizationId]
+      );
+      if (lockRes.rows.length === 0) {
+        throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
+      }
+
+      const existing = lockRes.rows[0];
+      const currentVersion = Number(existing.version || 1);
+      if (expectedVersion !== undefined && currentVersion !== expectedVersion) {
+        throw new ApiError(
+          409,
+          'Xung đột phiên bản: Cảnh báo đã bị thay đổi bởi thao tác khác. Vui lòng tải lại dữ liệu.'
+        );
+      }
+
+      await client.query(
+        `UPDATE alert_events
+         SET assigned_to = NULL,
+             assigned_by = $3,
+             assigned_at = NULL,
+             version = COALESCE(version, 1) + 1,
+             updated_at = NOW()
+         WHERE id = $1 AND organization_id = $2`,
+        [id, organizationId, actorId]
+      );
+
+      await AlertEventHistoryModel.createEntry(
+        {
+          alert_event_id: id,
+          organization_id: organizationId,
+          old_status: existing.status,
+          new_status: existing.status,
+          action: 'UNASSIGNED',
+          actor_id: actorId,
+          actor_type: 'USER',
+          note: note?.trim() || 'Hủy phân công người phụ trách',
+          old_value: {
+            assigned_to: existing.assigned_to || null,
+            assignee_name: existing.prev_assignee_name || existing.prev_assignee_email || null,
+          },
+          new_value: {
+            assigned_to: null,
+            assignee_name: null,
+          },
+        },
+        client
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const updated = await AlertEventModel.findById(id, organizationId);
+    if (!updated) {
+      throw ApiError.internal('Lỗi khi tải lại cảnh báo sau khi hủy phân công');
+    }
+
+    try {
+      broadcastTelemetryToUi({
+        type: 'alert_updated',
+        action: 'UNASSIGNED',
+        organization_id: organizationId,
+        alert_id: updated.id,
+        status: updated.status,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // Non-blocking
+    }
+    return updated;
+  }
+
+  /**
+   * Get paginated audit trail of an alert event (PBI22 Task 4.3)
+   */
+  public static async getAlertAuditTrail(
+    alertEventId: string,
+    organizationId: string,
+    options: { page?: number; limit?: number; order?: string } = {}
+  ) {
+    const alert = await AlertEventModel.findById(alertEventId, organizationId);
+    if (!alert) {
+      throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
+    }
+    return AlertEventHistoryModel.getAuditTrail(alertEventId, options);
   }
 
   /**
@@ -421,9 +761,6 @@ export class AlertLifecycleService {
     return event;
   }
 
-  /**
-   * Get alert summary metrics for dashboard with organization isolation
-   */
   /**
    * Get paginated alert history with full filters (PBI22 Task 4.2)
    */
