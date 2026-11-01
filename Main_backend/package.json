@@ -40,7 +40,9 @@
     "test:logs-isolation": "tsx --test src/test/logsSecurityAndLoad.test.ts",
     "test:k8s-events": "tsx --test --test-concurrency=1 src/test/kubernetesEvents.test.ts",
     "test:apm": "tsx --test src/test/apmApi.test.ts",
-    "test:role-security": "tsx --test src/test/roleAssignmentSecurity.test.ts"
+    "test:role-security": "tsx --test src/test/roleAssignmentSecurity.test.ts",
+    "worker:rule-engine": "tsx src/workers/ruleEngine.worker.ts",
+    "test:rule-engine": "tsx --test src/test/ruleEngineEvaluation.test.ts"
   },
   "keywords": [
     "nodejs",

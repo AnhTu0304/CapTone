@@ -307,15 +307,20 @@ export class AlertRuleModel {
    * Retrieve active rules for Evaluation Engine
    */
   public static async findActiveRules(
-    organizationId: string,
+    organizationId?: string,
     clusterId?: string,
     metricType?: AlertMetricType,
     client?: PoolClient
   ): Promise<IAlertRule[]> {
     const db = client || pool;
-    const conditions = ['ar.organization_id = $1', 'ar.enabled = true'];
-    const params: any[] = [organizationId];
-    let paramIndex = 2;
+    const conditions = ['ar.enabled = true'];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (organizationId) {
+      conditions.push(`ar.organization_id = $${paramIndex++}`);
+      params.push(organizationId);
+    }
 
     if (clusterId) {
       conditions.push(`(ar.cluster_id = $${paramIndex++} OR ar.cluster_id IS NULL)`);

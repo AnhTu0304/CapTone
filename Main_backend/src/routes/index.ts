@@ -19,6 +19,7 @@ import { adminRoutes } from './admin.routes';
 import { reportRoutes } from './report.routes';
 import { statisticsRoutes } from './statistics.routes';
 import { alertRuleRoutes } from './alertRule.routes';
+import { alertEventRoutes } from './alertEvent.routes';
 
 const apiRouter = Router();
 
@@ -43,5 +44,6 @@ apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/statistics', statisticsRoutes);
 apiRouter.use('/alert-rules', alertRuleRoutes);
+apiRouter.use('/alert-events', alertEventRoutes);
 
 export default apiRouter;

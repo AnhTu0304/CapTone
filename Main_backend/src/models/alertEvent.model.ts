@@ -1,0 +1,492 @@
+import { PoolClient } from 'pg';
+import { pool } from '../config/database';
+import { AlertEventCategory, AlertEventStatus } from '../schemas/alertEvent.schema';
+import { AlertSeverity } from '../schemas/alertRule.schema';
+
+export interface IAlertEvent {
+  id: string;
+  organization_id: string;
+  cluster_id?: string | null;
+  rule_id?: string | null;
+  rule_name: string;
+  category: AlertEventCategory;
+  metric_type: string;
+  resource_type: string;
+  resource_id: string;
+  severity: AlertSeverity;
+  status: AlertEventStatus;
+  observed_value?: number | null;
+  threshold_value?: number | null;
+  unit?: string | null;
+  message: string;
+  details?: Record<string, any>;
+  first_detected_at: Date;
+  last_seen_at: Date;
+  resolved_at?: Date | null;
+  acknowledged_at?: Date | null;
+  acknowledged_by?: string | null;
+  created_at: Date;
+  updated_at: Date;
+  // Joined fields
+  cluster_name?: string | null;
+  acknowledger_name?: string | null;
+  acknowledger_email?: string | null;
+}
+
+export interface IAlertEventFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  category?: AlertEventCategory;
+  status?: AlertEventStatus;
+  severity?: AlertSeverity;
+  metric_type?: string;
+  resource_type?: string;
+  resource_id?: string;
+  cluster_id?: string;
+  rule_id?: string;
+  start_time?: string;
+  end_time?: string;
+  sort_by?: string;
+  order?: 'asc' | 'desc';
+}
+
+export interface IPaginatedAlertEvents {
+  items: IAlertEvent[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+export class AlertEventModel {
+  /**
+   * Format raw SQL row to typed IAlertEvent
+   */
+  private static formatRow(row: any): IAlertEvent {
+    return {
+      ...row,
+      observed_value: row.observed_value !== null ? Number(row.observed_value) : null,
+      threshold_value: row.threshold_value !== null ? Number(row.threshold_value) : null,
+      details: typeof row.details === 'object' && row.details !== null ? row.details : {},
+    };
+  }
+
+  /**
+   * Create or update open alert event (Deduplication)
+   * If an active/acknowledged alert event already exists for this rule & resource, update last_seen_at & observed_value.
+   * If none exists, insert a new active event.
+   */
+  public static async createOrUpdateOpenEvent(
+    data: {
+      organization_id: string;
+      cluster_id?: string | null;
+      rule_id?: string | null;
+      rule_name: string;
+      category: AlertEventCategory;
+      metric_type: string;
+      resource_type: string;
+      resource_id: string;
+      severity: AlertSeverity;
+      observed_value?: number | null;
+      threshold_value?: number | null;
+      unit?: string | null;
+      message: string;
+      details?: Record<string, any>;
+    },
+    client?: PoolClient
+  ): Promise<{ event: IAlertEvent; isNew: boolean }> {
+    const db = client || pool;
+
+    // First check if an open event already exists
+    const findQuery = `
+      SELECT id, first_detected_at, status
+      FROM alert_events
+      WHERE organization_id = $1
+        AND COALESCE(cluster_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND COALESCE(rule_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($3, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND resource_type = $4
+        AND resource_id = $5
+        AND metric_type = $6
+        AND status != 'RESOLVED'
+      LIMIT 1
+      FOR UPDATE;
+    `;
+
+    const existingRes = await db.query(findQuery, [
+      data.organization_id,
+      data.cluster_id || null,
+      data.rule_id || null,
+      data.resource_type,
+      data.resource_id,
+      data.metric_type,
+    ]);
+
+    if (existingRes.rows.length > 0) {
+      const existingId = existingRes.rows[0].id;
+      const updateQuery = `
+        UPDATE alert_events
+        SET last_seen_at = NOW(),
+            observed_value = $1,
+            threshold_value = $2,
+            message = $3,
+            details = $4,
+            updated_at = NOW()
+        WHERE id = $5
+        RETURNING *;
+      `;
+      const updateRes = await db.query(updateQuery, [
+        data.observed_value ?? null,
+        data.threshold_value ?? null,
+        data.message,
+        JSON.stringify(data.details || {}),
+        existingId,
+      ]);
+      return { event: this.formatRow(updateRes.rows[0]), isNew: false };
+    }
+
+    // Insert new event with partial unique conflict fallback
+    const insertQuery = `
+      INSERT INTO alert_events (
+        organization_id,
+        cluster_id,
+        rule_id,
+        rule_name,
+        category,
+        metric_type,
+        resource_type,
+        resource_id,
+        severity,
+        status,
+        observed_value,
+        threshold_value,
+        unit,
+        message,
+        details,
+        first_detected_at,
+        last_seen_at,
+        created_at,
+        updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, $13, $14, NOW(), NOW(), NOW(), NOW())
+      ON CONFLICT (
+        organization_id,
+        COALESCE(cluster_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        COALESCE(rule_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        resource_type,
+        resource_id,
+        metric_type
+      ) WHERE status != 'RESOLVED'
+      DO UPDATE SET
+        last_seen_at = NOW(),
+        observed_value = EXCLUDED.observed_value,
+        threshold_value = EXCLUDED.threshold_value,
+        message = EXCLUDED.message,
+        details = EXCLUDED.details,
+        updated_at = NOW()
+      RETURNING *;
+    `;
+
+    const insertParams = [
+      data.organization_id,
+      data.cluster_id || null,
+      data.rule_id || null,
+      data.rule_name,
+      data.category,
+      data.metric_type,
+      data.resource_type,
+      data.resource_id,
+      data.severity,
+      data.observed_value ?? null,
+      data.threshold_value ?? null,
+      data.unit || null,
+      data.message,
+      JSON.stringify(data.details || {}),
+    ];
+
+    const insertRes = await db.query(insertQuery, insertParams);
+    const row = insertRes.rows[0];
+    const isNew = Math.abs(new Date(row.created_at).getTime() - new Date(row.updated_at).getTime()) < 1000;
+    return { event: this.formatRow(row), isNew };
+  }
+
+  /**
+   * Auto-resolve an open alert event when metrics/state return to normal
+   */
+  public static async resolveOpenEvent(
+    data: {
+      organization_id: string;
+      cluster_id?: string | null;
+      rule_id?: string | null;
+      resource_type: string;
+      resource_id: string;
+      metric_type: string;
+      resolution_details?: Record<string, any>;
+    },
+    client?: PoolClient
+  ): Promise<IAlertEvent | null> {
+    const db = client || pool;
+    const query = `
+      UPDATE alert_events
+      SET status = 'RESOLVED',
+          resolved_at = NOW(),
+          updated_at = NOW(),
+          details = details || $7::jsonb
+      WHERE organization_id = $1
+        AND COALESCE(cluster_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND COALESCE(rule_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($3, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND resource_type = $4
+        AND resource_id = $5
+        AND metric_type = $6
+        AND status != 'RESOLVED'
+      RETURNING *;
+    `;
+    const params = [
+      data.organization_id,
+      data.cluster_id || null,
+      data.rule_id || null,
+      data.resource_type,
+      data.resource_id,
+      data.metric_type,
+      JSON.stringify(data.resolution_details || { resolved_by: 'RULE_ENGINE_AUTO' }),
+    ];
+
+    const res = await db.query(query, params);
+    if (res.rows.length === 0) return null;
+    return this.formatRow(res.rows[0]);
+  }
+
+  /**
+   * Find alert event by ID with tenant guard
+   */
+  public static async findById(
+    id: string,
+    organizationId?: string,
+    client?: PoolClient
+  ): Promise<IAlertEvent | null> {
+    const db = client || pool;
+    let query = `
+      SELECT 
+        ae.*,
+        c.name AS cluster_name,
+        u.full_name AS acknowledger_name,
+        u.email AS acknowledger_email
+      FROM alert_events ae
+      LEFT JOIN clusters c ON ae.cluster_id = c.id
+      LEFT JOIN users u ON ae.acknowledged_by = u.id
+      WHERE ae.id = $1
+    `;
+    const params: any[] = [id];
+
+    if (organizationId) {
+      query += ' AND ae.organization_id = $2';
+      params.push(organizationId);
+    }
+
+    const res = await db.query(query, params);
+    if (res.rows.length === 0) return null;
+    return this.formatRow(res.rows[0]);
+  }
+
+  /**
+   * Find paginated alert events with filters
+   */
+  public static async findByOrg(
+    organizationId: string,
+    filters: IAlertEventFilters = {},
+    client?: PoolClient
+  ): Promise<IPaginatedAlertEvents> {
+    const db = client || pool;
+    const page = Math.max(1, filters.page || 1);
+    const limit = Math.min(100, Math.max(1, filters.limit || 20));
+    const offset = (page - 1) * limit;
+
+    const conditions: string[] = ['ae.organization_id = $1'];
+    const params: any[] = [organizationId];
+    let paramIndex = 2;
+
+    if (filters.cluster_id) {
+      if (filters.cluster_id === 'null' || filters.cluster_id === 'org_wide') {
+        conditions.push('ae.cluster_id IS NULL');
+      } else {
+        conditions.push(`ae.cluster_id = $${paramIndex++}`);
+        params.push(filters.cluster_id);
+      }
+    }
+
+    if (filters.rule_id) {
+      conditions.push(`ae.rule_id = $${paramIndex++}`);
+      params.push(filters.rule_id);
+    }
+
+    if (filters.category) {
+      conditions.push(`ae.category = $${paramIndex++}`);
+      params.push(filters.category);
+    }
+
+    if (filters.status) {
+      conditions.push(`ae.status = $${paramIndex++}`);
+      params.push(filters.status);
+    }
+
+    if (filters.severity) {
+      conditions.push(`ae.severity = $${paramIndex++}`);
+      params.push(filters.severity);
+    }
+
+    if (filters.metric_type) {
+      conditions.push(`ae.metric_type = $${paramIndex++}`);
+      params.push(filters.metric_type);
+    }
+
+    if (filters.resource_type) {
+      conditions.push(`ae.resource_type = $${paramIndex++}`);
+      params.push(filters.resource_type);
+    }
+
+    if (filters.resource_id) {
+      conditions.push(`ae.resource_id = $${paramIndex++}`);
+      params.push(filters.resource_id);
+    }
+
+    if (filters.start_time) {
+      conditions.push(`ae.last_seen_at >= $${paramIndex++}`);
+      params.push(new Date(filters.start_time));
+    }
+
+    if (filters.end_time) {
+      conditions.push(`ae.last_seen_at <= $${paramIndex++}`);
+      params.push(new Date(filters.end_time));
+    }
+
+    if (filters.search) {
+      conditions.push(
+        `(ae.rule_name ILIKE $${paramIndex} OR ae.message ILIKE $${paramIndex} OR ae.resource_id ILIKE $${paramIndex})`
+      );
+      params.push(`%${filters.search.trim()}%`);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Count total matching
+    const countQuery = `SELECT COUNT(*) AS total FROM alert_events ae WHERE ${whereClause}`;
+    const countRes = await db.query(countQuery, params);
+    const total = parseInt(countRes.rows[0].total, 10);
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // Sorting
+    const allowedSortFields: Record<string, string> = {
+      first_detected_at: 'ae.first_detected_at',
+      last_seen_at: 'ae.last_seen_at',
+      resolved_at: 'ae.resolved_at',
+      severity: 'ae.severity',
+      status: 'ae.status',
+      created_at: 'ae.created_at',
+    };
+    const sortCol = allowedSortFields[filters.sort_by || 'last_seen_at'] || 'ae.last_seen_at';
+    const sortOrder = filters.order === 'asc' ? 'ASC' : 'DESC';
+
+    const dataQuery = `
+      SELECT 
+        ae.*,
+        c.name AS cluster_name,
+        u.full_name AS acknowledger_name,
+        u.email AS acknowledger_email
+      FROM alert_events ae
+      LEFT JOIN clusters c ON ae.cluster_id = c.id
+      LEFT JOIN users u ON ae.acknowledged_by = u.id
+      WHERE ${whereClause}
+      ORDER BY ${sortCol} ${sortOrder}
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    const dataRes = await db.query(dataQuery, [...params, limit, offset]);
+
+    return {
+      items: dataRes.rows.map((row) => this.formatRow(row)),
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: totalPages,
+      },
+    };
+  }
+
+  /**
+   * Acknowledge an active alert event
+   */
+  public static async acknowledgeEvent(
+    id: string,
+    organizationId: string,
+    userId: string,
+    note?: string,
+    client?: PoolClient
+  ): Promise<IAlertEvent | null> {
+    const db = client || pool;
+    const query = `
+      UPDATE alert_events
+      SET status = 'ACKNOWLEDGED',
+          acknowledged_at = NOW(),
+          acknowledged_by = $3,
+          details = details || $4::jsonb,
+          updated_at = NOW()
+      WHERE id = $1 AND organization_id = $2 AND status = 'ACTIVE'
+      RETURNING *;
+    `;
+    const detailsPatch = note ? { acknowledge_note: note } : {};
+    const res = await db.query(query, [id, organizationId, userId, JSON.stringify(detailsPatch)]);
+    if (res.rows.length === 0) return null;
+    return this.formatRow(res.rows[0]);
+  }
+
+  /**
+   * Manually resolve an alert event
+   */
+  public static async resolveEventById(
+    id: string,
+    organizationId: string,
+    userId?: string,
+    note?: string,
+    client?: PoolClient
+  ): Promise<IAlertEvent | null> {
+    const db = client || pool;
+    const query = `
+      UPDATE alert_events
+      SET status = 'RESOLVED',
+          resolved_at = NOW(),
+          details = details || $3::jsonb,
+          updated_at = NOW()
+      WHERE id = $1 AND organization_id = $2 AND status != 'RESOLVED'
+      RETURNING *;
+    `;
+    const detailsPatch = {
+      resolved_by: userId ? `USER_${userId}` : 'MANUAL',
+      resolution_note: note || 'Resolved by user',
+    };
+    const res = await db.query(query, [id, organizationId, JSON.stringify(detailsPatch)]);
+    if (res.rows.length === 0) return null;
+    return this.formatRow(res.rows[0]);
+  }
+
+  /**
+   * Find active / open alert events for a specific rule
+   */
+  public static async findOpenEventsByRule(
+    ruleId: string,
+    organizationId: string,
+    client?: PoolClient
+  ): Promise<IAlertEvent[]> {
+    const db = client || pool;
+    const query = `
+      SELECT ae.*
+      FROM alert_events ae
+      WHERE ae.rule_id = $1 AND ae.organization_id = $2 AND ae.status != 'RESOLVED'
+      ORDER BY ae.last_seen_at DESC
+    `;
+    const res = await db.query(query, [ruleId, organizationId]);
+    return res.rows.map((r) => this.formatRow(r));
+  }
+}

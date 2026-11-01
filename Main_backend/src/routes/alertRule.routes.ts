@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AlertRuleController } from '../controllers/alertRule.controller';
+import { AlertEventController } from '../controllers/alertEvent.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { requireRoles } from '../middlewares/rbac.middleware';
 
@@ -7,6 +8,42 @@ export const alertRuleRoutes = Router();
 
 // Toàn bộ API Alert Rule yêu cầu đăng nhập
 alertRuleRoutes.use(authenticateToken);
+
+// --- Sub-resource: Alert Events & Evaluation ---
+// POST /api/v1/alert-rules/evaluate - Kích hoạt đánh giá quy tắc
+alertRuleRoutes.post(
+  '/evaluate',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.triggerEvaluation
+);
+
+// GET /api/v1/alert-rules/events - Danh sách sự kiện cảnh báo
+alertRuleRoutes.get(
+  '/events',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.list
+);
+
+// GET /api/v1/alert-rules/events/:id - Xem chi tiết sự kiện cảnh báo
+alertRuleRoutes.get(
+  '/events/:id',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getById
+);
+
+// PATCH /api/v1/alert-rules/events/:id/acknowledge - Xác nhận sự kiện cảnh báo
+alertRuleRoutes.patch(
+  '/events/:id/acknowledge',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.acknowledge
+);
+
+// PATCH /api/v1/alert-rules/events/:id/resolve - Giải quyết sự kiện cảnh báo
+alertRuleRoutes.patch(
+  '/events/:id/resolve',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.resolve
+);
 
 // 1. GET /api/v1/alert-rules - Danh sách cấu hình cảnh báo
 alertRuleRoutes.get(
