@@ -20,3 +20,5 @@ export * from './organizationRole.model';
 export * from './organizationMember.model';
 export * from './healingAction.model';
 export * from './aiModelRegistry.model';
+export * from './alertRule.model';
+export * from './alertEvent.model';

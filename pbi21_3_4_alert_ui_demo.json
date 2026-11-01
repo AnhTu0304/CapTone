@@ -1,0 +1,184 @@
+{
+  "fixture_id": "PBI21_3_4_ALERT_UI_DEMO_V1",
+  "purpose": "Fixture de trigger va kiem thu giao dien Alert tren Frontend",
+  "target": {
+    "organization_slug": "acme-cloud-corp",
+    "cluster_name": "k8s-pods-cluster-v2",
+    "namespace": "production"
+  },
+  "scenarios": [
+    {
+      "scenario_id": "CPU-HIGH-001",
+      "category": "RESOURCE",
+      "title": "High CPU Usage on worker-node-01",
+      "severity": "WARNING",
+      "rule": {
+        "name": "Demo Rule - High CPU Usage",
+        "description": "Canh bao khi CPU tren node vuot 85% trong 60 giay",
+        "metric_type": "CPU",
+        "operator": "GT",
+        "threshold": 85,
+        "unit": "PERCENT",
+        "evaluation_window_seconds": 60,
+        "duration_seconds": 60,
+        "cooldown_seconds": 300,
+        "is_enabled": true
+      },
+      "resource": {
+        "resource_type": "NODE",
+        "resource_name": "worker-node-01",
+        "cluster_name": "k8s-pods-cluster-v2",
+        "namespace": null
+      },
+      "telemetry_points": [
+        {
+          "offset_seconds": -90,
+          "cpu_usage_percent": 88.4,
+          "memory_usage_percent": 64.2,
+          "disk_usage_percent": 52.1,
+          "network_rx_bytes_per_sec": 842000,
+          "network_tx_bytes_per_sec": 615000
+        },
+        {
+          "offset_seconds": -60,
+          "cpu_usage_percent": 91.2,
+          "memory_usage_percent": 66.0,
+          "disk_usage_percent": 52.2,
+          "network_rx_bytes_per_sec": 912000,
+          "network_tx_bytes_per_sec": 702000
+        },
+        {
+          "offset_seconds": -30,
+          "cpu_usage_percent": 94.6,
+          "memory_usage_percent": 67.5,
+          "disk_usage_percent": 52.3,
+          "network_rx_bytes_per_sec": 980000,
+          "network_tx_bytes_per_sec": 745000
+        },
+        {
+          "offset_seconds": 0,
+          "cpu_usage_percent": 96.1,
+          "memory_usage_percent": 68.1,
+          "disk_usage_percent": 52.3,
+          "network_rx_bytes_per_sec": 1030000,
+          "network_tx_bytes_per_sec": 790000
+        }
+      ],
+      "expected_alert": {
+        "status": "ACTIVE",
+        "severity": "WARNING",
+        "metric_value": 96.1,
+        "threshold": 85,
+        "message_contains": [
+          "worker-node-01",
+          "CPU",
+          "85"
+        ]
+      }
+    },
+    {
+      "scenario_id": "K8S-CRASH-001",
+      "category": "KUBERNETES",
+      "title": "Pod CrashLoopBackOff in production/orders-api",
+      "severity": "CRITICAL",
+      "rule": {
+        "name": "Demo Rule - Pod CrashLoopBackOff",
+        "description": "Canh bao khan cap khi Pod bi CrashLoopBackOff hoac restart >= 4 lan",
+        "metric_type": "K8S_POD_CRASHLOOP",
+        "operator": "GTE",
+        "threshold": 4,
+        "unit": "COUNT",
+        "evaluation_window_seconds": 120,
+        "duration_seconds": 0,
+        "cooldown_seconds": 300,
+        "is_enabled": true
+      },
+      "resource": {
+        "resource_type": "POD",
+        "resource_name": "orders-api-7d9c8b6f4-x9k2m",
+        "cluster_name": "k8s-pods-cluster-v2",
+        "namespace": "production"
+      },
+      "kubernetes_signal": {
+        "pod_phase": "Running",
+        "container_state": "Waiting",
+        "waiting_reason": "CrashLoopBackOff",
+        "restart_count": 6,
+        "last_termination_reason": "OOMKilled",
+        "exit_code": 137,
+        "event_reason": "BackOff",
+        "event_message": "Back-off restarting failed container orders-api in pod orders-api-7d9c8b6f4-x9k2m_production"
+      },
+      "expected_alert": {
+        "status": "ACTIVE",
+        "severity": "CRITICAL",
+        "metric_value": 6,
+        "threshold": 4,
+        "message_contains": [
+          "orders-api-7d9c8b6f4-x9k2m",
+          "CrashLoopBackOff"
+        ]
+      }
+    },
+    {
+      "scenario_id": "APM-5XX-001",
+      "category": "APM",
+      "title": "High HTTP 5xx Error Rate on checkout-service",
+      "severity": "CRITICAL",
+      "rule": {
+        "name": "Demo Rule - High APM 5xx Error Rate",
+        "description": "Canh bao khi ty le loi HTTP 5xx vuot 5% trong 60 giay",
+        "metric_type": "APM_ERROR_RATE",
+        "operator": "GT",
+        "threshold": 5,
+        "unit": "PERCENT",
+        "evaluation_window_seconds": 60,
+        "duration_seconds": 60,
+        "cooldown_seconds": 300,
+        "is_enabled": true
+      },
+      "resource": {
+        "resource_type": "SERVICE",
+        "resource_name": "checkout-service",
+        "cluster_name": "k8s-pods-cluster-v2",
+        "namespace": "production"
+      },
+      "apm_points": [
+        {
+          "offset_seconds": -60,
+          "request_rate_rps": 120,
+          "error_rate_percent": 7.8,
+          "http_5xx_count": 28,
+          "p95_latency_ms": 1420,
+          "p99_latency_ms": 2380
+        },
+        {
+          "offset_seconds": -30,
+          "request_rate_rps": 135,
+          "error_rate_percent": 9.4,
+          "http_5xx_count": 38,
+          "p95_latency_ms": 1680,
+          "p99_latency_ms": 2790
+        },
+        {
+          "offset_seconds": 0,
+          "request_rate_rps": 142,
+          "error_rate_percent": 11.2,
+          "http_5xx_count": 47,
+          "p95_latency_ms": 1890,
+          "p99_latency_ms": 3120
+        }
+      ],
+      "expected_alert": {
+        "status": "ACTIVE",
+        "severity": "CRITICAL",
+        "metric_value": 11.2,
+        "threshold": 5,
+        "message_contains": [
+          "checkout-service",
+          "5"
+        ]
+      }
+    }
+  ]
+}

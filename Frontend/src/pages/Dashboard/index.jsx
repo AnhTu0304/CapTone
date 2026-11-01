@@ -22,6 +22,7 @@ import NotificationsPage from './Notifications/NotificationsPage';
 import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
 import SettingsPage from './Settings/SettingsPage';
+import AlertsPage from './Alerts/AlertsPage';
 
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
@@ -52,6 +53,8 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         label = 'Giám Sát APM';
       } else if (part === 'incidents') {
         label = 'Quản Lý Sự Cố & RCA';
+      } else if (part === 'alerts' || part === 'alert-rules') {
+        label = 'Cảnh Báo & Ngưỡng';
       }
 
       crumbs.push({
@@ -102,6 +105,14 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     }
 
     // 4. Monitoring
+    if (
+      path === '/dashboard/alerts' ||
+      path === '/dashboard/monitoring/alerts' ||
+      path === '/dashboard/alert-rules' ||
+      path.startsWith('/dashboard/alerts/')
+    ) {
+      return <AlertsPage onNavigate={onNavigate} />;
+    }
     if (path === '/dashboard/monitoring/apm') {
       return <ApmPage onNavigate={onNavigate} />;
     }

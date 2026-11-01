@@ -1,0 +1,58 @@
+import { Router } from 'express';
+import { AlertEventController } from '../controllers/alertEvent.controller';
+import { authenticateToken } from '../middlewares/auth.middleware';
+import { requireRoles } from '../middlewares/rbac.middleware';
+
+export const alertEventRoutes = Router();
+
+// All alert event routes require authentication
+alertEventRoutes.use(authenticateToken);
+
+// 1. POST /api/v1/alert-events/evaluate - Manually trigger rule engine evaluation cycle (DevOps/Admin)
+alertEventRoutes.post(
+  '/evaluate',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.triggerEvaluation
+);
+
+// 1b. POST /api/v1/alerts/demo-ingest - Dev/Test fixture telemetry ingestion & evaluation adapter
+alertEventRoutes.post(
+  '/demo-ingest',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.demoIngest
+);
+
+// 2. GET /api/v1/alert-events - List alert events with pagination & filters
+alertEventRoutes.get(
+  '/',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.list
+);
+
+// 2b. GET /api/v1/alert-events/summary - Dashboard alert summary metrics
+alertEventRoutes.get(
+  '/summary',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getSummary
+);
+
+// 3. GET /api/v1/alert-events/:id - Get alert event details by ID
+alertEventRoutes.get(
+  '/:id',
+  requireRoles('VIEWER', 'USER', 'DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.getById
+);
+
+// 4. PATCH /api/v1/alert-events/:id/acknowledge - Acknowledge active alert event
+alertEventRoutes.patch(
+  '/:id/acknowledge',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.acknowledge
+);
+
+// 5. PATCH /api/v1/alert-events/:id/resolve - Manually resolve alert event
+alertEventRoutes.patch(
+  '/:id/resolve',
+  requireRoles('DEVOPS', 'SME_OWNER', 'ADMIN', 'SUPER_ADMIN'),
+  AlertEventController.resolve
+);
