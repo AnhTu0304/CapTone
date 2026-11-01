@@ -40,7 +40,7 @@ const TIME_RANGE_PRESETS = [
   { key: '7d', label: '7 ngày qua', ms: 7 * 24 * 60 * 60 * 1000 },
 ];
 
-export const AlertsPage = () => {
+export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
   const dashboard = useDashboard();
   const auth = useAuth();
 
@@ -68,7 +68,7 @@ export const AlertsPage = () => {
   }, [effectiveRole]);
 
   // Active View Tab: 'EVENTS' | 'RULES'
-  const [activeTab, setActiveTab] = useState('EVENTS');
+  const [activeTab, setActiveTab] = useState(initialTab || 'EVENTS');
 
   // Summary State
   const [summary, setSummary] = useState({
@@ -95,6 +95,40 @@ export const AlertsPage = () => {
   const [isLoadingRules, setIsLoadingRules] = useState(false);
   const [rulesError, setRulesError] = useState(null);
   const [ruleMetadata, setRuleMetadata] = useState(DEFAULT_RULE_METADATA);
+
+  // ==========================================
+  // [S5][PBI22 Task 4.1 & 4.2] Alert History State
+  // ==========================================
+  const [historyAlerts, setHistoryAlerts] = useState([]);
+  const [historyPagination, setHistoryPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    total_pages: 1,
+  });
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [historySummary, setHistorySummary] = useState({
+    total_alerts: 0,
+    critical_alerts: 0,
+    warning_alerts: 0,
+    info_alerts: 0,
+    resolved_alerts: 0,
+  });
+
+  // History Filters
+  const [historySearch, setHistorySearch] = useState('');
+  const debouncedHistorySearch = useDebounce(historySearch, 300);
+  const [historySeverity, setHistorySeverity] = useState('ALL');
+  const [historyStatus, setHistoryStatus] = useState('ALL');
+  const [historyCluster, setHistoryCluster] = useState('ALL');
+  const [historyResourceType, setHistoryResourceType] = useState('ALL');
+  const [historyTimePreset, setHistoryTimePreset] = useState('ALL');
+  const [historyStartDate, setHistoryStartDate] = useState('');
+  const [historyEndDate, setHistoryEndDate] = useState('');
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
+
 
   // Filter States (Events)
   const [searchQuery, setSearchQuery] = useState('');
@@ -247,6 +281,97 @@ export const AlertsPage = () => {
   useEffect(() => {
     fetchRulesAndMetadata();
   }, [fetchRulesAndMetadata, currentOrg?.id]);
+
+  // Fetch Alert History & Summary [S5][PBI22 Task 4.2]
+  const fetchAlertHistoryAndSummary = useCallback(async () => {
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      let startIso = undefined;
+      let endIso = undefined;
+
+      if (historyTimePreset !== 'ALL' && historyTimePreset !== 'CUSTOM') {
+        const preset = TIME_RANGE_PRESETS.find((p) => p.key === historyTimePreset);
+        if (preset?.ms) {
+          startIso = new Date(Date.now() - preset.ms).toISOString();
+        }
+      } else if (historyTimePreset === 'CUSTOM') {
+        if (historyStartDate) startIso = new Date(historyStartDate).toISOString();
+        if (historyEndDate) endIso = new Date(historyEndDate).toISOString();
+      }
+
+      const queryParams = {
+        page: historyPage,
+        limit: historyPageSize,
+        search: debouncedHistorySearch || undefined,
+        severity: historySeverity !== 'ALL' ? historySeverity : undefined,
+        status: historyStatus !== 'ALL' ? historyStatus : undefined,
+        clusterId: historyCluster !== 'ALL' ? historyCluster : undefined,
+        resourceType: historyResourceType !== 'ALL' ? historyResourceType : undefined,
+        startDate: startIso,
+        endDate: endIso,
+        sortBy: 'first_detected_at',
+        sortOrder: 'desc',
+      };
+
+      const summaryParams = {
+        clusterId: historyCluster !== 'ALL' ? historyCluster : undefined,
+        startDate: startIso,
+        endDate: endIso,
+      };
+
+      const [summaryRes, historyRes] = await Promise.all([
+        alertService.getAlertHistorySummary(summaryParams).catch(() => null),
+        alertService.getAlertHistory(queryParams),
+      ]);
+
+      if (summaryRes) {
+        setHistorySummary({
+          total_alerts: Number(summaryRes.total_alerts || 0),
+          critical_alerts: Number(summaryRes.critical_alerts || 0),
+          warning_alerts: Number(summaryRes.warning_alerts || 0),
+          info_alerts: Number(summaryRes.info_alerts || 0),
+          resolved_alerts: Number(summaryRes.resolved_alerts || 0),
+        });
+      }
+
+      if (historyRes) {
+        setHistoryAlerts(historyRes.items || []);
+        if (historyRes.pagination) {
+          setHistoryPagination({
+            page: Number(historyRes.pagination.page || 1),
+            limit: Number(historyRes.pagination.limit || 10),
+            total: Number(historyRes.pagination.total || 0),
+            total_pages: Number(historyRes.pagination.total_pages || 1),
+          });
+        }
+      }
+    } catch (err) {
+      if (!err?.isAborted) {
+        setHistoryError(err.message || 'Không thể tải lịch sử cảnh báo');
+      }
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [
+    historyPage,
+    historyPageSize,
+    debouncedHistorySearch,
+    historySeverity,
+    historyStatus,
+    historyCluster,
+    historyResourceType,
+    historyTimePreset,
+    historyStartDate,
+    historyEndDate,
+  ]);
+
+  useEffect(() => {
+    if (activeTab === 'HISTORY') {
+      fetchAlertHistoryAndSummary();
+    }
+  }, [activeTab, fetchAlertHistoryAndSummary]);
+
 
   // Single Polling Loop + Window Focus Refresh (with proper unmount cleanup)
   useEffect(() => {
@@ -757,6 +882,24 @@ export const AlertsPage = () => {
             }}
           >
             Danh Sách Cảnh Báo ({pagination.total})
+          </button>
+
+          <button
+            type="button"
+            data-testid="tab-alert-history"
+            onClick={() => setActiveTab('HISTORY')}
+            style={{
+              padding: '10px 18px',
+              border: 'none',
+              borderBottom: activeTab === 'HISTORY' ? '3px solid var(--dash-primary, #059669)' : '3px solid transparent',
+              backgroundColor: 'transparent',
+              color: activeTab === 'HISTORY' ? 'var(--dash-primary, #059669)' : 'var(--dash-text-secondary)',
+              fontSize: '0.875rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Lịch Sử Cảnh Báo ({historyPagination.total})
           </button>
 
           <button
@@ -1425,7 +1568,671 @@ export const AlertsPage = () => {
         </>
       )}
 
-      {/* TAB 2: ALERT RULES CONFIGURATION TABLE */}
+            {/* TAB 2: ALERT HISTORY (PBI22 Task 4.1 & 4.2) */}
+      {activeTab === 'HISTORY' && (
+        <div data-testid="alert-history-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* History KPI Summary Cards */}
+          <div
+            data-testid="history-kpi-cards"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px',
+            }}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: '12px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid var(--dash-border)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#EFF6FF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563EB',
+                }}
+              >
+                <Activity size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)' }}>Tổng Lịch Sử</div>
+                <div data-testid="kpi-history-total" style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                  {historySummary.total_alerts}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: '12px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #FECACA',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF2F2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626',
+                }}
+              >
+                <ShieldAlert size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#DC2626' }}>Khẩn cấp (Critical)</div>
+                <div data-testid="kpi-history-critical" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#DC2626' }}>
+                  {historySummary.critical_alerts}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: '12px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #FDE68A',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FFFBEB',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#D97706',
+                }}
+              >
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706' }}>Cảnh báo (Warning)</div>
+                <div data-testid="kpi-history-warning" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#D97706' }}>
+                  {historySummary.warning_alerts}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: '12px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #A7F3D0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+              }}
+            >
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#ECFDF5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#059669',
+                }}
+              >
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>Đã giải quyết (Resolved)</div>
+                <div data-testid="kpi-history-resolved" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669' }}>
+                  {historySummary.resolved_alerts}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* History Advanced Filter Bar */}
+          <div
+            data-testid="history-filter-bar"
+            style={{
+              padding: '16px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1px solid var(--dash-border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+              {/* Search */}
+              <div
+                style={{
+                  flex: '1 1 260px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                }}
+              >
+                <Search size={16} color="var(--dash-text-muted)" />
+                <input
+                  type="text"
+                  data-testid="history-search-input"
+                  placeholder="Tìm kiếm quy tắc, tài nguyên, namespace, message..."
+                  value={historySearch}
+                  onChange={(e) => {
+                    setHistorySearch(e.target.value);
+                    setHistoryPage(1);
+                  }}
+                  style={{
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    fontSize: '0.8125rem',
+                    outline: 'none',
+                    width: '100%',
+                    color: 'var(--dash-text-primary)',
+                  }}
+                />
+              </div>
+
+              {/* Severity */}
+              <select
+                data-testid="history-filter-severity"
+                value={historySeverity}
+                onChange={(e) => {
+                  setHistorySeverity(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                <option value="ALL">Tất cả Mức độ</option>
+                <option value="CRITICAL">CRITICAL (Khẩn cấp)</option>
+                <option value="WARNING">WARNING (Cảnh báo)</option>
+                <option value="INFO">INFO (Thông tin)</option>
+              </select>
+
+              {/* Status */}
+              <select
+                data-testid="history-filter-status"
+                value={historyStatus}
+                onChange={(e) => {
+                  setHistoryStatus(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                <option value="ALL">Tất cả Trạng thái</option>
+                <option value="ACTIVE">ACTIVE (Đang diễn ra)</option>
+                <option value="ACKNOWLEDGED">ACKNOWLEDGED (Đã tiếp nhận)</option>
+                <option value="RESOLVED">RESOLVED (Đã giải quyết)</option>
+              </select>
+
+              {/* Resource Type */}
+              <select
+                data-testid="history-filter-resource-type"
+                value={historyResourceType}
+                onChange={(e) => {
+                  setHistoryResourceType(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                <option value="ALL">Tất cả Loại tài nguyên</option>
+                <option value="node">Node (Máy chủ)</option>
+                <option value="pod">Pod (Kubernetes)</option>
+                <option value="service">Service (Dịch vụ APM)</option>
+              </select>
+
+              {/* Time Range Preset */}
+              <select
+                data-testid="history-filter-time"
+                value={historyTimePreset}
+                onChange={(e) => {
+                  setHistoryTimePreset(e.target.value);
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                }}
+              >
+                {TIME_RANGE_PRESETS.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.label}
+                  </option>
+                ))}
+                <option value="CUSTOM">Tùy chỉnh khoảng thời gian...</option>
+              </select>
+
+              {/* Reset Filter Button */}
+              <button
+                type="button"
+                data-testid="history-btn-clear-filters"
+                onClick={() => {
+                  setHistorySearch('');
+                  setHistorySeverity('ALL');
+                  setHistoryStatus('ALL');
+                  setHistoryCluster('ALL');
+                  setHistoryResourceType('ALL');
+                  setHistoryTimePreset('ALL');
+                  setHistoryStartDate('');
+                  setHistoryEndDate('');
+                  setHistoryPage(1);
+                }}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#F8FAFC',
+                  color: 'var(--dash-text-secondary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Đặt lại bộ lọc
+              </button>
+            </div>
+
+            {/* Custom Date Pickers */}
+            {historyTimePreset === 'CUSTOM' && (
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                  Từ ngày:
+                </span>
+                <input
+                  type="datetime-local"
+                  data-testid="history-start-date"
+                  value={historyStartDate}
+                  onChange={(e) => {
+                    setHistoryStartDate(e.target.value);
+                    setHistoryPage(1);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+                <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                  Đến ngày:
+                </span>
+                <input
+                  type="datetime-local"
+                  data-testid="history-end-date"
+                  value={historyEndDate}
+                  onChange={(e) => {
+                    setHistoryEndDate(e.target.value);
+                    setHistoryPage(1);
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--dash-border)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* History Data Table */}
+          <div
+            data-testid="history-table-container"
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1px solid var(--dash-border)',
+              overflow: 'hidden',
+            }}
+          >
+            {isLoadingHistory ? (
+              <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px' }} />
+                <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>Đang tải danh sách lịch sử cảnh báo...</div>
+              </div>
+            ) : historyError ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: '#DC2626' }}>
+                <AlertCircle size={28} style={{ margin: '0 auto 10px' }} />
+                <div style={{ fontSize: '0.875rem', fontWeight: 700 }}>{historyError}</div>
+                <button
+                  type="button"
+                  onClick={fetchAlertHistoryAndSummary}
+                  style={{
+                    marginTop: '12px',
+                    padding: '6px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Thử lại
+                </button>
+              </div>
+            ) : historyAlerts.length === 0 ? (
+              <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 12px', opacity: 0.7 }} />
+                <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                  Không tìm thấy sự kiện lịch sử nào
+                </div>
+                <div style={{ fontSize: '0.8125rem', marginTop: '4px' }}>
+                  Không có cảnh báo nào thỏa mãn bộ lọc hiện tại hoặc hệ thống hoạt động ổn định.
+                </div>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)' }}>
+                      <th style={{ padding: '12px 16px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Cảnh báo / Quy tắc
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Mức độ
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Trạng thái
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Tài nguyên & Namespace
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Giá trị đo / Ngưỡng
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Thời lượng (Duration)
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Phát hiện lần đầu
+                      </th>
+                      <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
+                        Giải quyết lúc / Bởi
+                      </th>
+                      <th style={{ padding: '12px 16px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem', textAlign: 'right' }}>
+                        Thao tác
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyAlerts.map((item) => {
+                      const sev = getSeverityStyle(item.severity);
+                      const st = getStatusStyle(item.status);
+                      const unitStr = item.unit ? ` ${item.unit}` : '';
+
+                      return (
+                        <tr
+                          key={item.id}
+                          data-testid="history-row"
+                          style={{
+                            borderBottom: '1px solid var(--dash-border)',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                        >
+                          <td style={{ padding: '14px 16px' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                              {item.rule_name || item.title || 'Cảnh báo hệ thống'}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '2px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.message}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '14px 14px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: sev.bg,
+                                color: sev.text,
+                                border: `1px solid ${sev.border}`,
+                                fontSize: '0.6875rem',
+                                fontWeight: 800,
+                              }}
+                            >
+                              {item.severity}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '14px 14px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: st.bg,
+                                color: st.text,
+                                border: `1px solid ${st.border}`,
+                                fontSize: '0.6875rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: st.dot }} />
+                              {item.status}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '14px 14px' }}>
+                            <div style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                              {item.resource_id}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+                              {item.resource_type || '—'} {item.namespace ? `| ns: ${item.namespace}` : ''}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '14px 14px' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                              {item.observed_value !== null ? `${item.observed_value}${unitStr}` : '—'}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                              Ngưỡng: {item.threshold_value !== null ? `${item.threshold_value}${unitStr}` : '—'}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '14px 14px' }}>
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: item.status === 'RESOLVED' ? '#059669' : '#D97706',
+                              }}
+                            >
+                              {item.duration_formatted || (item.duration_seconds ? `${item.duration_seconds}s` : '—')}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '14px 14px', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+                            {formatDateTime(item.first_detected_at)}
+                          </td>
+
+                          <td style={{ padding: '14px 14px', fontSize: '0.75rem' }}>
+                            {item.resolved_at ? (
+                              <div>
+                                <div style={{ color: '#059669', fontWeight: 600 }}>{formatDateTime(item.resolved_at)}</div>
+                                <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.6875rem' }}>
+                                  {item.resolver_name || item.resolver_email || item.details?.resolved_by || 'Hệ thống'}
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--dash-text-muted)' }}>—</span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              data-testid="history-btn-detail"
+                              onClick={() => {
+                                setSelectedAlert(item);
+                                setIsDetailOpen(true);
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--dash-border)',
+                                backgroundColor: '#FFFFFF',
+                                color: 'var(--dash-primary, #059669)',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Timeline
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {historyAlerts.length > 0 && (
+              <div
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#F8FAFC',
+                  borderTop: '1px solid var(--dash-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}>
+                  Trang <strong>{historyPagination.page}</strong> / <strong>{historyPagination.total_pages}</strong> (Tổng <strong>{historyPagination.total}</strong> bản ghi)
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <select
+                    value={historyPageSize}
+                    onChange={(e) => {
+                      setHistoryPageSize(Number(e.target.value));
+                      setHistoryPage(1);
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.75rem',
+                      backgroundColor: '#FFFFFF',
+                    }}
+                  >
+                    <option value={10}>10 / trang</option>
+                    <option value={20}>20 / trang</option>
+                    <option value={50}>50 / trang</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    disabled={historyPagination.page <= 1}
+                    onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--dash-border)',
+                      backgroundColor: '#FFFFFF',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: historyPagination.page <= 1 ? 'not-allowed' : 'pointer',
+                      opacity: historyPagination.page <= 1 ? 0.5 : 1,
+                    }}
+                  >
+                    Trước
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={historyPagination.page >= historyPagination.total_pages}
+                    onClick={() => setHistoryPage((p) => p + 1)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--dash-border)',
+                      backgroundColor: '#FFFFFF',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: historyPagination.page >= historyPagination.total_pages ? 'not-allowed' : 'pointer',
+                      opacity: historyPagination.page >= historyPagination.total_pages ? 0.5 : 1,
+                    }}
+                  >
+                    Sau
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+
+{/* TAB 2: ALERT RULES CONFIGURATION TABLE */}
       {activeTab === 'RULES' && (
         <div
           data-testid="alert-rules-section"

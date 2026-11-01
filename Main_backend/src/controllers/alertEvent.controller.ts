@@ -10,6 +10,7 @@ import {
   ResolveAlertEventSchema,
   AlertSummaryQuerySchema,
 } from '../schemas/alertEvent.schema';
+import { alertHistoryQuerySchema } from '../schemas/alertHistory.schema';
 import { AlertMetricType, AlertOperator, AlertSeverity } from '../schemas/alertRule.schema';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
@@ -65,6 +66,150 @@ export class AlertEventController {
    * GET /api/v1/alert-events
    * List alert events with pagination and filters
    */
+  /**
+   * GET /api/v1/alerts/history or GET /api/alerts/history
+   * Paginated alert history with full multi-dimensional filters (PBI22 Task 4.2)
+   */
+  public static async getHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parseResult = alertHistoryQuerySchema.safeParse(req.query);
+      if (!parseResult.success) {
+        return next(
+          new ApiError(
+            400,
+            parseResult.error.issues[0]?.message || 'Tham số truy vấn lịch sử cảnh báo không hợp lệ',
+            parseResult.error.format()
+          )
+        );
+      }
+
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+
+      // Verify cluster ownership if clusterId provided
+      if (parseResult.data.clusterId && parseResult.data.clusterId !== 'ALL' && parseResult.data.clusterId !== 'all') {
+        if (parseResult.data.clusterId !== 'null' && parseResult.data.clusterId !== 'org_wide') {
+          const belongs = await AlertRuleModel.verifyClusterOwnership(parseResult.data.clusterId, targetOrgId);
+          if (!belongs) {
+            throw ApiError.forbidden('Cụm máy chủ không thuộc phạm vi tổ chức của bạn');
+          }
+        }
+      }
+
+      const result = await AlertLifecycleService.getAlertHistory(targetOrgId, parseResult.data);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Lấy danh sách lịch sử cảnh báo thành công',
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/alerts/history/summary or GET /api/alerts/history/summary
+   * Summary counts for alert history (PBI22 Task 4.2)
+   */
+  public static async getHistorySummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+
+      const clusterId = req.query.clusterId as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+
+      if (clusterId && clusterId !== 'ALL' && clusterId !== 'all' && clusterId !== 'null' && clusterId !== 'org_wide') {
+        const belongs = await AlertRuleModel.verifyClusterOwnership(clusterId, targetOrgId);
+        if (!belongs) {
+          throw ApiError.forbidden('Cụm máy chủ không thuộc phạm vi tổ chức của bạn');
+        }
+      }
+
+      if (startDate && isNaN(new Date(startDate).getTime())) {
+        throw ApiError.badRequest('startDate không hợp lệ');
+      }
+      if (endDate && isNaN(new Date(endDate).getTime())) {
+        throw ApiError.badRequest('endDate không hợp lệ');
+      }
+      if (startDate && endDate && new Date(startDate).getTime() > new Date(endDate).getTime()) {
+        throw ApiError.badRequest('startDate không được lớn hơn endDate');
+      }
+
+      const summary = await AlertLifecycleService.getAlertHistorySummary(targetOrgId, {
+        clusterId,
+        startDate,
+        endDate,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Lấy thống kê lịch sử cảnh báo thành công',
+        data: summary,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/alerts/history/:id or GET /api/alerts/history/:id
+   * Get single alert history details by ID
+   */
+  public static async getHistoryById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+
+      const alert = await AlertLifecycleService.getAlertEventById(req.params.id, targetOrgId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Lấy chi tiết lịch sử cảnh báo thành công',
+        data: alert,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/alerts/history/:id/timeline or GET /api/v1/alerts/:id/timeline
+   * Get chronological status change history timeline
+   */
+  public static async getTimeline(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const targetOrgId = await AlertRuleService.enforceOrgAccess(
+        user,
+        AlertRuleService.extractRequestedOrgId(req)
+      );
+
+      const timeline = await AlertLifecycleService.getAlertTimeline(req.params.id, targetOrgId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Lấy dòng thời gian lịch sử cảnh báo thành công',
+        alert_id: req.params.id,
+        timeline,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   public static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const parseResult = ListAlertEventsQuerySchema.safeParse(req.query);
@@ -349,6 +494,10 @@ export class AlertEventController {
           rawMetric.includes('ERROR_RATE')
         ) {
           metricType = 'HTTP_5XX_RATE';
+        } else if (rawMetric === 'NETWORK_RECEIVE' || rawMetric.includes('NET_RX') || rawMetric.includes('RECEIVE')) {
+          metricType = 'NETWORK_RECEIVE';
+        } else if (rawMetric === 'NETWORK_TRANSMIT' || rawMetric.includes('NET_TX') || rawMetric.includes('TRANSMIT')) {
+          metricType = 'NETWORK_TRANSMIT';
         } else if (rawMetric === 'LATENCY') {
           metricType = 'LATENCY';
         }
@@ -476,7 +625,7 @@ export class AlertEventController {
         }
 
         // Ingest raw telemetry into real source tables
-        if (['CPU', 'RAM', 'DISK'].includes(metricType)) {
+        if (['CPU', 'RAM', 'DISK', 'NETWORK_RECEIVE', 'NETWORK_TRANSMIT'].includes(metricType)) {
           const nodeName =
             resourceCfg.resource_name ||
             (typeof sc.resource === 'string' && sc.resource.toUpperCase() !== 'NODE'
@@ -495,6 +644,8 @@ export class AlertEventController {
           const cpuVal = metricType === 'CPU' ? effectiveVal : 35;
           const ramVal = metricType === 'RAM' ? effectiveVal : 45;
           const diskVal = metricType === 'DISK' ? effectiveVal : 40;
+          const rxVal = metricType === 'NETWORK_RECEIVE' ? effectiveVal : 102400;
+          const txVal = metricType === 'NETWORK_TRANSMIT' ? effectiveVal : 51200;
 
           await pool.query(
             `INSERT INTO node_metrics (
@@ -503,10 +654,10 @@ export class AlertEventController {
                disk_usage_percent, disk_used_bytes, disk_total_bytes,
                net_rx_bytes_per_sec, net_tx_bytes_per_sec, collected_at
              ) VALUES
-               ($1, $2, $3, $4, $5, 8, $6, 4294967296, 8589934592, $7, 42949672960, 107374182400, 102400, 51200, NOW() - INTERVAL '90 seconds'),
-               ($1, $2, $3, $4, $5, 8, $6, 4294967296, 8589934592, $7, 42949672960, 107374182400, 102400, 51200, NOW() - INTERVAL '45 seconds'),
-               ($1, $2, $3, $4, $5, 8, $6, 4294967296, 8589934592, $7, 42949672960, 107374182400, 102400, 51200, NOW())`,
-            [agentId, targetOrgId, targetClusterId, nodeName, cpuVal, ramVal, diskVal]
+               ($1, $2, $3, $4, $5, 8, $6, 4294967296, 8589934592, $7, 42949672960, 107374182400, $8, $9, NOW() - INTERVAL '90 seconds'),
+               ($1, $2, $3, $4, $5, 8, $6, 4294967296, 8589934592, $7, 42949672960, 107374182400, $8, $9, NOW() - INTERVAL '45 seconds'),
+               ($1, $2, $3, $4, $5, 8, $6, 4294967296, 8589934592, $7, 42949672960, 107374182400, $8, $9, NOW())`,
+            [agentId, targetOrgId, targetClusterId, nodeName, cpuVal, ramVal, diskVal, rxVal, txVal]
           );
 
           processedScenarios.push({

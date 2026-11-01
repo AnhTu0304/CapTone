@@ -116,6 +116,44 @@ export const alertService = {
   },
 
   /**
+   * GET /api/v1/alerts/history
+   * Query alert history with filters, search and pagination [S5][PBI22 Task 4.2]
+   */
+  async getAlertHistory(params = {}) {
+    const qs = buildQueryString(params);
+    const res = await request(`/alerts/history${qs}`);
+    return {
+      items: Array.isArray(res?.data) ? res.data : [],
+      pagination: res?.pagination || {
+        page: Number(params.page || 1),
+        limit: Number(params.limit || 10),
+        total: Array.isArray(res?.data) ? res.data.length : 0,
+        total_pages: 1,
+      },
+    };
+  },
+
+  /**
+   * GET /api/v1/alerts/history/summary
+   * Summary counts for alert history [S5][PBI22 Task 4.2]
+   */
+  async getAlertHistorySummary(params = {}) {
+    const qs = buildQueryString(params);
+    const res = await request(`/alerts/history/summary${qs}`);
+    return res?.data || res;
+  },
+
+  /**
+   * GET /api/v1/alerts/history/:id/timeline
+   * Chronological lifecycle timeline [S5][PBI22 Task 4.2]
+   */
+  async getAlertTimeline(alertId) {
+    if (!alertId) throw new Error('Thiếu ID cảnh báo');
+    const res = await request(`/alerts/history/${encodeURIComponent(alertId)}/timeline`);
+    return Array.isArray(res?.timeline) ? res.timeline : [];
+  },
+
+  /**
    * PATCH /api/v1/alerts/:id/acknowledge
    */
   async acknowledgeAlert(alertId, note = '') {

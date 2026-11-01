@@ -1,4 +1,6 @@
 import { AlertEventModel, IAlertEvent, IAlertEventFilters, IPaginatedAlertEvents } from '../models/alertEvent.model';
+import { AlertEventHistoryModel, IAlertEventHistory } from '../models/alertEventHistory.model';
+import { AlertHistoryQuery } from '../schemas/alertHistory.schema';
 import { AlertEventCategory, AlertEventStatus } from '../schemas/alertEvent.schema';
 import { AlertSeverity } from '../schemas/alertRule.schema';
 import { ApiError } from '../utils/apiError';
@@ -129,6 +131,25 @@ export class AlertLifecycleService {
           threshold_value: updateRes.rows[0].threshold_value !== null ? Number(updateRes.rows[0].threshold_value) : null,
           occurrence_count: Number(updateRes.rows[0].occurrence_count || 1),
         };
+
+        if (row.severity === 'WARNING' && input.severity === 'CRITICAL') {
+          await AlertEventHistoryModel.createEntry(
+            {
+              alert_event_id: event.id,
+              old_status: row.status,
+              new_status: row.status,
+              action: 'ESCALATED',
+              actor_type: 'SYSTEM',
+              note: `Mức độ nghiêm trọng leo thang lên CRITICAL (giá trị: ${input.observed_value}${input.unit || ''})`,
+              metadata: {
+                old_severity: row.severity,
+                new_severity: input.severity,
+                observed_value: input.observed_value,
+              },
+            },
+            client
+          );
+        };
       } else {
         isNew = true;
         cooldownActive = false;
@@ -174,6 +195,23 @@ export class AlertLifecycleService {
           threshold_value: insertRes.rows[0].threshold_value !== null ? Number(insertRes.rows[0].threshold_value) : null,
           occurrence_count: Number(insertRes.rows[0].occurrence_count || 1),
         };
+
+        await AlertEventHistoryModel.createEntry(
+          {
+            alert_event_id: event.id,
+            old_status: null,
+            new_status: 'ACTIVE',
+            action: 'TRIGGERED',
+            actor_type: 'SYSTEM',
+            note: `Khởi phát cảnh báo: ${input.message}`,
+            metadata: {
+              observed_value: input.observed_value,
+              threshold_value: input.threshold_value,
+              severity: input.severity,
+            },
+          },
+          client
+        );
       }
 
       await client.query('COMMIT');
@@ -224,6 +262,20 @@ export class AlertLifecycleService {
     const resolved = await AlertEventModel.resolveOpenEvent(data);
     if (resolved) {
       try {
+        await AlertEventHistoryModel.createEntry({
+          alert_event_id: resolved.id,
+          old_status: 'ACTIVE',
+          new_status: 'RESOLVED',
+          action: 'AUTO_RESOLVED',
+          actor_type: 'SYSTEM',
+          note: 'Rule Engine tự động giải quyết khi chỉ số trở lại bình thường',
+        });
+      } catch {
+        // Non-blocking history
+      }
+    }
+    if (resolved) {
+      try {
         broadcastTelemetryToUi({
           type: 'alert_updated',
           action: 'AUTO_RESOLVED',
@@ -263,6 +315,21 @@ export class AlertLifecycleService {
     }
 
     const updated = await AlertEventModel.acknowledgeEvent(id, organizationId, userId, note);
+    if (updated) {
+      try {
+        await AlertEventHistoryModel.createEntry({
+          alert_event_id: id,
+          old_status: 'ACTIVE',
+          new_status: 'ACKNOWLEDGED',
+          action: 'ACKNOWLEDGED',
+          actor_id: userId,
+          actor_type: 'USER',
+          note: note || 'Tiếp nhận xử lý cảnh báo',
+        });
+      } catch {
+        // Non-blocking history
+      }
+    }
     if (!updated) {
       throw ApiError.internal('Lỗi khi cập nhật trạng thái xác nhận sự kiện cảnh báo');
     }
@@ -300,6 +367,21 @@ export class AlertLifecycleService {
     }
 
     const updated = await AlertEventModel.resolveEventById(id, organizationId, userId, note);
+    if (updated) {
+      try {
+        await AlertEventHistoryModel.createEntry({
+          alert_event_id: id,
+          old_status: existing.status,
+          new_status: 'RESOLVED',
+          action: 'RESOLVED',
+          actor_id: userId,
+          actor_type: 'USER',
+          note: note || 'Giải quyết cảnh báo thủ công từ giao diện',
+        });
+      } catch {
+        // Non-blocking history
+      }
+    }
     if (!updated) {
       throw ApiError.internal('Lỗi khi giải quyết sự kiện cảnh báo');
     }
@@ -342,6 +424,40 @@ export class AlertLifecycleService {
   /**
    * Get alert summary metrics for dashboard with organization isolation
    */
+  /**
+   * Get paginated alert history with full filters (PBI22 Task 4.2)
+   */
+  public static async getAlertHistory(
+    organizationId: string,
+    filters: AlertHistoryQuery
+  ) {
+    return AlertEventModel.findHistory(organizationId, filters);
+  }
+
+  /**
+   * Get alert history summary metrics (PBI22 Task 4.2)
+   */
+  public static async getAlertHistorySummary(
+    organizationId: string,
+    options: { clusterId?: string; startDate?: string; endDate?: string } = {}
+  ) {
+    return AlertEventModel.getHistorySummary(organizationId, options);
+  }
+
+  /**
+   * Get full lifecycle timeline of an alert event
+   */
+  public static async getAlertTimeline(
+    alertEventId: string,
+    organizationId: string
+  ): Promise<IAlertEventHistory[]> {
+    const alert = await AlertEventModel.findById(alertEventId, organizationId);
+    if (!alert) {
+      throw ApiError.notFound('Không tìm thấy sự kiện cảnh báo hoặc bạn không có quyền truy cập');
+    }
+    return AlertEventHistoryModel.findByAlertEventId(alertEventId);
+  }
+
   public static async getSummary(
     organizationId: string,
     options: { clusterId?: string; from?: string; to?: string } = {}

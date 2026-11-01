@@ -104,6 +104,8 @@ export const AlertDetailDrawer = ({
   const [detailData, setDetailData] = useState(alertItem || null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState(null);
+  const [timeline, setTimeline] = useState([]);
+  const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
   const [ackNote, setAckNote] = useState('');
   const [resolveNote, setResolveNote] = useState('');
@@ -123,11 +125,15 @@ export const AlertDetailDrawer = ({
       let mounted = true;
       setIsLoadingDetail(true);
       setDetailError(null);
-      alertService
-        .getAlertById(alertItem.id)
-        .then((fresh) => {
-          if (mounted && fresh) {
-            setDetailData(fresh);
+      setIsLoadingTimeline(true);
+      Promise.all([
+        alertService.getAlertById(alertItem.id),
+        (typeof alertService.getAlertTimeline === 'function' ? Promise.resolve(alertService.getAlertTimeline(alertItem.id)).catch(() => []) : Promise.resolve([])),
+      ])
+        .then(([fresh, timelineData]) => {
+          if (mounted) {
+            if (fresh) setDetailData(fresh);
+            if (Array.isArray(timelineData)) setTimeline(timelineData);
           }
         })
         .catch((err) => {
@@ -136,7 +142,10 @@ export const AlertDetailDrawer = ({
           }
         })
         .finally(() => {
-          if (mounted) setIsLoadingDetail(false);
+          if (mounted) {
+            setIsLoadingDetail(false);
+            setIsLoadingTimeline(false);
+          }
         });
       return () => {
         mounted = false;
@@ -173,6 +182,7 @@ export const AlertDetailDrawer = ({
       const merged = { ...detailData, ...updated, status: 'ACKNOWLEDGED' };
       setDetailData(merged);
       setActionSuccess('Đã xác nhận (ACKNOWLEDGED) sự kiện cảnh báo thành công.');
+      if (typeof alertService.getAlertTimeline === 'function') { alertService.getAlertTimeline(detailData.id).then((tl) => { if (Array.isArray(tl)) setTimeline(tl); }).catch(() => {}); }
       if (onAlertUpdated) onAlertUpdated(merged);
     } catch (err) {
       setActionError(err.message || 'Lỗi khi xác nhận sự kiện cảnh báo');
@@ -606,8 +616,9 @@ export const AlertDetailDrawer = ({
             </div>
           </div>
 
-          {/* Event Lifecycle & History */}
+          {/* Event Lifecycle & Timeline [S5][PBI22 Task 4.2] */}
           <div
+            data-testid="detail-timeline-section"
             style={{
               border: '1px solid var(--dash-border)',
               borderRadius: '10px',
@@ -623,61 +634,151 @@ export const AlertDetailDrawer = ({
                 fontWeight: 800,
                 color: 'var(--dash-text-primary)',
                 textTransform: 'uppercase',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
               }}
             >
-              Lịch sử Vòng đời Sự kiện (Event Lifecycle History)
+              <span>Dòng thời gian sự kiện (Lifecycle Timeline)</span>
+              {detailData.duration_formatted && (
+                <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, textTransform: 'none' }}>
+                  Thời lượng: {detailData.duration_formatted}
+                </span>
+              )}
             </div>
 
-            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8125rem' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <Clock size={15} color="#DC2626" style={{ marginTop: '2px', flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                    Khởi phát cảnh báo (ACTIVE)
-                  </div>
-                  <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                    {formatDateTime(detailData.first_detected_at)} — Đã ghi nhận {detailData.occurrence_count || 1} chu kỳ vi phạm
-                  </div>
-                </div>
-              </div>
-
-              {detailData.acknowledged_at && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                  <Check size={15} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#B45309' }}>
-                      Đã tiếp nhận xử lý (ACKNOWLEDGED)
-                    </div>
-                    <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      {formatDateTime(detailData.acknowledged_at)}
-                      {detailData.acknowledger_name ? ` bởi ${detailData.acknowledger_name}` : ''}
-                    </div>
-                    {detailData.details?.acknowledge_note && (
-                      <div style={{ marginTop: '4px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '6px', color: '#92400E', fontSize: '0.75rem' }}>
-                        Ghi chú: {detailData.details.acknowledge_note}
-                      </div>
-                    )}
-                  </div>
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.8125rem' }}>
+              {isLoadingTimeline && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)' }}>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Đang tải dòng thời gian...</span>
                 </div>
               )}
 
-              {detailData.resolved_at && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                  <CheckCircle2 size={15} color="#059669" style={{ marginTop: '2px', flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#065F46' }}>
-                      Đã giải quyết (RESOLVED)
-                    </div>
-                    <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      {formatDateTime(detailData.resolved_at)}
-                      {detailData.details?.resolved_by ? ` (${detailData.details.resolved_by})` : ''}
-                    </div>
-                    {(detailData.details?.resolution_note || detailData.details?.message) && (
-                      <div style={{ marginTop: '4px', padding: '6px 10px', backgroundColor: '#ECFDF5', borderRadius: '6px', color: '#065F46', fontSize: '0.75rem' }}>
-                        {detailData.details?.resolution_note || detailData.details?.message}
+              {timeline.length > 0 ? (
+                timeline.map((entry, idx) => {
+                  const isActionResolved = entry.action === 'RESOLVED' || entry.action === 'AUTO_RESOLVED';
+                  const isActionAck = entry.action === 'ACKNOWLEDGED';
+                  const isActionEsc = entry.action === 'ESCALATED';
+                  const actionColor = isActionResolved ? '#059669' : isActionAck ? '#D97706' : isActionEsc ? '#DC2626' : '#2563EB';
+                  const ActionIcon = isActionResolved ? CheckCircle2 : isActionAck ? Check : isActionEsc ? AlertTriangle : Clock;
+
+                  return (
+                    <div
+                      key={entry.id || idx}
+                      data-testid="timeline-item"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                        paddingBottom: idx < timeline.length - 1 ? '12px' : 0,
+                        borderBottom: idx < timeline.length - 1 ? '1px dashed var(--dash-border)' : 'none',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          backgroundColor: `${actionColor}15`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          marginTop: '2px',
+                        }}
+                      >
+                        <ActionIcon size={15} color={actionColor} />
                       </div>
-                    )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                          <span style={{ fontWeight: 700, color: actionColor }}>
+                            {entry.action}
+                            {entry.new_status ? ` (${entry.new_status})` : ''}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                            {formatDateTime(entry.created_at)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '2px' }}>
+                          Tác tử: <strong style={{ textTransform: 'uppercase' }}>{entry.actor_type || 'SYSTEM'}</strong>
+                          {entry.actor_name ? ` (${entry.actor_name})` : ''}
+                          {entry.old_status ? ` | Chuyển trạng thái: ${entry.old_status} -> ${entry.new_status}` : ''}
+                        </div>
+                        {entry.note && (
+                          <div
+                            style={{
+                              marginTop: '6px',
+                              padding: '6px 10px',
+                              backgroundColor: isActionResolved ? '#ECFDF5' : isActionAck ? '#FFFBEB' : '#F8FAFC',
+                              borderRadius: '6px',
+                              color: isActionResolved ? '#065F46' : isActionAck ? '#92400E' : 'var(--dash-text-primary)',
+                              fontSize: '0.75rem',
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {entry.note}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                /* Fallback if no timeline rows exist yet in table */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <Clock size={15} color="#DC2626" style={{ marginTop: '2px', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                        Khởi phát cảnh báo (ACTIVE)
+                      </div>
+                      <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                        {formatDateTime(detailData.first_detected_at)} — Đã ghi nhận {detailData.occurrence_count || 1} chu kỳ vi phạm
+                      </div>
+                    </div>
                   </div>
+
+                  {detailData.acknowledged_at && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                      <Check size={15} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#B45309' }}>
+                          Đã tiếp nhận xử lý (ACKNOWLEDGED)
+                        </div>
+                        <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                          {formatDateTime(detailData.acknowledged_at)}
+                          {detailData.acknowledger_name ? ` bởi ${detailData.acknowledger_name}` : ''}
+                        </div>
+                        {detailData.details?.acknowledge_note && (
+                          <div style={{ marginTop: '4px', padding: '6px 10px', backgroundColor: '#FFFBEB', borderRadius: '6px', color: '#92400E', fontSize: '0.75rem' }}>
+                            Ghi chú: {detailData.details.acknowledge_note}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {detailData.resolved_at && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                      <CheckCircle2 size={15} color="#059669" style={{ marginTop: '2px', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#065F46' }}>
+                          Đã giải quyết (RESOLVED)
+                        </div>
+                        <div style={{ color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                          {formatDateTime(detailData.resolved_at)}
+                          {detailData.resolver_name ? ` bởi ${detailData.resolver_name}` : detailData.details?.resolved_by ? ` (${detailData.details.resolved_by})` : ''}
+                          {detailData.duration_formatted ? ` (Kéo dài: ${detailData.duration_formatted})` : ''}
+                        </div>
+                        {(detailData.details?.resolution_note || detailData.details?.message) && (
+                          <div style={{ marginTop: '4px', padding: '6px 10px', backgroundColor: '#ECFDF5', borderRadius: '6px', color: '#065F46', fontSize: '0.75rem' }}>
+                            {detailData.details?.resolution_note || detailData.details?.message}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

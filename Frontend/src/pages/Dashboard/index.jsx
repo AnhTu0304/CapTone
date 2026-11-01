@@ -111,7 +111,13 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       path === '/dashboard/alert-rules' ||
       path.startsWith('/dashboard/alerts/')
     ) {
-      return <AlertsPage onNavigate={onNavigate} />;
+      const initialTab =
+        path === '/dashboard/alerts/history'
+          ? 'HISTORY'
+          : path === '/dashboard/alert-rules'
+          ? 'RULES'
+          : 'EVENTS';
+      return <AlertsPage onNavigate={onNavigate} initialTab={initialTab} />;
     }
     if (path === '/dashboard/monitoring/apm') {
       return <ApmPage onNavigate={onNavigate} />;
