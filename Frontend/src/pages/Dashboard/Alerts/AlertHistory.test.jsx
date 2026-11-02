@@ -719,16 +719,16 @@ describe('[S5][PBI22 Task 4.4] Alert History UI, Filters, Assignment, Resolution
     expect(mockNavigate).toHaveBeenCalledWith('/dashboard/alerts');
   });
 
-  // 26: AlertsPage tab delegation to standalone page
-  test('26. AlertsPage tab-alert-history delegates to /dashboard/alerts/history when onNavigate is provided', async () => {
-    const mockNavigate = jest.fn();
-    render(<AlertsPage onNavigate={mockNavigate} initialTab="EVENTS" />);
+  // 26: AlertsPage tabs verification: exactly 2 tabs (EVENTS & RULES), completely excluding tab-alert-history
+  test('26. AlertsPage renders exactly 2 tabs (EVENTS and RULES) and does NOT contain tab-alert-history', async () => {
+    render(<AlertsPage initialTab="EVENTS" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('tab-alert-history')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-alert-events')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-alert-rules')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId('tab-alert-history'));
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard/alerts/history');
+    // Verify tab-alert-history is completely removed from AlertsPage layout
+    expect(screen.queryByTestId('tab-alert-history')).not.toBeInTheDocument();
   });
 });

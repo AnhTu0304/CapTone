@@ -1002,29 +1002,6 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
             Danh Sách Cảnh Báo ({pagination.total})
           </button>
 
-          <button
-            type="button"
-            data-testid="tab-alert-history"
-            onClick={() => {
-              if (onNavigate) {
-                onNavigate('/dashboard/alerts/history');
-              } else {
-                setActiveTab('HISTORY');
-              }
-            }}
-            style={{
-              padding: '10px 18px',
-              border: 'none',
-              borderBottom: activeTab === 'HISTORY' ? '3px solid var(--dash-primary, #059669)' : '3px solid transparent',
-              backgroundColor: 'transparent',
-              color: activeTab === 'HISTORY' ? 'var(--dash-primary, #059669)' : 'var(--dash-text-secondary)',
-              fontSize: '0.875rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-            }}
-          >
-            Lịch Sử Cảnh Báo ({historyPagination.total})
-          </button>
 
           <button
             type="button"
