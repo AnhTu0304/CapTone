@@ -23,6 +23,7 @@ import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
 import SettingsPage from './Settings/SettingsPage';
 import AlertsPage from './Alerts/AlertsPage';
+import AlertHistoryPage from './Alerts/AlertHistoryPage';
 
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
@@ -53,6 +54,8 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         label = 'Giám Sát APM';
       } else if (part === 'incidents') {
         label = 'Quản Lý Sự Cố & RCA';
+      } else if (part === 'history' && parts[index - 1] === 'alerts') {
+        label = 'Lịch Sử Cảnh Báo';
       } else if (part === 'alerts' || part === 'alert-rules') {
         label = 'Cảnh Báo & Ngưỡng';
       }
@@ -105,6 +108,9 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     }
 
     // 4. Monitoring
+    if (path === '/dashboard/alerts/history') {
+      return <AlertHistoryPage onNavigate={onNavigate} />;
+    }
     if (
       path === '/dashboard/alerts' ||
       path === '/dashboard/monitoring/alerts' ||
@@ -112,9 +118,7 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       path.startsWith('/dashboard/alerts/')
     ) {
       const initialTab =
-        path === '/dashboard/alerts/history'
-          ? 'HISTORY'
-          : path === '/dashboard/alert-rules'
+        path === '/dashboard/alert-rules'
           ? 'RULES'
           : 'EVENTS';
       return <AlertsPage onNavigate={onNavigate} initialTab={initialTab} />;

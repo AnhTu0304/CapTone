@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { AlertsPage } from './AlertsPage';
+import { AlertHistoryPage } from './AlertHistoryPage';
 import { alertService } from '../../../services/alertService';
 
 let mockCurrentRole = 'SME_OWNER';
@@ -690,5 +691,44 @@ describe('[S5][PBI22 Task 4.4] Alert History UI, Filters, Assignment, Resolution
     });
     expect(screen.queryByTestId('detail-operations-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('assign-member-select')).not.toBeInTheDocument();
+  });
+  // 25: Dedicated standalone AlertHistoryPage without shared layout (no active summary cards, no tabs)
+  test('25. Standalone AlertHistoryPage renders dedicated header, skips shared layout/tabs, and navigates back', async () => {
+    const mockNavigate = jest.fn();
+    render(<AlertHistoryPage onNavigate={mockNavigate} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-history-page')).toBeInTheDocument();
+      expect(screen.getByTestId('alert-history-section')).toBeInTheDocument();
+    });
+
+    // Dedicated header
+    expect(screen.getByText('Lịch Sử Cảnh Báo & Nhật Ký Kiểm Toán (Alert History)')).toBeInTheDocument();
+
+    // Verify shared layout elements are NOT rendered on standalone page
+    expect(screen.queryByTestId('alert-summary-cards')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tab-alert-events')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tab-alert-rules')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-evaluate-rules')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-open-create-rule-modal')).not.toBeInTheDocument();
+
+    // Quick navigation back to active alerts
+    const backBtn = screen.getByTestId('btn-goto-rules');
+    expect(backBtn).toBeInTheDocument();
+    fireEvent.click(backBtn);
+    expect(mockNavigate).toHaveBeenCalledWith('/dashboard/alerts');
+  });
+
+  // 26: AlertsPage tab delegation to standalone page
+  test('26. AlertsPage tab-alert-history delegates to /dashboard/alerts/history when onNavigate is provided', async () => {
+    const mockNavigate = jest.fn();
+    render(<AlertsPage onNavigate={mockNavigate} initialTab="EVENTS" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-alert-history')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-alert-history'));
+    expect(mockNavigate).toHaveBeenCalledWith('/dashboard/alerts/history');
   });
 });

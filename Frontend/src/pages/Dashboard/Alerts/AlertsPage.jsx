@@ -25,6 +25,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { alertService, DEFAULT_RULE_METADATA, formatAlertApiError } from '../../../services/alertService';
 import { getAuthToken, API_BASE_URL } from '../../../services/apiClient';
+import AlertHistoryPage from './AlertHistoryPage';
 import AlertDetailDrawer, {
   OPERATOR_SYMBOLS,
   getSeverityStyle,
@@ -652,6 +653,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
     setIsDetailOpen(true);
   };
 
+  // If History tab is requested, render the dedicated AlertHistoryPage without shared layout
+  if (initialTab === 'HISTORY' || activeTab === 'HISTORY') {
+    return <AlertHistoryPage onNavigate={onNavigate} />;
+  }
+
   return (
     <div
       data-testid="alerts-dashboard-page"
@@ -999,7 +1005,13 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
           <button
             type="button"
             data-testid="tab-alert-history"
-            onClick={() => setActiveTab('HISTORY')}
+            onClick={() => {
+              if (onNavigate) {
+                onNavigate('/dashboard/alerts/history');
+              } else {
+                setActiveTab('HISTORY');
+              }
+            }}
             style={{
               padding: '10px 18px',
               border: 'none',
