@@ -6,14 +6,12 @@ import { ClusterDetailPage } from './ClusterDetailPage';
 import {
   Server,
   Plus,
-  RefreshCw,
   X,
   Radio,
   CheckCircle2,
   Cpu,
   Layers,
   Activity,
-  Globe,
   AlertCircle,
   ArrowRight,
   Building2,
@@ -215,19 +213,7 @@ export const ClustersPage = ({ onNavigate }) => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Quản Lý Cụm Kubernetes Đa Môi Trường
             </h1>
-            <span
-              style={{
-                fontSize: '0.6875rem',
-                fontWeight: 800,
-                padding: '2px 8px',
-                borderRadius: 'var(--dash-radius-full)',
-                backgroundColor: '#ECFDF5',
-                color: '#059669',
-                border: '1px solid #A7F3D0',
-              }}
-            >
-              {clusters.length} Cụm Đang Kết Nối
-            </span>
+
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
             Theo dõi trạng thái hoạt động, tài nguyên và cấu hình các cụm Kubernetes
@@ -235,29 +221,6 @@ export const ClustersPage = ({ onNavigate }) => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing || isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              color: 'var(--dash-text-primary)',
-              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
-              boxShadow: 'var(--dash-shadow-sm)',
-            }}
-          >
-            <RefreshCw size={14} className={isRefreshing || isGlobalRefreshing ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang đồng bộ...' : 'Đồng bộ cụm'}</span>
-          </button>
-
           {can(PERMISSIONS.ENV_MANAGE) && (
             <button
               type="button"
@@ -418,12 +381,7 @@ export const ClustersPage = ({ onNavigate }) => {
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--dash-text-primary)', wordBreak: 'break-word' }}>
                       {cls.name}
                     </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-                      <Globe size={12} color="var(--dash-text-muted)" />
-                      <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-muted)' }}>
-                        {cls.region}
-                      </span>
-                    </div>
+
                   </div>
                 </div>
 
@@ -495,39 +453,7 @@ export const ClustersPage = ({ onNavigate }) => {
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Key size={14} color="var(--dash-text-muted)" /> Mã Token Agent:
-                  </span>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.75rem',
-                    color: '#059669',
-                    backgroundColor: '#ECFDF5',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    border: '1px solid #A7F3D0',
-                    fontWeight: 700,
-                  }}>
-                    {cls.tokenPrefix ? `${cls.tokenPrefix}••••••••` : 'Chưa cấp Token'}
-                  </span>
-                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Activity size={14} color="var(--dash-text-muted)" /> Control Plane:
-                  </span>
-                  <span style={{
-                    color: cls.controlPlaneHealth === 'Healthy (100%)' ? '#059669' : (cls.controlPlaneHealth.includes('Chờ') ? '#D97706' : '#64748B'),
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    {cls.controlPlaneHealth === 'Healthy (100%)' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                    {cls.controlPlaneHealth}
-                  </span>
-                </div>
               </div>
 
               {/* Action Button: Chi Tiết Cụm */}

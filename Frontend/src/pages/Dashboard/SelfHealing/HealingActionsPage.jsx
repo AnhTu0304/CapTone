@@ -7,24 +7,27 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
-  RotateCcw,
   AlertTriangle,
-  Clock,
   Activity,
   Layers,
   ChevronRight,
+  Clock,
+  Shield,
+  FileText,
+  Sliders,
+  Check,
   X
 } from 'lucide-react';
 
 const ACTION_LABELS_VI = {
-  RESTART_POD: 'Khởi động lại Pod (RESTART_POD)',
-  REPLACE_POD: 'Thay thế Pod mới (REPLACE_POD)',
-  SCALE_REPLICAS: 'Mở rộng bản sao (SCALE_REPLICAS)',
-  SCALE_UP: 'Tăng số lượng Pod (SCALE_UP)',
-  SCALE_DOWN: 'Thu hẹp bản sao (SCALE_DOWN)',
-  ROLLBACK_DEPLOYMENT: 'Quay lui phiên bản (ROLLBACK_DEPLOYMENT)',
-  CLEANUP_STORAGE: 'Dọn dẹp ổ đĩa (CLEANUP_STORAGE)',
-  CLEANUP_TEMP_FILES: 'Dọn dẹp tệp tạm (CLEANUP_TEMP_FILES)',
+  RESTART_POD: 'Restart Pod',
+  REPLACE_POD: 'Replace Pod',
+  SCALE_REPLICAS: 'Scale Replicas',
+  SCALE_UP: 'Scale Up',
+  SCALE_DOWN: 'Scale Down',
+  ROLLBACK_DEPLOYMENT: 'Rollback Deployment',
+  CLEANUP_STORAGE: 'Cleanup Storage',
+  CLEANUP_TEMP_FILES: 'Cleanup Temp Files',
   TEMPORARY_IP_BLOCK: 'Chặn tạm thời IP tấn công (TEMPORARY_IP_BLOCK)',
   BLOCK_IP_TEMP: 'Chặn tạm thời IP tấn công (BLOCK_IP_TEMP)',
   NO_ACTION: 'Giám sát an toàn (NO_ACTION)',
@@ -37,7 +40,7 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
 
   // 1. Parse Kubernetes RBAC 403 Forbidden error
   const rbacMatch = rawMsg.match(
-    /User\\?\s*"([^"\\]+)\\?"\s+cannot\s+(\w+)\s+resource\s+\\?"([^"\\]+)\\?"(?:\s+in API group\s+\\?"([^"\\]*)\\?")?(?:\s+in the namespace\s+\\?"([^"\\]+)\\?")?/i
+    /User\?\s*"([^"\\]+)\?\s+cannot\s+(\w+)\s+resource\s+\?"([^"\\]+)\?"(?:\s+in API group\s+\?"([^"\\]*)\?")?(?:\s+in the namespace\s+\?"([^"\\]+)\?")?/i
   );
   if (rbacMatch || rawMsg.includes('(403)') || rawMsg.includes('Forbidden')) {
     const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
@@ -92,7 +95,7 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
     };
   }
 
-  // 4. Other failed messages (strip HTTPHeaderDict dump if present)
+  // 4. Other failed messages
   if (rawMsg.includes('HTTPHeaderDict')) {
     const cleanMsg = rawMsg.split('HTTP response headers:')[0].trim();
     return {
@@ -107,22 +110,16 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
   };
 };
 
-export const HealingActionsPage = () => {
+export const HealingActionsPage = ({ onNavigate }) => {
   const { currentOrg, currentEnv } = useDashboard();
   const [runningActions, setRunningActions] = useState([]);
-  const [historyActions, setHistoryActions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUsingLiveDb, setIsUsingLiveDb] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [operatingActionId, setOperatingActionId] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState(null);
-  const [confirmExecuteModal, setConfirmExecuteModal] = useState({ isOpen: false, action: null });
   const [confirmAbortModal, setConfirmAbortModal] = useState({ isOpen: false, action: null, reason: '' });
-  const [activeActionTab, setActiveActionTab] = useState('running'); // 'running' | 'history'
   const [runningPage, setRunningPage] = useState(1);
-  const [historyPage, setHistoryPage] = useState(1);
   const RUNNING_PER_PAGE = 5;
-  const HISTORY_PER_PAGE = 5;
 
   const activeClusterId = useMemo(() => {
     return currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster || '';
@@ -196,10 +193,6 @@ export const HealingActionsPage = () => {
   const mapekStages = useMemo(() => {
     const hasRunning = runningActions.some((a) => a.executionStatus === 'RUNNING');
     const hasPlanning = runningActions.some((a) => a.executionStatus === 'PENDING' || a.executionStatus === 'QUEUED');
-    const hasRecentCompleted = historyActions.some((a) => {
-      if (a.status !== 'completed' || !a.rawItem?.completed_at) return false;
-      return Date.now() - new Date(a.rawItem.completed_at).getTime() < 120000;
-    });
 
     return [
       {
@@ -234,39 +227,25 @@ export const HealingActionsPage = () => {
         step: '5. KNOWLEDGE',
         name: 'Cập Nhật Tri Thức',
         desc: 'Lưu vết MTTR và cập nhật trọng số chính sách vào cơ sở dữ liệu',
-        active: hasRecentCompleted,
+        active: !hasRunning && !hasPlanning,
         color: '#0D9488',
       },
     ];
-  }, [runningActions, historyActions]);
+  }, [runningActions]);
 
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch currently running actions from Main Backend
       const runningRes = await selfHealingService.getRunningActions({
         cluster_id: activeClusterId,
         organization_id: activeOrgId,
       });
 
-      // 2. Fetch history actions from Main Backend
-      const historyRes = await selfHealingService.getActions({
-        limit: 50,
-        cluster_id: activeClusterId,
-        organization_id: activeOrgId,
-      });
-
       const runningItems = runningRes?.items || (Array.isArray(runningRes) ? runningRes : []);
-      const historyItems = historyRes?.items || (Array.isArray(historyRes) ? historyRes : []);
-
       setRunningActions(runningItems.map(mapBackendActionToUI));
-      setHistoryActions(historyItems.map(mapBackendActionToUI));
-      setIsUsingLiveDb(true);
     } catch (err) {
       console.warn('[HealingActionsPage] Lỗi tải action:', err.message);
       setRunningActions([]);
-      setHistoryActions([]);
-      setIsUsingLiveDb(true);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -356,147 +335,12 @@ export const HealingActionsPage = () => {
     }
   };
 
-  const handleOpenExecuteModal = (act) => {
-    setConfirmExecuteModal({
-      isOpen: true,
-      action: act,
-    });
-  };
-
-  const handleConfirmExecute = async () => {
-    if (!confirmExecuteModal.action) return;
-    const actionId = confirmExecuteModal.action.rawId;
-
-    setOperatingActionId(actionId);
-    try {
-      await selfHealingService.executeAction(actionId);
-      setFeedbackMessage({ type: 'success', text: 'Đã kích hoạt thực thi hành động thành công qua Agent K8s!' });
-      setConfirmExecuteModal({ isOpen: false, action: null });
-      await fetchActions();
-    } catch (err) {
-      setFeedbackMessage({ type: 'error', text: `Lỗi kích hoạt hành động: ${err.message}` });
-    } finally {
-      setOperatingActionId(null);
-      setTimeout(() => setFeedbackMessage(null), 5000);
-    }
-  };
-
   const totalRunningPages = Math.max(1, Math.ceil(runningActions.length / RUNNING_PER_PAGE));
   const safeRunningPage = Math.min(Math.max(1, runningPage), totalRunningPages);
   const paginatedRunningActions = useMemo(() => {
     const start = (safeRunningPage - 1) * RUNNING_PER_PAGE;
     return runningActions.slice(start, start + RUNNING_PER_PAGE);
   }, [runningActions, safeRunningPage]);
-
-  const totalHistoryPages = Math.max(1, Math.ceil(historyActions.length / HISTORY_PER_PAGE));
-  const safeHistoryPage = Math.min(Math.max(1, historyPage), totalHistoryPages);
-  const paginatedHistoryActions = useMemo(() => {
-    const start = (safeHistoryPage - 1) * HISTORY_PER_PAGE;
-    return historyActions.slice(start, start + HISTORY_PER_PAGE);
-  }, [historyActions, safeHistoryPage]);
-
-  const renderPaginationBar = (currentPage, totalItems, perPage, onPageChange) => {
-    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
-    if (totalItems <= perPage) return null;
-    const startIdx = (currentPage - 1) * perPage + 1;
-    const endIdx = Math.min(currentPage * perPage, totalItems);
-
-    const pages = [];
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
-        pages.push(i);
-      } else if (pages[pages.length - 1] !== '...') {
-        pages.push('...');
-      }
-    }
-
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          marginTop: '16px',
-          paddingTop: '14px',
-          borderTop: '1px solid var(--dash-border)',
-        }}
-      >
-        <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
-          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> trong tổng số{' '}
-          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> mục ({perPage} mục / trang)
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button
-            type="button"
-            disabled={currentPage <= 1}
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-            style={{
-              padding: '5px 10px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '6px',
-              border: '1px solid #CBD5E1',
-              backgroundColor: currentPage <= 1 ? '#F8FAFC' : '#FFFFFF',
-              color: currentPage <= 1 ? '#94A3B8' : '#334155',
-              cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
-            }}
-          >
-            &laquo; Trước
-          </button>
-
-          {pages.map((p, idx) =>
-            p === '...' ? (
-              <span key={`ellipsis-${idx}`} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.75rem' }}>
-                ...
-              </span>
-            ) : (
-              <button
-                key={p}
-                type="button"
-                onClick={() => onPageChange(p)}
-                style={{
-                  minWidth: '30px',
-                  height: '30px',
-                  padding: '0 8px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  fontFamily: 'var(--font-mono)',
-                  borderRadius: '6px',
-                  border: currentPage === p ? '1px solid #2563EB' : '1px solid #CBD5E1',
-                  backgroundColor: currentPage === p ? '#2563EB' : '#FFFFFF',
-                  color: currentPage === p ? '#FFFFFF' : '#334155',
-                  cursor: 'pointer',
-                }}
-              >
-                {p}
-              </button>
-            )
-          )}
-
-          <button
-            type="button"
-            disabled={currentPage >= totalPages}
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-            style={{
-              padding: '5px 10px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '6px',
-              border: '1px solid #CBD5E1',
-              backgroundColor: currentPage >= totalPages ? '#F8FAFC' : '#FFFFFF',
-              color: currentPage >= totalPages ? '#94A3B8' : '#334155',
-              cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-            }}
-          >
-            Sau &raquo;
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="dashboard-healing-actions-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -527,15 +371,40 @@ export const HealingActionsPage = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Zap size={22} color="var(--dash-primary)" />
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Hành Động Tự Phục Hồi Đang Thực Thi (MAPE-K Closed Loop)
+              Hành Động Tự Phục Hồi Đang Thực Thi (Active & In-Flight)
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Giám sát tiến trình điều phối tự phục hồi MAPE-K và thực thi hành động theo thời gian thực
+            Giám sát tiến trình điều phối tự phục hồi MAPE-K và các can thiệp thời gian thực trên cụm máy chủ
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('/dashboard/self-healing/history')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                backgroundColor: '#EFF6FF',
+                color: '#1D4ED8',
+                border: '1px solid #BFDBFE',
+                borderRadius: 'var(--dash-radius-md)',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="Xem nhật ký kiểm toán và báo cáo MTTR"
+            >
+              <Clock size={14} />
+              <span>Lịch Sử Phục Hồi & MTTR &rarr;</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleRefresh}
@@ -633,556 +502,281 @@ export const HealingActionsPage = () => {
         </div>
       </div>
 
-      {/* UNIFIED TABBED CONTAINER: Running Actions & History */}
+      {/* ACTIVE IN-FLIGHT ACTIONS CONTAINER */}
       <div className="dash-card" style={{ padding: '20px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-        {/* Tab Navigation */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            borderBottom: '2px solid #E2E8F0',
-            paddingBottom: '0',
-            marginBottom: '16px',
-            flexWrap: 'nowrap',
-            overflowX: 'auto',
-          }}
-        >
-          {/* Tab 1: Đang Chạy Ngầm */}
-          <button
-            type="button"
-            onClick={() => setActiveActionTab('running')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: activeActionTab === 'running' ? '#EFF6FF' : 'transparent',
-              border: 'none',
-              borderBottom: activeActionTab === 'running' ? '3px solid #2563EB' : '3px solid transparent',
-              borderRadius: '6px 6px 0 0',
-              color: activeActionTab === 'running' ? '#1D4ED8' : '#64748B',
-              fontWeight: activeActionTab === 'running' ? 700 : 600,
-              fontSize: '0.8125rem',
-              cursor: 'pointer',
-              marginBottom: '-2px',
-              transition: 'all 0.15s ease',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            <Activity size={15} color={activeActionTab === 'running' ? '#2563EB' : '#94A3B8'} />
-            <span>Hành Động Đang Chạy Ngầm Trong Cụm</span>
-            <span
-              style={{
-                padding: '2px 7px',
-                borderRadius: '9999px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                fontFamily: 'var(--font-mono)',
-                backgroundColor: activeActionTab === 'running' ? '#DBEAFE' : '#F1F5F9',
-                color: activeActionTab === 'running' ? '#1E40AF' : '#64748B',
-              }}
-            >
-              {runningActions.length} Đang thực thi
-            </span>
-          </button>
-
-          {/* Tab 2: Lịch Sử Vừa Thực Thi */}
-          <button
-            type="button"
-            onClick={() => setActiveActionTab('history')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: activeActionTab === 'history' ? '#F0FDF4' : 'transparent',
-              border: 'none',
-              borderBottom: activeActionTab === 'history' ? '3px solid #059669' : '3px solid transparent',
-              borderRadius: '6px 6px 0 0',
-              color: activeActionTab === 'history' ? '#047857' : '#64748B',
-              fontWeight: activeActionTab === 'history' ? 700 : 600,
-              fontSize: '0.8125rem',
-              cursor: 'pointer',
-              marginBottom: '-2px',
-              transition: 'all 0.15s ease',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            <Clock size={15} color={activeActionTab === 'history' ? '#059669' : '#94A3B8'} />
-            <span>Lịch Sử Các Hành Động Vừa Thực Thi Trong Cụm</span>
-            <span
-              style={{
-                padding: '2px 7px',
-                borderRadius: '9999px',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                fontFamily: 'var(--font-mono)',
-                backgroundColor: activeActionTab === 'history' ? '#DCFCE7' : '#F1F5F9',
-                color: activeActionTab === 'history' ? '#166534' : '#64748B',
-              }}
-            >
-              {historyActions.length}
-            </span>
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Activity size={18} color="#2563EB" />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
+                Các Tiến Trình Can Thiệp Đang Diễn Ra Trong Cụm
+              </h3>
+              <span
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  backgroundColor: runningActions.length > 0 ? '#DBEAFE' : '#F1F5F9',
+                  color: runningActions.length > 0 ? '#1E40AF' : '#64748B',
+                }}
+              >
+                {runningActions.length} Đang thực thi
+              </span>
+            </div>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
+              Lệnh can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubelet API của cụm máy chủ
+            </p>
+          </div>
         </div>
 
-        {/* Tab 1 Content: Hành Động Đang Chạy Ngầm */}
-        {activeActionTab === 'running' && (
-          <div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '0 0 16px 0' }}>
-              Các can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubelet API của cụm
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {runningActions.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
-                  <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
-                  <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.9375rem' }}>
-                    Cụm đang vận hành ổn định
-                  </div>
-                  <div style={{ fontSize: '0.8125rem' }}>
-                    Không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm ({currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}). Toàn bộ tiến trình đang an toàn.
-                  </div>
-                </div>
-              ) : (
-                paginatedRunningActions.map((act) => (
-                  <div
-                    key={act.id}
-                    style={{
-                      padding: '16px 20px',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid var(--dash-border)',
-                      borderLeft: '4px solid #2563EB',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
-                            {act.id}
-                          </span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                            &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
-                          </span>
-                          <span
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: '0.6875rem',
-                              fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              backgroundColor: '#EFF6FF',
-                              color: '#2563EB',
-                              border: '1px solid #BFDBFE',
-                            }}
-                          >
-                            {act.stage}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
-                          {act.title}
-                        </div>
-                        {act.detailMessage && (
-                          <div style={{ fontSize: '0.8125rem', color: '#475569', marginTop: '3px', lineHeight: 1.45 }}>
-                            {act.detailMessage}
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 700, color: '#2563EB' }}>
-                            TIẾN ĐỘ: {act.progress}%
-                          </div>
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                            Thời gian chạy: {act.elapsed} &bull; Chính sách: {act.policy}
-                          </div>
-                        </div>
-
-                        {/* Abort button */}
-                        <button
-                          type="button"
-                          disabled={operatingActionId === act.rawId}
-                          onClick={() => handleOpenAbortModal(act)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            backgroundColor: '#FEF2F2',
-                            border: '1px solid #FECACA',
-                            color: '#DC2626',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
-                          }}
-                          title="Hủy bỏ can thiệp này ngay lập tức"
-                        >
-                          <XCircle size={13} />
-                          <span>{operatingActionId === act.rawId ? 'Đang hủy...' : 'Dừng can thiệp'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          width: `${act.progress}%`,
-                          height: '100%',
-                          backgroundColor: '#2563EB',
-                          transition: 'width 0.4s ease',
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-              {renderPaginationBar(safeRunningPage, runningActions.length, RUNNING_PER_PAGE, setRunningPage)}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2 Content: Lịch Sử Vừa Thực Thi */}
-        {activeActionTab === 'history' && (
-          <div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '0 0 16px 0' }}>
-              Ghi nhận đầy đủ kiểm toán kết quả khôi phục, thời gian hoàn tất và chính sách tự phục hồi
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {historyActions.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 20px', color: 'var(--dash-text-muted)', fontSize: '0.8125rem' }}>
-                  Chưa có lịch sử can thiệp tự phục hồi nào được ghi nhận cho cụm này.
-                </div>
-              ) : (
-                paginatedHistoryActions.map((act) => {
-                  const isCompleted = act.status === 'completed';
-                  const isCancelled = act.status === 'cancelled';
-                  const isFailed = act.status === 'failed';
-
-                  let borderColor = 'var(--dash-border)';
-                  let leftColor = '#64748B';
-                  let badgeBg = '#F1F5F9';
-                  let badgeColor = '#475569';
-                  let badgeBorder = '#CBD5E1';
-
-                  if (isCompleted) {
-                    borderColor = '#34D399';
-                    leftColor = '#059669';
-                    badgeBg = '#ECFDF5';
-                    badgeColor = '#059669';
-                    badgeBorder = '#A7F3D0';
-                  } else if (isCancelled) {
-                    borderColor = '#FCD34D';
-                    leftColor = '#D97706';
-                    badgeBg = '#FEF3C7';
-                    badgeColor = '#B45309';
-                    badgeBorder = '#FDE68A';
-                  } else if (isFailed) {
-                    borderColor = '#FCA5A5';
-                    leftColor = '#DC2626';
-                    badgeBg = '#FEF2F2';
-                    badgeColor = '#DC2626';
-                    badgeBorder = '#FECACA';
-                  }
-
-                  return (
-                    <div
-                      key={act.id}
-                      style={{
-                        padding: '16px 20px',
-                        backgroundColor: '#FFFFFF',
-                        border: `1px solid ${borderColor}`,
-                        borderLeft: `4px solid ${leftColor}`,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
-                              {act.id}
-                            </span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                              &bull; Workload: <strong>{act.service}</strong>
-                            </span>
-                            <span
-                              style={{
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: '0.6875rem',
-                                fontWeight: 700,
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: badgeBg,
-                                color: badgeColor,
-                                border: `1px solid ${badgeBorder}`,
-                              }}
-                            >
-                              {act.stage}
-                            </span>
-                          </div>
-
-                          <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
-                            {act.title}
-                          </div>
-                          {act.errorMessage && (
-                            <div style={{ fontSize: '0.78125rem', color: isFailed ? '#DC2626' : '#475569', marginTop: '3px', lineHeight: 1.45 }}>
-                              {act.errorMessage}
-                            </div>
-                          )}
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: leftColor }}>
-                              {act.executionStatus}
-                            </div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                              Thời lượng: {act.elapsed} &bull; {act.policy}
-                            </div>
-                          </div>
-
-                          {/* Retry button */}
-                          <button
-                            type="button"
-                            disabled={operatingActionId === act.rawId}
-                            onClick={() => handleOpenExecuteModal(act)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              backgroundColor: '#EFF6FF',
-                              border: '1px solid #BFDBFE',
-                              color: '#2563EB',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
-                            }}
-                            title="Kích hoạt chạy lại hành động tự phục hồi này"
-                          >
-                            <RotateCcw size={13} />
-                            <span>{operatingActionId === act.rawId ? 'Đang chạy...' : 'Kích hoạt lại'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              {renderPaginationBar(safeHistoryPage, historyActions.length, HISTORY_PER_PAGE, setHistoryPage)}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* MODAL 1: Xác Nhận Kích Hoạt Tự Phục Hồi */}
-      {confirmExecuteModal.isOpen && confirmExecuteModal.action && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
-          }}
-          onClick={() => setConfirmExecuteModal({ isOpen: false, action: null })}
-        >
-          <div
-            className="dash-card"
-            style={{
-              width: '100%',
-              maxWidth: '500px',
-              backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '0',
-              overflow: 'hidden',
-              border: '1px solid var(--dash-border)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {runningActions.length === 0 ? (
             <div
               style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid #DBEAFE',
-                backgroundColor: '#EFF6FF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                textAlign: 'center',
+                padding: '48px 24px',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '12px',
+                border: '1px dashed #CBD5E1',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    backgroundColor: '#DBEAFE',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <RotateCcw size={18} color="#2563EB" />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1E40AF' }}>
-                    Xác Nhận Kích Hoạt Tự Phục Hồi
-                  </h3>
-                  <span style={{ fontSize: '0.6875rem', color: '#3B82F6', fontFamily: 'var(--font-mono)' }}>
-                    {confirmExecuteModal.action.id}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setConfirmExecuteModal({ isOpen: false, action: null })}
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748B',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '6px',
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  backgroundColor: '#DCFCE7',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  margin: '0 auto 14px auto',
                 }}
               >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--dash-text-primary)', lineHeight: 1.5 }}>
-                Bạn có chắc chắn muốn kích hoạt chạy lại hành động tự phục hồi này trên dịch vụ{' '}
-                <strong>&ldquo;{confirmExecuteModal.action.service}&rdquo;</strong>?
+                <ShieldCheck size={32} color="#15803D" />
+              </div>
+              <div style={{ fontWeight: 800, color: '#0F172A', marginBottom: '6px', fontSize: '1.125rem' }}>
+                Cụm Kubernetes Đang Vận Hành Ổn Định
+              </div>
+              <p style={{ fontSize: '0.875rem', color: '#64748B', maxWidth: '540px', margin: '0 auto 20px auto', lineHeight: 1.5 }}>
+                Hiện không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm ({currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}). Toàn bộ các dịch vụ và Pods đều ở trạng thái an toàn.
               </p>
 
-              {/* Action summary card */}
-              <div
-                style={{
-                  padding: '12px 14px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid var(--dash-border)',
-                  borderRadius: '8px',
-                  fontSize: '0.75rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-muted)' }}>Mục tiêu:</span>
-                  <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {confirmExecuteModal.action.service} ({confirmExecuteModal.action.namespace})
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-muted)' }}>Hành động:</span>
-                  <span style={{ fontWeight: 600, color: '#2563EB' }}>
-                    {confirmExecuteModal.action.title}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-muted)' }}>Cụm Kubernetes:</span>
-                  <span style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {confirmExecuteModal.action.clusterName}
-                  </span>
-                </div>
-              </div>
+              {/* Quick Navigation Pills */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                {onNavigate && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/dashboard/self-healing/history')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '9px 16px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '8px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        color: '#1E293B',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <Clock size={15} color="#2563EB" />
+                      <span>Tra cứu Lịch Sử Phục Hồi & Báo Cáo MTTR &rarr;</span>
+                    </button>
 
-              {/* Info notice */}
-              <div
-                style={{
-                  padding: '10px 14px',
-                  backgroundColor: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
-                  borderRadius: '8px',
-                  fontSize: '0.75rem',
-                  color: '#166534',
-                  lineHeight: 1.4,
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '8px',
-                }}
-              >
-                <CheckCircle2 size={16} color="#16A34A" style={{ flexShrink: 0, marginTop: '1px' }} />
-                <span>
-                  Hệ thống sẽ phát lệnh can thiệp tự động trực tiếp tới K8s Agent để điều phối khắc phục sự cố ngay lập tức.
-                </span>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/dashboard/self-healing/policies')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '9px 16px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '8px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        color: '#1E293B',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <Shield size={15} color="#059669" />
+                      <span>Cấu Hình Chính Sách Tự Động &rarr;</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/dashboard/self-healing/approvals')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '9px 16px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        borderRadius: '8px',
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        color: '#1E293B',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <CheckCircle2 size={15} color="#D97706" />
+                      <span>Cổng Phê Duyệt (HITL) &rarr;</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
-
-            {/* Modal Footer */}
-            <div
-              style={{
-                padding: '14px 20px',
-                backgroundColor: '#F8FAFC',
-                borderTop: '1px solid var(--dash-border)',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '10px',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setConfirmExecuteModal({ isOpen: false, action: null })}
+          ) : (
+            paginatedRunningActions.map((act) => (
+              <div
+                key={act.id}
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--dash-border)',
+                  padding: '16px 20px',
                   backgroundColor: '#FFFFFF',
-                  color: 'var(--dash-text-secondary)',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                disabled={operatingActionId === confirmExecuteModal.action.rawId}
-                onClick={handleConfirmExecute}
-                style={{
-                  padding: '8px 18px',
+                  border: '1px solid var(--dash-border)',
+                  borderLeft: '4px solid #2563EB',
                   borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: '#2563EB',
-                  color: '#FFFFFF',
-                  fontSize: '0.8125rem',
-                  fontWeight: 700,
-                  cursor: operatingActionId === confirmExecuteModal.action.rawId ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
                 }}
               >
-                <RotateCcw size={14} />
-                <span>{operatingActionId === confirmExecuteModal.action.rawId ? 'Đang phát lệnh...' : 'Xác Nhận Kích Hoạt'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
+                        {act.id}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                        &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#2563EB',
+                          border: '1px solid #BFDBFE',
+                        }}
+                      >
+                        {act.stage}
+                      </span>
+                    </div>
 
-      {/* MODAL 2: Xác Nhận Dừng Can Thiệp Tự Động */}
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+                      {act.title}
+                    </div>
+                    {act.detailMessage && (
+                      <div style={{ fontSize: '0.8125rem', color: '#475569', marginTop: '3px', lineHeight: 1.45 }}>
+                        {act.detailMessage}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 700, color: '#2563EB' }}>
+                        TIẾN ĐỘ: {act.progress}%
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                        Thời gian chạy: {act.elapsed} &bull; Chính sách: {act.policy}
+                      </div>
+                    </div>
+
+                    {/* Abort button */}
+                    <button
+                      type="button"
+                      disabled={operatingActionId === act.rawId}
+                      onClick={() => handleOpenAbortModal(act)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        color: '#DC2626',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
+                      }}
+                      title="Hủy bỏ can thiệp này ngay lập tức"
+                    >
+                      <XCircle size={13} />
+                      <span>{operatingActionId === act.rawId ? 'Đang hủy...' : 'Dừng can thiệp'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${act.progress}%`,
+                      height: '100%',
+                      backgroundColor: '#2563EB',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ARCHITECTURAL SEPARATION GUIDE FOOTER */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: '16px',
+          marginTop: '4px',
+        }}
+      >
+        <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <Activity size={16} color="#2563EB" />
+            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>1. Hành Động Tự Sửa</span>
+          </div>
+          <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+            Theo dõi thời gian thực các can thiệp đang chạy (In-Flight) trên cụm K8s và chu trình MAPE-K. Hỗ trợ ngắt dừng khẩn cấp can thiệp.
+          </p>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <Clock size={16} color="#059669" />
+            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>2. Lịch Sử Phục Hồi</span>
+          </div>
+          <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+            Toàn bộ nhật ký kiểm toán hành động đã hoàn tất/thất bại, lọc theo ngày/tháng/năm và biểu đồ phân tích thời gian hồi phục MTTR.
+          </p>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <CheckCircle2 size={16} color="#D97706" />
+            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>3. Cổng Phê Duyệt (HITL)</span>
+          </div>
+          <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+            Cơ chế bảo vệ Human-in-the-Loop cho phép kỹ sư vận hành phê duyệt các hành động có rủi ro cao trước khi áp dụng vào sản xuất.
+          </p>
+        </div>
+      </div>
+
+      {/* MODAL: Xác Nhận Dừng Can Thiệp Tự Động */}
       {confirmAbortModal.isOpen && confirmAbortModal.action && (
         <div
           style={{
@@ -1274,7 +868,6 @@ export const HealingActionsPage = () => {
                 <strong>&ldquo;{confirmAbortModal.action.service}&rdquo;</strong>?
               </p>
 
-              {/* Input lý do */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginBottom: '6px' }}>
                   Lý do dừng khẩn cấp:
@@ -1296,7 +889,6 @@ export const HealingActionsPage = () => {
                 />
               </div>
 
-              {/* Warning note */}
               <div
                 style={{
                   padding: '10px 14px',

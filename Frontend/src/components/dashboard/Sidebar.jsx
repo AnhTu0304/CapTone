@@ -78,8 +78,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'GIÁM SÁT',
       items: [
-        { name: 'Cảnh báo & Ngưỡng', path: '/dashboard/alerts', icon: ShieldAlert, badge: 'RULE', badgeType: 'warning' },
-        { name: 'Lịch sử Cảnh báo', path: '/dashboard/alerts/history', icon: History },
         { name: 'Giám sát APM', path: '/dashboard/monitoring/apm', icon: Zap, badge: 'APM', badgeType: 'mint' },
         { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart, badge: 'LIVE', badgeType: 'mint' },
         { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },

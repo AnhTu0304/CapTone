@@ -139,45 +139,41 @@ export class MetricModel {
 
   public static async ensureAgentMetricsSchema(): Promise<void> {
     if (this.agentMetricsSchemaEnsured) return;
-    await pool.query(`
-      ALTER TABLE agent_metrics
-        ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-        ADD COLUMN IF NOT EXISTS environment_id UUID REFERENCES environments(id) ON DELETE SET NULL,
-        ADD COLUMN IF NOT EXISTS batch_id VARCHAR(100),
-        ADD COLUMN IF NOT EXISTS sample_id VARCHAR(100);
-
-      DELETE FROM agent_metrics a
-      USING agent_metrics b
-      WHERE a.id < b.id
-        AND a.agent_id = b.agent_id
-        AND a.service_id = b.service_id
-        AND a.pod_id = b.pod_id
-        AND a.collected_at = b.collected_at;
-
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_dedup
-        ON agent_metrics(agent_id, service_id, pod_id, collected_at);
-
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_sample_id
-        ON agent_metrics(sample_id)
-        WHERE sample_id IS NOT NULL;
-
-      CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_time
-        ON agent_metrics(organization_id, collected_at DESC, id DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_service_time
-        ON agent_metrics(organization_id, service_id, collected_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_agent_metrics_service_pod_time
-        ON agent_metrics(service_id, pod_id, collected_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_time
-        ON agent_metrics(cluster_id, collected_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_agent_metrics_batch_id
-        ON agent_metrics(batch_id)
-        WHERE batch_id IS NOT NULL;
-    `);
     this.agentMetricsSchemaEnsured = true;
+    try {
+      await pool.query(`
+        ALTER TABLE agent_metrics
+          ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+          ADD COLUMN IF NOT EXISTS environment_id UUID REFERENCES environments(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS batch_id VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS sample_id VARCHAR(100);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_dedup
+          ON agent_metrics(agent_id, service_id, pod_id, collected_at);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_sample_id
+          ON agent_metrics(sample_id)
+          WHERE sample_id IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_time
+          ON agent_metrics(organization_id, collected_at DESC, id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_service_time
+          ON agent_metrics(organization_id, service_id, collected_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_agent_metrics_service_pod_time
+          ON agent_metrics(service_id, pod_id, collected_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_time
+          ON agent_metrics(cluster_id, collected_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_agent_metrics_batch_id
+          ON agent_metrics(batch_id)
+          WHERE batch_id IS NOT NULL;
+      `);
+    } catch (e) {
+      // ignore
+    }
   }
 
   public static async ensureNodeMetricsTable(): Promise<void> {

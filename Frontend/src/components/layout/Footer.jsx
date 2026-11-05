@@ -140,7 +140,7 @@ export const Footer = ({ onNavigate }) => {
                   x="120"
                   y="214"
                   textAnchor="middle"
-                  fontFamily="Anybody, sans-serif"
+                  fontFamily="'Inter', sans-serif"
                   fontWeight="800"
                   fontSize="28"
                   letterSpacing="-1.2"

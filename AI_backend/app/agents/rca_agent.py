@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.agents.historical_incident_agent import HistoricalContext, normalize_cause
@@ -105,9 +106,20 @@ class RootCauseAnalysisAgent:
                 )
 
         # A recent deployment plus application failures is stronger than either
-        # signal alone. The agent still only recommends; it never performs rollback.
+        # signal alone. But only match explicit rollout/update events, not the generic K8s word 'Deployment'
         deployment_text = " ".join(kubernetes_raw.events).lower()
-        if ("deploy" in deployment_text or "rollout" in deployment_text) and (
+        has_real_rollout = bool(
+            re.search(r'(rollout|rollingupdate|image updated|new replicaset|revision changed|deploymentrollout)', deployment_text)
+            or ('scaling down replica set' in deployment_text and 'scaling up' in deployment_text)
+        )
+        already_rolled_back = bool(
+            previous_action in {'ROLLBACK_DEPLOYMENT', 'Rollback Deployment'}
+            or (action_history and any(
+                (getattr(h, 'action', '') in {'ROLLBACK_DEPLOYMENT', 'Rollback Deployment'})
+                for h in getattr(action_history, 'recent_actions', [])
+            ))
+        )
+        if has_real_rollout and not already_rolled_back and (
             "application_failure" in scores or "unstable_pod" in scores
         ):
             add("deployment_failure", 0.55, "Failures appeared alongside a deployment/rollout event")

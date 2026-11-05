@@ -121,9 +121,17 @@ echo ""
 # ------------------------------------------------------------------------------
 # 3. Yêu cầu nhập Token (CÂU HỎI DUY NHẤT)
 # ------------------------------------------------------------------------------
+CONFIGURED_TOKEN="__SELFHEAL_TOKEN__"
+
 if [ -z "${AGENT_TOKEN}" ]; then
-  read -r -s -p "Nhập Token do SelfHeal cấp: " AGENT_TOKEN
-  echo ""
+  if [ -n "${CONFIGURED_TOKEN}" ] && [[ "${CONFIGURED_TOKEN}" != "__"* ]]; then
+    AGENT_TOKEN="${CONFIGURED_TOKEN}"
+  elif [ -n "${SELFHEAL_AGENT_TOKEN:-}" ]; then
+    AGENT_TOKEN="${SELFHEAL_AGENT_TOKEN}"
+  else
+    read -r -s -p "Nhập Token do SelfHeal cấp: " AGENT_TOKEN
+    echo ""
+  fi
 fi
 
 if [ -z "${AGENT_TOKEN// }" ]; then

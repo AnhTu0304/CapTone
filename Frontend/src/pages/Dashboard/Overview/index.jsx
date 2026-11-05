@@ -41,11 +41,16 @@ export const OverviewPage = () => {
     isRefreshing,
     triggerRefresh,
     pendingApprovalsCount,
+    refreshPendingApprovals,
     onNavigate,
   } = useDashboard();
 
   const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
   const [chartTimeRange, setChartTimeRange] = useState('15m');
+  const chartTimeRangeRef = useRef(chartTimeRange);
+  useEffect(() => {
+    chartTimeRangeRef.current = chartTimeRange;
+  }, [chartTimeRange]);
 
   // Overview Statistics Cluster API State [S5][PBI19]
   const [overviewStats, setOverviewStats] = useState(null);
@@ -184,9 +189,9 @@ export const OverviewPage = () => {
     fetchClusterInfo();
   }, [fetchClusterInfo]);
 
-  // Auto-Refresh state & controls [S5][PBI19 Task 1.4]
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(30); // 15, 30, 60 seconds
-  const [isAutoRefreshActive, setIsAutoRefreshActive] = useState(true);
+  // Auto-Refresh background interval (30s)
+  const autoRefreshInterval = 30;
+  const isAutoRefreshActive = true;
   const isPollingBusyRef = useRef(false);
 
   // Manual & automated refresh function
@@ -198,6 +203,7 @@ export const OverviewPage = () => {
         fetchOverviewStats(),
         fetchClusterInfo(),
         loadClusterTrend(chartTimeRange),
+        refreshPendingApprovals ? refreshPendingApprovals() : Promise.resolve(),
       ]);
       const now = new Date();
       setLastDataTimestamp(
@@ -276,8 +282,10 @@ export const OverviewPage = () => {
                 return data.latest_point;
               });
             }
-            if (Array.isArray(data.sequence) && data.sequence.length > 0) {
-              setTelemetrySequence(data.sequence);
+            // Chi nap sequence ban dau khi telemetrySequence dang hoan toan rong
+            // Tranh viec live_pulse (chi co 20 diem) lien tuc xoa mat chuoi lich su 15m/1h/24h cua loadClusterTrend
+            if (chartTimeRangeRef.current === '15m' && Array.isArray(data.sequence) && data.sequence.length > 0) {
+              setTelemetrySequence((prev) => (prev.length === 0 ? data.sequence : prev));
             }
             if (Array.isArray(data.incidents)) setActiveIncidents(data.incidents);
             if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
@@ -304,25 +312,51 @@ export const OverviewPage = () => {
               node_ram_gb: raw.ram_used_bytes !== undefined ? (Number(raw.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2) : prev?.node_ram_gb,
             };
           });
-          // Tự động đẩy điểm đo vào chuỗi viễn trắc khi ở chế độ xem live 15m
-          setTelemetrySequence((prevSeq) => {
-            if (!prevSeq || prevSeq.length === 0) return prevSeq;
-            const newPoint = {
-              time_bucket: new Date().toISOString(),
-              time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              fullTime: `${new Date().toLocaleTimeString('vi-VN')} (${new Date().toLocaleDateString('vi-VN')})`,
-              cpu: cpuVal !== undefined ? cpuVal : 0,
-              ram: ramVal !== undefined ? ramVal : 0,
-              rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : Number(raw.rawRamMb || 0),
-              disk: Number(raw.disk !== undefined ? raw.disk : 10),
-              latency: Number(raw.latency !== undefined ? raw.latency : 0),
-              request_rate: Number(raw.request_rate || 0),
-              http_5xx_rate: Number(raw.http_5xx_rate || 0),
-              pod_restart_count: Number(raw.pod_restart_count || 0),
-              replica_count: Number(raw.replica_count || 1),
-            };
-            return [...prevSeq.slice(1), newPoint];
-          });
+          // Chi cap nhat chuoi thoi gian khi o che do xem live 15 phut
+          if (chartTimeRangeRef.current === '15m') {
+            setTelemetrySequence((prevSeq) => {
+              if (!prevSeq || prevSeq.length === 0) return prevSeq;
+              const now = new Date();
+              const nowMs = now.getTime();
+              const lastPt = prevSeq[prevSeq.length - 1];
+              const lastPtMs = lastPt.time_bucket ? new Date(lastPt.time_bucket).getTime() : (lastPt.timestamp || 0);
+
+              // Neu diem gan nhat cach chua toi 3 giay, cap nhat tai cho diem cuoi tranh lam nhay giat truc hoanh
+              if (nowMs - lastPtMs < 3000) {
+                const updated = [...prevSeq];
+                updated[updated.length - 1] = {
+                  ...lastPt,
+                  time_bucket: now.toISOString(),
+                  timestamp: nowMs,
+                  cpu: cpuVal !== undefined ? cpuVal : lastPt.cpu,
+                  ram: ramVal !== undefined ? ramVal : lastPt.ram,
+                  rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : lastPt.rawRamMb,
+                };
+                return updated;
+              }
+
+              const newPoint = {
+                time_bucket: now.toISOString(),
+                timestamp: nowMs,
+                time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                fullTime: `${now.toLocaleTimeString('vi-VN')} (${now.toLocaleDateString('vi-VN')})`,
+                cpu: cpuVal !== undefined ? cpuVal : 0,
+                ram: ramVal !== undefined ? ramVal : 0,
+                rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : Number(raw.rawRamMb || 0),
+                disk: Number(raw.disk !== undefined ? raw.disk : 0),
+                latency: Number(raw.latency !== undefined ? raw.latency : 0),
+                request_rate: Number(raw.request_rate || 0),
+                http_5xx_rate: Number(raw.http_5xx_rate || 0),
+                pod_restart_count: Number(raw.pod_restart_count || 0),
+                replica_count: Number(raw.replica_count || 1),
+              };
+
+              if (prevSeq.length >= 60) {
+                return [...prevSeq.slice(1), newPoint];
+              }
+              return [...prevSeq, newPoint];
+            });
+          }
           setLastDataTimestamp(new Date().toLocaleTimeString());
         } else if (payload.type === 'incident' && payload.data) {
           setActiveIncidents((prev) => [payload.data, ...prev.slice(0, 9)]);
@@ -359,7 +393,6 @@ export const OverviewPage = () => {
   }, [rawPods]);
 
   const namespacesCount = namespacesList.length;
-  const firstNode = clusterInfo?.nodes?.[0];
 
   // Node hardware capacity - Tổng hợp dung lượng thực tế từ toàn bộ nodes của cụm
   const { totalCpuCores, totalRamGb, totalDiskTb } = useMemo(() => {
@@ -378,15 +411,15 @@ export const OverviewPage = () => {
       }, 0);
 
       return {
-        totalCpuCores: totalCores > 0 ? Math.round(totalCores) : 12,
-        totalRamGb: totalRam > 0 ? (totalRam / (1024 * 1024 * 1024)).toFixed(1) : '8.0',
-        totalDiskTb: totalDisk > 0 ? (totalDisk / (1024 * 1024 * 1024 * 1024)).toFixed(1) : '1.0',
+        totalCpuCores: totalCores > 0 ? Math.round(totalCores) : 0,
+        totalRamGb: totalRam > 0 ? (totalRam / (1024 * 1024 * 1024)).toFixed(1) : '0.0',
+        totalDiskTb: totalDisk > 0 ? (totalDisk / (1024 * 1024 * 1024 * 1024)).toFixed(1) : '0.0',
       };
     }
     return {
-      totalCpuCores: 12,
-      totalRamGb: '8.0',
-      totalDiskTb: '1.0',
+      totalCpuCores: 0,
+      totalRamGb: '0.0',
+      totalDiskTb: '0.0',
     };
   }, [clusterInfo?.nodes]);
 
@@ -425,7 +458,7 @@ export const OverviewPage = () => {
 
   const diskVal = overviewStats?.resource_usage?.avg_disk_percent !== undefined
     ? Math.round(Number(overviewStats.resource_usage.avg_disk_percent))
-    : (telemetry?.disk !== undefined ? Math.round(Number(telemetry.disk)) : 10);
+    : (telemetry?.disk !== undefined ? Math.round(Number(telemetry.disk)) : 0);
   const diskStatusText = diskVal > 85 ? 'Cảnh báo đầy' : diskVal > 70 ? 'Cần theo dõi' : 'Bình thường';
   const diskUsedGb = Math.round((diskVal / 100) * parseFloat(totalDiskTb) * 1024);
 
@@ -459,12 +492,14 @@ export const OverviewPage = () => {
       const cpuPercent = Math.min(100, Math.max(0, Math.round((Number(pt.cpu) || 0) * 100) / 100));
 
       return {
+        timestamp: t.getTime(),
+        time_bucket: t.toISOString(),
         time: t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         fullTime: `${t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} (${t.toLocaleDateString('vi-VN')})`,
         cpu: cpuPercent,
         ram: ramPercent,
         rawRamMb: rawRamMb,
-        disk: Number(pt.disk) || 10,
+        disk: Number(pt.disk) || 0,
         latency: Number(pt.latency) || 0,
       };
     });
@@ -646,58 +681,6 @@ export const OverviewPage = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Auto-Refresh Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setIsAutoRefreshActive((prev) => !prev)}
-            title="Nhấn để Bật/Tắt tự động làm mới"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              padding: '6px 12px',
-              borderRadius: 'var(--dash-radius-md)',
-              backgroundColor: isAutoRefreshActive ? 'var(--dash-mint-100)' : 'var(--dash-bg-subtle)',
-              color: isAutoRefreshActive ? 'var(--dash-mint-600)' : 'var(--dash-text-muted)',
-              border: isAutoRefreshActive ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-border)',
-              cursor: 'pointer',
-            }}
-          >
-            <span
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: isAutoRefreshActive ? 'var(--dash-success)' : 'var(--dash-text-muted)',
-                boxShadow: isAutoRefreshActive ? '0 0 8px var(--dash-success)' : 'none',
-              }}
-            />
-            <span>{isAutoRefreshActive ? `Tự làm mới: ${autoRefreshInterval}s` : 'Tự làm mới: TẮT'}</span>
-          </button>
-
-          {/* Interval selector dropdown */}
-          <select
-            aria-label="Chu kỳ làm mới"
-            value={String(autoRefreshInterval)}
-            onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-            style={{
-              padding: '6px 10px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: 'var(--dash-radius-md)',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: '#FFFFFF',
-              color: 'var(--dash-text-primary)',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="15">15s</option>
-            <option value="30">30s</option>
-            <option value="60">60s</option>
-          </select>
-
           {/* Manual Refresh Now button */}
           <button
             type="button"
@@ -724,82 +707,6 @@ export const OverviewPage = () => {
             <RefreshCw size={14} className={(isRefreshing || isPollingBusyRef.current) ? 'animate-spin' : ''} />
             <span>Làm mới</span>
           </button>
-        </div>
-      </div>
-
-      {/* 2. System Health Card */}
-      <div
-        className="dash-card"
-        style={{
-          padding: '20px 24px',
-          backgroundColor: '#FFFFFF',
-          borderLeft: activeIncidentsCount > 0 ? '4px solid var(--dash-warning)' : '4px solid var(--dash-success)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: 'var(--dash-radius-lg)',
-              backgroundColor: activeIncidentsCount > 0 ? 'var(--dash-warning-bg)' : 'var(--dash-success-bg)',
-              color: activeIncidentsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-success)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            {activeIncidentsCount > 0 ? <AlertTriangle size={26} /> : <ShieldCheck size={26} />}
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '1.0625rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                {activeIncidentsCount > 0 ? 'Hệ Thống Đang Giám Sát Cảnh Báo' : 'Trạng Thái Hệ Thống: Khỏe Mạnh & Ổn Định'}
-              </span>
-              <span
-                style={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  backgroundColor: activeIncidentsCount > 0 ? 'var(--dash-warning-bg)' : 'var(--dash-success-bg)',
-                  color: activeIncidentsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-success-text)',
-                  border: activeIncidentsCount > 0 ? '1px solid var(--dash-warning-border)' : '1px solid var(--dash-success-border)',
-                }}
-              >
-                {activeIncidentsCount > 0 ? 'CẦN CHÚ Ý' : 'HOẠT ĐỘNG TỐT'}
-              </span>
-            </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-              Toàn bộ {nodeCount} máy chủ (node: {firstNode?.name || 'minikube'}) và {podCount} pods báo cáo dữ liệu định kỳ ổn định. Đầu dò nhân eBPF hoạt động với độ trễ &lt; 1.2ms. {activeIncidentsCount > 0 ? `Đang có ${activeIncidentsCount} sự cố/khuyến nghị AI đang được xử lý.` : 'Không có sự cố nghiêm trọng nào.'}
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-              Kết Nối Tác Tử
-            </div>
-            <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-success)' }}>
-              Đã kết nối (Nhịp tim 3s)
-            </div>
-          </div>
-          <div style={{ height: '28px', width: '1px', backgroundColor: 'var(--dash-border)' }} />
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-              Sự Cố Đang Diễn Ra
-            </div>
-            <div style={{ fontSize: '0.875rem', fontWeight: 700, color: activeIncidentsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-text-primary)' }}>
-              {activeIncidentsCount} Sự cố {activeIncidentsCount > 0 ? 'cần xử lý' : 'nghiêm trọng'}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -898,7 +805,7 @@ export const OverviewPage = () => {
                 color: 'var(--dash-text-muted)',
               }}
             >
-              {nodeCpuCores} / {totalCpuCores} vCPUs
+              {totalCpuCores > 0 ? `${nodeCpuCores} / ${totalCpuCores} vCPUs` : `${nodeCpuCores} vCPUs`}
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -926,7 +833,7 @@ export const OverviewPage = () => {
                 color: 'var(--dash-text-muted)',
               }}
             >
-              {nodeRamGb} / {totalRamGb} GB
+              {parseFloat(totalRamGb) > 0 ? `${nodeRamGb} / ${totalRamGb} GB` : `${nodeRamGb} GB`}
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -950,7 +857,7 @@ export const OverviewPage = () => {
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: diskVal > 85 ? 'var(--dash-danger)' : diskVal > 70 ? 'var(--dash-warning)' : 'var(--dash-success)' }}>{diskStatusText}</span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Ổ đĩa PV: {diskUsedGb} GB / {totalDiskTb} TB
+            {parseFloat(totalDiskTb) > 0 ? `Ổ đĩa PV: ${diskUsedGb} GB / ${totalDiskTb} TB` : "Ổ đĩa PV"}
           </div>
         </div>
 
@@ -1047,7 +954,7 @@ export const OverviewPage = () => {
                 ? 'Chưa có mẫu'
                 : telemetry?.latency
                 ? `${telemetry.latency}ms`
-                : '< 1.2ms'}
+                : '0ms'}
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
@@ -1070,11 +977,11 @@ export const OverviewPage = () => {
               {overviewStats?.remediations?.total !== undefined ? overviewStats.remediations.total : 0}
             </span>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
-              {overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}% Thành công` : '100% Thành công'}
+              {overviewStats?.remediations?.total > 0 ? `${Math.round(overviewStats.remediations.success_rate || 0)}% Thành công` : 'Chưa có sự cố'}
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Thời gian phục hồi TB: {overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '0.3s'}
+            Thời gian phục hồi TB: {overviewStats?.remediations?.total > 0 && overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '--'}
           </div>
         </div>
 
@@ -1128,181 +1035,6 @@ export const OverviewPage = () => {
         error={chartError}
         onRetry={() => loadClusterTrend(chartTimeRange)}
       />
-
-      {/* 4b. Cluster Fleet Status & Overview Area [S5][PBI19 Task 1.3] */}
-      <div
-        className="dash-card"
-        style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          borderRadius: '12px',
-          padding: '20px 24px',
-          boxShadow: 'var(--dash-shadow-xs)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Server size={18} color="var(--dash-primary)" />
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Trạng Thái Hạ Tầng Cụm Kubernetes (Cluster Fleet Status)
-              </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Hạ tầng được cấp quyền thuộc tổ chức <strong>{currentOrg?.name || 'Tổ chức hiện tại'}</strong> &bull; Đồng bộ thời gian thực
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-              Đang kết nối: <strong style={{ color: 'var(--dash-success)' }}>{envList?.filter((c) => c.agentStatus === 'ONLINE').length || 1}</strong> / {envList?.length || 1} cụm
-            </span>
-            <button
-              type="button"
-              onClick={() => onNavigate && onNavigate('/dashboard/clusters')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid var(--dash-border)',
-                color: 'var(--dash-primary)',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span>Quản lý cụm</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
-        </div>
-
-        {/* Cluster List Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
-                <th style={{ padding: '10px 14px', fontWeight: 600 }}>CỤM KUBERNETES</th>
-                <th style={{ padding: '10px 14px', fontWeight: 600 }}>MÔI TRƯỜNG</th>
-                <th style={{ padding: '10px 14px', fontWeight: 600 }}>TRẠNG THÁI CỤM</th>
-                <th style={{ padding: '10px 14px', fontWeight: 600 }}>TÁC TỬ eBPF</th>
-                <th style={{ padding: '10px 14px', fontWeight: 600 }}>QUY MÔ PHẦN CỨNG</th>
-                <th style={{ padding: '10px 14px', fontWeight: 600 }}>PHIÊN BẢN K8s</th>
-                <th style={{ padding: '10px 14px', fontWeight: 600, textAlign: 'right' }}>THAO TÁC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(!envList || envList.length === 0) ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
-                    Chưa có cụm Kubernetes nào được cấu hình trong tổ chức này.
-                  </td>
-                </tr>
-              ) : (
-                envList.map((c) => {
-                  const isCurrent = c.id === activeClusterId;
-                  const isConnected = c.status === 'Ready' || c.status === 'Healthy' || c.status === 'CONNECTED';
-                  const isAgentLive = c.agentStatus === 'ONLINE';
-
-                  return (
-                    <tr
-                      key={c.id}
-                      style={{
-                        borderBottom: '1px solid var(--dash-border)',
-                        backgroundColor: isCurrent ? '#F0FDF4' : 'transparent',
-                      }}
-                    >
-                      <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Server size={14} color={isCurrent ? '#16A34A' : 'var(--dash-text-muted)'} />
-                          <span>{c.cluster || c.name}</span>
-                          {isCurrent && (
-                            <span style={{ fontSize: '0.625rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#DCFCE7', color: '#15803D', fontWeight: 800 }}>
-                              HIỆN TẠI
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 14px', color: 'var(--dash-text-secondary)' }}>
-                        {c.envName || c.environment_name || 'Production'}
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <span
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            backgroundColor: isConnected ? '#ECFDF5' : '#FEF2F2',
-                            color: isConnected ? '#059669' : '#DC2626',
-                            border: isConnected ? '1px solid #A7F3D0' : '1px solid #FECACA',
-                          }}
-                        >
-                          {isConnected ? 'CONNECTED' : 'DISCONNECTED'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <span
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            backgroundColor: isAgentLive ? '#EFF6FF' : '#F1F5F9',
-                            color: isAgentLive ? '#1D4ED8' : '#64748B',
-                            border: isAgentLive ? '1px solid #BFDBFE' : '1px solid #CBD5E1',
-                          }}
-                        >
-                          {c.agentStatus || 'PENDING'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-secondary)' }}>
-                        {c.nodes || nodeCount} Nodes &bull; {c.pods || podCount} Pods
-                      </td>
-                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-text-muted)' }}>
-                        {clusterInfo?.kubernetes_version || 'v1.37.0'}
-                      </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                        {!isCurrent ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCurrentEnv(c);
-                              localStorage.setItem('selfheal_active_cluster_id', c.id);
-                              localStorage.setItem('selfheal_active_cluster_name', c.cluster || c.name);
-                              localStorage.setItem('selfheal_active_env_name', c.envName || 'Production');
-                              triggerRefresh();
-                            }}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid var(--dash-border)',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              color: 'var(--dash-text-primary)',
-                            }}
-                          >
-                            Chuyển sang cụm này
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#15803D', fontWeight: 700 }}>
-                            Đang xem
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>>
 
       {/* 5, 6, 7. Summaries Grid: AI Predictions, Incidents, Self-Healing */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
@@ -1570,16 +1302,16 @@ export const OverviewPage = () => {
             <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Tỷ Lệ Thành Công</div>
               <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-success)', marginTop: '2px' }}>
-                {overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}%` : '100%'}
+                {overviewStats?.remediations?.total > 0 && overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}%` : '--'}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>
-                {overviewStats?.remediations?.succeeded !== undefined ? `${overviewStats.remediations.succeeded}/${overviewStats.remediations.total || 0} Hành động` : (overviewStats?.remediations?.total ? `${overviewStats.remediations.total} Hành động` : 'Chưa có')}
+                {overviewStats?.remediations?.total > 0 ? `${overviewStats.remediations.succeeded || 0}/${overviewStats.remediations.total} Hành động` : 'Chưa có hành động'}
               </div>
             </div>
             <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Thời Gian Phục Hồi TB</div>
               <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                {overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '0.3s'}
+                {overviewStats?.remediations?.total > 0 && overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '--'}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>Không gián đoạn</div>
             </div>

@@ -80,7 +80,7 @@ def resolve_backend_url(request: Request) -> str:
 
 
 @router.get("/install.sh", summary="Download Linux/macOS Bash Installer")
-async def get_bash_installer(request: Request):
+async def get_bash_installer(request: Request, token: str | None = None):
     """Returns the official SelfHeal Agent Bash installation script for Linux and macOS."""
     file_path = safe_resolve_script("install-agent.sh")
     with open(file_path, "r", encoding="utf-8") as f:
@@ -90,9 +90,15 @@ async def get_bash_installer(request: Request):
     if ws_url:
         content = content.replace('CONFIGURED_SERVER_URL="__SELFHEAL_BACKEND_URL__"', f'CONFIGURED_SERVER_URL="{ws_url}"')
 
-    if settings.DOCKER_IMAGE and settings.DOCKER_IMAGE.strip():
-        content = content.replace('AGENT_IMAGE="__SELFHEAL_DOCKER_IMAGE__"', f'AGENT_IMAGE="{settings.DOCKER_IMAGE.strip()}"')
-        content = content.replace('image: captone-agent:1.0.0', f'image: {settings.DOCKER_IMAGE.strip()}')
+    if token and token.strip():
+        clean_token = token.strip().replace('"', '').replace('`', '').replace('$', '').replace('\n', '')
+        content = content.replace('CONFIGURED_TOKEN="__SELFHEAL_TOKEN__"', f'CONFIGURED_TOKEN="{clean_token}"')
+
+    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "captone-agent:1.0.0"
+    if "ghcr.io" in docker_img:
+        docker_img = "captone-agent:1.0.0"
+    content = content.replace('AGENT_IMAGE="__SELFHEAL_DOCKER_IMAGE__"', f'AGENT_IMAGE="{docker_img}"')
+    content = content.replace('image: captone-agent:1.0.0', f'image: {docker_img}')
 
     # Normalize Windows CRLF to Unix LF for Linux/macOS bash execution
     content = content.replace('\r\n', '\n').replace('\r', '\n')
@@ -109,7 +115,7 @@ async def get_bash_installer(request: Request):
 
 
 @router.get("/install.ps1", summary="Download Windows PowerShell Installer")
-async def get_powershell_installer(request: Request):
+async def get_powershell_installer(request: Request, token: str | None = None):
     """Returns the official SelfHeal Agent PowerShell installation script for Windows."""
     file_path = safe_resolve_script("install-agent.ps1")
     with open(file_path, "r", encoding="utf-8") as f:
@@ -119,9 +125,15 @@ async def get_powershell_installer(request: Request):
     if ws_url:
         content = content.replace('$CONFIGURED_SERVER_URL = "__SELFHEAL_BACKEND_URL__"', f'$CONFIGURED_SERVER_URL = "{ws_url}"')
 
-    if settings.DOCKER_IMAGE and settings.DOCKER_IMAGE.strip():
-        content = content.replace('$AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"', f'$AGENT_IMAGE = "{settings.DOCKER_IMAGE.strip()}"')
-        content = content.replace('image: captone-agent:1.0.0', f'image: {settings.DOCKER_IMAGE.strip()}')
+    if token and token.strip():
+        clean_token = token.strip().replace('"', '').replace('`', '').replace('$', '').replace('\n', '')
+        content = content.replace('$CONFIGURED_TOKEN = "__SELFHEAL_TOKEN__"', f'$CONFIGURED_TOKEN = "{clean_token}"')
+
+    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "captone-agent:1.0.0"
+    if "ghcr.io" in docker_img:
+        docker_img = "captone-agent:1.0.0"
+    content = content.replace('$AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"', f'$AGENT_IMAGE = "{docker_img}"')
+    content = content.replace('image: captone-agent:1.0.0', f'image: {docker_img}')
 
     return Response(
         content=content,

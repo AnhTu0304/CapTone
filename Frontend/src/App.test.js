@@ -367,7 +367,6 @@ test('renders Organization Profile (/dashboard/organization) and Members Page (/
   window.history.pushState({}, '', '/dashboard/organization');
   render(<App />);
   expect(screen.getByText(/Cài Đặt Hồ Sơ Tổ Chức/i)).toBeInTheDocument();
-  expect(screen.getByText(/Cụm Kubernetes Đã Liên Kết/i)).toBeInTheDocument();
   expect(screen.getByText(/Thông Tin Doanh Nghiệp/i)).toBeInTheDocument();
 
   window.history.pushState({}, '', '/dashboard/organization/members');

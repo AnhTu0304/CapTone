@@ -174,15 +174,9 @@ export const RouteRenderer = ({
     return <DashboardPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle standalone notifications / alerts paths
+  // Handle standalone notifications path
   if (path === '/notifications') {
     return <DashboardPage currentPath="/dashboard/notifications" onNavigate={onNavigate} />;
-  }
-  if (path === '/alerts' || path === '/alert-rules') {
-    return <DashboardPage currentPath="/dashboard/alerts" onNavigate={onNavigate} />;
-  }
-  if (path === '/alerts/history' || path === '/dashboard/alerts/history') {
-    return <DashboardPage currentPath="/dashboard/alerts/history" onNavigate={onNavigate} />;
   }
 
   // Handle all admin routes

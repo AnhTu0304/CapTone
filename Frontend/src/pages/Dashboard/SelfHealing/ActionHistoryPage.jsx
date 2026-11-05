@@ -55,7 +55,7 @@ const getThisYearStr = () => {
   return String(new Date().getFullYear());
 };
 
-export const ActionHistoryPage = () => {
+export const ActionHistoryPage = ({ onNavigate }) => {
   const { currentOrg, currentEnv } = useDashboard();
   const [searchTerm, setSearchTerm] = useState('');
   const [actions, setActions] = useState([]);
@@ -68,7 +68,7 @@ export const ActionHistoryPage = () => {
   const ITEMS_PER_PAGE = 10;
 
   // Filter States
-  const [timeFilterMode, setTimeFilterMode] = useState('today'); // 'today' | 'date' | 'month' | 'year' | 'all'
+  const [timeFilterMode, setTimeFilterMode] = useState('all'); // 'today' | 'date' | 'month' | 'year' | 'all'
   const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedMonth, setSelectedMonth] = useState(() => getThisMonthStr());
   const [selectedYear, setSelectedYear] = useState(() => getThisYearStr());
@@ -101,7 +101,7 @@ export const ActionHistoryPage = () => {
   const currentFilterLabel = useMemo(() => {
     if (timeFilterMode === 'today') {
       const parts = getTodayStr().split('-');
-      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
+      return `24 giờ qua (${parts[2]}/${parts[1]}/${parts[0]})`;
     }
     if (timeFilterMode === 'date') {
       if (!selectedDate) return 'Chọn ngày';
@@ -144,24 +144,35 @@ export const ActionHistoryPage = () => {
     const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
     const mttrSec = item.elapsed_seconds ? `${item.elapsed_seconds}s` : `${(durMs / 1000).toFixed(1)}s`;
 
-    const targetName = item.target_name || item.target_id || 'Chưa xác định';
-    const actionTypeCode = item.action_type_code || item.action_type_name || 'Tự phục hồi';
+    // Strip WORKLOAD/ or any other prefix from target name
+    const rawTarget = item.target_name || item.target_id || 'Chưa xác định';
+    const targetName = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
+
+    const rawActionCode = item.action_type_code || item.action_type_name || 'Tự phục hồi';
+    let actionFriendlyName = rawActionCode;
+    const upperCode = String(rawActionCode).toUpperCase();
+    if (upperCode.includes('SCALE')) actionFriendlyName = 'Scale Replicas';
+    else if (upperCode.includes('RESTART')) actionFriendlyName = 'Khởi động lại Pod';
+    else if (upperCode.includes('ROLLBACK')) actionFriendlyName = 'Rollback Deployment';
+    else if (upperCode.includes('CLEANUP')) actionFriendlyName = 'Dọn dẹp tài nguyên';
+    else if (upperCode.includes('NO_ACTION')) actionFriendlyName = 'Giám sát an toàn';
+
     const rawMsg = String(item.result?.message || item.error_message || '');
-    let title = rawMsg || `Thực thi ${actionTypeCode} trên ${targetName}`;
+    let title = rawMsg || `Thực thi ${actionFriendlyName} trên ${targetName}`;
     const rbacMatch = rawMsg.match(
-      /User\\?\s*"([^"\\]+)\\?"\s+cannot\s+(\w+)\s+resource\s+\\?"([^"\\]+)\\?"(?:\s+in API group\s+\\?"([^"\\]*)\\?")?(?:\s+in the namespace\s+\\?"([^"\\]+)\\?")?/i
+      /User\?\s*"([^"\\]+)\?"\s+cannot\s+(\w+)\s+resource\s+\?"([^"\\]+)\?"(?:\s+in API group\s+\?"([^"\\]*)\?")?(?:\s+in the namespace\s+\?"([^"\\]+)\?")?/i
     );
     if (rbacMatch || rawMsg.includes('(403)') || rawMsg.includes('Forbidden')) {
       const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
       const verb = rbacMatch ? rbacMatch[2] : 'patch';
       const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
       const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : (item.namespace || 'default');
-      title = `Thực thi ${actionTypeCode} trên "${targetName}" thất bại [Lỗi 403 Forbidden]: ServiceAccount "${saUser}" thiếu quyền "${verb}" tài nguyên "${resource}" tại namespace "${targetNs}"`;
+      title = `Thực thi ${actionFriendlyName} trên "${targetName}" thất bại [Lỗi 403 Forbidden]: ServiceAccount "${saUser}" thiếu quyền "${verb}" tài nguyên "${resource}" tại namespace "${targetNs}"`;
     } else if (rawMsg.includes('Self-healing mitigate action')) {
       title =
-        actionTypeCode === 'NO_ACTION'
-          ? `Giám sát an toàn (NO_ACTION): "${targetName}" ổn định trong ngưỡng an toàn`
-          : `Đã thực thi thành công ${actionTypeCode} trên dịch vụ "${targetName}"`;
+        upperCode === 'NO_ACTION'
+          ? `Giám sát an toàn: "${targetName}" ổn định trong ngưỡng an toàn`
+          : `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
     } else if (rawMsg.includes('HTTPHeaderDict')) {
       title = rawMsg.split('HTTP response headers:')[0].trim();
     }
@@ -176,46 +187,54 @@ export const ActionHistoryPage = () => {
        rawMsg.toLowerCase().includes('chờ phê duyệt'));
 
     let resultText = 'Thành công (100%)';
-    let verified = item.verification?.verification_type || (item.execution_status === 'SUCCEEDED' ? 'SLO Health Probe' : 'Hệ thống K8s');
+    let verified = '';
     let effectiveMttr = mttrSec;
     let effectiveStatus = item.execution_status || 'SUCCEEDED';
 
     if (isWaitingApproval) {
-      resultText = 'Chờ duyệt HITL (PENDING)';
-      verified = 'Đang chờ phê duyệt';
+      // Yêu cầu người dùng: Xóa (PENDING) và xóa chữ 'Đang chờ phê duyệt' bị lặp lại
+      resultText = 'Chờ duyệt HITL';
+      verified = '';
       effectiveMttr = 'Đang chờ';
       effectiveStatus = 'PENDING';
       if (!title || title.includes('Thực thi')) {
-        title = `Hành động ${actionTypeCode} trên "${targetName}" đang chờ phê duyệt tại Cổng HITL`;
+        title = `Hành động ${actionFriendlyName} trên "${targetName}" đang chờ phê duyệt tại Cổng HITL`;
       }
     } else if (item.execution_status === 'RUNNING') {
       resultText = 'Đang thực thi...';
-      verified = 'Đang can thiệp trên K8s';
+      verified = 'Đang xử lý';
       effectiveMttr = 'Đang chạy';
       effectiveStatus = 'RUNNING';
     } else if (item.execution_status === 'FAILED') {
-      resultText = 'Thất bại (Failed)';
-      verified = item.verification?.verification_type || 'Kiểm tra K8s thất bại';
+      resultText = 'Thất bại';
+      verified = item.verification?.verification_type ? 'Kiểm tra thất bại' : '';
       effectiveStatus = 'FAILED';
     } else if (item.execution_status === 'CANCELLED') {
-      resultText = 'Đã hủy bỏ (Cancelled)';
-      verified = 'Đã hủy bỏ';
+      resultText = 'Đã hủy bỏ';
+      verified = '';
       effectiveMttr = '-';
       effectiveStatus = 'CANCELLED';
     } else if (item.execution_status === 'SUCCEEDED') {
       resultText = 'Thành công (100%)';
-      verified = item.verification?.verification_type || 'SLO Health Probe';
+      const rawVer = item.verification?.verification_type || '';
+      verified = rawVer === 'K8S_POST_HEALING_PROBE' ? 'Đã xác thực K8s Probe' : (rawVer || 'Đã xác thực an toàn');
       effectiveStatus = 'SUCCEEDED';
       if (title.toLowerCase().includes('chờ phê duyệt')) {
-        title = `Đã thực thi thành công ${actionTypeCode} trên dịch vụ "${targetName}"`;
+        title = `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
       }
     }
+
+    // Làm gọn tiêu đề: Bỏ mã kỹ thuật (SCALE_REPLICAS), (Replicas) và bỏ cụm "theo chính sách ..." trong tiêu đề
+    title = title.replace(/\s*\((SCALE_REPLICAS|RESTART_POD|ROLLBACK_DEPLOYMENT|NO_ACTION|Replicas)\)/gi, '');
+    title = title.replace(/\s*theo chính sách\s+[A-Za-z0-9_-]+/gi, '');
+    title = title.replace(/\s{2,}/g, ' ').trim();
+    if (!title.endsWith('.')) title += '.';
 
     return {
       id: shortId,
       rawId: item.id,
       title,
-      target: `${item.target_type || 'Workload'}/${targetName}`,
+      target: targetName, // Xóa WORKLOAD/, chỉ hiển thị tên dịch vụ/target sạch
       targetName,
       namespace: item.namespace || 'default',
       policy: policyName,
@@ -333,7 +352,9 @@ export const ActionHistoryPage = () => {
         const itemYearStr = String(d.getFullYear());
 
         if (timeFilterMode === 'today') {
-          if (itemDateStr !== getTodayStr()) return false;
+          const isWithin24Hours = (Date.now() - d.getTime()) <= 24 * 60 * 60 * 1000 && (Date.now() - d.getTime()) >= -60000;
+          const isSameCalendarDay = itemDateStr === getTodayStr();
+          if (!isWithin24Hours && !isSameCalendarDay) return false;
         } else if (timeFilterMode === 'date') {
           if (selectedDate && itemDateStr !== selectedDate) return false;
         } else if (timeFilterMode === 'month') {
@@ -415,17 +436,26 @@ export const ActionHistoryPage = () => {
     }
     let totalSec = 0;
     let succeededCount = 0;
+    let finishedCount = 0;
+    let pendingCount = 0;
     filteredHistory.forEach((a) => {
+      if (a.status === 'PENDING' || a.executionStatus === 'PENDING' || (a.result && a.result.includes('Chờ duyệt'))) {
+        pendingCount++;
+        return;
+      }
+      finishedCount++;
       const dur = a.rawItem?.attempts?.[0]?.duration_ms
         ? a.rawItem.attempts[0].duration_ms / 1000
         : (parseFloat(a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
       totalSec += dur;
-      if (a.status === 'SUCCEEDED') succeededCount++;
+      if (a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED') succeededCount++;
     });
     return {
       totalActions: total,
-      averageRecoveryTime: `${(totalSec / total).toFixed(1)}s`,
-      successRate: `${Math.round((succeededCount / total) * 100)}%`,
+      pendingCount,
+      finishedCount,
+      averageRecoveryTime: finishedCount > 0 ? `${(totalSec / finishedCount).toFixed(1)}s` : '0s',
+      successRate: finishedCount > 0 ? `${Math.round((succeededCount / finishedCount) * 100)}%` : '100%',
     };
   }, [filteredHistory]);
 
@@ -774,7 +804,10 @@ export const ActionHistoryPage = () => {
                         Ngày có hành động gần đây:
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {['2026-10-31', '2026-10-30', '2026-10-29', '2026-10-28', '2026-10-27'].map((dStr) => {
+                        {Array.from({ length: 7 }, (_, i) => {
+                          const dt = new Date(Date.now() - i * 86400000);
+                          return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                        }).map((dStr) => {
                           const dParts = dStr.split('-');
                           const isToday = dStr === getTodayStr();
                           const isSelected = (timeFilterMode === 'today' && isToday) || (timeFilterMode === 'date' && selectedDate === dStr);
@@ -996,11 +1029,11 @@ export const ActionHistoryPage = () => {
               }}
             >
               <option value="ALL">Tất cả trạng thái</option>
-              <option value="SUCCEEDED">Thành công (SUCCEEDED)</option>
-              <option value="PENDING">Chờ duyệt (PENDING)</option>
-              <option value="FAILED">Thất bại (FAILED)</option>
-              <option value="CANCELLED">Đã hủy bỏ (CANCELLED)</option>
-              <option value="RUNNING">Đang thực thi (RUNNING)</option>
+              <option value="SUCCEEDED">Thành công</option>
+              <option value="PENDING">Chờ duyệt HITL</option>
+              <option value="FAILED">Thất bại</option>
+              <option value="CANCELLED">Đã hủy bỏ</option>
+              <option value="RUNNING">Đang thực thi</option>
             </select>
           </div>
 
@@ -1138,9 +1171,10 @@ export const ActionHistoryPage = () => {
                   const isSucceeded = rec.status === 'SUCCEEDED';
                   const isCancelled = rec.status === 'CANCELLED';
                   const isFailed = rec.status === 'FAILED';
+                  const isPending = rec.status === 'PENDING' || (rec.result && rec.result.includes('Chờ duyệt'));
 
                   let statusColor = '#059669';
-                  if (isCancelled) statusColor = '#D97706';
+                  if (isPending || isCancelled) statusColor = '#D97706';
                   if (isFailed) statusColor = '#DC2626';
 
                   return (
@@ -1163,31 +1197,60 @@ export const ActionHistoryPage = () => {
                         <span style={{ borderBottom: '1px dashed #CBD5E1' }}>{rec.id}</span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{rec.title}</div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                          Chính sách: {rec.policy}
-                        </div>
+                        <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)', lineHeight: 1.45 }}>{rec.title}</div>
                         {rec.errorMessage && (
-                          <div style={{ fontSize: '0.6875rem', color: '#DC2626', marginTop: '2px' }}>
+                          <div style={{ fontSize: '0.6875rem', color: '#DC2626', marginTop: '3px' }}>
                             Lý do: {rec.errorMessage}
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', color: 'var(--dash-primary)' }}>
-                        <div>{rec.target}</div>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--dash-primary)' }}>{rec.target}</div>
                         <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>ns: {rec.namespace}</div>
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: statusColor }}>
                         {rec.mttr}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: statusColor, fontWeight: 600 }}>
-                          {isSucceeded && <CheckCircle2 size={13} />}
-                          {isCancelled && <XCircle size={13} />}
-                          {isFailed && <AlertCircle size={13} />}
-                          <span>{rec.result}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: statusColor, fontWeight: 600 }}>
+                            {isPending && <Clock size={13} color="#D97706" />}
+                            {isSucceeded && <CheckCircle2 size={13} />}
+                            {isCancelled && <XCircle size={13} />}
+                            {isFailed && <AlertCircle size={13} />}
+                            <span>{rec.result}</span>
+                          </div>
+                          {isPending && onNavigate && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(rec.target)}`);
+                              }}
+                              style={{
+                                padding: '2px 8px',
+                                fontSize: '0.6875rem',
+                                fontWeight: 700,
+                                backgroundColor: '#FEF3C7',
+                                color: '#B45309',
+                                border: '1px solid #FDE68A',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                width: 'fit-content',
+                              }}
+                              title="Chuyen ngay toi Cong Phe Duyet HITL de kiem tra va duyet"
+                            >
+                              <span>Ký duyệt ngay &rarr;</span>
+                            </button>
+                          )}
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{rec.verifiedBy}</div>
+                        {rec.verifiedBy ? (
+                          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>{rec.verifiedBy}</div>
+                        ) : null}
+
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
                         {rec.timestamp}

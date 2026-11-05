@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import usePermissions from '../../../hooks/usePermissions';
 import NewPolicyModal from './NewPolicyModal';
+import PolicyDetailModal from './PolicyDetailModal';
 import {
   Shield,
   Sliders,
@@ -24,8 +25,14 @@ import {
   Building,
   Server,
   UserCheck,
-  Trash2
+  Trash2,
+
+  Eye,
+
+
+  Clock
 } from 'lucide-react';
+
 
 export const PoliciesPage = () => {
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
@@ -256,6 +263,7 @@ export const PoliciesPage = () => {
 
   const [deletingPolicyId, setDeletingPolicyId] = useState(null);
   const [policyToDelete, setPolicyToDelete] = useState(null);
+  const [selectedPolicy, setSelectedPolicy] = useState(null);
 
   const handleDeletePolicy = (policy) => {
     if (!canManagePolicies) {
@@ -281,6 +289,7 @@ export const PoliciesPage = () => {
         }
       } catch (e) {}
       toastSuccess(`Đã xóa thành công quy tắc "${policyToDelete.name}"!`, "Đã Xóa Quy Tắc");
+      setSelectedPolicy(null);
       setPolicyToDelete(null);
     } catch (err) {
       toastError(err?.message || "Lỗi kết nối máy chủ khi xóa chính sách", "Xóa Thất Bại");
@@ -557,268 +566,580 @@ export const PoliciesPage = () => {
         </div>
       )}
 
-      {/* 1. Chế Độ Tự Động Hóa Cốt Lõi */}
+      {/* 1. Chế Độ Vận Hành Tự Động Hóa (Cluster Automation Mode) */}
       <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <Shield size={18} color="var(--dash-primary)" />
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-            Chế Độ Vận Hành Tự Động Hóa (Cluster Automation Mode)
-          </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--dash-primary)',
+              flexShrink: 0,
+            }}
+          >
+            <Shield size={18} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
+              Chế Độ Vận Hành Tự Động Hóa (Cluster Automation Mode)
+            </h2>
+            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+              Quyết định mức độ tự trị và quyền can thiệp phục hồi của AI trên cụm Kubernetes
+            </p>
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-          {/* Supervised HITL (Khuyến nghị) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+          {/* Card 1: Supervised HITL (Khuyến nghị) */}
           <div
             onClick={() => handleSelectAutomationMode('SUPERVISED')}
             style={{
-              padding: '16px',
-              borderRadius: 'var(--dash-radius-md)',
-              border: globalMode === 'SUPERVISED' ? '2px solid var(--dash-primary)' : '1px solid var(--dash-border-subtle)',
-              backgroundColor: globalMode === 'SUPERVISED' ? 'rgba(16, 185, 129, 0.04)' : 'white',
+              padding: '14px 16px',
+              borderRadius: '12px',
+              border: globalMode === 'SUPERVISED' ? '2px solid var(--dash-primary)' : '1px solid #E2E8F0',
+              backgroundColor: globalMode === 'SUPERVISED' ? 'rgba(16, 185, 129, 0.04)' : '#FFFFFF',
+              boxShadow: globalMode === 'SUPERVISED' ? '0 2px 6px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
               cursor: canManagePolicies ? 'pointer' : 'not-allowed',
               opacity: canManagePolicies ? 1 : 0.8,
-              position: 'relative',
-              transition: 'all 0.2s',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              transition: 'all 0.2s ease',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Zap size={18} color="#059669" />
-                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--dash-text-primary)' }}>
-                  Bán Tự Động Có Giám Sát
+            <div>
+              {/* Row 1: Icon on left, Badge on right */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Zap size={15} />
+                </div>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    border: '1px solid #A7F3D0',
+                    fontWeight: 700,
+                    fontSize: '0.6875rem',
+                  }}
+                >
+                  Khuyến nghị cho SME
                 </span>
               </div>
-              <span
-                style={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  backgroundColor: '#ecfdf5',
-                  color: '#059669',
-                  border: '1px solid #a7f3d0',
-                }}
-              >
-                Khuyến nghị cho SME
-              </span>
+
+              {/* Row 2: Full Title without any truncation */}
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
+                Bán Tự Động Có Giám Sát
+              </div>
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-              AI tự động khắc phục các sự cố rủi ro thấp (OOM, Deadlock). Mọi hành động rủi ro cao (Drain node, Rollback) bắt buộc chuyển qua Cổng phê duyệt Con người (HITL).
+
+            {/* Description */}
+            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              Tự khắc phục rủi ro thấp (OOM, Deadlock). Mọi hành động rủi ro cao (Drain, Rollback) bắt buộc chuyển qua Cổng duyệt HITL.
             </p>
           </div>
 
-          {/* Autonomous */}
+          {/* Card 2: Autonomous */}
           <div
             onClick={() => handleSelectAutomationMode('AUTONOMOUS')}
             style={{
-              padding: '16px',
-              borderRadius: 'var(--dash-radius-md)',
-              border: globalMode === 'AUTONOMOUS' ? '2px solid var(--dash-primary)' : '1px solid var(--dash-border-subtle)',
-              backgroundColor: globalMode === 'AUTONOMOUS' ? 'rgba(16, 185, 129, 0.04)' : 'white',
+              padding: '14px 16px',
+              borderRadius: '12px',
+              border: globalMode === 'AUTONOMOUS' ? '2px solid #2563EB' : '1px solid #E2E8F0',
+              backgroundColor: globalMode === 'AUTONOMOUS' ? 'rgba(37, 99, 235, 0.04)' : '#FFFFFF',
+              boxShadow: globalMode === 'AUTONOMOUS' ? '0 2px 6px rgba(37, 99, 235, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
               cursor: canManagePolicies ? 'pointer' : 'not-allowed',
               opacity: canManagePolicies ? 1 : 0.8,
-              position: 'relative',
-              transition: 'all 0.2s',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              transition: 'all 0.2s ease',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <RotateCcw size={18} color="#2563eb" />
-                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--dash-text-primary)' }}>
-                  Tự Trị Toàn Phần (Autonomous)
+            <div>
+              {/* Row 1: Icon on left, Badge on right */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <RotateCcw size={15} />
+                </div>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#2563EB',
+                    border: '1px solid #BFDBFE',
+                    fontWeight: 700,
+                    fontSize: '0.6875rem',
+                  }}
+                >
+                  Không cần can thiệp
                 </span>
               </div>
-              <span
-                style={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  backgroundColor: '#eff6ff',
-                  color: '#2563eb',
-                  border: '1px solid #bfdbfe',
-                }}
-              >
-                Không cần can thiệp
-              </span>
+
+              {/* Row 2: Full Title without any truncation */}
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
+                Tự Trị Toàn Phần (Autonomous)
+              </div>
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-              Mọi hành động phục hồi được MAPE-K lập tức thực thi nếu không vượt quá ngưỡng bán kính sự cố (Blast Radius). Tối ưu MTTR xuống dưới 2 giây.
+
+            {/* Description */}
+            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              Mọi hành động được MAPE-K lập tức thực thi nếu không vượt quá ngưỡng Blast Radius. Tối ưu MTTR xuống dưới 2 giây.
             </p>
           </div>
 
-          {/* Audit Only */}
+          {/* Card 3: Audit Only */}
           <div
             onClick={() => handleSelectAutomationMode('AUDIT')}
             style={{
-              padding: '16px',
-              borderRadius: 'var(--dash-radius-md)',
-              border: globalMode === 'AUDIT' ? '2px solid var(--dash-primary)' : '1px solid var(--dash-border-subtle)',
-              backgroundColor: globalMode === 'AUDIT' ? 'rgba(16, 185, 129, 0.04)' : 'white',
+              padding: '14px 16px',
+              borderRadius: '12px',
+              border: globalMode === 'AUDIT' ? '2px solid #D97706' : '1px solid #E2E8F0',
+              backgroundColor: globalMode === 'AUDIT' ? 'rgba(217, 119, 6, 0.04)' : '#FFFFFF',
+              boxShadow: globalMode === 'AUDIT' ? '0 2px 6px rgba(217, 119, 6, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
               cursor: canManagePolicies ? 'pointer' : 'not-allowed',
               opacity: canManagePolicies ? 1 : 0.8,
-              position: 'relative',
-              transition: 'all 0.2s',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              transition: 'all 0.2s ease',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Lock size={18} color="#d97706" />
-                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--dash-text-primary)' }}>
-                  Chỉ Cảnh Báo (Audit & Dry-Run)
+            <div>
+              {/* Row 1: Icon on left, Badge on right */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
+                    backgroundColor: '#FFFBEB',
+                    color: '#D97706',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Lock size={15} />
+                </div>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#FFFBEB',
+                    color: '#D97706',
+                    border: '1px solid #FDE68A',
+                    fontWeight: 700,
+                    fontSize: '0.6875rem',
+                  }}
+                >
+                  An toàn tuyệt đối
                 </span>
               </div>
-              <span
-                style={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  backgroundColor: '#fffbeb',
-                  color: '#d97706',
-                  border: '1px solid #fde68a',
-                }}
-              >
-                An toàn tuyệt đối
-              </span>
+
+              {/* Row 2: Full Title without any truncation */}
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
+                Chỉ Cảnh Báo (Audit & Dry-Run)
+              </div>
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.5 }}>
+
+            {/* Description */}
+            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
               AI chỉ phân tích nguyên nhân gốc rễ và đề xuất giải pháp, tuyệt đối không can thiệp hay thay đổi trạng thái Kubernetes cluster.
             </p>
           </div>
         </div>
       </div>
 
-      {/* 2. Ngưỡng Kích Hoạt Cổng Phê Duyệt (HITL Safety Thresholds) */}
+                  {/* 2. Ngưỡng Kích Hoạt Cổng Phê Duyệt (HITL Safety Thresholds) */}
       <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <Sliders size={18} color="var(--dash-primary)" />
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-            Ngưỡng An Toàn & Kích Hoạt Cổng HITL (Safety Guards)
-          </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--dash-primary)',
+              flexShrink: 0,
+            }}
+          >
+            <Sliders size={18} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
+              Ngưỡng An Toàn & Kích Hoạt Cổng HITL (Safety Guards)
+            </h2>
+            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+              Hàng rào bảo vệ tự động (Guardrails) ngăn chặn tác động tiêu cực lan truyền trên toàn bộ cụm Kubernetes
+            </p>
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-          {/* Blast Radius Threshold */}
-          <div style={{ padding: '14px', backgroundColor: 'var(--dash-bg-subtle)', borderRadius: 'var(--dash-radius-md)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                Bán Kính Ảnh Hưởng Kích Hoạt HITL
-              </label>
-              <span style={{ fontWeight: 700, color: 'var(--dash-primary)', fontSize: '0.9375rem' }}>
-                {blastRadiusThreshold}% Pods
-              </span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+          {/* Card 1: Blast Radius */}
+          <div
+            style={{
+              padding: '14px 16px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '6px',
+                      backgroundColor: '#ECFDF5',
+                      color: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ShieldCheck size={14} />
+                  </div>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Bán Kính Ảnh Hưởng
+                  </span>
+                </div>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    border: '1px solid #A7F3D0',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    fontFamily: 'monospace',
+                    flexShrink: 0,
+                  }}
+                >
+                  {blastRadiusThreshold}% Pods
+                </span>
+              </div>
+
+              {/* Slider Control */}
+              <div style={{ padding: '4px 0 2px 0' }}>
+                <input
+                  type="range"
+                  min="10"
+                  max="50"
+                  step="5"
+                  value={blastRadiusThreshold}
+                  disabled={!canManagePolicies}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setBlastRadiusThreshold(val);
+                    updateClusterGuard('blastRadiusThreshold', val);
+                  }}
+                  style={{
+                    width: '100%',
+                    accentColor: '#059669',
+                    cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+                    opacity: canManagePolicies ? 1 : 0.6,
+                    height: '5px',
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.625rem', color: '#94A3B8', marginTop: '4px', fontWeight: 600 }}>
+                  <span>Min: 10%</span>
+                  <span>Ngưỡng kích hoạt HITL</span>
+                  <span>Max: 50%</span>
+                </div>
+              </div>
             </div>
-            <input
-              type="range"
-              min="10"
-              max="50"
-              step="5"
-              value={blastRadiusThreshold}
-              disabled={!canManagePolicies}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setBlastRadiusThreshold(val);
-                updateClusterGuard('blastRadiusThreshold', val);
-              }}
-              style={{ width: '100%', accentColor: 'var(--dash-primary)', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
-            />
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '6px 0 0 0' }}>
-              Hành động có khả năng tác động trên {blastRadiusThreshold}% số lượng Pods trong cùng Namespace sẽ tự động kích hoạt Cổng phê duyệt.
+
+            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              Tự kích hoạt Cổng duyệt khi vượt quá <strong style={{ color: '#059669' }}>{blastRadiusThreshold}%</strong> số Pods trong cùng Namespace.
             </p>
           </div>
 
-          {/* Max Restarts */}
-          <div style={{ padding: '14px', backgroundColor: 'var(--dash-bg-subtle)', borderRadius: 'var(--dash-radius-md)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                Giới Hạn Tự Động Khởi Động Lại
-              </label>
-              <span style={{ fontWeight: 700, color: 'var(--dash-primary)', fontSize: '0.9375rem' }}>
-                {maxRestarts} lần / {restartTimeWindow} phút
-              </span>
+          {/* Card 2: Max Restarts / Circuit Breaker */}
+          <div
+            style={{
+              padding: '14px 16px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '6px',
+                      backgroundColor: '#EFF6FF',
+                      color: '#2563EB',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <RotateCcw size={14} />
+                  </div>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Giới Hạn Khởi Động
+                  </span>
+                </div>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#2563EB',
+                    border: '1px solid #BFDBFE',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    fontFamily: 'monospace',
+                    flexShrink: 0,
+                  }}
+                >
+                  {maxRestarts} lần / {restartTimeWindow}m
+                </span>
+              </div>
+
+              {/* Controls */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
+                    Số lần tối đa
+                  </label>
+                  <select
+                    value={maxRestarts}
+                    disabled={!canManagePolicies}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setMaxRestarts(val);
+                      updateClusterGuard('maxRestarts', val);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '5px 6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#F8FAFC',
+                      color: '#0F172A',
+                      cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+                      opacity: canManagePolicies ? 1 : 0.6,
+                    }}
+                  >
+                    <option value={2}>2 lần</option>
+                    <option value={3}>3 lần</option>
+                    <option value={5}>5 lần</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
+                    Khung thời gian
+                  </label>
+                  <select
+                    value={restartTimeWindow}
+                    disabled={!canManagePolicies}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setRestartTimeWindow(val);
+                      updateClusterGuard('restartTimeWindow', val);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '5px 6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#F8FAFC',
+                      color: '#0F172A',
+                      cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+                      opacity: canManagePolicies ? 1 : 0.6,
+                    }}
+                  >
+                    <option value={10}>10 phút</option>
+                    <option value={15}>15 phút</option>
+                    <option value={30}>30 phút</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <select
-                value={maxRestarts}
-                disabled={!canManagePolicies}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setMaxRestarts(val);
-                  updateClusterGuard('maxRestarts', val);
-                }}
-                className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
-              >
-                <option value={2}>2 lần</option>
-                <option value={3}>3 lần (Chuẩn K8s)</option>
-                <option value={5}>5 lần</option>
-              </select>
-              <select
-                value={restartTimeWindow}
-                disabled={!canManagePolicies}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setRestartTimeWindow(val);
-                  updateClusterGuard('restartTimeWindow', val);
-                }}
-                className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
-              >
-                <option value={10}>Trong 10 phút</option>
-                <option value={15}>Trong 15 phút</option>
-                <option value={30}>Trong 30 phút</option>
-              </select>
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '6px 0 0 0' }}>
-              Ngăn chặn hiện tượng CrashLoopBackOff lặp vô tận làm suy kiệt Node và tài nguyên CPU.
+
+            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              Ngăn hiện tượng CrashLoopBackOff lặp vô tận làm suy kiệt Node và tài nguyên CPU.
             </p>
           </div>
 
-          {/* Approval Timeout & Cooldown */}
-          <div style={{ padding: '14px', backgroundColor: 'var(--dash-bg-subtle)', borderRadius: 'var(--dash-radius-md)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                Thời Gian Chờ Duyệt & Hạ Nhiệt
-              </label>
-              <span style={{ fontWeight: 700, color: 'var(--dash-primary)', fontSize: '0.9375rem' }}>
-                {approvalTimeout}m / {cooldownPeriod}m
-              </span>
+          {/* Card 3: Timeout & Cooldown */}
+          <div
+            style={{
+              padding: '14px 16px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '6px',
+                      backgroundColor: '#FFFBEB',
+                      color: '#D97706',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Clock size={14} />
+                  </div>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Chờ Duyệt & Hạ Nhiệt
+                  </span>
+                </div>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#FFFBEB',
+                    color: '#D97706',
+                    border: '1px solid #FDE68A',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    fontFamily: 'monospace',
+                    flexShrink: 0,
+                  }}
+                >
+                  {approvalTimeout}m / {cooldownPeriod}m
+                </span>
+              </div>
+
+              {/* Controls */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
+                    Hết hạn chờ
+                  </label>
+                  <select
+                    value={approvalTimeout}
+                    disabled={!canManagePolicies}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setApprovalTimeout(val);
+                      updateClusterGuard('approvalTimeout', val);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '5px 6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#F8FAFC',
+                      color: '#0F172A',
+                      cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+                      opacity: canManagePolicies ? 1 : 0.6,
+                    }}
+                  >
+                    <option value={10}>10 phút</option>
+                    <option value={20}>20 phút</option>
+                    <option value={30}>30 phút</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
+                    Hạ nhiệt
+                  </label>
+                  <select
+                    value={cooldownPeriod}
+                    disabled={!canManagePolicies}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setCooldownPeriod(val);
+                      updateClusterGuard('cooldownPeriod', val);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '5px 6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#F8FAFC',
+                      color: '#0F172A',
+                      cursor: canManagePolicies ? 'pointer' : 'not-allowed',
+                      opacity: canManagePolicies ? 1 : 0.6,
+                    }}
+                  >
+                    <option value={3}>3 phút</option>
+                    <option value={5}>5 phút</option>
+                    <option value={10}>10 phút</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <select
-                value={approvalTimeout}
-                disabled={!canManagePolicies}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setApprovalTimeout(val);
-                  updateClusterGuard('approvalTimeout', val);
-                }}
-                className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
-              >
-                <option value={10}>Timeout: 10 phút</option>
-                <option value={20}>Timeout: 20 phút</option>
-                <option value={30}>Timeout: 30 phút</option>
-              </select>
-              <select
-                value={cooldownPeriod}
-                disabled={!canManagePolicies}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setCooldownPeriod(val);
-                  updateClusterGuard('cooldownPeriod', val);
-                }}
-                className="dash-input"
-                style={{ flex: 1, padding: '6px 10px', fontSize: '0.8125rem', cursor: canManagePolicies ? 'pointer' : 'not-allowed', opacity: canManagePolicies ? 1 : 0.6 }}
-              >
-                <option value={3}>Hạ nhiệt: 3 phút</option>
-                <option value={5}>Hạ nhiệt: 5 phút</option>
-                <option value={10}>Hạ nhiệt: 10 phút</option>
-              </select>
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '6px 0 0 0' }}>
-              Hết thời gian chờ duyệt sẽ tự hủy lệnh an toàn. Thời gian hạ nhiệt chống giật xung (chatter).
+
+            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              Tự hủy lệnh khi quá hạn. Thời gian hạ nhiệt chống giật xung (chatter).
             </p>
           </div>
         </div>
@@ -842,13 +1163,13 @@ export const PoliciesPage = () => {
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-subtle)', borderBottom: '1px solid var(--dash-border-subtle)' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Mã & Tên Quy Tắc</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Vị Trí Cụm & Phân Loại</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Phân Loại</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Điều Kiện Kích Hoạt</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hành Động Tự Sửa Lỗi</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Rủi Ro</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Cần Duyệt (HITL)</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Bật / Tắt</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>Thao Tác</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>Chi Tiết</th>
               </tr>
             </thead>
             <tbody>
@@ -878,7 +1199,7 @@ export const PoliciesPage = () => {
                         backgroundColor: p.enabled ? 'transparent' : 'rgba(241, 245, 249, 0.5)',
                       }}
                     >
-                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top', cursor: 'pointer' }} onClick={() => setSelectedPolicy(p)} title="Nhấp để xem chi tiết quy tắc">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)', fontFamily: 'monospace' }}>
                             {p.code || p.id}
@@ -891,40 +1212,6 @@ export const PoliciesPage = () => {
                       <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)', fontWeight: 600 }}>
                         {p.category}
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            backgroundColor: '#EFF6FF',
-                            color: '#1D4ED8',
-                            border: '1px solid #BFDBFE',
-                            width: 'fit-content',
-                          }}
-                        >
-                          <Server size={10} />
-                          <span>Cụm: {currentEnv?.cluster || currentEnv?.name || 'Tất cả cụm'}</span>
-                        </span>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            fontSize: '0.6875rem',
-                            fontFamily: 'monospace',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: 'var(--dash-bg-subtle)',
-                            color: 'var(--dash-text-secondary)',
-                            width: 'fit-content',
-                          }}
-                        >
-                          ns: {p.targetNamespace || 'production'}
-                        </span>
-                      </div>
                     </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
@@ -934,45 +1221,6 @@ export const PoliciesPage = () => {
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
                       <div style={{ color: 'var(--dash-text-primary)', fontSize: '0.8125rem', fontWeight: 600 }}>
                         {p.action}
-                      </div>
-                      <div style={{ marginTop: '6px' }}>
-                        {currentEnv?.agentStatus === 'ONLINE' ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '0.6875rem',
-                              fontWeight: 700,
-                              color: '#059669',
-                              backgroundColor: '#ECFDF5',
-                              border: '1px solid #A7F3D0',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <CheckCircle2 size={10} />
-                            <span>Đã cấp quyền trên cụm {currentEnv?.cluster || currentEnv?.name || 'Tất cả cụm'}</span>
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '0.6875rem',
-                              fontWeight: 700,
-                              color: '#D97706',
-                              backgroundColor: '#FFFBEB',
-                              border: '1px solid #FDE68A',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <AlertTriangle size={10} />
-                            <span>Chưa cấp quyền (Tác tử Ngoại tuyến)</span>
-                          </span>
-                        )}
                       </div>
                     </td>
 
@@ -1088,32 +1336,38 @@ export const PoliciesPage = () => {
                         </span>
                       </div>
                     </td>
-                    <td style={{ padding: "14px 16px", verticalAlign: "top", textAlign: "center" }}>
+                    <td style={{ padding: '14px 16px', verticalAlign: 'top', textAlign: 'center' }}>
                       <button
                         type="button"
-                        onClick={() => handleDeletePolicy(p)}
-                        disabled={!canManagePolicies || deletingPolicyId === p.id}
+                        onClick={() => setSelectedPolicy(p)}
                         style={{
-                          padding: "6px 12px",
-                          borderRadius: "6px",
-                          border: "1px solid #FECACA",
-                          backgroundColor: "#FEF2F2",
-                          color: "#DC2626",
-                          cursor: canManagePolicies ? "pointer" : "not-allowed",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                          fontSize: "0.75rem",
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid #CBD5E1',
+                          backgroundColor: '#FFFFFF',
+                          fontSize: '0.75rem',
                           fontWeight: 600,
-                          transition: "all 0.15s ease",
-                          opacity: !canManagePolicies ? 0.5 : 1,
+                          color: 'var(--dash-text-primary)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
                         }}
-                        onMouseEnter={(e) => { if (canManagePolicies) e.currentTarget.style.backgroundColor = "#FEE2E2"; }}
-                        onMouseLeave={(e) => { if (canManagePolicies) e.currentTarget.style.backgroundColor = "#FEF2F2"; }}
-                        title={!canManagePolicies ? "Chỉ SME Owner và DevOps mới có quyền xóa quy tắc" : "Xóa vĩnh viễn quy tắc này"}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#F1F5F9';
+                          e.currentTarget.style.borderColor = 'var(--dash-primary)';
+                          e.currentTarget.style.color = 'var(--dash-primary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
+                          e.currentTarget.style.borderColor = '#CBD5E1';
+                          e.currentTarget.style.color = 'var(--dash-text-primary)';
+                        }}
+                        title="Xem chi tiết quy tắc"
                       >
-                        <Trash2 size={13} />
-                        <span>{deletingPolicyId === p.id ? "Đang xóa..." : "Xóa"}</span>
+                        <Eye size={13} />
+                        <span>Chi tiết</span>
                       </button>
                     </td>
                   </tr>
@@ -1125,6 +1379,17 @@ export const PoliciesPage = () => {
       </div>
 
             {/* Modal Thêm Quy Tắc Mới (Structured Dropdown Builder) */}
+            {/* Modal Chi Tiết Quy Tắc */}
+      <PolicyDetailModal
+        isOpen={!!selectedPolicy}
+        policy={selectedPolicy}
+        onClose={() => setSelectedPolicy(null)}
+        onDelete={(pol) => handleDeletePolicy(pol)}
+        canManagePolicies={canManagePolicies}
+        currentEnv={currentEnv}
+        deletingPolicyId={deletingPolicyId}
+      />
+
       <NewPolicyModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}

@@ -17,7 +17,6 @@ import {
   Layers,
   Activity,
   Globe,
-  ShieldCheck,
   RefreshCw,
   Copy,
   Check,
@@ -353,6 +352,28 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     ? (rotatedTokenResult.raw_token || rotatedTokenResult.token)
     : '<YOUR_AGENT_TOKEN>';
 
+  const getInstallerOrigin = () => {
+    if (typeof window === 'undefined') return 'http://localhost';
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
+      return `${protocol}//${hostname}`;
+    }
+    return window.location.origin;
+  };
+
+  const getOneLinerCommand = (os) => {
+    const origin = getInstallerOrigin();
+    if (os === 'linux') {
+      return hasRawToken
+        ? `curl -sSL "${origin}/agent/install.sh?token=${encodeURIComponent(tokenCopyValue)}" | bash`
+        : `curl -sSL ${origin}/agent/install.sh | bash -s -- --token <YOUR_AGENT_TOKEN>`;
+    } else {
+      return hasRawToken
+        ? `irm "${origin}/agent/install.ps1?token=${encodeURIComponent(tokenCopyValue)}" | iex`
+        : `irm ${origin}/agent/install.ps1 | iex`;
+    }
+  };
+
   // Trạng thái Agent chuẩn hóa: ONLINE | OFFLINE | CONNECTING | DEGRADED | PENDING
   const rawStatus = (clusterData.agent_status || 'PENDING').toUpperCase();
   const isOnline = rawStatus === 'ONLINE';
@@ -525,7 +546,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     border: '1px solid #CBD5E1',
                   }}
                 >
-                  {clusterData.provider || 'MINIKUBE'}
+                  {clusterData.provider || 'Kubernetes'}
                 </span>
                 {/* 4. Agent Status Badge */}
                 <span
@@ -569,34 +590,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               </div>
             </div>
           </div>
-
-          {/* Endpoint box */}
-          {clusterData.endpoint && (
-            <div
-              style={{
-                padding: '10px 14px',
-                backgroundColor: '#F8FAFC',
-                borderRadius: '8px',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                maxWidth: '420px',
-              }}
-            >
-              <ShieldCheck size={16} color="var(--dash-primary)" style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#334155' }}>
-                {clusterData.endpoint}
-              </span>
-              <button
-                onClick={() => handleCopy(clusterData.endpoint, 'endpoint')}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748B' }}
-                title="Sao chép Endpoint"
-              >
-                {copiedField === 'endpoint' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Polling Error Banner */}
@@ -848,7 +841,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--dash-text-secondary)' }}>Độ trễ phản hồi (Latency):</span>
                   <strong style={{ color: isOnline ? 'var(--dash-primary)' : '#64748B' }}>
-                    {isOnline ? `${latestLatency || 1.2} ms (Live probe)` : 'Chưa có tín hiệu (Đang chờ kết nối...)'}
+                    {isOnline ? (latestLatency ? `${latestLatency} ms (Live probe)` : 'Đang đo...') : 'Chưa có tín hiệu (Đang chờ kết nối...)'}
                   </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1163,12 +1156,12 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     </p>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       {scriptOs === 'windows' ? (
-                        <code>d: ; cd \AISelfHealing</code>
+                        <code>d: ; cd \NCKH</code>
                       ) : (
-                        <code>cd ~/AISelfHealing</code>
+                        <code>cd ~/NCKH</code>
                       )}
                       <button
-                        onClick={() => handleCopy(scriptOs === 'windows' ? 'd:\ncd \\AISelfHealing' : 'cd ~/AISelfHealing', 'qs_step1')}
+                        onClick={() => handleCopy(scriptOs === 'windows' ? 'd:\ncd \\NCKH' : 'cd ~/NCKH', 'qs_step1')}
                         style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
                         {copiedField === 'qs_step1' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
@@ -1323,18 +1316,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                       Installer Service trên cổng 8100/80 tự động nhúng cấu hình cluster và token xác thực:
                     </p>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                      {scriptOs === 'linux' ? (
-                        <code>curl -sSL {typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.sh | bash -s -- --token {tokenCopyValue}</code>
-                      ) : (
-                        <code>irm {typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.ps1 | iex</code>
-                      )}
+                      <code>{getOneLinerCommand(scriptOs)}</code>
                       <button
-                        onClick={() => handleCopy(
-                          scriptOs === 'linux'
-                            ? `curl -sSL ${typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.sh | bash -s -- --token ${tokenCopyValue}`
-                            : `irm ${typeof window !== 'undefined' ? window.location.origin : 'http://localhost'}/agent/install.ps1 | iex`,
-                          'oneliner_install'
-                        )}
+                        onClick={() => handleCopy(getOneLinerCommand(scriptOs), 'oneliner_install')}
                         style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
                       >
                         {copiedField === 'oneliner_install' ? 'Đã sao chép' : 'Sao chép'}
@@ -2080,8 +2064,8 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <span>{clusterData.provider}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>API Server Port:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>6443 (HTTPS Secure)</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>Phiên bản Kubernetes:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{clusterData.kubernetes_version || 'Chưa cập nhật'}</span>
                 </div>
               </div>
             </div>

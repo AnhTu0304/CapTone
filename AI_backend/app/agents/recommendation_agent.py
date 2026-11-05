@@ -91,6 +91,15 @@ class RecommendationAgent:
                 )
                 break
 
+        # Safeguard: Never repeat ROLLBACK_DEPLOYMENT if it was already executed recently.
+        if action == "ROLLBACK_DEPLOYMENT" and previous_action in {"ROLLBACK_DEPLOYMENT", "Rollback Deployment"}:
+            if kubernetes.restart_count > 0 or kubernetes.pod_status != "Running":
+                action = "RESTART_POD"
+                reason = "Dịch vụ đã được rollback trước đó nhưng sự cố vẫn tiếp diễn; đề xuất khởi động lại Pod thay vì tiếp tục rollback"
+            else:
+                action = "NO_ACTION"
+                reason = "Dịch vụ đã được rollback trước đó nhưng sự cố vẫn tiếp diễn; kích hoạt rào chắn Circuit Breaker để kỹ sư can thiệp thủ công"
+
         # Reassess an unsuccessful or partially successful action. It may still
         # be correct when strong new evidence or confirmed history supports it.
         if previous_action_result in {"FAILED", "PARTIAL"} and action == previous_action:

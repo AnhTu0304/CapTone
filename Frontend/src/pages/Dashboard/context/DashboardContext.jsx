@@ -3,6 +3,7 @@ import { request, setActiveOrganizationId, cancelPendingRequests } from '../../.
 import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 
 import { clusterService } from '../../../services/clusterService';
+import { selfHealingService } from '../../../services/selfHealingService';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
 const DashboardContext = createContext(null);
@@ -430,7 +431,30 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   };
 
   const unreadNotifsCount = notifications.filter((n) => !n.read).length;
-  const pendingApprovalsCount = 1;
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+
+  const fetchPendingApprovalsCount = useCallback(async () => {
+    try {
+      const clusterId = currentEnv?.clusterId || currentEnv?.id;
+      const orgId = currentOrg?.id;
+      const params = { status: 'PENDING', limit: 1 };
+      if (clusterId && !clusterId.startsWith('org-')) {
+        params.cluster_id = clusterId;
+      }
+      if (orgId && !orgId.startsWith('sandbox-')) {
+        params.organization_id = orgId;
+      }
+      const data = await selfHealingService.getApprovals(params);
+      setPendingApprovalsCount(typeof data?.total === 'number' ? data.total : (Array.isArray(data?.items) ? data.items.length : 0));
+    } catch {
+      setPendingApprovalsCount(0);
+    }
+  }, [currentEnv?.clusterId, currentEnv?.id, currentOrg?.id]);
+
+  useEffect(() => {
+    fetchPendingApprovalsCount();
+  }, [fetchPendingApprovalsCount]);
+
   const activeIncidentsCount = 0;
 
   return (
@@ -469,6 +493,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         setNotifications,
         unreadNotifsCount,
         pendingApprovalsCount,
+        refreshPendingApprovals: fetchPendingApprovalsCount,
         activeIncidentsCount,
         markAllNotificationsRead,
         toggleNotificationRead,

@@ -283,7 +283,7 @@ export const MembersPage = () => {
 
       {/* 2. 3 Role Overview Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-        <div className="dash-card" style={{ padding: '20px', borderLeft: '4px solid #059669' }}>
+        <div className="dash-card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <ShieldCheck size={18} color="#059669" />
             <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
@@ -295,7 +295,7 @@ export const MembersPage = () => {
           </p>
         </div>
 
-        <div className="dash-card" style={{ padding: '20px', borderLeft: '4px solid #2563EB' }}>
+        <div className="dash-card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <Lock size={18} color="#2563EB" />
             <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
@@ -307,7 +307,7 @@ export const MembersPage = () => {
           </p>
         </div>
 
-        <div className="dash-card" style={{ padding: '20px', borderLeft: '4px solid #64748B' }}>
+        <div className="dash-card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <Eye size={18} color="#64748B" />
             <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>

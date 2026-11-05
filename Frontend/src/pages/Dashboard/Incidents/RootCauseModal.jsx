@@ -257,7 +257,7 @@ const getEvidenceMeta = (text, idx) => {
   return { title, desc, color, bg, border, icon };
 };
 
-export const RootCauseModal = ({ incident, onClose, onResolve }) => {
+export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'causal' | 'io'
   const [copiedKey, setCopiedKey] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -771,20 +771,18 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
       return rawTranslated;
     }
 
-    const parts = [];
-    // 1. Đối tượng Pod/Node & Kết luận nguyên nhân gốc rễ
-    parts.push(
-      `Hệ thống ghi nhận sự cố trên dịch vụ "${serviceDisplayName}" (Pod bị ảnh hưởng: ${faultyPodName} tại Node ${faultyNodeName}, vai trò ${replicaSetRole}) với kết luận nguyên nhân gốc rễ là "${rootCauseTypeVi}" (Phân loại: ${rootCauseCategoryVi}, mức độ: ${severityVi}, độ tin cậy RCA: ${confidence !== null ? `${confidence}%` : '99%'}).`
+    const lines = [];
+    lines.push(
+      `• Sự cố phát hiện: Dịch vụ "${serviceDisplayName}" (Pod: ${faultyPodName} trên Node ${faultyNodeName}) gặp sự cố "${rootCauseTypeVi}" (${rootCauseCategoryVi}, mức độ ${severityVi}).`
     );
 
-    // 2. Triệu chứng viễn trắc 12 bước & Dự báo GRU + Bằng chứng thực tế
     if (metricSummary) {
-      parts.push(
-        `Qua chuỗi 12 mốc viễn trắc eBPF, mô hình GRU cảnh báo nguy cơ "${predictedRiskVi || 'BẤT THƯỜNG'}" với chỉ số thực tế ghi nhận: CPU tối đa ${metricSummary.cpu.max}% (hiện tại ${metricSummary.cpu.current}%), RAM tối đa ${metricSummary.ram.max}%, độ trễ đạt đỉnh ${metricSummary.latency.max} ms, tỷ lệ lỗi 5xx ${metricSummary.http_5xx_rate.max}% và số lần khởi động lại Pod là ${metricSummary.pod_restart_count}.`
+      lines.push(
+        `• Tín hiệu viễn trắc eBPF: CPU đỉnh ${metricSummary.cpu.max}% (hiện tại ${metricSummary.cpu.current}%), RAM đỉnh ${metricSummary.ram.max}%, độ trễ ${metricSummary.latency.max} ms, tỷ lệ lỗi 5xx ${metricSummary.http_5xx_rate.max}%, số lần khởi động lại Pod: ${metricSummary.pod_restart_count}.`
       );
     } else if (predictedRiskVi) {
-      parts.push(
-        `Mô hình học sâu GRU phát hiện tín hiệu rủi ro "${predictedRiskVi}" kết hợp với nhật ký container và sự kiện Kubernetes trên cụm.`
+      lines.push(
+        `• Cảnh báo học sâu GRU: Nguy cơ "${predictedRiskVi}" vượt ngưỡng an toàn.`
       );
     }
 
@@ -794,18 +792,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
         .map((e) => String(e).replace(/\.$/, '').trim())
         .filter(Boolean);
       if (topEvs.length > 0) {
-        parts.push(`Bằng chứng xác thực trực tiếp: ${topEvs.join('; ')}.`);
+        lines.push(`• Bằng chứng xác thực: ${topEvs.join('; ')}.`);
       }
     }
 
-    // 3. Phương án khắc phục & Điều phối MAPE-K
-    const cleanReason = String(recReasonVi || '').replace(/\.$/, '').trim();
-    const destNodeNote = recDestNodeName ? ` (Node dự phòng an toàn khả dụng: ${recDestNodeName})` : '';
-    parts.push(
-      `Để khôi phục SLA dịch vụ, hệ thống đề xuất hành động "${recActionVi}" (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi})${cleanReason ? ` do: ${cleanReason.charAt(0).toLowerCase() + cleanReason.slice(1)}` : ''}${destNodeNote}.`
+    lines.push(
+      `• Phương án tự khắc phục: Đề xuất thực thi hành động "${recActionVi}" (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi}) để nhanh chóng đưa dịch vụ trở về trạng thái ổn định theo chuẩn MAPE-K.`
     );
 
-    return parts.join(' ');
+    return lines.join('\n');
   }, [
     fullExplanation,
     serviceDisplayName,
@@ -1075,7 +1070,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
             }}
           >
             <GitBranch size={14} />
-            <span>Chuỗi Nhân Quả &amp; 6 Bằng Chứng</span>
+            <span>Chuỗi Nhân Quả &amp; Bằng Chứng</span>
           </button>
 
           <button
@@ -1097,7 +1092,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
             }}
           >
             <Database size={14} />
-            <span>Dữ Liệu Vào / Ra &amp; GRU 7 Heads</span>
+            <span>Dữ Liệu Viễn Trắc &amp; Dự Báo GRU</span>
           </button>
         </div>
 
@@ -1127,7 +1122,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: isResolved ? '#166534' : isUnknownOrNoAction ? '#334155' : '#991B1B', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <Sparkles size={15} />
-                    <span>3. KẾT LUẬN NGUYÊN NHÂN GỐC RỄ (ROOT CAUSE ANALYSIS)</span>
+                    <span>KẾT LUẬN NGUYÊN NHÂN GỐC RỄ (ROOT CAUSE ANALYSIS)</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span
@@ -1159,7 +1154,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   </div>
                 </div>
 
-                <div style={{ fontWeight: 800, fontSize: '0.875rem', color: isResolved ? '#15803D' : isUnknownOrNoAction ? '#334155' : '#B91C1C', marginBottom: '4px', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ fontWeight: 800, fontSize: '1.0625rem', color: isResolved ? '#15803D' : isUnknownOrNoAction ? '#334155' : '#B91C1C', marginBottom: '6px' }}>
                   {rootCauseTypeVi}
                 </div>
 
@@ -1207,61 +1202,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 </div>
               </div>
 
-              {/* ======================================================== */}
-              {/* 6. GIẢI TRÌNH CHI TIẾT DÀNH CHO BÁO CÁO INCIDENT */}
-              {/* ======================================================== */}
-              <div
-                style={{
-                  padding: '14px 16px',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.71875rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <FileText size={15} color="#059669" />
-                    <span>6. GIẢI TRÌNH CHI TIẾT BÁO CÁO SỰ CỐ (SRE INCIDENT REPORT)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyText(fullExplanationVi, 'explanation')}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '3px 8px',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      color: '#334155',
-                    }}
-                  >
-                    {copiedKey === 'explanation' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'explanation' ? 'Đã sao chép' : 'Sao chép giải trình'}</span>
-                  </button>
-                </div>
-                <div
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    fontSize: '0.8125rem',
-                    color: '#334155',
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {fullExplanationVi}
-                </div>
-              </div>
-
-              {/* ======================================================== */}
-              {/* 5. ĐỀ XUẤT HÀNH ĐỘNG & THAM SỐ KỸ THUẬT CỤ THỂ */}
-              {/* ======================================================== */}
+{/* ======================================================== */}
               <div
                 style={{
                   padding: '16px 18px',
@@ -1275,7 +1216,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <Zap size={16} color="#059669" />
-                      <span>5. ĐỀ XUẤT HÀNH ĐỘNG: {recActionVi}</span>
+                      <span>KẾ HOẠCH TỰ KHẮC PHỤC: {recActionVi}</span>
                       <span style={{ fontSize: '0.6875rem', backgroundColor: '#FEF2F2', color: '#B91C1C', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FECACA', fontWeight: 700 }}>
                         Ưu tiên: {actionPriorityVi}
                       </span>
@@ -1339,14 +1280,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   ) : !isResolved ? (
                     <button
                       type="button"
-                      onClick={handleExecuteRemediation}
+                      onClick={() => {
+                        if (requiresApproval && onNavigate) {
+                          onClose();
+                          onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(serviceDisplayName)}`);
+                        } else {
+                          handleExecuteRemediation();
+                        }
+                      }}
                       disabled={isExecuting}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
                         padding: '8px 16px',
-                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        background: requiresApproval ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                         color: '#FFFFFF',
                         borderRadius: '8px',
                         border: 'none',
@@ -1355,8 +1303,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                         cursor: isExecuting ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      <Zap size={14} />
-                      <span>{isExecuting ? 'Đang thực thi...' : 'Kích Hoạt Tự Khắc Phục Ngay'}</span>
+                      {requiresApproval ? <CheckCircle2 size={14} /> : <Zap size={14} />}
+                      <span>
+                        {isExecuting
+                          ? 'Đang thực thi...'
+                          : requiresApproval
+                          ? 'Chuyển Sang Cổng Phê Duyệt (HITL) →'
+                          : 'Kích Hoạt Tự Khắc Phục Ngay'}
+                      </span>
                     </button>
                   ) : (
                     <div
@@ -1422,7 +1376,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
 
                     <div style={{ padding: '8px 10px', backgroundColor: isCircuitBreakerTripped ? '#FEF2F2' : '#F8FAFC', borderRadius: '6px', border: isCircuitBreakerTripped ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: isCircuitBreakerTripped ? '#991B1B' : '#64748B', fontWeight: 700 }}>ANTI-LOOP (CIRCUIT BREAKER)</div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isCircuitBreakerTripped ? '#DC2626' : '#059669', fontFamily: 'var(--font-mono)' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isCircuitBreakerTripped ? '#DC2626' : '#059669' }}>
                         {blockedActions.length > 0 ? `Khóa: ${blockedActions.join(', ')}` : 'Trạng thái: Không khóa'}
                       </div>
                       <div style={{ fontSize: '0.625rem', color: isCircuitBreakerTripped ? '#B91C1C' : '#64748B', marginTop: '2px' }}>
@@ -1488,6 +1442,61 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
 
               {/* ======================================================== */}
               {/* 7. LIÊN KẾT TRI THỨC LỊCH SỬ (Knowledge Base) */}
+                            {/* ======================================================== */}
+              {/* 6. GIẢI TRÌNH CHI TIẾT DÀNH CHO BÁO CÁO INCIDENT */}
+              {/* ======================================================== */}
+              <div
+                style={{
+                  padding: '14px 16px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '0.71875rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <FileText size={15} color="#059669" />
+                    <span>BÁO CÁO GIẢI TRÌNH SRE (SRE INCIDENT REPORT)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(fullExplanationVi, 'explanation')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '3px 8px',
+                      fontSize: '0.6875rem',
+                      fontWeight: 600,
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      color: '#334155',
+                    }}
+                  >
+                    {copiedKey === 'explanation' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                    <span>{copiedKey === 'explanation' ? 'Đã sao chép' : 'Sao chép giải trình'}</span>
+                  </button>
+                </div>
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    fontSize: '0.8125rem',
+                    color: '#334155',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {fullExplanationVi}
+                </div>
+              </div>
+
+              {/* ======================================================== */}
+              {/* 5. ĐỀ XUẤT HÀNH ĐỘNG & THAM SỐ KỸ THUẬT CỤ THỂ */}
               {/* ======================================================== */}
               <div
                 style={{
@@ -1506,7 +1515,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                   <History size={16} color="#6366F1" />
                   <div>
                     <div style={{ fontSize: '0.78125rem', fontWeight: 800, color: '#334155' }}>
-                      7. LIÊN KẾT TRI THỨC LỊCH SỬ (KNOWLEDGE BASE RETRIEVAL)
+                      ĐỐI CHIẾU TRI THỨC LỊCH SỬ (KNOWLEDGE BASE RETRIEVAL)
                     </div>
                     <div style={{ fontSize: '0.6875rem', color: '#64748B' }}>
                       Đối soát sự cố tương đồng từ vector database: <strong style={{ color: historicalContextUsed ? '#059669' : '#64748B' }}>{historicalContextUsed ? 'KÍCH HOẠT (ACTIVE)' : 'KHÔNG (Chẩn đoán độc lập từ tín hiệu trực tiếp)'}</strong>
@@ -1583,7 +1592,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <ShieldCheck size={16} color="#059669" />
-                    <span>4. HỆ THỐNG 6 BẰNG CHỨNG XÁC THỰC ĐA TẦNG (MULTI-TIER EVIDENCE)</span>
+                    <span>HỆ THỐNG BẰNG CHỨNG XÁC THỰC ĐA TẦNG (MULTI-TIER EVIDENCE)</span>
                   </div>
                   <button
                     type="button"
@@ -1762,7 +1771,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve }) => {
                 >
                   <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#6D28D9', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Activity size={16} color="#7C3AED" />
-                    <span>2. KẾT QUẢ DỰ BÁO TỪ MÔ HÌNH HỌC SÂU GRU (7 HEADS ARCHITECTURE)</span>
+                    <span>KẾT QUẢ DỰ BÁO TỪ MÔ HÌNH HỌC SÂU GRU (7 HEADS ARCHITECTURE)</span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', color: '#5B21B6', fontWeight: 600, backgroundColor: '#EDE9FE', padding: '2px 8px', borderRadius: '4px' }}>
                     Ngưỡng phân loại chuẩn: {(primaryThreshold * 100).toFixed(0)}%

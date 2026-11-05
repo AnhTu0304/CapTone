@@ -201,21 +201,8 @@ export const WorkloadsPage = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Khối Lượng Công Việc & Pods
+              Khối Lượng Công Việc
             </h1>
-            <span
-              style={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 'var(--dash-radius-full)',
-                backgroundColor: runningPodsCount > 0 ? 'var(--dash-mint-100)' : 'var(--dash-warning-bg)',
-                color: runningPodsCount > 0 ? 'var(--dash-mint-600)' : 'var(--dash-warning-text)',
-                border: runningPodsCount > 0 ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-warning-border)',
-              }}
-            >
-              {totalPodsCount > 0 ? `${runningPodsCount} / ${totalPodsCount} Pods Đang Chạy` : '0 Pods Ngoại Tuyến'}
-            </span>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
             Giám sát chu kỳ sống của ứng dụng, số lần restart và phân phối containers theo từng Namespace
@@ -248,7 +235,7 @@ export const WorkloadsPage = () => {
                 boxShadow: activeView === 'WORKLOADS' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
-              Khối Công Việc ({distinctWorkloadsCount})
+              Khối Công Việc
             </button>
             <button
               type="button"
@@ -265,7 +252,7 @@ export const WorkloadsPage = () => {
                 boxShadow: activeView === 'PODS' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
-              Từng Pod Riêng Lẻ ({totalPodsCount})
+              Từng Pod Riêng Lẻ
             </button>
           </div>
 

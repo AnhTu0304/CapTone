@@ -111,10 +111,21 @@ Write-Host ""
 # ------------------------------------------------------------------------------
 # 3. Yêu cầu nhập Token (CÂU HỎI DUY NHẤT)
 # ------------------------------------------------------------------------------
+$CONFIGURED_TOKEN = "__SELFHEAL_TOKEN__"
+
 if (-not $Token) {
-    $securePass = Read-Host "Nhap Token do SelfHeal cap" -AsSecureString
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass)
-    $Token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+    if ($CONFIGURED_TOKEN -and $CONFIGURED_TOKEN -notmatch "^__") {
+        $Token = $CONFIGURED_TOKEN
+    } else {
+        $envToken = [System.Environment]::GetEnvironmentVariable("SELFHEAL_AGENT_TOKEN")
+        if ($envToken) {
+            $Token = $envToken
+        } else {
+            $securePass = Read-Host "Nhap Token do SelfHeal cap" -AsSecureString
+            $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass)
+            $Token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        }
+    }
 }
 
 if (-not $Token -or $Token.Trim() -eq "") {
