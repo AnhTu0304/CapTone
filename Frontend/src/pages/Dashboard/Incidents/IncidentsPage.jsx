@@ -130,7 +130,6 @@ const KNOWN_SERVICES = [
   'attack-injector-app',
   'chaos-testagent2',
   'ecommerce-store-app',
-  'mongodb-init',
   'mongodb',
   'selfheal-test-app',
   'sme-order-service',
@@ -141,8 +140,11 @@ const cleanServiceName = (raw) => {
   let s = raw.trim();
   s = s.replace(/^dịch vụ\s+/i, '').replace(/^service\s+/i, '').replace(/^pod[\/:]\s*/i, '');
   s = s.replace(/['".,;:)]+$/, '').replace(/^['"(]+/, '').trim();
-  if (KNOWN_SERVICES.includes(s.toLowerCase())) {
-    return s.toLowerCase();
+  const lower = s.toLowerCase();
+  if (lower === 'ecommerce-store') return 'ecommerce-store-app';
+  if (/^mongodb-\d+$/i.test(lower)) return 'mongodb';
+  if (KNOWN_SERVICES.includes(lower)) {
+    return lower;
   }
   // Loại bỏ các câu văn mô tả dài hoặc chứa khoảng trắng
   if (/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,40}$/.test(s)) {
@@ -312,7 +314,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
 };
 
 export const IncidentsPage = ({ onNavigate }) => {
-  const { currentOrg, currentEnv, envList, setCurrentEnv } = useDashboard();
+  const { currentOrg, currentEnv, envList, setCurrentEnv, refreshActiveIncidents } = useDashboard();
   const [selectedCluster, setSelectedCluster] = useState(() => currentEnv?.cluster || 'all'); // 'all' | clusterId
 
   // Tự động đồng bộ bộ lọc khi người dùng chuyển Cụm K8s trên Header Top Navbar
@@ -454,6 +456,7 @@ export const IncidentsPage = ({ onNavigate }) => {
   const handleRefresh = () => {
     setIsRefreshing(true);
     fetchIncidents();
+    refreshActiveIncidents?.();
   };
 
   // Kích hoạt giải quyết sự cố tức thời
@@ -462,6 +465,7 @@ export const IncidentsPage = ({ onNavigate }) => {
     if (targetRawId) {
       try {
         await aiService.updateIncidentStatus(targetRawId, 'RESOLVED');
+        refreshActiveIncidents?.();
       } catch (err) {
         console.warn('Lỗi cập nhật trạng thái sự cố lên DB:', err.message);
       }
@@ -560,7 +564,7 @@ export const IncidentsPage = ({ onNavigate }) => {
     const SYSTEM_IGNORED = new Set([
       'coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-apiserver-minikube',
       'kube-controller', 'kube-controller-manager-minikube', 'kube-scheduler-minikube',
-      'metrics-server', 'selfheal-agent', 'storage-provisioner', 'order-service', 'mongodb-init'
+      'metrics-server', 'selfheal-agent', 'storage-provisioner', 'order-service', 'payment-service', 'mongodb-init'
     ]);
 
     return Array.from(allServiceNames)

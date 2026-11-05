@@ -2,18 +2,18 @@
   "title": "Master Summary of All 8 RCA Self-Healing Actions",
   "total_actions_tested": 8,
   "all_passed": true,
-  "tested_at": "2026-10-26T15:56:44.447637+00:00",
+  "tested_at": "2026-11-05T18:17:58.864316+00:00",
   "actions": [
     {
       "id": "01",
       "action": "RESTART_POD",
       "file_name": "01_action_RESTART_POD.json",
       "scenario_title": "Khởi động lại Pod đơn lẻ (Restart Pod)",
-      "root_cause": "Unstable application pod",
+      "root_cause": "Pod ứng dụng bất ổn định / CrashLoop",
       "severity": "HIGH",
       "recommendation_priority": "HIGH",
       "target_type": "POD",
-      "target_name": null,
+      "target_name": "payment-service-7c9d8f6b5-x2abc",
       "status": "PASSED"
     },
     {
@@ -21,11 +21,11 @@
       "action": "REPLACE_POD",
       "file_name": "02_action_REPLACE_POD.json",
       "scenario_title": "Thay thế và tái tạo mới Pod (Replace Pod)",
-      "root_cause": "Unstable application pod",
+      "root_cause": "Pod ứng dụng bất ổn định / CrashLoop",
       "severity": "HIGH",
       "recommendation_priority": "HIGH",
       "target_type": "POD",
-      "target_name": null,
+      "target_name": "order-service-67fb989c4-k98xz",
       "status": "PASSED"
     },
     {
@@ -33,11 +33,11 @@
       "action": "RESTART_DEPLOYMENT",
       "file_name": "03_action_RESTART_DEPLOYMENT.json",
       "scenario_title": "Khởi động lại toàn bộ Deployment (Restart Deployment)",
-      "root_cause": "Application errors",
+      "root_cause": "Lỗi ứng dụng nội bộ (HTTP 5xx)",
       "severity": "MEDIUM",
       "recommendation_priority": "MEDIUM",
       "target_type": "DEPLOYMENT",
-      "target_name": "auth-v3.1.0",
+      "target_name": "auth-service",
       "status": "PASSED"
     },
     {
@@ -45,11 +45,11 @@
       "action": "SCALE_REPLICAS",
       "file_name": "04_action_SCALE_REPLICAS.json",
       "scenario_title": "Tăng cường quy mô bản sao Workload (Scale Replicas)",
-      "root_cause": "CPU saturation",
+      "root_cause": "Bão hòa tài nguyên CPU",
       "severity": "HIGH",
       "recommendation_priority": "HIGH",
-      "target_type": "POD",
-      "target_name": null,
+      "target_type": "DEPLOYMENT",
+      "target_name": "checkout-service",
       "status": "PASSED"
     },
     {
@@ -57,11 +57,11 @@
       "action": "ROLLBACK_DEPLOYMENT",
       "file_name": "05_action_ROLLBACK_DEPLOYMENT.json",
       "scenario_title": "Thu hồi phiên bản lỗi về bản cũ ổn định (Rollback Deployment)",
-      "root_cause": "Deployment failure",
+      "root_cause": "Lỗi triển khai phiên bản mới",
       "severity": "CRITICAL",
       "recommendation_priority": "CRITICAL",
       "target_type": "DEPLOYMENT",
-      "target_name": "notification-v1.9.0",
+      "target_name": "notification-service",
       "status": "PASSED"
     },
     {
@@ -69,11 +69,11 @@
       "action": "CLEANUP_STORAGE",
       "file_name": "06_action_CLEANUP_STORAGE.json",
       "scenario_title": "Dọn dẹp dung lượng ổ đĩa / PVC (Cleanup Storage)",
-      "root_cause": "Storage capacity exhausted",
+      "root_cause": "Cạn kiệt dung lượng lưu trữ",
       "severity": "HIGH",
       "recommendation_priority": "HIGH",
       "target_type": "POD",
-      "target_name": null,
+      "target_name": "logging-service",
       "status": "PASSED"
     },
     {
@@ -93,7 +93,7 @@
       "action": "NO_ACTION",
       "file_name": "08_action_NO_ACTION_CIRCUIT_BREAKER.json",
       "scenario_title": "Ngắt mạch an toàn Circuit Breaker & Human-in-the-Loop",
-      "root_cause": "Container memory exhausted",
+      "root_cause": "Cạn kiệt bộ nhớ container (OOM)",
       "severity": "CRITICAL",
       "recommendation_priority": "CRITICAL",
       "target_type": "POD",

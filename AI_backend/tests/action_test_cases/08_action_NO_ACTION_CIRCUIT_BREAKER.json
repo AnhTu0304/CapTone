@@ -4,7 +4,7 @@
   "scenario_title": "Ngắt mạch an toàn Circuit Breaker & Human-in-the-Loop",
   "file_name": "08_action_NO_ACTION_CIRCUIT_BREAKER.json",
   "test_status": "PASSED",
-  "tested_at": "2026-10-26T15:56:44.445943+00:00",
+  "tested_at": "2026-11-05T18:17:58.862794+00:00",
   "description": "Sự cố MongoDB Replica Set OOM SIGKILL 137, Pod giữ vai trò PRIMARY, đã thử tự động cứu chữa 2 lần thất bại (consecutive_failures: 2). Kích hoạt Circuit Breaker chuyển quyền can thiệp thủ công (NO_ACTION, CRITICAL) kèm manual_playbook 3 bước failover rs.stepDown(60).",
   "input_payload": {
     "request_id": "req-20261026-circuit-breaker-008",
@@ -81,7 +81,7 @@
       }
     },
     "root_cause": {
-      "cause": "Container memory exhausted",
+      "cause": "Cạn kiệt bộ nhớ container (OOM)",
       "confidence": 0.99,
       "severity": "CRITICAL"
     },
@@ -116,13 +116,14 @@
         ]
       }
     },
-    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Cạn kiệt bộ nhớ container (OOM). Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True), do đó quy trình chẩn đoán và hành động đã được đánh giá lại an toàn. Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu.",
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Cạn kiệt bộ nhớ container (OOM) (mức độ CRITICAL, độ tin cậy 99%). Các tín hiệu xác thực ghi nhận trực tiếp: Mức sử dụng RAM ở ngưỡng nguy hiểm (98.7%); Tiến trình trên Pod 'mongodb-0' bị tiêu diệt: exitCode 137 (OOMKilled); Container terminated with exitCode 137 (OOM-Killer SIGKILL). Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True), do đó quy trình chẩn đoán và hành động đã được đánh giá lại an toàn. Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu.",
     "historical_context_used": false,
     "similar_incident_ids": [],
     "workload_id": "wl-7788-99aa-bbcc-ddeeff001122",
     "namespace": "test-lab",
     "cluster_id": "9ea1db42-7524-4238-8716-315cbe0d0b39",
     "incident_id": "inc-20261026-circuit-breaker-008",
-    "request_id": "req-20261026-circuit-breaker-008"
+    "request_id": "req-20261026-circuit-breaker-008",
+    "engine": "Deterministic Multi-Agent SRE"
   }
 }

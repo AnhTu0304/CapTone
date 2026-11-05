@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from app.models.gru import ModelConfig, MultiHeadGRU
+from app.models.gru import ModelConfig, MultiHeadGRU, MultiHeadLSTM, build_risk_model
 from app.schemas.prediction import GRUMetricPoint, HeadPrediction, PredictionResponse, RiskScore
 from app.services.preprocessing import prepare_sequence
 
@@ -80,8 +80,8 @@ class PredictionService:
             for risk in self.risk_names
         }
         config = ModelConfig(**checkpoint["model_config"])
-        self.model = MultiHeadGRU(config)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.model = build_risk_model(checkpoint)
+        self.model.eval()
         self.model.eval()
         logger.info(
             "Loaded GRU checkpoint path=%s sequence_length=%d features=%d thresholds=%s",

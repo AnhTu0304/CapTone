@@ -39,9 +39,10 @@ export const SLACostSavingsChart = ({
   title = 'Cam Kết & Xu Hướng SLA Uptime (6 Tháng Gần Nhất)',
   subtitle = 'Đối chiếu thời gian hoạt động thực tế 6 tháng với cam kết chuẩn SLA 99.9% và số lượng sự cố tự phục hồi',
   className = '',
-  height = 310,
+  height = 340,
   trendsData = null,
   summary = null,
+  showSummaryCards = false,
 }) => {
   const [hoverIndex, setHoverIndex] = useState(null);
   const svgRef = useRef(null);
@@ -494,123 +495,125 @@ export const SLACostSavingsChart = ({
         )}
       </div>
 
-      {/* 3 THẺ TÓM TẮT CHÂN TRANG ĐỘC LẬP */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '16px',
-          marginTop: '22px',
-        }}
-      >
-        {/* Thẻ 1: Tổng thời gian vận hành */}
+      {/* 3 THẺ TÓM TẮT CHÂN TRANG ĐỘC LẬP (Chỉ bật khi cần, mặc định ẩn để biểu đồ thoáng và to rộng) */}
+      {showSummaryCards && (
         <div
           style={{
-            padding: '16px 20px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '16px',
+            marginTop: '22px',
           }}
         >
+          {/* Thẻ 1: Tổng thời gian vận hành */}
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              backgroundColor: '#EFF6FF',
+              padding: '16px 20px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              gap: '14px',
             }}
           >
-            <Activity size={22} color="#1D4ED8" strokeWidth={2.2} />
-          </div>
-          <div>
-            <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.02em', marginBottom: '2px' }}>
-              TỔNG THỜI GIAN VẬN HÀNH
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                backgroundColor: '#EFF6FF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Activity size={22} color="#1D4ED8" strokeWidth={2.2} />
             </div>
-            <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
-              {summary?.totalOperatingHours ? `${summary.totalOperatingHours.toLocaleString('vi-VN')} Giờ liên tục` : '4.320 Giờ liên tục'}
+            <div>
+              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.02em', marginBottom: '2px' }}>
+                TỔNG THỜI GIAN VẬN HÀNH
+              </div>
+              <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
+                {summary?.totalOperatingHours ? `${summary.totalOperatingHours.toLocaleString('vi-VN')} Giờ liên tục` : '4.320 Giờ liên tục'}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Thẻ 2: Cam kết thực đạt */}
-        <div
-          style={{
-            padding: '16px 20px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
-          }}
-        >
+          {/* Thẻ 2: Cam kết thực đạt */}
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              backgroundColor: '#F0F9FF',
+              padding: '16px 20px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              gap: '14px',
             }}
           >
-            <ShieldCheck size={22} color="#0284C7" strokeWidth={2.2} />
-          </div>
-          <div>
-            <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.02em', marginBottom: '2px' }}>
-              CAM KẾT THỰC ĐẠT
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                backgroundColor: '#F0F9FF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <ShieldCheck size={22} color="#0284C7" strokeWidth={2.2} />
             </div>
-            <div style={{ fontWeight: 800, color: '#0284C7', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
-              {summary?.actualUptime || '99.98%'} Uptime
+            <div>
+              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.02em', marginBottom: '2px' }}>
+                CAM KẾT THỰC ĐẠT
+              </div>
+              <div style={{ fontWeight: 800, color: '#0284C7', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
+                {summary?.actualUptime || '99.98%'} Uptime
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Thẻ 3: Tổng sự cố tự vá lỗi */}
-        <div
-          style={{
-            padding: '16px 20px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
-          }}
-        >
+          {/* Thẻ 3: Tổng sự cố tự vá lỗi */}
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              backgroundColor: '#DCFCE7',
+              padding: '16px 20px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              gap: '14px',
             }}
           >
-            <Wrench size={22} color="#16A34A" strokeWidth={2.2} />
-          </div>
-          <div>
-            <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.02em', marginBottom: '2px' }}>
-              TỔNG SỰ CỐ TỰ VÁ LỖI
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                backgroundColor: '#DCFCE7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Wrench size={22} color="#16A34A" strokeWidth={2.2} />
             </div>
-            <div style={{ fontWeight: 800, color: '#16A34A', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
-              {summary?.totalIncidentsResolved ?? 5} sự cố đã xử lý
+            <div>
+              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.02em', marginBottom: '2px' }}>
+                TỔNG SỰ CỐ TỰ VÁ LỖI
+              </div>
+              <div style={{ fontWeight: 800, color: '#16A34A', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
+                {summary?.totalIncidentsResolved ?? 5} sự cố đã xử lý
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

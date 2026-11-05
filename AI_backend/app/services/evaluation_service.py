@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from app.models.gru import ModelConfig, MultiHeadGRU
+from app.models.gru import ModelConfig, MultiHeadGRU, MultiHeadLSTM, build_risk_model
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ def evaluate_checkpoint_file(
         raise ValueError(f"Invalid checkpoint missing fields: {sorted(missing)}")
 
     model_config = ModelConfig(**checkpoint["model_config"])
-    model = MultiHeadGRU(model_config)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    model = build_risk_model(checkpoint)
+    model.eval()
     model.eval()
 
     total_params = sum(p.numel() for p in model.parameters())

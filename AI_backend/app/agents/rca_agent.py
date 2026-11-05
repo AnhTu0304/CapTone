@@ -109,7 +109,7 @@ class RootCauseAnalysisAgent:
         # signal alone. But only match explicit rollout/update events, not the generic K8s word 'Deployment'
         deployment_text = " ".join(kubernetes_raw.events).lower()
         has_real_rollout = bool(
-            re.search(r'(rollout|rollingupdate|image updated|new replicaset|revision changed|deploymentrollout)', deployment_text)
+            re.search(r'\b(rollout|rollingupdate|image updated|new replicaset|revision changed|deploymentrollout)\b', deployment_text)
             or ('scaling down replica set' in deployment_text and 'scaling up' in deployment_text)
         )
         already_rolled_back = bool(

@@ -31,12 +31,29 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   const {
     isSidebarCollapsed,
     setIsSidebarCollapsed,
+    isAgentConnected,
     pendingApprovalsCount,
+    activeIncidentsCount,
+    newPredictionsCount,
+    clearNewPredictionsCount,
+    newHealingHistoryCount,
+    clearNewHealingHistoryCount,
     unreadNotifsCount,
     onNavigate,
     currentOrg,
     currentUserRole,
   } = useDashboard();
+
+  // Tự động xóa số thông báo mới khi người dùng đang mở trang Dự báo rủi ro AI hoặc Lịch sử phục hồi
+  React.useEffect(() => {
+    const clean = (currentPath || '').toLowerCase().split('?')[0].split('#')[0];
+    if (clean.startsWith('/dashboard/ai/predictions') && newPredictionsCount > 0) {
+      clearNewPredictionsCount?.();
+    }
+    if (clean.startsWith('/dashboard/self-healing/history') && newHealingHistoryCount > 0) {
+      clearNewHealingHistoryCount?.();
+    }
+  }, [currentPath, newPredictionsCount, newHealingHistoryCount, clearNewPredictionsCount, clearNewHealingHistoryCount]);
 
   const auth = useAuth();
 
@@ -78,7 +95,13 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'GIÁM SÁT',
       items: [
-        { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart, badge: 'LIVE', badgeType: 'mint' },
+        {
+          name: 'Chỉ số tài nguyên',
+          path: '/dashboard/monitoring/metrics',
+          icon: LineChart,
+          badge: isAgentConnected ? 'LIVE' : 'OFFLINE',
+          badgeType: isAgentConnected ? 'mint' : 'neutral',
+        },
         { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },
         { name: 'Sự kiện K8s', path: '/dashboard/monitoring/events', icon: Activity },
       ],
@@ -86,15 +109,33 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'AI & SỰ CỐ',
       items: [
-        { name: 'Dự báo rủi ro AI', path: '/dashboard/ai/predictions', icon: Sparkles, badge: '1', badgeType: 'mint' },
-        { name: 'Quản lý sự cố & RCA', path: '/dashboard/incidents', icon: AlertTriangle },
+        {
+          name: 'Dự báo rủi ro AI',
+          path: '/dashboard/ai/predictions',
+          icon: Sparkles,
+          badge: newPredictionsCount > 0 ? `${newPredictionsCount}` : null,
+          badgeType: 'mint',
+        },
+        {
+          name: 'Quản lý sự cố & RCA',
+          path: '/dashboard/incidents',
+          icon: AlertTriangle,
+          badge: activeIncidentsCount > 0 ? `${activeIncidentsCount}` : null,
+          badgeType: 'danger',
+        },
       ],
     },
     {
       group: 'TỰ PHỤC HỒI',
       items: [
         { name: 'Hành động tự sửa', path: '/dashboard/self-healing/actions', icon: Zap },
-        { name: 'Lịch sử phục hồi', path: '/dashboard/self-healing/history', icon: History },
+        {
+          name: 'Lịch sử phục hồi',
+          path: '/dashboard/self-healing/history',
+          icon: History,
+          badge: newHealingHistoryCount > 0 ? `${newHealingHistoryCount}` : null,
+          badgeType: 'mint',
+        },
         { name: 'Chính sách tự động', path: '/dashboard/self-healing/policies', icon: ShieldAlert },
         {
           name: 'Cổng phê duyệt (HITL)',
@@ -182,6 +223,11 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   }, [filteredNavGroups, currentPath]);
 
   const handleItemClick = (path) => {
+    if (path === '/dashboard/ai/predictions') {
+      clearNewPredictionsCount?.();
+    } else if (path === '/dashboard/self-healing/history') {
+      clearNewHealingHistoryCount?.();
+    }
     if (onNavigate) {
       onNavigate(path);
     }
@@ -337,22 +383,34 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
                           padding: '1px 6px',
                           borderRadius: 'var(--dash-radius-full)',
                           backgroundColor:
-                            item.badgeType === 'warning'
+                            item.badgeType === 'danger'
+                              ? '#FEE2E2'
+                              : item.badgeType === 'warning'
                               ? 'var(--dash-warning-bg)'
                               : item.badgeType === 'mint'
                               ? 'var(--dash-mint-100)'
+                              : item.badgeType === 'neutral'
+                              ? '#F1F5F9'
                               : 'var(--dash-info-bg)',
                           color:
-                            item.badgeType === 'warning'
+                            item.badgeType === 'danger'
+                              ? '#DC2626'
+                              : item.badgeType === 'warning'
                               ? 'var(--dash-warning-text)'
                               : item.badgeType === 'mint'
                               ? 'var(--dash-mint-600)'
+                              : item.badgeType === 'neutral'
+                              ? '#64748B'
                               : 'var(--dash-info-text)',
                           border:
-                            item.badgeType === 'warning'
+                            item.badgeType === 'danger'
+                              ? '1px solid #FCA5A5'
+                              : item.badgeType === 'warning'
                               ? '1px solid var(--dash-warning-border)'
                               : item.badgeType === 'mint'
                               ? '1px solid var(--dash-mint-200)'
+                              : item.badgeType === 'neutral'
+                              ? '1px solid #CBD5E1'
                               : '1px solid var(--dash-info-border)',
                         }}
                       >
