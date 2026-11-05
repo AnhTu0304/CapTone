@@ -433,6 +433,25 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
   const unreadNotifsCount = notifications.filter((n) => !n.read).length;
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [activeIncidentsCount, setActiveIncidentsCount] = useState(0);
+  const [newPredictionsCount, setNewPredictionsCount] = useState(() => {
+    const saved = sessionStorage.getItem('selfheal_new_predictions_count');
+    return saved ? Math.max(0, parseInt(saved, 10) || 0) : 0;
+  });
+  const [newHealingHistoryCount, setNewHealingHistoryCount] = useState(() => {
+    const saved = sessionStorage.getItem('selfheal_new_healing_history_count');
+    return saved ? Math.max(0, parseInt(saved, 10) || 0) : 0;
+  });
+
+  const clearNewPredictionsCount = useCallback(() => {
+    setNewPredictionsCount(0);
+    sessionStorage.setItem('selfheal_new_predictions_count', '0');
+  }, []);
+
+  const clearNewHealingHistoryCount = useCallback(() => {
+    setNewHealingHistoryCount(0);
+    sessionStorage.setItem('selfheal_new_healing_history_count', '0');
+  }, []);
 
   const fetchPendingApprovalsCount = useCallback(async () => {
     try {
@@ -452,8 +471,59 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     }
   }, [currentEnv?.clusterId, currentEnv?.id, currentOrg?.id]);
 
+  const fetchActiveIncidentsCount = useCallback(async () => {
+    try {
+      const clusterId = currentEnv?.clusterId || currentEnv?.id;
+      const orgId = currentOrg?.id;
+      const search = new URLSearchParams();
+      search.set('limit', '50');
+      search.set('status', 'OPEN');
+      if (clusterId && !clusterId.startsWith('org-')) {
+        search.set('cluster_id', clusterId);
+      }
+      if (orgId && !orgId.startsWith('sandbox-')) {
+        search.set('organization_id', orgId);
+      }
+      const res = await request(`/ai/incidents?${search.toString()}`);
+      const items = res?.data?.items || res?.items || (Array.isArray(res?.data) ? res.data : []);
+      const nowMs = Date.now();
+      const activeCount = items.filter((item) => {
+        if (!item || item.status === 'RESOLVED' || item.healing_status === 'SUCCEEDED') return false;
+        let recAction = item.recommendation || '';
+        if (!recAction && item.analysis_result) {
+          try {
+            const parsed = typeof item.analysis_result === 'string' ? JSON.parse(item.analysis_result) : item.analysis_result;
+            recAction = parsed?.recommendation?.action || '';
+          } catch {}
+        }
+        const isNoAction =
+          recAction === 'NO_ACTION' ||
+          (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
+        if (isNoAction) return false;
+
+        const isActivelyRecoveringOrPending = Boolean(
+          item.has_pending_approval ||
+          item.healing_approval_status === 'PENDING' ||
+          item.status === 'AWAITING_APPROVAL' ||
+          item.healing_status === 'IN_PROGRESS' ||
+          item.healing_status === 'PENDING' ||
+          item.status === 'INVESTIGATING'
+        );
+        if (isActivelyRecoveringOrPending) return true;
+
+        const detectedMs = new Date(item.detected_at || item.created_at || 0).getTime();
+        const isRecent = !isNaN(detectedMs) && (nowMs - detectedMs) <= 15 * 60 * 1000;
+        return isRecent;
+      }).length;
+      setActiveIncidentsCount(activeCount);
+    } catch {
+      setActiveIncidentsCount(0);
+    }
+  }, [currentEnv?.clusterId, currentEnv?.id, currentOrg?.id]);
+
   useEffect(() => {
     fetchPendingApprovalsCount();
+    fetchActiveIncidentsCount();
 
     // ⚡ Lắng nghe sự kiện Real-time qua WebSocket (Push model)
     const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
@@ -461,8 +531,9 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       'sme-order-service',
       (payload) => {
         if (!payload || !payload.type) return;
+        const currentPathname = (window.location?.pathname || '').toLowerCase();
 
-        // 1. Khi có yêu cầu phê duyệt mới hoặc trạng thái thay đổi
+        // 1. Khi có yêu cầu phê duyệt mới hoặc trạng thái hành động tự phục hồi thay đổi
         if (
           payload.type === 'approval_created' ||
           payload.type === 'approval_status_changed' ||
@@ -471,6 +542,18 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           payload.type === 'healing_action_aborted'
         ) {
           fetchPendingApprovalsCount();
+          fetchActiveIncidentsCount();
+
+          if (
+            (payload.type === 'healing_action_completed' || payload.type === 'healing_action_triggered') &&
+            !currentPathname.startsWith('/dashboard/self-healing/history')
+          ) {
+            setNewHealingHistoryCount((prev) => {
+              const next = prev + 1;
+              sessionStorage.setItem('selfheal_new_healing_history_count', String(next));
+              return next;
+            });
+          }
 
           if (payload.type === 'approval_created') {
             const newNotif = {
@@ -493,6 +576,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
         // 2. Khi có sự cố mới được phát hiện
         if (payload.type === 'incident' && payload.data) {
+          fetchActiveIncidentsCount();
           const newNotif = {
             id: `notif-inc-${Date.now()}`,
             title: 'Sự cố mới phát hiện',
@@ -509,6 +593,24 @@ export const DashboardProvider = ({ children, onNavigate }) => {
             return updated;
           });
         }
+
+        // 3. Khi có dự báo rủi ro AI mới hoặc khuyến nghị mới từ GRU/RCA
+        if ((payload.type === 'ai_prediction' || payload.type === 'ai_recommendation') && payload.data) {
+          const isRiskPrediction =
+            payload.type === 'ai_recommendation' ||
+            payload.data.status === 'RISK_DETECTED' ||
+            (payload.data.primary_risk && payload.data.primary_risk !== 'NORMAL') ||
+            (Array.isArray(payload.data.detected_risks) && payload.data.detected_risks.length > 0) ||
+            Number(payload.data.overall_risk_score || payload.data.risk_score || 0) >= 0.55;
+
+          if (isRiskPrediction && !currentPathname.startsWith('/dashboard/ai/predictions')) {
+            setNewPredictionsCount((prev) => {
+              const next = prev + 1;
+              sessionStorage.setItem('selfheal_new_predictions_count', String(next));
+              return next;
+            });
+          }
+        }
       },
       null,
       activeClusterId && !activeClusterId.startsWith('org-') ? activeClusterId : null
@@ -517,15 +619,14 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     // Fallback sync thưa (mỗi 60s) để đảm bảo không bao giờ bị lệch dữ liệu nếu mạng gián đoạn
     const fallbackTimer = setInterval(() => {
       fetchPendingApprovalsCount();
+      fetchActiveIncidentsCount();
     }, 60000);
 
     return () => {
       unsubscribe();
       clearInterval(fallbackTimer);
     };
-  }, [fetchPendingApprovalsCount, currentEnv?.clusterId, currentEnv?.id]);
-
-  const activeIncidentsCount = 0;
+  }, [fetchPendingApprovalsCount, fetchActiveIncidentsCount, currentEnv?.clusterId, currentEnv?.id]);
 
   return (
     <DashboardContext.Provider
@@ -565,6 +666,11 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         pendingApprovalsCount,
         refreshPendingApprovals: fetchPendingApprovalsCount,
         activeIncidentsCount,
+        refreshActiveIncidents: fetchActiveIncidentsCount,
+        newPredictionsCount,
+        clearNewPredictionsCount,
+        newHealingHistoryCount,
+        clearNewHealingHistoryCount,
         markAllNotificationsRead,
         toggleNotificationRead,
         isSidebarCollapsed,

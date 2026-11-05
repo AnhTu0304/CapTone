@@ -664,50 +664,55 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
 
 export const normalizeServiceName = (val) => {
-
   if (!val) return '';
-
-  const str = String(val).trim();
+  const raw = typeof val === 'object' ? (val.name || val.service_name || val.workload_name || '') : String(val);
+  const str = String(raw).trim();
+  if (!str) return '';
 
   // Map specific legacy seed UUIDs to actual database workload names if a UUID was passed
-
   if (str === 'd9d4f68b-ffd5-4d44-8de2-980fcd6087d7') return 'selfheal-test-app';
-
   if (
-
     str === 'c0000000-0000-0000-0000-000000000001' ||
-
     str === 'c0000000-0000-0000-0000-000000000002' ||
-
     str === '6341454b-b372-479f-8eac-e0b39ad715e1' ||
-
     str === '446f1224-4c37-4a4c-89d3-611dc51a5cc9'
-
   ) return 'sme-order-service';
-
   if (str === 'fafbe6bc-d295-4f3b-aaa7-e5d3a3a16d2e' || str === '899b0ff5-c316-4ac3-9115-c802ad0bba7d') return 'chaos-testagent2';
-
   if (str === '19765456-dfdd-4d87-b32a-67d3e7be74c1' || str === '8a1c09b8-0dda-4777-9a6f-7a7a723a7197') return 'ecommerce-store-app';
-
   if (str === '6c8b57e0-6503-4249-802a-84e8751c01b9' || str === '58151d7d-b1fe-42cc-80de-594457c19c70') return 'attack-injector-app';
 
+  // Chuẩn hóa tên Pod con và tên rút gọn về đúng tên Workload thật trên K8s
+  const lower = str.toLowerCase();
+  if (/^mongodb-\d+$/i.test(lower)) return 'mongodb';
+  if (lower === 'ecommerce-store') return 'ecommerce-store-app';
 
+  // Loại bỏ các dịch vụ mẫu (seed cũ) không tồn tại trên K8s và dịch vụ hệ thống
+  const IGNORED_SERVICES = new Set([
+    'order-service',
+    'payment-service',
+    'mongodb-init',
+    'coredns',
+    'etcd-minikube',
+    'kindnet',
+    'kube',
+    'kube-apiserver-minikube',
+    'kube-controller',
+    'kube-controller-manager-minikube',
+    'kube-scheduler-minikube',
+    'metrics-server',
+    'selfheal-agent',
+    'storage-provisioner',
+  ]);
+  if (IGNORED_SERVICES.has(lower)) return '';
 
   // If raw UUID without mapping, drop it
-
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
-
     return '';
-
   }
 
   // Otherwise return the real service name as-is
-
   return str;
-
 };
-
-
 
 export const PredictionsPage = () => {
   const { currentOrg, currentEnv, isAgentConnected, envList, setCurrentEnv, isRefreshing, triggerRefresh, onNavigate } = useDashboard();

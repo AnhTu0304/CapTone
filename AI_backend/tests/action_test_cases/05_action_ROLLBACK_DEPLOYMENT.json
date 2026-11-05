@@ -4,7 +4,7 @@
   "scenario_title": "Thu hồi phiên bản lỗi về bản cũ ổn định (Rollback Deployment)",
   "file_name": "05_action_ROLLBACK_DEPLOYMENT.json",
   "test_status": "PASSED",
-  "tested_at": "2026-10-26T15:56:44.372222+00:00",
+  "tested_at": "2026-11-05T18:17:58.765937+00:00",
   "description": "Sự cố sập phát sinh ngay sau đợt cập nhật phiên bản mới (v1.8.2 lên v1.9.0) kèm Deployment failure events. RCA đề xuất ROLLBACK_DEPLOYMENT về phiên bản ổn định trước đó.",
   "input_payload": {
     "request_id": "req-20261026-rollback-005",
@@ -52,7 +52,7 @@
     "service_id": "notification-service",
     "prediction": null,
     "root_cause": {
-      "cause": "Deployment failure",
+      "cause": "Lỗi triển khai phiên bản mới",
       "confidence": 0.725,
       "severity": "CRITICAL"
     },
@@ -64,12 +64,12 @@
       "reason": "Sự cố có tương quan trực tiếp với bản triển khai vừa cập nhật; đề xuất rollback phiên bản",
       "priority": "CRITICAL",
       "target_type": "DEPLOYMENT",
-      "target_name": "notification-v1.9.0",
-      "target_id": null,
+      "target_name": "notification-service",
+      "target_id": "wl-notif-svc-005",
       "target_node": null,
       "action_parameters": {
         "faulty_pod_id": null,
-        "faulty_pod_name": "notification-v1.9.0",
+        "faulty_pod_name": null,
         "faulty_node_id": null,
         "faulty_node_name": null,
         "recommended_destination_node": null,
@@ -79,13 +79,14 @@
         "manual_playbook": []
       }
     },
-    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Lỗi triển khai phiên bản mới.",
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Lỗi triển khai phiên bản mới (mức độ CRITICAL, độ tin cậy 73%). Các tín hiệu xác thực ghi nhận trực tiếp: Failures appeared alongside a deployment/rollout event.",
     "historical_context_used": false,
     "similar_incident_ids": [],
     "workload_id": "wl-notif-svc-005",
     "namespace": "production",
     "cluster_id": "cluster-prod-asia-01",
     "incident_id": "inc-20261026-rollback-005",
-    "request_id": "req-20261026-rollback-005"
+    "request_id": "req-20261026-rollback-005",
+    "engine": "Deterministic Multi-Agent SRE"
   }
 }

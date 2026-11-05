@@ -16,14 +16,33 @@ code {
 /* ==========================================================================
    Print / Export PDF Optimization Styles
    ========================================================================== */
+.print-only {
+  display: none !important;
+}
+
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 12mm 10mm;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-flex {
+    display: flex !important;
+  }
+
   .dashboard-desktop-sidebar,
   .dashboard-mobile-sidebar-drawer,
   .dashboard-mobile-header,
   .dashboard-topbar,
   .no-print,
   .dash-export-actions,
-  button {
+  button,
+  input,
+  select {
     display: none !important;
   }
 
@@ -32,7 +51,7 @@ code {
     color: #0f172a !important;
     margin: 0 !important;
     padding: 0 !important;
-    font-size: 11pt !important;
+    font-size: 10pt !important;
   }
 
   .dashboard-root-layout,
@@ -46,7 +65,7 @@ code {
   }
 
   .dashboard-reports-page {
-    padding: 10px !important;
+    padding: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     overflow: visible !important;
@@ -57,10 +76,11 @@ code {
     print-color-adjust: exact !important;
   }
 
-  .dash-card, .dash-table-container {
-    break-inside: avoid;
+  .dash-card, .dash-table-container, .print-signature-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
     box-shadow: none !important;
     border: 1px solid #cbd5e1 !important;
-    margin-bottom: 16px !important;
+    margin-bottom: 14px !important;
   }
 }

@@ -633,7 +633,6 @@ export const ApprovalsPage = () => {
             displayedRequests.map((req) => {
               const isApproved = approvedIds.includes(req.id);
               const isRejected = rejectedIds.includes(req.id);
-              const isCritical = req.urgency === 'CRITICAL';
 
               return (
                 <div
@@ -643,7 +642,6 @@ export const ApprovalsPage = () => {
                     padding: '16px 20px',
                     backgroundColor: isApproved ? '#F0FDF4' : isRejected ? '#FEF2F2' : '#FFFFFF',
                     border: isApproved ? '1px solid #86EFAC' : isRejected ? '1px solid #FECACA' : '1px solid #E2E8F0',
-                    borderLeft: isApproved ? '5px solid #16A34A' : isRejected ? '5px solid #DC2626' : '5px solid #F59E0B',
                     borderRadius: '12px',
                     boxShadow: '0 2px 6px -1px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)',
                     display: 'flex',
@@ -652,8 +650,8 @@ export const ApprovalsPage = () => {
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  {/* Hàng 1: Thẻ thông tin hành động, dịch vụ, cụm và thời gian */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
+                  {/* Hàng 1: Thẻ thông tin hành động, dịch vụ, cụm (trái) và thời gian nằm góc phải phía trên */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span
                         style={{
@@ -727,7 +725,7 @@ export const ApprovalsPage = () => {
                       </span>
                     </div>
 
-                    {/* Mốc thời gian gọn gàng */}
+                    {/* Mốc thời gian cố định ở góc phải phía trên */}
                     <div
                       style={{
                         display: 'inline-flex',
@@ -739,6 +737,8 @@ export const ApprovalsPage = () => {
                         padding: '4px 10px',
                         borderRadius: '6px',
                         border: '1px solid #E2E8F0',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       <Clock size={12} color="#94A3B8" />
@@ -752,14 +752,13 @@ export const ApprovalsPage = () => {
                       {req.cleanTitle}
                     </div>
 
-                    {/* Khung hành động tự lành nổi bật, trang nhã */}
+                    {/* Khung hành động tự lành (đã xóa viền màu đậm bên trái) */}
                     <div
                       style={{
                         fontSize: '0.8125rem',
                         color: '#1E293B',
                         backgroundColor: '#F0F9FF',
                         border: '1px solid #BAE6FD',
-                        borderLeft: '4px solid #0284C7',
                         padding: '10px 14px',
                         borderRadius: '8px',
                         lineHeight: 1.5,
