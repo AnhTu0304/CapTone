@@ -32,7 +32,7 @@ body {
   min-height: 100vh;
 }
 
-/* Typography Base - Anybody for headings, DM Sans for body */
+/* Typography Base - Standard clean modern typography */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   color: var(--text-primary);
@@ -58,8 +58,7 @@ code, pre {
 }
 
 button {
-  font-family: var(--font-display);
-  border-radius: 0px;
+  font-family: var(--font-body);
 }
 
 input, select, textarea {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { ScrollText } from 'lucide-react';
+import { ScrollText, Eye, EyeOff } from 'lucide-react';
 
 /**
  * AuditDistributionChart
@@ -50,7 +50,6 @@ const classifyLog = (item) => {
   const action = (item.event || item.action || '').toUpperCase();
   const actorType = (item.actorType || item.actor_type || '').toUpperCase();
   const desc = (item.description || '').toUpperCase();
-  const status = (item.status || '').toUpperCase();
 
   // 1. AI MAPE-K Autonomous
   if (
@@ -108,6 +107,7 @@ export const AuditDistributionChart = ({
   filterControl = null,
 }) => {
   const [hoverIndex, setHoverIndex] = useState(null);
+  const [showDataLabels, setShowDataLabels] = useState(true);
   const svgRef = useRef(null);
 
   const categories = useMemo(() => [
@@ -274,7 +274,7 @@ export const AuditDistributionChart = ({
         total,
       };
     });
-  }, [logs, fallbackData, timeFilterMode, selectedDate, selectedMonth, selectedYear, categories]);
+  }, [logs, fallbackData, timeFilterMode, selectedDate, selectedMonth, selectedYear]);
 
   const padding = { top: 25, right: 25, bottom: 35, left: 45 };
   const width = 760;
@@ -351,6 +351,32 @@ export const AuditDistributionChart = ({
             ))}
           </div>
 
+          {/* Nút Bật / Tắt Hiển Thị Số Liệu Trên Các Cột */}
+          <button
+            type="button"
+            onClick={() => setShowDataLabels((prev) => !prev)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '3px 9px',
+              borderRadius: 'var(--dash-radius-sm, 6px)',
+              border: showDataLabels ? '1px solid #10B981' : '1px solid var(--dash-border, #CBD5E1)',
+              backgroundColor: showDataLabels ? '#ECFDF5' : '#F8FAFC',
+              color: showDataLabels ? '#047857' : '#64748B',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              userSelect: 'none',
+              boxShadow: showDataLabels ? '0 1px 2px rgba(16, 185, 129, 0.12)' : 'none',
+            }}
+            title={showDataLabels ? 'Đang bật hiển thị số liệu cột (Bấm để ẩn)' : 'Đang ẩn số liệu cột (Bấm để hiện)'}
+          >
+            {showDataLabels ? <Eye size={12} color="#059669" /> : <EyeOff size={12} color="#94A3B8" />}
+            <span>{showDataLabels ? 'Hiện số liệu cột' : 'Ẩn số liệu cột'}</span>
+          </button>
+
           {/* Bộ lọc Date Picker đặt trực tiếp trên Biểu đồ */}
           {filterControl && (
             <div>
@@ -402,13 +428,22 @@ export const AuditDistributionChart = ({
             const barW = activeDays.length > 20 ? 10 : activeDays.length > 8 ? 18 : 28;
             const isHovered = hoverIndex === i;
 
-            // Stack heights
-            let currentBase = 0;
+            const totalVal = d.total || (d.autonomous || 0) + (d.hitl || 0) + (d.policy || 0) + (d.auth || 0);
+            const rawTotalH = (totalVal / maxTotal) * chartHeight;
+            const totalH = totalVal > 0 ? Math.max(3.5, rawTotalH) : 0;
+            const barTopY = padding.top + chartHeight - totalH;
+
+            // Stack heights with minimum visible slice
+            let accumulatedH = 0;
             const barSegments = categories.map((cat) => {
               const val = d[cat.key] || 0;
-              const segH = (val / maxTotal) * chartHeight;
-              const segY = padding.top + chartHeight - ((currentBase + val) / maxTotal) * chartHeight;
-              currentBase += val;
+              if (val <= 0 || totalVal <= 0) {
+                return { key: cat.key, color: cat.color, y: padding.top + chartHeight, height: 0, val: 0 };
+              }
+              const fraction = val / totalVal;
+              const segH = Math.max(1.2, fraction * totalH);
+              const segY = padding.top + chartHeight - (accumulatedH + segH);
+              accumulatedH += segH;
               return {
                 key: cat.key,
                 color: cat.color,
@@ -418,6 +453,11 @@ export const AuditDistributionChart = ({
               };
             });
 
+            const labelY = Math.max(padding.top + 8, barTopY - 5);
+            const numDigits = String(totalVal).length;
+            const badgeW = numDigits * (activeDays.length > 15 ? 6.5 : 7.5) + 6;
+            const badgeH = activeDays.length > 15 ? 12 : 14;
+
             return (
               <g key={`col-${d.day}-${i}`}>
                 {/* Hover Column Background */}
@@ -426,23 +466,69 @@ export const AuditDistributionChart = ({
                   y={padding.top}
                   width={barW + 8}
                   height={chartHeight}
-                  fill={isHovered ? 'rgba(241, 245, 249, 0.8)' : 'transparent'}
+                  fill={isHovered ? 'rgba(241, 245, 249, 0.85)' : 'transparent'}
                   rx="4"
                 />
 
                 {/* Segments */}
                 {barSegments.map((seg) => (
-                  <rect
-                    key={`seg-${seg.key}`}
-                    x={cx - barW / 2}
-                    y={seg.y}
-                    width={barW}
-                    height={Math.max(0, seg.height)}
-                    fill={seg.color}
-                    opacity={isHovered ? 1 : 0.88}
-                    rx="1"
-                  />
+                  <g key={`seg-grp-${seg.key}`}>
+                    <rect
+                      x={cx - barW / 2}
+                      y={seg.y}
+                      width={barW}
+                      height={Math.max(0, seg.height)}
+                      fill={seg.color}
+                      opacity={isHovered ? 1 : 0.88}
+                      rx="1"
+                    />
+                    {/* Segment Value inside bar if segment is sufficiently tall */}
+                    {showDataLabels && seg.height >= 26 && barW >= 15 && seg.val > 0 && (
+                      <text
+                        x={cx}
+                        y={seg.y + seg.height / 2 + 3.5}
+                        textAnchor="middle"
+                        fontSize={activeDays.length > 15 ? "8" : "9"}
+                        fontWeight="700"
+                        fontFamily="var(--font-mono, monospace)"
+                        fill="#FFFFFF"
+                        opacity={0.95}
+                        pointerEvents="none"
+                      >
+                        {seg.val}
+                      </text>
+                    )}
+                  </g>
                 ))}
+
+                {/* Data Label trên đỉnh mỗi cột (Data Label on top of each bar) */}
+                {showDataLabels && totalVal > 0 && (
+                  <g pointerEvents="none">
+                    {/* Badge nền nhỏ giúp số luôn đọc được rõ ràng */}
+                    <rect
+                      x={cx - badgeW / 2}
+                      y={labelY - badgeH + 3}
+                      width={badgeW}
+                      height={badgeH}
+                      rx="3"
+                      fill={isHovered ? '#0F172A' : '#F8FAFC'}
+                      stroke={isHovered ? '#34D399' : '#CBD5E1'}
+                      strokeWidth={isHovered ? '1.2' : '0.8'}
+                      opacity={isHovered ? 1 : 0.94}
+                    />
+                    <text
+                      x={cx}
+                      y={labelY}
+                      textAnchor="middle"
+                      fontSize={activeDays.length > 20 ? "7.5" : activeDays.length > 12 ? "8.5" : "9.5"}
+                      fontWeight="700"
+                      fontFamily="var(--font-mono, monospace)"
+                      fill={isHovered ? '#34D399' : '#1E293B'}
+                    >
+                      {totalVal}
+                    </text>
+                  </g>
+                )}
 
                 {/* Label on X Axis */}
                 <text

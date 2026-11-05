@@ -72,29 +72,39 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
   let statusBg = '#DCFCE7';
   let statusColor = '#15803D';
   let statusBorder = '#86EFAC';
-  let statusLabel = 'Thành công (SUCCEEDED)';
+  let statusLabel = 'Thành công';
 
   if (isWaitingApproval) {
     statusBg = '#FEF3C7';
     statusColor = '#B45309';
     statusBorder = '#FDE68A';
-    statusLabel = 'Chờ duyệt HITL (PENDING)';
+    statusLabel = 'Chờ duyệt HITL';
   } else if (isFailed) {
     statusBg = '#FEE2E2';
     statusColor = '#B91C1C';
     statusBorder = '#FCA5A5';
-    statusLabel = 'Thất bại (FAILED)';
+    statusLabel = 'Thất bại';
   } else if (isCancelled) {
     statusBg = '#F1F5F9';
     statusColor = '#475569';
     statusBorder = '#CBD5E1';
-    statusLabel = 'Đã hủy (CANCELLED)';
+    statusLabel = 'Đã hủy';
   } else if (isRunning) {
     statusBg = '#E0F2FE';
     statusColor = '#0369A1';
     statusBorder = '#7DD3FC';
-    statusLabel = 'Đang thực thi (RUNNING)';
+    statusLabel = 'Đang thực thi';
   }
+
+  const cleanTargetName = (val) => {
+    if (!val) return 'Chưa xác định';
+    return String(val).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
+  };
+
+  const formatProbeLabel = (val) => {
+    if (!val || val === 'K8S_POST_HEALING_PROBE') return 'K8s Health Probe';
+    return val;
+  };
 
   const shortId = actionId ? `ACT-${actionId.slice(0, 8).toUpperCase()}` : 'ACT-UNKNOWN';
   const attempts = detail?.attempts || [];
@@ -231,7 +241,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
               <ShieldCheck size={12} /> HẬU KIỂM TRA (SLO)
             </div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0284C7', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-              {verifications[0]?.verification_type || 'K8S_POST_HEALING_PROBE'}
+              {isWaitingApproval ? 'Chờ kích hoạt probe' : formatProbeLabel(verifications[0]?.verification_type)}
             </div>
           </div>
 
@@ -240,7 +250,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
               <Server size={12} /> ĐỐI TƯỢNG (TARGET)
             </div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {detail?.target_name || resultObj?.details?.target || 'attack-injector-app'}
+              {cleanTargetName(detail?.target_name || resultObj?.details?.target || 'attack-injector-app')}
             </div>
           </div>
 
@@ -377,7 +387,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                   )}
                   <span>
                     {isWaitingApproval
-                      ? 'Yêu Cầu Tự Lành Đang Chờ Phê Duyệt An Toàn (HITL Pending)'
+                      ? 'Yêu Cầu Tự Lành Đang Chờ Phê Duyệt An Toàn (HITL)'
                       : isRunning
                       ? 'Tiến Trình Tự Phục Hồi Đang Diễn Ra'
                       : isFailed
@@ -466,16 +476,23 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', fontSize: '0.8125rem' }}>
                   <div>
+                    <span style={{ color: '#64748B' }}>Dịch vụ mục tiêu:</span>
+                    <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+                      {cleanTargetName(detail?.target_name || resultObj?.details?.target || 'mongodb')}
+                    </div>
+                  </div>
+
+                  <div>
                     <span style={{ color: '#64748B' }}>Không gian tên (Namespace):</span>
                     <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-                      {resultObj?.details?.namespace || detail?.namespace || 'test-lab'}
+                      {resultObj?.details?.namespace || detail?.namespace || 'default'}
                     </div>
                   </div>
 
                   <div>
                     <span style={{ color: '#64748B' }}>Cụm Kubernetes:</span>
                     <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-                      {detail?.cluster_name || detail?.cluster_id || 'test-lab'}
+                      {detail?.cluster_name || detail?.cluster_id || 'Production K8s'}
                     </div>
                   </div>
 
@@ -487,23 +504,16 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Chế độ thực thi:</span>
-                    <div style={{ fontWeight: 700, color: '#0F172A' }}>
-                      {detail?.execution_mode === 'AUTO' ? 'Tự động (Autonomous)' : 'Thủ công (Manual / HITL)'}
+                    <span style={{ color: '#64748B' }}>Chính sách tự lành:</span>
+                    <div style={{ fontWeight: 700, color: '#2563EB', fontFamily: 'var(--font-mono)' }}>
+                      {detail?.policy_name || resultObj?.policy_name || 'POL-SCALE-OUT-TRAFFIC'}
                     </div>
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Mức độ rủi ro:</span>
-                    <div style={{ fontWeight: 700, color: detail?.risk_level === 'HIGH' ? '#DC2626' : '#059669' }}>
-                      {detail?.risk_level || 'MEDIUM'}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span style={{ color: '#64748B' }}>Phê duyệt (HITL):</span>
-                    <div style={{ fontWeight: 700, color: '#059669' }}>
-                      {detail?.approval_status || 'APPROVED'}
+                    <span style={{ color: '#64748B' }}>Trạng thái phê duyệt:</span>
+                    <div style={{ fontWeight: 700, color: isWaitingApproval ? '#D97706' : '#059669' }}>
+                      {isWaitingApproval ? 'Chờ duyệt HITL' : (detail?.approval_status || 'Đã phê duyệt')}
                     </div>
                   </div>
                 </div>
@@ -666,7 +676,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                     color: isWaitingApproval ? '#B45309' : isFailed ? '#B91C1C' : '#15803D',
                   }}
                 >
-                  {isWaitingApproval ? 'KẾT QUẢ: CHỜ DUYỆT (PENDING)' : isFailed ? 'KẾT QUẢ: THẤT BẠI (FAIL)' : 'KẾT QUẢ: ĐẠT CHUẨN (PASS)'}
+                  {isWaitingApproval ? 'KẾT QUẢ: CHỜ DUYỆT HITL' : isFailed ? 'KẾT QUẢ: THẤT BẠI' : 'KẾT QUẢ: ĐẠT CHUẨN (PASS)'}
                 </div>
               </div>
 
@@ -712,7 +722,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                   <div>
                     <span style={{ color: '#64748B' }}>Loại kiểm thử (Probe Type):</span>
                     <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                      {verifications[0]?.verification_type || 'K8S_POST_HEALING_PROBE'}
+                      {isWaitingApproval ? 'Chờ kích hoạt probe' : formatProbeLabel(verifications[0]?.verification_type)}
                     </div>
                   </div>
                   <div>

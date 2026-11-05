@@ -9,7 +9,6 @@ import {
   Bell,
   ChevronDown,
   Check,
-  Clock,
   Menu,
 } from 'lucide-react';
 
@@ -25,11 +24,7 @@ export const TopHeader = () => {
     envList,
     isLoadingEnvs,
     fetchOrgEnvironmentsAndClusters,
-    isAgentConnected,
     setIsAgentConnected,
-    isAutoRefresh,
-    setIsAutoRefresh,
-    isRefreshing,
     triggerRefresh,
     notifications,
     unreadNotifsCount,
@@ -334,7 +329,7 @@ export const TopHeader = () => {
             }}
           >
             <Server size={15} color="var(--dash-text-secondary)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
               {isLoadingEnvs
                 ? 'Đang tải cụm...'
                 : currentEnv?.cluster
@@ -549,81 +544,8 @@ export const TopHeader = () => {
         </div>
       </div>
 
-      {/* Right: Actions, Refresh, Role Switcher, Notifications, Profile */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Agent Connection Simulator Toggle (Demo tool for Empty State) */}
-        <button
-          onClick={() => setIsAgentConnected(!isAgentConnected)}
-          title={isAgentConnected ? "Tác tử đang kết nối. Bấm để thử trạng thái trống" : "Chưa có tác tử kết nối. Bấm để khôi phục dữ liệu mẫu"}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '5px 10px',
-            borderRadius: 'var(--dash-radius-full)',
-            backgroundColor: isAgentConnected ? 'var(--dash-success-bg)' : 'var(--dash-warning-bg)',
-            border: isAgentConnected ? '1px solid var(--dash-success-border)' : '1px solid var(--dash-warning-border)',
-            color: isAgentConnected ? 'var(--dash-success-text)' : 'var(--dash-warning-text)',
-            fontSize: '0.6875rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          <span
-            style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              backgroundColor: isAgentConnected ? 'var(--dash-success)' : 'var(--dash-warning)',
-            }}
-          />
-          <span>{isAgentConnected ? 'Tác tử: Trực tuyến' : 'Tác tử: Ngoại tuyến'}</span>
-        </button>
-
-        {/* Manual Refresh & Auto-refresh status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <button
-            onClick={triggerRefresh}
-            title="Làm mới số liệu bảng điều khiển"
-            disabled={isRefreshing}
-            style={{
-              background: 'none',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--dash-text-secondary)',
-              cursor: 'pointer',
-              backgroundColor: 'var(--dash-bg-canvas)',
-            }}
-          >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-            title="Bật/Tắt tự động làm mới sau 30 giây"
-            style={{
-              padding: '4px 8px',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              backgroundColor: isAutoRefresh ? 'var(--dash-mint-50)' : 'var(--dash-bg-canvas)',
-              color: isAutoRefresh ? 'var(--dash-primary)' : 'var(--dash-text-muted)',
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <Clock size={11} />
-            <span>{isAutoRefresh ? '30s' : 'Tắt'}</span>
-          </button>
-        </div>
-
+      {/* Right: Notifications & Profile */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
         {/* Notifications Popover */}
         <div ref={notifRef} style={{ position: 'relative' }}>
           <button

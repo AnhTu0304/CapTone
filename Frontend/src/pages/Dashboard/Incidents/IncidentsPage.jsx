@@ -224,14 +224,19 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const recAction = rcaParsed?.recommendation?.action || item.recommendation || (item.title?.includes('UNKNOWN') ? 'NO_ACTION' : 'RESTART_POD & RESCALE');
   const isNoAction = recAction === 'NO_ACTION' || (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
 
-  // Trạng thái vòng đời sự cố lấy từ backend status, không tự suy ra sự cố an toàn chỉ từ NO_ACTION
+  // Trạng thái vòng đời sự cố: Phản ánh trung thực trạng thái thực tế từ CSDL
+  const hasPendingApproval = Boolean(item.has_pending_approval || item.healing_approval_status === 'PENDING' || item.status === 'AWAITING_APPROVAL');
   let statusLabel = 'Đang theo dõi';
-  if (isResolved) {
+  if (isResolved || item.healing_status === 'SUCCEEDED') {
     statusLabel = 'Đã khắc phục hoàn tất';
-  } else if (isRecovering) {
+  } else if (hasPendingApproval) {
+    statusLabel = 'Chờ phê duyệt HITL';
+  } else if (item.healing_status === 'IN_PROGRESS' || isRecovering) {
     statusLabel = 'Đang tự phục hồi';
+  } else if (item.healing_status === 'FAILED') {
+    statusLabel = 'Tự khắc phục thất bại';
   } else if (item.status === 'OPEN') {
-    statusLabel = isNoAction ? 'Chưa đủ bằng chứng (NO_ACTION)' : 'Chờ phê duyệt HITL';
+    statusLabel = isNoAction ? 'Tự động an toàn (NO_ACTION)' : 'Đang xử lý / Giám sát';
   } else if (item.status) {
     statusLabel = item.status;
   }
@@ -259,12 +264,6 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
         ? `Mô hình AI phát hiện nguy cơ ${predictedRisk}${rcaConfidence !== null ? ` với độ tin cậy ${rcaConfidence}%` : ''}`
         : 'Mô hình AI theo dõi chuỗi viễn trắc telemetry',
       score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
-    },
-    {
-      type: 'K8S_EVENT',
-      ref: `pod/${serviceName}`,
-      summary: 'Kubelet cảnh báo tải tài nguyên tăng nhanh',
-      score: '91%',
     },
   ];
 
@@ -330,7 +329,7 @@ export const IncidentsPage = ({ onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Bộ lọc thời gian: mặc định là 'today' (ngày hôm nay) theo yêu cầu người dùng
-  const [timeFilterMode, setTimeFilterMode] = useState('today'); // 'today' | 'date' | 'month' | 'year' | 'all'
+  const [timeFilterMode, setTimeFilterMode] = useState('all'); // 'all' | 'today' | 'date' | 'month' | 'year'
   const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedMonth, setSelectedMonth] = useState(() => getThisMonthStr());
   const [selectedYear, setSelectedYear] = useState(() => getThisYearStr());
@@ -586,16 +585,77 @@ export const IncidentsPage = ({ onNavigate }) => {
     return Array.from(years).sort().reverse();
   }, [incidents]);
 
-  // Thống kê nhanh
-  const stats = useMemo(() => {
-    const total = incidents.length;
-    const critical = incidents.filter((i) => i.severity === 'CRITICAL' || i.severity === 'HIGH').length;
-    const recovering = incidents.filter((i) => i.status.includes('phục hồi') || i.status.includes('duyệt')).length;
-    const resolved = incidents.filter((i) => i.status.includes('hoàn tất') || i.status.includes('an toàn')).length;
-    return { total, critical, recovering, resolved };
+  // Danh sách ngày có sự cố gần đây (dùng cho các nút bấm nhanh trong lịch)
+  const recentIncidentDates = useMemo(() => {
+    const dateSet = new Set();
+    const today = getTodayStr();
+    dateSet.add(today);
+    incidents.forEach((inc) => {
+      if (inc.detectedAt) {
+        const d = new Date(inc.detectedAt);
+        if (!isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          dateSet.add(`${y}-${m}-${day}`);
+        }
+      }
+    });
+    return Array.from(dateSet).sort().reverse().slice(0, 6);
   }, [incidents]);
 
-  // Bộ lọc dữ liệu phía Client
+  // Hàm kiểm tra trùng khớp bộ lọc thời gian
+  const checkTimeMatch = useCallback((detectedAt) => {
+    if (timeFilterMode === 'all') return true;
+    if (!detectedAt) return false;
+    const d = new Date(detectedAt);
+    if (isNaN(d.getTime())) return false;
+
+    const incY = d.getFullYear();
+    const incM = String(d.getMonth() + 1).padStart(2, '0');
+    const incD = String(d.getDate()).padStart(2, '0');
+    const incDateStr = `${incY}-${incM}-${incD}`;
+    const incMonthStr = `${incY}-${incM}`;
+    const incYearStr = String(incY);
+
+    if (timeFilterMode === 'today') {
+      return incDateStr === getTodayStr();
+    }
+    if (timeFilterMode === 'date') {
+      return selectedDate ? incDateStr === selectedDate : true;
+    }
+    if (timeFilterMode === 'month') {
+      return selectedMonth ? incMonthStr === selectedMonth : true;
+    }
+    if (timeFilterMode === 'year') {
+      return selectedYear ? incYearStr === selectedYear : true;
+    }
+    return true;
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+
+  // Thống kê nhanh theo Cụm và Thời gian được chọn
+  const stats = useMemo(() => {
+    const list = incidents.filter((inc) => {
+      const matchCluster =
+        selectedCluster === 'all' ||
+        inc.clusterId === selectedCluster ||
+        inc.cluster === selectedCluster ||
+        inc.clusterName === selectedCluster ||
+        (inc.clusterName && selectedCluster && inc.clusterName.toLowerCase() === selectedCluster.toLowerCase()) ||
+        (inc.clusterId && selectedCluster && inc.clusterId.toLowerCase() === selectedCluster.toLowerCase());
+
+      const matchTime = checkTimeMatch(inc.detectedAt);
+      return matchCluster && matchTime;
+    });
+
+    const total = list.length;
+    const critical = list.filter((i) => i.severity === 'CRITICAL' || i.severity === 'HIGH').length;
+    const recovering = list.filter((i) => i.status.includes('phục hồi') || i.status.includes('duyệt')).length;
+    const resolved = list.filter((i) => i.status.includes('hoàn tất') || i.status.includes('an toàn')).length;
+    return { total, critical, recovering, resolved };
+  }, [incidents, selectedCluster, checkTimeMatch]);
+
+  // Bộ lọc dữ liệu phía Client (bao gồm bộ lọc thời gian)
   const filteredIncidents = useMemo(() => {
     return incidents.filter((inc) => {
       const matchSeverity = selectedSeverity === 'all' || inc.severity === selectedSeverity;
@@ -620,9 +680,12 @@ export const IncidentsPage = ({ onNavigate }) => {
         inc.clusterName === selectedCluster ||
         (inc.clusterName && selectedCluster && inc.clusterName.toLowerCase() === selectedCluster.toLowerCase()) ||
         (inc.clusterId && selectedCluster && inc.clusterId.toLowerCase() === selectedCluster.toLowerCase());
-      return matchCluster && matchSeverity && matchStatus && matchService && matchSearch;
+
+      const matchTime = checkTimeMatch(inc.detectedAt);
+
+      return matchCluster && matchSeverity && matchStatus && matchService && matchSearch && matchTime;
     });
-  }, [incidents, selectedSeverity, selectedStatus, selectedService, searchQuery, selectedCluster]);
+  }, [incidents, selectedSeverity, selectedStatus, selectedService, searchQuery, selectedCluster, checkTimeMatch]);
 
   // Tính toán phân trang (Pagination calculations)
   const totalFiltered = filteredIncidents.length;
@@ -999,7 +1062,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                         Ngày có sự cố gần đây:
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {['2026-10-31', '2026-10-30', '2026-10-29', '2026-10-28', '2026-10-27'].map((dStr) => {
+                        {recentIncidentDates.map((dStr) => {
                           const dParts = dStr.split('-');
                           const isToday = dStr === getTodayStr();
                           const isSelected = (timeFilterMode === 'today' && isToday) || (timeFilterMode === 'date' && selectedDate === dStr);
@@ -1366,6 +1429,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                   const isDone = item.status.includes('hoàn tất');
                   const isSafeNoAction = item.status.includes('NO_ACTION') || item.status.includes('an toàn');
                   const isWait = item.status.includes('duyệt');
+                  const isFailed = item.status.includes('thất bại');
 
                   return (
                     <tr
@@ -1448,31 +1512,61 @@ export const IncidentsPage = ({ onNavigate }) => {
                       </td>
 
                       <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '4px 9px',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            backgroundColor: isDone ? '#DCFCE7' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : '#EFF6FF',
-                            color: isDone ? '#15803D' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : '#1D4ED8',
-                            border: `1px solid ${isDone ? '#86EFAC' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : '#BFDBFE'}`,
-                          }}
-                        >
-                          {isDone ? (
-                            <CheckCircle2 size={13} />
-                          ) : isSafeNoAction ? (
-                            <ShieldCheck size={13} />
-                          ) : isWait ? (
+                        {isWait && onNavigate ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(item.service)}`);
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              backgroundColor: '#FEF3C7',
+                              color: '#B45309',
+                              border: '1px solid #FDE68A',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                            title="Chuyển ngay tới Cổng Phê Duyệt HITL để kiểm tra và duyệt"
+                          >
                             <Clock size={13} />
-                          ) : (
-                            <Zap size={13} />
-                          )}
-                          <span>{item.status}</span>
-                        </span>
+                            <span>Chờ phê duyệt HITL &rarr;</span>
+                          </button>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 9px',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              backgroundColor: isDone ? '#DCFCE7' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : isFailed ? '#FEE2E2' : '#EFF6FF',
+                              color: isDone ? '#15803D' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : isFailed ? '#DC2626' : '#1D4ED8',
+                              border: `1px solid ${isDone ? '#86EFAC' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : isFailed ? '#FCA5A5' : '#BFDBFE'}`,
+                            }}
+                          >
+                            {isDone ? (
+                              <CheckCircle2 size={13} />
+                            ) : isSafeNoAction ? (
+                              <ShieldCheck size={13} />
+                            ) : isWait ? (
+                              <Clock size={13} />
+                            ) : isFailed ? (
+                              <AlertTriangle size={13} />
+                            ) : (
+                              <Zap size={13} />
+                            )}
+                            <span>{item.status}</span>
+                          </span>
+                        )}
                       </td>
 
                       <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -1733,6 +1827,7 @@ export const IncidentsPage = ({ onNavigate }) => {
           incident={activeModalIncident}
           onClose={() => setActiveModalIncident(null)}
           onResolve={handleResolveIncident}
+          onNavigate={onNavigate}
         />
       )}
     </div>

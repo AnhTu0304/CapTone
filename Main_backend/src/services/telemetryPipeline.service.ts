@@ -261,6 +261,7 @@ export class TelemetryPipelineService {
           p.execution_mode,
           p.risk_level,
           p.confidence_threshold,
+          p.cooldown_seconds,
           p.requires_approval,
           p.is_active,
           p.environment_id,
@@ -304,28 +305,40 @@ export class TelemetryPipelineService {
       const isAuto = (policy.execution_mode === 'AUTO' || policy.execution_mode === 'AUTONOMOUS');
       const effectiveRisk = (policy.risk_level || policy.default_risk_level || 'LOW').toUpperCase();
 
+      // Cooldown & Anti-Spam Check:
+      // If this service has an action of the same type currently PENDING, RUNNING, or completed within cooldown window, skip!
+      const cooldownSec = policy.cooldown_seconds ? Number(policy.cooldown_seconds) : 300;
+      const recentActionRes = await pool.query(
+        `SELECT id, execution_status, completed_at, created_at 
+         FROM healing_actions 
+         WHERE target_name = $1 
+           AND action_type_id = $2 
+           AND (
+             (approval_status = 'PENDING' AND execution_status = 'PENDING')
+             OR (execution_status = 'RUNNING')
+             OR (completed_at >= NOW() - ($3 || ' seconds')::interval)
+           )
+         ORDER BY created_at DESC 
+         LIMIT 1;`,
+        [serviceId, policy.action_type_id, `${cooldownSec}`]
+      );
+
+      if (recentActionRes.rows.length > 0) {
+        const act = recentActionRes.rows[0];
+        if (act.execution_status === 'PENDING') {
+          console.log(`⏳ [PolicyEngine] '${serviceId}' đã có yêu cầu phê duyệt đang chờ (ID: ${act.id}). Bỏ qua không tạo ca trùng lặp.`);
+          await pool.query(`UPDATE healing_actions SET requested_at = NOW() WHERE id = $1;`, [act.id]);
+        } else if (act.execution_status === 'RUNNING') {
+          console.log(`⏳ [PolicyEngine] '${serviceId}' đang trong quá trình thực thi ${policy.action_name} (ID: ${act.id}). Bỏ qua.`);
+        } else {
+          console.log(`⏳ [PolicyEngine] '${serviceId}' vừa thực hiện ${policy.action_name} và đang trong thời gian Cooldown (${cooldownSec}s, hoàn tất lúc: ${act.completed_at}). Bỏ qua không kích hoạt lặp.`);
+        }
+        return;
+      }
+
       // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold)
       if (!isAuto || policy.requires_approval || confidence < threshold) {
         console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires HITL approval (Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
-        // Chống spam & chồng chất yêu cầu: Nếu dịch vụ này ĐÃ CÓ 1 hành động cùng loại đang CHỜ DUYỆT (PENDING),
-        // tuyệt đối KHÔNG tạo thêm yêu cầu mới mà chỉ cập nhật lại thời gian để người vận hành biết lỗi vẫn tiếp diễn.
-        const existingPending = await pool.query(
-          `SELECT id FROM healing_actions 
-           WHERE target_name = $1 
-             AND action_type_id = $2 
-             AND approval_status = 'PENDING' 
-             AND execution_status = 'PENDING'
-           LIMIT 1;`,
-          [serviceId, policy.action_type_id]
-        );
-        if (existingPending.rows.length > 0) {
-          console.log(`⏳ [PolicyEngine] '${serviceId}' đã có yêu cầu phê duyệt đang chờ (ID: ${existingPending.rows[0].id}). Bỏ qua không tạo ca trùng lặp.`);
-          await pool.query(
-            `UPDATE healing_actions SET requested_at = NOW() WHERE id = $1;`,
-            [existingPending.rows[0].id]
-          );
-          return;
-        }
 
         const hitlActInsert = await pool.query(
           `INSERT INTO healing_actions (

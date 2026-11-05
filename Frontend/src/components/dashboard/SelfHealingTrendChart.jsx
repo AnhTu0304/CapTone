@@ -149,6 +149,67 @@ export const SelfHealingTrendChart = ({
       return days;
     }
 
+    // 3b. CHẾ ĐỘ LỌC TẤT CẢ (ALL): 7 ngày gần nhất
+    if (timeFilterMode === 'all') {
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const dStr = String(d.getDate()).padStart(2, '0');
+        const mStr = String(d.getMonth() + 1).padStart(2, '0');
+        const yNum = d.getFullYear();
+        const dayLabel = `${dStr}/${mStr}`;
+        const windowName = `Ngày ${dStr}/${mStr}/${yNum}`;
+
+        const dayStart = new Date(yNum, d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+        const dayEnd = new Date(yNum, d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+
+        const dayActions = (actions || []).filter((a) => {
+          const itemDate = a.rawItem?.completed_at || a.rawItem?.created_at || a.rawItem?.started_at;
+          if (!itemDate) return false;
+          const t = new Date(itemDate).getTime();
+          return t >= dayStart && t <= dayEnd;
+        });
+
+        const count = dayActions.length;
+        let totalDurationSec = 0;
+        const actionTypeCount = {};
+
+        dayActions.forEach((a) => {
+          const dur = a.rawItem?.attempts?.[0]?.duration_ms
+            ? a.rawItem.attempts[0].duration_ms / 1000
+            : (parseFloat(a.elapsed || a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
+          totalDurationSec += dur;
+          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || 'Tự phục hồi';
+          actionTypeCount[typeName] = (actionTypeCount[typeName] || 0) + 1;
+        });
+
+        let topAction = 'Hệ thống ổn định';
+        let maxCount = 0;
+        Object.entries(actionTypeCount).forEach(([k, v]) => {
+          if (v > maxCount) {
+            maxCount = v;
+            topAction = k;
+          }
+        });
+
+        const avgMttr = count > 0 ? parseFloat((totalDurationSec / count).toFixed(1)) : 0;
+        const succeededCount = dayActions.filter(
+          (a) => a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED' || a.status === 'completed'
+        ).length;
+        const successRate = count > 0 ? Math.round((succeededCount / count) * 100) : 100;
+
+        days.push({
+          window: windowName,
+          label: dayLabel,
+          actions: count,
+          avgMttrSeconds: avgMttr,
+          successRate,
+          topAction: count > 0 ? topAction : 'Không phát sinh sự cố',
+        });
+      }
+      return days;
+    }
+
     // 3. CHẾ ĐỘ LỌC THEO NGÀY CỤ THỂ
     if (timeFilterMode === 'date' && selectedDate) {
       const [tYear, tMonth, tDay] = selectedDate.split('-').map(Number);
@@ -431,17 +492,32 @@ export const SelfHealingTrendChart = ({
             const y = padding.top + chartHeight - barHeight;
 
             return (
-              <rect
-                key={i}
-                x={x}
-                y={y}
-                width={barWidth}
-                height={Math.max(barHeight, 0)}
-                fill="rgba(5, 150, 105, 0.18)"
-                stroke="#059669"
-                strokeWidth="1"
-                rx="2"
-              />
+              <g key={i}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={Math.max(barHeight, 0)}
+                  fill={hoverIndex === i ? "rgba(5, 150, 105, 0.35)" : "rgba(5, 150, 105, 0.18)"}
+                  stroke="#059669"
+                  strokeWidth="1"
+                  rx="2"
+                />
+                {d.actions > 0 && (
+                  <text
+                    x={getX(i)}
+                    y={y - 5}
+                    textAnchor="middle"
+                    fontFamily="var(--font-mono, monospace)"
+                    fontSize={data.length > 20 ? "7.5" : "9"}
+                    fontWeight="700"
+                    fill={hoverIndex === i ? "#059669" : "#475569"}
+                    pointerEvents="none"
+                  >
+                    {d.actions}
+                  </text>
+                )}
+              </g>
             );
           })}
 

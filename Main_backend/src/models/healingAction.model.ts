@@ -60,7 +60,7 @@ export class HealingActionModel {
     const values: any[] = [];
     let idx = 1;
 
-    if (filters.organization_id && filters.organization_id !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
+    if (filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
       conditions.push(`(
         env.organization_id = $${idx} OR 
         i.organization_id = $${idx} OR 
@@ -70,7 +70,7 @@ export class HealingActionModel {
       idx++;
     }
 
-    if (filters.cluster_id && filters.cluster_id !== 'ALL') {
+    if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
       conditions.push(`i.cluster_id IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
@@ -186,7 +186,7 @@ export class HealingActionModel {
     const values: any[] = [];
     let idx = 1;
 
-    if (filters.organization_id && filters.organization_id !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
+    if (filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
       conditions.push(`(
         env.organization_id = $${idx} OR 
         i.organization_id = $${idx} OR 
@@ -196,7 +196,7 @@ export class HealingActionModel {
       idx++;
     }
 
-    if (filters.cluster_id && filters.cluster_id !== 'ALL') {
+    if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
       conditions.push(`i.cluster_id IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
@@ -821,7 +821,7 @@ export class HealingActionModel {
     const values: any[] = [];
     let idx = 1;
 
-    if (filters.organization_id && filters.organization_id !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
+    if (filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
       conditions.push(`p.organization_id = $${idx++}`);
       values.push(filters.organization_id);
     }
@@ -1097,12 +1097,12 @@ export class HealingActionModel {
     const values: any[] = [];
     let idx = 1;
 
-    if (filters.organization_id && filters.organization_id !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
+    if (filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
       conditions.push(`env.organization_id = $${idx++}`);
       values.push(filters.organization_id);
     }
 
-    if (filters.cluster_id && filters.cluster_id !== 'ALL') {
+    if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
       conditions.push(`i.cluster_id IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
@@ -1111,7 +1111,7 @@ export class HealingActionModel {
       idx++;
     }
 
-    if (filters.status && filters.status !== 'ALL') {
+    if (filters.status && filters.status.toUpperCase() !== 'ALL') {
       conditions.push(`ap.status = $${idx++}::approval_status`);
       values.push(filters.status.toUpperCase());
     }

@@ -128,8 +128,16 @@ export const AgentsPage = () => {
       ? `${Math.round((onlineAgents.length / agents.length) * 100)}% Trực tuyến`
       : 'Chưa có tác tử';
 
-  // Câu lệnh cài đặt thật
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  // Hàm chuẩn hóa domain cho Agent Installer (tự động loại bỏ cổng dev 3000/3001 trên localhost để trỏ đúng Nginx Gateway cổng 80)
+  const getInstallerOrigin = () => {
+    if (typeof window === 'undefined') return 'http://localhost';
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
+      return `${protocol}//${hostname}`;
+    }
+    return window.location.origin;
+  };
+  const originUrl = getInstallerOrigin();
   const psCommand = `irm ${originUrl}/agent/install.ps1 | iex`;
   const bashCommand = `curl -sSL ${originUrl}/agent/install.sh | bash`;
   const helmCommand = `helm repo add selfheal http://localhost/agent/charts

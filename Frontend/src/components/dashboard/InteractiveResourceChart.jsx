@@ -56,22 +56,12 @@ function sanitizeSeriesData(items, valueKey) {
 
   mapped.sort((a, b) => a.time - b.time);
 
-  const deduped = [];
-  let lastTime = -1;
+  // Deduplicate strictly by time bucket: keep latest point if multiple share the same second
+  const dedupedMap = new Map();
   for (const pt of mapped) {
-    let t = pt.time;
-    if (t <= lastTime) {
-      t = lastTime + 1;
-    }
-    lastTime = t;
-    deduped.push({
-      time: t,
-      value: pt.value,
-      rawItem: pt.rawItem,
-    });
+    dedupedMap.set(pt.time, pt);
   }
-
-  return deduped;
+  return Array.from(dedupedMap.values()).sort((a, b) => a.time - b.time);
 }
 
 /**
@@ -116,10 +106,20 @@ export const InteractiveResourceChart = ({
   const cpuSeriesRef = useRef(null);
   const ramSeriesRef = useRef(null);
   const thresholdLineRef = useRef(null);
+  const hasFittedRef = useRef(false);
+  const prevRangeRef = useRef(timeRange);
+
+  useEffect(() => {
+    if (timeRange !== prevRangeRef.current) {
+      prevRangeRef.current = timeRange;
+      hasFittedRef.current = false;
+    }
+  }, [timeRange]);
 
   const selectedRange = onTimeRangeChange ? timeRange : internalTimeRange;
 
   const handleRangeClick = (rangeId) => {
+    hasFittedRef.current = false;
     if (onTimeRangeChange) {
       onTimeRangeChange(rangeId);
     } else {
@@ -208,12 +208,13 @@ export const InteractiveResourceChart = ({
   // Initialize and manage lightweight-charts instance
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || telemetryData.length === 0 || isLoading || error || !isClusterOnline) {
+    if (!container || !isClusterOnline) {
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
         cpuSeriesRef.current = null;
         ramSeriesRef.current = null;
+        hasFittedRef.current = false;
       }
       return undefined;
     }
@@ -368,9 +369,9 @@ export const InteractiveResourceChart = ({
     }
 
     if (chart && typeof chart.timeScale === 'function') {
-      const ts = chart.timeScale();
-      if (typeof ts.fitContent === 'function') {
-        ts.fitContent();
+      if (!hasFittedRef.current && (sanitizedCpuData.length > 0 || sanitizedRamData.length > 0)) {
+        chart.timeScale().fitContent();
+        hasFittedRef.current = true;
       }
     }
 

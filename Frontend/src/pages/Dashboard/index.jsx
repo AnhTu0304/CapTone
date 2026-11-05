@@ -22,8 +22,6 @@ import NotificationsPage from './Notifications/NotificationsPage';
 import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
 import SettingsPage from './Settings/SettingsPage';
-import AlertsPage from './Alerts/AlertsPage';
-import AlertHistoryPage from './Alerts/AlertHistoryPage';
 
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
@@ -54,10 +52,6 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         label = 'Giám Sát APM';
       } else if (part === 'incidents') {
         label = 'Quản Lý Sự Cố & RCA';
-      } else if (part === 'history' && parts[index - 1] === 'alerts') {
-        label = 'Lịch Sử Cảnh Báo';
-      } else if (part === 'alerts' || part === 'alert-rules') {
-        label = 'Cảnh Báo & Ngưỡng';
       }
 
       crumbs.push({
@@ -108,21 +102,6 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     }
 
     // 4. Monitoring
-    if (path === '/dashboard/alerts/history') {
-      return <AlertHistoryPage onNavigate={onNavigate} />;
-    }
-    if (
-      path === '/dashboard/alerts' ||
-      path === '/dashboard/monitoring/alerts' ||
-      path === '/dashboard/alert-rules' ||
-      path.startsWith('/dashboard/alerts/')
-    ) {
-      const initialTab =
-        path === '/dashboard/alert-rules'
-          ? 'RULES'
-          : 'EVENTS';
-      return <AlertsPage onNavigate={onNavigate} initialTab={initialTab} />;
-    }
     if (path === '/dashboard/monitoring/apm') {
       return <ApmPage onNavigate={onNavigate} />;
     }
@@ -146,19 +125,19 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
 
     // 6. Self-Healing
     if (path === '/dashboard/self-healing/actions') {
-      return <HealingActionsPage />;
+      return <HealingActionsPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/self-healing/history') {
-      return <ActionHistoryPage />;
+      return <ActionHistoryPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/self-healing/approvals') {
-      return <ApprovalsPage />;
+      return <ApprovalsPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/self-healing/policies') {
-      return <PoliciesPage />;
+      return <PoliciesPage onNavigate={onNavigate} />;
     }
     if (path.startsWith('/dashboard/self-healing')) {
-      return <HealingActionsPage />;
+      return <HealingActionsPage onNavigate={onNavigate} />;
     }
 
     // 7. System
