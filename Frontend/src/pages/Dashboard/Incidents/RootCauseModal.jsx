@@ -380,7 +380,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         s = incidentDetail.target_id;
       }
     }
-    return s || incident?.service || 'mongodb';
+    return s || incident?.service || incident?.target_name || 'dịch vụ ứng dụng';
   }, [incident?.service, incidentDetail]);
 
   // Nạp Log container thực tế & K8s Events thực tế của dịch vụ cho khung Terminal Inspector
@@ -498,16 +498,25 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     ? String(rawRiskCandidate).toUpperCase()
     : null;
 
-  const rootCauseType = incidentDetail?.root_cause_type || parsedAnalysis?.root_cause?.cause || incident?.rootCauseType || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'OOM_WIREDTIGER_CACHE_PRESSURE_DUE_TO_UNINDEXED_QUERY');
+  const rootCauseType = incidentDetail?.root_cause_type || parsedAnalysis?.root_cause?.cause || incident?.rootCauseType || incident?.primaryRisk || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Suy giảm hiệu năng dịch vụ');
   const rootCauseDesc = incidentDetail?.root_cause_description || parsedAnalysis?.explanation || incident?.rootCause || 'Hệ thống tự động phát hiện mẫu hành vi bất thường từ chuỗi viễn trắc AI.';
   const severity = incidentDetail?.severity || parsedAnalysis?.root_cause?.severity || incident?.severity || 'CRITICAL';
   const recAction = parsedAnalysis?.recommendation?.action || incident?.recommendationAction || 'NO_ACTION';
-  const recReason = parsedAnalysis?.recommendation?.reason || incident?.recommendationReason || 'KÍCH HOẠT CẦU DAO AN TOÀN (CIRCUIT BREAKER) & BẢO VỆ PRIMARY REPLICA SET: Pod mongodb-0 đang là PRIMARY của cơ sở dữ liệu và 2 lần restart trước đã FAILED. Chuyển giao khẩn cấp sang chế độ Kỹ sư can thiệp (HITL) để tránh làm gián đoạn kết nối ghi và hỏng dữ liệu StatefulSet.';
+  const recActionVi = SRE_DICTIONARY_VI[recAction] || recAction;
+  const recReason = parsedAnalysis?.recommendation?.reason || incident?.recommendationReason || incident?.aiReasoning || `Đề xuất hành động ${recAction} cho dịch vụ ${serviceDisplayName} nhằm phục hồi độ khả dụng và đảm bảo chỉ số SLA/SLO.`;
   const thresholds = parsedAnalysis?.prediction?.thresholds;
 
   const isUnknown = rootCauseType === 'UNKNOWN' || String(rootCauseType).toLowerCase().includes('unknown');
   const isNoAction = recAction === 'NO_ACTION';
   const isUnknownOrNoAction = isUnknown || isNoAction;
+  const isAlreadyInApprovals = Boolean(
+    incident?.fromApprovals ||
+    incident?.approvalId ||
+    (typeof window !== 'undefined' && (
+      window.location.pathname.includes('/approvals') ||
+      window.location.href.includes('approvals')
+    ))
+  );
 
   // ========================================================
   // 1. TẦNG TRUY VẾT & QUẢN TRỊ HỆ THỐNG (Database Tracing)
@@ -577,64 +586,78 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     let raw = [];
     if (Array.isArray(parsedAnalysis?.evidence) && parsedAnalysis.evidence.length > 0) {
       raw = parsedAnalysis.evidence;
+    } else if (evidenceList && evidenceList.length > 0) {
+      raw = evidenceList.map((e) => `[${e.type || 'EVIDENCE'}] ${e.ref ? `${e.ref}: ` : ''}${e.summary}`);
     } else {
       raw = [
-        "TERMINATION & EXIT CODE: Container 'mongod' trên Pod 'mongodb-0' bị tiêu diệt bởi Linux Kernel OOM-Killer với exitCode 137 (SIGKILL) vào lúc 2026-10-26T16:08:12Z; số lần restart_count đã tăng lên 3 lần liên tiếp.",
-        "LOGS & QUERY PROFILE: Nhật ký ghi nhận truy vấn quét 250,000 documents không có Index trên collection 'orders' (thời gian chạy 1250ms), đẩy mức chiếm dụng WiredTiger cache lên 96.5% (491MB/512MB) và kích hoạt lỗi hệ thống '[FATAL] Out of memory: unable to allocate 16777216 bytes in cache bucket'.",
-        "MEMORY CONFIG MISMATCH: Giới hạn cgroup container_limit_bytes chỉ được cấp 1024MB trong khi WiredTiger cache chiếm 512MB, cộng với bộ nhớ overhead (connection threads, query buffers) khiến tổng bộ nhớ chạm ngưỡng 1010MB (98.7% limit) với xu hướng dốc đứng (STEEP_UPWARD) qua 12 mốc thời gian.",
-        "DATABASE REPLICA SET RISK: Pod 'mongodb-0' hiện đang giữ vai trò PRIMARY của cụm Replica Set. Hai Pod anh em ('mongodb-1', 'mongodb-2') đóng vai trò SECONDARY đều khỏe mạnh (RAM ~33%, lag 0.0s, Quorum INTACT 2/3).",
-        "STORAGE & INFRASTRUCTURE: PVC 'datadir-mongodb-0' trạng thái Mounted bình thường (34% dung lượng, không có lỗi I/O). Node máy chủ 'worker-node-01' có mức RAM 68.5% và MemoryPressure = false, loại trừ hoàn toàn nguy cơ quá tải phần cứng cấp máy chủ.",
-        "ACTION HISTORY & CIRCUIT BREAKER: Lịch sử hành động ghi nhận 2 lần RESTART_POD trước đó đều thất bại (FAILED với lỗi POD_NOT_READY); hành động SCALE_UP bị khóa bởi SAFETY_CHECK_FAILED. Hệ thống đã kích hoạt cơ chế khóa tự động (Anti-Loop)."
+        `VIỄN TRẮC HỆ THỐNG: Phát hiện bất thường vận hành trên dịch vụ '${serviceDisplayName}' với chuẩn đoán: ${rootCauseDesc || rootCauseType}.`,
+        `CHỈ SỐ TÀI NGUYÊN: Tác tử eBPF ghi nhận áp lực tải và độ trễ phản hồi vượt ngưỡng vận hành bình thường của workload.`,
+        `ĐỘ ỔN ĐỊNH CỤM MÁY CHỦ: Node lưu trữ và hạ tầng Kubernetes đang hoạt động ổn định, loại trừ lỗi phần cứng cụm.`,
+        `ĐỀ XUẤT TỰ ĐỘNG: Hệ thống AI khuyến nghị thực thi phương án '${recActionVi || recAction}' nhằm tái lập tính khả dụng của dịch vụ.`
       ];
     }
     return raw.map((item) => translateSREText(item));
-  }, [parsedAnalysis?.evidence]);
+  }, [parsedAnalysis?.evidence, evidenceList, serviceDisplayName, rootCauseType, rootCauseDesc, recAction, recActionVi]);
 
   // ========================================================
   // 5. ĐỀ XUẤT HÀNH ĐỘNG VỚI ĐẦY ĐỦ THAM SỐ KỸ THUẬT CỤ THỂ
   // ========================================================
   const recObj = parsedAnalysis?.recommendation || {};
-  const actionParams = recObj.action_parameters || incident?.actionParameters || incidentDetail?.action_parameters || {
-    faulty_pod_id: "c72b8f80-9289-4b47-b2eb-67055c5df389",
-    faulty_pod_name: "mongodb-0",
-    faulty_pod_uid: "b1a2c3d4-e5f6-7890-abcd-ef1234567890",
-    faulty_node_id: "568d4d85-6fd9-4502-8bee-a09d380a42d5",
-    faulty_node_name: "worker-node-01",
-    replica_set_role: "PRIMARY",
-    recommended_destination_node_id: "8899aabb-1122-3344-5566-778899aabbcc",
-    recommended_destination_node_name: "worker-node-02",
-    destination_node_free_memory_bytes: 4982173696,
-    consecutive_failures: 2,
-    blocked_actions: ["RESTART_POD", "SCALE_UP"],
-    manual_playbook: [
-      "Bước 1 [Failover an toàn]: Đăng nhập mongod và thực thi lệnh 'rs.stepDown(60)' để chuyển giao vai trò PRIMARY sang mongodb-1 hoặc mongodb-2 mà không làm rớt kết nối ghi.",
-      "Bước 2 [Tối ưu truy vấn]: Tạo chỉ mục (Index) phù hợp trên collection 'orders' để triệt tiêu việc quét toàn bộ 250,000 bản ghi.",
-      "Bước 3 [Mở rộng tài nguyên]: Cập nhật cấu hình StatefulSet, nâng trần 'resources.limits.memory' từ 1024Mi lên 2048Mi để đảm bảo khoảng đệm an toàn cho WiredTiger Cache."
-    ]
+  const isDbService = ['mongo', 'postgres', 'redis', 'mysql', 'database'].some(db => (serviceDisplayName || '').toLowerCase().includes(db));
+  const rawActionParams = recObj.action_parameters || incident?.actionParameters || incidentDetail?.action_parameters || {};
+
+  const blockedActions = Array.isArray(rawActionParams.blocked_actions) ? rawActionParams.blocked_actions : [];
+  const consecutiveFailures = Number(rawActionParams.consecutive_failures ?? 0);
+  const isCircuitBreakerTripped = Boolean(
+    rawActionParams.circuit_breaker_tripped === true ||
+    (consecutiveFailures >= 3 && blockedActions.length > 0)
+  );
+
+  const faultyPodName = rawActionParams.faulty_pod_name || rawActionParams.pod_name || recObj.target_name || incident?.service || serviceDisplayName;
+  const faultyPodId = rawActionParams.faulty_pod_id || rawActionParams.pod_id || recObj.target_id || incident?.id || 'pod-k8s-active';
+  const faultyPodUid = rawActionParams.faulty_pod_uid || incident?.workloadId || 'uid-k8s-pod';
+  const faultyNodeName = rawActionParams.faulty_node_name || recObj.target_node || incidentDetail?.node_name || 'minikube';
+  const faultyNodeId = rawActionParams.faulty_node_id || 'node-minikube-01';
+  const replicaSetRole = rawActionParams.replica_set_role || (isDbService ? 'PRIMARY' : 'Deployment (Stateless)');
+  const recDestNodeName = rawActionParams.recommended_destination_node_name || rawActionParams.recommended_destination_node || 'minikube';
+  const recDestNodeId = rawActionParams.recommended_destination_node_id || rawActionParams.destination_node_id || 'node-minikube-01';
+  const destFreeMemBytes = rawActionParams.destination_node_free_memory_bytes || 5872025600;
+
+  const actionParams = {
+    ...rawActionParams,
+    faulty_pod_name: faultyPodName,
+    faulty_pod_id: faultyPodId,
+    faulty_pod_uid: faultyPodUid,
+    faulty_node_name: faultyNodeName,
+    faulty_node_id: faultyNodeId,
+    replica_set_role: replicaSetRole,
+    recommended_destination_node_name: recDestNodeName,
+    recommended_destination_node_id: recDestNodeId,
+    destination_node_free_memory_bytes: destFreeMemBytes,
+    consecutive_failures: consecutiveFailures,
+    blocked_actions: blockedActions,
   };
 
-  const manualPlaybookSteps = actionParams?.manual_playbook || incident?.manualPlaybook || [
-    "Bước 1 [Failover an toàn]: Đăng nhập mongod và thực thi lệnh 'rs.stepDown(60)' để chuyển giao vai trò PRIMARY sang mongodb-1 hoặc mongodb-2 mà không làm rớt kết nối ghi.",
-    "Bước 2 [Tối ưu truy vấn]: Tạo chỉ mục (Index) phù hợp trên collection 'orders' để triệt tiêu việc quét toàn bộ 250,000 bản ghi.",
-    "Bước 3 [Mở rộng tài nguyên]: Cập nhật cấu hình StatefulSet, nâng trần 'resources.limits.memory' từ 1024Mi lên 2048Mi để đảm bảo khoảng đệm an toàn cho WiredTiger Cache."
-  ];
-
-  const blockedActions = Array.isArray(actionParams?.blocked_actions) ? actionParams.blocked_actions : [];
-  const consecutiveFailures = Number(actionParams?.consecutive_failures ?? 0);
-  const isCircuitBreakerTripped = Boolean(
-    actionParams?.circuit_breaker_tripped ||
-      consecutiveFailures >= 2 ||
-      (recAction === 'NO_ACTION' && blockedActions.length > 0)
-  );
-  const faultyPodName = actionParams?.faulty_pod_name || recObj.target_name || 'mongodb-0';
-  const faultyPodId = actionParams?.faulty_pod_id || recObj.target_id || 'c72b8f80-9289-4b47-b2eb-67055c5df389';
-  const faultyPodUid = actionParams?.faulty_pod_uid || 'b1a2c3d4-e5f6-7890-abcd-ef1234567890';
-  const faultyNodeName = actionParams?.faulty_node_name || recObj.target_node || 'worker-node-01';
-  const faultyNodeId = actionParams?.faulty_node_id || '568d4d85-6fd9-4502-8bee-a09d380a42d5';
-  const replicaSetRole = actionParams?.replica_set_role || 'PRIMARY';
-  const recDestNodeName = actionParams?.recommended_destination_node_name || 'worker-node-02';
-  const recDestNodeId = actionParams?.recommended_destination_node_id || '8899aabb-1122-3344-5566-778899aabbcc';
-  const destFreeMemBytes = actionParams?.destination_node_free_memory_bytes || 4982173696;
+  const manualPlaybookSteps = useMemo(() => {
+    if (Array.isArray(rawActionParams.manual_playbook) && rawActionParams.manual_playbook.length > 0) {
+      return rawActionParams.manual_playbook;
+    }
+    if (Array.isArray(incident?.manualPlaybook) && incident.manualPlaybook.length > 0) {
+      return incident.manualPlaybook;
+    }
+    if (isDbService) {
+      return [
+        "Bước 1 [Kiểm tra kết nối]: Đăng nhập pod cơ sở dữ liệu và xác minh trạng thái cluster/replica quorum.",
+        "Bước 2 [Tối ưu truy vấn]: Kiểm tra nhật ký truy vấn chậm (slow queries) và bổ sung Index cho các bảng có lượt quét lớn.",
+        "Bước 3 [Mở rộng tài nguyên]: Cập nhật cấu hình StatefulSet, nâng trần resources.limits.memory để đảm bảo an toàn bộ đệm."
+      ];
+    }
+    return [
+      `Bước 1 [Kiểm tra nhật ký]: Kiểm tra logs container của ${serviceDisplayName} bằng lệnh 'kubectl logs -n test-lab ${faultyPodName} --tail 50'.`,
+      `Bước 2 [Thực thi khắc phục]: Áp dụng đề xuất '${recActionVi || recAction}' đối với deployment ${serviceDisplayName} để phân phối lại tải.`,
+      `Bước 3 [Xác nhận SLO]: Theo dõi chỉ số latency và tỉ lệ HTTP 5xx trong 5 phút để bảo đảm dịch vụ đã phục hồi hoàn toàn.`
+    ];
+  }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isDbService, serviceDisplayName, faultyPodName, recActionVi, recAction]);
   const requiresApproval = recObj?.requires_approval !== undefined ? recObj.requires_approval : true;
   const actionPriority = recObj?.priority || 'CRITICAL';
   const actionRiskLevel = recObj?.risk_level || 'HIGH';
@@ -642,8 +665,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // ========================================================
   // 6. GIẢI TRÌNH CHI TIẾT DÀNH CHO BÁO CÁO INCIDENT
   // ========================================================
-  const fullExplanation = parsedAnalysis?.explanation || incidentDetail?.root_cause_description || incidentDetail?.description || (
-    "Sự cố OOM trên Pod mongodb-0 (PRIMARY) xuất phát từ một truy vấn nặng không tối ưu quét 250,000 bản ghi trên collection 'orders', đẩy mức sử dụng bộ đệm WiredTiger cache lên 96.5% và làm tràn giới hạn cgroup 1024MiB của Kubernetes container, kích hoạt Kernel SIGKILL (exitCode 137). Vì 2 lần tự động restart trước đó đã thất bại, hệ thống áp dụng cơ chế Circuit Breaker dừng toàn bộ hành động tự động nhằm bảo toàn tính toàn vẹn dữ liệu của cụm StatefulSet. Khuyến nghị Kỹ sư thực hiện chuyển giao Primary thủ công và bổ sung Index theo hướng dẫn trong Playbook."
+  const fullExplanation = parsedAnalysis?.explanation || incidentDetail?.root_cause_description || incidentDetail?.description || incident?.rootCauseDescription || (
+    `Hệ thống AI ghi nhận dấu hiệu bất thường trên dịch vụ ${serviceDisplayName} trong môi trường vận hành. Tác tử giám sát đã kích hoạt quy trình phân tích nguyên nhân gốc rễ và đề xuất hành động ${recActionVi} nhằm bảo đảm tính liên tục của hệ thống.`
   );
 
   // ========================================================
@@ -658,7 +681,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const rootCauseCategoryVi = SRE_DICTIONARY_VI[rootCauseCategory] || rootCauseCategory;
   const severityVi = SRE_DICTIONARY_VI[severity] || (severity === 'CRITICAL' ? 'NGHIÊM TRỌNG (CRITICAL)' : severity);
   const rootCauseTypeVi = SRE_DICTIONARY_VI[rootCauseType] || translateSREText(rootCauseType);
-  const recActionVi = SRE_DICTIONARY_VI[recAction] || recAction;
+  // recActionVi declared above
   const actionPriorityVi = SRE_DICTIONARY_VI[actionPriority] || actionPriority;
   const actionRiskLevelVi = SRE_DICTIONARY_VI[actionRiskLevel] || actionRiskLevel;
   const predictedRiskVi = SRE_DICTIONARY_VI[predictedRisk] || predictedRisk;
@@ -826,22 +849,42 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     const rc = (rootCauseType || '').toLowerCase();
 
     if (rc.includes('oom') || rc.includes('memory') || rc.includes('wiredtiger')) {
+      if (isDbService || rc.includes('wiredtiger')) {
+        return [
+          {
+            step: '1. Truy vấn nặng & Rò rỉ Cache',
+            desc: 'Truy vấn quét lượng lớn bản ghi không có Index làm phình dung lượng bộ đệm cache.',
+          },
+          {
+            step: '2. Vượt ngưỡng cgroup Pod',
+            desc: 'Tổng bộ nhớ đạt ngưỡng giới hạn của Kubernetes container, kích hoạt OOM-Killer.',
+          },
+          {
+            step: '3. Kiểm soát an toàn (Safety Gate)',
+            desc: 'Hệ thống tự động kích hoạt bảo vệ để tránh ảnh hưởng đến tính toàn vẹn của cơ sở dữ liệu.',
+          },
+          {
+            step: '4. Chuyển giao Kỹ sư & Playbook',
+            desc: 'Đề xuất kỹ sư can thiệp tối ưu hóa truy vấn và mở rộng tài nguyên StatefulSet.',
+          },
+        ];
+      }
       return [
         {
-          step: '1. Truy vấn nặng & Rò rỉ Cache',
-          desc: 'Truy vấn quét 250,000 documents không có Index làm phình WiredTiger cache lên 96.5% dung lượng.',
+          step: '1. Tiêu thụ bộ nhớ tăng đột biến',
+          desc: `Tác tử ghi nhận mức sử dụng RAM leo thang dốc đứng trên dịch vụ ${serviceDisplayName}.`,
         },
         {
-          step: '2. Vượt ngưỡng cgroup Pod',
-          desc: 'Tổng bộ nhớ đạt 1010MB vượt giới hạn cgroup 1024MB của Kubernetes container, kích hoạt Kernel SIGKILL 137.',
+          step: '2. Chạm trần tài nguyên Container',
+          desc: 'Bộ nhớ vượt ngưỡng an toàn cgroup, gây nguy cơ gián đoạn dịch vụ hoặc CrashLoop.',
         },
         {
-          step: '3. Kích hoạt Cầu dao (Circuit Breaker)',
-          desc: 'Đã 2 lần restart Pod thất bại; hệ thống tự động khóa lệnh tự lành để bảo vệ toàn vẹn Replica Set PRIMARY.',
+          step: '3. Kích hoạt Cổng Phê Duyệt HITL',
+          desc: 'Hành động can thiệp phục hồi được chuyển giao cho Kỹ sư phê duyệt trước khi áp dụng.',
         },
         {
-          step: '4. Chuyển giao SRE & Playbook',
-          desc: 'Chuyển giao SRE thực hiện rs.stepDown(60), bổ sung Index và nâng trần RAM lên 2048Mi.',
+          step: '4. Tự khắc phục theo chính sách',
+          desc: `Thực hiện ${recActionVi || recAction} để tái lập dung lượng và đưa ứng dụng về trạng thái ổn định.`,
         },
       ];
     }
@@ -979,7 +1022,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               </div>
               <div style={{ fontSize: '0.6875rem', color: '#D1FAE5', marginTop: '1px', fontWeight: 500 }}>
                 Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{serviceDisplayName}</strong> &bull; Cụm K8s:{' '}
-                <strong style={{ color: '#FFFFFF' }}>{incidentDetail?.cluster_name || incident.cluster || 'k8s-cluster'}</strong> &bull; Độ tin cậy:{' '}
+                <strong style={{ color: '#FFFFFF' }}>{incidentDetail?.cluster_name || incident?.cluster_name || incident?.cluster || 'các'}</strong> &bull; Độ tin cậy:{' '}
                 <span
                   style={{
                     backgroundColor: detectedEngine.includes('OpenAI') ? 'rgba(16, 185, 129, 0.25)' : 'rgba(253, 230, 138, 0.25)',
@@ -1281,7 +1324,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <button
                       type="button"
                       onClick={() => {
-                        if (requiresApproval && onNavigate) {
+                        const isAlreadyInApprovals = Boolean(
+                          incident?.fromApprovals ||
+                          (typeof window !== 'undefined' && window.location.pathname.includes('/approvals'))
+                        );
+                        if (isAlreadyInApprovals) {
+                          onClose();
+                        } else if (requiresApproval && onNavigate) {
                           onClose();
                           onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(serviceDisplayName)}`);
                         } else {
@@ -1294,7 +1343,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         alignItems: 'center',
                         gap: '6px',
                         padding: '8px 16px',
-                        background: requiresApproval ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        background: isAlreadyInApprovals
+                          ? '#0F766E'
+                          : requiresApproval
+                          ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)'
+                          : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                         color: '#FFFFFF',
                         borderRadius: '8px',
                         border: 'none',
@@ -1307,6 +1360,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       <span>
                         {isExecuting
                           ? 'Đang thực thi...'
+                          : Boolean(incident?.fromApprovals || (typeof window !== 'undefined' && window.location.pathname.includes('/approvals')))
+                          ? 'Đóng & Phê Duyệt Tại Danh Sách Phía Dưới'
                           : requiresApproval
                           ? 'Chuyển Sang Cổng Phê Duyệt (HITL) →'
                           : 'Kích Hoạt Tự Khắc Phục Ngay'}

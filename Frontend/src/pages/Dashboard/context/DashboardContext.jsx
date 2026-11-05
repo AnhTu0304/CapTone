@@ -4,6 +4,7 @@ import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 
 import { clusterService } from '../../../services/clusterService';
 import { selfHealingService } from '../../../services/selfHealingService';
+import telemetryService from '../../../services/telemetryService';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
 
 const DashboardContext = createContext(null);
@@ -453,7 +454,76 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
   useEffect(() => {
     fetchPendingApprovalsCount();
-  }, [fetchPendingApprovalsCount]);
+
+    // ⚡ Lắng nghe sự kiện Real-time qua WebSocket (Push model)
+    const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
+    const unsubscribe = telemetryService.subscribeWebSocket(
+      'sme-order-service',
+      (payload) => {
+        if (!payload || !payload.type) return;
+
+        // 1. Khi có yêu cầu phê duyệt mới hoặc trạng thái thay đổi
+        if (
+          payload.type === 'approval_created' ||
+          payload.type === 'approval_status_changed' ||
+          payload.type === 'healing_action_triggered' ||
+          payload.type === 'healing_action_completed' ||
+          payload.type === 'healing_action_aborted'
+        ) {
+          fetchPendingApprovalsCount();
+
+          if (payload.type === 'approval_created') {
+            const newNotif = {
+              id: `notif-appr-${Date.now()}`,
+              title: 'Cần Phê Duyệt Tự Phục Hồi (HITL)',
+              desc: `AI đề xuất hành động [${payload.data?.action_name || 'Phục hồi'}] trên ${payload.data?.target_name || 'Dịch vụ'}`,
+              time: 'Vừa xong',
+              type: 'warning',
+              read: false,
+              unread: true,
+              link: '/dashboard/self-healing/approvals',
+            };
+            setNotifications((prev) => {
+              const updated = [newNotif, ...prev.slice(0, 49)];
+              saveStoredNotifications(updated);
+              return updated;
+            });
+          }
+        }
+
+        // 2. Khi có sự cố mới được phát hiện
+        if (payload.type === 'incident' && payload.data) {
+          const newNotif = {
+            id: `notif-inc-${Date.now()}`,
+            title: 'Sự cố mới phát hiện',
+            desc: payload.data.title || `Sự cố trên dịch vụ ${payload.data.service_id || ''}`,
+            time: 'Vừa xong',
+            type: 'error',
+            read: false,
+            unread: true,
+            link: '/dashboard/incidents',
+          };
+          setNotifications((prev) => {
+            const updated = [newNotif, ...prev.slice(0, 49)];
+            saveStoredNotifications(updated);
+            return updated;
+          });
+        }
+      },
+      null,
+      activeClusterId && !activeClusterId.startsWith('org-') ? activeClusterId : null
+    );
+
+    // Fallback sync thưa (mỗi 60s) để đảm bảo không bao giờ bị lệch dữ liệu nếu mạng gián đoạn
+    const fallbackTimer = setInterval(() => {
+      fetchPendingApprovalsCount();
+    }, 60000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(fallbackTimer);
+    };
+  }, [fetchPendingApprovalsCount, currentEnv?.clusterId, currentEnv?.id]);
 
   const activeIncidentsCount = 0;
 

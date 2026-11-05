@@ -2,12 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
-import NodeMetricsChartsPanel from '../../../components/dashboard/NodeMetricsChartsPanel';
-import { deploymentService } from '../../../services/deploymentService';
 import { useK8sResourcePolling } from '../../../hooks/useK8sResourcePolling';
-import K8sFreshnessBadge from '../../../components/dashboard/K8sFreshnessBadge';
-import K8sDeploymentsPanel from '../../../components/dashboard/K8sDeploymentsPanel';
-import K8sResourceDetailModal from '../../../components/dashboard/K8sResourceDetailModal';
 import {
   Server,
   ArrowLeft,
@@ -16,7 +11,6 @@ import {
   Cpu,
   Layers,
   Activity,
-  Globe,
   RefreshCw,
   Copy,
   Check,
@@ -24,14 +18,11 @@ import {
   Box,
   KeyRound,
   AlertTriangle,
-  HardDrive,
   Clock,
-  Search,
   Filter,
   ShieldAlert,
   Trash2,
   X,
-  Wifi,
   AlertCircle,
   Building,
   Key,
@@ -39,10 +30,6 @@ import {
   Sliders,
   PowerOff,
   FileText,
-  Zap,
-  CheckCircle,
-  Info,
-  HelpCircle,
   CheckCheck,
   Sparkles,
 } from 'lucide-react';
@@ -55,12 +42,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   const [activeTab, setActiveTab] = useState('agent'); // 'agent' | 'nodes' | 'pods' | 'logs' | 'config'
   const [copiedField, setCopiedField] = useState(null);
 
-  // Pods search & filter
-  const [podSearch, setPodSearch] = useState('');
-  const [selectedNamespace, setSelectedNamespace] = useState('ALL');
-  const [selectedPodPhase, setSelectedPodPhase] = useState('ALL');
-  const [crashLoopOnly, setCrashLoopOnly] = useState(false);
-  const [selectedDetailModal, setSelectedDetailModal] = useState(null);
 
   const {
     summary: liveSummary,
@@ -146,6 +127,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   useEffect(() => {
     fetchDetail();
+    // Tự động kiểm tra và đồng bộ trạng thái realtime mỗi 3 giây
+    const timer = setInterval(() => {
+      fetchDetail(true);
+    }, 12000);
+    return () => clearInterval(timer);
   }, [fetchDetail]);
 
   const handleRefresh = async () => {
@@ -352,8 +338,24 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     ? (rotatedTokenResult.raw_token || rotatedTokenResult.token)
     : '<YOUR_AGENT_TOKEN>';
 
+  const getWsBackendUrl = () => {
+    if (typeof window === 'undefined') return 'ws://localhost:5000/api/v1/agent/connect';
+    if (process.env.REACT_APP_WS_URL) {
+      return process.env.REACT_APP_WS_URL.replace(/\/+$/, '');
+    }
+    const { protocol, hostname, port } = window.location;
+    const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
+      return `${wsProto}//${hostname}:5000/api/v1/agent/connect`;
+    }
+    return `${wsProto}//${window.location.host}/api/v1/agent/connect`;
+  };
+
   const getInstallerOrigin = () => {
     if (typeof window === 'undefined') return 'http://localhost';
+    if (process.env.REACT_APP_INSTALLER_URL) {
+      return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
+    }
     const { protocol, hostname, port } = window.location;
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
       return `${protocol}//${hostname}`;
@@ -364,13 +366,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   const getOneLinerCommand = (os) => {
     const origin = getInstallerOrigin();
     if (os === 'linux') {
-      return hasRawToken
-        ? `curl -sSL "${origin}/agent/install.sh?token=${encodeURIComponent(tokenCopyValue)}" | bash`
-        : `curl -sSL ${origin}/agent/install.sh | bash -s -- --token <YOUR_AGENT_TOKEN>`;
+      return `curl -fsSL "${origin}/agent/install.sh" | bash`;
     } else {
-      return hasRawToken
-        ? `irm "${origin}/agent/install.ps1?token=${encodeURIComponent(tokenCopyValue)}" | iex`
-        : `irm ${origin}/agent/install.ps1 | iex`;
+      return `irm "${origin}/agent/install.ps1" | iex`;
     }
   };
 
@@ -395,24 +393,13 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     ? '#10B981'
     : (isDegraded ? '#F59E0B' : (isConnecting ? '#3B82F6' : '#EF4444'));
 
-  // Chỉ hiển thị độ trễ thực tế khi Agent đã Online thật
-  const latestLatency = isOnline && heartbeats[0]?.latency_ms != null ? heartbeats[0].latency_ms : null;
-  const isControlPlaneHealthy = isOnline && (nodes.length > 0 || (clusterData.nodes_count && clusterData.nodes_count > 0));
-  const isControlPlanePending = isConnecting || clusterData.status === 'PENDING' || nodes.length === 0;
+  // Hiển thị độ trễ thực tế từ Agent
+  const latestLatency = heartbeats[0]?.latency_ms != null ? heartbeats[0].latency_ms : null;
+  const isControlPlaneHealthy = (isOnline || isDegraded || nodes.length > 0) && readyNodesCount > 0;
+  const isControlPlanePending = isConnecting || (nodes.length === 0 && !isOnline);
   const controlPlaneText = isControlPlaneHealthy ? 'Healthy (100%)' : (isControlPlanePending ? 'Chờ kết nối (0%)' : 'Ngoại tuyến');
   const controlPlaneColor = isControlPlaneHealthy ? '#059669' : (isControlPlanePending ? '#D97706' : '#64748B');
 
-  // Filter pods with phase and crashLoopOnly support
-  const filteredPods = pods.filter((p) => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(podSearch.toLowerCase()) ||
-      (p.image && p.image.toLowerCase().includes(podSearch.toLowerCase()));
-    const matchesNs = selectedNamespace === 'ALL' || p.namespace === selectedNamespace;
-    const matchesPhase =
-      selectedPodPhase === 'ALL' || (p.phase || '').toUpperCase() === selectedPodPhase.toUpperCase();
-    const matchesCrash = !crashLoopOnly || p.has_crash_loop || p.status === 'CrashLoopBackOff';
-    return matchesSearch && matchesNs && matchesPhase && matchesCrash;
-  });
 
   return (
     <div className="cluster-detail-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -437,53 +424,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
           <ArrowLeft size={16} />
           <span>Quay lại danh sách Cụm K8s</span>
         </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Nút Xoay Vòng / Đổi Token (Rotate Token) */}
-          <button
-            type="button"
-            onClick={() => setShowRotateModal(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#ECFDF5',
-              border: '1px solid #A7F3D0',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              color: '#059669',
-              cursor: 'pointer',
-              boxShadow: 'var(--dash-shadow-sm)',
-            }}
-          >
-            <Key size={14} />
-            <span>Xoay Vòng / Đổi Token (Rotate Token)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: 'var(--dash-shadow-sm)',
-            }}
-          >
-            <RefreshCw size={14} className={isRefreshing || isGlobalRefreshing ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang đồng bộ...' : 'Đồng bộ Live'}</span>
-          </button>
-        </div>
       </div>
 
       {/* 1. View Details: Header Banner Tổng Quan */}
@@ -673,7 +613,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: statusColor, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusDot }} />
               <span>
-                {isOnline ? `Online${latestLatency ? ` (${latestLatency} ms)` : ''}` : (isConnecting ? 'Chờ kết nối...' : 'Offline')}
+                {(isOnline || isDegraded) ? `Online${latestLatency != null ? ` (${latestLatency} ms)` : ''}` : (isConnecting ? 'Chờ kết nối...' : 'Offline')}
               </span>
             </div>
           </div>
@@ -750,9 +690,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '0px', overflowX: 'auto' }}>
         {[
           { id: 'agent', label: 'Quản Lý & Kết Nối Agent', icon: Radio, count: null },
-          { id: 'nodes', label: 'Máy Chủ Nodes', icon: Cpu, count: nodes.length },
-          { id: 'pods', label: 'Tài Nguyên Pods Đang Chạy', icon: Box, count: pods.length },
-          { id: 'deployments', label: 'Deployments & Replicas', icon: Layers, count: deployments.length },
           { id: 'logs', label: 'Nhật Ký Kết Nối (Connection Logs)', icon: FileText, count: connectionLogs.length },
           { id: 'config', label: 'Cấu Hình & Vùng Thao Tác', icon: Settings, count: null },
         ].map((tab) => {
@@ -840,16 +777,18 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--dash-text-secondary)' }}>Độ trễ phản hồi (Latency):</span>
-                  <strong style={{ color: isOnline ? 'var(--dash-primary)' : '#64748B' }}>
-                    {isOnline ? (latestLatency ? `${latestLatency} ms (Live probe)` : 'Đang đo...') : 'Chưa có tín hiệu (Đang chờ kết nối...)'}
+                  <strong style={{ color: (isOnline || isDegraded) ? 'var(--dash-primary)' : '#64748B' }}>
+                    {latestLatency != null
+                      ? `${latestLatency} ms (Live probe)`
+                      : ((isOnline || isDegraded) ? 'Đang đo...' : 'Chưa có tín hiệu (Đang chờ kết nối...)')}
                   </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--dash-text-secondary)' }}>Nhịp tim gần nhất (Heartbeat):</span>
                   <span>
-                    {isOnline && heartbeats[0]
-                      ? new Date(heartbeats[0].reported_at).toLocaleTimeString('vi-VN')
-                      : 'Chưa nhận tín hiệu (Chờ cài đặt Agent trên K8s)'}
+                    {heartbeats[0]
+                      ? `${new Date(heartbeats[0].reported_at).toLocaleTimeString('vi-VN')} (${Math.max(0, Math.round((Date.now() - new Date(heartbeats[0].reported_at).getTime()) / 1000))}s trước)`
+                      : ((isOnline || isDegraded) ? 'Vừa kết nối (Đang nhận heartbeat)' : 'Chưa nhận tín hiệu (Chờ cài đặt Agent trên K8s)')}
                   </span>
                 </div>
               </div>
@@ -903,7 +842,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   }}
                 >
                   <Key size={13} />
-                  <span>Xoay Vòng Token (Rotate)</span>
+                  <span>Xoay Vòng / Đổi Token (Rotate Token)</span>
                 </button>
               </div>
 
@@ -940,28 +879,6 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </p>
                 )}
               </div>
-
-              {/* 2. Connect Agent: Lệnh Helm Triển Khai Nhanh */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)', marginBottom: '4px' }}>
-                  Lệnh kết nối nhanh Kubernetes (Helm Chart từ <code>deploy/helm/selfheal-agent</code>)
-                </label>
-                <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '14px', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', lineHeight: '1.6', position: 'relative' }}>
-                  <code>
-                    helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \<br />
-                    &nbsp;&nbsp;--namespace selfheal-system --create-namespace \<br />
-                    &nbsp;&nbsp;--set config.clusterId="{clusterData.id}" \<br />
-                    &nbsp;&nbsp;--set secret.agentToken="{tokenCopyValue}"
-                  </code>
-                  <button
-                    onClick={() => handleCopy(`helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent --namespace selfheal-system --create-namespace --set config.clusterId="${clusterData.id}" --set secret.agentToken="${tokenCopyValue}"`, 'helm')}
-                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
-                  >
-                    {copiedField === 'helm' ? 'Đã sao chép' : 'Sao chép lệnh'}
-                  </button>
-                </div>
-              </div>
-
               <div style={{ padding: '10px 12px', backgroundColor: '#F0FDF4', borderRadius: '6px', border: '1px solid #BBF7D0', fontSize: '0.75rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CheckCircle2 size={16} color="#16A34A" style={{ flexShrink: 0 }} />
                 <span>
@@ -971,78 +888,44 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             </div>
           </div>
 
-          {/* 2. Connect Agent: Hướng Dẫn Cài Đặt Chi Tiết Chuẩn Repo Agent (Connection Guide) */}
+          {/* 2. Cài Đặt Agent K8s */}
           <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Terminal size={20} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
-                  Hướng Dẫn Cài Đặt & Kết Nối Agent Vào Cụm Kubernetes (Connect Agent)
+                  Cài Đặt Agent K8s
                 </h3>
               </div>
 
-              {/* Method Switcher Tabs */}
+              {/* Method Switcher Tabs: Chỉ 2 tab Cài Đặt và Gỡ Cài Đặt */}
               <div style={{ display: 'flex', gap: '6px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => setConnectTab('quickstart')}
+                  onClick={() => setConnectTab('install')}
                   style={{
-                    padding: '6px 12px',
+                    padding: '6px 14px',
                     borderRadius: '6px',
                     border: 'none',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    backgroundColor: connectTab === 'quickstart' ? '#FFFFFF' : 'transparent',
-                    color: connectTab === 'quickstart' ? 'var(--dash-primary)' : '#64748B',
-                    boxShadow: connectTab === 'quickstart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    backgroundColor: connectTab !== 'uninstall' ? '#FFFFFF' : 'transparent',
+                    color: connectTab !== 'uninstall' ? 'var(--dash-primary)' : '#64748B',
+                    boxShadow: connectTab !== 'uninstall' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '5px'
                   }}
                 >
-                  <Sparkles size={13} color={connectTab === 'quickstart' ? 'var(--dash-primary)' : '#64748B'} />
-                  Cho Người Mới (Quickstart)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConnectTab('script')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    backgroundColor: connectTab === 'script' ? '#FFFFFF' : 'transparent',
-                    color: connectTab === 'script' ? 'var(--dash-primary)' : '#64748B',
-                    boxShadow: connectTab === 'script' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  }}
-                >
-                  ⚡ Cài Tự Động (One-Liner)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConnectTab('helm')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    backgroundColor: connectTab === 'helm' ? '#FFFFFF' : 'transparent',
-                    color: connectTab === 'helm' ? 'var(--dash-primary)' : '#64748B',
-                    boxShadow: connectTab === 'helm' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  }}
-                >
-                  ⚓ Helm Chart (deploy/helm)
+                  <Sparkles size={13} color={connectTab !== 'uninstall' ? 'var(--dash-primary)' : '#64748B'} />
+                  ⚡ Cài Đặt Agent
                 </button>
                 <button
                   type="button"
                   onClick={() => setConnectTab('uninstall')}
                   style={{
-                    padding: '6px 12px',
+                    padding: '6px 14px',
                     borderRadius: '6px',
                     border: 'none',
                     fontSize: '0.75rem',
@@ -1051,20 +934,24 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     backgroundColor: connectTab === 'uninstall' ? '#FFFFFF' : 'transparent',
                     color: connectTab === 'uninstall' ? '#DC2626' : '#64748B',
                     boxShadow: connectTab === 'uninstall' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
                   }}
                 >
-                  🗑️ Gỡ Cài Đặt (Uninstall)
+                  <Trash2 size={13} color={connectTab === 'uninstall' ? '#DC2626' : '#64748B'} />
+                  🗑️ Gỡ Cài Đặt
                 </button>
               </div>
             </div>
 
-            {/* TAB 0: QUICKSTART GUIDE CHO NGƯỜI MỚI */}
-            {connectTab === 'quickstart' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Header Controls: OS & Cluster Type */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '12px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            {/* TAB 1: CÀI ĐẶT AGENT (TỪNG BƯỚC 1 - NHẬP TOKEN SAU) */}
+            {connectTab !== 'uninstall' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Header Controls: OS Switcher */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hệ điều hành của bạn:</span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hệ điều hành máy quản trị:</span>
                     <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px', border: '1px solid #CBD5E1', borderRadius: '6px' }}>
                       <button
                         type="button"
@@ -1101,159 +988,78 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Loại cụm Kubernetes:</span>
-                    <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px', border: '1px solid #CBD5E1', borderRadius: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setQuickstartEnv('local')}
-                        style={{
-                          padding: '4px 10px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          backgroundColor: quickstartEnv === 'local' ? 'var(--dash-primary)' : 'transparent',
-                          color: quickstartEnv === 'local' ? '#FFFFFF' : '#475569',
-                        }}
-                      >
-                        Local (Minikube / Docker)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setQuickstartEnv('cloud')}
-                        style={{
-                          padding: '4px 10px',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          backgroundColor: quickstartEnv === 'cloud' ? 'var(--dash-primary)' : 'transparent',
-                          color: quickstartEnv === 'cloud' ? '#FFFFFF' : '#475569',
-                        }}
-                      >
-                        Cloud / Remote (K3s/EKS/GKE)
-                      </button>
-                    </div>
-                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                    Cài đặt từng bước &bull; Nhập Token an toàn
+                  </span>
                 </div>
 
-                {/* 4 Steps Stepper List */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {/* BƯỚC 1 */}
-                  <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* 3 Step List: Cài từng bước 1 rồi nhập token sau */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* BƯỚC 1: CHẠY LỆNH CÀI ĐẶT */}
+                  <div style={{ padding: '14px 16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>1</span>
-                        <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Mở Terminal & Chuyển vào thư mục dự án</strong>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>1</span>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>Chạy lệnh khởi chạy trình cài đặt</strong>
                       </div>
-                      <span style={{ fontSize: '0.6875rem', color: '#D97706', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Quan Trọng</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Bước 1</span>
                     </div>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
-                      Mở PowerShell / Terminal và chuyển vào thư mục gốc của dự án. <em>Tránh chạy tại thư mục cá nhân mặc định <code>C:\Users\...</code> để không bị lỗi thiếu đường dẫn thư mục <code>Agent</code>.</em>
+                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                      Chạy lệnh bên dưới trên Terminal máy quản trị cụm K8s để bắt đầu quá trình cài đặt:
                     </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                      {scriptOs === 'windows' ? (
-                        <code>d: ; cd \NCKH</code>
-                      ) : (
-                        <code>cd ~/NCKH</code>
-                      )}
+                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 80px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      <code>{getOneLinerCommand(scriptOs)}</code>
                       <button
-                        onClick={() => handleCopy(scriptOs === 'windows' ? 'd:\ncd \\NCKH' : 'cd ~/NCKH', 'qs_step1')}
-                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => handleCopy(getOneLinerCommand(scriptOs), 'oneliner_cmd')}
+                        style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {copiedField === 'qs_step1' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                        {copiedField === 'oneliner_cmd' ? <><Check size={12} color="#10B981" /> Đã chép</> : <><Copy size={12} /> Sao chép</>}
                       </button>
                     </div>
                   </div>
 
-                  {/* BƯỚC 2 (Local only) */}
-                  {quickstartEnv === 'local' && (
-                    <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>2</span>
-                          <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Build & Nạp Image vào cụm Minikube (Chỉ làm 1 lần)</strong>
-                        </div>
-                        <span style={{ fontSize: '0.6875rem', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Cụm Local</span>
-                      </div>
-                      <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
-                        Vì mã nguồn Agent nằm ở máy local, bạn cần build Docker image và nạp vào Minikube để Pod K8s có thể khởi chạy mà không bị lỗi <code>ErrImagePull</code>:
-                      </p>
-                      <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                        {scriptOs === 'windows' ? (
-                          <code>docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent ; minikube image load captone-agent:1.0.0</code>
-                        ) : (
-                          <code>docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent && minikube image load captone-agent:1.0.0</code>
-                        )}
-                        <button
-                          onClick={() => handleCopy(
-                            scriptOs === 'windows'
-                              ? 'docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent ; minikube image load captone-agent:1.0.0'
-                              : 'docker build -t captone-agent:1.0.0 -f Agent/Dockerfile Agent && minikube image load captone-agent:1.0.0',
-                            'qs_step2'
-                          )}
-                          style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          {copiedField === 'qs_step2' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* BƯỚC 3 */}
-                  <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* BƯỚC 2: SAO CHÉP & NHẬP TOKEN KHI ĐƯỢC HỎI */}
+                  <div style={{ padding: '14px 16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>{quickstartEnv === 'local' ? '3' : '2'}</span>
-                        <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Chạy Script Cài Đặt Tự Động Với Token Cụm</strong>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>2</span>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>Nhập Token xác thực (khi script yêu cầu)</strong>
                       </div>
-                      <span style={{ fontSize: '0.6875rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Tự Động Kết Nối</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Xác Thực</span>
                     </div>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
-                      Lệnh dưới đây đã tự động nhúng mã xác thực Token của cụm này. Script sẽ tự tạo namespace <code>selfheal-system</code>, cấu hình RBAC, Secret bảo mật và triển khai Agent Deployment:
+                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                      Khi màn hình terminal xuất hiện dòng nhắc <code>Nhập Token do SelfHeal cấp:</code>, hãy dán mã Token bảo mật dưới đây vào rồi nhấn <strong>Enter</strong>:
                     </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                      {scriptOs === 'windows' ? (
-                        <code>Set-ExecutionPolicy RemoteSigned -Scope Process; .\Agent\installer\install-agent.ps1 -Token "{tokenCopyValue}"</code>
-                      ) : (
-                        <code>chmod +x Agent/installer/install-agent.sh && ./Agent/installer/install-agent.sh --token "{tokenCopyValue}"</code>
-                      )}
+                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 105px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      <code>{tokenCopyValue || '<YOUR_AGENT_TOKEN>'}</code>
                       <button
-                        onClick={() => handleCopy(
-                          scriptOs === 'windows'
-                            ? `Set-ExecutionPolicy RemoteSigned -Scope Process; .\\Agent\\installer\\install-agent.ps1 -Token "${tokenCopyValue}"`
-                            : `chmod +x Agent/installer/install-agent.sh && ./Agent/installer/install-agent.sh --token "${tokenCopyValue}"`,
-                          'qs_step3'
-                        )}
-                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => handleCopy(tokenCopyValue, 'step2_token')}
+                        style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {copiedField === 'qs_step3' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                        {copiedField === 'step2_token' ? <><Check size={12} color="#10B981" /> Đã chép</> : <><Copy size={12} /> Sao chép Token</>}
                       </button>
                     </div>
                   </div>
 
-                  {/* BƯỚC 4 */}
-                  <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* BƯỚC 3: KIỂM TRA TRẠNG THÁI */}
+                  <div style={{ padding: '14px 16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#10B981', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>{quickstartEnv === 'local' ? '4' : '3'}</span>
-                        <strong style={{ fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>Kiểm Tra Trạng Thái & Nhận Tín Hiệu Online</strong>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#10B981', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>3</span>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>Kiểm tra trạng thái Agent Pod</strong>
                       </div>
                       <span style={{ fontSize: '0.6875rem', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Hoàn Tất</span>
                     </div>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.8125rem', lineHeight: '1.5' }}>
-                      Kiểm tra trạng thái Pod của Agent trong cụm. Khi thấy trạng thái <code>Running</code>, đèn giám sát phía trên sẽ lập tức chuyển sang <strong>Online</strong>:
+                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
+                      Kiểm tra trạng thái Pod của Agent trong cụm. Khi thấy Pod đạt trạng thái <code>Running</code>, hệ thống sẽ tự động kích hoạt <strong>Online</strong>:
                     </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 80px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       <code>kubectl get pods -n selfheal-system</code>
                       <button
-                        onClick={() => handleCopy('kubectl get pods -n selfheal-system', 'qs_step4')}
-                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => handleCopy('kubectl get pods -n selfheal-system', 'qs_step2')}
+                        style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {copiedField === 'qs_step4' ? <><Check size={12} color="#10B981" /> Đã sao chép</> : <><Copy size={12} /> Sao chép</>}
+                        {copiedField === 'qs_step2' ? <><Check size={12} color="#10B981" /> Đã chép</> : <><Copy size={12} /> Sao chép</>}
                       </button>
                     </div>
                   </div>
@@ -1261,246 +1067,85 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               </div>
             )}
 
-            {/* TAB 1: ONE-LINER AUTOMATED SCRIPT */}
-            {connectTab === 'script' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* OS Switcher */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hệ điều hành máy chủ quản trị:</span>
-                  <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#F8FAFC', padding: '2px', border: '1px solid #E2E8F0', borderRadius: '6px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setScriptOs('linux')}
-                      style={{
-                        padding: '4px 10px',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        backgroundColor: scriptOs === 'linux' ? 'var(--dash-primary)' : 'transparent',
-                        color: scriptOs === 'linux' ? '#FFFFFF' : '#475569',
-                      }}
-                    >
-                      Linux / macOS (Bash)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setScriptOs('windows')}
-                      style={{
-                        padding: '4px 10px',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        backgroundColor: scriptOs === 'windows' ? 'var(--dash-primary)' : 'transparent',
-                        color: scriptOs === 'windows' ? '#FFFFFF' : '#475569',
-                      }}
-                    >
-                      Windows (PowerShell)
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-                  {/* Script option 1: Remote One-liner */}
-                  <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
-                        Cách 1: Lệnh Tải & Chạy Trực Tiếp (Qua Installer API)
-                      </strong>
-                      <span style={{ fontSize: '0.6875rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>Khuyên Dùng</span>
-                    </div>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Installer Service trên cổng 8100/80 tự động nhúng cấu hình cluster và token xác thực:
-                    </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                      <code>{getOneLinerCommand(scriptOs)}</code>
-                      <button
-                        onClick={() => handleCopy(getOneLinerCommand(scriptOs), 'oneliner_install')}
-                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
-                      >
-                        {copiedField === 'oneliner_install' ? 'Đã sao chép' : 'Sao chép'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Script option 2: Local Repo File */}
-                  <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
-                      Cách 2: Chạy Script Có Sẵn Trong Thư Mục <code>Agent/installer/</code>
-                    </strong>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Chạy trực tiếp từ mã nguồn dự án trên máy quản trị có quyền <code>kubectl</code>:
-                    </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                      {scriptOs === 'linux' ? (
-                        <code>chmod +x Agent/installer/install-agent.sh && ./Agent/installer/install-agent.sh --token {tokenCopyValue}</code>
-                      ) : (
-                        <code>Set-ExecutionPolicy RemoteSigned -Scope Process; .\Agent\installer\install-agent.ps1 -Token "{tokenCopyValue}"</code>
-                      )}
-                      <button
-                        onClick={() => handleCopy(
-                          scriptOs === 'linux'
-                            ? `chmod +x Agent/installer/install-agent.sh && ./Agent/installer/install-agent.sh --token ${tokenCopyValue}`
-                            : `Set-ExecutionPolicy RemoteSigned -Scope Process; .\\Agent\\installer\\install-agent.ps1 -Token "${tokenCopyValue}"`,
-                          'local_script_install'
-                        )}
-                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
-                      >
-                        {copiedField === 'local_script_install' ? 'Đã sao chép' : 'Sao chép'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Workflow explanation */}
-                <div style={{ padding: '12px 14px', backgroundColor: '#EFF6FF', borderRadius: '6px', border: '1px solid #BFDBFE', fontSize: '0.75rem', color: '#1E40AF', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Info size={15} /> Quy trình tự động thực hiện bởi bộ cài đặt:
-                  </div>
-                  <ol style={{ margin: 0, paddingLeft: '18px', lineHeight: '1.6' }}>
-                    <li>Tự động nhận diện Kubernetes Context hiện tại (Minikube, Docker Desktop K8s, Cloud K8s).</li>
-                    <li>Khởi tạo Kubernetes Namespace <code>selfheal-system</code> độc lập.</li>
-                    <li>Lưu trữ Agent Token an toàn vào Kubernetes Secret <code>selfheal-agent-secret</code> (không lộ plain text trên tiến trình).</li>
-                    <li>Tự động kích hoạt Helm triển khai Agent Deployment và theo dõi quá trình Rollout hoàn tất.</li>
-                  </ol>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 2: HELM CHART DEPLOYMENT */}
-            {connectTab === 'helm' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', fontSize: '0.8125rem' }}>
-                  {/* Step 1 */}
-                  <div style={{ padding: '14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <strong style={{ color: 'var(--dash-text-primary)' }}>Bước 1: Tạo Namespace & Secret Bảo Mật</strong>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Khởi tạo namespace <code>selfheal-system</code> và Kubernetes Secret chứa Token của Agent.
-                    </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#E2E8F0', padding: '10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        kubectl create secret generic selfheal-agent-secret -n selfheal-system...
-                      </span>
-                      <button
-                        onClick={() => handleCopy(`kubectl create namespace selfheal-system --dry-run=client -o yaml | kubectl apply -f -\nkubectl create secret generic selfheal-agent-secret -n selfheal-system --from-literal=AGENT_TOKEN="${tokenCopyValue}" --dry-run=client -o yaml | kubectl apply -f -`, 'helm_step1')}
-                        style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', padding: '2px 4px' }}
-                      >
-                        {copiedField === 'helm_step1' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div style={{ padding: '14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <strong style={{ color: 'var(--dash-text-primary)' }}>Bước 2: Triển Khai Helm Chart Tùy Chỉnh</strong>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Cài đặt chart từ thư mục nguồn <code>Agent/deploy/helm/selfheal-agent</code>.
-                    </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#E2E8F0', padding: '10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent...
-                      </span>
-                      <button
-                        onClick={() => handleCopy(`helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent --namespace selfheal-system --set config.agentServerUrl="ws://localhost:5000/api/v1/agent/connect" --set config.clusterId="${clusterData.id}" --set secret.existingSecret="selfheal-agent-secret"`, 'helm_step2')}
-                        style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', padding: '2px 4px' }}
-                      >
-                        {copiedField === 'helm_step2' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div style={{ padding: '14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <strong style={{ color: 'var(--dash-text-primary)' }}>Bước 3: Xác Nhận Pods & Telemetry Logs</strong>
-                    <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Kiểm tra trạng thái Agent Pod và theo dõi luồng bắt tay WebSocket trực tiếp.
-                    </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#E2E8F0', padding: '10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>kubectl get pods -n selfheal-system</span>
-                      <button
-                        onClick={() => handleCopy('kubectl get pods -n selfheal-system\nkubectl logs -n selfheal-system -l app.kubernetes.io/name=selfheal-agent -f', 'helm_step3')}
-                        style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', padding: '2px 4px' }}
-                      >
-                        {copiedField === 'helm_step3' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3: UNINSTALLATION */}
+            {/* TAB 2: UNINSTALLATION (GỠ CÀI ĐẶT) */}
             {connectTab === 'uninstall' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ padding: '14px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <strong style={{ color: '#991B1B', fontSize: '0.8125rem' }}>Gỡ Bỏ Sạch Sẽ Tác Tử SelfHeal Khỏi Cụm Kubernetes:</strong>
-                  <p style={{ margin: 0, color: '#7F1D1D', fontSize: '0.75rem' }}>
-                    Sử dụng các script gỡ bỏ trong thư mục <code>Agent/installer/</code> hoặc lệnh Helm để thu hồi tài nguyên ServiceAccount, ClusterRole và Secrets.
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px', marginTop: '6px' }}>
-                    <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>./Agent/installer/uninstall-agent.sh</span>
-                      <button onClick={() => handleCopy('./Agent/installer/uninstall-agent.sh', 'un_sh')} style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer' }}>
-                        {copiedField === 'un_sh' ? <Check size={14} /> : <Copy size={14} />}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                  {/* Method 1: Automated Script */}
+                  <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>Cách 1: Lệnh Gỡ Tự Động (Script)</strong>
+                      <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Nhanh Nhất</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600, marginBottom: '3px' }}>Linux / macOS (Bash):</div>
+                        <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '8px 65px 8px 10px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                          <code>curl -fsSL "{getInstallerOrigin()}/agent/uninstall.sh" | bash</code>
+                          <button
+                            onClick={() => handleCopy(`curl -fsSL "${getInstallerOrigin()}/agent/uninstall.sh" | bash`, 'un_sh')}
+                            style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
+                          >
+                            {copiedField === 'un_sh' ? 'Đã chép' : 'Sao chép'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600, marginBottom: '3px' }}>Windows (PowerShell):</div>
+                        <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '8px 65px 8px 10px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                          <code>irm "{getInstallerOrigin()}/agent/uninstall.ps1" | iex</code>
+                          <button
+                            onClick={() => handleCopy(`irm "${getInstallerOrigin()}/agent/uninstall.ps1" | iex`, 'un_ps1')}
+                            style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
+                          >
+                            {copiedField === 'un_ps1' ? 'Đã chép' : 'Sao chép'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Method 2: Kubectl */}
+                  <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>Cách 2: Kubectl</strong>
+                      <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>K8s CLI</span>
+                    </div>
+                    <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600 }}>Xóa toàn bộ tài nguyên và Namespace của Agent:</div>
+                    <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 65px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      <code>kubectl delete namespace selfheal-system</code>
+                      <button
+                        onClick={() => handleCopy('kubectl delete namespace selfheal-system', 'un_k8s')}
+                        style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
+                      >
+                        {copiedField === 'un_k8s' ? 'Đã chép' : 'Sao chép'}
                       </button>
                     </div>
-                    <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>.\Agent\installer\uninstall-agent.ps1</span>
-                      <button onClick={() => handleCopy('.\\Agent\\installer\\uninstall-agent.ps1', 'un_ps1')} style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer' }}>
-                        {copiedField === 'un_ps1' ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
+                  </div>
+
+                  {/* Method 3: Helm */}
+                  <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>Cách 3: Helm</strong>
+                      <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Package Manager</span>
                     </div>
-                    <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>helm uninstall selfheal-agent -n selfheal-system</span>
-                      <button onClick={() => handleCopy('helm uninstall selfheal-agent -n selfheal-system\nkubectl delete namespace selfheal-system', 'un_helm')} style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer' }}>
-                        {copiedField === 'un_helm' ? <Check size={14} /> : <Copy size={14} />}
+                    <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600 }}>Gỡ Helm Release và dọn sạch Namespace:</div>
+                    <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 65px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      <code>{`helm uninstall selfheal-agent -n selfheal-system
+kubectl delete namespace selfheal-system`}</code>
+                      <button
+                        onClick={() => handleCopy(`helm uninstall selfheal-agent -n selfheal-system\nkubectl delete namespace selfheal-system`, 'un_helm')}
+                        style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
+                      >
+                        {copiedField === 'un_helm' ? 'Đã chép' : 'Sao chép'}
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
             )}
-
-            {/* Live Connection Probe & Simulation Trigger Bar */}
-            <div style={{ marginTop: '4px', padding: '12px 16px', backgroundColor: isOnline ? '#F0FDF4' : '#F8FAFC', borderRadius: '8px', border: `1px solid ${isOnline ? '#BBF7D0' : 'var(--dash-border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusDot }} />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                  Trạng Thái Hiện Tại: <strong style={{ color: statusColor }}>{agentStatusText}</strong>
-                </span>
-                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  {isOnline ? '— Đang truyền nhận telemetry 2 chiều qua WebSocket.' : '— Đang chờ Agent khởi chạy và gửi nhịp tim đầu tiên.'}
-                </span>
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  onClick={handleRefreshStatus}
-                  disabled={isRefreshing}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: isOnline ? '#F0FDF4' : '#F8FAFC',
-                    border: `1px solid ${isOnline ? '#BBF7D0' : '#CBD5E1'}`,
-                    borderRadius: '6px',
-                    color: isOnline ? '#15803D' : '#334155',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: isRefreshing ? 'default' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: 'var(--dash-shadow-sm)',
-                  }}
-                >
-                  <RefreshCw size={14} color={isOnline ? '#16A34A' : '#64748B'} />
-                  <span>{isRefreshing ? 'Đang kiểm tra...' : (isOnline ? 'Làm Mới Trạng Thái (Online)' : 'Kiểm Tra Trạng Thái Kết Nối')}</span>
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* 6. Agent Configuration Form (Cấu hình namespace giám sát, chu kỳ gửi Metrics, eBPF probes) */}
@@ -1627,350 +1272,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 2: MÁY CHỦ NODES                                           */}
-      {/* ============================================================== */}
-      {activeTab === 'nodes' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {nodes.length === 0 ? (
-            <div className="dash-card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '12px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Cpu size={28} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1E293B' }}>Chưa nhận diện máy chủ Node nào</h3>
-              <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748B', maxWidth: '500px', lineHeight: '1.6' }}>
-                Tác tử eBPF Agent đang ở trạng thái <strong>Chờ kết nối...</strong>. Sau khi triển khai và kết nối Agent vào cụm Kubernetes thành công, hệ thống sẽ tự động quét và hiển thị toàn bộ máy chủ Control Plane & Worker Nodes tại đây.
-              </p>
-            </div>
-          ) : (
-            <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Cpu size={18} color="var(--dash-primary)" />
-                  <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>Danh Sách Máy Chủ Nodes Thực Tế Trong Database ({nodes.length} Nodes)</h3>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '0.75rem', color: readyNodesCount === nodes.length ? '#059669' : '#DC2626', fontWeight: 700 }}>
-                    ● {readyNodesCount}/{nodes.length} Sẵn Sàng (Ready)
-                  </span>
-                  <K8sFreshnessBadge freshness={liveFreshness} />
-                </div>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                      <th style={{ padding: '12px 18px' }}>Tên Node</th>
-                      <th style={{ padding: '12px 18px' }}>Vai Trò</th>
-                      <th style={{ padding: '12px 18px' }}>Trạng Thái K8s</th>
-                      <th style={{ padding: '12px 18px' }}>Cảnh Báo Áp Lực</th>
-                      <th style={{ padding: '12px 18px' }}>CPU (Alloc / Cap)</th>
-                      <th style={{ padding: '12px 18px' }}>RAM (Alloc / Cap)</th>
-                      <th style={{ padding: '12px 18px' }}>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nodes.map((node, index) => {
-                      const ramCapGb = node.memory_capacity_bytes ? (node.memory_capacity_bytes / (1024 ** 3)).toFixed(1) : (node.memory_capacity || '--');
-                      const ramAllocGb = node.memory_allocatable_bytes ? (node.memory_allocatable_bytes / (1024 ** 3)).toFixed(1) : (node.memory_allocatable || '-');
-                      const cpuCap = node.cpu_capacity_millicores ? `${(node.cpu_capacity_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_capacity || '--');
-                      const cpuAlloc = node.cpu_allocatable_millicores ? `${(node.cpu_allocatable_millicores / 1000).toFixed(0)} vCPU` : (node.cpu_allocatable || '-');
-                      const rolesArr = typeof node.roles === 'string' ? JSON.parse(node.roles || '[]') : (node.roles || []);
-                      const roleLabel = rolesArr.includes('control-plane') ? 'control-plane' : 'worker';
-                      const effectiveStatus = node.effective_status || (node.ready ? 'Ready' : (node.status || 'Unknown'));
-                      const pressures = Array.isArray(node.active_pressures) ? node.active_pressures : [];
-
-                      return (
-                        <tr key={node.id || node.name || index} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                          <td style={{ padding: '14px 18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
-                            {node.name}
-                          </td>
-                          <td style={{ padding: '14px 18px' }}>
-                            <span
-                              style={{
-                                fontSize: '0.6875rem',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontWeight: 700,
-                                backgroundColor: roleLabel === 'control-plane' ? '#F3E8FF' : '#E0E7FF',
-                                color: roleLabel === 'control-plane' ? '#7E22CE' : '#4338CA',
-                              }}
-                            >
-                              {roleLabel}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px 18px' }}>
-                            {effectiveStatus === 'Ready' && (
-                              <span style={{ color: '#059669', backgroundColor: '#ECFDF5', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
-                                <CheckCircle2 size={13} /> Ready
-                              </span>
-                            )}
-                            {effectiveStatus === 'NotReady' && (
-                              <span style={{ color: '#DC2626', backgroundColor: '#FEF2F2', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
-                                <AlertTriangle size={13} /> NotReady
-                              </span>
-                            )}
-                            {effectiveStatus === 'Unknown' && (
-                              <span style={{ color: '#D97706', backgroundColor: '#FFFBEB', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
-                                <HelpCircle size={13} /> Unknown
-                              </span>
-                            )}
-                            {effectiveStatus === 'Unverified' && (
-                              <span style={{ color: '#64748B', backgroundColor: '#F1F5F9', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
-                                Unverified
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '14px 18px' }}>
-                            {pressures.length > 0 ? (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                {pressures.map((press) => (
-                                  <span key={press} style={{ fontSize: '0.6875rem', backgroundColor: '#FEF3C7', color: '#B45309', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                                    {press}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>Bình thường</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '14px 18px', fontSize: '0.75rem' }}>
-                            {cpuAlloc} / {cpuCap}
-                          </td>
-                          <td style={{ padding: '14px 18px', fontSize: '0.75rem' }}>
-                            {ramAllocGb} / {ramCapGb} GB
-                          </td>
-                          <td style={{ padding: '14px 18px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDetailModal({ resource: node, type: 'NODE' })}
-                              style={{
-                                padding: '4px 10px',
-                                fontSize: '0.75rem',
-                                border: '1px solid var(--dash-border)',
-                                borderRadius: '4px',
-                                backgroundColor: '#FFFFFF',
-                                color: 'var(--dash-primary)',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Chi Tiết
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Biểu đồ Chuỗi Thời Gian Node Metrics (Lightweight Charts v5.2.1) */}
-          <NodeMetricsChartsPanel
-            orgId={clusterData.organization_id || currentOrg?.id}
-            clusterId={clusterData.id || clusterId}
-            agentId={clusterData.agent_id}
-            nodesOverride={nodes}
-          />
-        </div>
-      )}
-
-      {activeTab === 'pods' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {pods.length === 0 ? (
-            <div className="dash-card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '12px', backgroundColor: '#F5F3FF', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Box size={28} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1E293B' }}>Chưa có khối lượng Pods nào</h3>
-              <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748B', maxWidth: '500px', lineHeight: '1.6' }}>
-                Cụm chưa nhận dữ liệu viễn trắc. Ngay khi Agent được kết nối thành công, các Pods đang vận hành trên các Namespaces sẽ được đồng bộ theo thời gian thực về màn hình này.
-              </p>
-            </div>
-          ) : (
-            <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
-              {/* Filter & Search Header */}
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', backgroundColor: '#F8FAFC' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Box size={18} color="var(--dash-primary)" />
-                  <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>
-                    Danh Sách Pods Đang Vận Hành ({filteredPods.length}/{pods.length} Pods)
-                  </h3>
-                  <K8sFreshnessBadge freshness={liveFreshness} />
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ position: 'relative' }}>
-                    <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-                    <input
-                      type="text"
-                      placeholder="Tìm kiếm Pod hoặc Image..."
-                      value={podSearch}
-                      onChange={(e) => setPodSearch(e.target.value)}
-                      style={{ padding: '7px 12px 7px 30px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem', width: '200px' }}
-                    />
-                  </div>
-
-                  <select
-                    value={selectedNamespace}
-                    onChange={(e) => setSelectedNamespace(e.target.value)}
-                    style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
-                  >
-                    <option value="ALL">Tất cả Namespace ({namespaces.length})</option>
-                    {namespaces.map((ns) => {
-                      const nsName = ns.name || ns;
-                      return (
-                        <option key={nsName} value={nsName}>
-                          Namespace: {nsName}
-                        </option>
-                      );
-                    })}
-                  </select>
-
-                  <select
-                    value={selectedPodPhase}
-                    onChange={(e) => setSelectedPodPhase(e.target.value)}
-                    style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
-                  >
-                    <option value="ALL">Tất cả Phase</option>
-                    <option value="Running">Running</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Failed">Failed</option>
-                    <option value="Succeeded">Succeeded</option>
-                    <option value="Unknown">Unknown</option>
-                  </select>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', cursor: 'pointer', userSelect: 'none' }}>
-                    <input
-                      type="checkbox"
-                      checked={crashLoopOnly}
-                      onChange={(e) => setCrashLoopOnly(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <span style={{ color: crashLoopPodsCount > 0 ? '#DC2626' : '#64748B', fontWeight: crashLoopOnly ? 700 : 500 }}>
-                      Chỉ CrashLoop ({crashLoopPodsCount})
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Pods Table */}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                      <th style={{ padding: '12px 18px' }}>Tên Pod</th>
-                      <th style={{ padding: '12px 18px' }}>Namespace</th>
-                      <th style={{ padding: '12px 18px' }}>Phase & Trạng Thái</th>
-                      <th style={{ padding: '12px 18px' }}>Lý Do Chờ / Lỗi Container</th>
-                      <th style={{ padding: '12px 18px' }}>Máy Chủ Node</th>
-                      <th style={{ padding: '12px 18px' }}>Khởi Động Lại</th>
-                      <th style={{ padding: '12px 18px' }}>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPods.map((pod, idx) => {
-                      const isCrash = pod.status === 'CrashLoopBackOff' || pod.has_crash_loop || pod.waiting_reason === 'CrashLoopBackOff';
-                      const isOOM = pod.waiting_reason === 'OOMKilled' || pod.last_termination_reason === 'OOMKilled';
-                      const hasWaiting = Boolean(pod.waiting_reason);
-
-                      return (
-                        <tr key={pod.id || pod.name || idx} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                          <td style={{ padding: '12px 18px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--dash-text-primary)' }}>
-                            {pod.name}
-                          </td>
-                          <td style={{ padding: '12px 18px' }}>
-                            <span style={{ fontSize: '0.6875rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: 600 }}>
-                              {pod.namespace || 'default'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 18px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
-                                Phase: {pod.phase || 'Unknown'}
-                              </span>
-                              {isCrash ? (
-                                <span style={{ color: '#DC2626', backgroundColor: '#FEF2F2', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', width: 'fit-content' }}>
-                                  <AlertTriangle size={12} /> CrashLoopBackOff
-                                </span>
-                              ) : pod.status === 'Running' || pod.phase === 'Running' ? (
-                                <span style={{ color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', width: 'fit-content' }}>
-                                  <CheckCircle2 size={12} /> Running
-                                </span>
-                              ) : (
-                                <span style={{ color: '#D97706', backgroundColor: '#FFFBEB', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', width: 'fit-content' }}>
-                                  {pod.status || pod.phase}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px 18px' }}>
-                            {isCrash || isOOM || hasWaiting ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <span style={{ color: '#DC2626', fontWeight: 700, fontSize: '0.75rem' }}>
-                                  {pod.waiting_reason || (isCrash ? 'CrashLoopBackOff' : 'Error')}
-                                  {pod.exit_code !== undefined && pod.exit_code !== null ? ` (Exit ${pod.exit_code})` : ''}
-                                </span>
-                                {pod.waiting_message && (
-                                  <span style={{ fontSize: '0.6875rem', color: '#64748B', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pod.waiting_message}>
-                                    {pod.waiting_message}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{ color: '#94A3B8', fontSize: '0.75rem' }}>-</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '12px 18px', fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-                            {pod.node_name || '-'}
-                          </td>
-                          <td style={{ padding: '12px 18px' }}>
-                            <span style={{ fontWeight: (pod.restart_count || 0) > 0 ? 700 : 500, color: (pod.restart_count || 0) > 0 ? '#DC2626' : 'var(--dash-text-primary)' }}>
-                              {pod.restart_count ?? 0}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 18px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDetailModal({ resource: pod, type: 'POD' })}
-                              style={{
-                                padding: '4px 10px',
-                                fontSize: '0.75rem',
-                                border: '1px solid var(--dash-border)',
-                                borderRadius: '4px',
-                                backgroundColor: '#FFFFFF',
-                                color: 'var(--dash-primary)',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Chi Tiết
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'deployments' && (
-        <K8sDeploymentsPanel
-          deployments={deployments}
-          namespaces={namespaces}
-          isLoading={isPollingLoading || isRefreshing}
-          freshness={liveFreshness}
-          onSelectDeployment={(dep) => setSelectedDetailModal({ resource: dep, type: 'DEPLOYMENT' })}
-        />
-      )}
-
+      
       {activeTab === 'logs' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div className="dash-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid var(--dash-border)', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
@@ -2547,14 +1849,6 @@ data-testid="confirm-rotate-token-btn"
         </div>
       )}
 
-      {/* Modal Xem Chi Tiết Trạng Thái Tài Nguyên K8s (Node, Pod, Deployment) */}
-      {selectedDetailModal && (
-        <K8sResourceDetailModal
-          resource={selectedDetailModal.resource}
-          type={selectedDetailModal.type}
-          onClose={() => setSelectedDetailModal(null)}
-        />
-      )}
     </div>
   );
 };

@@ -489,7 +489,7 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
 
     const intervalId = setInterval(() => {
       fetchAlertsAndSummary(true);
-    }, 15000);
+    }, 60000);
 
     const handleWindowFocus = () => {
       fetchAlertsAndSummary(true);

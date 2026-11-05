@@ -151,7 +151,8 @@ export class AgentService {
       collected_at: collectedAt,
     }, dbClient);
 
-    await this.bridgeAgentMetricToNodeMetric(agent, data, collectedAt, serviceId, result.id);
+    // Synthetic bridging is disabled permanently to avoid polluting node_metrics table
+    // await this.bridgeAgentMetricToNodeMetric(agent, data, collectedAt, serviceId, result.id);
     if (uuidRegex.test(agent.id)) {
       await AgentModel.touchLastSeen(agent.id);
     }
@@ -179,6 +180,13 @@ export class AgentService {
     if (!clusterId) return;
 
     try {
+      // Do NOT create synthetic node metrics if the cluster is actively reporting genuine node_metrics from NodeResourceCollector
+      const genuineNodeMetrics = await pool.query(
+        "SELECT id FROM node_metrics WHERE cluster_id = $1 AND metadata->>'service_id' IS NULL AND collected_at > NOW() - INTERVAL '90 seconds' LIMIT 1",
+        [clusterId]
+      );
+      if (genuineNodeMetrics.rows.length > 0) return;
+
       const nodeRes = await pool.query(
         `SELECT n.id, n.name, n.cpu_capacity_millicores, n.memory_capacity_bytes, n.disk_capacity_bytes,
                 c.environment_id, e.organization_id

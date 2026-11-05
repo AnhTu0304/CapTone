@@ -10,7 +10,6 @@ import {
   TrendingUp,
   CheckCircle2,
   RefreshCw,
-  GitCommit,
   AlertTriangle,
   FileSpreadsheet,
   FileJson,
@@ -552,33 +551,38 @@ export const ReportsPage = () => {
         </div>
       </div>
 
-      {/* Incident Severity & Root Cause Distribution */}
-      <IncidentSeverityBreakdown breakdown={reportData?.incidentBreakdown} />
+      {/* Executive 2-Column Analytics Grid: SLA Uptime Trends & Incident Root Causes */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '20px', alignItems: 'stretch' }}>
+        {/* Cột 1: Biểu đồ tương tác Cam kết & Xu hướng SLA Uptime */}
+        <SLACostSavingsChart
+          height={280}
+          title={
+            timeRange === '1M'
+              ? 'Cam Kết & Xu Hướng SLA Uptime (30 Ngày Gần Nhất)'
+              : timeRange === '3M'
+              ? 'Cam Kết & Xu Hướng SLA Uptime (Quý 3 / 90 Ngày Gần Nhất)'
+              : timeRange === '1Y'
+              ? 'Cam Kết & Xu Hướng SLA Uptime (Năm 2026 - Theo 4 Quý)'
+              : 'Cam Kết & Xu Hướng SLA Uptime (6 Tháng Gần Nhất)'
+          }
+          subtitle={
+            timeRange === '1M'
+              ? 'Đối chiếu thời gian hoạt động thực tế 4 tuần gần nhất với cam kết chuẩn SLA 99.9%'
+              : timeRange === '3M'
+              ? 'Đối chiếu thời gian hoạt động thực tế 3 tháng trong quý với cam kết chuẩn SLA 99.9%'
+              : timeRange === '1Y'
+              ? 'Đối chiếu thời gian hoạt động thực tế theo 4 quý năm 2026 với cam kết chuẩn SLA 99.9%'
+              : 'Đối chiếu thời gian hoạt động thực tế 6 tháng với cam kết chuẩn SLA 99.9% và số lượng sự cố tự phục hồi'
+          }
+          trendsData={reportData?.monthlyTrends}
+          summary={reportData?.summary}
+        />
 
-      {/* Main Interactive React Chart */}
-      <SLACostSavingsChart
-        height={280}
-        title={
-          timeRange === '1M'
-            ? 'Cam Kết & Xu Hướng SLA Uptime (30 Ngày Gần Nhất - Theo Tuần)'
-            : timeRange === '3M'
-            ? 'Cam Kết & Xu Hướng SLA Uptime (Quý 3 / 90 Ngày Gần Nhất)'
-            : timeRange === '1Y'
-            ? 'Cam Kết & Xu Hướng SLA Uptime (Năm 2026 - Theo 4 Quý)'
-            : 'Cam Kết & Xu Hướng SLA Uptime (6 Tháng Gần Nhất)'
-        }
-        subtitle={
-          timeRange === '1M'
-            ? 'Đối chiếu thời gian hoạt động thực tế 4 tuần gần nhất với cam kết chuẩn SLA 99.9%'
-            : timeRange === '3M'
-            ? 'Đối chiếu thời gian hoạt động thực tế 3 tháng trong quý với cam kết chuẩn SLA 99.9%'
-            : timeRange === '1Y'
-            ? 'Đối chiếu thời gian hoạt động thực tế theo 4 quý năm 2026 với cam kết chuẩn SLA 99.9%'
-            : 'Đối chiếu thời gian hoạt động thực tế 6 tháng với cam kết chuẩn SLA 99.9% và số lượng sự cố tự phục hồi'
-        }
-        trendsData={reportData?.monthlyTrends}
-        summary={reportData?.summary}
-      />
+        {/* Cột 2: Phân bổ mức độ nghiêm trọng & Căn nguyên sự cố */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <IncidentSeverityBreakdown breakdown={reportData?.incidentBreakdown} style={{ height: '100%' }} />
+        </div>
+      </div>
 
       {/* Service-by-Service SLA Breakdown Table */}
       <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
@@ -753,149 +757,6 @@ export const ReportsPage = () => {
                     </td>
                   </tr>
                 ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Recent Changes & Self-Healing Remediations Table */}
-      <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <GitCommit size={18} color="var(--dash-primary)" />
-            <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Nhật Ký Biến Động & Tự Khắc Phục Gần Đây
-              </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Lịch sử các lần Rollback, Auto-restart và Scale Pod tự động để bảo đảm chỉ số SLA
-              </p>
-            </div>
-          </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-            {recentChanges.length} sự kiện gần nhất
-          </span>
-        </div>
-
-        <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '12px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>MÃ BIẾN ĐỘNG</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>LOẠI THAY ĐỔI</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>DỊCH VỤ ẢNH HƯỞNG</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>MÔ TẢ HÀNH ĐỘNG</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>THỜI ĐIỂM</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>KẾT QUẢ</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'right' }}>THAO TÁC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentChanges.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--dash-text-muted)', fontSize: '0.875rem' }}>
-                    Chưa có biến động hoặc sự cố tự khắc phục nào được ghi nhận trong khoảng thời gian này.
-                  </td>
-                </tr>
-              ) : (
-                recentChanges.map((chg) => {
-                  const isRollback = String(chg.type || '').toUpperCase().includes('ROLLBACK');
-                  const isSucceeded = chg.result === 'SUCCEEDED';
-                  return (
-                    <tr key={chg.id} style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF' }}>
-                      <td style={{ padding: '14px 16px' }}>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate && onNavigate('/dashboard/incidents')}
-                          title="Nhấp để xem chi tiết sự cố tại Bàn Giám Sát Sự Cố"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(2, 132, 199, 0.08)',
-                            color: '#0284C7',
-                            border: '1px solid rgba(2, 132, 199, 0.25)',
-                            fontFamily: 'var(--font-mono)',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <span>{chg.id}</span>
-                          <ExternalLink size={11} />
-                        </button>
-                      </td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <span
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                            backgroundColor: isRollback ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                            color: isRollback ? '#EF4444' : '#2563EB',
-                            border: `1px solid ${isRollback ? 'rgba(239, 68, 68, 0.25)' : 'rgba(59, 130, 246, 0.25)'}`,
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          {chg.type}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                        {chg.service}
-                      </td>
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', lineHeight: 1.4 }}>
-                        {chg.description}
-                      </td>
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                        {new Date(chg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(chg.timestamp).toLocaleDateString('vi-VN')}
-                      </td>
-                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                        <span
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: 'var(--dash-radius-full)',
-                            fontSize: '0.6875rem',
-                            fontWeight: 800,
-                            backgroundColor: isSucceeded ? '#ECFDF5' : '#FEF2F2',
-                            color: isSucceeded ? '#059669' : '#DC2626',
-                            border: `1px solid ${isSucceeded ? '#A7F3D0' : '#FECACA'}`,
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          ● {chg.result}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate && onNavigate('/dashboard/incidents')}
-                          title="Xem phân tích nguyên nhân gốc rễ (RCA) của sự cố này"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '5px 10px',
-                            backgroundColor: '#F0FDF4',
-                            border: '1px solid #BBF7D0',
-                            borderRadius: '6px',
-                            color: '#15803D',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          <span>Xem RCA</span>
-                          <ArrowUpRight size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
               )}
             </tbody>
           </table>

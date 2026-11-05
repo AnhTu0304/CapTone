@@ -14,9 +14,24 @@ import {
   AlertTriangle, 
   AlertCircle, 
   ZoomIn, 
+  ZoomOut,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
   RefreshCw,
   Maximize2
 } from 'lucide-react';
+
+/**
+ * Khoảng thời gian Preset chuẩn hóa đồng bộ với NodeMetricsChartsPanel
+ */
+export const TIME_RANGE_PRESETS = [
+  { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, limit: 180 },
+  { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, limit: 360 },
+  { id: '6h', label: '6 giờ', durationMs: 6 * 60 * 60 * 1000, limit: 720 },
+  { id: '24h', label: '24 giờ', durationMs: 24 * 60 * 60 * 1000, limit: 1440 },
+  { id: '7d', label: '7 ngày', durationMs: 7 * 24 * 60 * 60 * 1000, limit: 2000 },
+];
 
 /**
  * Utility: Extract Unix timestamp in seconds (UTCTimestamp) from data point
@@ -86,6 +101,7 @@ export const InteractiveResourceChart = ({
   className = '',
   height = 280,
   timeRange = '15m',
+  showTimeRange = true,
   onTimeRangeChange,
   isLive = false,
   isStale = false,
@@ -172,15 +188,62 @@ export const InteractiveResourceChart = ({
   const timeFormatter = useCallback((time) => {
     if (typeof time === 'number') {
       const d = new Date(time * 1000);
+      if (selectedRange === '7d' || selectedRange === '24h') {
+        return `${d.getDate()}/${d.getMonth() + 1} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+      }
       return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     return String(time);
-  }, []);
+  }, [selectedRange]);
 
   // Reset / Fit Content
   const handleFitContent = useCallback(() => {
-    if (chartRef.current) {
-      chartRef.current.timeScale().fitContent();
+    if (chartRef.current && typeof chartRef.current.timeScale === 'function') {
+      const ts = chartRef.current.timeScale();
+      if (ts && typeof ts.fitContent === 'function') {
+        ts.fitContent();
+      }
+    }
+  }, []);
+
+  // Zoom & Pan Action Handlers
+  const handleZoomIn = useCallback(() => {
+    if (!chartRef.current || typeof chartRef.current.timeScale !== 'function') return;
+    const timeScale = chartRef.current.timeScale();
+    if (!timeScale || typeof timeScale.getVisibleLogicalRange !== 'function') return;
+    const range = timeScale.getVisibleLogicalRange() || { from: 10, to: 50 };
+    if (range && Number.isFinite(range.from) && Number.isFinite(range.to)) {
+      const delta = (range.to - range.from) * 0.25;
+      if (typeof timeScale.setVisibleLogicalRange === 'function') {
+        timeScale.setVisibleLogicalRange({ from: range.from + delta / 2, to: range.to - delta / 2 });
+      }
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (!chartRef.current || typeof chartRef.current.timeScale !== 'function') return;
+    const timeScale = chartRef.current.timeScale();
+    if (!timeScale || typeof timeScale.getVisibleLogicalRange !== 'function') return;
+    const range = timeScale.getVisibleLogicalRange();
+    if (range && Number.isFinite(range.from) && Number.isFinite(range.to)) {
+      const delta = (range.to - range.from) * 0.25;
+      if (typeof timeScale.setVisibleLogicalRange === 'function') {
+        timeScale.setVisibleLogicalRange({ from: range.from - delta / 2, to: range.to + delta / 2 });
+      }
+    }
+  }, []);
+
+  const handlePan = useCallback((direction) => {
+    if (!chartRef.current || typeof chartRef.current.timeScale !== 'function') return;
+    const timeScale = chartRef.current.timeScale();
+    if (!timeScale || typeof timeScale.getVisibleLogicalRange !== 'function') return;
+    const range = timeScale.getVisibleLogicalRange();
+    if (range && Number.isFinite(range.from) && Number.isFinite(range.to)) {
+      const span = range.to - range.from;
+      const shift = span * 0.2 * (direction === 'left' ? -1 : 1);
+      if (typeof timeScale.setVisibleLogicalRange === 'function') {
+        timeScale.setVisibleLogicalRange({ from: range.from + shift, to: range.to + shift });
+      }
     }
   }, []);
 
@@ -248,7 +311,7 @@ export const InteractiveResourceChart = ({
           timeScale: {
             borderColor: '#E2E8F0',
             timeVisible: true,
-            secondsVisible: true,
+            secondsVisible: selectedRange === '15m',
             tickMarkFormatter: timeFormatter,
           },
           localization: {
@@ -489,32 +552,25 @@ export const InteractiveResourceChart = ({
                 />
                 DỮ LIỆU CŨ (Stale)
               </span>
-            ) : isLive ? (
+            ) : null}
+            {isLoading && telemetryData && telemetryData.length > 0 && (
               <span
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
+                  gap: '4px',
                   padding: '2px 8px',
                   borderRadius: '12px',
-                  backgroundColor: 'rgba(5, 150, 105, 0.1)',
-                  color: '#059669',
+                  backgroundColor: '#F1F5F9',
+                  color: '#64748B',
                   fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  fontFamily: 'var(--font-mono, monospace)',
+                  fontWeight: 600,
                 }}
               >
-                <span
-                  style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: '#059669',
-                  }}
-                />
-                TRỰC TIẾP (eBPF 5s)
+                <RefreshCw size={10} className="animate-spin" />
+                Đang đồng bộ...
               </span>
-            ) : null}
+            )}
           </div>
           <p
             style={{
@@ -527,44 +583,169 @@ export const InteractiveResourceChart = ({
           </p>
         </div>
 
-        {/* Action Controls: Time Range Selector, Zoom Mode, Toggles */}
+        {/* Action Controls: Time Range Selector, Zoom Controls, Scale Mode, Toggles */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-          {/* Time range selector */}
+          {/* Time range selector (Đồng bộ kiểu dáng và preset chuẩn với Chỉ số viễn trắc hạ tầng) */}
+          {showTimeRange && (
+            <div
+              role="group"
+              aria-label="Khoảng thời gian"
+              style={{
+                display: 'inline-flex',
+                backgroundColor: '#F1F5F9',
+                padding: '3px',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                gap: '2px',
+              }}
+            >
+              {TIME_RANGE_PRESETS.map((preset) => {
+                const active = selectedRange === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    data-testid={`resource-chart-range-${preset.id}`}
+                    className={active ? 'active' : ''}
+                    onClick={() => handleRangeClick(preset.id)}
+                    style={{
+                      padding: '5px 10px',
+                      fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      backgroundColor: active ? '#FFFFFF' : 'transparent',
+                      color: active ? '#059669' : '#64748B',
+                      border: 'none',
+                      borderRadius: '6px',
+                      boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Zoom & Pan Controls Group (chuẩn như Chỉ số viễn trắc hạ tầng) */}
           <div
+            role="toolbar"
+            aria-label="Điều khiển thu phóng"
+            data-testid="chart-zoom-pan-controls"
             style={{
               display: 'inline-flex',
-              backgroundColor: '#F1F5F9',
-              borderRadius: '6px',
+              alignItems: 'center',
+              backgroundColor: '#F8FAFC',
               padding: '2px',
+              borderRadius: '8px',
               border: '1px solid #E2E8F0',
+              gap: '2px',
             }}
           >
-            {[
-              { id: '15m', label: '15 phút' },
-              { id: '1h', label: '1 giờ' },
-              { id: '6h', label: '6 giờ' },
-              { id: '24h', label: '24 giờ' },
-            ].map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => handleRangeClick(r.id)}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '0.75rem',
-                  fontWeight: selectedRange === r.id ? 700 : 500,
-                  color: selectedRange === r.id ? '#0F172A' : '#64748B',
-                  backgroundColor: selectedRange === r.id ? '#FFFFFF' : 'transparent',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  boxShadow: selectedRange === r.id ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
+            <button
+              type="button"
+              data-testid="chart-zoom-in"
+              title="Phóng to (Zoom In)"
+              onClick={handleZoomIn}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ZoomIn size={14} />
+            </button>
+            <button
+              type="button"
+              data-testid="chart-zoom-out"
+              title="Thu nhỏ (Zoom Out)"
+              onClick={handleZoomOut}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ZoomOut size={14} />
+            </button>
+            <div style={{ width: '1px', height: '16px', backgroundColor: '#CBD5E1', margin: '0 2px' }} />
+            <button
+              type="button"
+              data-testid="chart-pan-left"
+              title="Kéo lùi thời gian (Pan Left)"
+              onClick={() => handlePan('left')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <button
+              type="button"
+              data-testid="chart-pan-right"
+              title="Kéo tiến thời gian (Pan Right)"
+              onClick={() => handlePan('right')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <ChevronRight size={15} />
+            </button>
+            <div style={{ width: '1px', height: '16px', backgroundColor: '#CBD5E1', margin: '0 2px' }} />
+            <button
+              type="button"
+              data-testid="chart-reset-zoom"
+              title="Đặt lại vùng nhìn (Reset Zoom)"
+              onClick={handleFitContent}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={13} />
+            </button>
           </div>
 
           {/* Auto-scale vs Standard 0-100% Mode Toggle */}
@@ -660,7 +841,7 @@ export const InteractiveResourceChart = ({
       </div>
 
       {/* 2. Chart Body with States */}
-      {isLoading ? (
+      {isLoading && (!telemetryData || telemetryData.length === 0) ? (
         <div
           style={{
             height: `${height}px`,
@@ -678,7 +859,7 @@ export const InteractiveResourceChart = ({
             Đang tải dữ liệu chuỗi thời gian...
           </span>
         </div>
-      ) : error ? (
+      ) : error && (!telemetryData || telemetryData.length === 0) ? (
         <div
           style={{
             height: `${height}px`,
@@ -977,12 +1158,14 @@ export const InteractiveResourceChart = ({
             ĐIỀU PHỐI AUTONOMOUS
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary, #0F172A)' }}>
-            Vòng lặp MAPE-K
+            {isLive ? 'Vòng lặp MAPE-K (Active)' : isClusterOnline ? 'Tự Động Giám Sát' : 'Tạm Dừng'}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#059669' }}>
+          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: isLive ? '#059669' : '#64748B' }}>
             {stats.hasData && stats.maxCpu > 80
               ? '⚠️ Tự động kích hoạt Scale Replicas'
-              : 'Mô hình GRU + Multi-Agent RCA: Giám sát'}
+              : isLive
+              ? 'Thu thập viễn trắc eBPF & suy luận AI liên tục'
+              : 'Đang chờ luồng dữ liệu viễn trắc'}
           </div>
         </div>
       </div>

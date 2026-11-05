@@ -175,6 +175,22 @@ export const AuthProvider = ({ children }) => {
     return newUser;
   }, []);
 
+  // Hàm Xác thực mã OTP Email
+  const verifyEmail = useCallback(async (code) => {
+    const res = await authService.verifyEmail(code, token);
+    if (user) {
+      const updatedUser = { ...user, email_verified_at: new Date().toISOString(), status: 'ACTIVE' };
+      setUser(updatedUser);
+      localStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+    }
+    return res;
+  }, [token, user]);
+
+  // Hàm Gửi lại mã OTP xác thực Email
+  const resendVerification = useCallback(async () => {
+    return await authService.resendVerification(token);
+  }, [token]);
+
   // Hàm Đăng xuất
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
@@ -354,6 +370,8 @@ export const AuthProvider = ({ children }) => {
     login,
     loginWithGoogle,
     register,
+    verifyEmail,
+    resendVerification,
     logout,
     getInitials,
     getUserRoles,

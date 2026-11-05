@@ -231,7 +231,7 @@ export const MembersPage = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Users size={22} color="var(--dash-primary)" />
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Thành Viên & Ma Trận Phân Quyền RBAC
+              Thành Viên & Ma Trận Phân Quyền
             </h1>
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
@@ -329,9 +329,6 @@ export const MembersPage = () => {
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
                 Quản Lý Danh Sách Nhân Sự & Lời Mời
               </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Danh sách tài khoản được cấp phép truy cập vào bảng điều khiển tổ chức {currentOrg?.name || ''}
-              </p>
             </div>
 
             <button
@@ -484,7 +481,7 @@ export const MembersPage = () => {
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Thành Viên / Ứng Viên</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Vai Trò RBAC</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Vai Trò</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Xác Thực 2FA</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Hoạt Động / Tham Gia</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Trạng Thái</th>
@@ -665,7 +662,7 @@ export const MembersPage = () => {
       <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-            Ma Trận So Sánh Quyền Hạn RBAC Chi Tiết
+            Ma Trận So Sánh Quyền Hạn Chi Tiết
           </h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
             Đối chiếu phân quyền rõ ràng giữa các vai trò nhằm bảo vệ an toàn cho hệ thống
@@ -790,7 +787,7 @@ export const MembersPage = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Phân Quyền Vai Trò (Organization RBAC Role) <span style={{ color: '#EF4444' }}>*</span>
+                  Phân Quyền Vai Trò (Organization Role) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   value={inviteRole}
@@ -890,7 +887,7 @@ export const MembersPage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Shield size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  Thay Đổi Vai Trò RBAC
+                  Thay Đổi Vai Trò
                 </h3>
               </div>
               <button

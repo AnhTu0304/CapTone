@@ -630,7 +630,7 @@ export const NodeMetricsChartsPanel = ({
     if (!isAutoRefresh) return undefined;
     const timer = setInterval(() => {
       fetchMetrics(true);
-    }, 15000);
+    }, 20000);
     return () => clearInterval(timer);
   }, [isAutoRefresh, fetchMetrics]);
 
@@ -984,7 +984,7 @@ export const NodeMetricsChartsPanel = ({
                 backgroundColor: isAutoRefresh ? '#10B981' : '#94A3B8',
               }}
             />
-            <span>Auto 15s</span>
+            <span>Auto 5s</span>
           </button>
 
           {/* Manual Refresh Button */}

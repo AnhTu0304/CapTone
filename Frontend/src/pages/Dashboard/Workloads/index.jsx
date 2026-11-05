@@ -31,30 +31,37 @@ export const WorkloadsPage = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [restartStatus, setRestartStatus] = useState(null); // null | 'RESTARTING' | 'SUCCESS'
 
-  // 1. Tải danh sách Pods THẬT theo Cụm K8s độc lập
-  const fetchClusterPods = useCallback(async () => {
+  // 1. Tải danh sách Pods THẬT theo Cụm K8s độc lập (Tự động kiểm tra và đồng bộ liên tục)
+  const fetchClusterPods = useCallback(async (isSilent = false) => {
     const clusterId = currentEnv?.clusterId || currentEnv?.id;
     if (!clusterId) return;
 
-    setIsLoading(true);
+    if (!isSilent) setIsLoading(true);
     try {
       const data = await podService.getPodsByCluster(clusterId);
-      setPods(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        setPods(data);
+      }
     } catch (err) {
       console.warn('[WorkloadsPage] Lỗi tải danh sách Pods:', err);
-      setPods([]);
+      if (!isSilent) setPods([]);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   }, [currentEnv?.clusterId, currentEnv?.id]);
 
   useEffect(() => {
-    fetchClusterPods();
+    fetchClusterPods(false);
+    // Tự động kiểm tra và cập nhật trạng thái Pods/Workloads liên tục mỗi 3 giây
+    const timer = setInterval(() => {
+      fetchClusterPods(true);
+    }, 3000);
+    return () => clearInterval(timer);
   }, [fetchClusterPods]);
 
   const handleRefresh = async () => {
     triggerRefresh();
-    await fetchClusterPods();
+    await fetchClusterPods(false);
   };
 
   // 2. Gom nhóm Pods thành các Khối công việc (Workloads)

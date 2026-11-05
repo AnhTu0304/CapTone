@@ -161,19 +161,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Quản Trị Tác Tử eBPF Agent
             </h1>
-            <span
-              style={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 'var(--dash-radius-full)',
-                backgroundColor: onlineAgents.length > 0 ? 'var(--dash-mint-100)' : 'var(--dash-warning-bg)',
-                color: onlineAgents.length > 0 ? 'var(--dash-mint-600)' : 'var(--dash-warning-text)',
-                border: onlineAgents.length > 0 ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-warning-border)',
-              }}
-            >
-              {onlineAgents.length} Đang Hoạt Động
-            </span>
+            
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
             Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF

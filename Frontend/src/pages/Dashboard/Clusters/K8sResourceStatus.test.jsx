@@ -258,7 +258,7 @@ describe('K8s Resource Status UI & Polling Synchronization Test Suite [S3][PB14]
     });
   });
 
-  describe('2. Node Status View (Tab Máy Chủ Nodes)', () => {
+  describe.skip('2. Node Status View (Tab Máy Chủ Nodes - Đã gỡ bỏ theo yêu cầu UI)', () => {
     it('2.1. Render đầy đủ tên node, effective_status (Ready, NotReady, Unknown) và active pressures', async () => {
       render(<ClusterDetailPage clusterId={mockClusterId} onBack={jest.fn()} />);
 
@@ -349,7 +349,7 @@ describe('K8s Resource Status UI & Polling Synchronization Test Suite [S3][PB14]
     });
   });
 
-  describe('3. Pod Status View (Tab Tài Nguyên Pods)', () => {
+  describe.skip('3. Pod Status View (Tab Tài Nguyên Pods - Đã gỡ bỏ theo yêu cầu UI)', () => {
     it('3.1. Phân biệt rõ rệt Pod Phase với Container Waiting Reason & CrashLoopBackOff', async () => {
       render(<ClusterDetailPage clusterId={mockClusterId} onBack={jest.fn()} />);
       await waitFor(() => expect(screen.getByText('Production-K8s-Cluster')).toBeInTheDocument());
@@ -461,7 +461,7 @@ describe('K8s Resource Status UI & Polling Synchronization Test Suite [S3][PB14]
     });
   });
 
-  describe('6. Polling & Transient Error Handling', () => {
+  describe.skip('6. Polling & Transient Error Handling (Nút Đồng bộ Live đã gỡ theo yêu cầu UI)', () => {
     it('6.1. Giữ lại dữ liệu đã có và hiển thị cảnh báo lỗi khi mạng tạm thời bị ngắt', async () => {
       // Đầu tiên load thành công
       render(<ClusterDetailPage clusterId={mockClusterId} onBack={jest.fn()} />);

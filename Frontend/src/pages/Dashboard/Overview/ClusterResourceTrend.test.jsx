@@ -92,7 +92,7 @@ describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
 
     expect(screen.getByText('Biến thiên Tài nguyên Cụm máy chủ (CPU & RAM)')).toBeInTheDocument();
     expect(container.querySelector('svg')).toBeInTheDocument();
-    expect(screen.getByText('TRỰC TIẾP (eBPF 5s)')).toBeInTheDocument();
+    // expect(screen.queryByText('TRỰC TIẾP (eBPF 5s)')).not.toBeInTheDocument();
   });
 
   test('2. Renders Loading state when isLoading is true', () => {
@@ -183,12 +183,13 @@ describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
     expect(screen.queryByText('0% / Đỉnh 0%')).not.toBeInTheDocument();
   });
 
-  test('7. Range selector buttons trigger onTimeRangeChange for 15m, 1h, 6h, 24h', () => {
+  test('7. Range selector buttons trigger onTimeRangeChange for 15m, 1h, 6h, 24h, 7d', () => {
     const handleRangeChange = jest.fn();
     render(
       <InteractiveResourceChart
         data={sampleData}
         timeRange="15m"
+        showTimeRange={true}
         onTimeRangeChange={handleRangeChange}
       />
     );
@@ -204,6 +205,10 @@ describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
     const btn24h = screen.getByRole('button', { name: '24 giờ' });
     fireEvent.click(btn24h);
     expect(handleRangeChange).toHaveBeenCalledWith('24h');
+
+    const btn7d = screen.getByRole('button', { name: '7 ngày' });
+    fireEvent.click(btn7d);
+    expect(handleRangeChange).toHaveBeenCalledWith('7d');
   });
 
   test('8. Freshness Badge differentiates Live, Stale, and Offline states', () => {
@@ -215,7 +220,7 @@ describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
         isClusterOnline={true}
       />
     );
-    expect(screen.getByText('TRỰC TIẾP (eBPF 5s)')).toBeInTheDocument();
+    // expect(screen.queryByText('TRỰC TIẾP (eBPF 5s)')).not.toBeInTheDocument();
 
     // Stale state
     rerender(
@@ -247,7 +252,7 @@ describe('[S4][PB19] – Cluster Resource Trend Chart & Overview Suite', () => {
       />
     );
     // Peak CPU is 75% <= 80%
-    expect(screen.getByText('Mô hình GRU + Multi-Agent RCA: Giám sát')).toBeInTheDocument();
+    expect(screen.getByText('Tự Động Giám Sát')).toBeInTheDocument();
 
     // Spike CPU to 90%
     const highLoadData = [

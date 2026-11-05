@@ -50,6 +50,7 @@ class LogsCollector:
                     namespace=pod.namespace,
                     since_seconds=since_seconds,
                     tail_lines=50,
+                    _request_timeout=3,
                 )
                 self._last_read_times[pod.name] = now
             except Exception:

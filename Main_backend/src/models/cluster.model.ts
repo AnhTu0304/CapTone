@@ -503,8 +503,9 @@ export class ClusterModel {
     if (normalizedAgentStatus === 'PENDING') {
       normalizedAgentStatus = 'CONNECTING';
     } else if (normalizedAgentStatus === 'ONLINE') {
-      const topLatency = recentHeartbeats[0]?.latency_ms;
-      if (topLatency && topLatency > 60) {
+      const lastSeen = cluster.last_seen_at ? new Date(cluster.last_seen_at).getTime() : 0;
+      // Chỉ suy giảm nếu mất heartbeat quá 35s
+      if (lastSeen > 0 && Date.now() - lastSeen > 35000) {
         normalizedAgentStatus = 'DEGRADED';
       }
     }

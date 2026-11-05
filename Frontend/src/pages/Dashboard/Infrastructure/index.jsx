@@ -178,19 +178,7 @@ export const InfrastructurePage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Hạ Tầng Cụm Máy Chủ Kubernetes
             </h1>
-            <span
-              style={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 'var(--dash-radius-full)',
-                backgroundColor: readyNodesCount > 0 ? 'var(--dash-mint-100)' : 'var(--dash-warning-bg)',
-                color: readyNodesCount > 0 ? 'var(--dash-mint-600)' : 'var(--dash-warning-text)',
-                border: readyNodesCount > 0 ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-warning-border)',
-              }}
-            >
-              {totalNodesCount > 0 ? `${readyNodesCount} / ${totalNodesCount} Nodes Sẵn Sàng` : '0 Nodes Ngoại Tuyến'}
-            </span>
+            
           </div>
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
             Quản lý tài nguyên vCPU, Bộ nhớ RAM và dung lượng Pods của từng máy chủ riêng biệt

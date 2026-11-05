@@ -19,7 +19,8 @@ import {
   RotateCcw,
   Server,
   Zap,
-  Filter
+  Filter,
+  BarChart2
 } from 'lucide-react';
 
 const CANONICAL_ACTION_TYPES = [
@@ -77,6 +78,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedActionType, setSelectedActionType] = useState('ALL');
   const [dbActionTypes, setDbActionTypes] = useState([]);
+  const [showTrendChart, setShowTrendChart] = useState(false);
 
   // Trạng thái mở Popover Lịch
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -1117,16 +1119,19 @@ export const ActionHistoryPage = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Embedded Self-Healing Trend Chart (Được đồng bộ bộ lọc) */}
-      <SelfHealingTrendChart
-        actions={filteredHistory}
-        analytics={dynamicAnalytics}
-        title={`Xu Hướng Phục Hồi Tự Động & Thời Gian MTTR (${currentFilterLabel})`}
-        timeFilterMode={timeFilterMode}
-        selectedDate={selectedDate}
-        selectedMonth={selectedMonth}
-        selectedYear={selectedYear}
-      />
+      {/* Embedded Self-Healing Trend Chart (Mặc định ẩn gọn gàng, có nút mở xem xu hướng MTTR) */}
+      {showTrendChart && (
+        <SelfHealingTrendChart
+          actions={filteredHistory}
+          analytics={dynamicAnalytics}
+          height={180}
+          title={`Xu Hướng Phục Hồi Tự Động & Thời Gian MTTR (${currentFilterLabel})`}
+          timeFilterMode={timeFilterMode}
+          selectedDate={selectedDate}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+        />
+      )}
 
       {/* History Records Table (Được đồng bộ bộ lọc) */}
       <div className="dash-card" style={{ padding: '20px' }}>
@@ -1140,6 +1145,28 @@ export const ActionHistoryPage = ({ onNavigate }) => {
               <strong style={{ color: '#059669' }}>{dynamicAnalytics.successRate}</strong> &bull; Nhấp vào hàng để xem chi tiết
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowTrendChart((prev) => !prev)}
+            title={showTrendChart ? 'Thu gọn biểu đồ MTTR' : 'Mở biểu đồ xu hướng MTTR'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '6px',
+              border: showTrendChart ? '1px solid #93C5FD' : '1px solid var(--dash-border)',
+              backgroundColor: showTrendChart ? '#EFF6FF' : '#FFFFFF',
+              color: showTrendChart ? '#1D4ED8' : 'var(--dash-text-secondary)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <BarChart2 size={14} />
+            <span>{showTrendChart ? 'Ẩn Biểu Đồ MTTR' : 'Xem Xu Hướng MTTR'}</span>
+          </button>
         </div>
 
         <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '10px', overflow: 'hidden' }}>

@@ -149,27 +149,7 @@ export const MetricsPage = ({ onNavigate }) => {
             <Server size={14} />
             <span>Hạ Tầng (Node Metrics)</span>
           </button>
-          <button
-            type="button"
-            data-testid="metrics-switch-to-apm-btn"
-            onClick={() => onNavigate && onNavigate('/dashboard/monitoring/apm')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              backgroundColor: '#F8FAFC',
-              border: '1px solid #CBD5E1',
-              borderRadius: '6px',
-              color: '#475569',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <Zap size={14} />
-            <span>Ứng Dụng (APM)</span>
-          </button>
+          
           <button
             type="button"
             onClick={() => {

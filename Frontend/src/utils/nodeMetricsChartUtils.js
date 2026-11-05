@@ -13,11 +13,11 @@
  */
 
 export const TIME_RANGE_PRESETS = [
-  { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, limit: 600, maxChartPoints: 120 },
-  { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, limit: 1500, maxChartPoints: 240 },
-  { id: '6h', label: '6 giờ', durationMs: 6 * 60 * 60 * 1000, limit: 3000, maxChartPoints: 360 },
-  { id: '24h', label: '24 giờ', durationMs: 24 * 60 * 60 * 1000, limit: 6000, maxChartPoints: 400 },
-  { id: '7d', label: '7 ngày', durationMs: 7 * 24 * 60 * 60 * 1000, limit: 10000, maxChartPoints: 500 },
+  { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, limit: 300, maxChartPoints: 120 },
+  { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, limit: 600, maxChartPoints: 240 },
+  { id: '6h', label: '6 giờ', durationMs: 6 * 60 * 60 * 1000, limit: 1000, maxChartPoints: 360 },
+  { id: '24h', label: '24 giờ', durationMs: 24 * 60 * 60 * 1000, limit: 1500, maxChartPoints: 400 },
+  { id: '7d', label: '7 ngày', durationMs: 7 * 24 * 60 * 60 * 1000, limit: 2000, maxChartPoints: 500 },
 ];
 
 export const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
