@@ -98,7 +98,13 @@ fi
 CONFIGURED_SERVER_URL="__SELFHEAL_BACKEND_URL__"
 
 if [ -z "${AGENT_IMAGE}" ] || [[ "${AGENT_IMAGE}" == "__"* ]]; then
-  AGENT_IMAGE="captone-agent:1.0.0"
+  if [ -n "${SELFHEAL_AGENT_IMAGE:-}" ]; then
+    AGENT_IMAGE="${SELFHEAL_AGENT_IMAGE}"
+  elif [[ "${CURRENT_CONTEXT}" == *"minikube"* ]] || [[ "${CURRENT_CONTEXT}" == *"docker"* ]]; then
+    AGENT_IMAGE="captone-agent:1.0.0"
+  else
+    AGENT_IMAGE="ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
+  fi
 fi
 
 if [ -z "${SERVER_URL}" ]; then

@@ -610,10 +610,10 @@ class AgentService:
         while self._is_running:
             node_disk_pct: Optional[float] = None
             try:
-                k8s_nodes = self.nodes_collector.list_nodes()
+                k8s_nodes = await asyncio.to_thread(self.nodes_collector.list_nodes)
                 if k8s_nodes and self.node_resource_collector.node_name not in [n.name for n in k8s_nodes if getattr(n, "name", None)]:
                     self.node_resource_collector.node_name = k8s_nodes[0].name
-                node_snapshot = self.node_resource_collector.collect_snapshot()
+                node_snapshot = await asyncio.to_thread(self.node_resource_collector.collect_snapshot)
                 node_disk_pct = node_snapshot.disk_usage_percent
                 await self.ws_client.send(NodeMetricsMessage(data=node_snapshot))
             except asyncio.CancelledError:
@@ -622,13 +622,17 @@ class AgentService:
                 logger.error("Error collecting/sending node resource metrics: %s", node_err)
 
             try:
-                pods = self.pods_collector.list_pods(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                pods = await asyncio.to_thread(
+                    self.pods_collector.list_pods,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                replicas = self.deployments_collector.get_replicas_map(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                replicas = await asyncio.to_thread(
+                    self.deployments_collector.get_replicas_map,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                nodes = self.nodes_collector.list_nodes()
+                nodes = await asyncio.to_thread(self.nodes_collector.list_nodes)
                 metrics = await self.metrics_manager.aggregate_metrics(
                     pods,
                     replicas,
@@ -655,10 +659,12 @@ class AgentService:
 
         while self._is_running:
             try:
-                pods = self.pods_collector.list_pods(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                pods = await asyncio.to_thread(
+                    self.pods_collector.list_pods,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                logs = self.logs_collector.collect_pod_logs(pods)
+                logs = await asyncio.to_thread(self.logs_collector.collect_pod_logs, pods)
                 for l in logs:
                     await self.ws_client.send(LogMessage(data=l))
             except asyncio.CancelledError:
@@ -676,16 +682,22 @@ class AgentService:
 
         while self._is_running:
             try:
-                events = self.events_collector.collect_events(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                events = await asyncio.to_thread(
+                    self.events_collector.collect_events,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                pod_anomalies = self.pods_collector.detect_pod_anomalies(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                pod_anomalies = await asyncio.to_thread(
+                    self.pods_collector.detect_pod_anomalies,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                dep_anomalies = self.deployments_collector.detect_deployment_anomalies(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                dep_anomalies = await asyncio.to_thread(
+                    self.deployments_collector.detect_deployment_anomalies,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                node_anomalies = self.nodes_collector.detect_node_anomalies()
+                node_anomalies = await asyncio.to_thread(self.nodes_collector.detect_node_anomalies)
                 for ev in (*events, *pod_anomalies, *dep_anomalies, *node_anomalies):
                     await self.ws_client.send(K8sEventMessage(data=ev))
             except asyncio.CancelledError:
@@ -703,14 +715,18 @@ class AgentService:
 
         while self._is_running:
             try:
-                nodes = self.nodes_collector.list_nodes_detail()
-                namespaces = self.nodes_collector.list_namespaces()
-                pods = self.pods_collector.list_pods_detail(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                nodes = await asyncio.to_thread(self.nodes_collector.list_nodes_detail)
+                namespaces = await asyncio.to_thread(self.nodes_collector.list_namespaces)
+                pods = await asyncio.to_thread(
+                    self.pods_collector.list_pods_detail,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
-                services = self.services_collector.list_services_detail()
-                deployments = self.deployments_collector.list_deployments_detail(
-                    self.config.K8S_NAMESPACE, self.config.MONITOR_ALL_NAMESPACES
+                services = await asyncio.to_thread(self.services_collector.list_services_detail)
+                deployments = await asyncio.to_thread(
+                    self.deployments_collector.list_deployments_detail,
+                    self.config.K8S_NAMESPACE,
+                    self.config.MONITOR_ALL_NAMESPACES,
                 )
                 if nodes or pods or services or deployments:
                     await self.ws_client.send(K8sInventoryMessage(data={

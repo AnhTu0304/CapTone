@@ -20,6 +20,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { telemetryService } from '../../../services/telemetryService';
+import { clusterService } from '../../../services/clusterService';
 import { K8sEventSeverityBadge } from '../../../components/dashboard/K8sEventSeverityBadge';
 import { EventDetailModal } from '../../../components/dashboard/EventDetailModal';
 
@@ -84,6 +85,7 @@ export const formatEventAge = (dateStr) => {
 
 export const EventsPage = () => {
   const { currentOrg, currentEnv, selectedCluster } = useDashboard();
+  const clusterId = selectedCluster?.id || selectedCluster?.name || currentEnv?.clusterId || currentEnv?.id || currentEnv?.cluster_id || undefined;
 
   // Filters state
   const [selectedType, setSelectedType] = useState('all');
@@ -119,6 +121,21 @@ export const EventsPage = () => {
   // Available namespaces for filter
   const [namespacesList, setNamespacesList] = useState(['default', 'kube-system', 'production', 'staging']);
 
+  // Dynamically load namespaces for the cluster
+  useEffect(() => {
+    if (!clusterId) return;
+    clusterService.getClusterNamespaces(clusterId, currentOrg?.id)
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const names = data.map((item) => (typeof item === 'string' ? item : item?.name)).filter(Boolean);
+          if (names.length > 0) {
+            setNamespacesList((prev) => Array.from(new Set([...prev, ...names])));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [clusterId, currentOrg?.id]);
+
   // Refs for race-condition prevention & abort controller
   const queryTokenRef = useRef(0);
   const abortControllerRef = useRef(null);
@@ -131,8 +148,6 @@ export const EventsPage = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-  const clusterId = selectedCluster?.id || selectedCluster?.name || currentEnv?.clusterId || currentEnv?.id || currentEnv?.cluster_id || undefined;
 
   // 2. Fetch events function
   const fetchEvents = useCallback(
@@ -173,6 +188,11 @@ export const EventsPage = () => {
           setEvents(fetchedEvents);
           if (res?.pagination) {
             setPagination(res.pagination);
+          }
+          // Tự động bổ sung namespace từ telemetry events thực tế
+          const eventNs = fetchedEvents.map((e) => e.namespace).filter(Boolean);
+          if (eventNs.length > 0) {
+            setNamespacesList((prev) => Array.from(new Set([...prev, ...eventNs])));
           }
         }
       } catch (err) {

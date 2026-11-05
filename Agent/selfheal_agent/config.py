@@ -100,7 +100,7 @@ class AgentConfig(BaseSettings):
         description="HTTP port for k8s liveness and readiness health probes",
     )
     QUEUE_MAX_SIZE: int = Field(
-        default=500,
+        default=2000,
         ge=1,
         description="Maximum buffer size for telemetry queue when disconnected",
     )

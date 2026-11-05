@@ -4,7 +4,7 @@ import '@testing-library/jest-dom';
 import { LoginPage } from './index';
 import AuthContext from '../../context/AuthContext';
 
-describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
+describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
@@ -32,7 +32,7 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
     expect(screen.getByRole('button', { name: /Đăng nhập với Google \/ Gmail/i })).toBeInTheDocument();
   });
 
-  test('2. Redirects user WITHOUT organization to /onboarding/organization after successful login', async () => {
+  test('2. Redirects user WITHOUT organization directly to /portal (Tầng Cá Nhân) after login', async () => {
     const handleNavigate = jest.fn();
     const mockLogin = jest.fn().mockResolvedValue({
       id: 'user-uuid-1',
@@ -52,18 +52,12 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
     });
 
-    expect(await screen.findByText(/Đăng nhập thành công!/i)).toBeInTheDocument();
-    expect(screen.getByText(/Đang chuyển hướng vào không gian làm việc của bạn/i)).toBeInTheDocument();
-
-    // Advance timer
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    expect(handleNavigate).toHaveBeenCalledWith('/onboarding/organization');
+    // Điều hướng trực tiếp về /portal, không hiển thị nút "Vào Bảng Điều Khiển Ngay"
+    expect(handleNavigate).toHaveBeenCalledWith('/portal');
+    expect(screen.queryByText(/Vào Bảng Điều Khiển Ngay/i)).not.toBeInTheDocument();
   });
 
-  test('3. Redirects user WITH existing organization to /dashboard after successful login', async () => {
+  test('3. Redirects user WITH existing organization directly to /portal after login', async () => {
     const handleNavigate = jest.fn();
     const mockLogin = jest.fn().mockResolvedValue({
       id: 'user-uuid-2',
@@ -83,16 +77,11 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
     });
 
-    expect(await screen.findByText(/Đăng nhập thành công!/i)).toBeInTheDocument();
-
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    expect(handleNavigate).toHaveBeenCalledWith('/dashboard');
+    expect(handleNavigate).toHaveBeenCalledWith('/portal');
+    expect(screen.queryByText(/Vào Bảng Điều Khiển Ngay/i)).not.toBeInTheDocument();
   });
 
-  test('4. Redirects ADMIN account to /admin even if no organization configured', async () => {
+  test('4. Redirects ADMIN account directly to /portal (Tầng Cá Nhân) after login', async () => {
     const handleNavigate = jest.fn();
     const mockLogin = jest.fn().mockResolvedValue({
       id: 'admin-uuid-2',
@@ -111,16 +100,11 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
     });
 
-    expect(await screen.findByText(/Đăng nhập thành công!/i)).toBeInTheDocument();
-
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    expect(handleNavigate).toHaveBeenCalledWith('/admin');
+    expect(handleNavigate).toHaveBeenCalledWith('/portal');
+    expect(screen.queryByText(/Vào Bảng Điều Khiển Ngay/i)).not.toBeInTheDocument();
   });
 
-  test('5. Redirects SUPER_ADMIN account to /admin and allows instant click', async () => {
+  test('5. Redirects SUPER_ADMIN account directly to /portal immediately', async () => {
     const handleNavigate = jest.fn();
     const mockLogin = jest.fn().mockResolvedValue({
       id: 'superadmin-uuid-3',
@@ -138,10 +122,8 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
     });
 
-    const instantBtn = await screen.findByRole('button', { name: /Vào Bảng Điều Khiển Ngay/i });
-    fireEvent.click(instantBtn);
-
-    expect(handleNavigate).toHaveBeenCalledWith('/admin');
+    expect(handleNavigate).toHaveBeenCalledWith('/portal');
+    expect(screen.queryByText(/Vào Bảng Điều Khiển Ngay/i)).not.toBeInTheDocument();
   });
 
   test('6. Displays error alert when credentials are invalid', async () => {
@@ -161,7 +143,7 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
     });
   });
 
-  test('7. Triggers Google Sign-In and redirects to /onboarding/organization when user has no organization', async () => {
+  test('7. Triggers Google Sign-In and redirects directly to /portal', async () => {
     const handleNavigate = jest.fn();
     const mockLoginWithGoogle = jest.fn().mockResolvedValue({
       id: 'google-user-1',
@@ -201,12 +183,7 @@ describe('LoginPage Admin, User & Onboarding Redirection Suite', () => {
     });
 
     expect(mockLoginWithGoogle).toHaveBeenCalledWith('mock_google_token');
-    expect(await screen.findByText(/Đăng nhập thành công!/i)).toBeInTheDocument();
-
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    expect(handleNavigate).toHaveBeenCalledWith('/onboarding/organization');
+    expect(handleNavigate).toHaveBeenCalledWith('/portal');
+    expect(screen.queryByText(/Vào Bảng Điều Khiển Ngay/i)).not.toBeInTheDocument();
   });
 });

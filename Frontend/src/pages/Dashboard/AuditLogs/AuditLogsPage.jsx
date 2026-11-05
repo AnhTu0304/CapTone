@@ -28,7 +28,8 @@ import {
   Bot,
   UserCheck,
   X,
-  Code2
+  Code2,
+  BarChart2
 } from 'lucide-react';
 
 // Helpers định dạng ngày tháng cục bộ an toàn theo múi giờ client
@@ -82,6 +83,7 @@ export const AuditLogsPage = () => {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [showChart, setShowChart] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const exportMenuRef = useRef(null);
 
@@ -1213,18 +1215,20 @@ export const AuditLogsPage = () => {
         </div>
       </div>
 
-      {/* 4. Distribution Chart (Được lọc đồng thời theo bộ lọc thời gian và vai trò) */}
-      <AuditDistributionChart
-        height={230}
-        title={`Phân Bổ Sự Kiện Kiểm Toán (${currentFilterLabel})`}
-        subtitle="Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật"
-        logs={filteredLogs}
-        fallbackData={stats?.days}
-        timeFilterMode={timeFilterMode}
-        selectedDate={selectedDate}
-        selectedMonth={selectedMonth}
-        selectedYear={selectedYear}
-      />
+      {/* 4. Distribution Chart (Mặc định ẩn để ưu tiên hiển thị Sổ cái ngay tầm mắt; có nút bấm bật khi cần) */}
+      {showChart && (
+        <AuditDistributionChart
+          height={230}
+          title={`Phân Bổ Sự Kiện Kiểm Toán (${currentFilterLabel})`}
+          subtitle="Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật"
+          logs={filteredLogs}
+          fallbackData={stats?.days}
+          timeFilterMode={timeFilterMode}
+          selectedDate={selectedDate}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+        />
+      )}
 
       {/* 5. Audit Log Table */}
       <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
@@ -1237,9 +1241,33 @@ export const AuditLogsPage = () => {
               Mỗi bản ghi được ký mã hóa và ghi chép bất biến theo thứ tự thời gian tuyến tính
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>
-            <Lock size={14} />
-            <span>Toàn vẹn mật mã: 100% Khớp</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setShowChart((prev) => !prev)}
+              title={showChart ? 'Thu gọn biểu đồ phân bổ' : 'Mở biểu đồ phân bổ sự kiện'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: showChart ? '1px solid #93C5FD' : '1px solid var(--dash-border)',
+                backgroundColor: showChart ? '#EFF6FF' : '#FFFFFF',
+                color: showChart ? '#1D4ED8' : 'var(--dash-text-secondary)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <BarChart2 size={14} />
+              <span>{showChart ? 'Ẩn Biểu Đồ Phân Bổ' : 'Xem Phân Bổ Sự Kiện'}</span>
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#059669', fontWeight: 700 }}>
+              <Lock size={14} />
+              <span>Toàn vẹn mật mã: 100% Khớp</span>
+            </div>
           </div>
         </div>
 

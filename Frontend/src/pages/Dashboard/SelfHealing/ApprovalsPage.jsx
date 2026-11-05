@@ -5,12 +5,14 @@ import { PermissionGate } from '../../../components/common/PermissionGate';
 import { PERMISSIONS } from '../../../hooks/usePermissions';
 import { useToast } from '../../../context/ToastContext';
 import { selfHealingService } from '../../../services/selfHealingService';
+import telemetryService from '../../../services/telemetryService';
 import RootCauseModal from '../Incidents/RootCauseModal';
 import {
   CheckCircle2,
   FileCode,
   Mail,
   ShieldCheck,
+  Sparkles,
   Check,
   X,
   RefreshCw,
@@ -27,7 +29,7 @@ import {
 } from 'lucide-react';
 
 export const ApprovalsPage = () => {
-  const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh } = useDashboard();
+  const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh, selectedCluster } = useDashboard();
   const { success: toastSuccess, warning: toastWarning } = useToast();
   const getQueryTarget = () => {
     try {
@@ -47,6 +49,7 @@ export const ApprovalsPage = () => {
   const [clusterFilter, setClusterFilter] = useState('all');
   const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isWsConnected, setIsWsConnected] = useState(false);
 
   const [approvedIds, setApprovedIds] = useState([]);
   const [rejectedIds, setRejectedIds] = useState([]);
@@ -115,7 +118,8 @@ export const ApprovalsPage = () => {
       title: cleanTitle,
       targetName,
       target: targetName,
-      clusterName: item.cluster_name || "ai",
+      clusterName: item.cluster_name || selectedCluster?.name || currentEnv?.clusterName || "các",
+      clusterId: item.cluster_id || selectedCluster?.id || currentEnv?.clusterId || currentEnv?.id,
       rootCauseType: rootCause,
       rootCauseDesc: item.root_cause_description || `AI phân tích viễn trắc ghi nhận sự cố trên dịch vụ ${targetName}.`,
       confidenceScore: confidence,
@@ -183,6 +187,36 @@ export const ApprovalsPage = () => {
   useEffect(() => {
     fetchApprovals(currentPage);
   }, [fetchApprovals, currentPage, searchTerm, clusterFilter, isRefreshing, currentOrg?.id, currentEnv?.id, currentEnv?.cluster]);
+
+  // ⚡ Lắng nghe WebSocket Real-time: Tự động cập nhật danh sách phê duyệt khi có sự kiện mới
+  useEffect(() => {
+    const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
+    const unsubscribe = telemetryService.subscribeWebSocket(
+      'sme-order-service',
+      (payload) => {
+        if (!payload || !payload.type) return;
+
+        if (
+          payload.type === 'approval_created' ||
+          payload.type === 'approval_status_changed' ||
+          payload.type === 'healing_action_triggered' ||
+          payload.type === 'healing_action_completed' ||
+          payload.type === 'healing_action_aborted'
+        ) {
+          fetchApprovals(currentPage);
+        }
+      },
+      (connected) => {
+        setIsWsConnected(connected);
+      },
+      activeClusterId && !activeClusterId.startsWith('org-') ? activeClusterId : null
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchApprovals, currentPage, currentEnv?.clusterId, currentEnv?.id]);
+
 
   const handleApprove = async (id) => {
     const req = approvalRequests.find((r) => r.id === id);
@@ -259,14 +293,25 @@ export const ApprovalsPage = () => {
     setEvidenceIncident({
       id: req.incidentId || req.rawId,
       rawId: req.incidentId || req.rawId,
+      incidentId: req.incidentId,
+      approvalId: req.approvalId || req.id,
       title: req.title,
       service: req.targetName,
+      target_name: req.targetName,
+      cluster: req.clusterName || selectedCluster?.name || 'các',
+      cluster_name: req.clusterName || selectedCluster?.name || 'các',
+      cluster_id: req.clusterId || selectedCluster?.id,
       severity: req.urgency,
       confidence: req.confidenceScore,
       primaryRisk: req.rootCauseType,
+      rootCauseType: req.rootCauseType,
+      rootCauseDescription: req.rootCauseDesc,
       recommendationAction: req.actionCode,
+      recommendationReason: req.aiReasoning,
+      aiReasoning: req.aiReasoning,
       detectedAt: req.rawRequestedAt,
       analysisResult: req.actionResult,
+      fromApprovals: true,
     });
   };
 
@@ -404,6 +449,32 @@ export const ApprovalsPage = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '20px',
+              backgroundColor: isWsConnected ? '#ECFDF5' : '#F1F5F9',
+              color: isWsConnected ? '#065F46' : '#64748B',
+              border: `1px solid ${isWsConnected ? '#A7F3D0' : '#CBD5E1'}`,
+              fontSize: '0.75rem',
+              fontWeight: 600,
+            }}
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: isWsConnected ? '#10B981' : '#94A3B8',
+                boxShadow: isWsConnected ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
+                display: 'inline-block',
+              }}
+            />
+            <span>{isWsConnected ? 'Thời gian thực (WebSocket Push)' : 'Đang đồng bộ...'}</span>
+          </div>
           <button
             type="button"
             onClick={triggerRefresh}
@@ -434,9 +505,7 @@ export const ApprovalsPage = () => {
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
               Yêu Cầu Chờ Ký Duyệt ({totalCount})
             </h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-              Vui lòng kiểm tra mã thay đổi diff, nguyên nhân gốc rễ RCA và phạm vi tác động trước khi bấm phê duyệt
-            </p>
+            
           </div>
 
           {/* Quick Search & Filter bar */}
@@ -571,35 +640,36 @@ export const ApprovalsPage = () => {
                   key={req.id}
                   style={{
                     position: 'relative',
-                    padding: '12px 16px',
+                    padding: '16px 20px',
                     backgroundColor: isApproved ? '#F0FDF4' : isRejected ? '#FEF2F2' : '#FFFFFF',
-                    border: isApproved ? '1px solid #86EFAC' : isRejected ? '1px solid #FECACA' : '1px solid var(--dash-border)',
-                    borderLeft: isApproved ? '4px solid #16A34A' : isRejected ? '4px solid #DC2626' : '4px solid #F59E0B',
-                    borderRadius: '8px',
-                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+                    border: isApproved ? '1px solid #86EFAC' : isRejected ? '1px solid #FECACA' : '1px solid #E2E8F0',
+                    borderLeft: isApproved ? '5px solid #16A34A' : isRejected ? '5px solid #DC2626' : '5px solid #F59E0B',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 6px -1px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '8px',
+                    gap: '10px',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  {/* Thanh Tiêu Đề Gọn Gàng: Hành Động, Dịch Vụ, Cụm & Mốc Thời Gian */}
+                  {/* Hàng 1: Thẻ thông tin hành động, dịch vụ, cụm và thời gian */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '5px',
-                          padding: '3px 10px',
+                          gap: '6px',
+                          padding: '4px 10px',
                           borderRadius: '6px',
                           backgroundColor: '#EEF2FF',
-                          color: '#4F46E5',
+                          color: '#4338CA',
                           border: '1px solid #C7D2FE',
                           fontWeight: 700,
-                          fontSize: '0.75rem',
+                          fontSize: '0.78125rem',
                         }}
                       >
-                        <Zap size={13} />
+                        <Zap size={14} color="#4F46E5" />
                         <span>{req.actionFriendlyName || req.actionName}</span>
                       </span>
 
@@ -607,18 +677,18 @@ export const ApprovalsPage = () => {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '5px',
-                          padding: '3px 10px',
+                          gap: '6px',
+                          padding: '4px 10px',
                           borderRadius: '6px',
                           backgroundColor: '#F8FAFC',
                           color: '#1E293B',
                           border: '1px solid #E2E8F0',
-                          fontSize: '0.75rem',
+                          fontSize: '0.78125rem',
                           fontWeight: 600,
                         }}
                       >
                         <Server size={13} color="#64748B" />
-                        <span>Dịch vụ: <strong>{req.targetName}</strong></span>
+                        <span>Dịch vụ: <strong style={{ color: '#0F172A' }}>{req.targetName}</strong></span>
                       </span>
 
                       <span
@@ -626,17 +696,17 @@ export const ApprovalsPage = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '5px',
-                          padding: '3px 10px',
+                          padding: '4px 10px',
                           borderRadius: '6px',
-                          backgroundColor: '#F1F5F9',
+                          backgroundColor: '#F8FAFC',
                           color: '#475569',
-                          border: '1px solid #CBD5E1',
+                          border: '1px solid #E2E8F0',
                           fontSize: '0.75rem',
                           fontWeight: 600,
                         }}
                       >
                         <Layers size={13} color="#64748B" />
-                        <span>Cụm: <strong>{req.clusterName || 'ai'}</strong></span>
+                        <span>Cụm: <strong>{req.clusterName || 'các'}</strong></span>
                       </span>
 
                       <span
@@ -644,12 +714,12 @@ export const ApprovalsPage = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
-                          padding: '3px 8px',
+                          padding: '4px 9px',
                           borderRadius: '6px',
-                          backgroundColor: req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#FFF1F2' : '#FEF3C7',
-                          color: req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#E11D48' : '#B45309',
-                          border: `1px solid ${req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#FDA4AF' : '#FDE68A'}`,
-                          fontSize: '0.71875rem',
+                          backgroundColor: req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#FEF2F2' : '#FFFBEB',
+                          color: req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#DC2626' : '#B45309',
+                          border: `1px solid ${req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#FECACA' : '#FDE68A'}`,
+                          fontSize: '0.75rem',
                           fontWeight: 700,
                         }}
                       >
@@ -657,75 +727,87 @@ export const ApprovalsPage = () => {
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.71875rem', color: '#64748B' }}>
-                      <span style={{ padding: '2px 6px', backgroundColor: '#F1F5F9', borderRadius: '4px', fontFamily: 'var(--font-mono)' }}>{req.id}</span>
-                      {req.actionShortId && (
-                        <span
-                          style={{
-                            padding: '2px 6px',
-                            backgroundColor: '#EFF6FF',
-                            color: '#1D4ED8',
-                            borderRadius: '4px',
-                            border: '1px solid #BFDBFE',
-                            fontSize: '0.6875rem',
-                            fontWeight: 700,
-                          }}
-                          title="Mã hành động tự phục hồi tương ứng trong Lịch sử phục hồi"
-                        >
-                          Hành động: <span style={{ fontFamily: 'var(--font-mono)' }}>{req.actionShortId}</span>
-                        </span>
-                      )}
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={11} />
-                        <span>{req.timestamp}</span>
-                      </span>
+                    {/* Mốc thời gian gọn gàng */}
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '0.75rem',
+                        color: '#64748B',
+                        backgroundColor: '#F8FAFC',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #E2E8F0',
+                      }}
+                    >
+                      <Clock size={12} color="#94A3B8" />
+                      <span>{req.timestamp}</span>
                     </div>
                   </div>
 
-                  {/* Chi Tiết Sự Cố & Đề Xuất Tự Lành */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.35 }}>
+                  {/* Hàng 2: Chi tiết sự cố */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.4 }}>
                       {req.cleanTitle}
                     </div>
 
+                    {/* Khung hành động tự lành nổi bật, trang nhã */}
                     <div
                       style={{
                         fontSize: '0.8125rem',
                         color: '#1E293B',
-                        backgroundColor: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        borderLeft: '3px solid #2563EB',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        lineHeight: 1.45,
+                        backgroundColor: '#F0F9FF',
+                        border: '1px solid #BAE6FD',
+                        borderLeft: '4px solid #0284C7',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        lineHeight: 1.5,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '8px',
                       }}
                     >
-                      <strong style={{ color: '#2563EB' }}>Hành động tự lành: </strong>
-                      <span>{req.aiReasoning}</span>
+                      <div style={{ minWidth: '16px', marginTop: '2px' }}>
+                        <Zap size={14} color="#0284C7" />
+                      </div>
+                      <div>
+                        <strong style={{ color: '#0369A1', fontWeight: 700 }}>Hành động tự lành: </strong>
+                        <span>{req.aiReasoning}</span>
+                      </div>
                     </div>
 
+                    {/* Hàng 3: Chính sách & Độ tin cậy AI */}
                     <div
                       style={{
                         display: 'flex',
                         flexWrap: 'wrap',
                         alignItems: 'center',
                         gap: '12px',
-                        fontSize: '0.71875rem',
+                        fontSize: '0.75rem',
                         color: '#64748B',
                         paddingTop: '2px',
                       }}
                     >
-                      <span>Chính sách: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{req.policyName}</strong></span>
-                      <span>•</span>
-                      <span>Độ tin cậy AI: <strong style={{ color: '#059669', fontFamily: 'var(--font-mono)' }}>{req.confidenceScore}%</strong></span>
-                      <span>•</span>
-                      <span>Người đề xuất: <strong style={{ color: '#334155' }}>{req.requestedBy}</strong></span>
-                      <span>•</span>
-                      <span>Phạm vi: <strong style={{ color: '#334155' }}>{req.blastRadius}</strong></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <ShieldCheck size={14} color="#059669" />
+                        <span>Chính sách:</span>
+                        <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)', backgroundColor: '#F1F5F9', padding: '1px 7px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+                          {req.policyName}
+                        </strong>
+                      </span>
+                      <span style={{ color: '#CBD5E1' }}>•</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <Sparkles size={13} color="#D97706" />
+                        <span>Độ tin cậy AI:</span>
+                        <strong style={{ color: '#059669', fontWeight: 700 }}>
+                          {req.confidenceScore}%
+                        </strong>
+                      </span>
                     </div>
                   </div>
 
-                  {/* Hàng 4: Hàng nút thao tác */}
+                  {/* Hàng 4: Hàng nút thao tác phê duyệt & xem bằng chứng */}
                   <div
                     style={{
                       display: 'flex',
@@ -734,11 +816,11 @@ export const ApprovalsPage = () => {
                       flexWrap: 'wrap',
                       gap: '8px',
                       marginTop: '4px',
-                      paddingTop: '8px',
+                      paddingTop: '10px',
                       borderTop: '1px dashed #E2E8F0',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       {/* Nút Xem Bằng Chứng RCA */}
                       <button
                         type="button"
@@ -746,19 +828,20 @@ export const ApprovalsPage = () => {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '5px',
-                          padding: '5px 12px',
-                          backgroundColor: '#F8FAFC',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          backgroundColor: '#FFFFFF',
                           color: '#334155',
                           border: '1px solid #CBD5E1',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
+                          borderRadius: '7px',
+                          fontSize: '0.78125rem',
                           fontWeight: 600,
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
                         }}
                       >
-                        <Eye size={13} />
+                        <Eye size={14} color="#475569" />
                         <span>Xem bằng chứng RCA</span>
                       </button>
 
@@ -769,23 +852,22 @@ export const ApprovalsPage = () => {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '5px',
-                          padding: '5px 12px',
+                          gap: '6px',
+                          padding: '6px 14px',
                           backgroundColor: '#FFFFFF',
-                          border: '1px solid var(--dash-border)',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          color: 'var(--dash-primary)',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '7px',
+                          fontSize: '0.78125rem',
+                          fontWeight: 600,
+                          color: '#0F766E',
                           cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
                         }}
                       >
-                        <FileCode size={13} />
+                        <FileCode size={14} color="#0F766E" />
                         <span>Xem trước Diff (YAML)</span>
                       </button>
-
-
-
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -808,19 +890,20 @@ export const ApprovalsPage = () => {
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '5px',
-                                padding: '6px 14px',
-                                backgroundColor: 'var(--dash-primary)',
+                                gap: '6px',
+                                padding: '7px 18px',
+                                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                                 border: 'none',
-                                borderRadius: '6px',
+                                borderRadius: '7px',
                                 color: '#FFFFFF',
-                                fontSize: '0.75rem',
+                                fontSize: '0.78125rem',
                                 fontWeight: 700,
                                 cursor: 'pointer',
-                                boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                                transition: 'all 0.15s ease',
                               }}
                             >
-                              <Check size={13} />
+                              <Check size={14} />
                               <span>Phê Duyệt Ngay</span>
                             </button>
                           </PermissionGate>
@@ -830,14 +913,19 @@ export const ApprovalsPage = () => {
                               type="button"
                               onClick={() => handleReject(req.id)}
                               style={{
-                                padding: '4px 6px',
-                                background: 'none',
+                                padding: '6px 12px',
+                                background: 'transparent',
                                 border: 'none',
-                                color: '#EF4444',
-                                fontSize: '0.6875rem',
+                                color: '#DC2626',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
                                 cursor: 'pointer',
-                                textDecoration: 'underline',
+                                textDecoration: 'none',
+                                borderRadius: '6px',
+                                transition: 'background-color 0.15s ease',
                               }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                             >
                               Từ chối yêu cầu này
                             </button>

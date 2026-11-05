@@ -54,11 +54,18 @@ export const OverviewPage = () => {
 
   // Overview Statistics Cluster API State [S5][PBI19]
   const [overviewStats, setOverviewStats] = useState(null);
+  const overviewStatsRef = useRef(null);
+  useEffect(() => {
+    overviewStatsRef.current = overviewStats;
+  }, [overviewStats]);
+
   const [isStatsLoading, setIsStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState(null);
 
-  const fetchOverviewStats = useCallback(async () => {
-    setIsStatsLoading(true);
+  const fetchOverviewStats = useCallback(async (isSilent = false) => {
+    if (!isSilent && !overviewStatsRef.current) {
+      setIsStatsLoading(true);
+    }
     setStatsError(null);
     try {
       const orgId = currentOrg?.id;
@@ -85,6 +92,10 @@ export const OverviewPage = () => {
   // Realtime Telemetry & Live Cluster State
   const [telemetry, setTelemetry] = useState(null);
   const [telemetrySequence, setTelemetrySequence] = useState([]);
+  const telemetrySequenceRef = useRef([]);
+  useEffect(() => {
+    telemetrySequenceRef.current = telemetrySequence;
+  }, [telemetrySequence]);
   const [clusterInfo, setClusterInfo] = useState(null);
   const [isWsLive, setIsWsLive] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState([]);
@@ -106,7 +117,7 @@ export const OverviewPage = () => {
   ), [currentEnv?.agentStatus, clusterInfo?.status, clusterInfo?.nodes]);
 
   // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn với race-condition guard
-  const loadClusterTrend = useCallback(async (range) => {
+  const loadClusterTrend = useCallback(async (range, isSilent = false) => {
     const reqId = ++activeChartRequestRef.current;
     setChartTimeRange(range);
     setChartError(null);
@@ -117,7 +128,10 @@ export const OverviewPage = () => {
       return;
     }
 
-    setIsChartLoading(true);
+    // Chỉ bật loading toàn màn hình nếu chưa có dữ liệu trong biểu đồ
+    if (!isSilent && telemetrySequenceRef.current.length === 0) {
+      setIsChartLoading(true);
+    }
     const controller = new AbortController();
 
     try {
@@ -190,7 +204,7 @@ export const OverviewPage = () => {
   }, [fetchClusterInfo]);
 
   // Auto-Refresh background interval (30s)
-  const autoRefreshInterval = 30;
+  const autoRefreshInterval = 60;
   const isAutoRefreshActive = true;
   const isPollingBusyRef = useRef(false);
 
@@ -200,9 +214,9 @@ export const OverviewPage = () => {
     isPollingBusyRef.current = true;
     try {
       await Promise.allSettled([
-        fetchOverviewStats(),
+        fetchOverviewStats(true),
         fetchClusterInfo(),
-        loadClusterTrend(chartTimeRange),
+        loadClusterTrend(chartTimeRange, true),
         refreshPendingApprovals ? refreshPendingApprovals() : Promise.resolve(),
       ]);
       const now = new Date();
@@ -255,10 +269,29 @@ export const OverviewPage = () => {
       return;
     }
 
+    // Dynamic service ID based on real pods in the cluster, fallback to first pod or sme-order-service
+    const targetServiceId = (rawPods && rawPods.length > 0)
+      ? (rawPods.find((p) => p.workload_name || p.name)?.workload_name || rawPods[0]?.name || 'sme-order-service')
+      : 'sme-order-service';
+
     // Tải snapshot REST ban đầu cho cụm Online
-    telemetryService.getLiveSummary('sme-order-service').then((data) => {
+    telemetryService.getLiveSummary(targetServiceId).then((data) => {
       if (isMounted && data) {
-        if (data.latest_point) setTelemetry(data.latest_point);
+        setTelemetry((prev) => {
+          const next = { ...prev, ...(data.latest_point || {}) };
+          if (data.latest_node_metric) {
+            next.node_cpu_percent = Number(data.latest_node_metric.cpu_usage_percent);
+            next.node_ram_percent = Number(data.latest_node_metric.ram_usage_percent);
+            next.node_cpu_cores = Number(data.latest_node_metric.cpu_cores);
+            if (data.latest_node_metric.ram_used_bytes) {
+              next.node_ram_gb = (Number(data.latest_node_metric.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2);
+            }
+            if (data.latest_node_metric.disk_usage_percent !== undefined) {
+              next.disk = Number(data.latest_node_metric.disk_usage_percent);
+            }
+          }
+          return next;
+        });
         if (Array.isArray(data.sequence) && data.sequence.length > 0) setTelemetrySequence(data.sequence);
         if (Array.isArray(data.incidents)) setActiveIncidents(data.incidents);
         if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
@@ -268,18 +301,36 @@ export const OverviewPage = () => {
 
     // Lắng nghe luồng WebSocket trực tiếp
     const unsubscribe = telemetryService.subscribeWebSocket(
-      'sme-order-service',
+      targetServiceId,
       (payload) => {
         if (!isMounted || !payload) return;
 
         if (payload.type === 'initial_state' || payload.type === 'live_summary' || payload.type === 'live_pulse') {
           const data = payload.data;
           if (data) {
-            if (data.latest_point) {
+            if (data.latest_point || data.latest_node_metric) {
               setTelemetry((prev) => {
                 if (prev?.cpu !== undefined) setPrevCpu(Number(prev.cpu));
                 if (prev?.ram !== undefined) setPrevRam(Number(prev.ram));
-                return data.latest_point;
+                const merged = { ...prev };
+                if (data.latest_point) {
+                  merged.cpu = Number(data.latest_point.cpu ?? merged.cpu ?? 0);
+                  merged.ram = Number(data.latest_point.ram ?? merged.ram ?? 0);
+                  if (data.latest_point.disk !== undefined) merged.disk = Number(data.latest_point.disk);
+                  if (data.latest_point.latency !== undefined) merged.latency = Number(data.latest_point.latency);
+                }
+                if (data.latest_node_metric) {
+                  merged.node_cpu_percent = Number(data.latest_node_metric.cpu_usage_percent);
+                  merged.node_ram_percent = Number(data.latest_node_metric.ram_usage_percent);
+                  merged.node_cpu_cores = Number(data.latest_node_metric.cpu_cores);
+                  if (data.latest_node_metric.ram_used_bytes) {
+                    merged.node_ram_gb = (Number(data.latest_node_metric.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2);
+                  }
+                  if (data.latest_node_metric.disk_usage_percent !== undefined) {
+                    merged.disk = Number(data.latest_node_metric.disk_usage_percent);
+                  }
+                }
+                return merged;
               });
             }
             // Chi nap sequence ban dau khi telemetrySequence dang hoan toan rong
@@ -291,28 +342,23 @@ export const OverviewPage = () => {
             if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
             setLastDataTimestamp(new Date(payload.timestamp || Date.now()).toLocaleTimeString());
           }
-        } else if ((payload.type === 'raw_metric' || payload.type === 'metrics' || payload.type === 'node_metrics') && payload.data) {
+        } else if (payload.type === 'node_metrics' && payload.data) {
+          // THÔNG SỐ TOÀN CỤM MÁY CHỦ (Từ eBPF / NodeResourceCollector của Agent)
           const raw = payload.data;
           setIsDataStale(false);
-          const cpuVal = raw.cpu_usage_percent !== undefined ? Number(raw.cpu_usage_percent) : raw.cpu !== undefined ? Number(raw.cpu) : undefined;
-          const ramVal = raw.ram_usage_percent !== undefined ? Number(raw.ram_usage_percent) : raw.ram !== undefined ? Number(raw.ram) : undefined;
+          const nodeCpu = raw.cpu_usage_percent !== undefined ? Number(raw.cpu_usage_percent) : undefined;
+          const nodeRam = raw.ram_usage_percent !== undefined ? Number(raw.ram_usage_percent) : undefined;
 
-          setTelemetry((prev) => {
-            if (prev?.cpu !== undefined) setPrevCpu(Number(prev.cpu));
-            if (prev?.ram !== undefined) setPrevRam(Number(prev.ram));
-            return {
-              ...prev,
-              cpu: cpuVal !== undefined ? cpuVal : prev?.cpu,
-              ram: ramVal !== undefined ? ramVal : prev?.ram,
-              disk: raw.disk !== undefined ? Number(raw.disk) : prev?.disk,
-              latency: raw.latency !== undefined ? Number(raw.latency) : prev?.latency,
-              node_cpu_percent: raw.cpu_usage_percent !== undefined ? Number(raw.cpu_usage_percent) : prev?.node_cpu_percent,
-              node_ram_percent: raw.ram_usage_percent !== undefined ? Number(raw.ram_usage_percent) : prev?.node_ram_percent,
-              node_cpu_cores: raw.cpu_cores !== undefined ? Number(raw.cpu_cores) : prev?.node_cpu_cores,
-              node_ram_gb: raw.ram_used_bytes !== undefined ? (Number(raw.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2) : prev?.node_ram_gb,
-            };
-          });
-          // Chi cap nhat chuoi thoi gian khi o che do xem live 15 phut
+          setTelemetry((prev) => ({
+            ...prev,
+            node_cpu_percent: nodeCpu !== undefined ? nodeCpu : prev?.node_cpu_percent,
+            node_ram_percent: nodeRam !== undefined ? nodeRam : prev?.node_ram_percent,
+            node_cpu_cores: raw.cpu_cores !== undefined ? Number(raw.cpu_cores) : prev?.node_cpu_cores,
+            node_ram_gb: raw.ram_used_bytes !== undefined ? (Number(raw.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2) : prev?.node_ram_gb,
+            disk: raw.disk_usage_percent !== undefined ? Number(raw.disk_usage_percent) : prev?.disk,
+          }));
+
+          // Đồng thời cập nhật Biểu đồ Tài nguyên Cụm máy chủ (CPU & RAM)
           if (chartTimeRangeRef.current === '15m') {
             setTelemetrySequence((prevSeq) => {
               if (!prevSeq || prevSeq.length === 0) return prevSeq;
@@ -321,15 +367,14 @@ export const OverviewPage = () => {
               const lastPt = prevSeq[prevSeq.length - 1];
               const lastPtMs = lastPt.time_bucket ? new Date(lastPt.time_bucket).getTime() : (lastPt.timestamp || 0);
 
-              // Neu diem gan nhat cach chua toi 3 giay, cap nhat tai cho diem cuoi tranh lam nhay giat truc hoanh
               if (nowMs - lastPtMs < 3000) {
                 const updated = [...prevSeq];
                 updated[updated.length - 1] = {
                   ...lastPt,
                   time_bucket: now.toISOString(),
                   timestamp: nowMs,
-                  cpu: cpuVal !== undefined ? cpuVal : lastPt.cpu,
-                  ram: ramVal !== undefined ? ramVal : lastPt.ram,
+                  cpu: nodeCpu !== undefined ? nodeCpu : lastPt.cpu,
+                  ram: nodeRam !== undefined ? nodeRam : lastPt.ram,
                   rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : lastPt.rawRamMb,
                 };
                 return updated;
@@ -340,15 +385,11 @@ export const OverviewPage = () => {
                 timestamp: nowMs,
                 time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                 fullTime: `${now.toLocaleTimeString('vi-VN')} (${now.toLocaleDateString('vi-VN')})`,
-                cpu: cpuVal !== undefined ? cpuVal : 0,
-                ram: ramVal !== undefined ? ramVal : 0,
-                rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : Number(raw.rawRamMb || 0),
-                disk: Number(raw.disk !== undefined ? raw.disk : 0),
-                latency: Number(raw.latency !== undefined ? raw.latency : 0),
-                request_rate: Number(raw.request_rate || 0),
-                http_5xx_rate: Number(raw.http_5xx_rate || 0),
-                pod_restart_count: Number(raw.pod_restart_count || 0),
-                replica_count: Number(raw.replica_count || 1),
+                cpu: nodeCpu !== undefined ? nodeCpu : (lastPt?.cpu || 0),
+                ram: nodeRam !== undefined ? nodeRam : (lastPt?.ram || 0),
+                rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : Number(lastPt?.rawRamMb || 0),
+                disk: Number(raw.disk_usage_percent !== undefined ? raw.disk_usage_percent : (lastPt?.disk || 0)),
+                latency: Number(lastPt?.latency || 0),
               };
 
               if (prevSeq.length >= 60) {
@@ -358,10 +399,38 @@ export const OverviewPage = () => {
             });
           }
           setLastDataTimestamp(new Date().toLocaleTimeString());
+        } else if ((payload.type === 'raw_metric' || payload.type === 'metrics') && payload.data) {
+          // THÔNG SỐ POD NGHIỆP VỤ (APM microservice con)
+          const raw = payload.data;
+          setIsDataStale(false);
+          const podCpu = raw.cpu !== undefined ? Number(raw.cpu) : undefined;
+          const podRam = raw.ram !== undefined ? Number(raw.ram) : undefined;
+
+          setTelemetry((prev) => {
+            if (prev?.cpu !== undefined) setPrevCpu(Number(prev.cpu));
+            if (prev?.ram !== undefined) setPrevRam(Number(prev.ram));
+            return {
+              ...prev,
+              cpu: podCpu !== undefined ? podCpu : prev?.cpu,
+              ram: podRam !== undefined ? podRam : prev?.ram,
+              latency: raw.latency !== undefined ? Number(raw.latency) : prev?.latency,
+              request_rate: raw.request_rate !== undefined ? Number(raw.request_rate) : prev?.request_rate,
+              http_5xx_rate: raw.http_5xx_rate !== undefined ? Number(raw.http_5xx_rate) : prev?.http_5xx_rate,
+            };
+          });
+          setLastDataTimestamp(new Date().toLocaleTimeString());
         } else if (payload.type === 'incident' && payload.data) {
           setActiveIncidents((prev) => [payload.data, ...prev.slice(0, 9)]);
         } else if (payload.type === 'ai_recommendation' && payload.data) {
           setAiRecommendations((prev) => [payload.data, ...prev.slice(0, 9)]);
+        } else if (
+          payload.type === 'approval_created' ||
+          payload.type === 'approval_status_changed' ||
+          payload.type === 'healing_action_triggered'
+        ) {
+          if (refreshPendingApprovals) {
+            refreshPendingApprovals();
+          }
         }
       },
       (connected) => {
@@ -435,22 +504,37 @@ export const OverviewPage = () => {
   );
   const ramDiff = prevRam !== null ? (ramVal - prevRam).toFixed(1) : '0.0';
 
-  // Live Node Cluster metrics (Của chung Cụm Máy Chủ)
-  const nodeCpuPercent = overviewStats?.resource_usage?.avg_cpu_percent !== undefined
+  // Mức trung bình 1 giờ (Historical 1h average from API)
+  const avgCpu1h = overviewStats?.resource_usage?.avg_cpu_percent !== undefined
     ? Number(overviewStats.resource_usage.avg_cpu_percent).toFixed(1)
-    : (telemetry?.node_cpu_percent !== undefined && telemetry.node_cpu_percent !== null && Number(telemetry.node_cpu_percent) > 0
-        ? Number(telemetry.node_cpu_percent).toFixed(1)
-        : '0.0');
-
-  const nodeCpuCores = telemetry?.node_cpu_cores !== undefined && telemetry.node_cpu_cores !== null && Number(telemetry.node_cpu_cores) > 0
-    ? Number(telemetry.node_cpu_cores).toFixed(2)
-    : ((Number(nodeCpuPercent) / 100) * totalCpuCores).toFixed(2);
-
-  const nodeRamPercent = overviewStats?.resource_usage?.avg_ram_percent !== undefined
+    : null;
+  const avgRam1h = overviewStats?.resource_usage?.avg_ram_percent !== undefined
     ? Number(overviewStats.resource_usage.avg_ram_percent).toFixed(1)
-    : (telemetry?.node_ram_percent !== undefined && telemetry.node_ram_percent !== null && Number(telemetry.node_ram_percent) > 0
-        ? Number(telemetry.node_ram_percent).toFixed(1)
-        : '0.0');
+    : null;
+
+  // Mức Tức thời thời gian thực (Real-time Live from eBPF WebSocket stream)
+  const liveCpuPoint = telemetry?.node_cpu_percent !== undefined && telemetry.node_cpu_percent !== null && Number(telemetry.node_cpu_percent) > 0
+    ? Number(telemetry.node_cpu_percent)
+    : (telemetrySequence?.length > 0 ? Number(telemetrySequence[telemetrySequence.length - 1].cpu) : null);
+
+  const liveRamPoint = telemetry?.node_ram_percent !== undefined && telemetry.node_ram_percent !== null && Number(telemetry.node_ram_percent) > 0
+    ? Number(telemetry.node_ram_percent)
+    : (telemetrySequence?.length > 0 ? Number(telemetrySequence[telemetrySequence.length - 1].ram) : null);
+
+  // Ưu tiên hiển thị số TỨC THỜI thời gian thực để đồng bộ 100% với biểu đồ viễn trắc
+  const nodeCpuPercent = liveCpuPoint !== null
+    ? liveCpuPoint.toFixed(1)
+    : (avgCpu1h || '0.0');
+
+  const nodeRamPercent = liveRamPoint !== null
+    ? liveRamPoint.toFixed(1)
+    : (avgRam1h || '0.0');
+
+  // Cores used = (nodeCpuPercent / 100) * totalCpuCores
+  const nodeUsedCpuCores = totalCpuCores > 0
+    ? ((Number(nodeCpuPercent) / 100) * totalCpuCores).toFixed(2)
+    : '0.00';
+  const nodeCpuCores = nodeUsedCpuCores;
 
   const nodeRamGb = telemetry?.node_ram_gb !== undefined && telemetry.node_ram_gb !== null && Number(telemetry.node_ram_gb) > 0
     ? Number(telemetry.node_ram_gb).toFixed(2)
@@ -487,9 +571,24 @@ export const OverviewPage = () => {
       const t = pt.time_bucket
         ? new Date(pt.time_bucket)
         : new Date(Date.now() - (telemetrySequence.length - idx) * 5000);
-      const rawRamMb = Number(pt.ram) || 0;
-      const ramPercent = Math.min(100, Math.max(0, Math.round(((rawRamMb / totalRamMb) * 100) * 100) / 100));
-      const cpuPercent = Math.min(100, Math.max(0, Math.round((Number(pt.cpu) || 0) * 100) / 100));
+
+      const rawRamVal = Number(pt.node_ram_percent ?? pt.ram_usage_percent ?? pt.ram ?? 0);
+      let ramPercent = 0;
+      let rawRamMb = Number(pt.rawRamMb ?? 0);
+
+      // Nếu rawRamVal > 100, tức là mang giá trị Megabytes thô (ví dụ 1850MB hay 3350MB)
+      if (rawRamVal > 100) {
+        rawRamMb = rawRamVal;
+        ramPercent = Math.min(100, Math.max(0, Math.round(((rawRamMb / totalRamMb) * 100) * 100) / 100));
+      } else {
+        // rawRamVal đã là phần trăm hợp lệ (ví dụ: 22.8% - 41.2%)
+        ramPercent = Math.min(100, Math.max(0, Math.round(rawRamVal * 100) / 100));
+        if (!rawRamMb && ramPercent > 0) {
+          rawRamMb = Math.round((ramPercent / 100) * totalRamMb);
+        }
+      }
+
+      const cpuPercent = Math.min(100, Math.max(0, Math.round((Number(pt.cpu_usage_percent ?? pt.cpu) || 0) * 100) / 100));
 
       return {
         timestamp: t.getTime(),
@@ -499,7 +598,7 @@ export const OverviewPage = () => {
         cpu: cpuPercent,
         ram: ramPercent,
         rawRamMb: rawRamMb,
-        disk: Number(pt.disk) || 0,
+        disk: Number(pt.disk_usage_percent ?? pt.disk ?? 0),
         latency: Number(pt.latency) || 0,
       };
     });
@@ -750,7 +849,7 @@ export const OverviewPage = () => {
       )}
 
       {/* 3. Overview Metric Cards (with Loading Skeleton) */}
-      {isStatsLoading ? (
+      {isStatsLoading && !overviewStats ? (
         <div
           style={{
             display: 'grid',
@@ -794,7 +893,7 @@ export const OverviewPage = () => {
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>CPU Máy Chủ (Toàn Cụm)</span>
             <Cpu size={16} color="var(--dash-primary)" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
               {nodeCpuPercent}%
             </span>
@@ -805,8 +904,13 @@ export const OverviewPage = () => {
                 color: 'var(--dash-text-muted)',
               }}
             >
-              {totalCpuCores > 0 ? `${nodeCpuCores} / ${totalCpuCores} vCPUs` : `${nodeCpuCores} vCPUs`}
+              {totalCpuCores > 0 ? `${nodeUsedCpuCores} / ${totalCpuCores} vCPUs` : `${nodeUsedCpuCores} vCPUs`}
             </span>
+            {avgCpu1h && (
+              <span style={{ fontSize: '0.6875rem', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+                TB 1h: {avgCpu1h}%
+              </span>
+            )}
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Pod nghiệp vụ:</span>
@@ -822,7 +926,7 @@ export const OverviewPage = () => {
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>RAM Máy Chủ (Toàn Cụm)</span>
             <Database size={16} color="var(--dash-info)" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
               {nodeRamPercent}%
             </span>
@@ -835,6 +939,11 @@ export const OverviewPage = () => {
             >
               {parseFloat(totalRamGb) > 0 ? `${nodeRamGb} / ${totalRamGb} GB` : `${nodeRamGb} GB`}
             </span>
+            {avgRam1h && (
+              <span style={{ fontSize: '0.6875rem', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
+                TB 1h: {avgRam1h}%
+              </span>
+            )}
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed var(--dash-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Pod nghiệp vụ:</span>
@@ -1028,6 +1137,7 @@ export const OverviewPage = () => {
         subtitle="Dữ liệu viễn trắc đo đạc từ các DaemonSet eBPF theo thời gian thực"
         timeRange={chartTimeRange}
         onTimeRangeChange={handleChartRangeChange}
+        showTimeRange={true}
         isLive={isWsLive && isClusterOnline && !isDataStale}
         isStale={isDataStale}
         isClusterOnline={isClusterOnline}
@@ -1038,7 +1148,7 @@ export const OverviewPage = () => {
 
       {/* 5, 6, 7. Summaries Grid: AI Predictions, Incidents, Self-Healing */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-        {/* 5. AI Prediction Summary */}
+        {/* 5. Pending Approvals & AI Remediation Summary */}
         <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1047,21 +1157,26 @@ export const OverviewPage = () => {
                   width: '28px',
                   height: '28px',
                   borderRadius: 'var(--dash-radius-sm)',
-                  backgroundColor: 'var(--dash-mint-100)',
-                  color: 'var(--dash-mint-600)',
+                  backgroundColor: pendingApprovalsCount > 0 ? '#FEF3C7' : 'var(--dash-mint-100)',
+                  color: pendingApprovalsCount > 0 ? '#B45309' : 'var(--dash-mint-600)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Sparkles size={16} />
+                {pendingApprovalsCount > 0 ? <CheckCircle2 size={16} /> : <Sparkles size={16} />}
               </div>
-              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                AI Dự Báo Rủi Ro Chủ Động
-              </h3>
+              <div>
+                <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
+                  Đề Xuất Phê Duyệt (HITL)
+                </h3>
+                <div style={{ fontSize: '0.65625rem', color: 'var(--dash-text-muted)', marginTop: '1px' }}>
+                  AI Dự Báo Rủi Ro Chủ Động &bull; Cổng Phê Duyệt
+                </div>
+              </div>
             </div>
             <button
-              onClick={() => onNavigate && onNavigate('/dashboard/ai/predictions')}
+              onClick={() => onNavigate && onNavigate('/dashboard/self-healing/approvals')}
               style={{
                 background: 'none',
                 border: 'none',
@@ -1071,7 +1186,7 @@ export const OverviewPage = () => {
                 cursor: 'pointer',
               }}
             >
-              Xem tất cả &rarr;
+              Cổng phê duyệt &rarr;
             </button>
           </div>
 
@@ -1091,47 +1206,81 @@ export const OverviewPage = () => {
           >
             <HelpCircle size={14} color="var(--dash-text-muted)" style={{ flexShrink: 0, marginTop: '2px' }} />
             <span>
-              <strong>Lưu ý kỹ thuật:</strong> Dự báo AI phản ánh rủi ro xác suất dựa trên chuỗi thời gian, không phải sự cố đã xảy ra.
+              <strong>Lưu ý vận hành:</strong> Các hành động tự phục hồi có mức độ ảnh hưởng cao đều được chuyển giao qua Cổng HITL để Kỹ sư kiểm duyệt.
             </span>
           </div>
 
-          {/* Prediction Item THẬT từ CSDL / WebSocket - Chỉ hiển thị khi có đề xuất đang chờ phê duyệt */}
-          {pendingRecommendations.length > 0 ? (
+          {/* Hiển thị đề xuất thật cần phê duyệt (Ưu tiên pendingApprovalsCount và pendingRecommendations) */}
+          {pendingApprovalsCount > 0 || pendingRecommendations.length > 0 ? (
             <div
               style={{
-                padding: '12px',
-                border: '1px solid var(--dash-border)',
+                padding: '12px 14px',
+                border: '1px solid #BAE6FD',
                 borderRadius: 'var(--dash-radius-md)',
-                backgroundColor: '#FFFFFF',
-                marginBottom: '10px',
+                backgroundColor: '#F0F9FF',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                  {pendingRecommendations[0]?.recommendation || 'Đề xuất Tự Khắc Phục AI'}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0369A1' }}>
+                  {pendingApprovalsCount > 0
+                    ? `Có ${pendingApprovalsCount} yêu cầu tự phục hồi chờ phê duyệt`
+                    : pendingRecommendations[0]?.recommendation || 'Đề xuất Tự Khắc Phục AI'}
                 </span>
                 <span
                   style={{
                     fontSize: '0.6875rem',
                     fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: 'var(--dash-radius-full)',
-                    backgroundColor: 'var(--dash-warning-bg)',
-                    color: 'var(--dash-warning-text)',
-                    border: '1px solid var(--dash-warning-border)',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    backgroundColor: '#FEF3C7',
+                    color: '#B45309',
+                    border: '1px solid #FDE68A',
                   }}
                 >
-                  Ưu tiên: {pendingRecommendations[0]?.risk_level || 'HIGH'}
+                  Cần xử lý
                 </span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5 }}>
-                {pendingRecommendations[0]?.reasoning || 'Hệ thống AI đề xuất xử lý tối ưu cho workload.'}
+              <div style={{ fontSize: '0.75rem', color: '#1E293B', lineHeight: 1.5 }}>
+                {pendingRecommendations[0]?.reasoning ||
+                  'Hệ thống AI đề xuất hành động điều phối (Scale Replicas, Restart Pod...) để phân phối tải và duy trì tính khả dụng của dịch vụ.'}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                <span>Trạng thái: {pendingRecommendations[0]?.status || 'PROPOSED'}</span>
-                <span style={{ color: 'var(--dash-primary)', fontWeight: 600, cursor: 'pointer' }} onClick={() => onNavigate && onNavigate('/dashboard/ai/predictions')}>
-                  Xem khuyến nghị &rarr;
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginTop: '4px',
+                  paddingTop: '8px',
+                  borderTop: '1px dashed #BAE6FD',
+                }}
+              >
+                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
+                  Chế độ an toàn: Human-in-the-Loop
                 </span>
+                <button
+                  type="button"
+                  onClick={() => onNavigate && onNavigate('/dashboard/self-healing/approvals')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.71875rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                  }}
+                >
+                  <CheckCircle2 size={12} />
+                  <span>Xử Lý Ngay &rarr;</span>
+                </button>
               </div>
             </div>
           ) : (
@@ -1151,10 +1300,10 @@ export const OverviewPage = () => {
             >
               <ShieldCheck size={28} color="var(--dash-success)" style={{ marginBottom: '6px' }} />
               <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
-                Không Phát Hiện Rủi Ro Tiềm Ẩn
+                Không Có Yêu Cầu Chờ Duyệt
               </div>
               <p style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-                Mô hình AI dự báo chuỗi thời gian chưa ghi nhận nguy cơ quá tải hay bất thường.
+                Tất cả các dịch vụ đang vận hành ổn định, không có đề xuất cần can thiệp.
               </p>
             </div>
           )}

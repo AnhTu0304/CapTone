@@ -636,9 +636,10 @@ export const telemetryService = {
       '1h': 60 * 60 * 1000,
       '6h': 6 * 60 * 60 * 1000,
       '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
     };
     const durationMs = durationMsMap[range] || durationMsMap['15m'];
-    const limitMap = { '15m': 180, '1h': 360, '6h': 720, '24h': 1440 };
+    const limitMap = { '15m': 180, '1h': 360, '6h': 720, '24h': 1440, '7d': 2000 };
     const limit = limitMap[range] || 180;
     const nowMs = Date.now();
     const fromIso = new Date(nowMs - durationMs).toISOString();
@@ -661,7 +662,7 @@ export const telemetryService = {
 
         const items = Array.isArray(nodeRes?.items) ? nodeRes.items : [];
         if (items.length > 0) {
-          const bucketSec = range === '15m' ? 5 : range === '1h' ? 60 : range === '6h' ? 300 : 900;
+          const bucketSec = range === '15m' ? 5 : range === '1h' ? 60 : range === '6h' ? 300 : range === '24h' ? 900 : 3600;
           const pointsByBucket = new Map();
 
           for (let i = 0; i < items.length; i++) {
@@ -694,12 +695,16 @@ export const telemetryService = {
             const p = pointsByBucket.get(k);
             const c = p.count || 1;
             const t = p.date;
+            const cpuVal = Math.round((p.cpuSum / c) * 100) / 100;
+            const ramVal = Math.round((p.ramSum / c) * 100) / 100;
             return {
               time_bucket: t.toISOString(),
               time: t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
               fullTime: `${t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} (${t.toLocaleDateString('vi-VN')})`,
-              cpu: Math.round((p.cpuSum / c) * 100) / 100,
-              ram: Math.round((p.ramSum / c) * 100) / 100,
+              cpu: cpuVal,
+              ram: ramVal,
+              node_cpu_percent: cpuVal,
+              node_ram_percent: ramVal,
               rawRamMb: Math.round((p.rawRamMbSum / c) * 10) / 10,
               disk: Math.round((p.diskSum / c) * 10) / 10,
               latency: 0,
@@ -725,39 +730,12 @@ export const telemetryService = {
       }
     }
 
-    // 2. Fallback: query APM service metrics sequence for the cluster
-    try {
-      const bucketSeconds = range === '15m' ? 5 : range === '1h' ? 60 : range === '6h' ? 300 : 900;
-      const seq = await this.getMetricsSequence(activeServiceId, {
-        limit: Math.min(100, limit),
-        bucket_seconds: bucketSeconds,
-        cluster_id: clusterId,
-        signal: options?.signal,
-      });
-
-      if (Array.isArray(seq) && seq.length > 0) {
-        const latestTime = seq[seq.length - 1]?.time_bucket
-          ? new Date(seq[seq.length - 1].time_bucket).getTime()
-          : Date.now();
-        const isStale = (Date.now() - latestTime) > (5 * 60 * 1000);
-
-        return {
-          sequence: seq,
-          latestPoint: seq[seq.length - 1],
-          isStale,
-          source: 'agent_metrics',
-        };
-      }
-    } catch (err) {
-      if (err?.name === 'AbortError') throw err;
-      console.warn('[telemetryService] getMetricsSequence fallback error:', err.message);
-    }
-
+    // Luôn trả về nguồn node_metrics chuẩn để tránh lẫn lộn Pod MB và Node %
     return {
       sequence: [],
       latestPoint: null,
       isStale: false,
-      source: 'none',
+      source: 'node_metrics',
     };
   },
 

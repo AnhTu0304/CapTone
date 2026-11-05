@@ -726,6 +726,23 @@ export class HealingActionService {
     } catch (execErr) {
       console.warn('[HealingActionService] Auto-execute after HITL approval warning:', execErr);
     }
+    // Phát sự kiện phê duyệt HITL thành công tới Frontend qua WebSocket
+    try {
+      broadcastTelemetryToUi({
+        type: 'approval_status_changed',
+        data: {
+          action_id: actionId,
+          status: 'APPROVED',
+          approved_by: user?.email || approvedBy,
+          target_name: action?.target_name,
+          cluster_name: action?.cluster_name,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (wsErr) {
+      console.warn('[HealingActionService] Warning broadcasting approval status changed:', wsErr);
+    }
+
     return await HealingActionModel.findActionById(actionId);
   }
 
@@ -767,6 +784,23 @@ export class HealingActionService {
       });
     } catch (auditErr) {
       console.warn('[HealingActionService] Ghi audit log HITL approval rejected thất bại:', auditErr);
+    }
+
+    // Phát sự kiện từ chối HITL tới Frontend qua WebSocket
+    try {
+      broadcastTelemetryToUi({
+        type: 'approval_status_changed',
+        data: {
+          action_id: actionId,
+          status: 'REJECTED',
+          rejected_by: user?.email || rejectedBy,
+          target_name: action?.target_name,
+          cluster_name: action?.cluster_name,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (wsErr) {
+      console.warn('[HealingActionService] Warning broadcasting rejection status changed:', wsErr);
     }
 
     return rejected;

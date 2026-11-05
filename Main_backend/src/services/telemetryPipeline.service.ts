@@ -387,6 +387,24 @@ export class TelemetryPipelineService {
           HitlNotificationService.notifyApproversForAction(pendingActionId).catch((err) => {
             console.warn('[TelemetryPipelineService] Gửi email HITL thất bại:', err.message);
           });
+
+          // Phát sự kiện yêu cầu phê duyệt mới tới tất cả Frontend qua WebSocket
+          try {
+            broadcastTelemetryToUi({
+              type: 'approval_created',
+              data: {
+                id: pendingActionId,
+                incident_id: rca.incident_id,
+                target_name: serviceId,
+                policy_name: policy.policy_name,
+                action_name: policy.action_name,
+                risk_level: effectiveRisk,
+                timestamp: new Date().toISOString(),
+              },
+            });
+          } catch (wsErr) {
+            console.warn('[TelemetryPipelineService] Broadcast approval_created thất bại:', wsErr);
+          }
         }
         return;
       }

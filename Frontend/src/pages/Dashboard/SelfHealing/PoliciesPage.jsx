@@ -45,8 +45,7 @@ export const PoliciesPage = () => {
 
   // Cluster Identity & State Isolation Key
   const clusterName = currentEnv?.cluster || currentEnv?.name || currentEnv?.id || 'all-clusters';
-  const isOfflineMockCluster = currentEnv?.agentStatus === 'OFFLINE' || ['vcxv', 'gfgfdg', 'dmsndisa'].includes(String(clusterName).toLowerCase());
-  const isClusterOnline = !isOfflineMockCluster;
+  const isClusterOnline = currentEnv?.agentStatus === 'ONLINE';
   const clusterKey = currentEnv?.id ? `cluster_${currentEnv.id}` : `cluster_${clusterName}`;
 
   // Helper: Retrieve cluster-specific safety guards

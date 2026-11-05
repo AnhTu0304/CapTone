@@ -16,7 +16,6 @@ router = APIRouter(prefix="/agent", tags=["Installer Distribution"])
 
 def safe_resolve_script(filename: str) -> Path:
     """Validate filename against path traversal and verify existence."""
-    # Strict validation: prevent path separators
     if "/" in filename or "\\" in filename or ".." in filename:
         logger.warning("Path traversal attempt blocked: %r", filename)
         raise HTTPException(
@@ -27,7 +26,6 @@ def safe_resolve_script(filename: str) -> Path:
     base_dir = settings.INSTALLERS_DIR.resolve()
     target = (base_dir / filename).resolve()
 
-    # Ensure target path stays strictly inside base_dir
     try:
         target.relative_to(base_dir)
     except ValueError:
@@ -61,7 +59,7 @@ def resolve_backend_url(request: Request) -> str:
 
     Priority:
     1. Explicit BACKEND_WS_URL from environment / settings.
-    2. Derived from incoming request's Host / X-Forwarded-Host header if it's a VPS / public domain.
+    2. Derived from incoming request's Host / X-Forwarded-Host header.
     3. Empty string (falls back to client-side local cluster discovery).
     """
     if settings.BACKEND_WS_URL and settings.BACKEND_WS_URL.strip():
@@ -71,12 +69,186 @@ def resolve_backend_url(request: Request) -> str:
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme
     ws_proto = "wss" if proto == "https" else "ws"
 
-    # If accessed via a real domain or public IP on VPS (not localhost/127.0.0.1)
     clean_host = forwarded_host.split(":")[0].strip().lower()
     if clean_host and clean_host not in ["localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal"]:
         return f"{ws_proto}://{forwarded_host}/api/v1/agent/connect"
 
     return ""
+
+
+def generate_kubernetes_manifest(
+    ws_url: str,
+    token: str,
+    docker_image: str,
+    cluster_id: str = "",
+) -> str:
+    """Build a complete, standalone Kubernetes multi-document YAML for enterprise deployment."""
+    token_val = token if token else "YOUR_AGENT_TOKEN"
+    server_url = ws_url if ws_url else "ws://localhost:5000/api/v1/agent/connect"
+    img = docker_image if docker_image else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
+
+    return f"""apiVersion: v1
+kind: Namespace
+metadata:
+  name: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: selfheal-agent-sa
+  namespace: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: selfheal-agent-role
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "namespaces", "events", "nodes"]
+    verbs: ["get", "list", "watch", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: selfheal-agent-rolebinding
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+subjects:
+  - kind: ServiceAccount
+    name: selfheal-agent-sa
+    namespace: selfheal-system
+roleRef:
+  kind: ClusterRole
+  name: selfheal-agent-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: selfheal-agent-secret
+  namespace: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+type: Opaque
+stringData:
+  AGENT_TOKEN: "{token_val}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selfheal-agent-config
+  namespace: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+data:
+  AGENT_SERVER_URL: "{server_url}"
+  AGENT_UID: "selfheal-agent-cluster-01"
+  CLUSTER_ID: "{cluster_id}"
+  METRICS_INTERVAL_MS: "5000"
+  LOG_COLLECTION_INTERVAL_MS: "5000"
+  LOG_LEVEL: "INFO"
+  ENABLE_HEALING_ACTIONS: "false"
+  HEALTH_PORT: "8080"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selfheal-agent
+  namespace: selfheal-system
+  labels:
+    app.kubernetes.io/name: selfheal-agent
+    app.kubernetes.io/component: monitoring-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: selfheal-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: selfheal-agent
+    spec:
+      serviceAccountName: selfheal-agent-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: selfheal-agent
+          image: {img}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-health
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: selfheal-agent-config
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: selfheal-agent-secret
+                  key: AGENT_TOKEN
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {{}}
+"""
 
 
 @router.get("/install.sh", summary="Download Linux/macOS Bash Installer")
@@ -94,9 +266,7 @@ async def get_bash_installer(request: Request, token: str | None = None):
         clean_token = token.strip().replace('"', '').replace('`', '').replace('$', '').replace('\n', '')
         content = content.replace('CONFIGURED_TOKEN="__SELFHEAL_TOKEN__"', f'CONFIGURED_TOKEN="{clean_token}"')
 
-    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "captone-agent:1.0.0"
-    if "ghcr.io" in docker_img:
-        docker_img = "captone-agent:1.0.0"
+    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
     content = content.replace('AGENT_IMAGE="__SELFHEAL_DOCKER_IMAGE__"', f'AGENT_IMAGE="{docker_img}"')
     content = content.replace('image: captone-agent:1.0.0', f'image: {docker_img}')
 
@@ -129,10 +299,9 @@ async def get_powershell_installer(request: Request, token: str | None = None):
         clean_token = token.strip().replace('"', '').replace('`', '').replace('$', '').replace('\n', '')
         content = content.replace('$CONFIGURED_TOKEN = "__SELFHEAL_TOKEN__"', f'$CONFIGURED_TOKEN = "{clean_token}"')
 
-    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "captone-agent:1.0.0"
-    if "ghcr.io" in docker_img:
-        docker_img = "captone-agent:1.0.0"
+    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
     content = content.replace('$AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"', f'$AGENT_IMAGE = "{docker_img}"')
+    content = content.replace('$CONFIGURED_AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"', f'$CONFIGURED_AGENT_IMAGE = "{docker_img}"')
     content = content.replace('image: captone-agent:1.0.0', f'image: {docker_img}')
 
     return Response(
@@ -140,6 +309,43 @@ async def get_powershell_installer(request: Request, token: str | None = None):
         media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="install-agent.ps1"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/install.yaml", summary="Download Ready-to-Apply Dynamic Kubernetes Manifest")
+async def get_k8s_install_manifest(request: Request, token: str | None = None, cluster_id: str | None = None):
+    """Returns a full Kubernetes manifest with Token & Server URL dynamically embedded."""
+    ws_url = resolve_backend_url(request)
+    clean_token = token.strip().replace('"', '').replace('\n', '') if token else "YOUR_AGENT_TOKEN"
+    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
+    content = generate_kubernetes_manifest(ws_url, clean_token, docker_img, cluster_id or "")
+
+    return Response(
+        content=content,
+        media_type="application/yaml; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="selfheal-agent-install.yaml"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/manifest.yaml", summary="Download Standard Kubernetes Manifest")
+async def get_k8s_standard_manifest(request: Request):
+    """Returns standard Kubernetes manifest referencing selfheal-agent-secret."""
+    ws_url = resolve_backend_url(request)
+    docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
+    content = generate_kubernetes_manifest(ws_url, "YOUR_AGENT_TOKEN", docker_img, "")
+
+    return Response(
+        content=content,
+        media_type="application/yaml; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="selfheal-agent.yaml"',
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "X-Content-Type-Options": "nosniff",
         },
@@ -207,6 +413,8 @@ async def get_agent_distribution_info() -> dict[str, Any]:
         "endpoints": {
             "bash_installer": "/agent/install.sh",
             "powershell_installer": "/agent/install.ps1",
+            "k8s_install_manifest": "/agent/install.yaml",
+            "k8s_standard_manifest": "/agent/manifest.yaml",
             "bash_uninstaller": "/agent/uninstall.sh",
             "powershell_uninstaller": "/agent/uninstall.ps1",
             "checksums": "/agent/checksums",

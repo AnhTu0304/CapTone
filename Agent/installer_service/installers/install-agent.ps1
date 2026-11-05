@@ -8,6 +8,7 @@ param (
     [string]$ServerUrl = "",
     [string]$Token = "",
     [string]$Namespace = "selfheal-system",
+    [string]$AgentImage = "",
     [switch]$NonInteractive
 )
 
@@ -34,12 +35,45 @@ if (-not $currentContext) {
     exit 1
 }
 
-# Kiem tra ket noi thuc te den Kubernetes API Server
-$clusterCheck = (kubectl cluster-info --request-timeout=4s 2>&1)
-if ($LASTEXITCODE -ne 0) {
+# Kiem tra ket noi thuc te den Kubernetes API Server (An toan tuyet doi, chong NativeCommandError)
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$clusterCheck = ""
+$clusterOk = $false
+try {
+    $clusterCheck = (cmd.exe /c "kubectl cluster-info --request-timeout=4s" 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -eq 0 -and $clusterCheck -notmatch "refused|Unable to connect|timeout|timed out") {
+        $clusterOk = $true
+    }
+} catch {
+    $clusterCheck = $_.Exception.Message
+} finally {
+    $ErrorActionPreference = $prevEAP
+}
+
+# Neu khong ket noi duoc, thu tu dong khoi dong lai Minikube neu may co cai Minikube
+if (-not $clusterOk) {
+    $minikubeCmd = Get-Command minikube -ErrorAction SilentlyContinue
+    if ($minikubeCmd) {
+        Write-Host "[CANH BAO] Cum Kubernetes ($currentContext) dang tat hoac mat ket noi!" -ForegroundColor Yellow
+        Write-Host "  -> Dang tu dong khoi dong lai Minikube de phuc vu cai dat Agent..." -ForegroundColor Cyan
+        minikube start
+        cmd.exe /c "minikube update-context" 2>&1 | Out-Null
+
+        $clusterCheck = (cmd.exe /c "kubectl cluster-info --request-timeout=6s" 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $clusterCheck -notmatch "refused|Unable to connect|timeout") {
+            $clusterOk = $true
+            Write-Host "[THANH CONG] Minikube da san sang!" -ForegroundColor Green
+        }
+    }
+}
+
+if (-not $clusterOk) {
     Write-Host "[ERROR] Khong the ket noi den Kubernetes API Server (Context: $currentContext)!" -ForegroundColor Red
     Write-Host "  Nguyen nhan: Cum Kubernetes hien tai dang bi dung (Stopped) hoac endpoint bi lech cong." -ForegroundColor Yellow
-    Write-Host "  Chi tiet: $(($clusterCheck | Out-String).Trim())" -ForegroundColor Gray
+    if ($clusterCheck) {
+        Write-Host "  Chi tiet: $clusterCheck" -ForegroundColor Gray
+    }
     Write-Host ""
     Write-Host "--- HUONG DAN KHAC PHUC NHANH ---" -ForegroundColor Cyan
     Write-Host "1. Neu dung Minikube, hay khoi dong lai cum bang lenh:" -ForegroundColor White
@@ -85,6 +119,7 @@ if ($useHelm) {
 # 2. Xử lý địa chỉ Backend (Tự động nạp sẵn, không bắt người dùng nhập)
 # ------------------------------------------------------------------------------
 $CONFIGURED_SERVER_URL = "__SELFHEAL_BACKEND_URL__"
+$CONFIGURED_AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"
 
 if (-not $ServerUrl) {
     if ($CONFIGURED_SERVER_URL -and $CONFIGURED_SERVER_URL -notmatch "^__") {
@@ -106,7 +141,22 @@ if (-not $ServerUrl) {
 }
 
 Write-Host "  * Server URL         : $ServerUrl (Tu dong ket noi)" -ForegroundColor Green
-Write-Host ""
+if (-not $AgentImage) {
+    if ($CONFIGURED_AGENT_IMAGE -and $CONFIGURED_AGENT_IMAGE -notmatch "^__") {
+        $AgentImage = $CONFIGURED_AGENT_IMAGE
+    } else {
+        $envImg = [System.Environment]::GetEnvironmentVariable("SELFHEAL_AGENT_IMAGE")
+        if ($envImg) {
+            $AgentImage = $envImg
+        } elseif ($currentContext -like "*minikube*" -or $currentContext -like "*docker*") {
+            $AgentImage = "captone-agent:1.0.0"
+        } else {
+            $AgentImage = "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
+        }
+    }
+}
+Write-Host "  * Docker Image       : $AgentImage" -ForegroundColor Green
+
 
 # ------------------------------------------------------------------------------
 # 3. Yêu cầu nhập Token (CÂU HỎI DUY NHẤT)
@@ -248,7 +298,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: selfheal-agent
-          image: captone-agent:1.0.0
+          image: $AgentImage
           imagePullPolicy: IfNotPresent
           ports:
             - name: http-health

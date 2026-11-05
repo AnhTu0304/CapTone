@@ -109,6 +109,58 @@ export const authService = {
     }
     return data.data;
   },
+
+  /**
+   * Xác thực mã OTP kích hoạt tài khoản
+   * @param {string} code - Mã OTP 6 chữ số
+   * @param {string} [token] - Token xác thực nếu có
+   */
+  async verifyEmail(code, token) {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    const savedToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('selfheal_auth_token') : null);
+    if (savedToken) {
+      headers['Authorization'] = `Bearer ${savedToken}`;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ code: String(code).trim() }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Mã xác thực không chính xác hoặc đã hết hạn');
+    }
+    return data;
+  },
+
+  /**
+   * Yêu cầu gửi lại mã xác thực OTP về email
+   * @param {string} [token] - Token xác thực nếu có
+   */
+  async resendVerification(token) {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    const savedToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('selfheal_auth_token') : null);
+    if (savedToken) {
+      headers['Authorization'] = `Bearer ${savedToken}`;
+    }
+
+    const res = await fetch(`${API_BASE_URL}/auth/send-verification`, {
+      method: 'POST',
+      headers,
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Không thể gửi lại mã xác thực lúc này');
+    }
+    return data;
+  },
 };
 
 export default authService;

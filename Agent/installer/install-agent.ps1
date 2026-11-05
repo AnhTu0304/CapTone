@@ -8,6 +8,7 @@ param (
     [string]$ServerUrl = "",
     [string]$Token = "",
     [string]$Namespace = "selfheal-system",
+    [string]$AgentImage = "",
     [switch]$NonInteractive
 )
 
@@ -85,6 +86,7 @@ if ($useHelm) {
 # 2. Xử lý địa chỉ Backend (Tự động nạp sẵn, không bắt người dùng nhập)
 # ------------------------------------------------------------------------------
 $CONFIGURED_SERVER_URL = "__SELFHEAL_BACKEND_URL__"
+$CONFIGURED_AGENT_IMAGE = "__SELFHEAL_DOCKER_IMAGE__"
 
 if (-not $ServerUrl) {
     if ($CONFIGURED_SERVER_URL -and $CONFIGURED_SERVER_URL -notmatch "^__") {
@@ -106,7 +108,22 @@ if (-not $ServerUrl) {
 }
 
 Write-Host "  * Server URL         : $ServerUrl (Tu dong ket noi)" -ForegroundColor Green
-Write-Host ""
+if (-not $AgentImage) {
+    if ($CONFIGURED_AGENT_IMAGE -and $CONFIGURED_AGENT_IMAGE -notmatch "^__") {
+        $AgentImage = $CONFIGURED_AGENT_IMAGE
+    } else {
+        $envImg = [System.Environment]::GetEnvironmentVariable("SELFHEAL_AGENT_IMAGE")
+        if ($envImg) {
+            $AgentImage = $envImg
+        } elseif ($currentContext -like "*minikube*" -or $currentContext -like "*docker*") {
+            $AgentImage = "captone-agent:1.0.0"
+        } else {
+            $AgentImage = "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
+        }
+    }
+}
+Write-Host "  * Docker Image       : $AgentImage" -ForegroundColor Green
+
 
 # ------------------------------------------------------------------------------
 # 3. Yêu cầu nhập Token (CÂU HỎI DUY NHẤT)
@@ -237,7 +254,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: selfheal-agent
-          image: captone-agent:1.0.0
+          image: $AgentImage
           imagePullPolicy: IfNotPresent
           ports:
             - name: http-health

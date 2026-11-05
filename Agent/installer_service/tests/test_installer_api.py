@@ -38,6 +38,22 @@ def test_get_powershell_installer(client: TestClient) -> None:
     assert "kubectl" in resp.text
 
 
+def test_get_k8s_manifests(client: TestClient) -> None:
+    # 1. Dynamic install manifest with token
+    resp = client.get("/agent/install.yaml?token=sh_tok_live_123456")
+    assert resp.status_code == 200
+    assert "application/yaml" in resp.headers["content-type"]
+    assert "sh_tok_live_123456" in resp.text
+    assert "kind: Deployment" in resp.text
+    assert "name: selfheal-agent" in resp.text
+
+    # 2. Standard static manifest
+    resp_std = client.get("/agent/manifest.yaml")
+    assert resp_std.status_code == 200
+    assert "application/yaml" in resp_std.headers["content-type"]
+    assert "kind: Deployment" in resp_std.text
+
+
 def test_get_checksums(client: TestClient) -> None:
     resp = client.get("/agent/checksums")
     assert resp.status_code == 200

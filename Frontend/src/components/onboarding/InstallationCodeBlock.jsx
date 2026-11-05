@@ -8,35 +8,45 @@ export const InstallationCodeBlock = ({
   environmentName = 'Staging',
   className = '',
 }) => {
-  const [method, setMethod] = useState('powershell'); // 'powershell' | 'bash' | 'helm'
+  const [method, setMethod] = useState('powershell'); // 'powershell' | 'bash' | 'manifest' | 'helm'
 
   const effectiveToken = token && typeof token === 'string' && token.length > 20
     ? token
     : '<MÃ_TOKEN_DO_HỆ_THỐNG_CẤP>';
 
-  const powershellCode = `# 1. Mở PowerShell với quyền Administrator tại thư mục dự án
-Set-ExecutionPolicy RemoteSigned -Scope Process -Force
+  const getOrigin = () => {
+    if (typeof window === 'undefined') return 'http://localhost';
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
+      return `${protocol}//${hostname}`;
+    }
+    return window.location.origin;
+  };
 
-# 2. Chạy Script cài đặt SelfHeal Agent tự động với Token
-.\\Agent\\installer\\install-agent.ps1 -Token "${effectiveToken}"`;
+  const origin = getOrigin();
 
-  const bashCode = `# 1. Cấp quyền thực thi cho script cài đặt
-chmod +x ./Agent/installer/install-agent.sh
+  const powershellCode = `# Cài đặt tự động SelfHeal Agent qua link chính thức (1-Liner PowerShell):
+irm "${origin}/agent/install.ps1?token=${encodeURIComponent(effectiveToken)}" | iex`;
 
-# 2. Thực thi cài đặt Agent vào cụm Kubernetes
-./Agent/installer/install-agent.sh --token "${effectiveToken}"`;
+  const bashCode = `# Cài đặt tự động SelfHeal Agent qua link chính thức (1-Liner cURL):
+curl -fsSL "${origin}/agent/install.sh?token=${encodeURIComponent(effectiveToken)}" | bash`;
 
-  const helmCode = `# Cài đặt trực tiếp bằng Helm Chart nội bộ của dự án
-helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
+  const manifestCode = `# Triển khai trực tiếp Kubernetes Manifest đầy đủ qua URL Cloud:
+kubectl apply -f "${origin}/agent/install.yaml?token=${encodeURIComponent(effectiveToken)}"`;
+
+  const helmCode = `# Cài đặt qua Helm Repository chính thức của SelfHeal:
+helm repo add selfheal ${origin}/charts
+helm repo update
+helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
   --namespace selfheal-system \\
   --create-namespace \\
   --set secret.agentToken="${effectiveToken}" \\
-  --set config.clusterName="${clusterName}" \\
-  --set securityContext.runAsNonRoot=true`;
+  --set config.clusterName="${clusterName}"`;
 
   const codeMap = {
     powershell: powershellCode,
     bash: bashCode,
+    manifest: manifestCode,
     helm: helmCode,
   };
 
@@ -53,7 +63,7 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
         marginBottom: '20px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div
             style={{
@@ -81,7 +91,7 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
                 margin: 0,
               }}
             >
-              Cài đặt Tác tử SelfHeal
+              Cài đặt Tác tử SelfHeal (Chuẩn Enterprise Link)
             </h3>
             <p
               style={{
@@ -91,7 +101,7 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
                 margin: 0,
               }}
             >
-              Thực thi trong terminal máy chủ của bạn thông qua PowerShell (Windows), Bash (Linux/macOS) hoặc Helm 3.
+              Cài đặt trực tiếp qua Link URL Cloud — Không cần clone mã nguồn hay build Docker.
             </p>
           </div>
         </div>
@@ -103,6 +113,7 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
             backgroundColor: 'rgba(61, 59, 79, 0.06)',
             padding: '2px',
             border: '1px solid var(--border-default)',
+            gap: '2px',
           }}
         >
           <button
@@ -120,7 +131,7 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
               transition: 'all 0.15s ease',
             }}
           >
-            PowerShell
+            PowerShell (Windows)
           </button>
           <button
             type="button"
@@ -137,7 +148,24 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
               transition: 'all 0.15s ease',
             }}
           >
-            Bash (Linux)
+            Bash (Linux/macOS)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMethod('manifest')}
+            style={{
+              padding: '4px 10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              backgroundColor: method === 'manifest' ? 'var(--color-primary)' : 'transparent',
+              color: method === 'manifest' ? '#FFFFFF' : 'var(--color-primary)',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Kubectl Manifest (URL)
           </button>
           <button
             type="button"
@@ -197,10 +225,12 @@ helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
               <Terminal size={12} />
               <span>
                 {method === 'powershell'
-                  ? 'powershell - install-agent.ps1'
+                  ? 'powershell - One-Liner Install'
                   : method === 'bash'
-                  ? 'bash - install-agent.sh'
-                  : 'helm - deploy/helm/selfheal-agent'}
+                  ? 'bash - One-Liner Install'
+                  : method === 'manifest'
+                  ? 'kubectl - Dynamic Manifest Apply'
+                  : 'helm - Enterprise Chart Repository'}
               </span>
             </span>
           </div>

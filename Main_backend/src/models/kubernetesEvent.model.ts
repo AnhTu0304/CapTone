@@ -108,7 +108,7 @@ export class KubernetesEventModel {
     if (!namespaceId && metadata.namespace && event.cluster_id) {
       try {
         const nsRes = await pool.query(
-          `SELECT id FROM namespaces WHERE name = $1 AND cluster_id = $2 LIMIT 1`,
+          `SELECT id FROM namespaces WHERE name = $1 AND (cluster_id::text = $2 OR cluster_id IN (SELECT id FROM clusters WHERE name = $2 OR id::text = $2)) LIMIT 1`,
           [metadata.namespace, event.cluster_id]
         );
         if (nsRes.rows.length > 0) {
@@ -244,14 +244,14 @@ export class KubernetesEventModel {
       const rType = options.resourceType.trim();
       if (rType.toLowerCase() === 'deployment') {
         conditions.push(`(
-          e.resource_type ILIKE ${paramIdx}
+          e.resource_type ILIKE $${paramIdx}
           OR e.reason ILIKE '%Deploy%'
           OR e.message ILIKE '%Deployment%'
         )`);
         params.push(rType);
         paramIdx++;
       } else {
-        conditions.push(`e.resource_type ILIKE ${paramIdx++}`);
+        conditions.push(`e.resource_type ILIKE $${paramIdx++}`);
         params.push(rType);
       }
     }
@@ -294,17 +294,29 @@ export class KubernetesEventModel {
       params.push(options.endTime);
     }
 
-    // Filter by Cluster ID
+    // Filter by Cluster ID (UUID or Name) - Note: kubernetes_events.cluster_id is character varying(255)
     if (options.clusterId && options.clusterId.toUpperCase() !== 'ALL') {
-      conditions.push(`e.cluster_id::text = $${paramIdx++}`);
-      params.push(options.clusterId);
+      const cId = options.clusterId.trim();
+      conditions.push(`(
+        e.cluster_id = $${paramIdx}
+        OR e.cluster_id IN (SELECT c.id::text FROM clusters c WHERE c.id::text = $${paramIdx} OR c.name ILIKE $${paramIdx})
+        OR e.cluster_id IN (SELECT c.name FROM clusters c WHERE c.name ILIKE $${paramIdx})
+        OR e.metadata->>'cluster_name' ILIKE $${paramIdx}
+      )`);
+      params.push(cId);
+      paramIdx++;
     }
 
     // Multi-tenant organization isolation scope [S4][PB18] 4.2
     if (Array.isArray(options.allowedOrgIds) && options.allowedOrgIds.length > 0) {
       conditions.push(`(
         e.cluster_id IN (
-          SELECT c.id FROM clusters c
+          SELECT c.id::text FROM clusters c
+          JOIN environments env ON c.environment_id = env.id
+          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
+        )
+        OR e.cluster_id IN (
+          SELECT c.name FROM clusters c
           JOIN environments env ON c.environment_id = env.id
           WHERE env.organization_id = ANY($${paramIdx}::uuid[])
         )
@@ -417,7 +429,7 @@ export class KubernetesEventModel {
         env.name AS environment_name,
         env.organization_id
       FROM kubernetes_events e
-      LEFT JOIN clusters c ON e.cluster_id = c.id
+      LEFT JOIN clusters c ON (e.cluster_id = c.id::text OR e.cluster_id = c.name)
       LEFT JOIN environments env ON c.environment_id = env.id
       WHERE e.id = $1
     `;
@@ -516,7 +528,7 @@ export class KubernetesEventModel {
         `UPDATE pods
          SET status = $1, updated_at = NOW()
          WHERE (name = $2 OR kubernetes_uid = $3)
-           AND cluster_id = $4`,
+           AND (cluster_id::text = $4 OR cluster_id IN (SELECT id FROM clusters WHERE name = $4 OR id::text = $4))`,
         [status, podName, kubernetesUid, clusterId]
       );
     } catch {

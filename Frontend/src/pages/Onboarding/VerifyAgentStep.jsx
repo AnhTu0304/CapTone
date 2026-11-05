@@ -281,32 +281,43 @@ export const VerifyAgentStep = ({ onNavigate }) => {
 
   const isConnected = agentStatus?.state === 'connected';
 
-  // Câu lệnh Helm Chart nội bộ
-  const helmCommand = `# 1. Cài đặt Agent vào cụm Kubernetes bằng Helm Chart dự án
-helm upgrade --install selfheal-agent ./Agent/deploy/helm/selfheal-agent \\
+  const getOrigin = () => {
+    if (typeof window === 'undefined') return 'http://localhost';
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
+      return `${protocol}//${hostname}`;
+    }
+    return window.location.origin;
+  };
+  const origin = getOrigin();
+
+  // Câu lệnh Helm Chart Doanh Nghiệp
+  const helmCommand = `# Cài đặt Agent qua Helm Repository chính thức của SelfHeal
+helm repo add selfheal ${origin}/charts
+helm repo update
+helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
   --namespace selfheal-system --create-namespace \\
   --set secret.agentToken="${effectiveToken}" \\
-  --set config.clusterName="${clusterName}" \\
-  --set securityContext.runAsNonRoot=true`;
+  --set config.clusterName="${clusterName}"`;
 
-  // Câu lệnh Script cài đặt tự động (PowerShell & Bash)
-  const scriptCommand = `# Dành cho Windows (PowerShell):
-Set-ExecutionPolicy RemoteSigned -Scope Process -Force
-.\\Agent\\installer\\install-agent.ps1 -Token "${effectiveToken}"
+  // Câu lệnh Script cài đặt tự động 100% qua URL (PowerShell & Bash)
+  const scriptCommand = `# Dành cho Windows (PowerShell - 1 Dòng lệnh tải và chạy trực tiếp):
+irm "${origin}/agent/install.ps1?token=${encodeURIComponent(effectiveToken)}" | iex
 
-# Dành cho Linux / macOS (Bash):
-chmod +x ./Agent/installer/install-agent.sh
-./Agent/installer/install-agent.sh --token "${effectiveToken}"`;
+# Dành cho Linux / macOS (Bash - 1 Dòng lệnh tải và chạy trực tiếp):
+curl -fsSL "${origin}/agent/install.sh?token=${encodeURIComponent(effectiveToken)}" | bash`;
 
   // Câu lệnh Kubectl Secret & Native Manifests
-  const kubectlCommand = `# 1. Tạo Namespace an toàn cho Tác tử
-kubectl create namespace selfheal-system --dry-run=client -o yaml | kubectl apply -f -
+  const kubectlCommand = `# Cách 1: Triển khai 1 dòng qua Kubernetes Manifest URL Cloud
+kubectl apply -f "${origin}/agent/install.yaml?token=${encodeURIComponent(effectiveToken)}"
 
-# 2. Tạo Secret bảo mật chứa Agent Token xác thực
+# Cách 2: Triển khai 2 bước chuẩn bảo mật Secret
+kubectl create namespace selfheal-system --dry-run=client -o yaml | kubectl apply -f -
 kubectl create secret generic selfheal-agent-secret \\
   --namespace selfheal-system \\
   --from-literal="AGENT_TOKEN=${effectiveToken}" \\
-  --dry-run=client -o yaml | kubectl apply -f -`;
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f "${origin}/agent/manifest.yaml"`;
 
   return (
     <div className="onboarding-step-verify-agent">
