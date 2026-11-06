@@ -35,11 +35,28 @@ export class TelemetryController {
       return null;
     }
 
+    const userRoles = Array.isArray(user.roles) ? user.roles : [];
+    const isSuperAdmin = userRoles.some((r: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(r).trim().toUpperCase()));
+
     const memberRes = await pool.query(
       `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
       [user.id]
     );
     const userOrgIds: string[] = memberRes.rows.map((r) => r.organization_id);
+
+    if (isSuperAdmin) {
+      const requestedOrg =
+        (req.headers['x-organization-id'] as string) ||
+        (req.query.organization_id as string) ||
+        (req.query.orgId as string) ||
+        (req.body?.organization_id as string) ||
+        (req.params?.orgId as string);
+
+      if (requestedOrg) {
+        return { allowedOrgIds: [requestedOrg], scopedOrgId: requestedOrg };
+      }
+      return { allowedOrgIds: [], scopedOrgId: '' };
+    }
 
     if (userOrgIds.length === 0) {
       ApiResponse.error(res, 'Từ chối truy cập: Bạn không thuộc tổ chức nào hoặc chưa được cấp quyền', 403);

@@ -298,9 +298,8 @@ export class KubernetesEventModel {
     if (options.clusterId && options.clusterId.toUpperCase() !== 'ALL') {
       const cId = options.clusterId.trim();
       conditions.push(`(
-        e.cluster_id = $${paramIdx}
-        OR e.cluster_id IN (SELECT c.id::text FROM clusters c WHERE c.id::text = $${paramIdx} OR c.name ILIKE $${paramIdx})
-        OR e.cluster_id IN (SELECT c.name FROM clusters c WHERE c.name ILIKE $${paramIdx})
+        e.cluster_id::text = $${paramIdx}
+        OR e.cluster_id IN (SELECT c.id FROM clusters c WHERE c.id::text = $${paramIdx} OR c.name ILIKE $${paramIdx})
         OR e.metadata->>'cluster_name' ILIKE $${paramIdx}
       )`);
       params.push(cId);
@@ -311,12 +310,7 @@ export class KubernetesEventModel {
     if (Array.isArray(options.allowedOrgIds) && options.allowedOrgIds.length > 0) {
       conditions.push(`(
         e.cluster_id IN (
-          SELECT c.id::text FROM clusters c
-          JOIN environments env ON c.environment_id = env.id
-          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
-        )
-        OR e.cluster_id IN (
-          SELECT c.name FROM clusters c
+          SELECT c.id FROM clusters c
           JOIN environments env ON c.environment_id = env.id
           WHERE env.organization_id = ANY($${paramIdx}::uuid[])
         )
@@ -429,7 +423,7 @@ export class KubernetesEventModel {
         env.name AS environment_name,
         env.organization_id
       FROM kubernetes_events e
-      LEFT JOIN clusters c ON (e.cluster_id = c.id::text OR e.cluster_id = c.name)
+      LEFT JOIN clusters c ON (e.cluster_id = c.id OR e.cluster_id::text = c.name)
       LEFT JOIN environments env ON c.environment_id = env.id
       WHERE e.id = $1
     `;
