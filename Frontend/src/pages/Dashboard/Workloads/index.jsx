@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { podService } from '../../../services/podService';
+import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import {
   Box,
   Layers,
@@ -18,6 +19,7 @@ import {
 
 export const WorkloadsPage = () => {
   const { currentEnv, isRefreshing, triggerRefresh, onNavigate } = useDashboard();
+  const { can } = usePermissions();
   const [pods, setPods] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -728,7 +730,7 @@ export const WorkloadsPage = () => {
                               cursor: 'pointer',
                             }}
                           >
-                            Khởi động lại (Restart)
+                            {can(PERMISSIONS.ENV_MANAGE) ? 'Khởi động lại (Restart)' : 'Xem Chi Tiết'}
                           </button>
                         </td>
                       </tr>
@@ -913,6 +915,7 @@ export const WorkloadsPage = () => {
               >
                 Đóng
               </button>
+              {can(PERMISSIONS.ENV_MANAGE) && (
               <button
                 onClick={() => {
                   const targetPod = selectedItem.type === 'POD' ? selectedItem.data : selectedItem.data.pods[0];
@@ -947,6 +950,7 @@ export const WorkloadsPage = () => {
                   <span>Khởi Động Lại (Restart)</span>
                 )}
               </button>
+              )}
             </div>
           </div>
         </div>

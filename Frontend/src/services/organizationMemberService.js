@@ -106,9 +106,9 @@ export const organizationMemberService = {
   /**
    * Mời thành viên mới vào tổ chức qua email
    * @param {string} orgId
-   * @param {{ email: string, role_code: 'SME_OWNER'|'DEVOPS'|'VIEWER', full_name?: string }} data
+   * @param {{ email: string, role_code: 'SME_OWNER'|'DEVOPS'|'VIEWER' }} data
    */
-  async inviteMember(orgId, { email, role_code = 'DEVOPS', full_name }) {
+  async inviteMember(orgId, { email, role_code = 'DEVOPS' }) {
     if (!email || !email.includes('@')) {
       throw new Error('Địa chỉ email không hợp lệ');
     }
@@ -165,7 +165,7 @@ export const organizationMemberService = {
       user: {
         id: `usr-${Date.now().toString().slice(-4)}`,
         email: email.trim(),
-        full_name: full_name || email.split('@')[0],
+        full_name: email.split('@')[0],
         avatar_url: null,
         status: 'INVITED',
       },

@@ -115,6 +115,9 @@ export const RouteRenderer = ({
   const auth = useAuth();
 
   const user = auth?.user || null;
+  const isSuperAdmin = auth?.isSuperAdmin ? auth.isSuperAdmin(user) : false;
+  const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(user) : false;
+  const isOwnerUser = auth?.isOwner ? auth.isOwner(user) : false;
   const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
 
@@ -140,7 +143,7 @@ export const RouteRenderer = ({
   // Handle all dashboard routes (User / Owner Portal với phân cấp RBAC động theo tenant role)
   if (path.startsWith('/dashboard')) {
     const activeOrgRole = (localStorage.getItem('selfheal_active_org_role') || '').toUpperCase();
-    const effectiveDashboardRole = activeOrgRole || (isViewerUser ? 'VIEWER' : isDevOpsUser ? 'DEVOPS' : 'SME_OWNER');
+    const effectiveDashboardRole = activeOrgRole || (isSuperAdmin || isSystemAdmin || isOwnerUser ? 'SME_OWNER' : isDevOpsUser ? 'DEVOPS' : 'VIEWER');
     const isDashboardDevOps = effectiveDashboardRole === 'DEVOPS';
     const isDashboardViewer = effectiveDashboardRole === 'VIEWER';
 

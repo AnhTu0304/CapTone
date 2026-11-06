@@ -831,6 +831,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Mã Token Xác Thực & Xoay Vòng</h3>
                 </div>
                 {/* Rotate Token Button */}
+                {can(PERMISSIONS.AGENT_MANAGE) && (
                 <button
                   type="button"
                   onClick={() => setShowRotateModal(true)}
@@ -851,6 +852,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <Key size={13} />
                   <span>Xoay Vòng / Đổi Token (Rotate Token)</span>
                 </button>
+                )}
               </div>
 
               {/* Active Token Display */}
@@ -1476,6 +1478,7 @@ kubectl delete namespace selfheal-system`}</code>
           </div>
 
           {/* 7. Disconnect / Remove: Vùng Thao Tác Nguy Hiểm (Danger Zone) */}
+          {(can(PERMISSIONS.AGENT_MANAGE) || can(PERMISSIONS.ENV_DELETE)) && (
           <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B' }}>
               <ShieldAlert size={20} />
@@ -1487,6 +1490,7 @@ kubectl delete namespace selfheal-system`}</code>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px', paddingTop: '8px' }}>
               {/* Ngắt kết nối Agent */}
+              {can(PERMISSIONS.AGENT_MANAGE) && (
               <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #F87171', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
                 <div>
                   <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>Ngắt Kết Nối Agent (Disconnect)</h4>
@@ -1516,6 +1520,7 @@ kubectl delete namespace selfheal-system`}</code>
                   <span>Ngắt Kết Nối Agent</span>
                 </button>
               </div>
+              )}
 
               {/* Xóa Cấu Hình Cụm (Chỉ SME_OWNER có quyền) */}
               {can(PERMISSIONS.ENV_DELETE) && (
@@ -1551,6 +1556,7 @@ kubectl delete namespace selfheal-system`}</code>
               )}
             </div>
           </div>
+          )}
         </div>
       )}
 

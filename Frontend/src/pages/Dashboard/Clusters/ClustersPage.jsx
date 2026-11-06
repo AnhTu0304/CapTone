@@ -310,6 +310,7 @@ export const ClustersPage = ({ onNavigate }) => {
           <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', maxWidth: '460px', margin: 0 }}>
             Tổ chức {currentOrg?.name} chưa liên kết cụm máy chủ Kubernetes nào. Hãy đăng ký cụm mới để kích hoạt tác tử giám sát và tự phục hồi.
           </p>
+          {can(PERMISSIONS.ENV_MANAGE) && (
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
@@ -327,6 +328,7 @@ export const ClustersPage = ({ onNavigate }) => {
           >
             Đăng Ký Cụm Đầu Tiên
           </button>
+          )}
         </div>
       ) : (
         /* Clusters Grid */

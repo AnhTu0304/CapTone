@@ -236,6 +236,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <span>Làm mới</span>
           </button>
 
+          {can(PERMISSIONS.AGENT_MANAGE) && (
           <button
             onClick={() => setIsInstallModalOpen(true)}
             style={{
@@ -256,6 +257,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <Plus size={16} />
             <span>Cài đặt Tác tử Mới</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -402,6 +404,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', maxWidth: '460px', margin: '4px auto 16px auto' }}>
                 Triển khai Tác tử eBPF vào cụm Kubernetes của bạn để tự động thu thập viễn trắc và kích hoạt cơ chế tự phục hồi AI.
               </p>
+              {can(PERMISSIONS.AGENT_MANAGE) && (
               <button
                 onClick={() => setIsInstallModalOpen(true)}
                 style={{
@@ -417,6 +420,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               >
                 + Cài đặt Tác tử Mới
               </button>
+              )}
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>

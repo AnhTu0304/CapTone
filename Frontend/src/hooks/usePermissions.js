@@ -62,16 +62,15 @@ export const usePermissions = () => {
     dashboardContext?.currentOrg?.role ||
     dashboardContext?.currentUserRole ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('selfheal_active_org_role') : null) ||
-    'SME_OWNER'
+    'VIEWER'
   ).toUpperCase();
   const normalizedRole = rawRole.replace(/\s+/g, '_');
   const activeRole = normalizedRole;
 
-  const isOwner = isSuperAdmin || isSystemAdmin || normalizedRole === 'SME_OWNER' || normalizedRole === 'PLATFORM_ADMIN' || normalizedRole === 'OWNER' || normalizedRole === 'ADMIN';
-  const isDevOps = (normalizedRole === 'DEVOPS' || (auth?.isDevOps && auth.isDevOps(user))) && !isOwner;
-  const isViewer = (normalizedRole === 'VIEWER' || (auth?.isViewer && auth.isViewer(user))) && !isOwner && !isDevOps;
-
-  /**
+  const isOwner = isSuperAdmin || isSystemAdmin || ['SME_OWNER', 'PLATFORM_ADMIN', 'OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(normalizedRole);
+  const isDevOps = !isOwner && (normalizedRole === 'DEVOPS' || (auth?.isDevOps && auth.isDevOps(user)));
+  const isViewer = !isOwner && !isDevOps;
+/**
    * Kiểm tra quyền cụ thể
    * @param {string} permission - Một trong các giá trị của PERMISSIONS
    * @returns {boolean}
