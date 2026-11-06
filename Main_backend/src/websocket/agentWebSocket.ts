@@ -447,11 +447,17 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                   ]
                 );
 
-                // Auto-resolve incident
-                if (row?.incident_id) {
+                // Auto-resolve incident and any open duplicate incidents for the same target service
+                if (row?.incident_id || row?.target_name) {
                   await pool.query(
-                    `UPDATE incidents SET status = 'RESOLVED', updated_at = NOW() WHERE id = $1;`,
-                    [row.incident_id]
+                    `UPDATE incidents
+                     SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
+                     WHERE status != 'RESOLVED'
+                       AND (
+                         id = $1
+                         OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
+                       );`,
+                    [row?.incident_id || null, row?.target_name || null]
                   );
                 }
 
@@ -460,6 +466,17 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                   await pool.query(
                     `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
                     [row.recommendation_id]
+                  );
+                }
+                if (row?.incident_id || row?.target_name) {
+                  await pool.query(
+                    `UPDATE ai_recommendations r
+                     SET status = 'APPLIED'
+                     FROM incidents i
+                     WHERE r.incident_id = i.id
+                       AND (r.incident_id = $1 OR ($2::text IS NOT NULL AND (i.target_id = $2 OR i.title ILIKE '%' || $2 || '%')))
+                       AND r.status = 'PROPOSED';`,
+                    [row?.incident_id || null, row?.target_name || null]
                   );
                 }
               }

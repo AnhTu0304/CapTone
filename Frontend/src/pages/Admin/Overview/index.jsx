@@ -16,10 +16,7 @@ import {
   PieChart,
 } from 'lucide-react';
 import { fetchAdminOverview } from '../../../services/adminOverviewService';
-import GlobalScopeSelector from './components/GlobalScopeSelector';
 import KPISection from './components/KPISection';
-import PlatformHealthSection from './components/PlatformHealthSection';
-import { OrganizationGrowthSection } from './components/GrowthAndAnalyticsSections';
 import { AIOverviewSection } from './components/AIAndAgentSections';
 import { RecentActivitySection } from './components/FeedsSections';
 import InteractiveOrganizationGrowthChart from '../../../components/admin/InteractiveOrganizationGrowthChart';
@@ -294,7 +291,7 @@ export const OverviewPage = ({ onNavigate }) => {
           </p>
           <div style={{ display: 'flex', gap: '8px' }}>
             <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#059669', backgroundColor: 'rgba(5, 150, 105, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
-              86 Doanh nghiệp
+              {data?.kpi?.companies?.total ?? 0} Doanh nghiệp
             </span>
             <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#D97706', backgroundColor: '#FEFCE8', padding: '2px 6px', borderRadius: '4px' }}>
               Thống kê 12 tháng
@@ -343,7 +340,7 @@ export const OverviewPage = ({ onNavigate }) => {
               So sánh Trước/Sau
             </span>
             <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#7C3AED', backgroundColor: '#F5F3FF', padding: '2px 6px', borderRadius: '4px' }}>
-              Kho 5 Model
+              {data?.aiOverview?.modelName ? '1 Model Đang Chạy' : 'Kho Model'}
             </span>
           </div>
         </div>
@@ -395,7 +392,7 @@ export const OverviewPage = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* SECTION 3: KPI CARDS */}
+      {/* SECTION 4: KPI CARDS */}
       <KPISection
         kpiData={data?.kpi}
         status={status}
@@ -404,35 +401,19 @@ export const OverviewPage = ({ onNavigate }) => {
         onNavigate={onNavigate}
       />
 
-      {/* SECTION 4: INTERACTIVE ORGANIZATION & TENANT GROWTH DYNAMICS (DAY / MONTH / YEAR) */}
-      <InteractiveOrganizationGrowthChart />
+      {/* SECTION 5: INTERACTIVE ORGANIZATION & TENANT GROWTH DYNAMICS */}
+      <InteractiveOrganizationGrowthChart
+        kpiData={data?.kpi}
+        statistics={data?.statistics}
+      />
 
-      {/* SECTION 5: PLATFORM CORE SUBSYSTEMS HEALTH */}
-      <PlatformHealthSection
-        healthData={data?.platformHealth}
+      {/* SECTION 6: AI PLATFORM OVERVIEW */}
+      <AIOverviewSection
+        aiData={data?.aiOverview}
         status={status}
         errorMessage={errorMessage}
         onRetry={handleManualRefresh}
       />
-
-      {/* SECTION 5: 2-COLUMN GRID (ORGANIZATION GROWTH & AI PLATFORM OVERVIEW) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '20px' }}>
-        {/* ORGANIZATION GROWTH SECTION */}
-        <OrganizationGrowthSection
-          growthData={data?.organizationGrowth}
-          status={status}
-          errorMessage={errorMessage}
-          onRetry={handleManualRefresh}
-        />
-
-        {/* AI OVERVIEW SECTION */}
-        <AIOverviewSection
-          aiData={data?.aiOverview}
-          status={status}
-          errorMessage={errorMessage}
-          onRetry={handleManualRefresh}
-        />
-      </div>
 
       {/* SECTION 6: RECENT PLATFORM ACTIVITY (AUDIT TRAIL) */}
       <RecentActivitySection

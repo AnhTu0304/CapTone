@@ -17,7 +17,6 @@ import {
   X,
   ExternalLink,
   Shield,
-  HelpCircle,
   Layers,
   Server,
   Filter,
@@ -572,46 +571,6 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               </tbody>
             </table>
           )}
-        </div>
-      </div>
-
-      {/* 4. Troubleshooting Guide Box */}
-      <div
-        className="dash-card"
-        style={{
-          padding: '20px 24px',
-          borderLeft: '4px solid var(--dash-primary)',
-          backgroundColor: '#FFFFFF',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <HelpCircle size={18} color="var(--dash-primary)" />
-          <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-            Hướng Dẫn Xử Lý Sự Cố Kết Nối Tác Tử (Troubleshooting)
-          </h3>
-        </div>
-        <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5, margin: '0 0 12px 0' }}>
-          Nếu một tác tử chuyển sang trạng thái Ngoại tuyến hoặc ngừng phát nhịp tim, vui lòng kiểm tra các bước sau trên cụm Kubernetes của bạn:
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', fontSize: '0.75rem' }}>
-          <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
-            <strong>1. Kiểm tra Pod DaemonSet</strong>
-            <p style={{ color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              Chạy <code>kubectl get pods -n selfheal-system -l app.kubernetes.io/name=selfheal-agent</code> để xác nhận Pods đang ở trạng thái Running.
-            </p>
-          </div>
-          <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
-            <strong>2. Phiên bản Linux Kernel</strong>
-            <p style={{ color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              eBPF BPF_PROG_TYPE_SOCK_OPS yêu cầu phiên bản nhân Linux tối thiểu &gt;= 5.8 (khuyến nghị 5.15+ LTS).
-            </p>
-          </div>
-          <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
-            <strong>3. Khởi động lại Pod sau khi đổi Token</strong>
-            <p style={{ color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-              Chạy <code>kubectl rollout restart deployment/selfheal-agent -n selfheal-system</code> để nạp Token mới.
-            </p>
-          </div>
         </div>
       </div>
 

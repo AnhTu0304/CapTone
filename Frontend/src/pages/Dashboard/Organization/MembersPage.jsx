@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { useAuth } from '../../../context/AuthContext';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { useToast } from '../../../context/ToastContext';
 import { organizationMemberService } from '../../../services/organizationMemberService';
@@ -35,6 +36,7 @@ const RBAC_PERMISSIONS = [
 
 export const MembersPage = () => {
   const { currentOrg } = useDashboard();
+  const { user: currentUser } = useAuth();
   const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
 
   // Xác định thẩm quyền quản trị của người dùng hiện tại
@@ -281,45 +283,6 @@ export const MembersPage = () => {
         )}
       </div>
 
-      {/* 2. 3 Role Overview Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-        <div className="dash-card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <ShieldCheck size={18} color="#059669" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-              Chủ DN (SME Owner)
-            </h3>
-          </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.45 }}>
-            Toàn quyền quản trị cao nhất: Ký duyệt hành động HITL Gate, điều chỉnh ma trận chính sách, quản lý thành viên và thanh toán gói cước.
-          </p>
-        </div>
-
-        <div className="dash-card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <Lock size={18} color="#2563EB" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-              Kỹ Sư DevOps Lead
-            </h3>
-          </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.45 }}>
-            Vận hành hạ tầng: Cài đặt tác tử eBPF, xem chi tiết logs/metrics, cấu hình cụm máy chủ và đề xuất phương án tự phục hồi.
-          </p>
-        </div>
-
-        <div className="dash-card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <Eye size={18} color="#64748B" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-              Người Xem (Viewer)
-            </h3>
-          </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.45 }}>
-            Quyền chỉ đọc an toàn: Theo dõi trạng thái cụm, xem biểu đồ tài nguyên và tải báo cáo SLA, không thể can thiệp hay sửa đổi trạng thái.
-          </p>
-        </div>
-      </div>
-
       {/* 3. Member & Invitation List Table Card */}
       <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
         {/* Card Header & Controls */}
@@ -522,6 +485,11 @@ export const MembersPage = () => {
                       ? 'Kỹ Sư DevOps Lead'
                       : 'Người Xem (Viewer)');
                   const isInvited = m.status === 'INVITED';
+                  const isOwnerRole = roleCode === 'SME_OWNER';
+                  const isSelf = Boolean(
+                    (currentUser?.id && (m.user?.id === currentUser.id || m.user_id === currentUser.id)) ||
+                    (currentUser?.email && (m.user?.email === currentUser.email || m.email === currentUser.email))
+                  );
 
                   return (
                     <tr key={m.id} style={{ borderBottom: '1px solid var(--dash-border)' }}>
@@ -606,7 +574,45 @@ export const MembersPage = () => {
 
                       {/* Actions */}
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {canManageMembers ? (
+                        {isOwnerRole ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.6875rem',
+                              color: '#059669',
+                              backgroundColor: '#ECFDF5',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #A7F3D0',
+                              fontWeight: 700,
+                            }}
+                            title="Chủ sở hữu tổ chức được bảo vệ tối cao (Không thể tự hạ cấp vai trò hoặc xóa tài khoản)"
+                          >
+                            <ShieldCheck size={13} color="#059669" />
+                            <span>Chủ Sở Hữu</span>
+                          </span>
+                        ) : isSelf ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.6875rem',
+                              color: '#2563EB',
+                              backgroundColor: '#EFF6FF',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #BFDBFE',
+                              fontWeight: 700,
+                            }}
+                            title="Tài khoản đăng nhập của bạn (Không thể tự xóa khỏi tổ chức tại đây)"
+                          >
+                            <Lock size={12} color="#2563EB" />
+                            <span>Tài Khoản Của Bạn</span>
+                          </span>
+                        ) : canManageMembers ? (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                             {/* Nút Đổi Vai Trò */}
                             <button

@@ -440,7 +440,7 @@ export const ApprovalsPage = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckCircle2 size={22} color="var(--dash-primary)" />
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Cổng Phê Duyệt Của Con Người (Human-in-the-Loop Gate)
+              Cổng Phê Duyệt Của Con Người
             </h1>
           </div>
 <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '3px', margin: 0 }}>
@@ -449,32 +449,6 @@ export const ApprovalsPage = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 12px',
-              borderRadius: '20px',
-              backgroundColor: isWsConnected ? '#ECFDF5' : '#F1F5F9',
-              color: isWsConnected ? '#065F46' : '#64748B',
-              border: `1px solid ${isWsConnected ? '#A7F3D0' : '#CBD5E1'}`,
-              fontSize: '0.75rem',
-              fontWeight: 600,
-            }}
-          >
-            <span
-              style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: isWsConnected ? '#10B981' : '#94A3B8',
-                boxShadow: isWsConnected ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
-                display: 'inline-block',
-              }}
-            />
-            <span>{isWsConnected ? 'Thời gian thực (WebSocket Push)' : 'Đang đồng bộ...'}</span>
-          </div>
           <button
             type="button"
             onClick={triggerRefresh}
@@ -791,9 +765,7 @@ export const ApprovalsPage = () => {
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                         <ShieldCheck size={14} color="#059669" />
                         <span>Chính sách:</span>
-                        <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)', backgroundColor: '#F1F5F9', padding: '1px 7px', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
-                          {req.policyName}
-                        </strong>
+                        <strong style={{ color: '#0F172A' }}>{req.policyName}</strong>
                       </span>
                       <span style={{ color: '#CBD5E1' }}>•</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>

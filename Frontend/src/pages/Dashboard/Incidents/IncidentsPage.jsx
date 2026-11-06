@@ -227,7 +227,9 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const isNoAction = recAction === 'NO_ACTION' || (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
 
   // Trạng thái vòng đời sự cố: Phản ánh trung thực trạng thái thực tế từ CSDL
-  const hasPendingApproval = Boolean(item.has_pending_approval || item.healing_approval_status === 'PENDING' || item.status === 'AWAITING_APPROVAL');
+  const hasPendingApproval = item.has_pending_approval !== undefined
+    ? Boolean(item.has_pending_approval)
+    : Boolean(item.pending_approval_id || item.healing_approval_status === 'PENDING' || item.status === 'AWAITING_APPROVAL');
   let statusLabel = 'Đang theo dõi';
   if (isResolved || item.healing_status === 'SUCCEEDED') {
     statusLabel = 'Đã khắc phục hoàn tất';
@@ -301,6 +303,10 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     predictedRisk: predictedRisk,
     primaryRisk: predictedRisk ? `${predictedRisk}${rcaConfidence !== null ? ` (${rcaConfidence}%)` : ''}` : null,
     mttr: isResolved ? 'Đã khắc phục hoàn tất' : 'Đang chạy (1.4s)',
+    hasPendingApproval: hasPendingApproval,
+    pendingApprovalId: item.pending_approval_id || null,
+    healingStatus: item.healing_status || null,
+    healingApprovalStatus: item.healing_approval_status || null,
     recommendationAction: recAction,
     recommendationReason: recReason,
     evidences: evidencesList,

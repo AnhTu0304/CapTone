@@ -332,6 +332,18 @@ export class TelemetryPipelineService {
           console.log(`⏳ [PolicyEngine] '${serviceId}' đang trong quá trình thực thi ${policy.action_name} (ID: ${act.id}). Bỏ qua.`);
         } else {
           console.log(`⏳ [PolicyEngine] '${serviceId}' vừa thực hiện ${policy.action_name} và đang trong thời gian Cooldown (${cooldownSec}s, hoàn tất lúc: ${act.completed_at}). Bỏ qua không kích hoạt lặp.`);
+          if (rca.incident_id) {
+            await pool.query(
+              `UPDATE incidents SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW() WHERE id = $1 AND status != 'RESOLVED';`,
+              [rca.incident_id]
+            );
+          }
+          if (rca.recommendation_id) {
+            await pool.query(
+              `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
+              [rca.recommendation_id]
+            );
+          }
         }
         return;
       }
@@ -564,14 +576,33 @@ export class TelemetryPipelineService {
         // Nếu đã dispatch tới Agent, đặt timeout 10 giây dự phòng nếu WebSocket callback bị thất lạc
         setTimeout(async () => {
           try {
-            await pool.query(
+            const updRes = await pool.query(
               `UPDATE healing_actions 
                SET execution_status = 'SUCCEEDED', 
                    completed_at = COALESCE(completed_at, NOW()), 
                    result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', '"Tác vụ tự phục hồi hoàn tất thành công trên cụm Kubernetes."'::jsonb) 
-               WHERE id = $1 AND execution_status = 'RUNNING'`,
+               WHERE id = $1 AND execution_status = 'RUNNING'
+               RETURNING id`,
               [actionId]
             );
+            if ((updRes.rowCount || 0) > 0) {
+              await pool.query(
+                `UPDATE incidents
+                 SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
+                 WHERE status != 'RESOLVED'
+                   AND (
+                     id = $1
+                     OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
+                   );`,
+                [rca.incident_id || null, serviceId || null]
+              );
+              if (rca.recommendation_id) {
+                await pool.query(
+                  `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
+                  [rca.recommendation_id]
+                );
+              }
+            }
           } catch (e) {
             // ignore
           }

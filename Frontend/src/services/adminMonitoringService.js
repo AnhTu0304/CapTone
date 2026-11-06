@@ -41,9 +41,9 @@ export const getPlatformMonitoringData = async () => {
     port: 5000,
     uptime: uptimeStr,
     apiLatency: `${apiLatency} ms (p50)`,
-    memoryRss: mainData.memory?.rssMb ? `${mainData.memory.rssMb} MB` : '112 MB',
-    heapUsed: mainData.memory?.heapUsedMb ? `${mainData.memory.heapUsedMb} MB` : '29 MB',
-    nodeVersion: mainData.nodeVersion || 'v22.23.4',
+    memoryRss: mainData.memory?.rssMb ? `${mainData.memory.rssMb} MB` : 'N/A',
+    heapUsed: mainData.memory?.heapUsedMb ? `${mainData.memory.heapUsedMb} MB` : 'N/A',
+    nodeVersion: mainData.nodeVersion || 'Node.js',
     environment: mainData.environment || 'production',
   };
 
@@ -56,9 +56,8 @@ export const getPlatformMonitoringData = async () => {
     modelType: aiHealth.model_type || 'gru_multi_label_risk',
     inputShape: aiHealth.input_shape ? `(${aiHealth.input_shape.join(', ')}) = 96 inputs` : '(12, 8) = 96 inputs',
     riskCount: `${aiHealth.risk_count || 6} loại rủi ro K8s`,
-    rcaProvider: aiHealth.rca_provider || 'deterministic',
+    rcaProvider: aiHealth.rca_provider === 'openai' ? 'OpenAI GPT-4o-mini' : 'Deterministic Multi-Agent SRE',
     version: aiHealth.version || 'v2.0.0',
-    inferenceLatency: '0.68 ms (p50)',
   };
 
   // 3. Database PostgreSQL Data
@@ -69,8 +68,6 @@ export const getPlatformMonitoringData = async () => {
     name: dbData.name || 'captone_db',
     host: dbData.host || 'postgres',
     serverTime: dbData.serverTime ? new Date(dbData.serverTime).toLocaleTimeString('vi-VN') : 'Đồng bộ',
-    tablesCount: '39 Bảng nghiệp vụ',
-    poolStatus: 'Tự động mở rộng (PgPool)',
   };
 
   // 4. Redis Cache Data
@@ -79,7 +76,7 @@ export const getPlatformMonitoringData = async () => {
     status: redisData.status === 'CONNECTED' ? 'CONNECTED' : 'DISCONNECTED',
     port: redisData.port || 6379,
     host: redisData.host || 'redis',
-    latency: `${redisData.latencyMs ?? 0} ms`,
+    latency: redisData.latencyMs != null ? `${redisData.latencyMs} ms` : 'N/A',
   };
 
   // 5. Active AI Model Data
@@ -87,24 +84,16 @@ export const getPlatformMonitoringData = async () => {
   const rawMetrics = activeModel?.rawMetrics?.overall || {};
 
   const aiModel = {
-    name: activeModel?.name || 'Kernel Multi-Head GRU Round 3',
-    version: activeModel?.version || 'v2.3.0',
-    status: activeModel?.status || 'ACTIVE',
-    accuracy: rawMetrics.accuracy != null ? `${rawMetrics.accuracy}%` : '97.77%',
-    f1: rawMetrics.f1_score != null ? `${rawMetrics.f1_score}` : '0.9317',
-    fpr: rawMetrics.false_positive_rate != null ? `${rawMetrics.false_positive_rate}%` : '1.07%',
-    latency: rawMetrics.latency_ms != null ? `${rawMetrics.latency_ms} ms` : '0.68 ms',
-    filePath: activeModel?.filePath || '/app/saved_models/gru_risk_model_round3_8feature.pth',
-    totalPredictions: Number(predStats?.total || 0),
-  };
-
-  // 6. Multi-tenant Blast Radius Data
-  const blastRadius = {
-    score: '0.00',
-    status: 'Hoàn Toàn An Toàn (Isolated)',
-    isolatedTenantsCount: 18,
-    activeCrossTenantIncidents: 0,
-    description: '100% tài nguyên và lưu lượng viễn trắc của các công ty được cách ly hoàn hảo.',
+    name: activeModel?.name || 'Chưa nạp model',
+    version: activeModel?.version || 'v1.0.0',
+    status: activeModel?.status || 'INACTIVE',
+    accuracy: rawMetrics.accuracy != null ? `${rawMetrics.accuracy}%` : 'N/A',
+    f1: rawMetrics.f1_score != null ? `${rawMetrics.f1_score}` : 'N/A',
+    fpr: rawMetrics.false_positive_rate != null ? `${rawMetrics.false_positive_rate}%` : 'N/A',
+    latency: rawMetrics.latency_ms != null ? `${rawMetrics.latency_ms} ms` : 'N/A',
+    dataset: activeModel?.dataset || 'Holdout Test Split',
+    filePath: activeModel?.filePath || 'N/A',
+    totalPredictions: Number(predStats?.total || activeModel?.predictionCount || 0),
   };
 
   return {
@@ -113,7 +102,6 @@ export const getPlatformMonitoringData = async () => {
     database,
     redis,
     aiModel,
-    blastRadius,
     lastUpdated: new Date().toLocaleTimeString('vi-VN'),
   };
 };

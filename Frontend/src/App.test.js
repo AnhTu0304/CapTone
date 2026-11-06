@@ -19,7 +19,7 @@ test('renders navigation routes in header and page', () => {
   expect(docsLinks.length).toBeGreaterThan(0);
 });
 
-test('renders new 3D Hero Section heading and trust badges', () => {
+test('renders new 3D Hero Section heading and action buttons', () => {
   render(<App />);
   const headingObs = screen.getAllByText(/Quan sát/i);
   expect(headingObs.length).toBeGreaterThan(0);
@@ -27,12 +27,8 @@ test('renders new 3D Hero Section heading and trust badges', () => {
   const headingRec = screen.getAllByText(/Khôi phục/i);
   expect(headingRec.length).toBeGreaterThan(0);
 
-  const k8sBadges = screen.getAllByText(/Native Kubernetes/i);
-  expect(k8sBadges.length).toBeGreaterThan(0);
-
-  expect(screen.getByText(/Ứng dụng AI/i)).toBeInTheDocument();
-  const controlBadges = screen.getAllByText(/Con người kiểm soát/i);
-  expect(controlBadges.length).toBeGreaterThan(0);
+  const ctaBtn = screen.getByText(/Bắt đầu ngay/i);
+  expect(ctaBtn).toBeInTheDocument();
 });
 
 test('renders 3D Infrastructure Dashboard and metrics', () => {
@@ -179,7 +175,6 @@ test('renders Dashboard Agents Page (/dashboard/agents) with eBPF agents and ins
   expect(screen.getByText(/selfheal-agent-worker-01/i)).toBeInTheDocument();
   expect(screen.getByText(/selfheal-agent-worker-02/i)).toBeInTheDocument();
   expect(screen.getByText(/Cài đặt Tác tử Mới/i)).toBeInTheDocument();
-  expect(screen.getByText(/Hướng Dẫn Xử Lý Sự Cố Kết Nối Tác Tử/i)).toBeInTheDocument();
 });
 
 test('renders Dashboard Infrastructure (/dashboard/infrastructure) and Workloads (/dashboard/workloads)', () => {

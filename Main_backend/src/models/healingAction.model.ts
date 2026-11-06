@@ -1229,10 +1229,16 @@ export class HealingActionModel {
           [action.incident_id, action.target_name]
         );
       }
-      if (action.incident_id) {
+      if (action.incident_id || action.target_name) {
         await pool.query(
-          `UPDATE incidents SET status = 'RESOLVED', resolved_at = NOW() WHERE id = $1;`,
-          [action.incident_id]
+          `UPDATE incidents
+           SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
+           WHERE status != 'RESOLVED'
+             AND (
+               id = $1
+               OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
+             );`,
+          [action.incident_id || null, action.target_name || null]
         );
       }
     }
@@ -1263,10 +1269,16 @@ export class HealingActionModel {
         [action.recommendation_id]
       );
     }
-    if (action && action.incident_id) {
+    if (action && (action.incident_id || action.target_name)) {
       await pool.query(
-        `UPDATE incidents SET status = 'RESOLVED' WHERE id = $1;`,
-        [action.incident_id]
+        `UPDATE incidents
+         SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
+         WHERE status != 'RESOLVED'
+           AND (
+             id = $1
+             OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
+           );`,
+        [action.incident_id || null, action.target_name || null]
       );
     }
 

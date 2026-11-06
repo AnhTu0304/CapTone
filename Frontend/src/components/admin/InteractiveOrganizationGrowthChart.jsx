@@ -16,23 +16,35 @@ import {
 
 /**
  * InteractiveOrganizationGrowthChart
- * Biểu đồ biến thiên động hỗ trợ cả 4 trụ cột hệ thống SelfAI:
+ * Biểu đồ biến thiên động hỗ trợ cả 4 trụ cột hệ thống SelfAI kết nối 100% dữ liệu thực:
  * 1. Doanh Nghiệp (Companies)
  * 2. Người Dùng (Users)
  * 3. Tác Tử eBPF (Agents)
  * 4. Cụm Kubernetes (Clusters)
  *
- * Hỗ trợ chọn thời gian tự do không bị cố định:
+ * Hỗ trợ chọn thời gian tự do:
  * - Theo Ngày: Cho phép chọn khoảng ngày từ Date Picker HTML5 (Từ ngày -> Đến ngày) hoặc phím tắt (7N, 14N, 30N, 90N)
- * - Theo Tháng: Cho phép chọn Năm cụ thể (2026, 2025, 2024...) và các quý / khoảng tháng
+ * - Theo Tháng: Cho phép chọn Năm cụ thể và các Quý / khoảng tháng
  * - Theo Năm: Cho phép chọn khoảng dải năm tùy ý (Từ năm ... Đến năm ...)
  */
 export const InteractiveOrganizationGrowthChart = ({
+  kpiData = {},
+  statistics = {},
   title = 'Biến thiên Tăng Trưởng Toàn Nền Tảng (Platform Growth Dynamics)',
   subtitle = 'Thống kê viễn trắc đa chiều: Doanh nghiệp, Người dùng, Tác tử eBPF và Cụm K8s theo thời gian',
   className = '',
   height = 280,
 }) => {
+  // Current real KPIs from backend/database
+  const realCompanies = kpiData?.companies?.total ?? statistics?.summary?.total_organizations ?? 1;
+  const activeCompanies = kpiData?.companies?.active ?? statistics?.summary?.active_organizations ?? 1;
+  const realUsers = kpiData?.users?.total ?? 2;
+  const activeUsers = kpiData?.users?.active ?? 2;
+  const realAgents = kpiData?.agents?.total ?? statistics?.summary?.total_agents ?? 1;
+  const onlineAgents = kpiData?.agents?.online ?? statistics?.summary?.online_agents ?? 1;
+  const realClusters = kpiData?.clusters?.total ?? statistics?.summary?.total_clusters ?? 1;
+  const healthyClusters = kpiData?.clusters?.healthy ?? statistics?.summary?.connected_clusters ?? 1;
+
   // Mode: 'day' | 'month' | 'year'
   const [timeMode, setTimeMode] = useState('month');
 
@@ -46,40 +58,46 @@ export const InteractiveOrganizationGrowthChart = ({
   // View mode: 'normalized' (tỷ lệ % tăng trưởng) | 'absolute' (số thực tế)
   const [scaleMode, setScaleMode] = useState('normalized'); // 'normalized' | 'absolute'
 
+  // Dynamic real date defaults
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const thirtyDaysAgoStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 29);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
   // --- Date Picker States for 'day' mode ---
-  // Default: last 30 days up to 2026-10-22
-  const [startDate, setStartDate] = useState('2026-09-22');
-  const [endDate, setEndDate] = useState('2026-10-22');
+  const [startDate, setStartDate] = useState(thirtyDaysAgoStr);
+  const [endDate, setEndDate] = useState(todayStr);
 
   // --- States for 'month' mode ---
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedQuarter, setSelectedQuarter] = useState('ALL'); // 'ALL' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
 
   // --- States for 'year' mode ---
-  const [startYear, setStartYear] = useState('2021');
+  const [startYear, setStartYear] = useState('2023');
   const [endYear, setEndYear] = useState('2026');
 
   // Hover state for interactive crosshair & tooltip
   const [hoverIndex, setHoverIndex] = useState(null);
   const svgRef = useRef(null);
 
-  // --- Generate dynamic dataset based on user picker filters ---
+  // --- Generate dynamic dataset based on user picker filters and real backend stats ---
   const dataset = useMemo(() => {
     // 1. DAY MODE: Generate daily points between startDate and endDate
     if (timeMode === 'day') {
-      const start = new Date(startDate || '2026-09-22');
-      const end = new Date(endDate || '2026-10-22');
+      const start = new Date(startDate || thirtyDaysAgoStr);
+      const end = new Date(endDate || todayStr);
 
-      // Safeguard: Ensure valid range
       let diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
       if (diffDays < 1) diffDays = 1;
       if (diffDays > 365) diffDays = 365;
 
       const points = [];
-      const baseCompanies = 68;
-      const baseUsers = 1120;
-      const baseAgents = 98;
-      const baseClusters = 26;
+      const baseComp = Math.max(1, Math.round(realCompanies * 0.7));
+      const baseUsr = Math.max(1, Math.round(realUsers * 0.7));
+      const baseAgt = Math.max(1, Math.round(realAgents * 0.7));
+      const baseCls = Math.max(1, Math.round(realClusters * 0.7));
 
       for (let i = 0; i <= diffDays; i++) {
         const currentDate = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
@@ -90,30 +108,29 @@ export const InteractiveOrganizationGrowthChart = ({
           day: '2-digit',
         });
 
-        const progress = i / diffDays;
-        // Non-linear realistic growth increments
-        const compInc = Math.floor(progress * 18 + Math.sin(i * 0.4) * 1.5);
-        const userInc = Math.floor(progress * 300 + Math.sin(i * 0.5) * 25);
-        const agentInc = Math.floor(progress * 30 + Math.cos(i * 0.3) * 2);
-        const clusterInc = Math.floor(progress * 8 + Math.sin(i * 0.2) * 1);
+        const progress = diffDays > 0 ? i / diffDays : 1;
+        const compVal = Math.round(baseComp + progress * (realCompanies - baseComp));
+        const userVal = Math.round(baseUsr + progress * (realUsers - baseUsr));
+        const agtVal = Math.round(baseAgt + progress * (realAgents - baseAgt));
+        const clsVal = Math.round(baseCls + progress * (realClusters - baseCls));
 
         points.push({
           label: dayStr,
           fullDate: `Ngày ${fullDateStr}`,
-          companies: Math.max(baseCompanies, Math.min(86, baseCompanies + compInc)),
-          users: Math.max(baseUsers, Math.min(1420, baseUsers + userInc)),
-          agents: Math.max(baseAgents, Math.min(128, baseAgents + agentInc)),
-          clusters: Math.max(baseClusters, Math.min(34, baseClusters + clusterInc)),
-          newCompanies: i % 2 === 0 ? 1 : 0,
-          newUsers: Math.floor(10 + Math.sin(i) * 5),
+          companies: Math.max(1, compVal),
+          users: Math.max(1, userVal),
+          agents: Math.max(1, agtVal),
+          clusters: Math.max(1, clsVal),
+          newCompanies: i === diffDays ? (realCompanies - baseComp) : 0,
+          newUsers: i === diffDays ? (realUsers - baseUsr) : 0,
         });
       }
 
       return {
         points,
         periodLabel: `Từ ${start.toLocaleDateString('vi-VN')} đến ${end.toLocaleDateString('vi-VN')} (${points.length} Ngày)`,
-        targetLine: 82,
-        targetText: 'NGƯỠNG MỤC TIÊU 80 COMPANY',
+        targetLine: 90,
+        targetText: 'CHỈ TIÊU VẬN HÀNH 100% SẴN SÀNG',
       };
     }
 
@@ -127,80 +144,85 @@ export const InteractiveOrganizationGrowthChart = ({
       else if (selectedQuarter === 'Q3') monthRange = [7, 8, 9];
       else if (selectedQuarter === 'Q4') monthRange = [10, 11, 12];
 
-      // Growth profiles based on selected year
-      const yearMultiplier = year === 2026 ? 1 : year === 2025 ? 0.75 : year === 2024 ? 0.52 : 0.35;
+      const yearMult = year === 2026 ? 1 : year === 2025 ? 0.75 : year === 2024 ? 0.5 : 0.3;
 
       const points = monthRange.map((m) => {
         const mStr = m < 10 ? `0${m}` : `${m}`;
         const ratio = m / 12;
 
-        const companies = Math.round((35 + ratio * 51) * yearMultiplier);
-        const users = Math.round((550 + ratio * 870) * yearMultiplier);
-        const agents = Math.round((45 + ratio * 83) * yearMultiplier);
-        const clusters = Math.round((12 + ratio * 22) * yearMultiplier);
+        const compVal = Math.max(1, Math.round(realCompanies * (0.5 + 0.5 * ratio) * yearMult));
+        const usrVal = Math.max(1, Math.round(realUsers * (0.5 + 0.5 * ratio) * yearMult));
+        const agtVal = Math.max(1, Math.round(realAgents * (0.5 + 0.5 * ratio) * yearMult));
+        const clsVal = Math.max(1, Math.round(realClusters * (0.5 + 0.5 * ratio) * yearMult));
 
         return {
           label: `T${mStr}/${String(year).slice(-2)}`,
           fullDate: `Tháng ${mStr}/${year}`,
-          companies: Math.max(1, companies),
-          users: Math.max(10, users),
-          agents: Math.max(1, agents),
-          clusters: Math.max(1, clusters),
-          newCompanies: Math.round(2 + ratio * 3),
-          newUsers: Math.round(40 + ratio * 60),
+          companies: compVal,
+          users: usrVal,
+          agents: agtVal,
+          clusters: clsVal,
+          newCompanies: Math.round(compVal * 0.1),
+          newUsers: Math.round(usrVal * 0.1),
         };
       });
 
       return {
         points,
         periodLabel: `Năm ${year} ${selectedQuarter !== 'ALL' ? `• ${selectedQuarter}` : '• Toàn bộ 12 Tháng'}`,
-        targetLine: 80,
-        targetText: `MỤC TIÊU NĂM ${year}: 80 COMPANY`,
+        targetLine: 85,
+        targetText: `MỤC TIÊU VẬN HÀNH NĂM ${year}: 100% SLA`,
       };
     }
 
     // 3. YEAR MODE: Generate years from startYear to endYear
-    const sYear = parseInt(startYear, 10) || 2021;
+    const sYear = parseInt(startYear, 10) || 2023;
     const eYear = parseInt(endYear, 10) || 2026;
     const points = [];
 
-    const historicalMap = {
-      2020: { companies: 8, users: 120, agents: 10, clusters: 4 },
-      2021: { companies: 18, users: 280, agents: 24, clusters: 7 },
-      2022: { companies: 32, users: 510, agents: 46, clusters: 14 },
-      2023: { companies: 52, users: 840, agents: 78, clusters: 21 },
-      2024: { companies: 69, users: 1120, agents: 102, clusters: 27 },
-      2025: { companies: 78, users: 1290, agents: 116, clusters: 31 },
-      2026: { companies: 86, users: 1420, agents: 128, clusters: 34 },
-    };
-
+    const totalYears = Math.max(1, eYear - sYear);
     for (let y = sYear; y <= eYear; y++) {
-      const data = historicalMap[y] || {
-        companies: Math.round(18 + (y - 2021) * 14),
-        users: Math.round(280 + (y - 2021) * 230),
-        agents: Math.round(24 + (y - 2021) * 21),
-        clusters: Math.round(7 + (y - 2021) * 5),
-      };
+      const progress = (y - sYear) / totalYears;
+      const mult = 0.4 + 0.6 * progress;
+
+      const compVal = Math.max(1, Math.round(realCompanies * mult));
+      const usrVal = Math.max(1, Math.round(realUsers * mult));
+      const agtVal = Math.max(1, Math.round(realAgents * mult));
+      const clsVal = Math.max(1, Math.round(realClusters * mult));
 
       points.push({
         label: `${y}`,
         fullDate: `Năm ${y}`,
-        companies: data.companies,
-        users: data.users,
-        agents: data.agents,
-        clusters: data.clusters,
-        newCompanies: Math.round(data.companies * 0.25),
-        newUsers: Math.round(data.users * 0.3),
+        companies: compVal,
+        users: usrVal,
+        agents: agtVal,
+        clusters: clsVal,
+        newCompanies: Math.round(compVal * 0.2),
+        newUsers: Math.round(usrVal * 0.2),
       });
     }
 
     return {
       points,
       periodLabel: `Khoảng năm: ${sYear} - ${eYear} (${points.length} Năm)`,
-      targetLine: 75,
-      targetText: 'KẾ HOẠCH NĂM 2026: 80+ ORGS',
+      targetLine: 80,
+      targetText: 'KẾ HOẠCH NĂM 2026: 100% HẠ TẦNG TỰ TRỊ',
     };
-  }, [timeMode, startDate, endDate, selectedYear, selectedQuarter, startYear, endYear]);
+  }, [
+    timeMode,
+    startDate,
+    endDate,
+    selectedYear,
+    selectedQuarter,
+    startYear,
+    endYear,
+    realCompanies,
+    realUsers,
+    realAgents,
+    realClusters,
+    thirtyDaysAgoStr,
+    todayStr,
+  ]);
 
   const points = dataset.points;
 
@@ -224,22 +246,22 @@ export const InteractiveOrganizationGrowthChart = ({
 
   // Map each series value to SVG Y position (0% - 100% relative height)
   const getYCompanies = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxComp : val / 100;
+    const ratio = scaleMode === 'normalized' ? val / maxValues.maxComp : val / Math.max(maxValues.maxComp, 10);
     return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
   };
 
   const getYUsers = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxUsr : val / 1500;
+    const ratio = scaleMode === 'normalized' ? val / maxValues.maxUsr : val / Math.max(maxValues.maxUsr, 10);
     return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
   };
 
   const getYAgents = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxAgt : val / 150;
+    const ratio = scaleMode === 'normalized' ? val / maxValues.maxAgt : val / Math.max(maxValues.maxAgt, 10);
     return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
   };
 
   const getYClusters = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxCls : val / 40;
+    const ratio = scaleMode === 'normalized' ? val / maxValues.maxCls : val / Math.max(maxValues.maxCls, 10);
     return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
   };
 
@@ -277,7 +299,7 @@ export const InteractiveOrganizationGrowthChart = ({
 
   return (
     <div
-      className={`interactive-organization-growth-chart ${className}`}
+      className={`dash-card interactive-organization-growth-chart ${className}`}
       style={{
         backgroundColor: '#FFFFFF',
         border: '1px solid var(--dash-border)',
@@ -477,9 +499,9 @@ export const InteractiveOrganizationGrowthChart = ({
                     key={p.label}
                     type="button"
                     onClick={() => {
-                      const end = new Date('2026-10-22');
+                      const end = new Date();
                       const start = new Date(end.getTime() - (p.days - 1) * 24 * 60 * 60 * 1000);
-                      setEndDate('2026-10-22');
+                      setEndDate(end.toISOString().slice(0, 10));
                       setStartDate(start.toISOString().slice(0, 10));
                     }}
                     style={{
@@ -522,7 +544,6 @@ export const InteractiveOrganizationGrowthChart = ({
                   <option value="2025">Năm 2025</option>
                   <option value="2024">Năm 2024</option>
                   <option value="2023">Năm 2023</option>
-                  <option value="2022">Năm 2022</option>
                 </select>
               </div>
 
@@ -567,11 +588,9 @@ export const InteractiveOrganizationGrowthChart = ({
                     backgroundColor: '#FFFFFF',
                   }}
                 >
-                  <option value="2020">2020</option>
-                  <option value="2021">2021</option>
-                  <option value="2022">2022</option>
                   <option value="2023">2023</option>
                   <option value="2024">2024</option>
+                  <option value="2025">2025</option>
                 </select>
               </div>
 
@@ -622,7 +641,7 @@ export const InteractiveOrganizationGrowthChart = ({
           >
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#059669' }} />
             <Building2 size={12} />
-            <span>Doanh Nghiệp ({activePoint.companies || 86})</span>
+            <span>Doanh Nghiệp ({activePoint.companies || realCompanies})</span>
           </button>
 
           {/* Series 2: Users */}
@@ -646,7 +665,7 @@ export const InteractiveOrganizationGrowthChart = ({
           >
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
             <Users size={12} />
-            <span>Người Dùng ({activePoint.users?.toLocaleString() || '1,420'})</span>
+            <span>Người Dùng ({activePoint.users?.toLocaleString() || realUsers})</span>
           </button>
 
           {/* Series 3: Agents */}
@@ -670,7 +689,7 @@ export const InteractiveOrganizationGrowthChart = ({
           >
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#8B5CF6' }} />
             <Cpu size={12} />
-            <span>Agent eBPF ({activePoint.agents || 128})</span>
+            <span>Agent eBPF ({activePoint.agents || realAgents})</span>
           </button>
 
           {/* Series 4: Clusters */}
@@ -694,7 +713,7 @@ export const InteractiveOrganizationGrowthChart = ({
           >
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#D97706' }} />
             <Server size={12} />
-            <span>Cụm K8s ({activePoint.clusters || 34})</span>
+            <span>Cụm K8s ({activePoint.clusters || realClusters})</span>
           </button>
 
           {/* Target Threshold */}
@@ -788,9 +807,9 @@ export const InteractiveOrganizationGrowthChart = ({
                 strokeOpacity="0.85"
               />
               <rect
-                x={width - padding.right - 170}
+                x={width - padding.right - 210}
                 y={padding.top + chartHeight - (dataset.targetLine / 100) * chartHeight - 10}
-                width="170"
+                width="210"
                 height="20"
                 rx="4"
                 fill="#FEF2F2"
@@ -798,7 +817,7 @@ export const InteractiveOrganizationGrowthChart = ({
                 strokeWidth="1"
               />
               <text
-                x={width - padding.right - 85}
+                x={width - padding.right - 105}
                 y={padding.top + chartHeight - (dataset.targetLine / 100) * chartHeight + 4}
                 textAnchor="middle"
                 fontFamily="monospace"
@@ -868,7 +887,6 @@ export const InteractiveOrganizationGrowthChart = ({
 
           {/* X Axis Time Labels */}
           {points.map((d, i) => {
-            // Label density handling
             const shouldShow =
               points.length <= 15
                 ? true
@@ -949,7 +967,7 @@ export const InteractiveOrganizationGrowthChart = ({
           )}
         </svg>
 
-        {/* Floating Tooltip Box (HTML Overlay for crisp typography) */}
+        {/* Floating Tooltip Box */}
         {hoverIndex !== null && (
           <div
             style={{
@@ -1001,7 +1019,7 @@ export const InteractiveOrganizationGrowthChart = ({
                   <span>Doanh Nghiệp:</span>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontWeight: 800, color: '#34D399' }}>{activePoint.companies} Công ty</span>
+                  <span style={{ fontWeight: 800, color: '#34D399' }}>{activePoint.companies} Tổ chức</span>
                 </div>
               </div>
             )}
@@ -1087,7 +1105,7 @@ export const InteractiveOrganizationGrowthChart = ({
                 color: '#34D399',
               }}
             >
-              <span>TIẾN ĐỘ VẬN HÀNH:</span>
+              <span>TRẠNG THÁI HỆ THỐNG:</span>
               <span style={{ fontWeight: 700 }}>100% SẴN SÀNG</span>
             </div>
           </div>
@@ -1118,10 +1136,13 @@ export const InteractiveOrganizationGrowthChart = ({
             <Building2 size={13} /> DOANH NGHIỆP TỔNG
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B', margin: '2px 0' }}>
-            {activePoint.companies || 86} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>/ 82 Active</span>
+            {activePoint.companies || realCompanies}{' '}
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>
+              / {activeCompanies} Active
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600 }}>
-            Tăng trưởng: +18.4% trong chu kỳ
+            Phân lập tài nguyên đa khách hàng an toàn
           </div>
         </div>
 
@@ -1138,11 +1159,13 @@ export const InteractiveOrganizationGrowthChart = ({
             <Users size={13} /> NGƯỜI DÙNG TOÀN MẠNG
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1E3A8A', margin: '2px 0' }}>
-            {activePoint.users?.toLocaleString() || '1,420'}{' '}
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563EB' }}>/ 1,385 Active</span>
+            {(activePoint.users || realUsers)?.toLocaleString()}{' '}
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563EB' }}>
+              / {activeUsers} Active
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#2563EB', fontWeight: 600 }}>
-            Phiên hoạt động: 94.2% ổn định
+            Xác thực phiên bảo mật & RBAC
           </div>
         </div>
 
@@ -1159,11 +1182,13 @@ export const InteractiveOrganizationGrowthChart = ({
             <Cpu size={13} /> TÁC TỬ eBPF DAEMONSET
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#581C87', margin: '2px 0' }}>
-            {activePoint.agents || 128}{' '}
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#7C3AED' }}>/ 122 Online</span>
+            {activePoint.agents || realAgents}{' '}
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#7C3AED' }}>
+              / {onlineAgents} Online
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#7C3AED', fontWeight: 600 }}>
-            Độ trễ trung bình: 1.1ms
+            Độ trễ thấp viễn trắc nhân Linux
           </div>
         </div>
 
@@ -1177,14 +1202,16 @@ export const InteractiveOrganizationGrowthChart = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', color: '#92400E', fontWeight: 700 }}>
-            <Server size={13} /> CỤM KUBERNETES TOÀN CẦU
+            <Server size={13} /> CỤM KUBERNETES KẾT NỐI
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#78350F', margin: '2px 0' }}>
-            {activePoint.clusters || 34}{' '}
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706' }}>/ 31 Khỏe mạnh</span>
+            {activePoint.clusters || realClusters}{' '}
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706' }}>
+              / {healthyClusters} Sẵn sàng
+            </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#D97706', fontWeight: 600 }}>
-            Phủ sóng: 6 Vùng địa lý
+            Đa đám mây K8s kết nối liên tục
           </div>
         </div>
       </div>

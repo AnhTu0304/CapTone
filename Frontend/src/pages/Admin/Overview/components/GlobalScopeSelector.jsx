@@ -2,12 +2,26 @@ import React from 'react';
 import { Filter, Layers, Clock, Globe, Shield } from 'lucide-react';
 import { SCOPE_OPTIONS } from '../../../../services/adminOverviewService';
 
-export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
+export const GlobalScopeSelector = ({
+  scope = {},
+  onChange,
+  isRefreshing,
+  organizationOptions,
+  clusterOptions,
+}) => {
   const handleChange = (key, value) => {
     if (onChange) {
       onChange({ ...scope, [key]: value });
     }
   };
+
+  const orgList = organizationOptions && organizationOptions.length > 0
+    ? organizationOptions
+    : SCOPE_OPTIONS.organizations;
+
+  const clusterList = clusterOptions && clusterOptions.length > 0
+    ? clusterOptions
+    : SCOPE_OPTIONS.clusters;
 
   return (
     <div
@@ -46,7 +60,7 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
             Phạm Vi Giám Sát Toàn Cục
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-            Lọc viễn trắc theo tổ chức, môi trường và cụm máy chủ
+            Lọc viễn trắc theo tổ chức doanh nghiệp, môi trường và cụm máy chủ
           </div>
         </div>
       </div>
@@ -67,7 +81,7 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
           <Shield size={14} color="#64748B" />
           <select
             aria-label="Chọn tổ chức"
-            value={scope.orgId}
+            value={scope.orgId || 'all'}
             onChange={(e) => handleChange('orgId', e.target.value)}
             disabled={isRefreshing}
             style={{
@@ -80,9 +94,10 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
               color: 'var(--dash-text-primary)',
               cursor: 'pointer',
               outline: 'none',
+              maxWidth: '220px',
             }}
           >
-            {SCOPE_OPTIONS.organizations.map((org) => (
+            {orgList.map((org) => (
               <option key={org.id} value={org.id}>
                 {org.name}
               </option>
@@ -95,7 +110,7 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
           <Globe size={14} color="#64748B" />
           <select
             aria-label="Chọn môi trường"
-            value={scope.env}
+            value={scope.env || 'all'}
             onChange={(e) => handleChange('env', e.target.value)}
             disabled={isRefreshing}
             style={{
@@ -123,7 +138,7 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
           <Layers size={14} color="#64748B" />
           <select
             aria-label="Chọn cụm máy chủ"
-            value={scope.clusterId}
+            value={scope.clusterId || 'all'}
             onChange={(e) => handleChange('clusterId', e.target.value)}
             disabled={isRefreshing}
             style={{
@@ -136,9 +151,10 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
               color: 'var(--dash-text-primary)',
               cursor: 'pointer',
               outline: 'none',
+              maxWidth: '220px',
             }}
           >
-            {SCOPE_OPTIONS.clusters.map((c) => (
+            {clusterList.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -151,7 +167,7 @@ export const GlobalScopeSelector = ({ scope, onChange, isRefreshing }) => {
           <Clock size={14} color="#64748B" />
           <select
             aria-label="Chọn khung thời gian"
-            value={scope.timeRange}
+            value={scope.timeRange || '24h'}
             onChange={(e) => handleChange('timeRange', e.target.value)}
             disabled={isRefreshing}
             style={{

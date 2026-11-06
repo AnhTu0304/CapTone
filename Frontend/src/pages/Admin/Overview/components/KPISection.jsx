@@ -4,11 +4,9 @@ import {
   Users,
   Cpu,
   Server,
-  Activity,
-  ShieldCheck,
-  AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  AlertTriangle,
   XCircle,
 } from 'lucide-react';
 import WidgetContainer from '../../../../components/admin/WidgetContainer';
@@ -31,16 +29,8 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
               grid-template-columns: repeat(4, minmax(0, 1fr));
               gap: 16px;
             }
-            .admin-kpi-metrics-grid {
-              display: grid;
-              grid-template-columns: repeat(4, minmax(0, 1fr));
-              gap: 12px;
-            }
             @media (max-width: 992px) {
               .admin-kpi-pillars-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-              }
-              .admin-kpi-metrics-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
               }
             }
@@ -48,13 +38,10 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
               .admin-kpi-pillars-grid {
                 grid-template-columns: 1fr;
               }
-              .admin-kpi-metrics-grid {
-                grid-template-columns: 1fr;
-              }
             }
           `}</style>
 
-          {/* TOP ROW: 4 CORE PILLARS (4 CARDS PER ROW) */}
+          {/* 4 CORE PILLARS (4 CARDS PER ROW) */}
           <div className="admin-kpi-pillars-grid">
             {/* Card 1: Companies */}
             <div
@@ -93,7 +80,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <ArrowRight size={14} color="var(--dash-text-muted)" />
                 </div>
                 <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.companies?.total ?? 86}
+                  {kpiData.companies?.total ?? 0}
                 </div>
               </div>
               <div style={{ marginTop: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
@@ -101,7 +88,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#059669', fontWeight: 700 }}>
                       <CheckCircle2 size={11} color="#059669" />
-                      {kpiData.companies?.active ?? 82} Active
+                      {kpiData.companies?.active ?? 0} Active
                     </span>
                     <span style={{ color: '#94A3B8' }}>•</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: '#D97706', fontWeight: 700 }}>
@@ -110,7 +97,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px' }}>
-                    {kpiData.companies?.diff || '+4 mới'}
+                    {kpiData.companies?.diff || 'Đồng bộ'}
                   </span>
                 </div>
               </div>
@@ -170,7 +157,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px' }}>
-                    {kpiData.users?.diff || '+128 mới'}
+                    {kpiData.users?.diff || 'Hoạt động'}
                   </span>
                 </div>
               </div>
@@ -230,7 +217,7 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px' }}>
-                    {kpiData.agents?.diff || '95.3%'}
+                    {kpiData.agents?.diff || '100% sẵn sàng'}
                   </span>
                 </div>
               </div>
@@ -290,71 +277,8 @@ export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate 
                     </span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', backgroundColor: '#F1F5F9', padding: '2px 6px', borderRadius: '4px' }}>
-                    {kpiData.clusters?.diff || '6 Vùng'}
+                    {kpiData.clusters?.diff || 'Sẵn sàng'}
                   </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SECONDARY ROW: SLA & ENGINE PERFORMANCE METRICS (4 CARDS PER ROW) */}
-          <div
-            className="admin-kpi-metrics-grid"
-            style={{
-              backgroundColor: '#F8FAFC',
-              border: '1px solid var(--dash-border)',
-              borderRadius: '10px',
-              padding: '12px 16px',
-            }}
-          >
-            {/* Metric 1 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Activity size={14} color="#15803D" />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>ĐỘ KHẢ DỤNG SLA</div>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#15803D', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.uptime?.value || '99.98%'} <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#166534' }}>({kpiData.uptime?.diff || '+0.08%'})</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Metric 2 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ShieldCheck size={14} color="#059669" />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TỰ PHỤC HỒI MAPE-K</div>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#065F46', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.selfHealingRate?.value || '94.2%'} <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#047857' }}>(MTTR 1.4s)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Metric 3 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertTriangle size={14} color="#DC2626" />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>SỰ CỐ TOÀN NỀN TẢNG</div>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#DC2626', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.activeIncidents?.value || '1 Khẩn Cấp'} <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#991B1B' }}>(Đang xử lý)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Metric 4 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Server size={14} color="#475569" />
-              </div>
-              <div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TÀI NGUYÊN QUẢN LÝ</div>
-                <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)' }}>
-                  {kpiData.managedResources?.value || '12 Nodes / 186 Pods'}
                 </div>
               </div>
             </div>

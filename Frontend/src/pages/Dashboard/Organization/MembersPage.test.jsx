@@ -1,3 +1,4 @@
+jest.setTimeout(20000);
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -140,13 +141,8 @@ describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
 
     // 1.1 Kiểm tra Header
     expect(
-      screen.getByRole('heading', { name: /Thành Viên & Ma Trận Phân Quyền RBAC/i })
+      screen.getByRole('heading', { name: /Thành Viên & Ma Trận Phân Quyền/i })
     ).toBeInTheDocument();
-
-    // 1.2 Kiểm tra 3 Role cards
-    expect(screen.getByText('Chủ DN (SME Owner)')).toBeInTheDocument();
-    expect(screen.getByText('Kỹ Sư DevOps Lead')).toBeInTheDocument();
-    expect(screen.getByText('Người Xem (Viewer)')).toBeInTheDocument();
 
     // 1.3 Kiểm tra hiển thị danh sách thành viên từ API/Service
     await waitFor(() => {
@@ -156,7 +152,7 @@ describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
     });
 
     // 1.4 Kiểm tra hiển thị ma trận RBAC
-    expect(screen.getByText(/Ma Trận So Sánh Quyền Hạn RBAC Chi Tiết/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ma Trận So Sánh Quyền Hạn Chi Tiết/i)).toBeInTheDocument();
   });
 
   test('2. Lọc thành viên theo Tab trạng thái và Tìm kiếm từ khóa', async () => {

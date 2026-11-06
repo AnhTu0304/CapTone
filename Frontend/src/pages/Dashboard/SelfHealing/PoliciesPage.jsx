@@ -456,25 +456,6 @@ export const PoliciesPage = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={triggerRefresh}
-            disabled={isRefreshing}
-            className="dash-btn"
-            style={{
-              padding: '8px 12px',
-              backgroundColor: 'white',
-              border: '1px solid var(--dash-border-subtle)',
-              color: 'var(--dash-text-secondary)',
-              fontSize: '0.8125rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-            Đồng bộ Kubernetes
-          </button>
-
-          <button
             onClick={() => {
               if (!canManagePolicies) {
                 toastWarning('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.', 'Quyền Hạn');

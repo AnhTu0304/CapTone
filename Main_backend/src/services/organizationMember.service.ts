@@ -242,6 +242,11 @@ export class OrganizationMemberService {
       throw new ApiError(404, 'Thành viên này không tồn tại trong tổ chức');
     }
 
+    // Bảo vệ: Chủ sở hữu không được tự đổi vai trò của chính mình để tránh mất quyền quản trị
+    if (targetUserId === currentUserId && currentMember.role_code === 'SME_OWNER') {
+      throw new ApiError(400, 'Chủ sở hữu (SME Owner) không thể tự thay đổi vai trò của chính mình. Vui lòng chuyển giao quyền Chủ sở hữu trước.');
+    }
+
     // Bảo vệ: Tuyệt đối không cho phép gán vai trò hệ thống (SUPER_ADMIN, ADMIN) cho thành viên tổ chức
     if (dto.role_code && ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(dto.role_code.toUpperCase())) {
       throw new ApiError(403, 'Không thể cấp vai trò hệ thống thông qua API quản lý thành viên tổ chức');
@@ -328,8 +333,14 @@ export class OrganizationMemberService {
       throw new ApiError(404, 'Thành viên này không tồn tại trong tổ chức hoặc đã bị xóa trước đó');
     }
 
-    // Không cho phép xóa Chủ sở hữu duy nhất
+    // Không cho phép xóa Chủ sở hữu duy nhất hoặc tự xóa chính mình nếu là Chủ sở hữu
     if (targetMember.role_code === 'SME_OWNER') {
+      if (isSelfLeaving) {
+        throw new ApiError(
+          400,
+          'Chủ sở hữu (SME Owner) không thể tự xóa hoặc rời khỏi tổ chức. Vui lòng chuyển giao quyền Chủ sở hữu cho thành viên khác trước hoặc giải thể tổ chức.'
+        );
+      }
       const ownerCount = await OrganizationMemberModel.countActiveRoleByOrg(orgId, 'SME_OWNER');
       if (ownerCount <= 1) {
         throw new ApiError(
