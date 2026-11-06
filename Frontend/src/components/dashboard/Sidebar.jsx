@@ -58,12 +58,15 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   const auth = useAuth();
 
   const user = auth?.user || null;
-  // Quyền hạn tenant trong Tổ chức đang chọn có ưu tiên tối cao trong Dashboard
+  const isSuperAdmin = auth?.isSuperAdmin ? auth.isSuperAdmin(user) : false;
+  const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(user) : false;
+  const isOwnerUser = auth?.isOwner ? auth.isOwner(user) : false;
+  // Quyền hạn tenant trong Tổ chức đang chọn có ưu tiên tối cao trong Dashboard (Principle of Least Privilege: Mặc định VIEWER)
   const effectiveRole = (
     currentUserRole ||
     currentOrg?.role_in_org ||
     currentOrg?.role ||
-    (auth?.isViewer && auth.isViewer(user) ? 'VIEWER' : auth?.isDevOps && auth.isDevOps(user) ? 'DEVOPS' : 'SME_OWNER')
+    (isSuperAdmin || isSystemAdmin || isOwnerUser ? 'SME_OWNER' : (auth?.isDevOps && auth.isDevOps(user)) ? 'DEVOPS' : 'VIEWER')
   ).toUpperCase();
 
   const isDevOpsUser = effectiveRole === 'DEVOPS';

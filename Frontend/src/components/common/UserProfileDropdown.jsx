@@ -36,7 +36,7 @@ export const resolveUserSystemRole = (u) => {
   if (normalized.includes('USER')) return 'USER';
 
   // 2. Kiểm tra trường đơn lẻ systemRole / system_role trả về trực tiếp từ API backend
-  const directRole = (u.systemRole || u.system_role || '').toString().toUpperCase().trim();
+  const directRole = (u.systemRole || u.system_role || u.role || '').toString().toUpperCase().trim();
   if (directRole === 'SUPER_ADMIN') return 'SUPER_ADMIN';
   if (directRole === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
   if (directRole === 'ADMIN') return 'ADMIN';
@@ -97,7 +97,7 @@ export const UserProfileDropdown = ({
   // Chuẩn hóa họ tên, xóa hậu tố (Super Admin) hoặc (Admin) nếu có
   const displayName = useMemo(() => {
     if (!rawDisplayName) return '';
-    return rawDisplayName.replace(/\s*\((?:Super\s*Admin|Admin)\)/gi, '').trim();
+    return rawDisplayName.replace(/\s*\((?:Super\s*Admin|Admin|User|SME\s*Owner|DevOps)\)/gi, '').trim();
   }, [rawDisplayName]);
 
   const displayEmail =
@@ -149,6 +149,11 @@ export const UserProfileDropdown = ({
   }, [activeSystemRole]);
 
   const roleSubtitle = roleDisplay;
+
+  // Không hiển thị nhãn USER theo yêu cầu, chỉ hiển thị khi là Admin / Super Admin (hoặc chưa gán role)
+  const shouldShowRoleSubtitle = useMemo(() => {
+    return ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(activeSystemRole);
+  }, [activeSystemRole]);
 
   // Xử lý đóng khi click bên ngoài và khi nhấn Escape
   useEffect(() => {
@@ -350,20 +355,22 @@ export const UserProfileDropdown = ({
           >
             {displayName}
           </div>
-          <div
-            style={{
-              fontSize: '0.6875rem',
-              color: activeSystemRole ? '#059669' : '#64748B',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              marginTop: '1px',
-            }}
-          >
-            <Shield size={10} color={activeSystemRole ? '#059669' : '#64748B'} />
-            <span>{roleSubtitle}</span>
-          </div>
+          {shouldShowRoleSubtitle && (
+            <div
+              style={{
+                fontSize: '0.6875rem',
+                color: activeSystemRole ? '#059669' : '#64748B',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                marginTop: '1px',
+              }}
+            >
+              <Shield size={10} color={activeSystemRole ? '#059669' : '#64748B'} />
+              <span>{roleSubtitle}</span>
+            </div>
+          )}
         </div>
 
         <ChevronDown
@@ -424,7 +431,29 @@ export const UserProfileDropdown = ({
               </div>
             </div>
 
-            {/* Đã loại bỏ huy hiệu dưới tên theo yêu cầu */}
+            {/* Hiển thị huy hiệu vai trò quản trị viên nếu là Admin / Super Admin (USER ẩn hoàn toàn) */}
+            {['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(activeSystemRole) && (
+              <div style={{ marginTop: '8px' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#D1FAE5',
+                    color: '#065F46',
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    border: '1px solid #A7F3D0',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  <Shield size={10} color="#059669" />
+                  {activeSystemRole}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Menu Items */}

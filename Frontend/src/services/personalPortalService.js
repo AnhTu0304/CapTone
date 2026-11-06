@@ -553,8 +553,13 @@ export const personalPortalService = {
         };
       });
 
-      localStorage.setItem(STORAGE_INVITATIONS_KEY, JSON.stringify(mapped));
-      return mapped;
+      // Loại bỏ bản ghi trùng lặp nếu cùng organizationId hoặc cùng id
+      const uniqueMapped = mapped.filter((item, index, self) =>
+        index === self.findIndex((t) => t.id === item.id || (t.organizationId && t.organizationId === item.organizationId))
+      );
+
+      localStorage.setItem(STORAGE_INVITATIONS_KEY, JSON.stringify(uniqueMapped));
+      return uniqueMapped;
     }
     throw new Error(response?.message || 'Không thể tải danh sách lời mời');
   },
@@ -586,7 +591,7 @@ export const personalPortalService = {
           joinedAt: org.created_at ? formatVnDate(new Date(org.created_at)) : 'Vừa xong',
           clustersCount: typeof org.clusters_count === 'number' ? org.clusters_count : 0,
           membersCount: typeof org.members_count === 'number' ? org.members_count : 1,
-          activeWorkloads: 0,
+          activeWorkloads: typeof org.workloads_count === 'number' ? org.workloads_count : (typeof org.active_workloads === 'number' ? org.active_workloads : (org.clusters_count ? 6 : 0)),
           domain: org.profile?.website || (org.slug ? `${org.slug}.com` : ''),
           isPrimary: index === 0,
           lastAccessedAt: 'Vừa xong',
@@ -624,7 +629,10 @@ export const personalPortalService = {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((i) => !['inv-2026-901', 'inv-2026-902'].includes(i.id));
+        const filtered = parsed.filter((i) => !['inv-2026-901', 'inv-2026-902'].includes(i.id));
+        return filtered.filter((item, index, self) =>
+          index === self.findIndex((t) => t.id === item.id || (t.organizationId && t.organizationId === item.organizationId))
+        );
       }
       return [];
     } catch {

@@ -1,4 +1,3 @@
-jest.setTimeout(20000);
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -7,6 +6,8 @@ import { AuthProvider } from '../../../context/AuthContext';
 import { ToastProvider } from '../../../context/ToastContext';
 import { DashboardProvider } from '../context/DashboardContext';
 import { organizationMemberService } from '../../../services/organizationMemberService';
+
+jest.setTimeout(20000);
 
 const mockMembersList = [
   {
@@ -109,6 +110,9 @@ const renderMembersPage = () => {
 describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.setItem('selfheal_active_org_id', 'org-acme');
+    localStorage.setItem('selfheal_active_org_name', 'Acme Corp');
+    localStorage.setItem('selfheal_active_org_role', 'SME_OWNER');
     organizationMemberService.getMembers.mockImplementation(() =>
       Promise.resolve({
         items: mockMembersList,
@@ -147,9 +151,9 @@ describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
     // 1.3 Kiểm tra hiển thị danh sách thành viên từ API/Service
     await waitFor(() => {
       expect(screen.getByText('Lê Minh Quân')).toBeInTheDocument();
-      expect(screen.getByText('Trần Đình Tuấn')).toBeInTheDocument();
-      expect(screen.getByText('Phạm Thị Lan')).toBeInTheDocument();
     });
+    expect(screen.getByText('Trần Đình Tuấn')).toBeInTheDocument();
+    expect(screen.getByText('Phạm Thị Lan')).toBeInTheDocument();
 
     // 1.4 Kiểm tra hiển thị ma trận RBAC
     expect(screen.getByText(/Ma Trận So Sánh Quyền Hạn Chi Tiết/i)).toBeInTheDocument();
@@ -196,10 +200,8 @@ describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
     expect(screen.getByText(/Mời Thành Viên Mới Vào Tổ Chức/i)).toBeInTheDocument();
 
     // 3.2 Nhập email hợp lệ
-    const emailInput = screen.getByPlaceholderText('tuan.dang@acmecorp.vn');
-    const nameInput = screen.getByPlaceholderText('VD: Đặng Quốc Tuấn');
+    const emailInput = screen.getByPlaceholderText('thanhvien@gmail.com');
     fireEvent.change(emailInput, { target: { value: 'quoc.tuan@acmecorp.vn' } });
-    fireEvent.change(nameInput, { target: { value: 'Đặng Quốc Tuấn' } });
 
     // 3.3 Submit form
     const submitBtn = screen.getByRole('button', { name: /Gửi Thư Mời/i });
@@ -210,7 +212,7 @@ describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
         expect.any(String),
         expect.objectContaining({
           email: 'quoc.tuan@acmecorp.vn',
-          full_name: 'Đặng Quốc Tuấn',
+          role_code: 'DEVOPS',
         })
       );
     });
@@ -237,5 +239,78 @@ describe('MembersPage UI Suite (/dashboard/organization/members)', () => {
     await waitFor(() => {
       expect(organizationMemberService.removeMember).toHaveBeenCalled();
     });
+  });
+
+  test('5. Hiển thị ảnh đại diện (avatar_url) khi có sẵn hoặc hiển thị chữ cái viết tắt (monogram)', async () => {
+    organizationMemberService.getMembers.mockImplementation(() =>
+      Promise.resolve({
+        items: [
+          {
+            id: 'mem-with-avatar',
+            organization_id: 'org-acme',
+            user: {
+              id: 'usr-av',
+              email: 'avatar.user@acmecorp.vn',
+              full_name: 'Hoàng Văn Nam',
+              avatar_url: 'https://images.unsplash.com/photo-test?w=150',
+              status: 'ACTIVE',
+            },
+            role: { code: 'DEVOPS', name: 'DevOps Lead' },
+            status: 'ACTIVE',
+            joined_at: '2026-01-10T08:00:00.000Z',
+          },
+          {
+            id: 'mem-without-avatar',
+            organization_id: 'org-acme',
+            user: {
+              id: 'usr-no-av',
+              email: 'noavatar@acmecorp.vn',
+              full_name: 'Đặng Quốc Tuấn',
+              avatar_url: null,
+              status: 'ACTIVE',
+            },
+            role: { code: 'VIEWER', name: 'Viewer' },
+            status: 'ACTIVE',
+            joined_at: '2026-01-10T08:00:00.000Z',
+          },
+        ],
+        pagination: { total: 2, page: 1, limit: 20, totalPages: 1 },
+      })
+    );
+
+    renderMembersPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Hoàng Văn Nam')).toBeInTheDocument();
+    });
+
+    const avatarImg = screen.getByAltText('Hoàng Văn Nam');
+    expect(avatarImg).toBeInTheDocument();
+    expect(avatarImg).toHaveAttribute('src', 'https://images.unsplash.com/photo-test?w=150');
+    expect(screen.getByText('ĐT')).toBeInTheDocument();
+  });
+  test('6. Mở cửa sổ nhỏ (Modal) hiển thị chi tiết hồ sơ cá nhân của thành viên', async () => {
+    renderMembersPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Lê Minh Quân')).toBeInTheDocument();
+    });
+
+    // 6.1 Bấm nút xem chi tiết hồ sơ (Eye button)
+    const viewButtons = screen.getAllByTitle(/Xem chi tiết hồ sơ cá nhân/i);
+    expect(viewButtons.length).toBeGreaterThan(0);
+    fireEvent.click(viewButtons[0]);
+
+    // 6.2 Modal chi tiết xuất hiện
+    expect(screen.getByText(/Chi Tiết Hồ Sơ Cá Nhân/i)).toBeInTheDocument();
+    expect(screen.getByText('Chức danh:')).toBeInTheDocument();
+    expect(screen.getByText('Số điện thoại:')).toBeInTheDocument();
+    expect(screen.getByText(/Phạm vi quyền hạn/i)).toBeInTheDocument();
+
+    // 6.3 Bấm nút Đóng
+    const closeBtn = screen.getByRole('button', { name: /^Đóng$/i });
+    fireEvent.click(closeBtn);
+
+    expect(screen.queryByText(/Chi Tiết Hồ Sơ Cá Nhân/i)).not.toBeInTheDocument();
   });
 });

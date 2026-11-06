@@ -49,6 +49,17 @@ const parseConfidence = (val) => {
   return Math.round(num <= 1 ? num * 100 : num);
 };
 
+// Tên tiếng Việt thân thiện, chuẩn SRE cho 7 Heads mô hình học sâu GRU
+const HEAD_NAMES_VI = {
+  CPU_OVERLOAD: 'Quá tải vi xử lý CPU (CPU_OVERLOAD)',
+  OOM: 'Cạn kiệt bộ nhớ RAM (OOM)',
+  DISK_FULL: 'Đầy dung lượng ổ đĩa (DISK_FULL)',
+  HIGH_LATENCY: 'Độ trễ phản hồi tăng cao (HIGH_LATENCY)',
+  HTTP_5XX_SPIKE: 'Đột biến lỗi máy chủ (HTTP 5xx)',
+  TRAFFIC_OVERLOAD: 'Quá tải lưu lượng truy cập (TRAFFIC_OVERLOAD)',
+  SCALE_DOWN_CANDIDATE: 'Thu hẹp Pod dư thừa (SCALE_DOWN)',
+};
+
 // Danh sách trắng cho phép loại rủi ro dự báo hợp lệ (ngăn chặn việc lấy tên hành động thay cho rủi ro)
 const VALID_RISKS = new Set([
   'OOM',
@@ -366,9 +377,35 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     };
   }, [incident?.rawId, incident?.id, incident?.service, incident?.predictionId]);
 
-  const isResolved = (incidentDetail?.status || incident?.status || '').toLowerCase().includes('resolve') ||
+  const isApprovalContext = Boolean(
+    incident?.fromApprovals === true ||
+    incident?.hasPendingApproval === true ||
+    incident?.approvalId ||
+    incident?.pendingApprovalId ||
+    incident?.approvalStatus === 'PENDING' ||
+    (typeof window !== 'undefined' && (
+      window.location.pathname.includes('/approvals') ||
+      window.location.href.includes('approvals')
+    ))
+  );
+
+  const hasActualPendingApproval = Boolean(
+    isApprovalContext ||
+    incidentDetail?.has_pending_approval === true ||
+    incidentDetail?.pending_approval_id ||
+    incident?.hasPendingApproval === true ||
+    incident?.pendingApprovalId
+  );
+
+  // QUAN TRỌNG: Nếu yêu cầu này đang nằm trong luồng chờ phê duyệt (HITL Pending),
+  // nó CHƯA THỂ là "ĐÃ KHẮC PHỤC" vì kỹ sư chưa bấm duyệt hành động!
+  const isResolved = !hasActualPendingApproval && (
+    (incidentDetail?.status || incident?.status || '').toLowerCase().includes('resolve') ||
     (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'SUCCEEDED' ||
-    (incident?.status && incident?.status.includes('hoàn tất'));
+    (incident?.status && incident?.status.includes('hoàn tất'))
+  );
+
+  const requiresApproval = hasActualPendingApproval && !isResolved;
 
   const serviceDisplayName = useMemo(() => {
     let s = incident?.service;
@@ -659,13 +696,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       `Bước 3 [Xác nhận SLO]: Theo dõi chỉ số latency và tỉ lệ HTTP 5xx trong 5 phút để bảo đảm dịch vụ đã phục hồi hoàn toàn.`
     ];
   }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isDbService, serviceDisplayName, faultyPodName, recActionVi, recAction]);
-  const hasActualPendingApproval = Boolean(
-    isAlreadyInApprovals ||
-    incidentDetail?.has_pending_approval === true ||
-    incidentDetail?.pending_approval_id ||
-    (incidentDetail === null && (incident?.hasPendingApproval === true || incident?.pendingApprovalId))
-  );
-  const requiresApproval = !isResolved && hasActualPendingApproval;
+  // hasActualPendingApproval & requiresApproval already initialized safely above
   const actionPriority = recObj?.priority || 'CRITICAL';
   const actionRiskLevel = recObj?.risk_level || 'HIGH';
 
@@ -1097,7 +1128,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             }}
           >
             <Sparkles size={14} />
-            <span>Chẩn Đoán &amp; Playbook (Overview)</span>
+            <span>1. Chẩn Đoán &amp; Khắc Phục</span>
           </button>
 
           <button
@@ -1119,7 +1150,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             }}
           >
             <GitBranch size={14} />
-            <span>Chuỗi Nhân Quả &amp; Bằng Chứng</span>
+            <span>2. Chuỗi Nhân Quả &amp; Bằng Chứng</span>
           </button>
 
           <button
@@ -1141,18 +1172,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             }}
           >
             <Database size={14} />
-            <span>Dữ Liệu Viễn Trắc &amp; Dự Báo GRU</span>
+            <span>3. Viễn Trắc &amp; Dự Báo AI</span>
           </button>
         </div>
 
         {/* Modal Body */}
         <div style={{ padding: '10px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', flex: '1 1 auto' }}>
-          {isLoadingDetail && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '6px 12px', borderRadius: '6px', border: '1px solid #A7F3D0' }}>
-              <RefreshCw size={12} className="animate-spin" />
-              <span>Đang đồng bộ dữ liệu chi tiết từ cơ sở dữ liệu PostgreSQL...</span>
-            </div>
-          )}
+
 
           {/* TAB 1: OVERVIEW & PLAYBOOK */}
           {activeTab === 'overview' && (
@@ -1209,7 +1235,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    Dự báo rủi ro: <strong style={{ color: '#1D4ED8' }}>{predictedRiskVi || 'TRÀN RAM (OOM)'}</strong>
+                    Dự báo rủi ro: <strong style={{ color: '#1D4ED8' }}>{predictedRiskVi || (detectedRisksList.length > 0 ? 'Phát hiện nguy cơ' : 'Không suy biến tài nguyên')}</strong>
                   </span>
                   <span style={{ color: '#CBD5E1' }}>&bull;</span>
                   <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
@@ -1314,52 +1340,81 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       )}
                     </div>
                   ) : !isResolved ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const isAlreadyInApprovals = Boolean(
-                          incident?.fromApprovals ||
-                          (typeof window !== 'undefined' && window.location.pathname.includes('/approvals'))
-                        );
-                        if (isAlreadyInApprovals) {
-                          onClose();
-                        } else if (requiresApproval && onNavigate) {
-                          onClose();
-                          onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(serviceDisplayName)}`);
-                        } else {
-                          handleExecuteRemediation();
-                        }
-                      }}
-                      disabled={isExecuting}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 16px',
-                        background: isAlreadyInApprovals
-                          ? '#0F766E'
-                          : requiresApproval
-                          ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)'
-                          : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                        color: '#FFFFFF',
-                        borderRadius: '8px',
-                        border: 'none',
-                        fontSize: '0.78125rem',
-                        fontWeight: 700,
-                        cursor: isExecuting ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {requiresApproval ? <CheckCircle2 size={14} /> : <Zap size={14} />}
-                      <span>
-                        {isExecuting
-                          ? 'Đang thực thi...'
-                          : Boolean(incident?.fromApprovals || (typeof window !== 'undefined' && window.location.pathname.includes('/approvals')))
-                          ? 'Đóng & Phê Duyệt Tại Danh Sách Phía Dưới'
-                          : requiresApproval
-                          ? 'Chuyển Sang Cổng Phê Duyệt (HITL) →'
-                          : 'Kích Hoạt Tự Khắc Phục Ngay'}
-                      </span>
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {isApprovalContext && onResolve && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsExecuting(true);
+                            setTimeout(() => {
+                              setIsExecuting(false);
+                              if (onResolve) onResolve(incident?.id, incident?.rawId);
+                            }, 400);
+                          }}
+                          disabled={isExecuting}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                            color: '#FFFFFF',
+                            borderRadius: '8px',
+                            border: 'none',
+                            fontSize: '0.78125rem',
+                            fontWeight: 700,
+                            cursor: isExecuting ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
+                          }}
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>{isExecuting ? 'Đang gửi phê duyệt...' : 'Phê Duyệt Hành Động Ngay'}</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isAlreadyInApprovals) {
+                            onClose();
+                          } else if (requiresApproval && onNavigate) {
+                            onClose();
+                            onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(serviceDisplayName)}`);
+                          } else {
+                            handleExecuteRemediation();
+                          }
+                        }}
+                        disabled={isExecuting}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 16px',
+                          background: isAlreadyInApprovals
+                            ? '#F1F5F9'
+                            : requiresApproval
+                            ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)'
+                            : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                          color: isAlreadyInApprovals ? '#334155' : '#FFFFFF',
+                          borderRadius: '8px',
+                          border: isAlreadyInApprovals ? '1px solid #CBD5E1' : 'none',
+                          fontSize: '0.78125rem',
+                          fontWeight: 700,
+                          cursor: isExecuting ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {requiresApproval ? <CheckCircle2 size={14} /> : <Zap size={14} />}
+                        <span>
+                          {isExecuting
+                            ? 'Đang thực thi...'
+                            : isAlreadyInApprovals
+                            ? (onResolve ? 'Đóng & Xem Danh Sách' : 'Đóng & Phê Duyệt Tại Danh Sách Phía Dưới')
+                            : requiresApproval
+                            ? 'Chuyển Sang Cổng Phê Duyệt (HITL) →'
+                            : 'Kích Hoạt Tự Khắc Phục Ngay'}
+                        </span>
+                      </button>
+                    </div>
                   ) : (
                     <div
                       style={{
@@ -1828,31 +1883,50 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                       Rủi ro vượt ngưỡng kích hoạt (Detected Risks):
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {detectedRisksList.map((r, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 12px',
-                            backgroundColor: '#FEF2F2',
-                            color: '#B91C1C',
-                            border: '1px solid #FECACA',
-                            borderRadius: '6px',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                          }}
-                        >
-                          <AlertTriangle size={13} color="#DC2626" />
-                          <span>{r.risk_type}</span>
-                          <span style={{ backgroundColor: '#DC2626', color: '#FFFFFF', padding: '1px 6px', borderRadius: '3px', fontSize: '0.6875rem' }}>
-                            {Math.round(r.confidence <= 1 ? r.confidence * 100 : r.confidence)}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                    {detectedRisksList.length > 0 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {detectedRisksList.map((r, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 12px',
+                              backgroundColor: '#FEF2F2',
+                              color: '#B91C1C',
+                              border: '1px solid #FECACA',
+                              borderRadius: '6px',
+                              fontWeight: 700,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            <AlertTriangle size={13} color="#DC2626" />
+                            <span>{HEAD_NAMES_VI[r.risk_type] || r.risk_type}</span>
+                            <span style={{ backgroundColor: '#DC2626', color: '#FFFFFF', padding: '1px 6px', borderRadius: '3px', fontSize: '0.6875rem' }}>
+                              {Math.round(r.confidence <= 1 ? r.confidence * 100 : r.confidence)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          padding: '10px 14px',
+                          backgroundColor: '#F0FDF4',
+                          border: '1px solid #BBF7D0',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <CheckCircle2 size={16} color="#15803D" />
+                        <span style={{ fontSize: '0.78125rem', color: '#166534', fontWeight: 600 }}>
+                          ✓ Không có rủi ro viễn trắc nào vượt ngưỡng. Toàn bộ 7 chỉ số tài nguyên (CPU, RAM, Ổ đĩa, Độ trễ, Mạng) đều trong giới hạn an toàn.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* BẢNG 7 HEADS VỚI PROGRESS BAR */}
@@ -1880,7 +1954,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isTriggered ? '#DC2626' : '#334155' }}>
-                                {headName}
+                                {HEAD_NAMES_VI[headName] || headName}
                               </span>
                               <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: isTriggered ? '#B91C1C' : '#64748B' }}>
                                 {confPct}% (Ngưỡng {thPct}%)
@@ -2056,135 +2130,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 </div>
               </div>
 
-              {/* KHỐI ĐẦU RA JSON CHUẨN HÓA (FULL STRUCTURED JSON) */}
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#ECFDF5',
-                    borderBottom: '1px solid #A7F3D0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                  }}
-                >
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={16} color="#059669" />
-                    <span>CẤU TRÚC ĐẦU RA ĐẦY ĐỦ 7 PHẦN (STRUCTURED JSON SCHEMA)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyText(
-                      parsedAnalysis || {
-                        request_id: requestId,
-                        incident_id: incidentIdStr,
-                        cluster_id: clusterIdStr,
-                        namespace: namespaceStr,
-                        service_id: serviceDisplayName,
-                        workload_id: workloadIdStr,
-                        analyzed_at: analyzedAtStr,
-                        analysis_duration_ms: analysisDurationMs,
-                        prediction: gruPrediction,
-                        root_cause: { cause: rootCauseType, category: rootCauseCategory, confidence: (confidence || 99) / 100, severity },
-                        evidence: multiTierEvidences,
-                        recommendation: { action: recAction, priority: actionPriority, risk_level: actionRiskLevel, requires_approval: requiresApproval, reason: recReason, action_parameters: actionParams },
-                        explanation: fullExplanation,
-                        historical_context_used: historicalContextUsed,
-                        similar_incident_ids: similarIncidentIds
-                      },
-                      'raw_json'
-                    )}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '3px 8px',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #A7F3D0',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      color: '#065F46',
-                    }}
-                  >
-                    {copiedKey === 'raw_json' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'raw_json' ? 'Đã sao chép JSON' : 'Sao chép JSON'}</span>
-                  </button>
-                </div>
 
-                <div style={{ padding: '16px' }}>
-                  <div
-                    style={{
-                      backgroundColor: '#0F172A',
-                      color: '#F8FAFC',
-                      padding: '14px 16px',
-                      borderRadius: '8px',
-                      fontSize: '0.75rem',
-                      lineHeight: 1.6,
-                      maxHeight: '260px',
-                      overflowY: 'auto',
-                      border: '1px solid #1E293B',
-                    }}
-                  >
-                    <pre style={{ margin: 0 }}>
-                      {JSON.stringify(
-                        parsedAnalysis || {
-                          request_id: requestId,
-                          incident_id: incidentIdStr,
-                          cluster_id: clusterIdStr,
-                          namespace: namespaceStr,
-                          service_id: serviceDisplayName,
-                          workload_id: workloadIdStr,
-                          analyzed_at: analyzedAtStr,
-                          analysis_duration_ms: analysisDurationMs,
-                          prediction: gruPrediction || {
-                            service_id: serviceDisplayName,
-                            threshold: primaryThreshold,
-                            thresholds: gruThresholds,
-                            detected_risks: detectedRisksList,
-                            risk_outputs: riskOutputsAll,
-                          },
-                          root_cause: {
-                            cause: rootCauseType,
-                            category: rootCauseCategory,
-                            confidence: (confidence || 99) / 100,
-                            severity,
-                          },
-                          evidence: multiTierEvidences,
-                          recommendation: {
-                            action: recAction,
-                            priority: actionPriority,
-                            risk_level: actionRiskLevel,
-                            requires_approval: requiresApproval,
-                            target_type: 'POD',
-                            target_id: faultyPodId,
-                            target_name: faultyPodName,
-                            target_node: faultyNodeName,
-                            reason: recReason,
-                            action_parameters: actionParams,
-                          },
-                          explanation: fullExplanation,
-                          historical_context_used: historicalContextUsed,
-                          similar_incident_ids: similarIncidentIds,
-                        },
-                        null,
-                        2
-                      )}
-                    </pre>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -2209,23 +2155,66 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             })()}
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              padding: '7px 18px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '8px',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              color: '#334155',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            Đóng
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => handleCopyText(
+                parsedAnalysis || {
+                  request_id: requestId,
+                  incident_id: incidentIdStr,
+                  cluster_id: clusterIdStr,
+                  namespace: namespaceStr,
+                  service_id: serviceDisplayName,
+                  workload_id: workloadIdStr,
+                  analyzed_at: analyzedAtStr,
+                  analysis_duration_ms: analysisDurationMs,
+                  prediction: gruPrediction,
+                  root_cause: { cause: rootCauseType, category: rootCauseCategory, confidence: (confidence || 99) / 100, severity },
+                  evidence: multiTierEvidences,
+                  recommendation: { action: recAction, priority: actionPriority, risk_level: actionRiskLevel, requires_approval: requiresApproval, reason: recReason, action_parameters: actionParams },
+                  explanation: fullExplanation,
+                  historical_context_used: historicalContextUsed,
+                  similar_incident_ids: similarIncidentIds
+                },
+                'raw_json'
+              )}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '7px 14px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '8px',
+                fontSize: '0.78125rem',
+                fontWeight: 600,
+                color: '#475569',
+                cursor: 'pointer',
+              }}
+              title="Sao chép toàn bộ payload JSON dữ liệu phân tích RCA phục vụ kỹ thuật"
+            >
+              {copiedKey === 'raw_json' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
+              <span>{copiedKey === 'raw_json' ? 'Đã sao chép JSON' : 'Sao chép JSON'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '7px 20px',
+                backgroundColor: '#059669',
+                border: '1px solid #059669',
+                borderRadius: '8px',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                color: '#FFFFFF',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Đóng
+            </button>
+          </div>
         </div>
       </div>
     </div>

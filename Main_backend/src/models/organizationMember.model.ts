@@ -190,6 +190,7 @@ export class OrganizationMemberModel {
       SELECT 
         om.id, om.organization_id, om.user_id, om.role_id, om.status, om.invited_by, om.joined_at, om.created_at, om.updated_at,
         u.email AS user_email, u.full_name AS user_full_name, u.avatar_url AS user_avatar_url, u.status AS user_status,
+        u.phone AS user_phone, u.job_title AS user_job_title, u.last_login_at AS user_last_login_at,
         r.code AS role_code, r.name AS role_name, r.description AS role_description,
         inv.id AS inviter_id, inv.email AS inviter_email, inv.full_name AS inviter_full_name
       FROM organization_members om

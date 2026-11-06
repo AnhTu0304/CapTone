@@ -1,3 +1,4 @@
+// CapTone Enterprise: Members & RBAC Management
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
@@ -20,7 +21,11 @@ import {
   AlertTriangle,
   Shield,
   Clock,
-  UserX
+  UserX,
+  User,
+  Phone,
+  Calendar,
+  Briefcase
 } from 'lucide-react';
 
 const RBAC_PERMISSIONS = [
@@ -33,6 +38,15 @@ const RBAC_PERMISSIONS = [
   { feature: 'Ký Duyệt Hành Động Khẩn Cấp (HITL Gate)', owner: true, devops: false, viewer: false },
   { feature: 'Quản lý Hồ sơ Tổ chức & Gói Dịch Vụ', owner: true, devops: false, viewer: false },
 ];
+
+const getMemberInitials = (name) => {
+  if (!name) return 'TV';
+  const parts = name.trim().split(' ').filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
 
 export const MembersPage = () => {
   const { currentOrg } = useDashboard();
@@ -57,8 +71,7 @@ export const MembersPage = () => {
   // Modal Mời thành viên mới
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState('DEVOPS');
+    const [inviteRole, setInviteRole] = useState('DEVOPS');
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
 
@@ -70,6 +83,9 @@ export const MembersPage = () => {
   // Modal Xác nhận xóa thành viên
   const [deletingMember, setDeletingMember] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Modal Chi tiết hồ sơ cá nhân thành viên
+  const [selectedMemberDetail, setSelectedMemberDetail] = useState(null);
 
   const fetchMembers = useCallback(async () => {
     setIsLoading(true);
@@ -148,13 +164,11 @@ export const MembersPage = () => {
       await organizationMemberService.inviteMember(orgId, {
         email: inviteEmail.trim(),
         role_code: inviteRole,
-        full_name: inviteName.trim() || undefined,
-      });
+              });
 
       setShowInviteModal(false);
       setInviteEmail('');
-      setInviteName('');
-      setInviteRole('DEVOPS');
+            setInviteRole('DEVOPS');
       toastSuccess(`Đã gửi thư mời tham gia tổ chức tới ${inviteEmail}!`, 'Mời Thành Viên');
       await fetchMembers();
     } catch (err) {
@@ -445,7 +459,7 @@ export const MembersPage = () => {
               <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Thành Viên / Ứng Viên</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Vai Trò</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Xác Thực 2FA</th>
+                
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Hoạt Động / Tham Gia</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Trạng Thái</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'right' }}>Thao Tác</th>
@@ -454,7 +468,7 @@ export const MembersPage = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                  <td colSpan={5} style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                       <RefreshCw size={16} className="animate-spin" />
                       <span>Đang tải danh sách thành viên và lời mời...</span>
@@ -463,7 +477,7 @@ export const MembersPage = () => {
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                  <td colSpan={5} style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <Users size={28} color="#94A3B8" />
                       <span style={{ fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Không tìm thấy thành viên hoặc lời mời nào</span>
@@ -491,11 +505,59 @@ export const MembersPage = () => {
                     (currentUser?.email && (m.user?.email === currentUser.email || m.email === currentUser.email))
                   );
 
+                  let localStoredAvatar = null;
+                  try {
+                    const profileKey = `selfheal_profile_${memberEmail.toLowerCase().trim()}`;
+                    const rawProfile = localStorage.getItem(profileKey);
+                    if (rawProfile) {
+                      const p = JSON.parse(rawProfile);
+                      localStoredAvatar = p?.avatar || p?.avatarUrl || p?.avatar_url || null;
+                    }
+                  } catch {
+                    // ignore
+                  }
+
+                  const memberAvatar =
+                    m.user?.avatar_url ||
+                    m.user?.avatarUrl ||
+                    m.user?.avatar ||
+                    m.avatar_url ||
+                    m.avatarUrl ||
+                    m.avatar ||
+                    (isSelf ? (currentUser?.avatar_url || currentUser?.avatarUrl || currentUser?.avatar) : null) ||
+                    localStoredAvatar ||
+                    null;
+
                   return (
                     <tr key={m.id} style={{ borderBottom: '1px solid var(--dash-border)' }}>
                       {/* Name & Email */}
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          onClick={() => setSelectedMemberDetail(m)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                          title="Bấm để xem chi tiết hồ sơ cá nhân"
+                        >
+                                                    {memberAvatar ? (
+                            <img
+                              src={memberAvatar}
+                              alt={memberName}
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '8px',
+                                objectFit: 'cover',
+                                flexShrink: 0,
+                                border: '1px solid var(--dash-border, #E2E8F0)',
+                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+                              }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextElementSibling) {
+                                  e.currentTarget.nextElementSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                          ) : null}
                           <div
                             style={{
                               width: '32px',
@@ -503,7 +565,7 @@ export const MembersPage = () => {
                               borderRadius: '8px',
                               backgroundColor: roleCode === 'SME_OWNER' ? '#ECFDF5' : roleCode === 'DEVOPS' ? '#EFF6FF' : '#F1F5F9',
                               color: roleCode === 'SME_OWNER' ? '#059669' : roleCode === 'DEVOPS' ? '#2563EB' : '#475569',
-                              display: 'flex',
+                              display: memberAvatar ? 'none' : 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontWeight: 700,
@@ -511,7 +573,7 @@ export const MembersPage = () => {
                               flexShrink: 0,
                             }}
                           >
-                            {memberName.slice(0, 2).toUpperCase()}
+                            {getMemberInitials(memberName)}
                           </div>
                           <div>
                             <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{memberName}</div>
@@ -538,19 +600,32 @@ export const MembersPage = () => {
                         </span>
                       </td>
 
-                      {/* 2FA */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontSize: '0.75rem', color: m.mfa ? '#059669' : '#94A3B8', fontWeight: 600 }}>
-                          {m.mfa ? '● Đã Bật' : '○ Chưa Bật'}
-                        </span>
-                      </td>
+                      
 
-                      {/* Last Active / Invited time */}
-                      <td style={{ padding: '14px 16px', color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>
-                        {isInvited && m.inviter ? (
-                          <span>Mời bởi {m.inviter.full_name || m.inviter.email}</span>
+                      {/* Last Active / Joined Date */}
+                      <td style={{ padding: '14px 16px', fontSize: '0.75rem' }}>
+                        {isInvited ? (
+                          <div>
+                            <div style={{ color: 'var(--dash-text-primary)', fontWeight: 600 }}>
+                              {m.expires_at ? `Hạn chót: ${new Date(m.expires_at).toLocaleDateString('vi-VN')}` : 'Hạn chót: 7 ngày sau'}
+                            </div>
+                            {m.inviter && (
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                                Mời bởi: {m.inviter.full_name || m.inviter.email}
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          m.lastActive || 'Hoạt động gần đây'
+                          <div>
+                            <div style={{ color: 'var(--dash-text-primary)', fontWeight: 600 }}>
+                              {m.lastActive || (m.user?.last_login_at ? `Đăng nhập: ${new Date(m.user.last_login_at).toLocaleDateString('vi-VN')}` : 'Hoạt động gần đây')}
+                            </div>
+                            {m.joined_at && (
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                                Tham gia: {new Date(m.joined_at).toLocaleDateString('vi-VN')}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
 
@@ -574,7 +649,25 @@ export const MembersPage = () => {
 
                       {/* Actions */}
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {isOwnerRole ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMemberDetail(m)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--dash-text-secondary)',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                            }}
+                            title="Xem chi tiết hồ sơ cá nhân"
+                          >
+                            <Eye size={15} />
+                          </button>
+                          {isOwnerRole ? (
                           <span
                             style={{
                               display: 'inline-flex',
@@ -654,6 +747,7 @@ export const MembersPage = () => {
                         ) : (
                           <span style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>&mdash;</span>
                         )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -766,30 +860,19 @@ export const MembersPage = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Email Công Ty <span style={{ color: '#EF4444' }}>*</span>
+                  Email Thành Viên <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="tuan.dang@acmecorp.vn"
+                  placeholder="thanhvien@gmail.com"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: 'var(--dash-radius-md)', fontSize: '0.875rem' }}
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Họ và Tên (Tùy chọn)
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: Đặng Quốc Tuấn"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: 'var(--dash-radius-md)', fontSize: '0.875rem' }}
-                />
-              </div>
+              
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
@@ -805,7 +888,7 @@ export const MembersPage = () => {
                   <option value="SME_OWNER">Chủ DN (SME Owner - Toàn quyền & Duyệt HITL)</option>
                 </select>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.71875rem', color: 'var(--dash-text-muted)' }}>
-                  Lưu ý: Vai trò này chỉ có hiệu lực nội bộ trong tổ chức, không cấp quyền Platform Super Admin.
+                  Lưu ý: Vai trò này quyết định quyền hạn thao tác tài nguyên trong tổ chức và có thể thay đổi bất kỳ lúc nào.
                 </p>
               </div>
 
@@ -969,6 +1052,283 @@ export const MembersPage = () => {
       )}
 
       {/* 7. Modal: Xác Nhận Xóa / Thu Hồi Thành Viên */}
+
+      {/* 8. Modal: Chi Tiết Hồ Sơ Cá Nhân Thành Viên */}
+      {selectedMemberDetail && (() => {
+        const m = selectedMemberDetail;
+        const memberName = m.user?.full_name || m.name || 'Thành viên mới';
+        const memberEmail = m.user?.email || m.email || '';
+        const roleCode = m.role?.code || m.role || 'VIEWER';
+        const roleName =
+          m.role?.name ||
+          m.roleLabel ||
+          (roleCode === 'SME_OWNER'
+            ? 'Chủ Doanh Nghiệp (SME Owner)'
+            : roleCode === 'DEVOPS'
+            ? 'Kỹ Sư DevOps Lead'
+            : 'Người Xem / Kiểm Toán (Viewer)');
+        const isOwner = roleCode === 'SME_OWNER';
+        const isDevOps = roleCode === 'DEVOPS';
+
+        let localStoredAvatar = null;
+        try {
+          const profileKey = `selfheal_profile_${memberEmail.toLowerCase().trim()}`;
+          const rawProfile = localStorage.getItem(profileKey);
+          if (rawProfile) {
+            const p = JSON.parse(rawProfile);
+            localStoredAvatar = p?.avatar || p?.avatarUrl || p?.avatar_url || null;
+          }
+        } catch {
+          // ignore
+        }
+
+        const memberAvatar =
+          m.user?.avatar_url ||
+          m.user?.avatarUrl ||
+          m.user?.avatar ||
+          m.avatar_url ||
+          m.avatarUrl ||
+          m.avatar ||
+          localStoredAvatar ||
+          null;
+
+        const phone = m.user?.phone || 'Chưa cập nhật';
+        const jobTitle = m.user?.job_title || (isOwner ? 'Chủ Doanh Nghiệp' : isDevOps ? 'Kỹ Sư Hạ Tầng & SRE Lead' : 'Chuyên Viên Phân Tích / Kiểm Toán');
+        const joinDate = m.joined_at ? new Date(m.joined_at).toLocaleDateString('vi-VN') : (m.created_at ? new Date(m.created_at).toLocaleDateString('vi-VN') : 'Mới tham gia');
+        const lastActive = m.lastActive || (m.user?.last_login_at ? `Đăng nhập: ${new Date(m.user.last_login_at).toLocaleString('vi-VN')}` : 'Đang hoạt động');
+
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.65)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '20px',
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setSelectedMemberDetail(null);
+            }}
+          >
+            <div
+              className="dash-card"
+              style={{
+                width: '100%',
+                maxWidth: '480px',
+                backgroundColor: '#FFFFFF',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '0',
+                borderRadius: '16px',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  padding: '16px 20px',
+                  borderBottom: '1px solid var(--dash-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: 'var(--dash-bg-canvas, #F8FAFC)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <User size={18} color="var(--dash-primary, #059669)" />
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+                    Chi Tiết Hồ Sơ Cá Nhân
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMemberDetail(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--dash-text-muted)',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Đóng cửa sổ"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Profile Card Banner */}
+              <div style={{ padding: '24px 20px 16px', textAlign: 'center', borderBottom: '1px solid var(--dash-border)' }}>
+                <div style={{ display: 'inline-block', position: 'relative', marginBottom: '12px' }}>
+                  {memberAvatar ? (
+                    <img
+                      src={memberAvatar}
+                      alt={memberName}
+                      style={{
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '16px',
+                        objectFit: 'cover',
+                        border: '3px solid #FFFFFF',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.12)',
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        if (e.currentTarget.nextElementSibling) {
+                          e.currentTarget.nextElementSibling.style.display = 'flex';
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '16px',
+                      backgroundColor: roleCode === 'SME_OWNER' ? '#ECFDF5' : roleCode === 'DEVOPS' ? '#EFF6FF' : '#F1F5F9',
+                      color: roleCode === 'SME_OWNER' ? '#059669' : roleCode === 'DEVOPS' ? '#2563EB' : '#475569',
+                      display: memberAvatar ? 'none' : 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '1.5rem',
+                      boxShadow: '0 4px 10px rgba(0, 0, 0, 0.08)',
+                    }}
+                  >
+                    {getMemberInitials(memberName)}
+                  </div>
+                </div>
+
+                <h4 style={{ margin: '0 0 4px', fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+                  {memberName}
+                </h4>
+                <p style={{ margin: '0 0 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {memberEmail}
+                </p>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      padding: '3px 10px',
+                      borderRadius: '12px',
+                      backgroundColor: roleCode === 'SME_OWNER' ? '#ECFDF5' : roleCode === 'DEVOPS' ? '#EFF6FF' : '#F1F5F9',
+                      color: roleCode === 'SME_OWNER' ? '#059669' : roleCode === 'DEVOPS' ? '#2563EB' : '#475569',
+                      border: `1px solid ${roleCode === 'SME_OWNER' ? '#A7F3D0' : roleCode === 'DEVOPS' ? '#BFDBFE' : '#CBD5E1'}`,
+                    }}
+                  >
+                    {roleName}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      padding: '3px 10px',
+                      borderRadius: '12px',
+                      backgroundColor: m.status === 'ACTIVE' ? '#ECFDF5' : '#FFFBEB',
+                      color: m.status === 'ACTIVE' ? '#059669' : '#D97706',
+                      border: `1px solid ${m.status === 'ACTIVE' ? '#A7F3D0' : '#FDE68A'}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {m.status === 'ACTIVE' ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                    <span>{m.status === 'ACTIVE' ? 'Đang Hoạt Động' : 'Chờ Chấp Nhận'}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Profile Details List */}
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
+                    <Briefcase size={15} color="#64748B" />
+                    <span>Chức danh:</span>
+                  </div>
+                  <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{jobTitle}</strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
+                    <Phone size={15} color="#64748B" />
+                    <span>Số điện thoại:</span>
+                  </div>
+                  <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{phone}</strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
+                    <Calendar size={15} color="#64748B" />
+                    <span>Ngày tham gia:</span>
+                  </div>
+                  <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{joinDate}</strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
+                    <Clock size={15} color="#64748B" />
+                    <span>Hoạt động:</span>
+                  </div>
+                  <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{lastActive}</strong>
+                </div>
+
+                {/* Quyền hạn tóm tắt trong tổ chức */}
+                <div style={{ marginTop: '2px', padding: '10px 12px', backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
+                    <Shield size={13} />
+                    <span>Phạm vi quyền hạn ({roleCode}):</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.71875rem', color: '#15803D', lineHeight: 1.4 }}>
+                    {isOwner
+                      ? 'Toàn quyền kiểm soát tài nguyên công ty, quản lý thành viên, phê duyệt khẩn cấp HITL và điều phối hạ tầng K8s.'
+                      : isDevOps
+                      ? 'Quản trị cụm máy chủ K8s, cài đặt tác tử eBPF, vận hành hệ thống viễn trắc và kích hoạt kịch bản tự chữa lành L1/L2.'
+                      : 'Quyền xem chỉ đọc: theo dõi bảng điều khiển tổng quan, số liệu viễn trắc, nhật ký kiểm toán và báo cáo SLA.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div
+                style={{
+                  padding: '12px 20px',
+                  borderTop: '1px solid var(--dash-border)',
+                  backgroundColor: 'var(--dash-bg-canvas, #F8FAFC)',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedMemberDetail(null)}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid var(--dash-border)',
+                    borderRadius: '8px',
+                    color: 'var(--dash-text-secondary)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {deletingMember && (
         <div
           style={{
