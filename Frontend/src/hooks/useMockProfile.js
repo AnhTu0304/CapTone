@@ -13,7 +13,12 @@ export const useMockProfile = () => {
     const stored = getStoredProfile();
     // If auth context has full_name or email, prioritize keeping them aligned
     if (user?.full_name && user.full_name !== 'User') {
-      return { ...stored, fullName: user.full_name, email: user.email || stored.email };
+      return {
+        ...stored,
+        fullName: user.full_name,
+        email: user.email || stored.email,
+        avatar: user.avatar_url || user.avatar || (user.email === stored.email ? stored.avatar : null),
+      };
     }
     return stored;
   });
@@ -27,6 +32,29 @@ export const useMockProfile = () => {
   });
   const [avatarPreview, setAvatarPreview] = useState(profile.avatar);
   const [errors, setErrors] = useState({});
+
+  // Cập nhật khi thông tin người dùng đăng nhập thay đổi (chuyển đổi tài khoản)
+  useEffect(() => {
+    if (user) {
+      const stored = getStoredProfile();
+      const updated = {
+        ...stored,
+        fullName: user.full_name || stored.fullName,
+        email: user.email || stored.email,
+        avatar: user.avatar_url || user.avatar || (user.email === stored.email ? stored.avatar : null),
+      };
+      setProfile(updated);
+      if (!isEditing) {
+        setFormData({
+          fullName: updated.fullName || '',
+          phone: updated.phone || '',
+          jobTitle: updated.jobTitle || '',
+          avatar: updated.avatar || null,
+        });
+        setAvatarPreview(updated.avatar || null);
+      }
+    }
+  }, [user, isEditing]);
 
   // Sync profile data from backend API with fallback when authenticated
   useEffect(() => {
@@ -116,7 +144,7 @@ export const useMockProfile = () => {
         const updated = { ...prev };
         delete updated.avatar;
         return updated;
-      });
+      } );
     };
     reader.onerror = () => {
       setErrors((prev) => ({ ...prev, avatar: 'Không thể đọc tệp ảnh. Vui lòng thử lại.' }));
@@ -178,6 +206,8 @@ export const useMockProfile = () => {
         if (authUserStr) {
           const authUser = JSON.parse(authUserStr);
           authUser.full_name = finalProfile.fullName;
+          authUser.avatar_url = finalProfile.avatar || null;
+          authUser.avatar = finalProfile.avatar || null;
           localStorage.setItem('selfheal_auth_user', JSON.stringify(authUser));
         }
       } catch {

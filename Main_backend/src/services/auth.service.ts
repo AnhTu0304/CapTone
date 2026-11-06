@@ -126,6 +126,8 @@ export class AuthService {
             id: user.id,
             email: user.email,
             full_name: user.full_name,
+            avatar_url: user.avatar_url || null,
+            avatarUrl: user.avatar_url || null,
             token,
             system_roles: systemRoles,
             systemRole: primarySystemRole,

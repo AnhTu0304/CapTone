@@ -1066,7 +1066,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Nhóm Bên Phải: Tìm kiếm + Đặt lại + Số lượng khớp */}
+        {/* Nhóm Bên Phải: Tìm kiếm */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           {/* Search Box */}
           <div style={{ position: 'relative' }}>
@@ -1077,7 +1077,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 height: '32px',
-                width: '210px',
+                width: '240px',
                 padding: '0 10px 0 28px',
                 fontSize: '0.75rem',
                 border: '1px solid var(--dash-border)',
@@ -1087,34 +1087,6 @@ export const ActionHistoryPage = ({ onNavigate }) => {
               }}
             />
             <Search size={13} style={{ position: 'absolute', left: '8px', top: '9px', color: 'var(--dash-text-muted)' }} />
-          </div>
-
-          {isFiltered && (
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '0 8px',
-                height: '32px',
-                borderRadius: '6px',
-                border: '1px solid #FECACA',
-                backgroundColor: '#FEF2F2',
-                color: '#B91C1C',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              <RotateCcw size={12} />
-              <span>Đặt lại</span>
-            </button>
-          )}
-
-          <div style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap' }}>
-            Khớp: <strong style={{ color: 'var(--dash-primary)' }}>{filteredHistory.length}</strong> / {actions.length} ca
           </div>
         </div>
       </div>
@@ -1138,7 +1110,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
           <div>
             <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Nhật Ký Hành Động Đã Lọc ({filteredHistory.length} ca)
+              Nhật Ký Hành Động
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
               Thời gian hồi phục trung bình: <strong style={{ color: '#059669' }}>{dynamicAnalytics.averageRecoveryTime}</strong> &bull; Tỷ lệ thành công:{' '}

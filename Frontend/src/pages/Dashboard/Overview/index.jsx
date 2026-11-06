@@ -936,7 +936,7 @@ export const OverviewPage = () => {
         {/* Card 1: CPU Usage */}
         <div className="dash-card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>CPU Máy Chủ (Toàn Cụm)</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>CPU Máy Chủ</span>
             <Cpu size={16} color="var(--dash-primary)" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
@@ -958,7 +958,7 @@ export const OverviewPage = () => {
         {/* Card 2: Memory Usage */}
         <div className="dash-card" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>RAM Máy Chủ (Toàn Cụm)</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>RAM Máy Chủ</span>
             <Database size={16} color="var(--dash-info)" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>

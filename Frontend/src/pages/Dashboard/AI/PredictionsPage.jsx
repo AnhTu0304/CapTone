@@ -894,19 +894,12 @@ export const PredictionsPage = () => {
   // Bộ lọc & điều khiển biểu đồ 12 bước
 
   const [activeSeries, setActiveSeries] = useState({
-
     cpu: true,
-
     ram: true,
-
-    disk: false,
-
-    latency: false,
-
-    request_rate: false,
-
-    http_5xx_rate: false,
-
+    disk: true,
+    latency: true,
+    request_rate: true,
+    http_5xx_rate: true,
   });
 
   const [scaleMode, setScaleMode] = useState('auto'); // 'auto' | 'standard'
@@ -3966,7 +3959,7 @@ export const PredictionsPage = () => {
 
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
 
-                    Chuỗi 12 Mốc Viễn Trắc Đầu Vào Của GRU (60 Giây)
+                    Chuỗi Viễn Trắc Telemetry Thời Gian Thực (60 Giây)
 
                   </h3>
 
@@ -4246,73 +4239,7 @@ export const PredictionsPage = () => {
 
 
 
-              {/* 3 nút thao tác nhanh nằm ngang hàng với Dịch vụ */}
-
-              <button
-
-                type="button"
-
-                onClick={setCpuRamOnly}
-
-                style={{
-
-                  padding: '5px 10px',
-
-                  fontSize: '0.75rem',
-
-                  fontWeight: 600,
-
-                  backgroundColor: '#EFF6FF',
-
-                  color: '#1D4ED8',
-
-                  border: '1px solid #BFDBFE',
-
-                  borderRadius: '6px',
-
-                  cursor: 'pointer',
-
-                }}
-
-              >
-
-                Chỉ CPU & RAM
-
-              </button>
-
-
-
-              <button
-
-                type="button"
-
-                onClick={setAllSeries}
-
-                style={{
-
-                  padding: '5px 10px',
-
-                  fontSize: '0.75rem',
-
-                  fontWeight: 600,
-
-                  backgroundColor: '#F8FAFC',
-
-                  color: '#475569',
-
-                  border: '1px solid #CBD5E1',
-
-                  borderRadius: '6px',
-
-                  cursor: 'pointer',
-
-                }}
-
-              >
-
-                Tất cả 6 chỉ số
-
-              </button>
+              {/* Nút chuyển đổi thang đo nằm ngang hàng với Dịch vụ */}
 
 
 
