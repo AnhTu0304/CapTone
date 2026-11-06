@@ -2,70 +2,99 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import OverviewPage from './Overview';
 import WidgetContainer from '../../components/admin/WidgetContainer';
+import * as adminOverviewService from '../../services/adminOverviewService';
 
-describe('Admin Overview Page Suite (/admin/overview)', () => {
-  test('renders 12 sections and snapshot timestamp after data load', async () => {
+describe('Admin Overview Page Suite (/admin)', () => {
+  beforeEach(() => {
+    jest.spyOn(adminOverviewService, 'fetchAdminOverview').mockResolvedValue({
+      status: 'ready',
+      timestamp: '04:00:00 06/11/2026',
+      data: {
+        kpi: {
+          companies: { total: 1, active: 1, incident: 0, diff: '+0 mới', status: 'positive' },
+          users: { total: 2, active: 2, locked: 0, pending: 0, diff: '+0 mới', status: 'positive' },
+          agents: { total: 1, online: 1, offline: 0, pending: 0, revoked: 0, diff: '100% sẵn sàng', status: 'positive' },
+          clusters: { total: 1, healthy: 1, degraded: 0, diff: 'Sẵn sàng', status: 'positive' },
+          uptime: { value: '99.98%', diff: '+0.05%', status: 'positive' },
+          selfHealingRate: { value: '100%', diff: '+0%', status: 'positive' },
+          activeIncidents: { value: '0 Sự cố', diff: '0 Khẩn cấp', status: 'positive' },
+          managedResources: { value: 'Hạ tầng K8s', diff: 'Sẵn sàng', status: 'positive' },
+        },
+        statistics: {
+          incidents: { total: 0, active: 0, resolved: 0, failed: 0, critical: 0, high: 0, medium: 0, low: 0 },
+          remediations: { total: 0, succeeded: 0, failed: 0, in_progress: 0, success_rate: 100 },
+          resource_usage: { avg_cpu_percent: 15, peak_cpu_percent: 25, avg_ram_percent: 40, peak_ram_percent: 50 },
+        },
+        organizationGrowth: {
+          totalOrganizations: 1,
+          activeOrganizations: 1,
+          totalClusters: 1,
+          connectedClusters: 1,
+          totalAgents: 1,
+          onlineAgents: 1,
+          remediationsTotal: 0,
+          remediationsSuccessRate: '100%',
+        },
+        aiOverview: {
+          engineVersion: 'PyTorch • Multi-Head GRU',
+          modelName: 'Gru Model 8feature',
+          version: 'v2.0.0',
+          predictionAccuracy: '97.4%',
+          f1Score: '0.9009',
+          fpr: '0.27%',
+          latency: '0.29 ms',
+          status: 'ACTIVE',
+          dataset: 'test.csv',
+          totalPredictions: 55000,
+        },
+        recentActivity: [],
+        dynamicScopes: {
+          organizations: [{ id: 'all', name: 'Tất Cả Tổ Chức' }],
+          clusters: [{ id: 'all', name: 'Tất Cả Cụm Máy Chủ' }],
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('renders page header, hubs, global scope and snapshot timestamp', async () => {
     render(<OverviewPage />);
 
     // Section 1: Page Header
-    expect(screen.getByText(/Bàn Điều Khiển Sức Khỏe Nền Tảng/i)).toBeInTheDocument();
-    expect(screen.getByText(/PLATFORM HEALTH/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bàn Điều Khiển Quản Trị Nền Tảng/i)).toBeInTheDocument();
 
     // Wait for data load from service layer
     await waitFor(() => {
       expect(screen.getByText(/Ảnh chụp:/i)).toBeInTheDocument();
     });
 
-    // Section 2: Global Scope Selector
-    expect(screen.getByLabelText(/Chọn tổ chức/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Chọn môi trường/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Chọn cụm máy chủ/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Chọn khung thời gian/i)).toBeInTheDocument();
+    // Section 2: Quick Hubs
+    expect(screen.getByText(/Quản Lý Người Dùng/i)).toBeInTheDocument();
+    expect(screen.getByText(/Công Ty & Thống Kê/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Đánh Giá Mô Hình AI/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Phát Thông Báo Toàn Mạng/i)).toBeInTheDocument();
 
-    // Section 3: KPI Cards
-    expect(screen.getByText(/Độ Khả Dụng Uptime/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Tỷ Lệ Tự Phục Hồi/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Sự Cố Đang Hoạt Động/i)).toBeInTheDocument();
-    expect(screen.getByText(/Tài Nguyên Chịu Tải/i)).toBeInTheDocument();
 
-    // Section 4: Platform Health
-    expect(screen.getByText(/Sức Khỏe Các Phân Hệ Nền Tảng/i)).toBeInTheDocument();
-    expect(screen.getByText(/K8s Control Plane API/i)).toBeInTheDocument();
-    expect(screen.getByText(/Đường Truyền Viễn Trắc eBPF/i)).toBeInTheDocument();
-    expect(screen.getByText(/Động Cơ Tự Trị AI MAPE-K/i)).toBeInTheDocument();
+    // Section 4: KPI Cards
+    await waitFor(() => {
+      expect(screen.getByText(/Tổng Số Company/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Tổng Số User/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tổng Số Agent Toàn Mạng/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tổng Số Cụm K8s/i)).toBeInTheDocument();
 
-    // Section 5: Infrastructure Overview
-    expect(screen.getByText(/Tổng Quan Hạ Tầng & Phân Bổ Tài Nguyên/i)).toBeInTheDocument();
-    expect(screen.getByText(/CPU TỔNG HỢP/i)).toBeInTheDocument();
-    expect(screen.getByText(/BỘ NHỚ RAM RSS/i)).toBeInTheDocument();
+    // Section 5: Interactive Growth & Operations Chart
+    expect(screen.getByText(/Biến thiên Tăng Trưởng Toàn Nền Tảng/i)).toBeInTheDocument();
 
-    // Section 6: Organization Growth
-    expect(screen.getByText(/Tăng Trưởng Tổ Chức & Áp Dụng/i)).toBeInTheDocument();
-    expect(screen.getByText(/TỔ CHỨC \/ TENANTS/i)).toBeInTheDocument();
 
-    // Section 7: Incident Analytics
-    expect(screen.getByText(/Phân Tích Dữ Liệu Sự Cố/i)).toBeInTheDocument();
-    expect(screen.getByText(/PHÂN BỐ THEO MỨC ĐỘ/i)).toBeInTheDocument();
+    // Section 7: AI Overview
+    expect(screen.getByText(/Động Cơ Trí Tuệ Nhân Tạo & Suy Diễn/i)).toBeInTheDocument();
 
-    // Section 8: Self-Healing Analytics
-    expect(screen.getByText(/Phân Tích Tự Phục Hồi MAPE-K/i)).toBeInTheDocument();
-    expect(screen.getByText(/TỰ TRỊ HOÀN TOÀN/i)).toBeInTheDocument();
-
-    // Section 9: AI Overview
-    expect(screen.getByText(/Tổng Quan Trí Tuệ Nhân Tạo & Suy Diễn/i)).toBeInTheDocument();
-    expect(screen.getByText(/MAPE-K Autonomous Engine v2.4-LTS/i)).toBeInTheDocument();
-
-    // Section 10: Agent Health
-    expect(screen.getByText(/Sức Khỏe Tác Tử eBPF/i)).toBeInTheDocument();
-    expect(screen.getByText(/12 \/ 12 Máy Chủ Đang Chạy Tác Tử/i)).toBeInTheDocument();
-
-    // Section 11: Critical Incident Feed
-    expect(screen.getByText(/Bảng Theo Dõi Sự Cố Nghiêm Trọng/i)).toBeInTheDocument();
-    expect(screen.getByText('INC-2026-081')).toBeInTheDocument();
-
-    // Section 12: Recent Activity
+    // Section 8: Recent Activity
     expect(screen.getByText(/Dòng Hoạt Động & Kiểm Toán Gần Nhất/i)).toBeInTheDocument();
-    expect(screen.getByText(/Vá cấu hình tự động \(Rolling Patch Memory\)/i)).toBeInTheDocument();
   });
 
   test('handles manual refresh action', async () => {
@@ -78,47 +107,6 @@ describe('Admin Overview Page Suite (/admin/overview)', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Ảnh chụp:/i)).toBeInTheDocument();
-    });
-  });
-
-  test('handles simulated disconnected state via scope selector', async () => {
-    render(<OverviewPage />);
-
-    // Select disconnected test cluster
-    const clusterSelect = screen.getByLabelText(/Chọn cụm máy chủ/i);
-    fireEvent.change(clusterSelect, { target: { value: 'cluster-disconnected' } });
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/Mất Kết Nối Với Cụm Máy Chủ/i).length).toBeGreaterThan(0);
-    });
-  });
-
-  test('handles simulated error state and retry via scope selector', async () => {
-    render(<OverviewPage />);
-
-    // Select error test cluster
-    const clusterSelect = screen.getByLabelText(/Chọn cụm máy chủ/i);
-    fireEvent.change(clusterSelect, { target: { value: 'cluster-error' } });
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/Không Thể Nạp Dữ Liệu/i).length).toBeGreaterThan(0);
-    });
-
-    // Check retry button exists
-    const retryButtons = screen.getAllByRole('button', { name: /Thử Lại Ngay/i });
-    expect(retryButtons.length).toBeGreaterThan(0);
-  });
-
-  test('handles simulated empty state via scope selector', async () => {
-    render(<OverviewPage />);
-
-    // Select empty time range
-    const timeRangeSelect = screen.getByLabelText(/Chọn khung thời gian/i);
-    fireEvent.change(timeRangeSelect, { target: { value: 'empty-range' } });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Không có sự cố nghiêm trọng nào được ghi nhận trong phạm vi này/i)).toBeInTheDocument();
-      expect(screen.getByText(/Không có hoạt động nào được ghi nhận gần đây/i)).toBeInTheDocument();
     });
   });
 

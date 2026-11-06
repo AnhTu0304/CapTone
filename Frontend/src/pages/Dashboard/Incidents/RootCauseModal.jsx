@@ -367,6 +367,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   }, [incident?.rawId, incident?.id, incident?.service, incident?.predictionId]);
 
   const isResolved = (incidentDetail?.status || incident?.status || '').toLowerCase().includes('resolve') ||
+    (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'SUCCEEDED' ||
     (incident?.status && incident?.status.includes('hoàn tất'));
 
   const serviceDisplayName = useMemo(() => {
@@ -658,7 +659,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       `Bước 3 [Xác nhận SLO]: Theo dõi chỉ số latency và tỉ lệ HTTP 5xx trong 5 phút để bảo đảm dịch vụ đã phục hồi hoàn toàn.`
     ];
   }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isDbService, serviceDisplayName, faultyPodName, recActionVi, recAction]);
-  const requiresApproval = recObj?.requires_approval !== undefined ? recObj.requires_approval : true;
+  const hasActualPendingApproval = Boolean(
+    isAlreadyInApprovals ||
+    incidentDetail?.has_pending_approval === true ||
+    incidentDetail?.pending_approval_id ||
+    (incidentDetail === null && (incident?.hasPendingApproval === true || incident?.pendingApprovalId))
+  );
+  const requiresApproval = !isResolved && hasActualPendingApproval;
   const actionPriority = recObj?.priority || 'CRITICAL';
   const actionRiskLevel = recObj?.risk_level || 'HIGH';
 
@@ -1013,7 +1020,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     padding: '2px 8px',
                     borderRadius: '4px',
                     fontSize: '0.6875rem',
-                    fontFamily: 'var(--font-mono)',
                     fontWeight: 700,
                   }}
                 >
@@ -1202,32 +1208,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span
-                    style={{
-                      fontSize: '0.6875rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      backgroundColor: '#EFF6FF',
-                      color: '#1D4ED8',
-                      border: '1px solid #BFDBFE',
-                    }}
-                  >
-                    Dự báo rủi ro: <strong>{predictedRiskVi || 'TRÀN RAM (OOM)'}</strong>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    Dự báo rủi ro: <strong style={{ color: '#1D4ED8' }}>{predictedRiskVi || 'TRÀN RAM (OOM)'}</strong>
                   </span>
-
-                  <span
-                    style={{
-                      fontSize: '0.6875rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      backgroundColor: '#ECFDF5',
-                      color: '#047857',
-                      border: '1px solid #A7F3D0',
-                    }}
-                  >
-                    Độ tin cậy RCA: <strong>{confidence !== null ? `${confidence}%` : '99%'}</strong>
+                  <span style={{ color: '#CBD5E1' }}>&bull;</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    Độ tin cậy RCA: <strong style={{ color: '#047857' }}>{confidence !== null ? `${confidence}%` : '99%'}</strong>
                   </span>
 
                   <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
@@ -1239,7 +1225,9 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           ? 'NGẮT MẠCH AN TOÀN (CIRCUIT BREAKER)'
                           : isUnknownOrNoAction
                             ? 'AN TOÀN (KHÔNG CẦN CAN THIỆP)'
-                            : 'CHỜ KHẮC PHỤC'}
+                            : requiresApproval
+                              ? 'CHỜ PHÊ DUYỆT (HITL)'
+                              : 'CHỜ KHẮC PHỤC'}
                     </strong>
                   </span>
                 </div>
@@ -1260,16 +1248,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <Zap size={16} color="#059669" />
                       <span>KẾ HOẠCH TỰ KHẮC PHỤC: {recActionVi}</span>
-                      <span style={{ fontSize: '0.6875rem', backgroundColor: '#FEF2F2', color: '#B91C1C', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FECACA', fontWeight: 700 }}>
+                      <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                      <span style={{ fontSize: '0.75rem', color: '#B91C1C', fontWeight: 700 }}>
                         Ưu tiên: {actionPriorityVi}
                       </span>
-                      <span style={{ fontSize: '0.6875rem', backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE', fontWeight: 700 }}>
+                      <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                      <span style={{ fontSize: '0.75rem', color: '#1D4ED8', fontWeight: 700 }}>
                         Rủi ro: {actionRiskLevelVi}
                       </span>
                       {requiresApproval && (
-                        <span style={{ fontSize: '0.6875rem', backgroundColor: '#FFFBEB', color: '#B45309', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FDE68A', fontWeight: 700 }}>
-                          Cần Kỹ sư duyệt (HITL)
-                        </span>
+                        <>
+                          <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                          <span style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: 700 }}>
+                            Cần Kỹ sư duyệt (HITL)
+                          </span>
+                        </>
                       )}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '2px', lineHeight: 1.35 }}>
@@ -1398,30 +1391,28 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '8px' }}>
                     <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>POD LỖI (TARGET POD)</div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
                         {faultyPodName}
                       </div>
-                      <div style={{ fontSize: '0.625rem', color: '#94A3B8', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                      <div style={{ fontSize: '0.625rem', color: '#94A3B8', marginTop: '2px' }}>
                         ID: {faultyPodId.substring(0, 18)}...
                       </div>
                     </div>
 
                     <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE &amp; VAI TRÒ REPLICA SET</div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>{faultyNodeName}</span>
-                        <span style={{ fontSize: '0.625rem', backgroundColor: '#FEF3C7', color: '#B45309', padding: '1px 5px', borderRadius: '3px' }}>
-                          {replicaSetRole}
-                        </span>
+                        <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 500 }}>({replicaSetRole})</span>
                       </div>
-                      <div style={{ fontSize: '0.625rem', color: '#94A3B8', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                      <div style={{ fontSize: '0.625rem', color: '#94A3B8', marginTop: '2px' }}>
                         UID: {faultyPodUid.substring(0, 18)}...
                       </div>
                     </div>
 
                     <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE AN TOÀN DỰ PHÒNG</div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669', fontFamily: 'var(--font-mono)' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669' }}>
                         {recDestNodeName}
                       </div>
                       <div style={{ fontSize: '0.625rem', color: '#166534', marginTop: '2px' }}>
@@ -1591,7 +1582,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           border: '1px solid #C7D2FE',
                           borderRadius: '4px',
                           fontSize: '0.65rem',
-                          fontFamily: 'var(--font-mono)',
                           fontWeight: 700,
                         }}
                       >
@@ -1744,7 +1734,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     color: '#E2E8F0',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    fontFamily: 'var(--font-mono)',
                     fontSize: '0.75rem',
                     lineHeight: 1.6,
                     maxHeight: '220px',
@@ -1955,7 +1944,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#15803D', textTransform: 'uppercase' }}>CPU (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.cpu.current}%
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#166534' }}>Max: {metricSummary.cpu.max}%</div>
@@ -1963,7 +1952,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#EFF6FF', border: '1px solid #DBEAFE' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>RAM (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.ram.current}%
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#1E40AF' }}>Max: {metricSummary.ram.max}%</div>
@@ -1971,7 +1960,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase' }}>DISK (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.disk.current}%
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#92400E' }}>Max: {metricSummary.disk.max}%</div>
@@ -1979,7 +1968,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#F5F3FF', border: '1px solid #EDE9FE' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#6D28D9', textTransform: 'uppercase' }}>ĐỘ TRỄ (MS)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.latency.current} ms
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#5B21B6' }}>Max: {metricSummary.latency.max} ms</div>
@@ -1987,7 +1976,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#0E7490', textTransform: 'uppercase' }}>REQ RATE</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.request_rate.current} <span style={{ fontSize: '0.6875rem' }}>req/s</span>
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#155E75' }}>Max: {metricSummary.request_rate.max}</div>
@@ -1995,7 +1984,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: metricSummary.http_5xx_rate.max > 0 ? '#FEF2F2' : '#F8FAFC', border: metricSummary.http_5xx_rate.max > 0 ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: metricSummary.http_5xx_rate.max > 0 ? '#DC2626' : '#64748B', textTransform: 'uppercase' }}>LỖI 5XX (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.http_5xx_rate.current}%
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#B91C1C' }}>Đỉnh: {metricSummary.http_5xx_rate.max}%</div>
@@ -2003,7 +1992,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#FDF2F8', border: '1px solid #FCE7F3' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#BE185D', textTransform: 'uppercase' }}>RESTARTS</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.pod_restart_count}
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#9D174D' }}>K8s Restarts</div>
@@ -2011,7 +2000,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                       <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#EEF2FF', border: '1px solid #E0E7FF' }}>
                         <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#4338CA', textTransform: 'uppercase' }}>REPLICAS</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.replica_count}
                         </div>
                         <div style={{ fontSize: '0.625rem', color: '#3730A3' }}>Pods cụm</div>
@@ -2044,7 +2033,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               style={{
                                 borderBottom: '1px solid #F1F5F9',
                                 backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
-                                fontFamily: 'var(--font-mono)',
                               }}
                             >
                               <td style={{ padding: '3px 5px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
@@ -2142,7 +2130,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       color: '#F8FAFC',
                       padding: '14px 16px',
                       borderRadius: '8px',
-                      fontFamily: 'var(--font-mono)',
                       fontSize: '0.75rem',
                       lineHeight: 1.6,
                       maxHeight: '260px',

@@ -153,7 +153,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           name: 'Thông báo',
           path: '/dashboard/notifications',
           icon: Bell,
-          badge: unreadNotifsCount > 0 ? `${unreadNotifsCount}` : null,
+          badge: unreadNotifsCount > 0 ? (unreadNotifsCount > 9 ? '9+' : `${unreadNotifsCount}`) : null,
           badgeType: 'info',
         },
         { name: 'Nhật ký kiểm toán', path: '/dashboard/audit-logs', icon: ScrollText },
@@ -210,6 +210,25 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     // 1. Exact match has top priority
     const exact = allItems.find((it) => it.path === cleanPath);
     if (exact) return exact.path;
+
+    // Special aliased routes for consolidated views (Phương án 1)
+    if (cleanPath.startsWith('/dashboard/monitoring/events') || cleanPath.startsWith('/dashboard/monitoring/logs')) {
+      const logsItem = allItems.find((it) => it.path === '/dashboard/monitoring/logs');
+      if (logsItem) return logsItem.path;
+    }
+    if (
+      cleanPath.startsWith('/dashboard/self-healing/history') ||
+      cleanPath.startsWith('/dashboard/self-healing/actions') ||
+      cleanPath.startsWith('/dashboard/self-healing/approvals') ||
+      cleanPath === '/dashboard/self-healing'
+    ) {
+      const hubItem = allItems.find((it) => it.path === '/dashboard/self-healing');
+      if (hubItem) return hubItem.path;
+    }
+    if (cleanPath.startsWith('/dashboard/audit-logs') || cleanPath.startsWith('/dashboard/reports')) {
+      const repItem = allItems.find((it) => it.path === '/dashboard/reports');
+      if (repItem) return repItem.path;
+    }
 
     // 2. Longest prefix match with trailing slash (ignoring root '/dashboard')
     const prefixMatches = allItems.filter(

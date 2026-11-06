@@ -3,8 +3,6 @@ import {
   ArrowRight, 
   BookOpen, 
   Layers, 
-  Brain, 
-  Shield, 
   Activity, 
   Sparkles, 
   Zap 
@@ -270,75 +268,6 @@ export const HeroSection = ({ onNavigate }) => {
                 </a>
               </div>
 
-              {/* 3 Trust Metrics */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '24px',
-                  paddingTop: '24px',
-                  borderTop: '1px solid var(--border-default)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '0px',
-                      backgroundColor: 'rgba(61, 59, 79, 0.08)',
-                      color: 'var(--color-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px solid var(--border-default)',
-                    }}
-                  >
-                    <Layers size={14} />
-                  </div>
-                  <span style={{ fontWeight: 600 }}>Native Kubernetes</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '0px',
-                      backgroundColor: 'rgba(40, 233, 159, 0.15)',
-                      color: 'var(--color-accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px solid var(--border-default)',
-                    }}
-                  >
-                    <Brain size={14} />
-                  </div>
-                  <span style={{ fontWeight: 600 }}>Ứng dụng AI</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '0px',
-                      backgroundColor: 'rgba(61, 59, 79, 0.08)',
-                      color: 'var(--color-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px solid var(--border-default)',
-                    }}
-                  >
-                    <Shield size={14} />
-                  </div>
-                  <span style={{ fontWeight: 600 }}>Con người kiểm soát</span>
-                </div>
-              </div>
-
             </div>
 
             {/* ================= RIGHT COLUMN (ENLARGED 3D DASHBOARD & AMBIENT VISUALS) ================= */}
@@ -489,17 +418,6 @@ export const HeroSection = ({ onNavigate }) => {
             </div>
 
           </div>
-
-          {/* Blueprint Corner Crosshairs (+) on Hero Border */}
-          <span className="blueprint-crosshair bp-ch-bl" aria-hidden="true">+</span>
-          <span className="blueprint-crosshair bp-ch-br" aria-hidden="true">+</span>
-
-          {/* Hexagonal Bolt Anchor Marker at Bottom-Left Guide Line */}
-          <span className="blueprint-bolt-anchor blueprint-bolt-left" aria-hidden="true" title="Anchor Bolt Marker">
-            <svg width="13" height="15" viewBox="0 0 13 15" fill="none">
-              <polygon points="6.5,0.5 12.5,4 12.5,11 6.5,14.5 0.5,11 0.5,4" fill="#8B8999" stroke="#686677" strokeWidth="1" opacity="0.85" />
-            </svg>
-          </span>
         </div>
       </section>
 

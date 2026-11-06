@@ -208,9 +208,12 @@ export class IncidentModel {
         COALESCE(nd.name, 'minikube') AS node_name,
         ha.id AS healing_action_id,
         ha.execution_status AS healing_status,
+        ha.approval_status AS healing_approval_status,
         ha.target_name AS healing_target_name,
         ha.action_name AS healing_action_name,
         ha.completed_at AS healing_completed_at,
+        ha.pending_approval_id,
+        (ha.pending_approval_id IS NOT NULL) AS has_pending_approval,
         CASE 
           WHEN i.resolved_at IS NOT NULL AND i.detected_at IS NOT NULL 
             THEN EXTRACT(EPOCH FROM (i.resolved_at - i.detected_at))::int
@@ -238,11 +241,20 @@ export class IncidentModel {
         LIMIT 1
       ) r ON true
       LEFT JOIN LATERAL (
-        SELECT ha.id, ha.execution_status, ha.target_name, hat.name AS action_name, ha.completed_at
+        SELECT
+          ha.id,
+          ha.execution_status,
+          ha.approval_status,
+          ha.target_name,
+          hat.name AS action_name,
+          ha.completed_at,
+          ap.id AS pending_approval_id
         FROM healing_actions ha
         LEFT JOIN healing_action_types hat ON hat.id = ha.action_type_id
+        LEFT JOIN approvals ap ON ap.healing_action_id = ha.id AND ap.status = 'PENDING'
         WHERE ha.incident_id = i.id
-        ORDER BY ha.created_at DESC
+           OR (i.status != 'RESOLVED' AND ap.id IS NOT NULL AND ha.target_name = COALESCE(w.name, i.target_id))
+        ORDER BY (ap.id IS NOT NULL) DESC, ha.created_at DESC
         LIMIT 1
       ) ha ON true
       ${whereClause}
@@ -294,7 +306,15 @@ export class IncidentModel {
         r.analysis_result,
         r.analyzed_at,
         COALESCE(ns.name, 'default') AS namespace,
-        COALESCE(nd.name, 'minikube') AS node_name
+        COALESCE(nd.name, 'minikube') AS node_name,
+        ha.id AS healing_action_id,
+        ha.execution_status AS healing_status,
+        ha.approval_status AS healing_approval_status,
+        ha.target_name AS healing_target_name,
+        ha.action_name AS healing_action_name,
+        ha.completed_at AS healing_completed_at,
+        ha.pending_approval_id,
+        (ha.pending_approval_id IS NOT NULL) AS has_pending_approval
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
@@ -314,6 +334,23 @@ export class IncidentModel {
         ORDER BY r.analyzed_at DESC
         LIMIT 1
       ) r ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          ha.id,
+          ha.execution_status,
+          ha.approval_status,
+          ha.target_name,
+          hat.name AS action_name,
+          ha.completed_at,
+          ap.id AS pending_approval_id
+        FROM healing_actions ha
+        LEFT JOIN healing_action_types hat ON hat.id = ha.action_type_id
+        LEFT JOIN approvals ap ON ap.healing_action_id = ha.id AND ap.status = 'PENDING'
+        WHERE ha.incident_id = i.id
+           OR (i.status != 'RESOLVED' AND ap.id IS NOT NULL AND ha.target_name = COALESCE(w.name, i.target_id))
+        ORDER BY (ap.id IS NOT NULL) DESC, ha.created_at DESC
+        LIMIT 1
+      ) ha ON true
       WHERE i.id = $1
       LIMIT 1;
     `;

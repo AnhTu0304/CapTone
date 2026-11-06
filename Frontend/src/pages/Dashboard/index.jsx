@@ -13,6 +13,8 @@ import HealingActionsPage from './SelfHealing/HealingActionsPage';
 import ActionHistoryPage from './SelfHealing/ActionHistoryPage';
 import ApprovalsPage from './SelfHealing/ApprovalsPage';
 import PoliciesPage from './SelfHealing/PoliciesPage';
+import LogsAndEventsPage from './Monitoring/LogsAndEventsPage';
+import SelfHealingHubPage from './SelfHealing/SelfHealingHubPage';
 import OrganizationPage from './Organization/OrganizationPage';
 import MembersPage from './Organization/MembersPage';
 import ClustersPage from './Clusters/ClustersPage';
@@ -103,10 +105,10 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       return <MetricsPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/monitoring/logs') {
-      return <LogsPage />;
+      return <LogsPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/monitoring/events') {
-      return <EventsPage />;
+      return <EventsPage onNavigate={onNavigate} />;
     }
 
     // 5. AI & Incidents
@@ -124,11 +126,11 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     if (path === '/dashboard/self-healing/history') {
       return <ActionHistoryPage onNavigate={onNavigate} />;
     }
-    if (path === '/dashboard/self-healing/approvals') {
-      return <ApprovalsPage onNavigate={onNavigate} />;
-    }
     if (path === '/dashboard/self-healing/policies') {
       return <PoliciesPage onNavigate={onNavigate} />;
+    }
+    if (path === '/dashboard/self-healing/approvals') {
+      return <ApprovalsPage onNavigate={onNavigate} />;
     }
     if (path.startsWith('/dashboard/self-healing')) {
       return <HealingActionsPage onNavigate={onNavigate} />;

@@ -38,8 +38,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/roles/**',
     SUPER_ADMIN: 'Toàn quyền (Tạo, gán, thu hồi vai trò toàn sàn)',
     ADMIN: 'Xem danh sách, kiểm tra thẩm quyền',
-    SME_OWNER: 'Phân quyền nội bộ trong doanh nghiệp mình',
-    DEVOPS: 'Không có quyền (Deny)',
+    USER: 'Không có quyền (Deny)',
     VIEWER: 'Chỉ xem danh sách (Read-only)',
   },
   {
@@ -47,8 +46,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/admin/settings/**',
     SUPER_ADMIN: 'Toàn quyền (Core runtime, maintenance mode, quota)',
     ADMIN: 'Không có quyền (Deny - chỉ Super Admin)',
-    SME_OWNER: 'Cấu hình hồ sơ doanh nghiệp',
-    DEVOPS: 'Không có quyền (Deny)',
+    USER: 'Không có quyền (Deny)',
     VIEWER: 'Không có quyền (Deny)',
   },
   {
@@ -56,8 +54,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/users/**',
     SUPER_ADMIN: 'Toàn quyền (Tạo, khóa, reset mật khẩu, xóa)',
     ADMIN: 'Xem danh sách, chi tiết, khóa/mở khóa tài khoản',
-    SME_OWNER: 'Mời và quản lý thành viên công ty',
-    DEVOPS: 'Không có quyền (Deny)',
+    USER: 'Xem hồ sơ cá nhân',
     VIEWER: 'Xem hồ sơ cá nhân',
   },
   {
@@ -65,8 +62,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/organizations/**',
     SUPER_ADMIN: 'Toàn quyền (Tạo mới, phê duyệt, xóa tổ chức)',
     ADMIN: 'Xem danh sách, kích hoạt / tạm khóa theo chính sách',
-    SME_OWNER: 'Toàn quyền quản trị doanh nghiệp của mình',
-    DEVOPS: 'Xem thông tin doanh nghiệp được gán',
+    USER: 'Xem thông tin doanh nghiệp (Read-only)',
     VIEWER: 'Xem thông tin doanh nghiệp (Read-only)',
   },
   {
@@ -74,8 +70,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/clusters/**',
     SUPER_ADMIN: 'Toàn quyền (Multi-cluster, cấp phát quota vật lý)',
     ADMIN: 'Giám sát và điều phối tài nguyên cụm toàn sàn',
-    SME_OWNER: 'Xem cụm và tài nguyên được cấp phát cho công ty',
-    DEVOPS: 'Toàn quyền điều khiển Pod, Node, Restart service',
+    USER: 'Xem trạng thái cụm (Read-only)',
     VIEWER: 'Xem trạng thái cụm (Read-only)',
   },
   {
@@ -83,8 +78,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/agents/**',
     SUPER_ADMIN: 'Toàn quyền (Cấp token, cấu hình sâu chính sách an toàn)',
     ADMIN: 'Điều phối fleet agent, duyệt hành động nguy cơ cao',
-    SME_OWNER: 'Bật / Tắt agent dịch vụ công ty',
-    DEVOPS: 'Tối ưu hóa playbook, kiểm thử tác tử, debug logs',
+    USER: 'Xem nhật ký hoạt động của agent',
     VIEWER: 'Xem nhật ký hoạt động của agent',
   },
   {
@@ -92,8 +86,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/ai/**',
     SUPER_ADMIN: 'Toàn quyền (Quản lý model, benchmark, tinh chỉnh ngưỡng)',
     ADMIN: 'Theo dõi model, xem phân tích RCA toàn hệ thống',
-    SME_OWNER: 'Xem báo cáo RCA và khuyến nghị tối ưu chi phí DN',
-    DEVOPS: 'Phân tích sâu nguyên nhân gốc rễ (RCA) & telemetry',
+    USER: 'Xem đồ thị dự báo dị thường (Read-only)',
     VIEWER: 'Xem đồ thị dự báo dị thường (Read-only)',
   },
   {
@@ -101,8 +94,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/telemetry/**',
     SUPER_ADMIN: 'Toàn quyền cấu hình telemetry & ngưỡng khẩn cấp',
     ADMIN: 'Giám sát trực tiếp thời gian thực, quản lý SLA',
-    SME_OWNER: 'Nhận cảnh báo sự cố ảnh hưởng doanh nghiệp',
-    DEVOPS: 'Tiếp nhận cảnh báo P0/P1, xử lý khắc phục tức thì',
+    USER: 'Xem bảng tổng quan giám sát',
     VIEWER: 'Xem bảng tổng quan giám sát',
   },
   {
@@ -110,8 +102,7 @@ const PERMISSIONS_MATRIX = [
     apiPath: '/api/v1/audit-logs/**',
     SUPER_ADMIN: 'Toàn quyền tra cứu kiểm toán toàn hệ thống',
     ADMIN: 'Tra cứu kiểm toán vận hành (Read-only)',
-    SME_OWNER: 'Tra cứu nhật ký nội bộ tổ chức',
-    DEVOPS: 'Tra cứu nhật ký thao tác kỹ thuật',
+    USER: 'Không có quyền (Deny)',
     VIEWER: 'Không có quyền (Deny)',
   },
 ];
@@ -127,6 +118,8 @@ const getRoleBadgeStyle = (role) => {
       return { bg: '#ECFDF5', border: '#A7F3D0', color: '#059669', label: 'SME_OWNER (Chủ DN)' };
     case 'DEVOPS':
       return { bg: '#EFF6FF', border: '#BFDBFE', color: '#1D4ED8', label: 'DEVOPS (Kỹ Sư)' };
+    case 'USER':
+      return { bg: '#F1F5F9', border: '#CBD5E1', color: '#475569', label: 'USER (Người Dùng)' };
     case 'VIEWER':
       return { bg: '#F1F5F9', border: '#CBD5E1', color: '#64748B', label: 'VIEWER (Chỉ Xem)' };
     default:
@@ -147,6 +140,9 @@ export const resolveUserRole = (u) => {
     if (codes.includes('SME_OWNER')) return 'SME_OWNER';
     if (codes.includes('DEVOPS')) return 'DEVOPS';
     if (codes.includes('VIEWER')) return 'VIEWER';
+  }
+  if (Array.isArray(u.system_roles) && u.system_roles.includes('USER')) {
+    return 'USER';
   }
   return u.currentRole || 'VIEWER';
 };
@@ -319,7 +315,9 @@ export const AdminRolesPage = () => {
   // Mở modal điều chỉnh vai trò
   const openAssignModal = (u) => {
     setSelectedUser(u);
-    setTargetRole(u.currentRole || 'ADMIN');
+    const resolved = resolveUserRole(u);
+    const validRole = ['SUPER_ADMIN', 'ADMIN', 'USER'].includes(resolved) ? resolved : 'USER';
+    setTargetRole(validRole);
     setAssignReason('');
     setModalError(null);
     setIsRoleModalOpen(true);
@@ -589,27 +587,9 @@ export const AdminRolesPage = () => {
             style={{
               padding: '6px 14px',
               borderRadius: '8px',
-              backgroundColor: '#ECFDF5',
-              border: '1px solid #A7F3D0',
-              color: '#059669',
-              fontWeight: 800,
-              fontSize: '0.8125rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <Users size={15} color="#059669" />
-            <span>SME_OWNER (Chủ DN)</span>
-          </div>
-          <span style={{ color: 'var(--dash-text-muted)', fontWeight: 800, fontSize: '1rem' }}>&gt;</span>
-          <div
-            style={{
-              padding: '6px 14px',
-              borderRadius: '8px',
-              backgroundColor: '#EFF6FF',
-              border: '1px solid #BFDBFE',
-              color: '#1D4ED8',
+              backgroundColor: '#F1F5F9',
+              border: '1px solid #CBD5E1',
+              color: '#475569',
               fontWeight: 700,
               fontSize: '0.8125rem',
               display: 'flex',
@@ -617,27 +597,12 @@ export const AdminRolesPage = () => {
               gap: '6px',
             }}
           >
-            <Shield size={15} color="#1D4ED8" />
-            <span>DEVOPS (Kỹ Sư)</span>
+            <UserCheck size={15} color="#475569" />
+            <span>USER (Người Dùng)</span>
           </div>
-          <span style={{ color: 'var(--dash-text-muted)', fontWeight: 800, fontSize: '1rem' }}>&gt;</span>
-          <div
-            style={{
-              padding: '6px 14px',
-              borderRadius: '8px',
-              backgroundColor: '#F1F5F9',
-              border: '1px solid #CBD5E1',
-              color: '#64748B',
-              fontWeight: 600,
-              fontSize: '0.8125rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <UserCheck size={15} color="#64748B" />
-            <span>VIEWER (Chỉ Xem)</span>
-          </div>
+        </div>
+        <div style={{ marginTop: '10px', fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic' }}>
+          💡 Lưu ý: Phân cấp vai trò toàn sàn chỉ gồm 3 vai trò hệ thống chuẩn (SUPER_ADMIN &gt; ADMIN &gt; USER). Các vai trò cấp tổ chức (SME_OWNER, DEVOPS, VIEWER) thuộc phạm vi quản trị riêng của từng Doanh nghiệp tại trang <strong>Quản Lý Nhân Sự & Lời Mời</strong>.
         </div>
       </div>
 
@@ -803,9 +768,7 @@ export const AdminRolesPage = () => {
                 <option value="ALL">Tất cả vai trò</option>
                 <option value="SUPER_ADMIN">SUPER_ADMIN</option>
                 <option value="ADMIN">ADMIN</option>
-                <option value="SME_OWNER">SME_OWNER</option>
-                <option value="DEVOPS">DEVOPS</option>
-                <option value="VIEWER">VIEWER</option>
+                <option value="USER">USER</option>
               </select>
 
               {(search.trim() || selectedRoleFilter !== 'ALL') && (
@@ -1148,12 +1111,10 @@ export const AdminRolesPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
-                <th style={{ padding: '12px 18px', fontWeight: 700, width: '22%' }}>Phân Hệ & API Route</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: '#DC2626', width: '16%' }}>SUPER_ADMIN</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: '#D97706', width: '16%' }}>ADMIN</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: '#059669', width: '16%' }}>SME_OWNER</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: '#1D4ED8', width: '16%' }}>DEVOPS</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: '#64748B', width: '14%' }}>VIEWER</th>
+                <th style={{ padding: '12px 18px', fontWeight: 700, width: '34%' }}>Phân Hệ & API Route</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#DC2626', width: '22%' }}>SUPER_ADMIN</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#D97706', width: '22%' }}>ADMIN</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', width: '22%' }}>USER</th>
               </tr>
             </thead>
             <tbody>
@@ -1163,11 +1124,9 @@ export const AdminRolesPage = () => {
                     <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{row.module}</div>
                     <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--dash-text-muted)', fontSize: '0.6875rem' }}>{row.apiPath}</div>
                   </td>
-                  <td style={{ padding: '14px 12px', fontWeight: 600, color: '#DC2626' }}>{row.SUPER_ADMIN}</td>
-                  <td style={{ padding: '14px 12px', color: row.ADMIN.includes('Deny') ? '#94A3B8' : '#B45309', fontWeight: 600 }}>{row.ADMIN}</td>
-                  <td style={{ padding: '14px 12px', color: row.SME_OWNER.includes('Deny') ? '#94A3B8' : '#047857', fontWeight: 600 }}>{row.SME_OWNER}</td>
-                  <td style={{ padding: '14px 12px', color: row.DEVOPS.includes('Deny') ? '#94A3B8' : '#1D4ED8', fontWeight: 600 }}>{row.DEVOPS}</td>
-                  <td style={{ padding: '14px 12px', color: row.VIEWER.includes('Deny') ? '#94A3B8' : '#64748B' }}>{row.VIEWER}</td>
+                  <td style={{ padding: '14px 16px', fontWeight: 600, color: '#DC2626' }}>{row.SUPER_ADMIN}</td>
+                  <td style={{ padding: '14px 16px', color: row.ADMIN.includes('Deny') ? '#94A3B8' : '#B45309', fontWeight: 600 }}>{row.ADMIN}</td>
+                  <td style={{ padding: '14px 16px', color: (row.USER || row.VIEWER)?.includes('Deny') ? '#94A3B8' : '#475569' }}>{row.USER || row.VIEWER}</td>
                 </tr>
               ))}
             </tbody>
@@ -1400,9 +1359,7 @@ export const AdminRolesPage = () => {
                 >
                   <option value="SUPER_ADMIN">SUPER_ADMIN (Quản trị Tối Cao Nền Tảng)</option>
                   <option value="ADMIN">ADMIN (Quản trị Vận Hành Nền Tảng)</option>
-                  <option value="SME_OWNER">SME_OWNER (Chủ Doanh Nghiệp Khách Hàng)</option>
-                  <option value="DEVOPS">DEVOPS (Kỹ Sư Vận Hành Hạ Tầng)</option>
-                  <option value="VIEWER">VIEWER (Người Dùng Chỉ Xem)</option>
+                  <option value="USER">USER (Người Dùng Hệ Thống)</option>
                 </select>
               </div>
 

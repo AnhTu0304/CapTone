@@ -539,7 +539,6 @@ export const InteractiveResourceChart = ({
                   color: '#D97706',
                   fontSize: '0.6875rem',
                   fontWeight: 700,
-                  fontFamily: 'var(--font-mono, monospace)',
                 }}
               >
                 <span
@@ -610,7 +609,6 @@ export const InteractiveResourceChart = ({
                     onClick={() => handleRangeClick(preset.id)}
                     style={{
                       padding: '5px 10px',
-                      fontFamily: 'var(--font-mono, monospace)',
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       backgroundColor: active ? '#FFFFFF' : 'transparent',
@@ -1010,7 +1008,6 @@ export const InteractiveResourceChart = ({
                   paddingBottom: '4px',
                   marginBottom: '6px',
                   fontSize: '0.75rem',
-                  fontFamily: 'var(--font-mono, monospace)',
                   color: '#94A3B8',
                 }}
               >
@@ -1026,7 +1023,6 @@ export const InteractiveResourceChart = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    fontFamily: 'var(--font-mono, monospace)',
                     fontSize: '0.75rem',
                     marginBottom: '4px',
                   }}
@@ -1050,7 +1046,6 @@ export const InteractiveResourceChart = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    fontFamily: 'var(--font-mono, monospace)',
                     fontSize: '0.75rem',
                     marginBottom: '4px',
                   }}
@@ -1076,7 +1071,6 @@ export const InteractiveResourceChart = ({
                   marginTop: '6px',
                   paddingTop: '4px',
                   borderTop: '1px solid rgba(255,255,255,0.1)',
-                  fontFamily: 'var(--font-mono, monospace)',
                   fontSize: '0.625rem',
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -1107,7 +1101,7 @@ export const InteractiveResourceChart = ({
         }}
       >
         <div style={{ padding: '8px 12px', backgroundColor: 'rgba(5, 150, 105, 0.05)', borderRadius: '6px', border: '1px solid rgba(5, 150, 105, 0.2)' }}>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#065F46', fontWeight: 700 }}>
+          <div style={{ fontSize: '0.6875rem', color: '#065F46', fontWeight: 700 }}>
             CPU TRUNG BÌNH / ĐỈNH
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#064E3B' }}>
@@ -1119,7 +1113,7 @@ export const InteractiveResourceChart = ({
               '—'
             )}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#059669' }}>
+          <div style={{ fontSize: '0.6875rem', color: '#059669' }}>
             {stats.hasData ? (
               `Quy đổi: ${((stats.avgCpu / 100) * totalCpuCores).toFixed(2)} / ${totalCpuCores} vCPUs`
             ) : (
@@ -1129,7 +1123,7 @@ export const InteractiveResourceChart = ({
         </div>
 
         <div style={{ padding: '8px 12px', backgroundColor: 'rgba(37, 99, 235, 0.05)', borderRadius: '6px', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#1E40AF', fontWeight: 700 }}>
+          <div style={{ fontSize: '0.6875rem', color: '#1E40AF', fontWeight: 700 }}>
             RAM TRUNG BÌNH / ĐỈNH
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#1E3A8A' }}>
@@ -1144,7 +1138,7 @@ export const InteractiveResourceChart = ({
               '—'
             )}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: '#3B82F6' }}>
+          <div style={{ fontSize: '0.6875rem', color: '#3B82F6' }}>
             {stats.hasData ? (
               `Quy đổi: ${stats.avgRam}% / ${totalMemoryGb} GB RSS`
             ) : (
@@ -1154,13 +1148,13 @@ export const InteractiveResourceChart = ({
         </div>
 
         <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: 'var(--dash-text-muted, #64748B)', fontWeight: 700 }}>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #64748B)', fontWeight: 700 }}>
             ĐIỀU PHỐI AUTONOMOUS
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary, #0F172A)' }}>
             {isLive ? 'Vòng lặp MAPE-K (Active)' : isClusterOnline ? 'Tự Động Giám Sát' : 'Tạm Dừng'}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', color: isLive ? '#059669' : '#64748B' }}>
+          <div style={{ fontSize: '0.6875rem', color: isLive ? '#059669' : '#64748B' }}>
             {stats.hasData && stats.maxCpu > 80
               ? '⚠️ Tự động kích hoạt Scale Replicas'
               : isLive
