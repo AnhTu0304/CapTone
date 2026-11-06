@@ -890,7 +890,7 @@ VALUES (
     'd3a26d55-0b9f-48e7-a328-846badf96cd7',
     'phamthaisang1710@gmail.com',
     '$2b$10$APWkvgW0lABeeSJJR0u8ru4uj8oKZymvphd5b3TM4kGbP3d6vV8Ey',
-    'Phạm Thái Sang (Super Admin)',
+    'Phạm Thái Sang',
     'ACTIVE',
     NOW()
 )
@@ -901,7 +901,7 @@ INSERT INTO users (email, password_hash, full_name, status, email_verified_at)
 VALUES (
     'superadmin@selfheal.com',
     crypt('AdminPassword123@', gen_salt('bf', 10)),
-    'Quản Trị Viên Tối Cao (Super Admin)',
+    'Quản Trị Viên Tối Cao',
     'ACTIVE',
     NOW()
 )

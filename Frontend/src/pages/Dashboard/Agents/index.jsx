@@ -193,7 +193,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 boxShadow: scopeMode === 'CURRENT_CLUSTER' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
-              Cụm này ({currentEnv?.name})
+              {currentEnv?.name || 'Cụm hiện tại'}
             </button>
             <button
               type="button"

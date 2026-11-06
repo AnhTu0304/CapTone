@@ -56,7 +56,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('SUPER_ADMIN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('SUPER_ADMIN')).toBeInTheDocument();
     expect(screen.getByText('Bảng Quản Trị Hệ Thống')).toBeInTheDocument();
     expect(screen.getByText('Nhật Ký Kiểm Toán SHA-256')).toBeInTheDocument();
   });
@@ -77,7 +77,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('SYSTEM_ADMIN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('SYSTEM_ADMIN')).toBeInTheDocument();
     expect(screen.getByText('Bảng Quản Trị Hệ Thống')).toBeInTheDocument();
   });
 
@@ -101,7 +101,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('SYSTEM_ADMIN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('SYSTEM_ADMIN')).toBeInTheDocument();
     expect(screen.queryByText('Kỹ Sư Vận Hành')).not.toBeInTheDocument();
   });
 
@@ -126,7 +126,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('Chưa được gán System Role').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Chưa được gán System Role')).toBeInTheDocument();
     expect(screen.queryByText('Bảng Quản Trị Hệ Thống')).not.toBeInTheDocument();
     expect(screen.getByText('Cài Đặt Tài Khoản')).toBeInTheDocument();
   });

@@ -2,6 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { authService } from '../services/authService';
 import multiTabSync, { SYNC_EVENTS } from '../services/multiTabSync';
 
+const cleanFullName = (name) => {
+  if (!name || typeof name !== 'string') return name;
+  return name.replace(/\s*\((?:Super\s*Admin|Admin)\)/gi, '').trim();
+};
+
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'selfheal_auth_token';
@@ -12,7 +17,10 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem(USER_KEY);
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (parsed?.full_name) parsed.full_name = cleanFullName(parsed.full_name);
+      return parsed;
     } catch {
       return null;
     }
@@ -59,6 +67,8 @@ export const AuthProvider = ({ children }) => {
       try {
         const profile = await authService.getProfile(savedToken);
         if (profile) {
+          if (profile.full_name) profile.full_name = cleanFullName(profile.full_name);
+          if (profile.fullName) profile.fullName = cleanFullName(profile.fullName);
           setUser(profile);
           localStorage.setItem(USER_KEY, JSON.stringify(profile));
         }
@@ -98,10 +108,15 @@ export const AuthProvider = ({ children }) => {
         id: res.data.id,
         email: res.data?.email,
         full_name: res.data?.full_name || res.data?.email?.split('@')[0],
+        avatar_url: res.data?.avatar_url || res.data?.avatarUrl || null,
         system_roles: res.data?.system_roles || [],
       };
     }
 
+    if (profile) {
+      if (profile.full_name) profile.full_name = cleanFullName(profile.full_name);
+      if (profile.fullName) profile.fullName = cleanFullName(profile.fullName);
+    }
     setUser(profile);
     localStorage.setItem(USER_KEY, JSON.stringify(profile));
     multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGIN);
@@ -202,6 +217,14 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('selfheal_active_cluster_name');
     localStorage.removeItem('selfheal_active_env_name');
     sessionStorage.removeItem('admin_access_token');
+    localStorage.removeItem('selfheal_mock_profile_v1');
+    try {
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('selfheal_profile_') || k.startsWith('selfheal_mock_profile')) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch {}
     try {
       sessionStorage.removeItem('selfheal_onboarding_state_v1');
       sessionStorage.removeItem('selfheal_onboarding_state_guest');

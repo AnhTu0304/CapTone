@@ -113,8 +113,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           name: 'Dự báo rủi ro AI',
           path: '/dashboard/ai/predictions',
           icon: Sparkles,
-          badge: newPredictionsCount > 0 ? `${newPredictionsCount}` : null,
-          badgeType: 'mint',
         },
         {
           name: 'Quản lý sự cố & RCA',

@@ -41,6 +41,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('agent'); // 'agent' | 'nodes' | 'pods' | 'logs' | 'config'
   const [copiedField, setCopiedField] = useState(null);
+  const [logPage, setLogPage] = useState(1);
 
 
   const {
@@ -321,6 +322,12 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     : (clusterData.token ? [clusterData.token] : []);
   const heartbeats = clusterData.recent_heartbeats || [];
   const connectionLogs = clusterData.connection_logs || [];
+  const LOGS_PER_PAGE = 10;
+  const totalLogPages = Math.ceil(connectionLogs.length / LOGS_PER_PAGE) || 1;
+  const safeLogPage = Math.min(Math.max(1, logPage), totalLogPages);
+  const startLogIdx = (safeLogPage - 1) * LOGS_PER_PAGE;
+  const endLogIdx = Math.min(startLogIdx + LOGS_PER_PAGE, connectionLogs.length);
+  const paginatedLogs = connectionLogs.slice(startLogIdx, endLogIdx);
   const namespaces = clusterData.namespaces && clusterData.namespaces.length > 0
     ? clusterData.namespaces
     : [{ name: 'default' }, { name: 'kube-system' }];
@@ -850,7 +857,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                   <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
-                    Active Token (1 Cụm &bull; 1 Agent &bull; 1 Token)
+                    Active Token
                   </label>
                   {activeToken?.expires_at && (
                     <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
@@ -1300,14 +1307,14 @@ kubectl delete namespace selfheal-system`}</code>
                   </tr>
                 </thead>
                 <tbody>
-                  {connectionLogs.length === 0 ? (
+                  {paginatedLogs.length === 0 ? (
                     <tr>
                       <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8' }}>
                         Chưa có sự kiện kết nối nào được ghi nhận.
                       </td>
                     </tr>
                   ) : (
-                    connectionLogs.map((log, idx) => {
+                    paginatedLogs.map((log, idx) => {
                       const sevColor = log.severity === 'SUCCESS' ? '#059669' : (log.severity === 'WARN' ? '#D97706' : (log.severity === 'ERROR' ? '#DC2626' : '#2563EB'));
                       const sevBg = log.severity === 'SUCCESS' ? '#ECFDF5' : (log.severity === 'WARN' ? '#FEF3C7' : (log.severity === 'ERROR' ? '#FEE2E2' : '#EFF6FF'));
 
@@ -1339,6 +1346,86 @@ kubectl delete namespace selfheal-system`}</code>
                 </tbody>
               </table>
             </div>
+            {totalLogPages > 1 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  padding: '12px 20px',
+                  borderTop: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
+                  Hiển thị <strong style={{ color: '#0F172A' }}>{startLogIdx + 1}–{endLogIdx}</strong> trong tổng số{' '}
+                  <strong style={{ color: '#0F172A' }}>{connectionLogs.length}</strong> sự kiện ({LOGS_PER_PAGE} bản ghi / trang)
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    disabled={safeLogPage <= 1}
+                    onClick={() => setLogPage((p) => Math.max(1, p - 1))}
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: safeLogPage <= 1 ? '#F8FAFC' : '#FFFFFF',
+                      color: safeLogPage <= 1 ? '#94A3B8' : '#334155',
+                      cursor: safeLogPage <= 1 ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    &laquo; Trước
+                  </button>
+
+                  {Array.from({ length: totalLogPages }, (_, i) => i + 1).map((pg) => (
+                    <button
+                      key={pg}
+                      type="button"
+                      onClick={() => setLogPage(pg)}
+                      style={{
+                        minWidth: '30px',
+                        height: '30px',
+                        padding: '0 8px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-mono)',
+                        borderRadius: '6px',
+                        border: safeLogPage === pg ? '1px solid #2563EB' : '1px solid #CBD5E1',
+                        backgroundColor: safeLogPage === pg ? '#2563EB' : '#FFFFFF',
+                        color: safeLogPage === pg ? '#FFFFFF' : '#334155',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {pg}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    disabled={safeLogPage >= totalLogPages}
+                    onClick={() => setLogPage((p) => Math.min(totalLogPages, p + 1))}
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: safeLogPage >= totalLogPages ? '#F8FAFC' : '#FFFFFF',
+                      color: safeLogPage >= totalLogPages ? '#94A3B8' : '#334155',
+                      cursor: safeLogPage >= totalLogPages ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Sau &raquo;
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
