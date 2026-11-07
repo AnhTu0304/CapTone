@@ -1,0 +1,151 @@
+/* ==========================================================================
+   HERO SECTION — EDITORIAL HALFTONE LAYOUT
+   ========================================================================== */
+
+.hero-section {
+  position: relative;
+  background-color: var(--bg-canvas);
+  /* Subtle warm newsprint halftone dot texture across the hero canvas */
+  background-image: radial-gradient(rgba(24, 24, 27, 0.055) 1px, transparent 0);
+  background-size: 16px 16px;
+  padding-top: 48px;
+  padding-bottom: 72px;
+  overflow: hidden;
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.16);
+}
+
+.hero-full-canvas {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+  position: relative;
+  z-index: 2;
+  border-left: 1px dashed rgba(61, 59, 79, 0.18);
+  border-right: 1px dashed rgba(61, 59, 79, 0.18);
+}
+
+.hero-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.22fr;
+  gap: 56px;
+  align-items: center;
+}
+
+.hero-left-col {
+  max-width: 580px;
+}
+
+.hero-heading {
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 4.8vw, 4.25rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: var(--color-ink);
+  margin-bottom: 24px;
+}
+
+.hero-heading-accent {
+  color: var(--color-accent);
+  display: inline-block;
+}
+
+.hero-description {
+  font-family: var(--font-body);
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 36px;
+}
+
+.hero-cta-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hero-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background-color: var(--color-primary);
+  color: var(--color-canvas);
+  font-weight: 600;
+  font-size: 1rem;
+  font-family: var(--font-display);
+  border-radius: 0px;
+  border: 1px solid var(--color-primary);
+  box-shadow: none;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.hero-btn-primary:hover {
+  background-color: #2A2838;
+  transform: translateX(-4px);
+}
+
+.hero-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 26px;
+  background-color: var(--color-accent);
+  color: var(--color-ink);
+  font-weight: 600;
+  font-size: 1rem;
+  font-family: var(--font-display);
+  border-radius: 0px;
+  border: 1px solid var(--color-accent);
+  box-shadow: none;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.hero-btn-secondary:hover {
+  background-color: #1FE092;
+  transform: translateX(4px);
+}
+
+/* Right Column: Clean Editorial Halftone Mascot Presentation */
+.hero-right-col {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1120px) {
+  .hero-grid-layout {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .hero-left-col {
+    max-width: 100%;
+    text-align: center;
+    margin: 0 auto;
+  }
+
+  .hero-cta-group {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-section {
+    padding-top: 32px;
+    padding-bottom: 48px;
+  }
+
+  .hero-full-canvas {
+    padding: 0 var(--space-4);
+  }
+
+  .hero-right-col {
+    padding: 8px 0 0;
+  }
+}
