@@ -17,9 +17,10 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
       data-testid="agent-bridge-section"
       style={{
         position: 'relative',
+        width: '100%',
         backgroundColor: 'var(--bg-navy)', /* #3D3B4F */
         borderTop: '1px solid rgba(198, 249, 226, 0.18)',
-        borderBottom: '1px dashed rgba(61, 59, 79, 0.24)',
+        borderBottom: '1px solid rgba(198, 249, 226, 0.18)',
         overflow: 'hidden',
       }}
     >
@@ -28,7 +29,7 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
         aria-hidden="true"
         style={{
           width: '100%',
-          height: '22px',
+          height: '24px',
           backgroundImage:
             'repeating-linear-gradient(to bottom, rgba(198, 249, 226, 0.16) 0px, rgba(198, 249, 226, 0.16) 1px, transparent 1px, transparent 4px)',
           borderBottom: '1px solid rgba(198, 249, 226, 0.14)',
@@ -36,13 +37,14 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
       />
 
       <div
-        className="container-custom no-crosshair"
         style={{
           position: 'relative',
-          paddingTop: '64px',
-          paddingBottom: '76px',
-          borderLeft: '1px dashed rgba(198, 249, 226, 0.14)',
-          borderRight: '1px dashed rgba(198, 249, 226, 0.14)',
+          width: '100%',
+          boxSizing: 'border-box',
+          paddingTop: '56px',
+          paddingBottom: '68px',
+          paddingLeft: 'clamp(24px, 5vw, 96px)',
+          paddingRight: 'clamp(24px, 5vw, 96px)',
         }}
       >
         {/* Top-left & top-right hexagon guide nodes */}
@@ -50,10 +52,10 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
           aria-hidden="true"
           style={{
             position: 'absolute',
-            top: '6px',
-            left: '-6px',
-            width: '11px',
-            height: '12px',
+            top: '8px',
+            left: 'clamp(16px, 3.5vw, 48px)',
+            width: '12px',
+            height: '13px',
             backgroundColor: '#698B7E',
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
           }}
@@ -62,10 +64,10 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
           aria-hidden="true"
           style={{
             position: 'absolute',
-            top: '6px',
-            right: '-6px',
-            width: '11px',
-            height: '12px',
+            top: '8px',
+            right: 'clamp(16px, 3.5vw, 48px)',
+            width: '12px',
+            height: '13px',
             backgroundColor: '#698B7E',
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
           }}
@@ -74,24 +76,24 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
         <div
           style={{
             display: 'flex',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             justifyContent: 'space-between',
             gap: '32px',
             flexWrap: 'wrap',
-            padding: '0 16px',
+            width: '100%',
           }}
         >
           {/* Left Content: [ AGENT ] tag, headline, concise bridge description */}
-          <div style={{ maxWidth: '880px' }}>
+          <div style={{ flex: '1 1 600px', maxWidth: '1100px' }}>
             <div
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.875rem',
-                fontWeight: 500,
+                fontWeight: 600,
                 letterSpacing: '0.18em',
                 color: '#9CE8C9',
                 textTransform: 'uppercase',
-                marginBottom: '18px',
+                marginBottom: '16px',
               }}
             >
               [ AGENT ]
@@ -100,12 +102,12 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
             <h2
               style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: 'clamp(2rem, 3.8vw, 3.125rem)',
+                fontSize: 'clamp(2rem, 3.8vw, 3.25rem)',
                 fontWeight: 700,
                 color: '#C6F9E2',
                 letterSpacing: '-0.03em',
-                lineHeight: 1.14,
-                marginBottom: '18px',
+                lineHeight: 1.15,
+                marginBottom: '16px',
               }}
             >
               Cách Agent kết nối với dự án của bạn
@@ -114,7 +116,7 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
             <p
               style={{
                 fontFamily: 'var(--font-body)',
-                fontSize: 'clamp(0.95rem, 1.35vw, 1.125rem)',
+                fontSize: 'clamp(0.95rem, 1.25vw, 1.125rem)',
                 fontWeight: 400,
                 color: '#88C6AD',
                 lineHeight: 1.55,
@@ -126,7 +128,7 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
           </div>
 
           {/* Right Hexagon Button */}
-          <div style={{ paddingTop: '4px' }}>
+          <div style={{ flexShrink: 0, paddingTop: '4px' }}>
             <a
               href="/guide"
               onClick={handleLearnMore}
@@ -134,12 +136,12 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '12px 28px',
+                padding: '12px 30px',
                 backgroundColor: '#C6F9E2',
                 color: '#2B2938',
                 fontFamily: 'var(--font-body)',
-                fontSize: '0.875rem',
-                fontWeight: 500,
+                fontSize: '0.9375rem',
+                fontWeight: 600,
                 textDecoration: 'none',
                 clipPath:
                   'polygon(11px 0%, calc(100% - 11px) 0%, 100% 50%, calc(100% - 11px) 100%, 11px 100%, 0% 50%)',
