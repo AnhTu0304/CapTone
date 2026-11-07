@@ -1,55 +1,48 @@
-/* ==========================================================================
-   CHICKEN MASCOT HTML5 VIDEO — HERO SECTION RIGHT CONTAINER
-   ========================================================================== */
-
 .chicken-mascot-stage {
   position: relative;
   width: 100%;
-  max-width: 720px;
+  max-width: 620px;
+  min-height: 490px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Reserve 16:9 aspect ratio (1280x720) to prevent Cumulative Layout Shift (CLS) */
-  aspect-ratio: 16 / 9;
-  background-color: transparent;
   user-select: none;
+  overflow: visible;
 }
 
-.chicken-mascot-video,
-.chicken-mascot-poster-fallback {
+.chicken-mascot-svg {
   width: 100%;
   height: auto;
-  max-width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: contain;
+  max-height: 530px;
   display: block;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  border-radius: 0;
-  background-color: transparent;
-  pointer-events: none;
+  overflow: visible;
+  filter: drop-shadow(0 14px 28px rgba(17, 21, 28, 0.06));
 }
 
-/* Hide any browser-specific native media controls or overlays */
-.chicken-mascot-video::-webkit-media-controls,
-.chicken-mascot-video::-webkit-media-controls-enclosure,
-.chicken-mascot-video::-webkit-media-controls-panel,
-.chicken-mascot-video::-webkit-media-controls-play-button,
-.chicken-mascot-video::-webkit-media-controls-start-playback-button {
-  display: none !important;
-  -webkit-appearance: none;
+.mascot-anim-part {
+  will-change: transform;
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1024px) {
   .chicken-mascot-stage {
-    max-width: 640px;
+    max-width: 520px;
+    min-height: 400px;
+  }
+
+  .chicken-mascot-svg {
+    max-height: 440px;
   }
 }
 
 @media (max-width: 640px) {
   .chicken-mascot-stage {
     max-width: 100%;
+    min-height: 310px;
+    padding: 8px 0;
+  }
+
+  .chicken-mascot-svg {
+    max-height: 340px;
   }
 }

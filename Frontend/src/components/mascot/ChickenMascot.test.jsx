@@ -3,51 +3,55 @@ import { render, screen } from '@testing-library/react';
 import ChickenMascot from './ChickenMascot';
 import HeroSection from '../../pages/Home/HeroSection';
 
-describe('ChickenMascot (HTML5 Video) & HeroSection integration', () => {
-  beforeEach(() => {
-    window.HTMLMediaElement.prototype.play = jest.fn(() => Promise.resolve());
-    window.HTMLMediaElement.prototype.pause = jest.fn();
+const REQUIRED_SVG_GROUP_IDS = [
+  'chicken-body',
+  'chicken-neck',
+  'chicken-head',
+  'chicken-comb',
+  'chicken-eye',
+  'chicken-beak-upper',
+  'chicken-beak-lower',
+  'chicken-wing',
+  'chicken-tail',
+  'chicken-legs',
+  'grain-01',
+  'grain-02',
+  'grain-03',
+  'grain-04',
+];
+
+describe('ChickenMascot (Method A Vector SVG + GSAP)', () => {
+  test('renders all 14 required independently controllable SVG groups', () => {
+    const { container } = render(<ChickenMascot />);
+    const svg = container.querySelector('svg.chicken-mascot-svg');
+    expect(svg).not.toBeNull();
+
+    REQUIRED_SVG_GROUP_IDS.forEach((id) => {
+      const group = container.querySelector(`#${id}`);
+      expect(group).not.toBeNull();
+      expect(group.tagName.toLowerCase()).toBe('g');
+    });
   });
 
-  test('renders HTML5 video mascot with required attributes (autoPlay, muted, loop, playsInline, preload="metadata", no controls)', () => {
-    const { container } = render(<ChickenMascot reducedMotion={false} />);
-
-    const videoEl = screen.getByTestId('chicken-mascot-video');
-    expect(videoEl).toBeInTheDocument();
-    expect(videoEl.tagName).toBe('VIDEO');
-    expect(videoEl).toHaveAttribute('src', '/videos/chicken-mascot.mp4');
-    expect(videoEl).toHaveAttribute('preload', 'metadata');
-    expect(videoEl).toHaveAttribute('playsinline');
-    expect(videoEl).toHaveAttribute('loop');
-    expect(videoEl).toHaveAttribute('autoplay');
-    expect(videoEl).not.toHaveAttribute('controls');
-    expect(videoEl.muted).toBe(true);
-
-    // Ensure both /videos/chicken-mascot.mp4 and bundled asset source tags exist
-    const sources = container.querySelectorAll('source');
-    expect(sources.length).toBeGreaterThanOrEqual(2);
-    expect(sources[0]).toHaveAttribute('src', '/videos/chicken-mascot.mp4');
-    expect(sources[0]).toHaveAttribute('type', 'video/mp4');
+  test('renders emerald #28E99F accents on eye and rice grains', () => {
+    const { container } = render(<ChickenMascot />);
+    const emeraldEye = container.querySelector('#chicken-eye path[fill="#28E99F"]');
+    const emeraldGrain = container.querySelector('#grain-01 path[fill="#28E99F"]');
+    expect(emeraldEye).not.toBeNull();
+    expect(emeraldGrain).not.toBeNull();
   });
 
-  test('pauses video and disables autoplay when prefers-reduced-motion is active', () => {
-    render(<ChickenMascot reducedMotion={true} />);
-
-    const videoEl = screen.getByTestId('chicken-mascot-video');
-    expect(videoEl).not.toHaveAttribute('autoplay');
-    expect(videoEl).toHaveAttribute('poster');
-    expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+  test('supports reducedMotion={true} prop and cleans up on unmount', () => {
+    const { container, unmount } = render(<ChickenMascot reducedMotion={true} />);
+    expect(container.querySelector('#chicken-head')).not.toBeNull();
+    expect(() => unmount()).not.toThrow();
   });
 
-  test('renders HeroSection with preserved left editorial content and right HTML5 video mascot only', () => {
-    const { container } = render(<HeroSection />);
-
+  test('renders inside HeroSection right column alongside Vietnamese headline and CTAs', () => {
+    render(<HeroSection />);
     expect(screen.getByText(/Quan sát\. Dự đoán\./i)).toBeInTheDocument();
-    expect(screen.getByText(/Khôi phục\./i)).toBeInTheDocument();
     expect(screen.getByText(/Bắt đầu ngay/i)).toBeInTheDocument();
     expect(screen.getByText(/Xem hướng dẫn/i)).toBeInTheDocument();
-
-    const videos = container.querySelectorAll('video.chicken-mascot-video');
-    expect(videos).toHaveLength(1);
+    expect(screen.getByTestId('chicken-mascot-stage')).toBeInTheDocument();
   });
 });

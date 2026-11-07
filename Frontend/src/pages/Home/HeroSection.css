@@ -1,16 +1,13 @@
 /* ==========================================================================
-   HERO SECTION — EDITORIAL HALFTONE LAYOUT
+   HERO SECTION — SELFHEAL TWO-COLUMN LAYOUT (ORIGINAL PROPORTIONS & HEIGHT)
    ========================================================================== */
 
 .hero-section {
   position: relative;
   background-color: var(--bg-canvas);
-  /* Subtle warm newsprint halftone dot texture across the hero canvas */
-  background-image: radial-gradient(rgba(24, 24, 27, 0.055) 1px, transparent 0);
-  background-size: 16px 16px;
   padding-top: 48px;
-  padding-bottom: 72px;
-  overflow: hidden;
+  padding-bottom: 90px;
+  overflow: visible;
   border-bottom: 1px dashed rgba(61, 59, 79, 0.16);
 }
 
@@ -27,9 +24,10 @@
 
 .hero-grid-layout {
   display: grid;
-  grid-template-columns: 1fr 1.22fr;
-  gap: 56px;
+  grid-template-columns: 1fr 1.38fr;
+  gap: 64px;
   align-items: center;
+  min-height: 572px;
 }
 
 .hero-left-col {
@@ -64,6 +62,7 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 42px;
 }
 
 .hero-btn-primary {
@@ -108,20 +107,23 @@
   transform: translateX(4px);
 }
 
-/* Right Column: Clean Editorial Halftone Mascot Presentation */
+/* Right Column: Preserves original 572px vertical presence */
 .hero-right-col {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 0;
+  padding: 40px 10px;
+  min-height: 572px;
+  width: 100%;
 }
 
 /* Responsive Breakpoints */
-@media (max-width: 1120px) {
+@media (max-width: 1240px) {
   .hero-grid-layout {
     grid-template-columns: 1fr;
-    gap: 40px;
+    gap: 56px;
+    min-height: auto;
   }
 
   .hero-left-col {
@@ -132,13 +134,19 @@
 
   .hero-cta-group {
     justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  .hero-right-col {
+    min-height: 420px;
+    padding: 20px 10px;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .hero-section {
-    padding-top: 32px;
-    padding-bottom: 48px;
+    padding-top: 36px;
+    padding-bottom: 56px;
   }
 
   .hero-full-canvas {
@@ -146,6 +154,7 @@
   }
 
   .hero-right-col {
+    min-height: auto;
     padding: 8px 0 0;
   }
 }
