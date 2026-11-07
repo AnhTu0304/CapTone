@@ -215,6 +215,18 @@ export class UserModel {
     /**
      * Kiểm tra sự tồn tại của email
      */
+    public static async findByIdWithPassword(userId: string, client?: PoolClient): Promise<IUser | null> {
+        const db = client || pool;
+        const querySql = `
+          SELECT id, email, full_name, password_hash, status, email_verified_at
+          FROM users 
+          WHERE id = $1 AND deleted_at IS NULL
+          LIMIT 1
+        `;
+        const result = await db.query<IUser>(querySql, [userId]);
+        return result.rows[0] || null;
+    }
+
     public static async findByEmail(email: string, client?: PoolClient): Promise<{ id: string } | null> {
         const db = client || pool;
         const result = await db.query<{ id: string }>(

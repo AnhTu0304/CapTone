@@ -450,7 +450,9 @@ export class UserService {
         const offset = (page - 1) * limit;
 
         const conditions: string[] = [
-            "(a.user_id = $1 OR (a.target_type = 'USER' AND a.target_id = $1) OR (a.organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = $1)))"
+            "(a.user_id = $1 OR (a.target_type = 'USER' AND a.target_id = $1))",
+            "(a.resource_type IS NULL OR a.resource_type != 'HEALING_ACTION')",
+            "(a.action NOT LIKE 'REMEDIATION_%' AND a.action NOT LIKE 'CIRCUIT_BREAKER_%' AND a.action NOT LIKE 'AUTONOMOUS_HEALING_%' AND a.action NOT LIKE 'HITL_%')"
         ];
         const params: any[] = [userId];
         let pIndex = 2;
@@ -462,7 +464,7 @@ export class UserService {
             } else if (cat === 'PROFILE') {
                 conditions.push("a.action IN ('USER_PROFILE_UPDATED', 'PROFILE_UPDATED', 'PROFILE_UPDATE', 'EMAIL_VERIFIED', 'USER_UPDATE', 'PROFILE')");
             } else if (cat === 'COMPANY') {
-                conditions.push("a.action IN ('ORG_CREATED', 'ORG_UPDATED', 'ORG_STATUS_CHANGED', 'INVITATION_SENT', 'INVITATION_ACCEPTED', 'MEMBER_JOINED', 'MEMBER_REMOVED', 'COMPANY', 'CLUSTER_CREATED', 'CLUSTER_DELETED', 'CONFIG_UPDATED')");
+                conditions.push("a.action IN ('ORG_CREATED', 'ORG_UPDATED', 'ORG_STATUS_CHANGED', 'INVITATION_SENT', 'INVITATION_ACCEPTED', 'MEMBER_JOINED', 'MEMBER_REMOVED', 'COMPANY', 'CLUSTER_CREATED', 'CLUSTER_DELETED', 'CONFIG_UPDATED', 'AGENT_CREATED', 'AGENT_DELETED', 'AGENT_CONNECTED', 'POLICY_STATUS_CHANGED', 'POLICY_CREATED', 'POLICY_UPDATED')");
             } else if (cat === 'SECURITY') {
                 conditions.push("a.action IN ('2FA_ENABLED', '2FA_DISABLED', 'USER_PASSWORD_CHANGED', 'PASSWORD_RESET', 'TOKEN_ROTATED', 'SECURITY')");
             }
@@ -480,8 +482,13 @@ export class UserService {
 
         const limitIndex = pIndex++;
         const offsetIndex = pIndex++;
-        const dataQuery = 'SELECT a.id, a.action, a.description, a.status, a.ip_address, a.created_at, a.metadata, a.actor_type ' +
-            'FROM audit_logs a WHERE ' + whereSql + ' ' +
+        const dataQuery = 'SELECT a.id, a.action, a.description, a.status, a.ip_address, a.user_agent, a.created_at, a.metadata, a.actor_type, a.organization_id, ' +
+            'COALESCE(o.name, a.metadata->>\'organization_name\', (SELECT o2.name FROM organizations o2 JOIN organization_members om2 ON om2.organization_id = o2.id WHERE om2.user_id = $1 LIMIT 1)) AS organization_name, ' +
+            'COALESCE(a.metadata->>\'cluster_name\', c.name, NULL) AS cluster_name ' +
+            'FROM audit_logs a ' +
+            'LEFT JOIN organizations o ON o.id = a.organization_id ' +
+            'LEFT JOIN clusters c ON (c.id::text = a.metadata->>\'cluster_id\' OR (a.resource_type = \'CLUSTER\' AND c.id = a.resource_id)) ' +
+            'WHERE ' + whereSql + ' ' +
             'ORDER BY a.created_at DESC ' +
             'LIMIT $' + limitIndex + ' OFFSET $' + offsetIndex;
 
@@ -502,14 +509,19 @@ export class UserService {
             } else if (action.includes('2FA') || action.includes('PASSWORD') || action.includes('TOKEN')) {
                 category = 'SECURITY';
                 title = action.includes('2FA') ? 'Bảo mật xác thực hai yếu tố (2FA)' : (action.includes('PASSWORD') ? 'Đổi mật khẩu tài khoản' : (action.includes('TOKEN') ? 'Xoay vòng Token Agent' : 'Bảo mật tài khoản'));
-            } else if (action.includes('ORG') || action.includes('MEMBER') || action.includes('INVITATION') || action.includes('CLUSTER') || action.includes('CONFIG') || action.includes('AGENT')) {
+            } else if (action.includes('ORG') || action.includes('MEMBER') || action.includes('INVITATION') || action.includes('CLUSTER') || action.includes('CONFIG') || action.includes('AGENT') || action.includes('POLICY')) {
                 category = 'COMPANY';
                 title = action.includes('ORG_CREATED') ? 'Khởi tạo Company mới' : (action.includes('ORG_UPDATED') ? 'Cập nhật hồ sơ tổ chức' : (action.includes('CLUSTER_CREATED') ? 'Đăng ký Cụm Kubernetes' : (action.includes('CONFIG') ? 'Cập nhật cấu hình Agent' : (action.includes('AGENT') ? 'Kết nối Tác tử Agent' : 'Thao tác tổ chức & hạ tầng'))));
             }
 
             const d = new Date(r.created_at);
-            const pad = (n: number) => String(n).padStart(2, '0');
-            const timestamp = pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+            let timestamp = '';
+            try {
+                timestamp = d.toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false }).replace(',', '');
+            } catch {
+                const pad = (n: number) => String(n).padStart(2, '0');
+                timestamp = pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+            }
 
             let ip = r.ip_address ? String(r.ip_address) : '127.0.0.1';
             if (ip === '::1' || ip === '::ffff:127.0.0.1') ip = '127.0.0.1';
@@ -518,11 +530,26 @@ export class UserService {
                 id: String(r.id),
                 actionType: r.action,
                 title,
-                description: r.description || title,
+                description: (() => {
+                    const rawDesc = r.description || title;
+                    let c = rawDesc.replace(/\[\S+@\S+\]/g, '').replace(/Người dùng\s*/i, '').trim();
+                    if (!c) return title;
+                    return c.charAt(0).toUpperCase() + c.slice(1);
+                })(),
                 timestamp,
                 ipAddress: ip,
+                userAgent: r.user_agent || null,
                 category,
                 status: r.status === 'SUCCESS' ? 'SUCCESS' : (r.status === 'FAILURE' ? 'FAILED' : r.status),
+                organizationName: r.organization_name || (r.metadata && r.metadata.organization_name) || null,
+                clusterName: (() => {
+                    let clName = r.cluster_name || (r.metadata && r.metadata.cluster_name) || null;
+                    if (!clName && r.description) {
+                        const m = r.description.match(/\[([a-zA-Z0-9_\-]+?)(?:-cluster)?(?:-ebpf)?-agent\]/i);
+                        if (m) clName = m[1];
+                    }
+                    return clName;
+                })(),
             };
         });
 
