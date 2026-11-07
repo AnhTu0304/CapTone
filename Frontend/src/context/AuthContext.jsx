@@ -89,6 +89,9 @@ export const AuthProvider = ({ children }) => {
   // Hàm Đăng nhập
   const login = useCallback(async ({ email, password }) => {
     const res = await authService.login({ email, password });
+    if (res?.data?.require_2fa) {
+      return { require_2fa: true, temp_token: res.data.temp_token };
+    }
     const receivedToken = res?.data?.token;
 
     if (!receivedToken) {
@@ -106,6 +109,41 @@ export const AuthProvider = ({ children }) => {
       // Fallback nếu profile chưa sẵn sàng
       profile = {
         id: res.data.id,
+        email: res.data?.email,
+        full_name: res.data?.full_name || res.data?.email?.split('@')[0],
+        avatar_url: res.data?.avatar_url || res.data?.avatarUrl || null,
+        system_roles: res.data?.system_roles || [],
+      };
+    }
+
+    if (profile) {
+      if (profile.full_name) profile.full_name = cleanFullName(profile.full_name);
+      if (profile.fullName) profile.fullName = cleanFullName(profile.fullName);
+    }
+    setUser(profile);
+    localStorage.setItem(USER_KEY, JSON.stringify(profile));
+    multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGIN);
+    return profile;
+  }, []);
+
+  // Hàm Xác thực mã 2FA để hoàn tất đăng nhập
+  const verify2FALogin = useCallback(async (tempToken, code) => {
+    const res = await authService.verify2FALogin(tempToken, code);
+    const receivedToken = res?.data?.token;
+
+    if (!receivedToken) {
+      throw new Error('Không nhận được mã xác thực token từ máy chủ');
+    }
+
+    setToken(receivedToken);
+    localStorage.setItem(TOKEN_KEY, receivedToken);
+
+    let profile = null;
+    try {
+      profile = await authService.getProfile(receivedToken);
+    } catch {
+      profile = {
+        id: res.data?.id,
         email: res.data?.email,
         full_name: res.data?.full_name || res.data?.email?.split('@')[0],
         avatar_url: res.data?.avatar_url || res.data?.avatarUrl || null,
@@ -391,6 +429,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: Boolean(token && user),
     loading,
     login,
+    verify2FALogin,
     loginWithGoogle,
     register,
     verifyEmail,

@@ -13,7 +13,8 @@
 
 import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
 
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
+const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api/v1';
+export const API_BASE_URL = rawApiUrl.replace('//localhost:5000', '//127.0.0.1:5000');
 
 let currentActiveOrgId = null;
 let currentSwitchAbortController = null;
@@ -25,6 +26,7 @@ const PUBLIC_OR_GLOBAL_ENDPOINTS = [
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/verify-email',
+  '/auth/2fa',
   '/health',
   '/organizations/me/list',
   '/organizations/me/invitations',
