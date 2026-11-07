@@ -1,21 +1,21 @@
 /* ==========================================================================
-   VINTAGE HALFTONE CHICKEN MASCOT — EDITORIAL ILLUSTRATION STYLES
+   VINTAGE HALFTONE ROOSTER MASCOT — EDITORIAL ILLUSTRATION STYLES
    ========================================================================== */
 
 .chicken-mascot-stage {
   position: relative;
   width: 100%;
-  max-width: 640px;
+  max-width: 680px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   user-select: none;
-  /* Subtle vintage newsprint radial aura */
+  /* Warm vintage newsprint aura matching the rooster engraving reference */
   background: radial-gradient(
-    ellipse 78% 72% at 50% 54%,
-    rgba(244, 241, 234, 0.75) 0%,
-    rgba(238, 238, 238, 0) 76%
+    ellipse 82% 74% at 52% 54%,
+    rgba(250, 248, 245, 0.88) 0%,
+    rgba(238, 238, 238, 0) 78%
   );
 }
 
@@ -24,16 +24,18 @@
   height: auto;
   display: block;
   overflow: visible;
-  /* Subtle green aura edge inspired by the halftone reference */
-  filter: drop-shadow(0 0 2px rgba(40, 233, 159, 0.42))
-          drop-shadow(0 12px 28px rgba(24, 24, 27, 0.06));
+  /* Crisp ink contrast with subtle editorial depth */
+  filter: drop-shadow(0 10px 24px rgba(20, 20, 19, 0.05));
 }
 
-/* GPU-friendly hints only on animated SVG groups */
+/* GPU-friendly hints only on animated SVG groups and multi-joint neck layers */
 #chicken-body,
 #chicken-neck,
+.neck-lower-hackle,
+.neck-upper-hackle,
 #chicken-head,
 #chicken-comb,
+#chicken-wattles,
 #chicken-eye,
 #chicken-beak-upper,
 #chicken-beak-lower,
@@ -49,8 +51,11 @@
 @media (prefers-reduced-motion: reduce) {
   #chicken-body,
   #chicken-neck,
+  .neck-lower-hackle,
+  .neck-upper-hackle,
   #chicken-head,
   #chicken-comb,
+  #chicken-wattles,
   #chicken-eye,
   #chicken-beak-upper,
   #chicken-beak-lower,
@@ -68,6 +73,6 @@
 
 @media (max-width: 768px) {
   .chicken-mascot-stage {
-    max-width: 480px;
+    max-width: 520px;
   }
 }

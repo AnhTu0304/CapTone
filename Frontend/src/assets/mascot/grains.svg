@@ -1,44 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 560" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 620" fill="none">
   <defs>
-    <pattern id="grains-halftone" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(25)">
-      <circle cx="2" cy="2" r="1.2" fill="#18181B" />
-      <circle cx="5" cy="5" r="0.7" fill="#27272A" />
+    <pattern id="stipple-ground" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(18)">
+      <circle cx="1.8" cy="1.8" r="1.05" fill="#141413" />
+      <circle cx="4.8" cy="4.2" r="0.65" fill="#141413" />
+    </pattern>
+    <pattern id="stipple-ground-fine" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(12)">
+      <circle cx="2" cy="2" r="0.7" fill="#141413" />
+      <circle cx="6" cy="5" r="0.45" fill="#27272A" />
     </pattern>
   </defs>
 
-  <g id="ground-engraving">
-    <!-- Horizontal vintage woodcut ground lines -->
-    <path d="M92 492 H496 M108 499 H514 M78 506 H526 M96 513 H510 M118 520 H488 M142 527 H460 M176 534 H418 M215 540 H368" stroke="#18181B" stroke-width="2.6" stroke-linecap="round" />
-    <path d="M126 495.5 H455 M90 502.5 H485 M112 509.5 H498 M134 516.5 H472 M158 523.5 H442 M194 530.5 H396" stroke="#18181B" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="18 6 8 5 28 7" />
-    <!-- Stipple soil pebbles -->
-    <circle cx="84" cy="498" r="2.2" fill="#18181B" />
-    <circle cx="72" cy="508" r="1.6" fill="#18181B" />
-    <circle cx="102" cy="524" r="2" fill="#18181B" />
-    <circle cx="132" cy="532" r="1.8" fill="#18181B" />
-    <circle cx="520" cy="496" r="1.8" fill="#18181B" />
-    <circle cx="534" cy="507" r="2.1" fill="#18181B" />
-    <circle cx="504" cy="522" r="1.6" fill="#18181B" />
+  <g id="ground-stipple-bed">
+    <ellipse cx="445" cy="528" rx="235" ry="22" fill="url(#stipple-ground)" opacity="0.72" />
+    <ellipse cx="430" cy="534" rx="285" ry="28" fill="url(#stipple-ground-fine)" opacity="0.58" />
+    <!-- Fine stipple dots around pecking zone -->
+    <circle cx="268" cy="532" r="1.4" fill="#141413" />
+    <circle cx="282" cy="527" r="1.1" fill="#141413" />
+    <circle cx="294" cy="535" r="1.5" fill="#141413" />
+    <circle cx="312" cy="529" r="1.2" fill="#141413" />
+    <circle cx="328" cy="536" r="1.3" fill="#141413" />
+    <circle cx="345" cy="531" r="1.1" fill="#141413" />
   </g>
 
-  <g id="grain-01" transform="translate(86, 482)">
-    <ellipse cx="0" cy="0" rx="8.5" ry="4.5" transform="rotate(-18)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.4" />
-    <ellipse cx="0" cy="0" rx="7" ry="3.2" transform="rotate(-18)" fill="url(#grains-halftone)" opacity="0.55" />
-    <path d="M-5 1.5 L5 -1.5" stroke="#18181B" stroke-width="1.4" stroke-linecap="round" />
+  <!-- Primary controllable grains (#grain-01 .. #grain-04) -->
+  <g id="grain-01" transform="translate(242, 535)">
+    <path d="M-9 0 C-5 -4.2 5 -4.2 9 0 C5 4.2 -5 4.2 -9 0 Z" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+    <path d="M-5 0 H5" stroke="#141413" stroke-width="0.9" stroke-linecap="round" />
+  </g>
+  <g id="grain-02" transform="translate(256, 521)">
+    <path d="M-8.5 0 C-4.5 -3.8 4.5 -3.8 8.5 0 C4.5 3.8 -4.5 3.8 -8.5 0 Z" transform="rotate(22)" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+  </g>
+  <g id="grain-03" transform="translate(228, 520)">
+    <path d="M-8.5 0 C-4.5 -3.8 4.5 -3.8 8.5 0 C4.5 3.8 -4.5 3.8 -8.5 0 Z" transform="rotate(-16)" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+  </g>
+  <g id="grain-04" transform="translate(222, 556)">
+    <path d="M-8.5 0 C-4.5 -3.8 4.5 -3.8 8.5 0 C4.5 3.8 -4.5 3.8 -8.5 0 Z" transform="rotate(-6)" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
   </g>
 
-  <g id="grain-02" transform="translate(105, 490)">
-    <ellipse cx="0" cy="0" rx="7.8" ry="4.2" transform="rotate(14)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.4" />
-    <ellipse cx="0" cy="0" rx="6.2" ry="2.8" transform="rotate(14)" fill="url(#grains-halftone)" opacity="0.55" />
-    <path d="M-4.5 -1.2 L4.5 1.2" stroke="#18181B" stroke-width="1.3" stroke-linecap="round" />
-  </g>
-
-  <g id="grain-03" transform="translate(72, 491)">
-    <ellipse cx="0" cy="0" rx="7.2" ry="3.9" transform="rotate(-28)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.2" />
-    <path d="M-4 1.8 L4 -1.8" stroke="#18181B" stroke-width="1.2" stroke-linecap="round" />
-  </g>
-
-  <g id="grain-04" transform="translate(122, 484)">
-    <ellipse cx="0" cy="0" rx="6.8" ry="3.6" transform="rotate(8)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.2" />
-    <path d="M-3.8 -0.6 L3.8 0.6" stroke="#18181B" stroke-width="1.2" stroke-linecap="round" />
+  <!-- Ambient foreground scattered rice grains matching reference composition -->
+  <g id="ambient-grains">
+    <path d="M100 532 C104 529 112 529 116 532 C112 535 104 535 100 532 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M132 523 C136 520 144 520 148 523 C144 526 136 526 132 523 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M146 549 C150 546 158 546 162 549 C158 552 150 552 146 549 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M170 530 C174 527 182 527 186 530 C182 533 174 533 170 530 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M186 512 C190 509 198 509 202 512 C198 515 190 515 186 512 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M196 533 C200 530 208 530 212 533 C208 536 200 536 196 533 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M276 519 C280 516 288 516 292 519 C288 522 280 522 276 519 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M294 540 C298 537 306 537 310 540 C306 543 298 543 294 540 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M273 558 C277 555 285 555 289 558 C285 561 277 561 273 558 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
+    <path d="M326 558 C330 555 338 555 342 558 C338 561 330 561 326 558 Z" fill="#FAF8F5" stroke="#141413" stroke-width="1.9" />
   </g>
 </svg>

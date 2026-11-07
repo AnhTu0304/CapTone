@@ -1,74 +1,83 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 560" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 620" fill="none">
   <defs>
-    <!-- Dense halftone stipple pattern -->
-    <pattern id="halftone-dense" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(32)">
-      <circle cx="2" cy="2" r="1.75" fill="#18181B" />
-      <circle cx="5" cy="5" r="1.15" fill="#18181B" />
+    <!-- 4-Tier Halftone Stipple & Woodcut Engraving Patterns -->
+    <pattern id="stipple-heavy" width="4.5" height="4.5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+      <circle cx="1.5" cy="1.5" r="1.45" fill="#141413" />
+      <circle cx="3.8" cy="3.8" r="1.15" fill="#141413" />
     </pattern>
-    <!-- Medium halftone stipple pattern -->
-    <pattern id="halftone-mid" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(32)">
-      <circle cx="2.5" cy="2.5" r="1.3" fill="#18181B" />
-      <circle cx="6" cy="6" r="0.75" fill="#27272A" />
+    <pattern id="stipple-dense" width="5.5" height="5.5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+      <circle cx="1.8" cy="1.8" r="1.25" fill="#141413" />
+      <circle cx="4.5" cy="4.5" r="0.85" fill="#141413" />
     </pattern>
-    <!-- Light newspaper halftone dot pattern -->
-    <pattern id="halftone-light" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(32)">
-      <circle cx="3" cy="3" r="0.95" fill="#27272A" />
+    <pattern id="stipple-mid" width="6.5" height="6.5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+      <circle cx="2" cy="2" r="1.05" fill="#141413" />
+      <circle cx="5.2" cy="5.2" r="0.6" fill="#27272A" />
     </pattern>
-    <!-- Woodcut cross-hatching pattern -->
-    <pattern id="engraving-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-24)">
-      <line x1="0" y1="2" x2="8" y2="2" stroke="#18181B" stroke-width="1.3" />
-      <line x1="0" y1="6" x2="8" y2="6" stroke="#18181B" stroke-width="0.9" stroke-dasharray="5 2" />
+    <pattern id="stipple-light" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+      <circle cx="2.5" cy="2.5" r="0.78" fill="#27272A" />
+      <circle cx="6.5" cy="6.5" r="0.42" fill="#3F3F46" />
+    </pattern>
+    <pattern id="engraving-lines" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-22)">
+      <line x1="0" y1="1.5" x2="6" y2="1.5" stroke="#141413" stroke-width="1.3" />
+      <line x1="0" y1="4.5" x2="6" y2="4.5" stroke="#141413" stroke-width="0.85" stroke-dasharray="4 1.5" />
     </pattern>
   </defs>
 
-  <g id="chicken-mascot-artwork">
-    <!-- Ground and Grains -->
-    <g id="ground-engraving">
-      <path d="M92 492 H496 M108 499 H514 M78 506 H526 M96 513 H510 M118 520 H488 M142 527 H460 M176 534 H418 M215 540 H368" stroke="#18181B" stroke-width="2.6" stroke-linecap="round" />
-    </g>
-    <g id="grain-01" transform="translate(86, 482)">
-      <ellipse cx="0" cy="0" rx="8.5" ry="4.5" transform="rotate(-18)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.4" />
-    </g>
-    <g id="grain-02" transform="translate(105, 490)">
-      <ellipse cx="0" cy="0" rx="7.8" ry="4.2" transform="rotate(14)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.4" />
-    </g>
-    <g id="grain-03" transform="translate(72, 491)">
-      <ellipse cx="0" cy="0" rx="7.2" ry="3.9" transform="rotate(-28)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.2" />
-    </g>
-    <g id="grain-04" transform="translate(122, 484)">
-      <ellipse cx="0" cy="0" rx="6.8" ry="3.6" transform="rotate(8)" fill="#F4F1EA" stroke="#18181B" stroke-width="2.2" />
+  <g id="rooster-mascot-artwork">
+    <!-- Ground stipple & scattered rice grains -->
+    <g id="ground-stipple-bed">
+      <ellipse cx="445" cy="528" rx="235" ry="22" fill="url(#stipple-mid)" opacity="0.58" />
+      <ellipse cx="430" cy="534" rx="285" ry="28" fill="url(#stipple-light)" opacity="0.62" />
     </g>
 
-    <!-- Legs -->
+    <g id="grain-01" transform="translate(242, 535)">
+      <path d="M-9 0 C-5 -4.2 5 -4.2 9 0 C5 4.2 -5 4.2 -9 0 Z" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+    </g>
+    <g id="grain-02" transform="translate(256, 521)">
+      <path d="M-8.5 0 C-4.5 -3.8 4.5 -3.8 8.5 0 C4.5 3.8 -4.5 3.8 -8.5 0 Z" transform="rotate(22)" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+    </g>
+    <g id="grain-03" transform="translate(228, 520)">
+      <path d="M-8.5 0 C-4.5 -3.8 4.5 -3.8 8.5 0 C4.5 3.8 -4.5 3.8 -8.5 0 Z" transform="rotate(-16)" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+    </g>
+    <g id="grain-04" transform="translate(222, 556)">
+      <path d="M-8.5 0 C-4.5 -3.8 4.5 -3.8 8.5 0 C4.5 3.8 -4.5 3.8 -8.5 0 Z" transform="rotate(-6)" fill="#FAF8F5" stroke="#141413" stroke-width="2" />
+    </g>
+
+    <!-- Planted Rooster Legs (#chicken-legs) -->
     <g id="chicken-legs">
-      <path d="M276 376 C248 378 214 404 196 446 C191 458 188 474 191 486 C198 474 206 456 218 442 C220 456 220 472 226 484 C232 470 235 452 241 436 C250 448 264 456 280 456 C268 446 258 432 256 416 C272 402 292 394 316 396 Z" fill="#F4F1EA" stroke="#18181B" stroke-width="4" stroke-linejoin="round" />
-      <path d="M362 396 L334 456 L264 462 C276 472 302 474 324 472 L248 504 C272 504 306 494 332 482 L298 532 C318 520 338 498 352 480 L398 486 C384 476 368 470 356 466 L388 402 Z" fill="#F4F1EA" stroke="#18181B" stroke-width="4" stroke-linejoin="round" />
+      <!-- Back/Left Forward-Angled Leg -->
+      <path d="M442 426 L396 502 L338 518 L354 522 L386 514 L350 538 L374 532 L404 516 L448 528 L438 516 L414 506 L464 434 Z" fill="#FAF8F5" stroke="#141413" stroke-width="3.2" stroke-linejoin="round" />
+      <!-- Foreground/Right Upright Planted Leg -->
+      <path d="M518 438 L498 516 L442 536 L464 538 L496 528 L480 564 L498 548 L514 530 L568 552 L552 536 L524 520 L542 442 Z" fill="#FAF8F5" stroke="#141413" stroke-width="3.4" stroke-linejoin="round" />
     </g>
 
-    <!-- Body, Tail, Wing, Neck, Head -->
+    <!-- Arching Sickle Tail (#chicken-tail) -->
     <g id="chicken-tail">
-      <path d="M404 156 C444 108 492 50 534 18 C558 4 578 16 572 44 C598 34 616 52 602 80 C628 74 644 96 626 124 C654 126 664 150 644 176 C666 186 666 214 642 234 C658 250 652 278 626 292 C636 312 622 338 594 344 L448 310 Z" fill="#18181B" stroke="#18181B" stroke-width="4" stroke-linejoin="round" />
+      <path d="M468 182 C492 104 548 34 612 18 C584 42 562 76 550 112 C598 48 668 38 718 98 C678 72 632 82 596 122 C654 78 722 98 742 184 C706 132 658 128 614 158 C672 138 730 178 742 268 C714 212 672 194 628 208 C674 214 708 268 688 338 C670 288 640 264 604 268 C638 294 654 344 636 382 L472 280 Z" fill="#141413" stroke="#141413" stroke-width="2.8" stroke-linejoin="round" />
     </g>
+
+    <!-- Rooster Body, Wing, Neck & Fierce Head -->
     <g id="chicken-body">
-      <path d="M138 256 C182 178 256 128 348 128 C398 128 446 146 492 178 C544 214 584 268 576 332 C568 394 504 438 426 442 C354 446 286 418 228 380 C176 346 132 302 138 256 Z" fill="#18181B" stroke="#18181B" stroke-width="4" />
+      <path d="M324 274 C368 208 424 184 488 186 C552 188 608 238 604 316 C600 388 556 444 504 454 C462 462 424 434 388 422 C348 408 314 352 324 274 Z" fill="#FAF8F5" stroke="#141413" stroke-width="3.4" />
       <g id="chicken-wing">
-        <path d="M254 168 C332 146 436 174 504 238 C532 264 544 304 522 336 C496 372 432 378 368 358 C306 338 248 294 234 238 C226 206 234 178 254 168 Z" fill="#18181B" stroke="#F4F1EA" stroke-width="2.5" />
+        <path d="M428 242 C488 222 578 258 632 342 C572 346 498 338 446 318 C412 304 402 264 428 242 Z" fill="#FAF8F5" stroke="#141413" stroke-width="3" />
       </g>
       <g id="chicken-neck">
-        <path d="M226 168 C172 198 122 252 94 316 C128 346 184 358 244 340 C278 292 276 214 226 168 Z" fill="#18181B" />
+        <path d="M398 192 C342 224 294 288 254 378 C294 408 364 416 426 386 C452 326 446 238 398 192 Z" fill="#FAF8F5" stroke="#141413" stroke-width="3" />
         <g id="chicken-head">
           <g id="chicken-comb">
-            <path d="M84 344 C64 328 56 300 72 288 C58 272 68 248 88 254 C84 234 102 222 118 238 C122 224 140 224 142 242 C132 278 106 318 84 344 Z" fill="#18181B" stroke="#18181B" stroke-width="3" />
+            <path d="M236 456 L212 434 L228 426 L212 396 L232 398 L224 358 L244 372 L246 326 L266 352 L274 316 L288 352 L292 384 Z" fill="#141413" stroke="#141413" stroke-width="2.5" stroke-linejoin="round" />
           </g>
           <g id="chicken-beak-upper">
-            <path d="M84 362 C66 378 58 404 68 428 C78 414 92 398 106 386 Z" fill="#18181B" />
+            <path d="M250 456 C238 474 238 494 244 510 C252 494 262 478 272 466 Z" fill="#FAF8F5" stroke="#141413" stroke-width="2.8" stroke-linejoin="round" />
           </g>
           <g id="chicken-beak-lower">
-            <path d="M94 382 C84 398 84 416 96 426 C104 412 112 398 116 386 Z" fill="#18181B" />
+            <path d="M258 468 C250 482 248 494 252 504 C260 492 268 480 274 470 Z" fill="#FAF8F5" stroke="#141413" stroke-width="2.5" stroke-linejoin="round" />
           </g>
           <g id="chicken-eye">
-            <circle cx="104" cy="346" r="10" fill="#18181B" stroke="#F4F1EA" stroke-width="2.5" />
-            <circle cx="103" cy="345" r="3.5" fill="#F4F1EA" />
+            <circle cx="272" cy="436" r="8" fill="#FAF8F5" stroke="#141413" stroke-width="2.4" />
+            <circle cx="272" cy="436" r="4.2" fill="#141413" />
+            <circle cx="270.5" cy="434.5" r="1.4" fill="#FAF8F5" />
           </g>
         </g>
       </g>

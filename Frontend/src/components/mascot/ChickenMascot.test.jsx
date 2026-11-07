@@ -20,12 +20,12 @@ const REQUIRED_SVG_GROUPS = [
   'grain-04',
 ];
 
-describe('ChickenMascot & HeroSection integration', () => {
-  test('renders SVG mascot with all required independently controllable group IDs and accessibility attributes', () => {
+describe('ChickenMascot (Halftone Engraving Rooster) & HeroSection integration', () => {
+  test('renders SVG rooster mascot with all required independently controllable group IDs, multi-joint neck layers, and halftone patterns', () => {
     const { container, unmount } = render(<ChickenMascot />);
 
     const imgRole = screen.getByRole('img', {
-      name: /Minh họa gà Halftone cổ điển đang mổ thóc/i,
+      name: /Minh họa gà trống Halftone cổ điển đang mổ thóc/i,
     });
     expect(imgRole).toBeInTheDocument();
 
@@ -34,9 +34,16 @@ describe('ChickenMascot & HeroSection integration', () => {
       expect(groupEl).not.toBeNull();
     });
 
-    // Ensure halftone patterns and clipping paths exist
+    // Ensure multi-joint neck sub-layers and wattles exist for organic bending
+    expect(container.querySelector('.neck-lower-hackle')).not.toBeNull();
+    expect(container.querySelector('.neck-upper-hackle')).not.toBeNull();
+    expect(container.querySelector('#chicken-wattles')).not.toBeNull();
+
+    // Ensure 4-tier halftone stipple patterns and clipping paths exist
     expect(container.querySelector('#halftone-dense')).not.toBeNull();
     expect(container.querySelector('#halftone-mid')).not.toBeNull();
+    expect(container.querySelector('#halftone-light')).not.toBeNull();
+    expect(container.querySelector('#halftone-ultrafine')).not.toBeNull();
     expect(container.querySelector('#clip-chicken-torso')).not.toBeNull();
 
     // Unmount cleanly without errors
@@ -49,7 +56,7 @@ describe('ChickenMascot & HeroSection integration', () => {
     expect(() => unmount()).not.toThrow();
   });
 
-  test('renders HeroSection with left editorial content and right Halftone ChickenMascot only', () => {
+  test('renders HeroSection with left editorial content and right Halftone Rooster Mascot only', () => {
     const { container } = render(<HeroSection />);
     expect(screen.getByText(/Quan sát\. Dự đoán\./i)).toBeInTheDocument();
     expect(screen.getByText(/Khôi phục\./i)).toBeInTheDocument();
