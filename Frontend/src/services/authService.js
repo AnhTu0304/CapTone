@@ -3,7 +3,24 @@
  * Kết nối trực tiếp với Main Backend Node.js Express (cổng 5000)
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
+const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api/v1';
+const API_BASE_URL = rawApiUrl.replace('//localhost:5000', '//127.0.0.1:5000');
+
+async function safeFetch(url, options = {}) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (url.includes('localhost')) {
+      const fallbackUrl = url.replace('localhost', '127.0.0.1');
+      return await fetch(fallbackUrl, options);
+    }
+    if (url.includes('127.0.0.1')) {
+      const fallbackUrl = url.replace('127.0.0.1', 'localhost');
+      return await fetch(fallbackUrl, options);
+    }
+    throw err;
+  }
+}
 
 export const authService = {
   /**
@@ -11,7 +28,7 @@ export const authService = {
    * @param {Object} payload { email, password, full_name }
    */
   async register({ email, password, full_name }) {
-    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -31,7 +48,7 @@ export const authService = {
    * @param {Object} payload { email, password }
    */
   async login({ email, password }) {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -47,11 +64,32 @@ export const authService = {
   },
 
   /**
+   * Xác thực mã OTP 2FA để hoàn tất đăng nhập
+   * @param {string} temp_token
+   * @param {string} code
+   */
+  async verify2FALogin(temp_token, code) {
+    const res = await safeFetch(`${API_BASE_URL}/auth/login/2fa`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ temp_token, code: code?.trim() }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Mã xác thực 2FA không chính xác hoặc đã hết hạn');
+    }
+    return data;
+  },
+
+  /**
    * Đăng nhập / Đăng ký nhanh bằng Google OAuth Token
    * @param {string} token
    */
   async googleLogin(token) {
-    const res = await fetch(`${API_BASE_URL}/auth/google`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/google`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -73,7 +111,7 @@ export const authService = {
   async getProfile(token) {
     if (!token) return null;
 
-    const res = await fetch(`${API_BASE_URL}/users/profile`, {
+    const res = await safeFetch(`${API_BASE_URL}/users/profile`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -95,7 +133,7 @@ export const authService = {
   async getMe(token) {
     if (!token) return null;
 
-    const res = await fetch(`${API_BASE_URL}/auth/me`, {
+    const res = await safeFetch(`${API_BASE_URL}/auth/me`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

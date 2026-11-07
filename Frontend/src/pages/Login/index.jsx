@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const LoginPage = ({ onNavigate }) => {
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, verify2FALogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isTwoFactorStep, setIsTwoFactorStep] = useState(false);
+  const [twoFactorTempToken, setTwoFactorTempToken] = useState('');
+  const [otpCode, setOtpCode] = useState('');
 
   // Tải Google Identity Services SDK nếu chưa có
   useEffect(() => {
@@ -36,10 +39,40 @@ export const LoginPage = ({ onNavigate }) => {
     setLoading(true);
 
     try {
-      await login({ email: email.trim(), password });
+      const loginRes = await login({ email: email.trim(), password });
+      if (loginRes?.require_2fa) {
+        setTwoFactorTempToken(loginRes.temp_token);
+        setIsTwoFactorStep(true);
+        setLoading(false);
+        return;
+      }
       handleRedirect();
     } catch (err) {
-      setError(err.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
+      if (err.message === 'Failed to fetch' || err.message?.toLowerCase().includes('fetch')) {
+        setError('Không thể kết nối đến máy chủ Backend (Port 5000). Vui lòng thử lại.');
+      } else {
+        setError(err.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
+      }
+      setLoading(false);
+    }
+  };
+
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    if (!otpCode.trim()) {
+      setError('Vui lòng nhập mã xác thực OTP 6 số hoặc mã dự phòng');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    try {
+      if (verify2FALogin) {
+        await verify2FALogin(twoFactorTempToken, otpCode.trim());
+      }
+      handleRedirect();
+    } catch (err) {
+      setError(err.message || 'Mã xác thực 2FA không chính xác hoặc đã hết hạn');
       setLoading(false);
     }
   };
@@ -199,6 +232,135 @@ export const LoginPage = ({ onNavigate }) => {
         </p>
       </div>
 
+      {isTwoFactorStep ? (
+        <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: '#ECFDF5',
+                color: '#059669',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px auto',
+              }}
+            >
+              <ShieldCheck size={26} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
+              Xác thực Hai Yếu Tố (2FA)
+            </h3>
+            <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+              Nhập mã xác thực 6 số từ ứng dụng Google Authenticator hoặc mã dự phòng để hoàn tất đăng nhập.
+            </p>
+          </div>
+
+          {error && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '4px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FCA5A5',
+                color: '#B91C1C',
+                fontSize: '0.875rem',
+                lineHeight: 1.4,
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label
+              htmlFor="login-2fa-otp"
+              style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#374151',
+                marginBottom: '6px',
+                textAlign: 'center',
+              }}
+            >
+              Mã OTP hoặc Mã dự phòng
+            </label>
+            <input
+              id="login-2fa-otp"
+              type="text"
+              autoFocus
+              required
+              maxLength={8}
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\s+/g, ''))}
+              placeholder="123456"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '6px',
+                border: '1px solid #D1D5DB',
+                backgroundColor: '#FFFFFF',
+                fontSize: '1.25rem',
+                letterSpacing: '3px',
+                textAlign: 'center',
+                fontWeight: 700,
+                color: '#111827',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: '4px',
+              backgroundColor: 'var(--color-primary, #000000)',
+              color: '#FFFFFF',
+              fontSize: '0.9375rem',
+              fontWeight: 600,
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <span>Xác Nhận Đăng Nhập</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsTwoFactorStep(false);
+              setOtpCode('');
+              setError('');
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6B7280',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '6px',
+            }}
+          >
+            <ArrowLeft size={16} /> Quay lại đăng nhập
+          </button>
+        </form>
+      ) : (
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {error && (
           <div
@@ -450,6 +612,7 @@ export const LoginPage = ({ onNavigate }) => {
           <span>Đăng nhập với Google / Gmail</span>
         </button>
       </form>
+      )}
     </div>
   );
 };

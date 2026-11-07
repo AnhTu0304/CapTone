@@ -29,89 +29,117 @@ export const INITIAL_COMPANIES = [];
 // Lời mời tham gia Company đang chờ mặc định
 export const INITIAL_INVITATIONS = [];
 
-// Các phiên đăng nhập đang hoạt động
-export const INITIAL_SESSIONS = [
-  {
+// Hàm phân tích User-Agent thành tên thiết bị và trình duyệt trực quan
+export function parseDeviceFromUserAgent(ua, fallbackDevice) {
+  if (!ua || typeof ua !== 'string') {
+    return fallbackDevice?.deviceName || 'Google Chrome trên Windows 10 / 11';
+  }
+
+  let os = 'Hệ điều hành khác';
+  if (/Windows NT 10.0/i.test(ua)) os = 'Windows 10 / 11';
+  else if (/Windows NT 6.3/i.test(ua)) os = 'Windows 8.1';
+  else if (/Windows NT 6.1/i.test(ua)) os = 'Windows 7';
+  else if (/Macintosh|Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/iPhone/i.test(ua)) os = 'iOS (iPhone)';
+  else if (/iPad/i.test(ua)) os = 'iPadOS';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+
+  let browser = 'Trình duyệt Web';
+  if (/Edg\//i.test(ua)) {
+    browser = 'Microsoft Edge';
+  } else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) {
+    browser = 'Google Chrome';
+  } else if (/Firefox\//i.test(ua)) {
+    browser = 'Mozilla Firefox';
+  } else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) {
+    browser = 'Apple Safari';
+  } else if (/OPR\//i.test(ua)) {
+    browser = 'Opera';
+  }
+
+  return `${browser} trên ${os}`;
+}
+
+// Hàm nhận diện thiết bị và trình duyệt thực tế của phiên hiện tại
+export function detectCurrentDevice() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return {
+      id: 'sess-current',
+      deviceName: 'Google Chrome trên Windows 11',
+      deviceType: 'DESKTOP',
+      ipAddress: '127.0.0.1 (Localhost / Mạng nội bộ)',
+      lastActive: 'Đang hoạt động (Phiên hiện tại)',
+      isCurrent: true,
+      browser: 'Google Chrome',
+      os: 'Windows 11',
+    };
+  }
+
+  const ua = navigator.userAgent || '';
+
+  // Nhận diện Hệ điều hành thực tế
+  let os = 'Hệ điều hành khác';
+  if (/Windows NT 10.0/i.test(ua)) os = 'Windows 10 / 11';
+  else if (/Windows NT 6.3/i.test(ua)) os = 'Windows 8.1';
+  else if (/Windows NT 6.1/i.test(ua)) os = 'Windows 7';
+  else if (/Macintosh|Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/iPhone/i.test(ua)) os = 'iOS (iPhone)';
+  else if (/iPad/i.test(ua)) os = 'iPadOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+
+  // Nhận diện Loại thiết bị (Desktop hoặc Mobile)
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  const deviceType = isMobile ? 'MOBILE' : 'DESKTOP';
+
+  // Nhận diện Trình duyệt & Phiên bản thực tế
+  let browserName = 'Trình duyệt Web';
+  let browserVersion = '';
+
+  if (/Edg\/([0-9.]+)/i.test(ua)) {
+    browserName = 'Microsoft Edge';
+    browserVersion = RegExp.$1.split('.')[0];
+  } else if (/Chrome\/([0-9.]+)/i.test(ua) && !/Edg/i.test(ua)) {
+    browserName = 'Google Chrome';
+    browserVersion = RegExp.$1.split('.')[0];
+  } else if (/Firefox\/([0-9.]+)/i.test(ua)) {
+    browserName = 'Mozilla Firefox';
+    browserVersion = RegExp.$1.split('.')[0];
+  } else if (/Safari\/([0-9.]+)/i.test(ua) && !/Chrome/i.test(ua)) {
+    browserName = 'Apple Safari';
+    browserVersion = RegExp.$1.split('.')[0];
+  } else if (/OPR\/([0-9.]+)/i.test(ua)) {
+    browserName = 'Opera';
+    browserVersion = RegExp.$1.split('.')[0];
+  }
+
+  const browserDisplay = browserVersion ? `${browserName} ${browserVersion}` : browserName;
+  const deviceName = `${browserName} trên ${os}`;
+
+  // Địa chỉ Host / IP thực tế kết nối
+  const host = window.location.hostname || 'localhost';
+  const ipDisplay = (host === 'localhost' || host === '127.0.0.1')
+    ? '127.0.0.1 (Localhost / Mạng nội bộ)'
+    : `${host} (Trực tuyến)`;
+
+  return {
     id: 'sess-current',
-    deviceName: 'Chrome trên Windows 11',
-    deviceType: 'DESKTOP',
-    ipAddress: '118.70.12.84 (Hà Nội, Việt Nam)',
+    deviceName,
+    deviceType,
+    ipAddress: ipDisplay,
     lastActive: 'Đang hoạt động (Phiên hiện tại)',
     isCurrent: true,
-    browser: 'Chrome 128.0',
-    os: 'Windows 11 Pro 64-bit',
-  },
-  {
-    id: 'sess-mobile-ios',
-    deviceName: 'Safari trên iPhone 15 Pro',
-    deviceType: 'MOBILE',
-    ipAddress: '14.162.144.12 (TP. Hồ Chí Minh, Việt Nam)',
-    lastActive: '45 phút trước',
-    isCurrent: false,
-    browser: 'Mobile Safari 17.4',
-    os: 'iOS 17.4',
-  },
-  {
-    id: 'sess-laptop-ubuntu',
-    deviceName: 'Firefox trên Ubuntu 24.04 LTS',
-    deviceType: 'DESKTOP',
-    ipAddress: '27.72.63.190 (Đà Nẵng, Việt Nam)',
-    lastActive: 'Hôm qua lúc 18:20',
-    isCurrent: false,
-    browser: 'Firefox 126.0',
-    os: 'Ubuntu Linux 24.04',
-  },
-];
+    browser: browserDisplay,
+    os,
+  };
+}
 
-// Lịch sử đăng nhập
-export const INITIAL_LOGIN_HISTORY = [
-  {
-    id: 'log-hist-1',
-    timestamp: '22/10/2026 03:00:15',
-    method: 'Email & Mật khẩu',
-    ipAddress: '118.70.12.84',
-    location: 'Hà Nội, Việt Nam',
-    device: 'Chrome / Windows 11',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'log-hist-2',
-    timestamp: '21/10/2026 21:15:40',
-    method: 'Email & Mật khẩu',
-    ipAddress: '14.162.144.12',
-    location: 'TP. Hồ Chí Minh, Việt Nam',
-    device: 'Safari / iOS 17.4',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'log-hist-3',
-    timestamp: '21/10/2026 14:02:11',
-    method: 'Google OAuth Single Sign-On',
-    ipAddress: '118.70.12.84',
-    location: 'Hà Nội, Việt Nam',
-    device: 'Chrome / Windows 11',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'log-hist-4',
-    timestamp: '20/10/2026 08:45:22',
-    method: 'Email & Mật khẩu',
-    ipAddress: '42.114.88.99',
-    location: 'Cần Thơ, Việt Nam',
-    device: 'Chrome / Android',
-    status: 'FAILED',
-    failReason: 'Sai mật khẩu lần 1',
-  },
-  {
-    id: 'log-hist-5',
-    timestamp: '19/10/2026 19:30:00',
-    method: 'Email & Mật khẩu',
-    ipAddress: '27.72.63.190',
-    location: 'Đà Nẵng, Việt Nam',
-    device: 'Firefox / Linux',
-    status: 'SUCCESS',
-  },
-];
+// Các phiên đăng nhập đang hoạt động (Mặc định chỉ chứa phiên thực tế từ thiết bị này)
+export const INITIAL_SESSIONS = [detectCurrentDevice()];
+
+// Lịch sử đăng nhập mặc định (Rỗng khi database chưa có bản ghi, sẽ đồng bộ qua API)
+export const INITIAL_LOGIN_HISTORY = [];
 
 // Thông báo cá nhân mặc định
 export const INITIAL_PERSONAL_NOTIFS = [];
@@ -388,10 +416,12 @@ export const personalPortalService = {
   async fetchDashboardSummary() {
     let companies = [];
     let invitations = [];
+    let recentActivities = [];
 
-    const [companiesRes, invitationsRes] = await Promise.allSettled([
+    const [companiesRes, invitationsRes, activitiesRes] = await Promise.allSettled([
       this.fetchMyCompanies(),
       this.fetchMyInvitations(),
+      this.fetchActivityHistory({ limit: 5 }),
     ]);
 
     if (companiesRes.status === 'fulfilled') {
@@ -408,13 +438,18 @@ export const personalPortalService = {
       invitations = this.getMyInvitations();
     }
 
+    if (activitiesRes.status === 'fulfilled') {
+      recentActivities = (activitiesRes.value || []).slice(0, 5);
+    } else {
+      recentActivities = this.getActivityHistory().slice(0, 5);
+    }
+
     const activeCompanies = companies.filter((c) => c.status === 'ACTIVE').length;
     const notifs = this.getNotifications();
     const unreadNotifs = notifs.filter((n) => !n.read).length;
     const pendingInvitations = invitations.filter((i) => i.status === 'PENDING').length;
 
     const recentCompany = companies[0] || null;
-    const recentActivities = this.getActivityHistory().slice(0, 5);
 
     return {
       companies,
@@ -705,6 +740,75 @@ export const personalPortalService = {
     return true;
   },
 
+  async get2FAStatus() {
+    try {
+      const res = await request('/auth/2fa/status');
+      if (res && res.success && res.data) {
+        const profile = getStoredProfile();
+        saveStoredProfile({ ...profile, twoFactorEnabled: Boolean(res.data.is_enabled) });
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('Không thể lấy trạng thái 2FA từ server, sử dụng local profile:', err?.message);
+    }
+    const profile = getStoredProfile();
+    return {
+      is_enabled: Boolean(profile?.twoFactorEnabled),
+      confirmed_at: null,
+      remaining_backup_codes: 0,
+    };
+  },
+
+  async setup2FA() {
+    const res = await request('/auth/2fa/setup', {
+      method: 'POST',
+    });
+    if (!res || !res.success) {
+      throw new Error(res?.message || 'Không thể khởi tạo cấu hình 2FA');
+    }
+    return res.data;
+  },
+
+  async enable2FA(code) {
+    const res = await request('/auth/2fa/enable', {
+      method: 'POST',
+      body: JSON.stringify({ code: code?.trim() }),
+    });
+    if (!res || !res.success) {
+      throw new Error(res?.message || 'Mã OTP xác thực không chính xác');
+    }
+    const profile = getStoredProfile();
+    const updated = { ...profile, twoFactorEnabled: true };
+    saveStoredProfile(updated);
+    this.logActivity(
+      'SECURITY_2FA',
+      'Bật xác thực 2 bước (2FA)',
+      'Đã kích hoạt bảo mật 2 lớp qua ứng dụng OTP',
+      'SECURITY'
+    );
+    return res.data;
+  },
+
+  async disable2FA(password = '') {
+    const res = await request('/auth/2fa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+    if (!res || !res.success) {
+      throw new Error(res?.message || 'Không thể vô hiệu hóa 2FA');
+    }
+    const profile = getStoredProfile();
+    const updated = { ...profile, twoFactorEnabled: false };
+    saveStoredProfile(updated);
+    this.logActivity(
+      'SECURITY_2FA',
+      'Tắt xác thực 2 bước (2FA)',
+      'Đã vô hiệu hóa bảo mật 2 lớp',
+      'SECURITY'
+    );
+    return res.data;
+  },
+
   toggle2FA(enabled) {
     const profile = getStoredProfile();
     const updated = { ...profile, twoFactorEnabled: Boolean(enabled) };
@@ -719,30 +823,84 @@ export const personalPortalService = {
   },
 
   getActiveSessions() {
+    const currentDevice = detectCurrentDevice();
     try {
       const raw = localStorage.getItem(STORAGE_SESSIONS_KEY);
-      if (!raw) return INITIAL_SESSIONS;
-      return JSON.parse(raw);
+      if (!raw) return [currentDevice];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Loại bỏ các session giả cũ (sess-mobile-ios, sess-laptop-ubuntu)
+        const validOtherSessions = parsed.filter(
+          (s) => !s.isCurrent && !['sess-mobile-ios', 'sess-laptop-ubuntu', 'sess-current'].includes(s.id)
+        );
+        return [currentDevice, ...validOtherSessions];
+      }
+      return [currentDevice];
     } catch {
-      return INITIAL_SESSIONS;
+      return [currentDevice];
     }
   },
 
   revokeOtherSessions() {
-    const sessions = this.getActiveSessions();
-    const currentOnly = sessions.filter((s) => s.isCurrent);
-    localStorage.setItem(STORAGE_SESSIONS_KEY, JSON.stringify(currentOnly));
+    const currentDevice = detectCurrentDevice();
+    localStorage.setItem(STORAGE_SESSIONS_KEY, JSON.stringify([currentDevice]));
     this.logActivity('SESSION_REVOKE', 'Đăng xuất khỏi các thiết bị khác', 'Đã vô hiệu hóa tất cả các phiên đăng nhập từ xa', 'SECURITY');
-    return currentOnly;
+    return [currentDevice];
+  },
+
+  async fetchLoginHistory(options = {}) {
+    const token = getAuthToken();
+    if (!token) {
+      return this.getLoginHistory();
+    }
+    const page = typeof options === 'number' ? options : (options?.page || 1);
+    const limit = typeof options === 'object' && options?.limit ? options.limit : (typeof options === 'number' ? 10 : (options?.limit || 10));
+    try {
+      const response = await request(`/users/me/activities?category=AUTH&page=${page}&limit=${limit}`);
+      if (response && response.success) {
+        const items = response.data?.items || (Array.isArray(response.data) ? response.data : []);
+        const total = typeof response.data?.total === 'number' ? response.data.total : items.length;
+        const currentDevice = detectCurrentDevice();
+        const mapped = items.map((r, index) => {
+          let location = 'Mạng nội bộ / Localhost';
+          if (r.ipAddress && r.ipAddress !== '127.0.0.1' && !r.ipAddress.startsWith('172.') && !r.ipAddress.startsWith('192.168.')) {
+            location = 'Trực tuyến (Việt Nam)';
+          }
+          return {
+            id: r.id || `login-${index}`,
+            timestamp: r.timestamp,
+            method: r.title?.includes('Google') ? 'Google OAuth SSO' : 'Email & Mật khẩu',
+            ipAddress: r.ipAddress || '127.0.0.1',
+            location,
+            device: r.userAgent ? parseDeviceFromUserAgent(r.userAgent, currentDevice) : currentDevice.deviceName,
+            status: r.status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
+          };
+        });
+        localStorage.setItem(STORAGE_LOGIN_HISTORY_KEY, JSON.stringify(mapped));
+        mapped.total = total;
+        mapped.page = page;
+        mapped.limit = limit;
+        mapped.items = mapped;
+        return mapped;
+      }
+      return this.getLoginHistory();
+    } catch (err) {
+      console.warn('Lỗi khi tải lịch sử đăng nhập từ server:', err);
+      return this.getLoginHistory();
+    }
   },
 
   getLoginHistory() {
     try {
       const raw = localStorage.getItem(STORAGE_LOGIN_HISTORY_KEY);
-      if (!raw) return INITIAL_LOGIN_HISTORY;
-      return JSON.parse(raw);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item) => !item.id?.startsWith('log-hist-'));
+      }
+      return [];
     } catch {
-      return INITIAL_LOGIN_HISTORY;
+      return [];
     }
   },
 
@@ -1004,7 +1162,7 @@ export const personalPortalService = {
       title,
       description,
       timestamp: formatVnDateTime(new Date()),
-      ipAddress: '118.70.12.84',
+      ipAddress: detectCurrentDevice()?.ipAddress?.split(' ')[0] || '127.0.0.1',
       category,
       status: 'SUCCESS',
     };

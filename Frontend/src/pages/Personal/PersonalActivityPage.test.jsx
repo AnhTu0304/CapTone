@@ -114,7 +114,7 @@ describe('PersonalActivityPage Suite (/personal/activity) - Real Database Audit 
       expect(screen.getByText('Đăng nhập vào hệ thống')).toBeInTheDocument();
     });
 
-    const select = screen.getByRole('combobox');
+    const select = screen.getAllByRole('combobox')[0];
     fireEvent.change(select, { target: { value: 'SECURITY' } });
 
     await waitFor(() => {

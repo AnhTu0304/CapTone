@@ -46,13 +46,16 @@ export class AuthController {
       }
 
       const result = await AuthService.login({ email, password });
+      if (result.require_2fa) {
+        return ApiResponse.success(res, 'Yêu cầu xác thực hai yếu tố (2FA)', result, 200);
+      }
       const primaryOrgId = result.organization_roles?.[0]?.organization_id || null;
       await AuditService.recordFromRequest(req, {
         organization_id: primaryOrgId,
         action: 'AUTH_LOGIN_SUCCESS',
         status: 'SUCCESS',
         user_id: result.id,
-        description: `Người dùng [${result.email}] đăng nhập thành công vào hệ thống`,
+        description: 'Đăng nhập thành công vào hệ thống',
         metadata: {
           email: result.email,
           has_organization: result.has_organization,
@@ -76,6 +79,44 @@ export class AuthController {
    * [GET] /api/v1/auth/me
    * Lấy thông tin tài khoản hiện tại từ Token xác thực
    */
+
+  /**
+   * [POST] /api/v1/auth/login/2fa
+   * Xác thực mã OTP 2FA để hoàn tất đăng nhập
+   */
+  public static async verify2FALogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { temp_token, code } = req.body;
+      if (!temp_token || !code) {
+        throw new ApiError(400, 'Vui lòng cung cấp mã phiên và mã OTP 2FA');
+      }
+      const result = await AuthService.verify2FALogin(temp_token, code);
+      const primaryOrgId = result.organization_roles?.[0]?.organization_id || null;
+      await AuditService.recordFromRequest(req, {
+        organization_id: primaryOrgId,
+        action: 'AUTH_LOGIN_SUCCESS',
+        status: 'SUCCESS',
+        user_id: result.id,
+        description: 'Đăng nhập thành công qua xác thực 2FA',
+        metadata: {
+          email: result.email,
+          auth_method: '2FA',
+          has_organization: result.has_organization,
+          organization_name: result.organization_roles?.[0]?.organization_name || null,
+        },
+      }).catch(() => {});
+      return ApiResponse.success(res, 'Đăng nhập thành công', result, 200);
+    } catch (error) {
+      await AuditService.recordFromRequest(req, {
+        action: 'AUTH_LOGIN_FAILURE',
+        status: 'FAILURE',
+        reason_code: 'INVALID_2FA_CODE',
+        description: 'Xác thực 2FA thất bại do mã OTP không hợp lệ',
+      }).catch(() => {});
+      next(error);
+    }
+  }
+
   public static async me(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req as any).user?.id;
