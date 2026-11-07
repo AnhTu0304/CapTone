@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
 import HeroSectionSlot from './HeroSectionSlot';
 import SectionHeader from '../../components/common/SectionHeader';
-import CapabilityCard from '../../components/marketing/CapabilityCard';
 import ProcessStep from '../../components/marketing/ProcessStep';
 import IncidentCard from '../../components/marketing/IncidentCard';
 import CTASection from '../../components/marketing/CTASection';
 import { 
-  Activity, 
-  Cpu, 
-  Search, 
-  Zap, 
-  UserCheck, 
   ShieldCheck, 
   CheckCircle2, 
   Check
@@ -18,44 +12,6 @@ import {
 
 export const HomePage = ({ onNavigate }) => {
   const [requireApprovalForProd, setRequireApprovalForProd] = useState(true);
-
-  const capabilities = [
-    {
-      number: "01",
-      icon: Activity,
-      title: "Giám sát thời gian thực",
-      description: "Liên tục theo dõi sức khỏe cluster, trạng thái pod, mức độ bão hòa tài nguyên, chỉ số mạng và luồng sự kiện Kubernetes control-plane theo chu kỳ 10 giây.",
-      tags: ["Prometheus", "eBPF", "K8s Events"]
-    },
-    {
-      number: "02",
-      icon: Cpu,
-      title: "Dự báo bằng AI",
-      description: "Phát hiện sớm rò rỉ bộ nhớ phi tuyến tính, cạn kiệt tài nguyên CPU và các chuỗi lỗi dây chuyền trước khi dẫn đến CrashLoopBackOff hoặc trục xuất pod.",
-      tags: ["Chuỗi thời gian", "Phát hiện bất thường", "LSTM"]
-    },
-    {
-      number: "03",
-      icon: Search,
-      title: "Phân tích nguyên nhân gốc rễ (RCA)",
-      description: "Tương quan dữ liệu đo từ xa đa chiều trên cấu hình deployment, các đợt cập nhật image gần nhất và áp lực node nhằm cô lập chính xác nguyên nhân gốc rễ.",
-      tags: ["Tương quan tín hiệu", "Log RCA", "Đồ thị topo"]
-    },
-    {
-      number: "04",
-      icon: Zap,
-      title: "Tự động phục hồi sự cố",
-      description: "Thực thi các hành động khắc phục có mục tiêu và tuân thủ chính sách: khởi động lại rolling pod có kiểm soát, co giãn replica, hoàn nguyên cấu hình và giải phóng bộ nhớ đệm.",
-      tags: ["Chính sách tất định", "Không gián đoạn", "Rollback"]
-    },
-    {
-      number: "05",
-      icon: UserCheck,
-      title: "Con người tham gia kiểm soát (HITL)",
-      description: "Thực thi ranh giới an toàn nghiêm ngặt. Các thao tác có bán kính ảnh hưởng lớn bắt buộc phải có sự phê duyệt xác thực từ kỹ sư vận hành.",
-      tags: ["Phân quyền RBAC", "Nhật ký kiểm toán", "Ghi đè thủ công"]
-    }
-  ];
 
   const workflowSteps = [
     { num: "1", title: "Thu thập", desc: "Thu nạp chỉ số đo lường, nhật ký & sự kiện K8s" },
@@ -131,40 +87,10 @@ export const HomePage = ({ onNavigate }) => {
 
   return (
     <div className="home-page">
-      {/* 1. HERO SECTION (SLOT PRESERVED) */}
+      {/* 1. HERO SECTION + [ AGENT ] BRIDGE BANNER */}
       <HeroSectionSlot onNavigate={onNavigate} />
 
-      {/* 2. CORE CAPABILITIES */}
-      <section className="section-py" style={{ backgroundColor: 'var(--color-surface)', borderTop: '1px dashed rgba(61, 59, 79, 0.16)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
-        <div className="container-custom">
-          <SectionHeader
-            badge="Lõi Tự Hành"
-            title="Xây dựng chuyên biệt cho hạ tầng SME dựa trên Kubernetes"
-            description="Khác biệt với các hệ thống APM cồng kềnh dễ gây quá tải cảnh báo, SelfHeal tập trung vào dự báo chủ động và tự động phục hồi tất định, tối ưu riêng cho các đội ngũ kỹ thuật tinh gọn."
-          />
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '24px',
-            }}
-          >
-            {capabilities.map((item, idx) => (
-              <CapabilityCard
-                key={idx}
-                number={item.number}
-                icon={item.icon}
-                title={item.title}
-                description={item.description}
-                tags={item.tags}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 3. HOW SELFHEAL WORKS */}
+      {/* 2. HOW SELFHEAL WORKS */}
       <section className="section-py" style={{ backgroundColor: 'var(--color-canvas)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <SectionHeader
@@ -198,7 +124,7 @@ export const HomePage = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* 4. FROM SIGNAL TO RECOVERY */}
+      {/* 3. FROM SIGNAL TO RECOVERY */}
       <section className="section-py" style={{ backgroundColor: 'var(--color-surface)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <SectionHeader
@@ -231,7 +157,7 @@ export const HomePage = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* 5. HUMAN CONTROL */}
+      {/* 4. HUMAN CONTROL */}
       <section className="section-py" style={{ backgroundColor: 'var(--color-canvas)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <div
@@ -399,7 +325,7 @@ export const HomePage = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* 6. FINAL CTA */}
+      {/* 5. FINAL CTA */}
       <section style={{ backgroundColor: 'var(--color-canvas)', borderTop: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <CTASection

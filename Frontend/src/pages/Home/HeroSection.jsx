@@ -62,8 +62,8 @@ export const HeroSection = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* ================= SUB-HERO FEATURE STRIP ================= */}
-      <FeatureStrip />
+      {/* ================= SUB-HERO AGENT BRIDGE BANNER ================= */}
+      <FeatureStrip onNavigate={onNavigate} />
     </>
   );
 };

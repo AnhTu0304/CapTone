@@ -1,148 +1,162 @@
 import React from 'react';
-import { 
-  Activity, 
-  Cpu, 
-  Search, 
-  Zap, 
-  UserCheck 
-} from 'lucide-react';
 
-export const FeatureStrip = ({ className = '' }) => {
-  const features = [
-    {
-      icon: Activity,
-      title: 'Giám sát thời gian thực',
-      desc: 'Theo dõi toàn diện tài nguyên, pod và events mọi lúc.',
-      iconBg: '#EFF6FF',
-      iconColor: '#2563EB',
-    },
-    {
-      icon: Cpu,
-      title: 'Dự báo bằng AI',
-      desc: 'Phát hiện sớm suy thoái hạ tầng trước khi xảy ra sự cố.',
-      iconBg: '#F5F3FF',
-      iconColor: '#7C3AED',
-    },
-    {
-      icon: Search,
-      title: 'Phân tích nguyên nhân gốc rễ',
-      desc: 'Khoanh vùng chính xác vấn đề, không chỉ báo cáo triệu chứng.',
-      iconBg: '#ECFDF5',
-      iconColor: '#059669',
-    },
-    {
-      icon: Zap,
-      title: 'Tự động khắc phục sự cố',
-      desc: 'Tự phục hồi dịch vụ theo các chính sách an toàn định sẵn.',
-      iconBg: '#F0F9FF',
-      iconColor: '#0284C7',
-    },
-    {
-      icon: UserCheck,
-      title: 'Con người kiểm soát',
-      desc: 'Yêu cầu phê duyệt rõ ràng đối với các tác vụ rủi ro cao.',
-      iconBg: '#F0FDF4',
-      iconColor: '#16A34A',
-    },
-  ];
+export const FeatureStrip = ({ className = '', onNavigate }) => {
+  const handleLearnMore = (e) => {
+    e.preventDefault();
+    if (onNavigate) {
+      onNavigate('/guide');
+    } else {
+      window.history.pushState({}, '', '/guide');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
 
   return (
     <section
-      className={`feature-strip-section ${className}`}
+      className={`agent-bridge-banner ${className}`.trim()}
+      data-testid="agent-bridge-section"
       style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderTop: '1px dashed rgba(61, 59, 79, 0.16)',
-        borderBottom: '1px dashed rgba(61, 59, 79, 0.16)',
-        padding: '56px 0',
+        position: 'relative',
+        backgroundColor: 'var(--bg-navy)', /* #3D3B4F */
+        borderTop: '1px solid rgba(198, 249, 226, 0.18)',
+        borderBottom: '1px dashed rgba(61, 59, 79, 0.24)',
+        overflow: 'hidden',
       }}
     >
-      <div className="container-custom">
-        {/* Header bar */}
-        <div style={{ maxWidth: '800px', marginBottom: '36px' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '3px',
-              backgroundColor: 'var(--color-accent)',
-              borderRadius: '0px',
-              marginBottom: '14px',
-            }}
-          ></div>
-          <h2
-            style={{
-              fontSize: 'clamp(1.5rem, 3vw, 1.875rem)',
-              fontWeight: 700,
-              fontFamily: 'var(--font-display)',
-              color: 'var(--text-primary)',
-              letterSpacing: '-0.025em',
-              marginBottom: '10px',
-              lineHeight: 1.25,
-            }}
-          >
-            Được xây dựng cho hạ tầng doanh nghiệp vừa và nhỏ (SME) dựa trên Kubernetes
-          </h2>
-          <p style={{ fontSize: '0.9375rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', lineHeight: 1.6, margin: 0 }}>
-            Các tính năng mạnh mẽ giúp giữ cơ sở hạ tầng của bạn luôn khỏe mạnh, an toàn và liên tục vận hành — ngay cả khi bạn không theo dõi.
-          </p>
-        </div>
+      {/* Top parallel horizontal scan lines matching Greptile [ AGENT ] banner */}
+      <div
+        aria-hidden="true"
+        style={{
+          width: '100%',
+          height: '22px',
+          backgroundImage:
+            'repeating-linear-gradient(to bottom, rgba(198, 249, 226, 0.16) 0px, rgba(198, 249, 226, 0.16) 1px, transparent 1px, transparent 4px)',
+          borderBottom: '1px solid rgba(198, 249, 226, 0.14)',
+        }}
+      />
 
-        {/* 5 Core Feature Cards Grid */}
+      <div
+        className="container-custom no-crosshair"
+        style={{
+          position: 'relative',
+          paddingTop: '64px',
+          paddingBottom: '76px',
+          borderLeft: '1px dashed rgba(198, 249, 226, 0.14)',
+          borderRight: '1px dashed rgba(198, 249, 226, 0.14)',
+        }}
+      >
+        {/* Top-left & top-right hexagon guide nodes */}
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '6px',
+            left: '-6px',
+            width: '11px',
+            height: '12px',
+            backgroundColor: '#698B7E',
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          }}
+        />
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '6px',
+            right: '-6px',
+            width: '11px',
+            height: '12px',
+            backgroundColor: '#698B7E',
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          }}
+        />
+
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: '20px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: '32px',
+            flexWrap: 'wrap',
+            padding: '0 16px',
           }}
         >
-          {features.map((feat, idx) => {
-            const Icon = feat.icon;
-            return (
-              <div
-                key={idx}
-                style={{
-                  padding: '20px',
-                  backgroundColor: 'var(--bg-canvas)',
-                  borderRadius: '0px',
-                  border: '1px solid var(--border-default)',
-                  transition: 'border-color 0.15s ease',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  boxShadow: 'none',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-default)';
-                }}
-              >
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '0px',
-                    backgroundColor: 'rgba(40, 233, 159, 0.15)',
-                    color: 'var(--color-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid var(--border-default)',
-                  }}
-                >
-                  <Icon size={18} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', marginBottom: '6px' }}>
-                    {feat.title}
-                  </h3>
-                  <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', lineHeight: 1.5, margin: 0 }}>
-                    {feat.desc}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+          {/* Left Content: [ AGENT ] tag, headline, concise bridge description */}
+          <div style={{ maxWidth: '880px' }}>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                letterSpacing: '0.18em',
+                color: '#9CE8C9',
+                textTransform: 'uppercase',
+                marginBottom: '18px',
+              }}
+            >
+              [ AGENT ]
+            </div>
+
+            <h2
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(2rem, 3.8vw, 3.125rem)',
+                fontWeight: 700,
+                color: '#C6F9E2',
+                letterSpacing: '-0.03em',
+                lineHeight: 1.14,
+                marginBottom: '18px',
+              }}
+            >
+              Cách Agent kết nối với dự án của bạn
+            </h2>
+
+            <p
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: 'clamp(0.95rem, 1.35vw, 1.125rem)',
+                fontWeight: 400,
+                color: '#88C6AD',
+                lineHeight: 1.55,
+                margin: 0,
+              }}
+            >
+              SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi, tự động đồng bộ trạng thái hạ tầng và kích hoạt quy trình khôi phục tức thì khi phát hiện sự cố tiềm ẩn.
+            </p>
+          </div>
+
+          {/* Right Hexagon Button */}
+          <div style={{ paddingTop: '4px' }}>
+            <a
+              href="/guide"
+              onClick={handleLearnMore}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '12px 28px',
+                backgroundColor: '#C6F9E2',
+                color: '#2B2938',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textDecoration: 'none',
+                clipPath:
+                  'polygon(11px 0%, calc(100% - 11px) 0%, 100% 50%, calc(100% - 11px) 100%, 11px 100%, 0% 50%)',
+                transition: 'background-color 0.15s ease, transform 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#28E99F';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#C6F9E2';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              Tìm hiểu thêm
+            </a>
+          </div>
         </div>
       </div>
     </section>
