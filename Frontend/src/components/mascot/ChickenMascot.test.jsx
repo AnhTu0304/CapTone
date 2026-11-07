@@ -3,66 +3,51 @@ import { render, screen } from '@testing-library/react';
 import ChickenMascot from './ChickenMascot';
 import HeroSection from '../../pages/Home/HeroSection';
 
-const REQUIRED_SVG_GROUPS = [
-  'chicken-body',
-  'chicken-neck',
-  'chicken-head',
-  'chicken-comb',
-  'chicken-eye',
-  'chicken-beak-upper',
-  'chicken-beak-lower',
-  'chicken-wing',
-  'chicken-tail',
-  'chicken-legs',
-  'grain-01',
-  'grain-02',
-  'grain-03',
-  'grain-04',
-];
-
-describe('ChickenMascot (Halftone Engraving Rooster) & HeroSection integration', () => {
-  test('renders SVG rooster mascot with all required independently controllable group IDs, multi-joint neck layers, and halftone patterns', () => {
-    const { container, unmount } = render(<ChickenMascot />);
-
-    const imgRole = screen.getByRole('img', {
-      name: /Minh họa gà trống Halftone cổ điển đang mổ thóc/i,
-    });
-    expect(imgRole).toBeInTheDocument();
-
-    REQUIRED_SVG_GROUPS.forEach((groupId) => {
-      const groupEl = container.querySelector(`#${groupId}`);
-      expect(groupEl).not.toBeNull();
-    });
-
-    // Ensure multi-joint neck sub-layers and wattles exist for organic bending
-    expect(container.querySelector('.neck-lower-hackle')).not.toBeNull();
-    expect(container.querySelector('.neck-upper-hackle')).not.toBeNull();
-    expect(container.querySelector('#chicken-wattles')).not.toBeNull();
-
-    // Ensure 4-tier halftone stipple patterns and clipping paths exist
-    expect(container.querySelector('#halftone-dense')).not.toBeNull();
-    expect(container.querySelector('#halftone-mid')).not.toBeNull();
-    expect(container.querySelector('#halftone-light')).not.toBeNull();
-    expect(container.querySelector('#halftone-ultrafine')).not.toBeNull();
-    expect(container.querySelector('#clip-chicken-torso')).not.toBeNull();
-
-    // Unmount cleanly without errors
-    expect(() => unmount()).not.toThrow();
+describe('ChickenMascot (HTML5 Video) & HeroSection integration', () => {
+  beforeEach(() => {
+    window.HTMLMediaElement.prototype.play = jest.fn(() => Promise.resolve());
+    window.HTMLMediaElement.prototype.pause = jest.fn();
   });
 
-  test('supports static state when reducedMotion is enabled', () => {
-    const { container, unmount } = render(<ChickenMascot reducedMotion={true} />);
-    expect(container.querySelector('#chicken-body')).not.toBeNull();
-    expect(() => unmount()).not.toThrow();
+  test('renders HTML5 video mascot with required attributes (autoPlay, muted, loop, playsInline, preload="metadata", no controls)', () => {
+    const { container } = render(<ChickenMascot reducedMotion={false} />);
+
+    const videoEl = screen.getByTestId('chicken-mascot-video');
+    expect(videoEl).toBeInTheDocument();
+    expect(videoEl.tagName).toBe('VIDEO');
+    expect(videoEl).toHaveAttribute('src', '/videos/chicken-mascot.mp4');
+    expect(videoEl).toHaveAttribute('preload', 'metadata');
+    expect(videoEl).toHaveAttribute('playsinline');
+    expect(videoEl).toHaveAttribute('loop');
+    expect(videoEl).toHaveAttribute('autoplay');
+    expect(videoEl).not.toHaveAttribute('controls');
+    expect(videoEl.muted).toBe(true);
+
+    // Ensure both /videos/chicken-mascot.mp4 and bundled asset source tags exist
+    const sources = container.querySelectorAll('source');
+    expect(sources.length).toBeGreaterThanOrEqual(2);
+    expect(sources[0]).toHaveAttribute('src', '/videos/chicken-mascot.mp4');
+    expect(sources[0]).toHaveAttribute('type', 'video/mp4');
   });
 
-  test('renders HeroSection with left editorial content and right Halftone Rooster Mascot only', () => {
+  test('pauses video and disables autoplay when prefers-reduced-motion is active', () => {
+    render(<ChickenMascot reducedMotion={true} />);
+
+    const videoEl = screen.getByTestId('chicken-mascot-video');
+    expect(videoEl).not.toHaveAttribute('autoplay');
+    expect(videoEl).toHaveAttribute('poster');
+    expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+  });
+
+  test('renders HeroSection with preserved left editorial content and right HTML5 video mascot only', () => {
     const { container } = render(<HeroSection />);
+
     expect(screen.getByText(/Quan sát\. Dự đoán\./i)).toBeInTheDocument();
     expect(screen.getByText(/Khôi phục\./i)).toBeInTheDocument();
     expect(screen.getByText(/Bắt đầu ngay/i)).toBeInTheDocument();
     expect(screen.getByText(/Xem hướng dẫn/i)).toBeInTheDocument();
-    expect(screen.getByTestId('chicken-mascot')).toBeInTheDocument();
-    expect(container.querySelector('.hero-dashboard-live')).toBeNull();
+
+    const videos = container.querySelectorAll('video.chicken-mascot-video');
+    expect(videos).toHaveLength(1);
   });
 });
