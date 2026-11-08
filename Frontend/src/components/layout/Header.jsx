@@ -32,12 +32,10 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
   }, []);
 
   const navLinks = [
-    { label: 'EXAMPLES', path: '/about', hasDropdown: false },
-    { label: 'PRICING', path: '/pricing', hasDropdown: false },
-    { label: 'FEATURES', path: '/features', hasDropdown: true },
-    { label: 'ENTERPRISE', path: '/features', hasDropdown: false },
-    { label: 'BLOG', path: '/guide', hasDropdown: false },
-    { label: 'RESOURCES', path: '/docs', hasDropdown: true },
+    { label: 'HƯỚNG DẪN', path: '/guide', hasDropdown: false },
+    { label: 'TÍNH NĂNG', path: '/features', hasDropdown: true },
+    { label: 'GIỚI THIỆU', path: '/about', hasDropdown: false },
+    { label: 'TÀI LIỆU', path: '/docs', hasDropdown: true },
   ];
 
   const handleLinkClick = (e, path) => {
@@ -105,33 +103,35 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
             </a>
           </div>
 
-          {/* ================= 2. CENTER ZONE: NAVIGATION LINKS ================= */}
-          <nav
-            className="header-center-nav"
-            aria-label="Điều hướng chính"
-          >
-            {navLinks.map((link) => {
-              const isActive = currentPath === link.path;
-              return (
-                <a
-                  key={link.label}
-                  href={link.path}
-                  onClick={(e) => handleLinkClick(e, link.path)}
-                  className={`header-nav-item ${isActive ? 'active' : ''}`}
-                >
-                  <span>{link.label}</span>
-                  {link.hasDropdown && (
-                    <ChevronDown
-                      size={12}
-                      strokeWidth={2.5}
-                      className="header-nav-chevron"
-                      aria-hidden="true"
-                    />
-                  )}
-                </a>
-              );
-            })}
-          </nav>
+          {/* ================= 2. CENTER ZONE: SYMMETRICAL NAVIGATION DIV ================= */}
+          <div className="header-center-wrapper">
+            <nav
+              className="header-center-nav"
+              aria-label="Điều hướng chính"
+            >
+              {navLinks.map((link) => {
+                const isActive = currentPath === link.path;
+                return (
+                  <a
+                    key={link.label}
+                    href={link.path}
+                    onClick={(e) => handleLinkClick(e, link.path)}
+                    className={`header-nav-item ${isActive ? 'active' : ''}`}
+                  >
+                    <span>{link.label}</span>
+                    {link.hasDropdown && (
+                      <ChevronDown
+                        size={12}
+                        strokeWidth={2.5}
+                        className="header-nav-chevron"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </a>
+                );
+              })}
+            </nav>
+          </div>
 
           {/* ================= 3. RIGHT ZONE: LANGUAGE & ACTIONS ================= */}
           <div className="header-right">

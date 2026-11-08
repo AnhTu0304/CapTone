@@ -1,8 +1,9 @@
 /* =====================================================================
    SELFHEAL CAD BLUEPRINT HEADER (GREPTILE ALIGNMENT)
-   - Left: Logo
-   - Center: Centered Monospace Nav with Dropdowns
-   - Right: Language Switcher + Dual-Hexagon Connected Pill Buttons
+   - Left: Logo (justify-self: start)
+   - Center: Centered Monospace Nav wrapped in dedicated div (justify-self: center)
+   - Right: Language Switcher + Dual-Hexagon Connected Buttons (justify-self: end)
+   - Layout: 3-Column CSS Grid (1fr auto 1fr) for true mathematical symmetry
    ===================================================================== */
 
 .header-outer-container {
@@ -27,6 +28,7 @@
   padding: 0 var(--space-6, 24px);
 }
 
+/* ================= 3-COLUMN SYMMETRIC GRID CONTAINER ================= */
 .header-inner-box {
   pointer-events: auto;
   width: 100%;
@@ -34,9 +36,9 @@
   margin: 0 auto;
   height: 64px;
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justifyContent: space-between;
   padding: 0 clamp(20px, 3.5vw, 44px);
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -86,6 +88,7 @@
 
 /* ================= 1. LEFT ZONE: BRAND LOGO ================= */
 .header-left {
+  justify-self: start;
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -98,13 +101,19 @@
   text-decoration: none;
 }
 
-/* ================= 2. CENTER ZONE: NAVIGATION LINKS ================= */
-.header-center-nav {
-  flex: 1 1 auto;
+/* ================= 2. CENTER ZONE: SYMMETRICAL NAVIGATION DIV ================= */
+.header-center-wrapper {
+  justify-self: center;
   display: flex;
   align-items: center;
-  justifyContent: center;
-  gap: clamp(14px, 2vw, 28px);
+  justify-content: center;
+  z-index: 2;
+}
+
+.header-center-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 2.2vw, 32px);
   font-family: var(--font-mono, 'Space Mono', 'Geist Mono', monospace);
 }
 
@@ -156,6 +165,7 @@
 
 /* ================= 3. RIGHT ZONE: ACTIONS & CONTROLS ================= */
 .header-right {
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -210,7 +220,7 @@
   width: 100%;
   display: flex;
   align-items: center;
-  justifyContent: space-between;
+  justify-content: space-between;
   padding: 8px 12px;
   background: none;
   border: none;
@@ -233,7 +243,7 @@
   font-weight: 700;
 }
 
-/* ================= DUAL-HEXAGON CONNECTED PILL BUTTON GROUP ================= */
+/* ================= DUAL-HEXAGON CONNECTED BUTTON GROUP ================= */
 .header-dual-hex-group {
   display: inline-flex;
   align-items: center;
@@ -241,7 +251,7 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.06));
 }
 
-/* Button 1: Left Button (Đăng nhập / Contact sales - Dark Navy #3D3B4F) */
+/* Button 1: Left Button (Đăng nhập - Dark Navy #3D3B4F) */
 .header-hex-btn-login {
   display: inline-flex;
   align-items: center;
@@ -267,7 +277,7 @@
   filter: brightness(1.08);
 }
 
-/* Button 2: Right Button (Đăng ký / Sign up - Vibrant Mint #28E99F) */
+/* Button 2: Right Button (Đăng ký - Vibrant Mint #28E99F) */
 .header-hex-btn-signup {
   display: inline-flex;
   align-items: center;
@@ -307,7 +317,11 @@
 }
 
 @media (max-width: 900px) {
-  .header-center-nav {
+  .header-inner-box {
+    display: flex;
+    justify-content: space-between;
+  }
+  .header-center-wrapper {
     display: none !important;
   }
   .header-dual-hex-group {

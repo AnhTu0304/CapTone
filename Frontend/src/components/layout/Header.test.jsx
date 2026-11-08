@@ -14,21 +14,22 @@ jest.mock('../../context/AuthContext', () => ({
   }),
 }));
 
-describe('Header Component (Greptile CAD Alignment)', () => {
+describe('Header Component (Greptile CAD Alignment with Symmetrical Center Nav)', () => {
   it('renders the brand logo on the left', () => {
     render(<Header />);
     const logoLink = screen.getByLabelText(/SelfHeal Homepage/i);
     expect(logoLink).toBeInTheDocument();
   });
 
-  it('renders centered navigation links: EXAMPLES, PRICING, FEATURES, ENTERPRISE, BLOG, RESOURCES', () => {
-    render(<Header />);
-    expect(screen.getByText('EXAMPLES')).toBeInTheDocument();
-    expect(screen.getByText('PRICING')).toBeInTheDocument();
-    expect(screen.getByText('FEATURES')).toBeInTheDocument();
-    expect(screen.getByText('ENTERPRISE')).toBeInTheDocument();
-    expect(screen.getByText('BLOG')).toBeInTheDocument();
-    expect(screen.getByText('RESOURCES')).toBeInTheDocument();
+  it('renders centered navigation links in Vietnamese: HƯỚNG DẪN, TÍNH NĂNG, GIỚI THIỆU, TÀI LIỆU', () => {
+    const { container } = render(<Header />);
+    expect(screen.getByText('HƯỚNG DẪN')).toBeInTheDocument();
+    expect(screen.getByText('TÍNH NĂNG')).toBeInTheDocument();
+    expect(screen.getByText('GIỚI THIỆU')).toBeInTheDocument();
+    expect(screen.getByText('TÀI LIỆU')).toBeInTheDocument();
+
+    const centerWrapper = container.querySelector('.header-center-wrapper');
+    expect(centerWrapper).toBeInTheDocument();
   });
 
   it('renders language switcher with default VI and toggles dropdown', () => {
@@ -61,10 +62,10 @@ describe('Header Component (Greptile CAD Alignment)', () => {
     const mockNavigate = jest.fn();
     render(<Header onNavigate={mockNavigate} />);
 
-    const pricingLink = screen.getByText('PRICING');
-    fireEvent.click(pricingLink);
+    const featuresLink = screen.getByText('TÍNH NĂNG');
+    fireEvent.click(featuresLink);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/pricing');
+    expect(mockNavigate).toHaveBeenCalledWith('/features');
   });
 
   it('calls onNavigate when Đăng nhập button is clicked', () => {
