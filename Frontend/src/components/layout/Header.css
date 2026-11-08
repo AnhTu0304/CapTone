@@ -248,7 +248,7 @@
   display: inline-flex;
   align-items: center;
   height: 34px;
-  gap: 3.5px;
+  gap: 1.5px;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.06));
 }
 
@@ -267,15 +267,20 @@
   text-decoration: none;
   white-space: nowrap;
   clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 50%, 100% 100%, 10px 100%, 0% 50%);
-  transition: background-color 0.15s ease, filter 0.15s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
   user-select: none;
   border: none;
   cursor: pointer;
+  will-change: transform;
+}
+
+.header-dual-hex-group:hover .header-hex-btn-login {
+  transform: translateX(-3.5px);
 }
 
 .header-hex-btn-login:hover {
   background-color: #2F2D3D;
-  filter: brightness(1.08);
+  filter: brightness(1.1);
 }
 
 /* Button 2: Right Button (Đăng ký - Vibrant Mint #28E99F) */
@@ -293,15 +298,20 @@
   text-decoration: none;
   white-space: nowrap;
   clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
-  transition: background-color 0.15s ease, filter 0.15s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
   user-select: none;
   border: none;
   cursor: pointer;
+  will-change: transform;
+}
+
+.header-dual-hex-group:hover .header-hex-btn-signup {
+  transform: translateX(3.5px);
 }
 
 .header-hex-btn-signup:hover {
   background-color: #1FD48F;
-  filter: brightness(1.05);
+  filter: brightness(1.08);
 }
 
 /* Authenticated User Capsule */
