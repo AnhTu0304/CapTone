@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import HeroSectionSlot from './HeroSectionSlot';
+import HowItWorksSection from './components/HowItWorksSection';
 import SectionHeader from '../../components/common/SectionHeader';
-import ProcessStep from '../../components/marketing/ProcessStep';
 import IncidentCard from '../../components/marketing/IncidentCard';
 import CTASection from '../../components/marketing/CTASection';
 import { 
@@ -12,15 +12,6 @@ import {
 
 export const HomePage = ({ onNavigate }) => {
   const [requireApprovalForProd, setRequireApprovalForProd] = useState(true);
-
-  const workflowSteps = [
-    { num: "1", title: "Thu thập", desc: "Thu nạp chỉ số đo lường, nhật ký & sự kiện K8s" },
-    { num: "2", title: "Phân tích", desc: "Tương quan dữ liệu đo từ xa qua các namespace" },
-    { num: "3", title: "Dự báo", desc: "Nhận diện quỹ đạo suy giảm trước khi xảy ra sự cố" },
-    { num: "4", title: "Đánh giá", desc: "Tính toán bán kính ảnh hưởng & ma trận an toàn" },
-    { num: "5", title: "Khắc phục", desc: "Áp dụng tự phục hồi hoặc yêu cầu phê duyệt" },
-    { num: "6", title: "Kiểm chứng", desc: "Xác thực mức độ ổn định SLI sau khắc phục" },
-  ];
 
   const incidentTimeline = [
     {
@@ -90,39 +81,8 @@ export const HomePage = ({ onNavigate }) => {
       {/* 1. HERO SECTION + [ AGENT ] BRIDGE BANNER */}
       <HeroSectionSlot onNavigate={onNavigate} />
 
-      {/* 2. HOW SELFHEAL WORKS */}
-      <section className="section-py" style={{ backgroundColor: 'var(--color-canvas)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
-        <div className="container-custom">
-          <SectionHeader
-            badge="Vòng Lặp Vận Hành"
-            title="Cách thức SelfHeal hoạt động"
-            description="Kiến trúc vòng lặp khép kín MAPE-K liên tục quan sát, suy luận và hành động, song song với việc kiểm chứng liên tục sự ổn định của cluster."
-          />
-
-          {/* Desktop Horizontal Process Flow */}
-          <div
-            className="desktop-process-flow"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              overflowX: 'auto',
-              paddingBottom: '8px',
-            }}
-          >
-            {workflowSteps.map((step, idx) => (
-              <ProcessStep
-                key={idx}
-                stepNumber={step.num}
-                title={step.title}
-                description={step.desc}
-                isLast={idx === workflowSteps.length - 1}
-                status={idx === 4 ? 'active' : idx === 5 ? 'success' : 'default'}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* 2. [ HOW IT WORKS ] 3-STEP CYBERNETIC BLUEPRINT SECTION */}
+      <HowItWorksSection />
 
       {/* 3. FROM SIGNAL TO RECOVERY */}
       <section className="section-py" style={{ backgroundColor: 'var(--color-surface)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
