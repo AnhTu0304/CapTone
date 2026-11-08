@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import HeroSectionSlot from './HeroSectionSlot';
 import HowItWorksSection from './components/HowItWorksSection';
+import AdaptationLearningSection from './components/AdaptationLearningSection';
 import SectionHeader from '../../components/common/SectionHeader';
-import IncidentCard from '../../components/marketing/IncidentCard';
 import CTASection from '../../components/marketing/CTASection';
 import { 
   ShieldCheck, 
@@ -13,69 +13,6 @@ import {
 export const HomePage = ({ onNavigate }) => {
   const [requireApprovalForProd, setRequireApprovalForProd] = useState(true);
 
-  const incidentTimeline = [
-    {
-      stage: "Bước 1: Trạng thái chuẩn",
-      title: "Vận hành bình thường",
-      timestamp: "14:20:00 UTC",
-      metricLabel: "Bộ nhớ RSS",
-      metricValue: "412MB / 1024MB",
-      status: "healthy",
-      workload: "deployment/order-processor",
-      actionNote: "Hệ thống ổn định"
-    },
-    {
-      stage: "Bước 2: Dấu hiệu suy giảm",
-      title: "Mức sử dụng bộ nhớ tăng",
-      timestamp: "14:26:30 UTC",
-      metricLabel: "Bộ nhớ RSS",
-      metricValue: "788MB (+12MB/phút)",
-      status: "warning",
-      workload: "deployment/order-processor",
-      actionNote: "Tốc độ tăng bất thường"
-    },
-    {
-      stage: "Bước 3: AI suy luận",
-      title: "AI phát hiện nguy cơ sự cố",
-      timestamp: "14:28:10 UTC",
-      metricLabel: "Thời gian đến khi OOM",
-      metricValue: "Dự kiến 6,4 phút",
-      status: "critical",
-      workload: "deployment/order-processor",
-      actionNote: "Độ tin cậy: 98,4%"
-    },
-    {
-      stage: "Bước 4: Kiểm tra an toàn",
-      title: "Đánh giá rủi ro & Chính sách",
-      timestamp: "14:28:45 UTC",
-      metricLabel: "Ma trận chính sách",
-      metricValue: "Cho phép khởi động lại Rolling tự động",
-      status: "pending",
-      workload: "deployment/order-processor",
-      actionNote: "Cổng sẵn sàng hợp lệ"
-    },
-    {
-      stage: "Bước 5: Thực thi",
-      title: "Tiến hành khắc phục",
-      timestamp: "14:29:15 UTC",
-      metricLabel: "Hành động",
-      metricValue: "kubectl rollout restart",
-      status: "remediated",
-      workload: "deployment/order-processor",
-      actionNote: "0 yêu cầu người dùng bị rớt"
-    },
-    {
-      stage: "Bước 6: Khôi phục",
-      title: "Dịch vụ phục hồi & Xác minh",
-      timestamp: "14:31:00 UTC",
-      metricLabel: "Kiểm tra sức khỏe",
-      metricValue: "Cả 3 Replicas Sẵn sàng (200 OK)",
-      status: "healthy",
-      workload: "deployment/order-processor",
-      actionNote: "Đã ngăn chặn sự cố thành công"
-    }
-  ];
-
   return (
     <div className="home-page">
       {/* 1. HERO SECTION + [ AGENT ] BRIDGE BANNER */}
@@ -84,38 +21,8 @@ export const HomePage = ({ onNavigate }) => {
       {/* 2. [ HOW IT WORKS ] 3-STEP CYBERNETIC BLUEPRINT SECTION */}
       <HowItWorksSection />
 
-      {/* 3. FROM SIGNAL TO RECOVERY */}
-      <section className="section-py" style={{ backgroundColor: 'var(--color-surface)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
-        <div className="container-custom">
-          <SectionHeader
-            badge="Tiến Trình Sự Cố"
-            title="Từ tín hiệu đầu tiên đến khi phục hồi"
-            description="Xem cách một nguy cơ tràn bộ nhớ (OOM) được phát hiện ngay từ quỹ đạo tăng ban đầu và được xử lý triệt để trước khi người dùng gặp lỗi."
-          />
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '20px',
-            }}
-          >
-            {incidentTimeline.map((item, idx) => (
-              <IncidentCard
-                key={idx}
-                stage={item.stage}
-                title={item.title}
-                timestamp={item.timestamp}
-                metricLabel={item.metricLabel}
-                metricValue={item.metricValue}
-                status={item.status}
-                workload={item.workload}
-                actionNote={item.actionNote}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* 3. [ ADAPTATION & LEARNING ] CONTINUOUS POLICY ADAPTATION SECTION */}
+      <AdaptationLearningSection onNavigate={onNavigate} />
 
       {/* 4. HUMAN CONTROL */}
       <section className="section-py" style={{ backgroundColor: 'var(--color-canvas)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>

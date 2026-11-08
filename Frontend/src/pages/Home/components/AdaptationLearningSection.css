@@ -1,0 +1,398 @@
+/* ==========================================================================
+   ADAPTATION & LEARNING SECTION — GREPTILE CAD ARCHITECTURE AESTHETIC
+   ========================================================================== */
+
+.adaptation-learning-section {
+  position: relative;
+  width: 100%;
+  background-color: #F3F3F5; /* Exact Greptile light canvas background */
+  padding: 88px 0 96px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-bottom: 1px solid #D6D6D8;
+}
+
+/* ================= HEADER BLOCK ================= */
+.als-header-container {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 0 clamp(20px, 4vw, 40px);
+  box-sizing: border-box;
+}
+
+.als-label-badge {
+  font-family: var(--font-mono, 'Space Mono', 'JetBrains Mono', SFMono-Regular, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #059669; /* Greptile luminous mint green */
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: inline-block;
+}
+
+.als-heading {
+  font-family: var(--font-display, 'Anybody', 'Inter', -apple-system, sans-serif);
+  font-size: clamp(2rem, 3.6vw, 3.125rem);
+  font-weight: 800;
+  color: #242232; /* Deep slate black */
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  margin: 0 0 18px 0;
+}
+
+.als-subtitle {
+  font-family: var(--font-body, 'DM Sans', 'Inter', -apple-system, sans-serif);
+  font-size: clamp(1rem, 1.25vw, 1.125rem);
+  color: #5A586B; /* Slate grey body */
+  line-height: 1.6;
+  max-width: 760px;
+  margin: 0 auto;
+  font-weight: 400;
+}
+
+/* ================= CAD RULER DIVIDER (EXACT DIVIDER-RULER MATCH) ================= */
+.als-divider-ruler {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  margin: 48px 0 56px 0;
+  border-top: 1px solid #D6D6D8;
+  border-bottom: 1px solid #D6D6D8;
+  background: repeating-linear-gradient(
+    to right,
+    #B8B8BD 0px,
+    #B8B8BD 1px,
+    transparent 1px,
+    transparent 10px
+  );
+  opacity: 0.85;
+}
+
+/* Major ruler tick marks overlay every 50px */
+.als-divider-ruler::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    to right,
+    #7B7B85 0px,
+    #7B7B85 1.5px,
+    transparent 1.5px,
+    transparent 50px
+  );
+  pointer-events: none;
+}
+
+/* ================= 2-CARD GRID CONTAINER ================= */
+.als-grid-container {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 48px);
+  box-sizing: border-box;
+}
+
+.als-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 36px;
+  width: 100%;
+}
+
+/* Card Column Layout */
+.als-card {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ================= HATCHED RIBBON BORDER (DIAGONAL 45° STRIPES) ================= */
+.als-card-frame {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px; /* 12px hatched ribbon */
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(85, 83, 104, 0.18) 0px,
+    rgba(85, 83, 104, 0.18) 1.5px,
+    transparent 1.5px,
+    transparent 6px
+  );
+  border: 1px solid rgba(85, 83, 104, 0.12);
+}
+
+.als-card-inner-gap {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  background-color: #F3F3F5; /* Matches section background */
+}
+
+/* Graphic Screen Box */
+.als-screen-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  min-height: 260px;
+  background-color: #F8F8FA;
+  border: 1px solid #D6D6D8;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Background Wireframe Mesh SVG */
+.als-wireframe-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+/* ================= CARD 1: ADD CONTEXT / RULES MOCKUP ================= */
+.als-mockup-card {
+  position: relative;
+  z-index: 2;
+  width: 88%;
+  max-width: 420px;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E2E6;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  padding: 18px 20px;
+}
+
+.als-mockup-title {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1C1A26;
+  margin: 0 0 4px 0;
+}
+
+.als-mockup-sub {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.8125rem;
+  color: #6B687C;
+  margin: 0 0 14px 0;
+}
+
+.als-step-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555368;
+  margin-bottom: 6px;
+}
+
+.als-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #B8B8BD;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #3D3B4F;
+}
+
+.als-mockup-textarea {
+  background-color: #F0F6FF;
+  border: 1px solid #B9D5FF;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: #1E40AF;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
+.als-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.als-tag-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  font-weight: 500;
+  background-color: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid #BFDBFE;
+  padding: 3px 8px;
+  box-sizing: border-box;
+}
+
+/* ================= CARD 2: CONTINUOUS LEARNING CONVERSATION ================= */
+.als-dialog-wrapper {
+  position: relative;
+  z-index: 2;
+  width: 88%;
+  max-width: 430px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.als-chat-bubble-user {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E2E6;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.als-user-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.als-bubble-text-user {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.8125rem;
+  color: #242232;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.als-bubble-sender {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #717082;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.als-chat-bubble-agent {
+  background-color: #D4F8E8; /* Mint green luminous Greptile learning box */
+  border: 1px solid rgba(40, 233, 159, 0.45);
+  box-shadow: 0 4px 14px rgba(40, 233, 159, 0.12);
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.als-agent-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background-color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+}
+
+.als-bubble-text-agent {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #065F46; /* Deep emerald text */
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ================= TYPOGRAPHY & BUTTONS BELOW CARDS ================= */
+.als-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.als-card-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #717082; /* Muted grey monospace tag matching Greptile */
+  text-transform: uppercase;
+}
+
+.als-card-title {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(1.4rem, 1.8vw, 1.65rem);
+  font-weight: 700;
+  color: #1C1A26;
+  letter-spacing: -0.03em;
+  line-height: 1.22;
+  margin: 0;
+}
+
+.als-card-desc {
+  font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
+  font-size: clamp(0.9375rem, 1.05vw, 1.05rem);
+  color: #555368;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.als-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 11px 24px;
+  background-color: #2B2938; /* Greptile dark button */
+  color: #FFFFFF;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid #2B2938;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.als-card-btn:hover {
+  background-color: #171520;
+  transform: translateY(-1px);
+}
+
+/* ================= RESPONSIVE BREAKPOINTS ================= */
+@media (max-width: 1024px) {
+  .als-grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .als-header-container {
+    padding: 0 20px;
+  }
+}
