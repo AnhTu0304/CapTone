@@ -1,0 +1,319 @@
+/* =====================================================================
+   SELFHEAL CAD BLUEPRINT HEADER (GREPTILE ALIGNMENT)
+   - Left: Logo
+   - Center: Centered Monospace Nav with Dropdowns
+   - Right: Language Switcher + Dual-Hexagon Connected Pill Buttons
+   ===================================================================== */
+
+.header-outer-container {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  width: 100%;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-top-wrapper {
+  background-color: var(--color-canvas, #EEEEEE);
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.16);
+  padding: 0;
+}
+
+.header-scrolled-wrapper {
+  top: 12px;
+  background-color: transparent;
+  border-bottom: none;
+  padding: 0 var(--space-6, 24px);
+}
+
+.header-inner-box {
+  pointer-events: auto;
+  width: 100%;
+  max-width: var(--content-max-width, 1400px);
+  margin: 0 auto;
+  height: 64px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  padding: 0 clamp(20px, 3.5vw, 44px);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-scrolled-wrapper .header-inner-box {
+  height: 56px;
+  background-color: rgba(238, 238, 238, 0.92);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px dashed rgba(61, 59, 79, 0.2);
+  padding: 0 20px 0 24px;
+}
+
+/* Technical Corner Crosshairs (+) visible when header contracts on scroll */
+.header-crosshair {
+  position: absolute;
+  color: var(--color-accent, #28E99F);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  opacity: 0.95;
+}
+.ch-tl { top: 0; left: 0; transform: translate(-50%, -50%); }
+.ch-tr { top: 0; right: 0; transform: translate(50%, -50%); }
+.ch-bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
+.ch-br { bottom: 0; right: 0; transform: translate(50%, 50%); }
+
+.header-datum-tab {
+  position: absolute;
+  top: -5px;
+  left: -13px;
+  pointer-events: none;
+  user-select: none;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+}
+
+/* ================= 1. LEFT ZONE: BRAND LOGO ================= */
+.header-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.header-logo-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* ================= 2. CENTER ZONE: NAVIGATION LINKS ================= */
+.header-center-nav {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  gap: clamp(14px, 2vw, 28px);
+  font-family: var(--font-mono, 'Space Mono', 'Geist Mono', monospace);
+}
+
+.header-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #555368;
+  text-decoration: none;
+  padding: 6px 4px;
+  position: relative;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+
+.header-nav-item:hover,
+.header-nav-item:focus-visible {
+  color: #000000;
+  outline: none;
+}
+
+.header-nav-item.active {
+  color: #000000;
+}
+
+.header-nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background-color: #3D3B4F;
+}
+
+.header-nav-chevron {
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+
+.header-nav-item:hover .header-nav-chevron {
+  opacity: 1;
+  transform: translateY(1px);
+}
+
+/* ================= 3. RIGHT ZONE: ACTIONS & CONTROLS ================= */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+/* Language Switcher Button */
+.header-lang-wrapper {
+  position: relative;
+}
+
+.header-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  background-color: transparent;
+  border: 1px dashed rgba(61, 59, 79, 0.24);
+  font-family: var(--font-mono, 'Space Mono', monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #3D3B4F;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.header-lang-btn:hover {
+  background-color: rgba(61, 59, 79, 0.06);
+  border-color: rgba(61, 59, 79, 0.4);
+  color: #000000;
+}
+
+.header-lang-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 120px;
+  background-color: #FFFFFF;
+  border: 1px solid rgba(61, 59, 79, 0.2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  padding: 4px 0;
+  z-index: 1050;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+}
+
+.header-lang-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  color: #3D3B4F;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+
+.header-lang-option:hover {
+  background-color: #F3F4F6;
+  color: #000000;
+}
+
+.header-lang-option.active {
+  color: #059669;
+  font-weight: 700;
+}
+
+/* ================= DUAL-HEXAGON CONNECTED PILL BUTTON GROUP ================= */
+.header-dual-hex-group {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.06));
+}
+
+/* Button 1: Left Button (Đăng nhập / Contact sales - Dark Navy #3D3B4F) */
+.header-hex-btn-login {
+  display: inline-flex;
+  align-items: center;
+  justifyContent: center;
+  height: 100%;
+  padding: 0 16px 0 20px;
+  background-color: #3D3B4F;
+  color: #FFFFFF;
+  font-family: var(--font-display, 'Inter', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  clip-path: polygon(10px 0%, 100% 0%, 100% 100%, 10px 100%, 0% 50%);
+  transition: background-color 0.15s ease, filter 0.15s ease;
+  user-select: none;
+  border: none;
+  cursor: pointer;
+}
+
+.header-hex-btn-login:hover {
+  background-color: #2F2D3D;
+  filter: brightness(1.08);
+}
+
+/* Button 2: Right Button (Đăng ký / Sign up - Vibrant Mint #28E99F) */
+.header-hex-btn-signup {
+  display: inline-flex;
+  align-items: center;
+  justifyContent: center;
+  height: 100%;
+  padding: 0 20px 0 16px;
+  background-color: #28E99F;
+  color: #000000;
+  font-family: var(--font-display, 'Inter', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  clip-path: polygon(0% 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 0% 100%);
+  transition: background-color 0.15s ease, filter 0.15s ease;
+  user-select: none;
+  border: none;
+  cursor: pointer;
+}
+
+.header-hex-btn-signup:hover {
+  background-color: #1FD48F;
+  filter: brightness(1.05);
+}
+
+/* Authenticated User Capsule */
+.header-auth-capsule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Mobile Toggle */
+.mobile-menu-toggle {
+  display: none;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .header-center-nav {
+    display: none !important;
+  }
+  .header-dual-hex-group {
+    display: none !important;
+  }
+  .mobile-menu-toggle {
+    display: flex !important;
+  }
+}

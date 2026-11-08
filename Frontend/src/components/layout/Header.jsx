@@ -1,15 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, ChevronDown, LayoutDashboard, LogOut, Shield } from 'lucide-react';
+import { Menu, ChevronDown, LayoutDashboard, LogOut, Shield, Globe } from 'lucide-react';
 import Logo from '../common/Logo';
 import MobileNavigation from './MobileNavigation';
 import useScrollHeader from '../../hooks/useScrollHeader';
 import { useAuth } from '../../context/AuthContext';
+import './Header.css';
 
 export const Header = ({ currentPath = '/', onNavigate }) => {
   const isScrolled = useScrollHeader(25);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [currentLang, setCurrentLang] = useState('VI');
+
   const userDropdownRef = useRef(null);
+  const langDropdownRef = useRef(null);
 
   const { user, isAuthenticated, logout, getInitials, getPrimaryRole } = useAuth();
 
@@ -18,16 +23,21 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
       if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) {
         setUserDropdownOpen(false);
       }
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
+        setLangDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const navLinks = [
-    { label: 'HƯỚNG DẪN', path: '/guide', hasDropdown: false },
-    { label: 'TÍNH NĂNG', path: '/features', hasDropdown: true },
-    { label: 'GIỚI THIỆU', path: '/about', hasDropdown: false },
-    { label: 'TÀI LIỆU', path: '/docs', hasDropdown: true },
+    { label: 'EXAMPLES', path: '/about', hasDropdown: false },
+    { label: 'PRICING', path: '/pricing', hasDropdown: false },
+    { label: 'FEATURES', path: '/features', hasDropdown: true },
+    { label: 'ENTERPRISE', path: '/features', hasDropdown: false },
+    { label: 'BLOG', path: '/guide', hasDropdown: false },
+    { label: 'RESOURCES', path: '/docs', hasDropdown: true },
   ];
 
   const handleLinkClick = (e, path) => {
@@ -51,44 +61,20 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
     }
   };
 
+  const selectLanguage = (lang) => {
+    setCurrentLang(lang);
+    setLangDropdownOpen(false);
+  };
+
   return (
     <>
       <div
         className={`header-outer-container ${isScrolled ? 'header-scrolled-wrapper' : 'header-top-wrapper'}`}
-        style={{
-          position: 'sticky',
-          top: isScrolled ? '12px' : '0px',
-          zIndex: 1000,
-          width: '100%',
-          backgroundColor: isScrolled ? 'transparent' : 'var(--color-canvas)',
-          borderBottom: isScrolled ? 'none' : '1px dashed rgba(61, 59, 79, 0.16)',
-          padding: isScrolled ? '0 var(--space-6)' : '0',
-          transition: 'all 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
-          pointerEvents: 'none',
-        }}
+        data-testid="header-container"
       >
         <header
           className="header-inner-box"
-          style={{
-            pointerEvents: 'auto',
-            width: '100%',
-            maxWidth: isScrolled ? 'var(--content-max-width)' : '100%', // Full-width at top, 1400px when scrolled!
-            margin: '0 auto',
-            height: isScrolled ? '56px' : '66px',
-            backgroundColor: isScrolled ? 'rgba(238, 238, 238, 0.90)' : 'transparent',
-            backdropFilter: isScrolled ? 'blur(12px) saturate(140%)' : 'none',
-            WebkitBackdropFilter: isScrolled ? 'blur(12px) saturate(140%)' : 'none',
-            border: isScrolled 
-              ? '1px dashed rgba(61, 59, 79, 0.18)' 
-              : 'none',
-            borderRadius: '0px',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: isScrolled ? '0 20px 0 24px' : '0 clamp(24px, 4vw, 48px)',
-            transition: 'all 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
+          aria-label="Thanh điều hướng chính của SelfHeal"
         >
           {/* Technical Corner Crosshairs (+) visible when header contracts on scroll */}
           {isScrolled && (
@@ -98,7 +84,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
               <span className="header-crosshair ch-bl" aria-hidden="true">+</span>
               <span className="header-crosshair ch-br" aria-hidden="true">+</span>
 
-              {/* Top-left Datum Tab Anchor from Greptile Blueprint */}
+              {/* Blueprint Top-Left Datum Tab Anchor */}
               <span className="header-datum-tab" aria-hidden="true" title="Datum Tab Anchor">
                 <svg width="13" height="11" viewBox="0 0 13 11" fill="none">
                   <polygon points="0,2.5 9,0 13,0 13,11 9,11 0,8.5" fill="#8B8999" opacity="0.85" />
@@ -107,73 +93,89 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
             </>
           )}
 
-          {/* Left: Brand Logo & Navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: isScrolled ? '32px' : '44px', transition: 'gap 0.3s ease' }}>
+          {/* ================= 1. LEFT ZONE: BRAND LOGO ================= */}
+          <div className="header-left">
             <a
               href="/"
               onClick={(e) => handleLinkClick(e, '/')}
-              style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
+              className="header-logo-link"
               aria-label="SelfHeal Homepage"
             >
               <Logo size={isScrolled ? 24 : 26} />
             </a>
-
-            {/* Desktop Navigation Links */}
-            <nav
-              className="desktop-nav"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '24px',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              {navLinks.map((link) => {
-                const isActive = currentPath === link.path;
-                return (
-                  <a
-                    key={link.path}
-                    href={link.path}
-                    onClick={(e) => handleLinkClick(e, link.path)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      color: isActive ? 'var(--color-primary)' : '#555368',
-                      textDecoration: 'none',
-                      borderBottom: isActive ? '2px solid var(--color-primary)' : '2px solid transparent',
-                      padding: '6px 0',
-                      transition: 'color 0.15s ease, border-color 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.color = 'var(--color-ink)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.color = '#555368';
-                    }}
-                  >
-                    <span>{link.label}</span>
-                    {link.hasDropdown && (
-                      <ChevronDown
-                        size={12}
-                        strokeWidth={2.5}
-                        style={{ opacity: 0.75, transition: 'transform 0.15s ease' }}
-                      />
-                    )}
-                  </a>
-                );
-              })}
-            </nav>
           </div>
 
-          {/* Right: Actions (User Profile or Sign in / Sign up) */}
-          <div className="desktop-actions" style={{ display: 'flex', alignItems: 'center' }}>
+          {/* ================= 2. CENTER ZONE: NAVIGATION LINKS ================= */}
+          <nav
+            className="header-center-nav"
+            aria-label="Điều hướng chính"
+          >
+            {navLinks.map((link) => {
+              const isActive = currentPath === link.path;
+              return (
+                <a
+                  key={link.label}
+                  href={link.path}
+                  onClick={(e) => handleLinkClick(e, link.path)}
+                  className={`header-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span>{link.label}</span>
+                  {link.hasDropdown && (
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={2.5}
+                      className="header-nav-chevron"
+                      aria-hidden="true"
+                    />
+                  )}
+                </a>
+              );
+            })}
+          </nav>
+
+          {/* ================= 3. RIGHT ZONE: LANGUAGE & ACTIONS ================= */}
+          <div className="header-right">
+            {/* Language Switcher */}
+            <div className="header-lang-wrapper" ref={langDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                className="header-lang-btn"
+                aria-label="Chuyển đổi ngôn ngữ"
+                aria-expanded={langDropdownOpen}
+              >
+                <Globe size={14} color="#3D3B4F" aria-hidden="true" />
+                <span>{currentLang}</span>
+                <ChevronDown size={11} strokeWidth={2.5} style={{ opacity: 0.7 }} aria-hidden="true" />
+              </button>
+
+              {langDropdownOpen && (
+                <div className="header-lang-dropdown" role="menu">
+                  <button
+                    type="button"
+                    onClick={() => selectLanguage('VI')}
+                    className={`header-lang-option ${currentLang === 'VI' ? 'active' : ''}`}
+                    role="menuitem"
+                  >
+                    <span>Tiếng Việt</span>
+                    {currentLang === 'VI' && <span>✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectLanguage('EN')}
+                    className={`header-lang-option ${currentLang === 'EN' ? 'active' : ''}`}
+                    role="menuitem"
+                  >
+                    <span>English</span>
+                    {currentLang === 'EN' && <span>✓</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Authenticated State vs Guest State */}
             {isAuthenticated && user ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="header-auth-capsule">
                 {/* Button to Dashboard */}
                 <a
                   href="/dashboard"
@@ -193,12 +195,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                     border: '1px solid var(--color-primary)',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                     transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#2D2B3B';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--color-primary)';
                   }}
                   title="Vào Bảng điều khiển"
                 >
@@ -299,7 +295,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                         padding: '8px 0',
                       }}
                     >
-                      {/* Identity Header */}
                       <div style={{ padding: '8px 16px 12px', borderBottom: '1px dashed rgba(61, 59, 79, 0.15)' }}>
                         <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-ink)' }}>
                           {user.full_name || 'Người dùng'}
@@ -336,7 +331,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                         </div>
                       </div>
 
-                      {/* Links */}
                       <div style={{ padding: '6px 0' }}>
                         <a
                           href="/dashboard"
@@ -353,13 +347,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                             fontSize: '0.8125rem',
                             fontWeight: 600,
                             textDecoration: 'none',
-                            transition: 'background-color 0.12s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#F3F4F6';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = 'transparent';
                           }}
                         >
                           <LayoutDashboard size={15} color="var(--color-primary)" />
@@ -369,7 +356,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
 
                       <div style={{ borderTop: '1px dashed rgba(61, 59, 79, 0.15)', margin: '4px 0' }} />
 
-                      {/* Logout Action */}
                       <button
                         type="button"
                         onClick={handleLogout}
@@ -386,13 +372,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                           border: 'none',
                           cursor: 'pointer',
                           textAlign: 'left',
-                          transition: 'background-color 0.12s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#FEF2F2';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
                         }}
                       >
                         <LogOut size={15} color="#DC2626" />
@@ -403,48 +382,49 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                 </div>
               </div>
             ) : (
-              <div className="chevron-btn-group">
-                {/* Button 1: Đăng nhập (Navy #3D3B4F Chevron) */}
+              /* Dual-Hexagon Connected Button Group matching Greptile */
+              <div className="header-dual-hex-group">
+                {/* Button 1: Đăng nhập (Navy #3D3B4F) */}
                 <a
                   href="/login"
                   onClick={(e) => handleLinkClick(e, '/login')}
-                  className="chevron-btn chevron-login"
+                  className="header-hex-btn-login"
                   title="Đăng nhập tài khoản"
                 >
                   <span>Đăng nhập</span>
                 </a>
 
-                {/* Button 2: Đăng ký (Mint #28E99F Chevron) */}
+                {/* Button 2: Đăng ký (Vibrant Mint #28E99F) */}
                 <a
                   href="/register"
                   onClick={(e) => handleLinkClick(e, '/register')}
-                  className="chevron-btn chevron-signup"
+                  className="header-hex-btn-signup"
                   title="Đăng ký tài khoản"
                 >
                   <span>Đăng ký</span>
                 </a>
               </div>
             )}
-          </div>
 
-          {/* Mobile Hamburger Button */}
-          <div className="mobile-menu-toggle">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Mở menu di động"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '6px',
-                color: 'var(--color-ink)',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <Menu size={22} />
-            </button>
+            {/* Mobile Hamburger Button */}
+            <div className="mobile-menu-toggle">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Mở menu di động"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  color: 'var(--color-ink)',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Menu size={22} />
+              </button>
+            </div>
           </div>
         </header>
       </div>
@@ -464,109 +444,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
           }
         }}
       />
-
-      {/* STYLES FOR SCROLLED HEADER & CHEVRON BUTTONS */}
-      <style>{`
-        /* Technical Corner Crosshairs (+) */
-        .header-crosshair {
-          position: absolute;
-          color: var(--color-accent); /* Greptile Mint #28E99F */
-          font-family: var(--font-mono);
-          font-size: 13px;
-          font-weight: 600;
-          line-height: 1;
-          pointer-events: none;
-          user-select: none;
-          z-index: 10;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 14px;
-          height: 14px;
-          opacity: 0.95;
-        }
-        .ch-tl { top: 0; left: 0; transform: translate(-50%, -50%); }
-        .ch-tr { top: 0; right: 0; transform: translate(50%, -50%); }
-        .ch-bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
-        .ch-br { bottom: 0; right: 0; transform: translate(50%, 50%); }
-
-        /* Blueprint Top-Left Datum Tab Anchor */
-        .header-datum-tab {
-          position: absolute;
-          top: -5px;
-          left: -13px;
-          pointer-events: none;
-          user-select: none;
-          z-index: 15;
-          display: flex;
-          align-items: center;
-        }
-
-        /* Signature Chevron Button Pair */
-        .chevron-btn-group {
-          display: inline-flex;
-          align-items: center;
-        }
-
-        .chevron-btn {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          justifyContent: center;
-          height: 34px;
-          font-family: var(--font-display);
-          font-size: 0.8125rem;
-          font-weight: 700;
-          text-decoration: none;
-          white-space: nowrap;
-          cursor: pointer;
-          transition: background-color 0.15s ease, transform 0.15s ease;
-        }
-
-        /* 1. Đăng nhập - Navy Ribbon Chevron */
-        .chevron-login {
-          padding: 0 18px 0 22px;
-          background-color: var(--color-primary); /* #3D3B4F */
-          color: #FFFFFF;
-          clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
-          z-index: 1;
-        }
-
-        .chevron-login:hover {
-          background-color: #4C4A61;
-          transform: translateX(-2px);
-        }
-
-        /* 2. Đăng ký - Mint Ribbon Chevron */
-        .chevron-signup {
-          padding: 0 20px 0 22px;
-          margin-left: 2px;
-          background-color: var(--color-accent); /* #28E99F */
-          color: #000000;
-          clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
-          z-index: 2;
-        }
-
-        .chevron-signup:hover {
-          background-color: #1FE092;
-          transform: translateX(2px);
-        }
-
-        @media (max-width: 768px) {
-          .desktop-nav, .desktop-actions {
-            display: none !important;
-          }
-          .mobile-menu-toggle {
-            display: block !important;
-          }
-        }
-
-        @media (min-width: 769px) {
-          .mobile-menu-toggle {
-            display: none !important;
-          }
-        }
-      `}</style>
     </>
   );
 };
