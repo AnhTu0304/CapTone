@@ -60,9 +60,10 @@
 .hero-cta-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
   flex-wrap: wrap;
   margin-bottom: 42px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.06));
 }
 
 .hero-btn-primary {
@@ -71,14 +72,14 @@
   justify-content: center;
   gap: 10px;
   height: 48px;
-  padding: 0 28px;
+  padding: 0 24px 0 28px;
   background-color: #3D3B4F;
   color: #FFFFFF;
   font-weight: 700;
   font-size: 0.9375rem;
   font-family: var(--font-display, 'Inter', sans-serif);
-  border-radius: 0px;
-  border: 1px solid #3D3B4F;
+  border: none;
+  clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 50%, 100% 100%, 12px 100%, 0% 50%);
   box-shadow: none;
   text-decoration: none;
   white-space: nowrap;
@@ -103,14 +104,14 @@
   justifyContent: center;
   gap: 10px;
   height: 48px;
-  padding: 0 28px;
+  padding: 0 28px 0 24px;
   background-color: #28E99F;
   color: #000000;
   font-weight: 700;
   font-size: 0.9375rem;
   font-family: var(--font-display, 'Inter', sans-serif);
-  border-radius: 0px;
-  border: 1px solid #28E99F;
+  border: none;
+  clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
   box-shadow: none;
   text-decoration: none;
   white-space: nowrap;
