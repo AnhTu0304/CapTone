@@ -4,6 +4,7 @@
 
 .adaptation-learning-section {
   position: relative;
+  z-index: 24; /* Elevated above blueprint gutter overlays */
   width: 100%;
   background-color: #F3F3F5; /* Exact Greptile light canvas background */
   padding: 88px 0 96px 0;
@@ -92,9 +93,9 @@
 /* ================= 2-CARD GRID CONTAINER ================= */
 .als-grid-container {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--content-max-width, 1400px);
   margin: 0 auto;
-  padding: 0 clamp(20px, 4vw, 48px);
+  padding: 0 clamp(24px, 4.5vw, 76px);
   box-sizing: border-box;
 }
 

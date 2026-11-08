@@ -4,6 +4,7 @@
 
 .onboarding-workflow-section {
   position: relative;
+  z-index: 24; /* Elevated above blueprint gutter overlays */
   width: 100%;
   background-color: #EDEDF0; /* Subtle cool light slate CAD canvas */
   padding: 84px 0 96px 0;
@@ -15,9 +16,9 @@
 /* ================= HEADER BLOCK ================= */
 .ows-header-container {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--content-max-width, 1400px);
   margin: 0 auto;
-  padding: 0 clamp(20px, 4vw, 48px);
+  padding: 0 clamp(24px, 4.5vw, 76px);
   box-sizing: border-box;
 }
 
@@ -133,17 +134,17 @@
 /* ================= 4-CARD GRID CONTAINER ================= */
 .ows-grid-container {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--content-max-width, 1400px);
   margin: 0 auto;
-  padding: 0 clamp(20px, 4vw, 48px);
+  padding: 0 clamp(24px, 4.5vw, 76px);
   box-sizing: border-box;
   position: relative;
 }
 
 .ows-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 28px);
   width: 100%;
   position: relative;
 }
@@ -154,6 +155,18 @@
   flex-direction: column;
   gap: 18px;
   position: relative;
+}
+
+/* Subtle CAD vertical dashed divider between cards */
+.ows-card:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  bottom: -12px;
+  right: calc(-1 * clamp(8px, 1vw, 14px));
+  width: 1px;
+  border-right: 1px dashed rgba(85, 83, 104, 0.22);
+  pointer-events: none;
 }
 
 /* ================= HATCHED RIBBON BORDER (DIAGONAL 45°) ================= */
@@ -395,6 +408,7 @@
   letter-spacing: -0.025em;
   line-height: 1.25;
   margin: 0;
+  min-height: 2.5em; /* Ensures equal horizontal baseline for descriptions across all 4 cards */
 }
 
 .ows-card-desc {
@@ -410,6 +424,14 @@
   .ows-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 36px;
+  }
+
+  .ows-card:not(:last-child)::after {
+    display: none;
+  }
+
+  .ows-card-title {
+    min-height: auto;
   }
 }
 
