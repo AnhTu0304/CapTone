@@ -1,75 +1,126 @@
 /* ==========================================================================
-   HOW IT WORKS SECTION — 3-STEP CYBERNETIC BLUEPRINT CARDS
+   HOW IT WORKS SECTION — BLUEPRINT CAD STYLING WITH DUAL HORIZONTAL LINES
    ========================================================================== */
 
 .how-it-works-section {
   position: relative;
   z-index: 24;
   width: 100%;
-  background-color: var(--bg-navy); /* #3D3B4F */
-  border-top: 1px dashed rgba(198, 249, 226, 0.16);
-  border-bottom: 1px dashed rgba(198, 249, 226, 0.16);
+  background-color: #434154; /* Exact sampled background from reference image */
   overflow: hidden;
   box-sizing: border-box;
+  padding: 24px 0 36px 0;
+  border-top: 1px solid rgba(107, 127, 127, 0.28);
+  border-bottom: 1px solid rgba(107, 127, 127, 0.28);
 }
 
-.how-it-works-canvas {
+/* Framing Line Tracks (Top and Bottom) */
+.hiw-track {
   position: relative;
   width: 100%;
-  box-sizing: border-box;
-  padding: 60px clamp(24px, 5vw, 96px) 80px;
-}
-
-/* Corner Guide Hexagon Nodes */
-.hiw-corner-node {
-  position: absolute;
-  width: 11px;
-  height: 12px;
-  background-color: #698B7E;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  pointer-events: none;
-}
-
-.hiw-node-tl {
-  top: 12px;
-  left: clamp(16px, 3.5vw, 48px);
-}
-
-.hiw-node-tr {
-  top: 12px;
-  right: clamp(16px, 3.5vw, 48px);
-}
-
-.hiw-node-bl {
-  bottom: 12px;
-  left: clamp(16px, 3.5vw, 48px);
-}
-
-.hiw-node-br {
-  bottom: 12px;
-  right: clamp(16px, 3.5vw, 48px);
-}
-
-/* Top Badge */
-.hiw-badge-wrapper {
+  height: 28px;
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 48px;
 }
 
-.hiw-badge {
+.hiw-track-bottom {
+  height: 16px;
+  margin-top: 10px;
+}
+
+/* 1px Solid Horizontal Line */
+.hiw-track-line {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #6B7F7F; /* Exact sampled teal/sage horizontal line */
+  z-index: 1;
+}
+
+.hiw-track-bottom .hiw-track-line {
+  top: 8px;
+}
+
+/* Circular Node Dots on the Lines */
+.hiw-track-dot {
+  position: absolute;
+  top: 7px; /* 10px circle centered on 1px line at top: 12px */
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background-color: #8AAEA0; /* Exact sampled node dot */
+  box-shadow: 0 0 6px rgba(138, 174, 160, 0.45);
+  z-index: 3;
+}
+
+.hiw-track-bottom .hiw-track-dot {
+  top: 3px;
+}
+
+.hiw-dot-left {
+  left: clamp(20px, 3.5vw, 64px);
+}
+
+.hiw-dot-right {
+  right: clamp(20px, 3.5vw, 64px);
+}
+
+/* Badge anchored snugly beneath the top horizontal line */
+.hiw-badge-anchor {
+  position: relative;
+  z-index: 4;
+  margin-top: 16px;
+}
+
+.hiw-badge-box {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 14px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  padding: 3px 12px;
+  background-color: #5C6B6E; /* Exact sampled badge background */
+  border-radius: 0px;
+  box-sizing: border-box;
+}
+
+.hiw-badge-text {
+  font-family: var(--font-mono, 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.18em;
-  color: #9CE8C9;
+  color: #FFFFFF; /* Crisp white */
   text-transform: uppercase;
-  background-color: rgba(30, 27, 38, 0.65);
-  border: 1px solid rgba(198, 249, 226, 0.22);
+  line-height: 1.25;
+}
+
+/* Main Content Container bounded between Top and Bottom lines */
+.hiw-content-container {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 40px clamp(24px, 5vw, 84px) 24px;
+}
+
+/* Left & Right Vertical Dashed Guidelines connecting top and bottom dots */
+.hiw-guide-v-left,
+.hiw-guide-v-right {
+  position: absolute;
+  top: -16px;
+  bottom: -20px;
+  width: 1px;
+  border-left: 1px dashed rgba(130, 165, 155, 0.32);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.hiw-guide-v-left {
+  left: calc(clamp(20px, 3.5vw, 64px) + 5px);
+}
+
+.hiw-guide-v-right {
+  right: calc(clamp(20px, 3.5vw, 64px) + 5px);
 }
 
 /* 3-Column Grid */
@@ -78,44 +129,46 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 28px;
   width: 100%;
+  position: relative;
+  z-index: 3;
 }
 
 .hiw-card {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
-/* Graphic Screen Container */
+/* Graphic Screen Box */
 .hiw-screen {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10.5;
   min-height: 220px;
-  background-color: #262332;
-  border: 1px solid rgba(198, 249, 226, 0.14);
+  background-color: #2D2A3B; /* Deep dark slate navy card backdrop */
+  border: 1px solid rgba(130, 165, 155, 0.22);
   box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.4);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .hiw-card:hover .hiw-screen {
-  border-color: rgba(40, 233, 159, 0.38);
-  box-shadow: inset 0 0 50px rgba(40, 233, 159, 0.08);
+  border-color: rgba(40, 233, 159, 0.42);
+  box-shadow: inset 0 0 45px rgba(40, 233, 159, 0.08);
 }
 
-/* Graphic Sub-elements */
+/* SVG Canvas styling */
 .hiw-svg-canvas {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-/* Orbit & Pulse animations */
+/* Micro-animations */
 @keyframes hiwPulseGlow {
   0%, 100% {
     transform: scale(1);
@@ -128,15 +181,6 @@
 }
 
 @keyframes hiwOrbitRotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes hiwRadarSweep {
   from {
     transform: rotate(0deg);
   }
@@ -164,16 +208,11 @@
   animation: hiwOrbitRotate 16s linear infinite;
 }
 
-.hiw-radar-beam {
-  transform-origin: center;
-  animation: hiwRadarSweep 6s linear infinite;
-}
-
 .hiw-float-box {
   animation: hiwFloatSubtle 4s ease-in-out infinite;
 }
 
-/* Card Text Block */
+/* Typography & Text Block */
 .hiw-info {
   display: flex;
   flex-direction: column;
@@ -181,29 +220,29 @@
 }
 
 .hiw-step-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, 'JetBrains Mono', SFMono-Regular, monospace);
   font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.16em;
-  color: #9CE8C9;
+  color: #8AAEA0; /* Exact sampled muted sage green */
   text-transform: uppercase;
 }
 
 .hiw-title {
-  font-family: var(--font-display);
-  font-size: clamp(1.2rem, 1.6vw, 1.45rem);
+  font-family: var(--font-display, 'Inter', -apple-system, sans-serif);
+  font-size: clamp(1.15rem, 1.5vw, 1.4rem);
   font-weight: 700;
-  color: #C6F9E2;
+  color: #DDFCEE; /* Exact sampled crisp pale mint-white */
   letter-spacing: -0.025em;
   line-height: 1.25;
   margin: 0;
 }
 
 .hiw-desc {
-  font-family: var(--font-body);
-  font-size: 0.9375rem;
-  color: #88C6AD;
-  line-height: 1.55;
+  font-family: var(--font-body, 'Inter', -apple-system, sans-serif);
+  font-size: 0.875rem;
+  color: #8DA79E; /* Exact sampled sage gray-green */
+  line-height: 1.6;
   margin: 0;
 }
 
@@ -211,16 +250,17 @@
 @media (max-width: 1080px) {
   .hiw-grid {
     grid-template-columns: 1fr;
-    gap: 40px;
-    max-width: 640px;
+    gap: 36px;
+    max-width: 580px;
     margin: 0 auto;
   }
 
-  .hiw-canvas {
-    padding: 48px 24px 64px;
+  .hiw-content-container {
+    padding: 32px 20px 20px;
   }
 
-  .hiw-badge-wrapper {
-    margin-bottom: 36px;
+  .hiw-guide-v-left,
+  .hiw-guide-v-right {
+    display: none;
   }
 }

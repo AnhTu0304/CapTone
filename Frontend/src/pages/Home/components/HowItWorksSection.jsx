@@ -8,17 +8,23 @@ export const HowItWorksSection = ({ className = '' }) => {
       data-testid="how-it-works-section"
       aria-label="Cách thức SelfHeal hoạt động"
     >
-      <div className="how-it-works-canvas">
-        {/* Corner Blueprint Guide Hexagon Nodes */}
-        <span className="hiw-corner-node hiw-node-tl" aria-hidden="true" />
-        <span className="hiw-corner-node hiw-node-tr" aria-hidden="true" />
-        <span className="hiw-corner-node hiw-node-bl" aria-hidden="true" />
-        <span className="hiw-corner-node hiw-node-br" aria-hidden="true" />
-
-        {/* Central Header Badge */}
-        <div className="hiw-badge-wrapper">
-          <span className="hiw-badge">[ HOW IT WORKS ]</span>
+      {/* ================= TOP FRAMING TRACK (HORIZONTAL LINE 1 + CIRCULAR NODES + BADGE) ================= */}
+      <div className="hiw-track hiw-track-top" aria-hidden="true">
+        <div className="hiw-track-line" />
+        <span className="hiw-track-dot hiw-dot-left" />
+        <span className="hiw-track-dot hiw-dot-right" />
+        <div className="hiw-badge-anchor">
+          <div className="hiw-badge-box">
+            <span className="hiw-badge-text">HOW IT WORKS</span>
+          </div>
         </div>
+      </div>
+
+      {/* ================= CONTENT CONTAINER WITH VERTICAL GUIDELINES ================= */}
+      <div className="hiw-content-container">
+        {/* Left & Right Vertical Dashed Connecting Guidelines */}
+        <span className="hiw-guide-v-left" aria-hidden="true" />
+        <span className="hiw-guide-v-right" aria-hidden="true" />
 
         {/* 3 Step Cards Grid */}
         <div className="hiw-grid">
@@ -180,7 +186,7 @@ export const HowItWorksSection = ({ className = '' }) => {
                 <ellipse cx="274" cy="135" rx="30" ry="12" stroke="#ECFFA3" strokeWidth="0.9" fill="none" />
                 <ellipse cx="274" cy="135" rx="12" ry="30" stroke="#9CE8C9" strokeWidth="0.9" fill="none" />
 
-                {/* Target Target Pins */}
+                {/* Target Pins */}
                 <circle cx="245" cy="115" r="3" fill="#28E99F" />
                 <circle cx="232" cy="135" r="3" fill="#28E99F" />
                 <circle cx="245" cy="155" r="3" fill="#28E99F" />
@@ -267,6 +273,13 @@ export const HowItWorksSection = ({ className = '' }) => {
             </div>
           </article>
         </div>
+      </div>
+
+      {/* ================= BOTTOM FRAMING TRACK (HORIZONTAL LINE 2 + CIRCULAR NODES) ================= */}
+      <div className="hiw-track hiw-track-bottom" aria-hidden="true">
+        <div className="hiw-track-line" />
+        <span className="hiw-track-dot hiw-dot-left" />
+        <span className="hiw-track-dot hiw-dot-right" />
       </div>
     </section>
   );

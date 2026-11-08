@@ -3,9 +3,9 @@ import { render, screen } from '@testing-library/react';
 import HowItWorksSection from './HowItWorksSection';
 
 describe('HowItWorksSection (3-step Cybernetic Blueprint)', () => {
-  test('renders [ HOW IT WORKS ] badge', () => {
+  test('renders HOW IT WORKS badge', () => {
     render(<HowItWorksSection />);
-    expect(screen.getByText(/\[ HOW IT WORKS \]/i)).toBeInTheDocument();
+    expect(screen.getByText(/HOW IT WORKS/i)).toBeInTheDocument();
   });
 
   test('renders all 3 steps: Quan sát, Dự đoán, and Khôi phục', () => {
