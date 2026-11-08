@@ -60,7 +60,7 @@
 .hero-cta-group {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 42px;
 }
@@ -68,43 +68,65 @@
 .hero-btn-primary {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 28px;
-  background-color: var(--color-primary);
-  color: var(--color-canvas);
-  font-weight: 600;
-  font-size: 1rem;
-  font-family: var(--font-display);
+  justify-content: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 28px;
+  background-color: #3D3B4F;
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  font-family: var(--font-display, 'Inter', sans-serif);
   border-radius: 0px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid #3D3B4F;
   box-shadow: none;
-  transition: transform 0.15s ease, background-color 0.15s ease;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.hero-cta-group:hover .hero-btn-primary {
+  transform: translateX(-4px);
 }
 
 .hero-btn-primary:hover {
-  background-color: #2A2838;
-  transform: translateX(-4px);
+  background-color: #2F2D3D;
+  filter: brightness(1.1);
 }
 
 .hero-btn-secondary {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 26px;
-  background-color: var(--color-accent);
-  color: var(--color-ink);
-  font-weight: 600;
-  font-size: 1rem;
-  font-family: var(--font-display);
+  justifyContent: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 28px;
+  background-color: #28E99F;
+  color: #000000;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  font-family: var(--font-display, 'Inter', sans-serif);
   border-radius: 0px;
-  border: 1px solid var(--color-accent);
+  border: 1px solid #28E99F;
   box-shadow: none;
-  transition: transform 0.15s ease, background-color 0.15s ease;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.hero-cta-group:hover .hero-btn-secondary {
+  transform: translateX(4px);
 }
 
 .hero-btn-secondary:hover {
-  background-color: #1FE092;
-  transform: translateX(4px);
+  background-color: #1FD48F;
+  filter: brightness(1.08);
 }
 
 /* Right Column: Preserves original 572px vertical presence */

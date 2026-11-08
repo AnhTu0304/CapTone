@@ -38,17 +38,19 @@ export const HeroSection = ({ onNavigate }) => {
                   href="/get-started"
                   onClick={(e) => handleLinkClick(e, '/get-started')}
                   className="hero-btn-primary"
+                  title="Bắt đầu ngay"
                 >
                   <span>Bắt đầu ngay</span>
-                  <ArrowRight size={17} />
+                  <ArrowRight size={18} strokeWidth={2.2} />
                 </a>
 
                 <a
                   href="/guide"
                   onClick={(e) => handleLinkClick(e, '/guide')}
                   className="hero-btn-secondary"
+                  title="Xem hướng dẫn"
                 >
-                  <BookOpen size={17} color="var(--color-ink)" />
+                  <BookOpen size={18} strokeWidth={2.2} color="#000000" />
                   <span>Xem hướng dẫn</span>
                 </a>
               </div>
