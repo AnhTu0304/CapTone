@@ -4,6 +4,7 @@ import HowItWorksSection from './components/HowItWorksSection';
 import AdaptationLearningSection from './components/AdaptationLearningSection';
 import OnboardingWorkflowSection from './components/OnboardingWorkflowSection';
 import HumanControlSection from './components/HumanControlSection';
+import FAQSection from './components/FAQSection';
 import CTASection from '../../components/marketing/CTASection';
 
 export const HomePage = ({ onNavigate }) => {
@@ -24,7 +25,10 @@ export const HomePage = ({ onNavigate }) => {
       {/* 5. [ HUMAN CONTROL ] CYBERNETIC AUTONOMOUS CONTROL & VERIFICATION SECTION */}
       <HumanControlSection onNavigate={onNavigate} />
 
-      {/* 6. FINAL CTA */}
+      {/* 6. [ FAQ ] CAD ACCORDION WITH CONSTELLATION GRIDS */}
+      <FAQSection onNavigate={onNavigate} />
+
+      {/* 7. FINAL CTA */}
       <section style={{ backgroundColor: 'var(--color-canvas)', borderTop: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <CTASection
