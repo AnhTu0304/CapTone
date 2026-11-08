@@ -1,0 +1,428 @@
+/* ==========================================================================
+   ONBOARDING WORKFLOW SECTION — GREPTILE CAD 4-STEP BLUEPRINT ARCHITECTURE
+   ========================================================================== */
+
+.onboarding-workflow-section {
+  position: relative;
+  width: 100%;
+  background-color: #EDEDF0; /* Subtle cool light slate CAD canvas */
+  padding: 84px 0 96px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-bottom: 1px solid #D6D6D8;
+}
+
+/* ================= HEADER BLOCK ================= */
+.ows-header-container {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 48px);
+  box-sizing: border-box;
+}
+
+.ows-header-flex {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.ows-header-left {
+  flex: 1 1 600px;
+  max-width: 820px;
+}
+
+.ows-label-badge {
+  font-family: var(--font-mono, 'Space Mono', SFMono-Regular, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #717082; /* Muted grey uppercase tag */
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: inline-block;
+}
+
+.ows-heading {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(2rem, 3.4vw, 3rem);
+  font-weight: 800;
+  color: #1C1A26;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  margin: 0 0 16px 0;
+}
+
+.ows-subtitle {
+  font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
+  font-size: clamp(0.95rem, 1.15vw, 1.1rem);
+  color: #555368;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ows-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 22px;
+  background-color: #2B2938;
+  color: #FFFFFF;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 9999px; /* Pill button matching Greptile header */
+  border: 1px solid #2B2938;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+  margin-top: 8px;
+}
+
+.ows-header-btn:hover {
+  background-color: #161520;
+  transform: translateY(-1px);
+}
+
+/* ================= RULER DIVIDER WITH NEON LIME BADGE ================= */
+.ows-divider-container {
+  position: relative;
+  width: 100%;
+  margin: 44px 0 52px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ows-divider-ruler {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 16px;
+  border-top: 1px solid #D6D6D8;
+  border-bottom: 1px solid #D6D6D8;
+  background: repeating-linear-gradient(
+    to right,
+    #B8B8BD 0px,
+    #B8B8BD 1px,
+    transparent 1px,
+    transparent 10px
+  );
+  opacity: 0.85;
+}
+
+.ows-neon-pill {
+  position: relative;
+  z-index: 2;
+  background-color: #E4FF6B; /* Neon lime yellow badge */
+  color: #141A12;
+  font-family: var(--font-mono, 'Space Mono', monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 4px 14px;
+  text-transform: uppercase;
+  border: 1px solid #D5F255;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* ================= 4-CARD GRID CONTAINER ================= */
+.ows-grid-container {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 48px);
+  box-sizing: border-box;
+  position: relative;
+}
+
+.ows-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  width: 100%;
+  position: relative;
+}
+
+/* Card Column */
+.ows-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: relative;
+}
+
+/* ================= HATCHED RIBBON BORDER (DIAGONAL 45°) ================= */
+.ows-card-frame {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px; /* 10px diagonal hatched border */
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(85, 83, 104, 0.18) 0px,
+    rgba(85, 83, 104, 0.18) 1.5px,
+    transparent 1.5px,
+    transparent 6px
+  );
+  border: 1px solid rgba(85, 83, 104, 0.12);
+}
+
+.ows-card-inner-gap {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  background-color: #EDEDF0;
+}
+
+/* Graphic Screen Box */
+.ows-screen-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11.5;
+  min-height: 195px;
+  background-color: #FFFFFF;
+  border: 1px solid #D6D6D8;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+/* Background Wireframe Mesh */
+.ows-wireframe-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+/* ================= STEP 01 MOCKUP: ORG & ENV ================= */
+.ows-mockup-org {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  background: #FAFAFB;
+  border: 1px solid #E2E2E6;
+  border-radius: 2px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ows-mockup-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #EDEDF0;
+  padding-bottom: 4px;
+}
+
+.ows-mockup-header-bar span {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #1C1A26;
+}
+
+.ows-pill-active {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.625rem;
+  background-color: #D4F8E8;
+  color: #065F46;
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.ows-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.625rem;
+  color: #555368;
+}
+
+.ows-form-val {
+  color: #2563EB;
+  font-weight: 500;
+}
+
+/* ================= STEP 02 MOCKUP: CONNECT AGENT ================= */
+.ows-mockup-agent {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ows-agent-cube {
+  width: 48px;
+  height: 48px;
+  background-color: #28E99F;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(40, 233, 159, 0.4);
+}
+
+.ows-cmd-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.5875rem;
+  background-color: #1C1A26;
+  color: #9CE8C9;
+  padding: 4px 8px;
+  border-radius: 2px;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================= STEP 03 MOCKUP: INVITE MEMBERS ================= */
+.ows-mockup-invite {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  background: #FFFFFF;
+  border: 1px solid #E2E2E6;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ows-member-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.625rem;
+  color: #333140;
+}
+
+.ows-role-badge {
+  font-size: 0.5625rem;
+  background-color: #F1F1F4;
+  color: #555368;
+  padding: 1px 5px;
+  border: 1px solid #D6D6D8;
+  margin-left: auto;
+}
+
+/* ================= STEP 04 MOCKUP: POLICY & HITL ================= */
+.ows-mockup-policy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.ows-gauge-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 2px;
+}
+
+.ows-gauge-35 {
+  background-color: #FFDEE9;
+  color: #B5179E;
+}
+
+.ows-gauge-45 {
+  background-color: #FEF08A;
+  color: #854D0E;
+}
+
+.ows-gauge-55 {
+  background-color: #28E99F;
+  color: #064E3B;
+}
+
+.ows-policy-status {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6rem;
+  color: #059669;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ================= TEXT & NUMBER BELOW SCREEN ================= */
+.ows-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ows-step-num {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #717082;
+  letter-spacing: 0.05em;
+}
+
+.ows-card-title {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(1.05rem, 1.25vw, 1.25rem);
+  font-weight: 700;
+  color: #1C1A26;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.ows-card-desc {
+  font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
+  font-size: 0.875rem;
+  color: #555368;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ================= RESPONSIVE BREAKPOINTS ================= */
+@media (max-width: 1100px) {
+  .ows-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 36px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ows-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    max-width: 440px;
+    margin: 0 auto;
+  }
+
+  .ows-header-flex {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

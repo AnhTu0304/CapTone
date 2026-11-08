@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import HeroSectionSlot from './HeroSectionSlot';
 import HowItWorksSection from './components/HowItWorksSection';
 import AdaptationLearningSection from './components/AdaptationLearningSection';
+import OnboardingWorkflowSection from './components/OnboardingWorkflowSection';
 import SectionHeader from '../../components/common/SectionHeader';
 import CTASection from '../../components/marketing/CTASection';
 import { 
@@ -24,7 +25,10 @@ export const HomePage = ({ onNavigate }) => {
       {/* 3. [ ADAPTATION & LEARNING ] CONTINUOUS POLICY ADAPTATION SECTION */}
       <AdaptationLearningSection onNavigate={onNavigate} />
 
-      {/* 4. HUMAN CONTROL */}
+      {/* 4. [ YOUR WORKFLOW ] 4-STEP ONBOARDING & LAUNCH SECTION */}
+      <OnboardingWorkflowSection onNavigate={onNavigate} />
+
+      {/* 5. HUMAN CONTROL */}
       <section className="section-py" style={{ backgroundColor: 'var(--color-canvas)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <div
