@@ -8,6 +8,10 @@ export const HowItWorksSection = ({ className = '' }) => {
       data-testid="how-it-works-section"
       aria-label="Cách thức SelfHeal hoạt động"
     >
+      {/* Continuous Left & Right Vertical Dashed Guidelines spanning the entire section */}
+      <span className="hiw-guide-v-left" aria-hidden="true" />
+      <span className="hiw-guide-v-right" aria-hidden="true" />
+
       {/* ================= HEADER BLOCK WITH TOP LINE, BADGE, AND SUB-LINE ================= */}
       <div className="hiw-header-block" aria-hidden="true">
         {/* Horizontal Line 1 (Above Badge) */}
@@ -34,10 +38,6 @@ export const HowItWorksSection = ({ className = '' }) => {
 
       {/* ================= CONTENT CONTAINER (~100px SPACING BELOW HOW IT WORKS) ================= */}
       <div className="hiw-content-container">
-        {/* Left & Right Vertical Dashed Connecting Guidelines */}
-        <span className="hiw-guide-v-left" aria-hidden="true" />
-        <span className="hiw-guide-v-right" aria-hidden="true" />
-
         {/* 3 Step Cards Grid */}
         <div className="hiw-grid">
           {/* ================= STEP 01: QUAN SÁT ================= */}

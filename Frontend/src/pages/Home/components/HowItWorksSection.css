@@ -115,14 +115,14 @@
   padding: 0 clamp(20px, 4.5vw, 76px) 24px;
 }
 
-/* Left & Right Vertical Dashed Guidelines connecting lines across the 100px gap */
+/* Left & Right Vertical Dashed Guidelines spanning continuously from top to bottom */
 .hiw-guide-v-left,
 .hiw-guide-v-right {
   position: absolute;
-  top: -110px;
-  bottom: -20px;
+  top: 0;
+  bottom: 0;
   width: 1px;
-  border-left: 1px dashed rgba(130, 165, 155, 0.32);
+  border-left: 1px dashed rgba(138, 174, 160, 0.45);
   pointer-events: none;
   z-index: 2;
 }
@@ -166,17 +166,6 @@
     transparent 1.5px,
     transparent 6px
   );
-  transition: background 0.25s ease, filter 0.25s ease;
-}
-
-.hiw-card:hover .hiw-screen-frame {
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(40, 233, 159, 0.68) 0px,
-    rgba(40, 233, 159, 0.68) 1.5px,
-    transparent 1.5px,
-    transparent 6px
-  );
 }
 
 /* Inner gap between hatched border and inner screen box */
@@ -202,12 +191,6 @@
   align-items: center;
   justify-content: center;
   box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.45);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.hiw-card:hover .hiw-screen {
-  border-color: rgba(40, 233, 159, 0.55);
-  box-shadow: inset 0 0 45px rgba(40, 233, 159, 0.09);
 }
 
 /* SVG Canvas styling */
@@ -311,7 +294,9 @@
   }
 
   .hiw-guide-v-left,
-  .hiw-guide-v-right {
+  .hiw-guide-v-right,
+  .agent-guide-v-left,
+  .agent-guide-v-right {
     display: none;
   }
 }

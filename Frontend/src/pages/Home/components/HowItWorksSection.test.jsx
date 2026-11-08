@@ -28,4 +28,10 @@ describe('HowItWorksSection (3-step Cybernetic Blueprint)', () => {
     const parallelAgentTags = screen.getAllByText(/PARALLEL AGENT/i);
     expect(parallelAgentTags.length).toBe(3);
   });
+
+  test('renders continuous vertical guidelines', () => {
+    const { container } = render(<HowItWorksSection />);
+    expect(container.querySelector('.hiw-guide-v-left')).toBeInTheDocument();
+    expect(container.querySelector('.hiw-guide-v-right')).toBeInTheDocument();
+  });
 });

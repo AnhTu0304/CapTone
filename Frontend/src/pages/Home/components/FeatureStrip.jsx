@@ -25,6 +25,36 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
         overflow: 'hidden',
       }}
     >
+      {/* Continuous Left & Right Vertical Dashed Guidelines spanning through the [ AGENT ] banner */}
+      <span
+        aria-hidden="true"
+        className="agent-guide-v-left"
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: 'calc(clamp(20px, 3.5vw, 64px) + 5px)',
+          width: '1px',
+          borderLeft: '1px dashed rgba(138, 174, 160, 0.45)',
+          pointerEvents: 'none',
+          zIndex: 2,
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className="agent-guide-v-right"
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 'calc(clamp(20px, 3.5vw, 64px) + 5px)',
+          width: '1px',
+          borderLeft: '1px dashed rgba(138, 174, 160, 0.45)',
+          pointerEvents: 'none',
+          zIndex: 2,
+        }}
+      />
+
       {/* Top parallel horizontal scan lines matching Greptile [ AGENT ] banner */}
       <div
         aria-hidden="true"
@@ -54,11 +84,13 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
           style={{
             position: 'absolute',
             top: '8px',
-            left: 'clamp(16px, 3.5vw, 48px)',
-            width: '12px',
-            height: '13px',
-            backgroundColor: '#698B7E',
+            left: 'clamp(20px, 3.5vw, 64px)',
+            width: '11px',
+            height: '11px',
+            backgroundColor: '#8AAEA0',
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+            boxShadow: '0 0 6px rgba(138, 174, 160, 0.45)',
+            zIndex: 3,
           }}
         />
         <span
@@ -66,11 +98,13 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
           style={{
             position: 'absolute',
             top: '8px',
-            right: 'clamp(16px, 3.5vw, 48px)',
-            width: '12px',
-            height: '13px',
-            backgroundColor: '#698B7E',
+            right: 'clamp(20px, 3.5vw, 64px)',
+            width: '11px',
+            height: '11px',
+            backgroundColor: '#8AAEA0',
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+            boxShadow: '0 0 6px rgba(138, 174, 160, 0.45)',
+            zIndex: 3,
           }}
         />
 
