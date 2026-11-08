@@ -20,7 +20,7 @@ export const PublicLayout = ({ children, currentPath = '/', onNavigate }) => {
       <div className="blueprint-gutter-right" aria-hidden="true" />
 
       <Header currentPath={currentPath} onNavigate={onNavigate} />
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {children}
       </main>
       <Footer onNavigate={onNavigate} />

@@ -17,6 +17,7 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
       data-testid="agent-bridge-section"
       style={{
         position: 'relative',
+        zIndex: 25,
         width: '100%',
         backgroundColor: 'var(--bg-navy)', /* #3D3B4F */
         borderTop: '1px solid rgba(198, 249, 226, 0.18)',
