@@ -1,0 +1,268 @@
+/* ==========================================================================
+   HUMAN CONTROL SECTION — CYBERNETIC TOPOGRAPHIC CAD LANDSCAPE
+   ========================================================================== */
+
+.human-control-section {
+  position: relative;
+  z-index: 24; /* Elevated above blueprint gutter overlays */
+  width: 100%;
+  background-color: #EAEAEF; /* Cool technical CAD off-white canvas */
+  padding: 88px 0 32px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-bottom: 1px solid #D6D6D8;
+}
+
+/* ================= HEADER BLOCK ================= */
+.hcs-header-container {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 0 clamp(20px, 4vw, 40px);
+  box-sizing: border-box;
+}
+
+.hcs-label-badge {
+  font-family: var(--font-mono, 'Space Mono', SFMono-Regular, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #555368;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: inline-block;
+}
+
+.hcs-heading {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(2rem, 3.8vw, 3.25rem);
+  font-weight: 800;
+  color: #1C1A26;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  margin: 0 0 16px 0;
+}
+
+.hcs-subtitle {
+  font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
+  font-size: clamp(1rem, 1.2vw, 1.125rem);
+  color: #555368;
+  line-height: 1.6;
+  max-width: 760px;
+  margin: 0 auto 28px auto;
+}
+
+/* Hexagonal pill center CTA button */
+.hcs-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 30px;
+  background-color: #2B2938;
+  color: #FFFFFF;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
+  border: 1px solid #2B2938;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.hcs-cta-btn:hover {
+  background-color: #171520;
+  transform: translateY(-2px);
+}
+
+/* ================= CYBERNETIC LANDSCAPE CANVAS ================= */
+.hcs-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 1400px;
+  margin: 36px auto 0 auto;
+  padding: 0 clamp(16px, 3.5vw, 48px);
+  box-sizing: border-box;
+}
+
+.hcs-canvas-stage {
+  position: relative;
+  width: 100%;
+  min-height: 420px;
+  height: 460px;
+  overflow: hidden;
+}
+
+/* Telemetry Left & Right Columns */
+.hcs-telemetry-col-left {
+  position: absolute;
+  top: 40px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(59, 130, 246, 0.55); /* Subtle blue telemetry */
+  pointer-events: none;
+  z-index: 2;
+  user-select: none;
+}
+
+.hcs-telemetry-col-right {
+  position: absolute;
+  top: 40px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(236, 72, 153, 0.45); /* Subtle pink/magenta telemetry */
+  text-align: right;
+  pointer-events: none;
+  z-index: 2;
+  user-select: none;
+}
+
+/* Floating Metric Badges in Landscape */
+.hcs-floating-badge {
+  position: absolute;
+  background-color: #FFFFFF;
+  border: 1px solid #D6D6D8;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 4;
+}
+
+.hcs-badge-bar-pink {
+  width: 44px;
+  height: 4px;
+  background-color: #FF8BA7;
+}
+
+.hcs-badge-bar-yellow {
+  width: 44px;
+  height: 4px;
+  background-color: #FEF08A;
+}
+
+.hcs-badge-bar-blue {
+  width: 44px;
+  height: 4px;
+  background-color: #818CF8;
+}
+
+/* Main Topographic Waveform SVG */
+.hcs-waveform-svg {
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Pulse animation for yellow marker nodes */
+@keyframes hcsNodePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+.hcs-pulse-node {
+  transform-origin: center;
+  animation: hcsNodePulse 3s ease-in-out infinite;
+}
+
+/* Geodesic Polyhedron Wireframe on Top Right */
+.hcs-polyhedron-svg {
+  position: absolute;
+  top: 15px;
+  right: 140px;
+  width: 180px;
+  height: 180px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ================= BOTTOM RULER TRACK & CYCLIC TELEMETRY ================= */
+.hcs-bottom-track {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  border-top: 1px solid #D0D0D5;
+  border-bottom: 1px solid #D0D0D5;
+  background: repeating-linear-gradient(
+    to right,
+    #B0B0B8 0px,
+    #B0B0B8 1px,
+    transparent 1px,
+    transparent 12px
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.hcs-track-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: #6B687C;
+  white-space: nowrap;
+  background-color: #EAEAEF;
+  padding: 0 16px;
+  text-transform: uppercase;
+}
+
+/* ================= BOTTOM HATCHED RIBBON BORDER ================= */
+.hcs-bottom-hatch {
+  width: 100%;
+  height: 14px;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(85, 83, 104, 0.18) 0px,
+    rgba(85, 83, 104, 0.18) 1.5px,
+    transparent 1.5px,
+    transparent 6px
+  );
+  margin-top: 4px;
+}
+
+/* ================= RESPONSIVE BREAKPOINTS ================= */
+@media (max-width: 900px) {
+  .hcs-canvas-stage {
+    min-height: 360px;
+    height: 380px;
+  }
+
+  .hcs-polyhedron-svg {
+    right: 20px;
+    width: 130px;
+    height: 130px;
+  }
+
+  .hcs-telemetry-col-left,
+  .hcs-telemetry-col-right {
+    display: none;
+  }
+}

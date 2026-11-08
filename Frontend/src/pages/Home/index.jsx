@@ -1,19 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import HeroSectionSlot from './HeroSectionSlot';
 import HowItWorksSection from './components/HowItWorksSection';
 import AdaptationLearningSection from './components/AdaptationLearningSection';
 import OnboardingWorkflowSection from './components/OnboardingWorkflowSection';
-import SectionHeader from '../../components/common/SectionHeader';
+import HumanControlSection from './components/HumanControlSection';
 import CTASection from '../../components/marketing/CTASection';
-import { 
-  ShieldCheck, 
-  CheckCircle2, 
-  Check
-} from 'lucide-react';
 
 export const HomePage = ({ onNavigate }) => {
-  const [requireApprovalForProd, setRequireApprovalForProd] = useState(true);
-
   return (
     <div className="home-page">
       {/* 1. HERO SECTION + [ AGENT ] BRIDGE BANNER */}
@@ -28,175 +21,10 @@ export const HomePage = ({ onNavigate }) => {
       {/* 4. [ YOUR WORKFLOW ] 4-STEP ONBOARDING & LAUNCH SECTION */}
       <OnboardingWorkflowSection onNavigate={onNavigate} />
 
-      {/* 5. HUMAN CONTROL */}
-      <section className="section-py" style={{ backgroundColor: 'var(--color-canvas)', borderBottom: '1px dashed rgba(61, 59, 79, 0.16)' }}>
-        <div className="container-custom">
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '48px',
-              alignItems: 'center',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  borderRadius: '0px',
-                  backgroundColor: 'var(--color-surface)',
-                  color: 'var(--color-primary)',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  fontFamily: 'var(--font-mono)',
-                  marginBottom: '16px',
-                  border: '1px solid var(--border-default)',
-                }}
-              >
-                <ShieldCheck size={14} />
-                KIẾN TRÚC AN TOÀN HÀNG ĐẦU
-              </div>
-              <h2
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'clamp(1.75rem, 3.5vw, 2.375rem)',
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  letterSpacing: '-0.025em',
-                  lineHeight: 1.25,
-                  marginBottom: '16px',
-                }}
-              >
-                AI khuyến nghị. <span style={{ color: 'var(--color-primary)', textDecoration: 'underline', textDecorationColor: 'var(--color-accent)' }}>Bạn nắm quyền kiểm soát.</span>
-              </h2>
-              <p
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '1rem',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.6,
-                  marginBottom: '24px',
-                }}
-              >
-                SelfHeal nói không với tự động hóa hộp đen mờ ám. Mọi hành động tự động đều vận hành nghiêm ngặt trong khuôn khổ chính sách do chính đội ngũ kỹ thuật của bạn thiết lập. Các thao tác có độ rủi ro cao sẽ tự động tạm dừng để chờ phê duyệt từ con người.
-              </p>
+      {/* 5. [ HUMAN CONTROL ] CYBERNETIC AUTONOMOUS CONTROL & VERIFICATION SECTION */}
+      <HumanControlSection onNavigate={onNavigate} />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  <CheckCircle2 size={16} color="var(--color-primary)" />
-                  <span>Ngưỡng rủi ro có thể cấu hình linh hoạt theo từng namespace (Production vs Staging)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  <CheckCircle2 size={16} color="var(--color-primary)" />
-                  <span>Nhật ký kiểm toán bất biến ghi nhận tín hiệu kích hoạt, lý do và danh tính người phê duyệt</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  <CheckCircle2 size={16} color="var(--color-primary)" />
-                  <span>Công tắc tạm dừng tức thì cho phép đình chỉ mọi thao tác tự hành chỉ với 1 thao tác</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive Policy & Approval Simulation Card */}
-            <div
-              style={{
-                backgroundColor: 'var(--color-surface)',
-                border: '1px solid var(--border-default)',
-                borderRadius: '0px',
-                padding: '24px',
-                boxShadow: 'none',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid var(--border-default)' }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9375rem', color: 'var(--text-primary)' }}>
-                    Chính sách quản trị tự hành
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Cluster: prod-k8s-cluster-01
-                  </div>
-                </div>
-                <span
-                  style={{
-                    fontSize: '0.6875rem',
-                    fontFamily: 'var(--font-mono)',
-                    backgroundColor: 'var(--color-canvas)',
-                    color: 'var(--color-primary)',
-                    padding: '3px 8px',
-                    borderRadius: '0px',
-                    border: '1px solid var(--border-default)',
-                    fontWeight: 700,
-                  }}
-                >
-                  ĐANG ÁP DỤNG
-                </span>
-              </div>
-
-              {/* Policy Chain */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8125rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--color-canvas)', borderRadius: '0px', border: '1px solid var(--border-default)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>1. Phát hiện bằng AI</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 600 }}>Phát hiện độ dốc bộ nhớ tăng cao</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--color-canvas)', borderRadius: '0px', border: '1px solid var(--border-default)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>2. Đánh giá rủi ro</span>
-                  <span style={{ color: 'var(--warning-text)', fontWeight: 600, backgroundColor: 'var(--warning-bg)', padding: '2px 6px', borderRadius: '0px', fontFamily: 'var(--font-mono)' }}>
-                    Trung bình (Khởi động lại Pod Replica)
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--color-canvas)', borderRadius: '0px', border: '1px solid var(--border-default)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>3. Rào chắn Production</span>
-                  <button
-                    type="button"
-                    onClick={() => setRequireApprovalForProd(!requireApprovalForProd)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: requireApprovalForProd ? 'var(--color-primary)' : 'var(--text-muted)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '14px',
-                        height: '14px',
-                        borderRadius: '0px',
-                        border: '1px solid var(--color-primary)',
-                        backgroundColor: requireApprovalForProd ? 'var(--color-primary)' : 'transparent',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#FFFFFF',
-                      }}
-                    >
-                      {requireApprovalForProd && <Check size={10} />}
-                    </span>
-                    {requireApprovalForProd ? 'Bắt buộc phê duyệt' : 'Tự động phê duyệt'}
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--color-canvas)', borderRadius: '0px', border: '1px solid var(--border-default)' }}>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>4. Cổng kiểm chứng</span>
-                  <span style={{ color: 'var(--color-primary)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>HTTP 200 &amp; Độ trễ &lt; 50ms</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. FINAL CTA */}
+      {/* 6. FINAL CTA */}
       <section style={{ backgroundColor: 'var(--color-canvas)', borderTop: '1px dashed rgba(61, 59, 79, 0.16)' }}>
         <div className="container-custom">
           <CTASection
