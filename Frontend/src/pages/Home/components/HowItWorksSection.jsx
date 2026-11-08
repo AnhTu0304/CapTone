@@ -8,19 +8,31 @@ export const HowItWorksSection = ({ className = '' }) => {
       data-testid="how-it-works-section"
       aria-label="Cách thức SelfHeal hoạt động"
     >
-      {/* ================= TOP FRAMING TRACK (HORIZONTAL LINE 1 + CIRCULAR NODES + BADGE) ================= */}
-      <div className="hiw-track hiw-track-top" aria-hidden="true">
-        <div className="hiw-track-line" />
-        <span className="hiw-track-dot hiw-dot-left" />
-        <span className="hiw-track-dot hiw-dot-right" />
-        <div className="hiw-badge-anchor">
+      {/* ================= HEADER BLOCK WITH TOP LINE, BADGE, AND SUB-LINE ================= */}
+      <div className="hiw-header-block" aria-hidden="true">
+        {/* Horizontal Line 1 (Above Badge) */}
+        <div className="hiw-track hiw-track-top">
+          <div className="hiw-track-line" />
+          <span className="hiw-track-dot hiw-dot-left" />
+          <span className="hiw-track-dot hiw-dot-right" />
+        </div>
+
+        {/* Badge HOW IT WORKS */}
+        <div className="hiw-badge-wrapper">
           <div className="hiw-badge-box">
             <span className="hiw-badge-text">HOW IT WORKS</span>
           </div>
         </div>
+
+        {/* Horizontal Line 2 (Directly Under Badge) */}
+        <div className="hiw-track hiw-track-sub">
+          <div className="hiw-track-line" />
+          <span className="hiw-track-dot hiw-dot-left" />
+          <span className="hiw-track-dot hiw-dot-right" />
+        </div>
       </div>
 
-      {/* ================= CONTENT CONTAINER WITH VERTICAL GUIDELINES ================= */}
+      {/* ================= CONTENT CONTAINER (160px - 200px SPACING BELOW HOW IT WORKS) ================= */}
       <div className="hiw-content-container">
         {/* Left & Right Vertical Dashed Connecting Guidelines */}
         <span className="hiw-guide-v-left" aria-hidden="true" />
@@ -275,7 +287,7 @@ export const HowItWorksSection = ({ className = '' }) => {
         </div>
       </div>
 
-      {/* ================= BOTTOM FRAMING TRACK (HORIZONTAL LINE 2 + CIRCULAR NODES) ================= */}
+      {/* ================= BOTTOM FRAMING TRACK (HORIZONTAL LINE AT FOOTER) ================= */}
       <div className="hiw-track hiw-track-bottom" aria-hidden="true">
         <div className="hiw-track-line" />
         <span className="hiw-track-dot hiw-dot-left" />

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HOW IT WORKS SECTION — BLUEPRINT CAD STYLING WITH DUAL HORIZONTAL LINES
+   HOW IT WORKS SECTION — BLUEPRINT CAD STYLING WITH MULTI-LINE FRAMING
    ========================================================================== */
 
 .how-it-works-section {
@@ -14,11 +14,20 @@
   border-bottom: 1px solid rgba(107, 127, 127, 0.28);
 }
 
-/* Framing Line Tracks (Top and Bottom) */
+/* Header Block with Top Line, Centered Badge, and Sub-Line */
+.hiw-header-block {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Framing Line Tracks (Top, Sub-line under badge, and Bottom) */
 .hiw-track {
   position: relative;
   width: 100%;
-  height: 28px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -26,13 +35,13 @@
 
 .hiw-track-bottom {
   height: 16px;
-  margin-top: 10px;
+  margin-top: 24px;
 }
 
 /* 1px Solid Horizontal Line */
 .hiw-track-line {
   position: absolute;
-  top: 12px;
+  top: 11px;
   left: 0;
   right: 0;
   height: 1px;
@@ -47,7 +56,7 @@
 /* Circular Node Dots on the Lines */
 .hiw-track-dot {
   position: absolute;
-  top: 7px; /* 10px circle centered on 1px line at top: 12px */
+  top: 6px; /* 11px circle centered on 1px line at top: 11px */
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -68,18 +77,20 @@
   right: clamp(20px, 3.5vw, 64px);
 }
 
-/* Badge anchored snugly beneath the top horizontal line */
-.hiw-badge-anchor {
+/* Badge centered between Top line and Sub-line */
+.hiw-badge-wrapper {
   position: relative;
   z-index: 4;
-  margin-top: 16px;
+  margin: 10px 0;
+  display: flex;
+  justify-content: center;
 }
 
 .hiw-badge-box {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 12px;
+  padding: 4px 14px;
   background-color: #5C6B6E; /* Exact sampled badge background */
   border-radius: 0px;
   box-sizing: border-box;
@@ -95,19 +106,20 @@
   line-height: 1.25;
 }
 
-/* Main Content Container bounded between Top and Bottom lines */
+/* Main Content Container: Spacing 160px - 200px (180px standard) below HOW IT WORKS */
 .hiw-content-container {
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  padding: 40px clamp(24px, 5vw, 84px) 24px;
+  margin-top: 180px; /* 180px spacing (in 160-200px range requested) */
+  padding: 0 clamp(24px, 5vw, 84px) 24px;
 }
 
-/* Left & Right Vertical Dashed Guidelines connecting top and bottom dots */
+/* Left & Right Vertical Dashed Guidelines connecting lines across the 180px gap */
 .hiw-guide-v-left,
 .hiw-guide-v-right {
   position: absolute;
-  top: -16px;
+  top: -190px;
   bottom: -20px;
   width: 1px;
   border-left: 1px dashed rgba(130, 165, 155, 0.32);
@@ -248,15 +260,16 @@
 
 /* Responsive Breakpoints */
 @media (max-width: 1080px) {
+  .hiw-content-container {
+    margin-top: clamp(80px, 14vw, 160px);
+    padding: 0 20px 20px;
+  }
+
   .hiw-grid {
     grid-template-columns: 1fr;
     gap: 36px;
     max-width: 580px;
     margin: 0 auto;
-  }
-
-  .hiw-content-container {
-    padding: 32px 20px 20px;
   }
 
   .hiw-guide-v-left,
