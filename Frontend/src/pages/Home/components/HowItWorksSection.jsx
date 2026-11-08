@@ -1,5 +1,6 @@
 import React from 'react';
 import './HowItWorksSection.css';
+import { TelemetryStreamIllustration } from './illustrations/TelemetryStreamIllustration';
 
 export const HowItWorksSection = ({ className = '' }) => {
   return (
@@ -45,72 +46,7 @@ export const HowItWorksSection = ({ className = '' }) => {
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
-                  <svg
-                    className="hiw-svg-canvas"
-                    viewBox="0 0 420 270"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <defs>
-                      <radialGradient id="hiw-core-glow-1" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor="#28E99F" stopOpacity="0.6" />
-                        <stop offset="70%" stopColor="#3B67F6" stopOpacity="0.2" />
-                        <stop offset="100%" stopColor="#3B67F6" stopOpacity="0" />
-                      </radialGradient>
-                      <filter id="hiw-blur-sm" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="3" />
-                      </filter>
-                    </defs>
-
-                    {/* Center subtle grid lines */}
-                    <line x1="20" y1="135" x2="400" y2="135" stroke="rgba(198, 249, 226, 0.12)" strokeWidth="1" strokeDasharray="3 3" />
-                    <line x1="210" y1="20" x2="210" y2="250" stroke="rgba(198, 249, 226, 0.12)" strokeWidth="1" strokeDasharray="3 3" />
-
-                    {/* Curved Coordinate Distortion Lines (Left & Right Mesh) */}
-                    <path d="M 40 70 Q 140 100 160 135 Q 140 170 40 200" stroke="#9CE8C9" strokeOpacity="0.22" strokeWidth="1" fill="none" />
-                    <path d="M 60 50 Q 150 90 160 135 Q 150 180 60 220" stroke="#9CE8C9" strokeOpacity="0.25" strokeWidth="1" fill="none" />
-                    <path d="M 90 40 Q 160 85 160 135 Q 160 185 90 230" stroke="#9CE8C9" strokeOpacity="0.28" strokeWidth="1" fill="none" />
-
-                    <path d="M 380 70 Q 280 100 260 135 Q 280 170 380 200" stroke="#9CE8C9" strokeOpacity="0.22" strokeWidth="1" fill="none" />
-                    <path d="M 360 50 Q 270 90 260 135 Q 270 180 360 220" stroke="#9CE8C9" strokeOpacity="0.25" strokeWidth="1" fill="none" />
-                    <path d="M 330 40 Q 260 85 260 135 Q 260 185 330 230" stroke="#9CE8C9" strokeOpacity="0.28" strokeWidth="1" fill="none" />
-
-                    {/* Horizontal mesh ribs */}
-                    <path d="M 50 90 Q 210 115 370 90" stroke="#9CE8C9" strokeOpacity="0.16" strokeWidth="0.8" fill="none" />
-                    <path d="M 50 180 Q 210 155 370 180" stroke="#9CE8C9" strokeOpacity="0.16" strokeWidth="0.8" fill="none" />
-
-                    {/* Central Telemetry Core Box */}
-                    <rect x="160" y="85" width="100" height="100" fill="#3B67F6" rx="2" />
-                    <circle cx="210" cy="135" r="46" fill="url(#hiw-core-glow-1)" />
-
-                    {/* Rotating Geodesic Sphere */}
-                    <g className="hiw-orbit-ring">
-                      <circle cx="210" cy="135" r="36" stroke="#FFFFFF" strokeWidth="1.2" strokeOpacity="0.8" fill="none" />
-                      <ellipse cx="210" cy="135" rx="36" ry="14" stroke="#ECFFA3" strokeWidth="1" strokeOpacity="0.9" fill="none" />
-                      <ellipse cx="210" cy="135" rx="14" ry="36" stroke="#9CE8C9" strokeWidth="1" strokeOpacity="0.9" fill="none" />
-                      <circle cx="238" cy="122" r="3.5" fill="#28E99F" filter="url(#hiw-blur-sm)" />
-                      <circle cx="238" cy="122" r="2.5" fill="#FFFFFF" />
-                    </g>
-
-                    {/* Floating Node Coordinates */}
-                    <g className="hiw-float-box">
-                      <rect x="138" y="92" width="10" height="10" fill="#FF8BA7" rx="1" />
-                      <rect x="138" y="168" width="10" height="10" fill="#FF8BA7" rx="1" />
-                      <rect x="272" y="92" width="10" height="10" fill="#FF8BA7" rx="1" />
-                      <rect x="272" y="168" width="10" height="10" fill="#FF8BA7" rx="1" />
-
-                      <rect x="180" y="70" width="8" height="8" fill="#FF8BA7" rx="1" />
-                      <rect x="232" y="70" width="8" height="8" fill="#FF8BA7" rx="1" />
-                      <rect x="180" y="192" width="8" height="8" fill="#FF8BA7" rx="1" />
-                      <rect x="232" y="192" width="8" height="8" fill="#FF8BA7" rx="1" />
-
-                      {/* Corner Accent Dots */}
-                      <rect x="156" y="81" width="7" height="7" fill="#ECFFA3" rx="1" />
-                      <rect x="257" y="81" width="7" height="7" fill="#ECFFA3" rx="1" />
-                      <rect x="156" y="182" width="7" height="7" fill="#ECFFA3" rx="1" />
-                      <rect x="257" y="182" width="7" height="7" fill="#ECFFA3" rx="1" />
-                    </g>
-                  </svg>
+                  <TelemetryStreamIllustration className="hiw-svg-canvas" />
                 </div>
               </div>
             </div>
