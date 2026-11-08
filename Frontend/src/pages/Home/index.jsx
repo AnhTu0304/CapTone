@@ -5,7 +5,7 @@ import AdaptationLearningSection from './components/AdaptationLearningSection';
 import OnboardingWorkflowSection from './components/OnboardingWorkflowSection';
 import HumanControlSection from './components/HumanControlSection';
 import FAQSection from './components/FAQSection';
-import CTASection from '../../components/marketing/CTASection';
+import ConnectClusterSection from './components/ConnectClusterSection';
 
 export const HomePage = ({ onNavigate }) => {
   return (
@@ -28,19 +28,8 @@ export const HomePage = ({ onNavigate }) => {
       {/* 6. [ FAQ ] CAD ACCORDION WITH CONSTELLATION GRIDS */}
       <FAQSection onNavigate={onNavigate} />
 
-      {/* 7. FINAL CTA */}
-      <section style={{ backgroundColor: 'var(--color-canvas)', borderTop: '1px dashed rgba(61, 59, 79, 0.16)' }}>
-        <div className="container-custom">
-          <CTASection
-            title="Sẵn sàng kết nối môi trường Kubernetes của bạn?"
-            description="Cài đặt SelfHeal agent nhẹ nhàng vào cluster của bạn trong chưa đầy 3 phút bằng file helm hoặc kubectl manifest tiêu chuẩn. Không bị khóa vào bất kỳ nhà cung cấp nào."
-            primaryButtonText="Bắt đầu ngay"
-            secondaryButtonText="Xem hướng dẫn"
-            onPrimaryClick={() => onNavigate && onNavigate('/get-started')}
-            onSecondaryClick={() => onNavigate && onNavigate('/guide')}
-          />
-        </div>
-      </section>
+      {/* 7. [ CONNECT CLUSTER ] GREPTILE DARK NAVY FINAL CTA WITH SATELLITE MESH */}
+      <ConnectClusterSection onNavigate={onNavigate} />
     </div>
   );
 };
