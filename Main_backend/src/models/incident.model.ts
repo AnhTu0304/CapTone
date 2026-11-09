@@ -230,7 +230,7 @@ export class IncidentModel {
       LEFT JOIN LATERAL (
         SELECT nd.name
         FROM nodes nd
-        WHERE nd.cluster_id::text = i.cluster_id
+        WHERE nd.cluster_id = c.id
         LIMIT 1
       ) nd ON true
       LEFT JOIN LATERAL (
@@ -253,7 +253,6 @@ export class IncidentModel {
         LEFT JOIN healing_action_types hat ON hat.id = ha.action_type_id
         LEFT JOIN approvals ap ON ap.healing_action_id = ha.id AND ap.status = 'PENDING'
         WHERE ha.incident_id = i.id
-           OR (i.status != 'RESOLVED' AND ap.id IS NOT NULL AND ha.target_name = COALESCE(w.name, i.target_id))
         ORDER BY (ap.id IS NOT NULL) DESC, ha.created_at DESC
         LIMIT 1
       ) ha ON true
@@ -324,7 +323,7 @@ export class IncidentModel {
       LEFT JOIN LATERAL (
         SELECT nd.name
         FROM nodes nd
-        WHERE nd.cluster_id::text = i.cluster_id
+        WHERE nd.cluster_id = c.id
         LIMIT 1
       ) nd ON true
       LEFT JOIN LATERAL (
@@ -347,7 +346,6 @@ export class IncidentModel {
         LEFT JOIN healing_action_types hat ON hat.id = ha.action_type_id
         LEFT JOIN approvals ap ON ap.healing_action_id = ha.id AND ap.status = 'PENDING'
         WHERE ha.incident_id = i.id
-           OR (i.status != 'RESOLVED' AND ap.id IS NOT NULL AND ha.target_name = COALESCE(w.name, i.target_id))
         ORDER BY (ap.id IS NOT NULL) DESC, ha.created_at DESC
         LIMIT 1
       ) ha ON true

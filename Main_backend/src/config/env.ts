@@ -13,6 +13,9 @@ export const config = {
   // AI Backend
   aiBackendUrl: process.env.AI_BACKEND_URL || 'http://ai-backend:8000',
 
+  // Telemetry Ingestion Mode: 'MEMORY_BUFFER' (Phương án 2: Đệm RAM/Redis, chỉ lưu DB khi có sự cố) | 'PERSIST_ALL'
+  telemetryIngestionMode: (process.env.TELEMETRY_INGESTION_MODE as 'MEMORY_BUFFER' | 'PERSIST_ALL') || 'MEMORY_BUFFER',
+
   // Database (PostgreSQL)
   db: {
     host: process.env.DB_HOST || 'localhost',

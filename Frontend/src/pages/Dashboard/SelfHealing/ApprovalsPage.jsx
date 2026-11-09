@@ -816,7 +816,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <Eye size={14} color="#475569" />
-                        <span>Xem bằng chứng RCA</span>
+                        <span>Chi tiết</span>
                       </button>
 
                       {/* Nút Xem Trước Diff (YAML) */}

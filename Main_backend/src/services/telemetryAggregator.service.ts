@@ -1,3 +1,4 @@
+import { TelemetryBufferService } from './telemetryBuffer.service';
 import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
 import { GRUMetricPoint } from '../schemas/ai.schema';
@@ -76,13 +77,19 @@ export class TelemetryAggregatorService {
     const limit = options?.limit ?? 12;
     const fillPadding = options?.fillPadding ?? true;
 
-    // Delegate query to MetricModel
-    const points = await MetricModel.aggregateByService(serviceId, bucketSeconds, limit, {
-      startTime: options?.startTime,
-      endTime: options?.endTime,
-      clusterId: options?.clusterId,
-      organizationId: options?.organizationId,
-    });
+    // Ưu tiên đọc từ In-Memory Buffer (RAM / Redis) nếu không có startTime lịch sử
+    let points: GRUMetricPoint[] = [];
+    if (!options?.startTime) {
+      points = await TelemetryBufferService.getDisplayPoints(serviceId, bucketSeconds, limit);
+    }
+    if (points.length === 0) {
+      points = await MetricModel.aggregateByService(serviceId, bucketSeconds, limit, {
+        startTime: options?.startTime,
+        endTime: options?.endTime,
+        clusterId: options?.clusterId,
+        organizationId: options?.organizationId,
+      });
+    }
 
     if (points.length === 0) {
       return [];
@@ -259,9 +266,11 @@ export class TelemetryAggregatorService {
       console.warn('[TelemetryAggregator] Could not query pod info:', e);
     }
 
-    // 2.5 Query Node metrics & conditions
+    // 2.5 Query Node metrics & conditions (strictly filtered by current cluster)
     let allNodes: any[] = [];
     try {
+      const clusterWhere = workloadClusterId ? `WHERE n.cluster_id = $1` : '';
+      const clusterParams = workloadClusterId ? [workloadClusterId] : [];
       const nodesRes = await pool.query(
         `SELECT DISTINCT ON (n.id)
            n.id AS node_id,
@@ -274,7 +283,9 @@ export class TelemetryAggregatorService {
            COALESCE(nm.ram_usage_percent, 0) AS ram_usage_pct
          FROM nodes n
          LEFT JOIN node_metrics nm ON nm.node_id = n.id
-         ORDER BY n.id, nm.collected_at DESC NULLS LAST;`
+         ${clusterWhere}
+         ORDER BY n.id, nm.collected_at DESC NULLS LAST;`,
+        clusterParams
       );
       allNodes = nodesRes.rows.map((r) => ({
         node_id: r.node_id,
