@@ -181,7 +181,7 @@ export class UserModel {
             om.status AS member_status
           FROM organization_members om
           JOIN organizations o ON om.organization_id = o.id
-          JOIN roles r ON om.role_id = r.id
+          JOIN organization_roles r ON om.role_id = r.id
           WHERE om.user_id = $1 AND om.status != 'REMOVED' AND o.deleted_at IS NULL
           ORDER BY o.created_at ASC
         `;
@@ -306,7 +306,7 @@ export class UserModel {
                 ))
                 FROM organization_members om
                 JOIN organizations o ON om.organization_id = o.id
-                JOIN roles r ON om.role_id = r.id
+                JOIN organization_roles r ON om.role_id = r.id
                 WHERE om.user_id = users.id AND om.status != 'REMOVED'
               ),
               '[]'::json

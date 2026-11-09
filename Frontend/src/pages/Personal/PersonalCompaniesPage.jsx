@@ -48,7 +48,6 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgSlug, setNewOrgSlug] = useState('');
   const [newOrgDomain, setNewOrgDomain] = useState('');
-  const [newOrgPlan, setNewOrgPlan] = useState('SME Starter');
   const [newOrgDesc, setNewOrgDesc] = useState('');
   const [createError, setCreateError] = useState('');
 
@@ -75,7 +74,6 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
         name: newOrgName,
         slug: newOrgSlug || 'new-company',
         domain: newOrgDomain,
-        plan: newOrgPlan,
         description: newOrgDesc,
       });
       const updatedComps = await personalPortalService.fetchMyCompanies();
@@ -146,7 +144,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-            My Companies — Công Ty Của Tôi
+            Công Ty Của Tôi
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
             Quản trị các tổ chức bạn đang trực thuộc, chuyển đổi không gian làm việc hoặc tạo mới công ty.
@@ -172,7 +170,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           }}
         >
           <Plus size={16} />
-          <span>Tạo Company Mới</span>
+          <span>Tạo Công Ty Mới</span>
         </button>
       </div>
 
@@ -202,7 +200,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           }}
         >
           <Building2 size={16} />
-          <span>Company Đang Tham Gia ({companies.length})</span>
+          <span>Công Ty Đang Tham Gia ({companies.length})</span>
         </button>
 
         <button
@@ -261,7 +259,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               />
               <input
                 type="text"
-                placeholder="Tìm kiếm theo tên Company hoặc slug..."
+                placeholder="Tìm kiếm theo tên công ty hoặc slug..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{
@@ -372,11 +370,6 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
                       <span style={{ color: '#64748B' }}>Vai trò của bạn:</span>
                       <strong style={{ color: '#0F172A' }}>{company.roleTitle}</strong>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
-                      <span style={{ color: '#64748B' }}>Gói dịch vụ:</span>
-                      <span style={{ fontWeight: 600, color: '#4338CA' }}>{company.plan}</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
@@ -626,7 +619,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Building2 size={20} color="#059669" />
                 <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Tạo Mới Doanh Nghiệp (Company)
+                  Tạo Mới Công Ty
                 </h3>
               </div>
               <button
@@ -716,29 +709,6 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                     outline: 'none',
                   }}
                 />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Gói Dịch Vụ
-                </label>
-                <select
-                  value={newOrgPlan}
-                  onChange={(e) => setNewOrgPlan(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '0.8125rem',
-                    outline: 'none',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <option value="SME Starter">SME Starter (Miễn phí 1 Cluster K8s)</option>
-                  <option value="SME Pro">SME Pro (Tối đa 5 Clusters, Giám sát AI)</option>
-                  <option value="Enterprise Cloud">Enterprise Cloud (Không giới hạn)</option>
-                </select>
               </div>
 
               <div>

@@ -55,7 +55,7 @@ describe('[S5][PBI22 Task 4.3 & 4.4] Alert Assignment, Resolution Concurrency & 
   }
 
   before(async () => {
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const roleMap = new Map<string, string>();
     rolesRes.rows.forEach((r: any) => roleMap.set(r.code, r.id));
 

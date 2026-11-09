@@ -50,7 +50,7 @@ describe('API Tiếp nhận và Lưu trữ Heartbeat Agent Suite [PB10][PB11 2.1
     await testRedisConnection();
 
     // 1. Roles
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
 
     // 2. Users

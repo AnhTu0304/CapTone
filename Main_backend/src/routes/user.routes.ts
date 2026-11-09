@@ -29,6 +29,15 @@ router.get('/me/activities', UserController.getMyActivities);
 // [POST] /api/v1/users/me/activities -> Ghi nhận nhật ký thao tác người dùng
 router.post('/me/activities', UserController.recordMyActivity);
 
+// [GET] /api/v1/users/me/notifications -> Xem thông báo cá nhân từ notifications
+router.get('/me/notifications', UserController.getMyNotifications);
+// [PATCH] /api/v1/users/me/notifications/read-all -> Đánh dấu tất cả thông báo đã đọc
+router.patch('/me/notifications/read-all', UserController.markAllNotificationsAsRead);
+// [PATCH] /api/v1/users/me/notifications/:id/read -> Đánh dấu 1 thông báo đã đọc
+router.patch('/me/notifications/:id/read', UserController.markNotificationAsRead);
+// [DELETE] /api/v1/users/me/notifications/:id -> Xóa 1 thông báo
+router.delete('/me/notifications/:id', UserController.deleteNotification);
+
 // [PUT] /api/v1/users/me -> Cập nhật thông tin hồ sơ của người dùng đang đăng nhập
 router.put('/me', validate(updateMyProfileSchema), UserController.updateMe);
 

@@ -431,21 +431,21 @@ export const AuditLogsPage = () => {
           fontSize: '0.75rem',
           fontWeight: 600,
           borderRadius: '6px',
-          border: isCalendarOpen || timeFilterMode !== 'all' ? '1px solid #10B981' : '1px solid var(--dash-border)',
-          backgroundColor: timeFilterMode !== 'all' ? '#ECFDF5' : '#FFFFFF',
-          color: timeFilterMode !== 'all' ? '#047857' : 'var(--dash-text-primary)',
+          border: '1px solid #CBD5E1',
+          backgroundColor: '#FFFFFF',
+          color: 'var(--dash-text-primary, #1E293B)',
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
           cursor: 'pointer',
-          boxShadow: isCalendarOpen ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : 'none',
+          boxShadow: isCalendarOpen ? '0 0 0 2px rgba(15, 23, 42, 0.08)' : 'none',
           transition: 'all 0.15s ease',
         }}
         title="Mở bảng lịch chọn ngày, tháng hoặc năm"
       >
-        <Calendar size={14} color="#059669" />
+        <Calendar size={14} color="#64748B" />
         <span>{currentFilterLabel}</span>
-        <ChevronDown size={12} color="#059669" />
+        <ChevronDown size={12} color="#64748B" />
       </button>
 
       {/* Cửa Sổ Popover Lịch Đa Chế Độ */}

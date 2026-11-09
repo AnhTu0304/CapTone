@@ -48,7 +48,7 @@ describe('Statistics API Cluster & Aggregated Overview Suite [S5][PBI19]', () =>
     }
 
     // 3. Gán Organization Membership cho tenant user vào tenantOrgId (role VIEWER)
-    const roleRes = await pool.query(`SELECT id FROM roles WHERE code = 'VIEWER' LIMIT 1`);
+    const roleRes = await pool.query(`SELECT id FROM organization_roles WHERE code = 'VIEWER' LIMIT 1`);
     if (roleRes.rows.length > 0) {
       await pool.query(`
         INSERT INTO organization_members (id, organization_id, user_id, role_id, status, created_at, updated_at)

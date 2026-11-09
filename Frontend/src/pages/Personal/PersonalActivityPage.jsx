@@ -262,7 +262,6 @@ export const PersonalActivityPage = () => {
               <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Hành Động & Chi Tiết</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Phân Loại</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Công Ty & Cụm K8s</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Địa Chỉ IP</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Thời Gian Thực Thi</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700, textAlign: 'right' }}>Trạng Thái</th>
@@ -277,8 +276,22 @@ export const PersonalActivityPage = () => {
                   <tr key={act.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ fontWeight: 700, color: '#0F172A' }}>{act.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
-                        {act.description}
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: 1.4 }}>
+                        <span>{act.description}</span>
+                        {act.organizationName && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#0284C7', fontWeight: 600 }}>
+                            <span style={{ color: '#CBD5E1' }}>•</span>
+                            <Building2 size={12} style={{ flexShrink: 0 }} />
+                            <span>{act.organizationName}</span>
+                          </span>
+                        )}
+                        {act.clusterName && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#7C3AED', fontWeight: 600 }}>
+                            <span style={{ color: '#CBD5E1' }}>•</span>
+                            <Server size={11} style={{ flexShrink: 0 }} />
+                            <span>Cụm: {act.clusterName}</span>
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -299,25 +312,6 @@ export const PersonalActivityPage = () => {
                         <BadgeIcon size={13} />
                         <span>{badge.label}</span>
                       </span>
-                    </td>
-
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.78125rem', fontWeight: 600, color: '#1E293B' }}>
-                          <Building2 size={13} style={{ color: '#0284C7', flexShrink: 0 }} />
-                          <span>{act.organizationName || 'Cá nhân'}</span>
-                        </div>
-                        {act.clusterName ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.71875rem', fontWeight: 600, color: '#7C3AED' }}>
-                            <Server size={12} style={{ color: '#8B5CF6', flexShrink: 0 }} />
-                            <span>Cụm: {act.clusterName}</span>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '0.71875rem', color: '#94A3B8' }}>
-                            Không gắn cụm
-                          </div>
-                        )}
-                      </div>
                     </td>
 
                     <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono, monospace)', color: '#334155' }}>

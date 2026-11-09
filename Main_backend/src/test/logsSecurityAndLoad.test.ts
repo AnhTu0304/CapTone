@@ -44,7 +44,7 @@ describe('Logs Security, Multi-Tenant Organization Isolation & Load Testing Suit
     await testRedisConnection();
 
     // 1. Fetch SME_OWNER role ID
-    const rolesRes = await pool.query(`SELECT id FROM roles WHERE code = 'SME_OWNER' AND scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id FROM organization_roles WHERE code = 'SME_OWNER' AND scope = 'ORGANIZATION'`);
     smeOwnerRoleId = rolesRes.rows[0]?.id;
 
     // 2. Insert Users

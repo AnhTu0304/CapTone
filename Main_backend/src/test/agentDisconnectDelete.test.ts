@@ -55,7 +55,7 @@ describe('Agent Disconnect, Delete & Access Control Suite [PB12 3.2]', () => {
     await testRedisConnection();
 
     // 1. Roles
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     const devopsRoleId = rolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
     const viewerRoleId = rolesRes.rows.find((r) => r.code === 'VIEWER')?.id;

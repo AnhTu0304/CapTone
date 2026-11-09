@@ -25,7 +25,7 @@ export const PERSONAL_NAV_ITEMS = [
   },
   {
     id: 'companies',
-    label: 'Company Của Tôi',
+    label: 'Công Ty Của Tôi',
     path: '/portal/companies',
     icon: Building2,
     badge: null,

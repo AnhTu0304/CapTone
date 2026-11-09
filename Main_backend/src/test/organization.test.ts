@@ -173,7 +173,7 @@ describe('Organization API CRUD, Status Lock/Unlock & Redis Cache Suite', () => 
       createdOrgSlug = org.slug;
 
       // Add memberId as VIEWER in this org for subsequent tests
-      const viewerRoleRes = await pool.query(`SELECT id FROM roles WHERE code = 'VIEWER'`);
+      const viewerRoleRes = await pool.query(`SELECT id FROM organization_roles WHERE code = 'VIEWER'`);
       if (viewerRoleRes.rows[0]) {
         await pool.query(
           `

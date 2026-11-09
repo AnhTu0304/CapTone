@@ -87,7 +87,7 @@ describe('Cụm API & DB Quản lý Cấu hình Ngưỡng Cảnh báo (Alert Rul
     await pool.query(`DELETE FROM alert_rules WHERE organization_id IN ($1, $2)`, [orgAId, orgBId]);
 
     // Role IDs
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     const devopsRoleId = rolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
     const viewerRoleId = rolesRes.rows.find((r) => r.code === 'VIEWER')?.id;
