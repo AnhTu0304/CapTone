@@ -3803,31 +3803,49 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
 
-              Trạng Thái Bình Thường
+              Nguy Cơ &amp; Dị Thường
 
             </span>
 
-            <ShieldCheck size={18} color="#10B981" />
+            <AlertTriangle size={18} color={isAgentConnected && (displayStats.total - (displayStats.by_type?.NORMAL || 0)) > 0 ? "#DC2626" : "#059669"} />
 
           </div>
 
-          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: isAgentConnected ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
-
-            {isAgentConnected && displayStats.total > 0
-
-              ? `${(((displayStats.by_type?.NORMAL || displayStats.total) / displayStats.total) * 100).toFixed(1)}%`
-
-              : '0%'}
-
-          </div>
-
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: isAgentConnected && (displayStats.total - (displayStats.by_type?.NORMAL || 0)) > 0 ? '#DC2626' : (isAgentConnected ? '#059669' : '#94A3B8'), fontFamily: 'var(--font-mono)' }}>
 
             {isAgentConnected
 
-              ? `${(displayStats.by_type?.NORMAL || displayStats.total).toLocaleString()} / ${displayStats.total.toLocaleString()} chu kỳ an toàn`
+              ? (displayStats.total - (displayStats.by_type?.NORMAL || 0)).toLocaleString()
 
-              : '0 / 0 chu kỳ an toàn'}
+              : 0}
+
+          </div>
+
+          <div style={{ fontSize: '0.75rem', color: isAgentConnected && (displayStats.total - (displayStats.by_type?.NORMAL || 0)) > 0 ? '#DC2626' : 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+
+            {isAgentConnected ? (
+
+              <>
+
+                <ShieldAlert size={13} />
+
+                <span>
+
+                  {displayStats.total > 0
+
+                    ? `${(((displayStats.total - (displayStats.by_type?.NORMAL || 0)) / displayStats.total) * 100).toFixed(1)}% chu kỳ phát hiện dị thường`
+
+                    : '0 chu kỳ phát hiện dị thường'}
+
+                </span>
+
+              </>
+
+            ) : (
+
+              '0 chu kỳ phát hiện dị thường'
+
+            )}
 
           </div>
 
@@ -3873,7 +3891,7 @@ export const PredictionsPage = () => {
 
                   : (noActionRecommendations.length > 0
 
-                      ? `${noActionRecommendations.length} đề xuất tự động an toàn (NO_ACTION)`
+                      ? '0 đề xuất đang chờ kích hoạt'
 
                       : '0 đề xuất đang chờ kích hoạt'))
 

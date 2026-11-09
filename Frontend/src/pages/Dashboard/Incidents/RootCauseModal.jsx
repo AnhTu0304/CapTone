@@ -559,12 +559,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // ========================================================
   // 1. TẦNG TRUY VẾT & QUẢN TRỊ HỆ THỐNG (Database Tracing)
   // ========================================================
-  const requestId = parsedAnalysis?.request_id || incidentDetail?.request_id || incident?.requestId || 'req-20261026-9ea1db42-7524';
-  const incidentIdStr = parsedAnalysis?.incident_id || incidentDetail?.id || incident?.rawId || incident?.id || 'inc-20261026-01265dc8-7e77';
-  const clusterIdStr = parsedAnalysis?.cluster_id || incidentDetail?.cluster_id || incident?.clusterId || incidentDetail?.cluster_name || incident?.cluster || '9ea1db42-7524-4238-8716-315cbe0d0b39';
-  const namespaceStr = parsedAnalysis?.namespace || incidentDetail?.namespace || incident?.namespace || 'test-lab';
-  const workloadIdStr = parsedAnalysis?.workload_id || incidentDetail?.target_id || incident?.workloadId || 'wl-7788-99aa-bbcc-ddeeff001122';
-  const analyzedAtStr = parsedAnalysis?.analyzed_at || incidentDetail?.analyzed_at || incidentDetail?.detected_at || incident?.detectedAt || '2026-10-26T16:12:05Z';
+  const incidentIdStr = incident?.id || incident?.rawId || parsedAnalysis?.incident_id || incidentDetail?.id || '';
+  const requestId = parsedAnalysis?.request_id || incidentDetail?.request_id || incident?.requestId || (incidentIdStr ? `req-${incidentIdStr.replace(/[^a-zA-Z0-9]/g, '').slice(-8)}` : 'req-live');
+  const clusterIdStr = incidentDetail?.cluster_name || incident?.cluster_name || incident?.cluster || parsedAnalysis?.cluster_id || incidentDetail?.cluster_id || 'fyuyu';
+  const namespaceStr = incident?.namespace || incidentDetail?.namespace || parsedAnalysis?.namespace || 'test-lab';
+  const workloadIdStr = incidentDetail?.target_id || parsedAnalysis?.workload_id || incident?.workloadId || incidentIdStr || '';
+  const analyzedAtStr = incidentDetail?.detected_at || incident?.detectedAt || parsedAnalysis?.analyzed_at || new Date().toISOString();
   const analysisDurationMs = parsedAnalysis?.analysis_duration_ms || incidentDetail?.analysis_duration_ms || 342;
 
   // ========================================================
@@ -581,19 +581,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     DISK_FULL: 0.75,
     SCALE_DOWN_CANDIDATE: 0.80,
   };
-  const detectedRisksList = gruPrediction?.detected_risks || [
-    { risk_type: 'OOM', confidence: 0.94 },
-    { risk_type: 'HIGH_LATENCY', confidence: 0.82 },
-    { risk_type: 'HTTP_5XX_SPIKE', confidence: 0.65 }
-  ];
-  const riskOutputsAll = gruPrediction?.risk_outputs || {
-    OOM: { confidence: 0.94 },
-    HIGH_LATENCY: { confidence: 0.82 },
-    HTTP_5XX_SPIKE: { confidence: 0.65 },
-    TRAFFIC_OVERLOAD: { confidence: 0.30 },
-    CPU_OVERLOAD: { confidence: 0.25 },
-    DISK_FULL: { confidence: 0.05 },
-    SCALE_DOWN_CANDIDATE: { confidence: 0.01 },
+  const detectedRisksList = gruPrediction?.detected_risks || incidentDetail?.detected_risks || [];
+  const riskOutputsAll = gruPrediction?.risk_outputs || incidentDetail?.risk_outputs || {
+    OOM: { confidence: 0 },
+    HIGH_LATENCY: { confidence: 0 },
+    HTTP_5XX_SPIKE: { confidence: 0 },
+    TRAFFIC_OVERLOAD: { confidence: 0 },
+    CPU_OVERLOAD: { confidence: 0 },
+    DISK_FULL: { confidence: 0 },
+    SCALE_DOWN_CANDIDATE: { confidence: 0 },
   };
 
   // ========================================================
@@ -652,14 +648,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   );
 
   const faultyPodName = rawActionParams.faulty_pod_name || rawActionParams.pod_name || recObj.target_name || incident?.service || serviceDisplayName;
-  const faultyPodId = rawActionParams.faulty_pod_id || rawActionParams.pod_id || recObj.target_id || incident?.id || 'pod-k8s-active';
-  const faultyPodUid = rawActionParams.faulty_pod_uid || incident?.workloadId || 'uid-k8s-pod';
+  const faultyPodId = rawActionParams.faulty_pod_id || rawActionParams.pod_id || recObj.target_id || incidentDetail?.target_id || incident?.id || '';
+  const faultyPodUid = rawActionParams.faulty_pod_uid || incidentDetail?.kubernetes_uid || '';
   const faultyNodeName = rawActionParams.faulty_node_name || recObj.target_node || incidentDetail?.node_name || 'minikube';
-  const faultyNodeId = rawActionParams.faulty_node_id || 'node-minikube-01';
-  const replicaSetRole = rawActionParams.replica_set_role || (isDbService ? 'PRIMARY' : 'Deployment (Stateless)');
-  const recDestNodeName = rawActionParams.recommended_destination_node_name || rawActionParams.recommended_destination_node || 'minikube';
-  const recDestNodeId = rawActionParams.recommended_destination_node_id || rawActionParams.destination_node_id || 'node-minikube-01';
-  const destFreeMemBytes = rawActionParams.destination_node_free_memory_bytes || 5872025600;
+  const faultyNodeId = rawActionParams.faulty_node_id || incidentDetail?.node_id || '';
+  const replicaSetRole = rawActionParams.replica_set_role || (isDbService ? 'StatefulSet (Stateful)' : 'Deployment (Stateless)');
+  const recDestNodeName = rawActionParams.recommended_destination_node_name || rawActionParams.recommended_destination_node || '';
+  const recDestNodeId = rawActionParams.recommended_destination_node_id || rawActionParams.destination_node_id || '';
+  const destFreeMemBytes = Number(rawActionParams.destination_node_free_memory_bytes || 0);
 
   const actionParams = {
     ...rawActionParams,
@@ -683,6 +679,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     if (Array.isArray(incident?.manualPlaybook) && incident.manualPlaybook.length > 0) {
       return incident.manualPlaybook;
     }
+    if (isCircuitBreakerTripped || recAction === 'NO_ACTION') {
+      const isDiskRisk = (rootCauseType || '').toLowerCase().includes('đĩa') || (rootCauseType || '').toLowerCase().includes('disk') || (rootCauseType || '').toLowerCase().includes('lưu trữ');
+      if (isDiskRisk) {
+        return [
+          `Bước 1 [Kiểm tra dung lượng]: Kiểm tra phân vùng ổ đĩa và tệp logs của pod: 'kubectl exec -it -n ${namespaceStr} ${faultyPodName} -- df -h'.`,
+          `Bước 2 [Dọn dẹp lưu trữ]: Dọn dẹp logs, tệp tạm trong emptyDir hoặc mở rộng dung lượng ổ đĩa PVC (PersistentVolumeClaim) trên Node.`,
+          `Bước 3 [Đóng sự cố]: Bấm nút 'Xác Nhận & Đóng Sự Cố' ở trên để mở lại Cầu dao tự động (Circuit Breaker) và xác nhận phục hồi.`
+        ];
+      }
+      return [
+        `Bước 1 [Kiểm tra nhật ký]: Kiểm tra logs container của ${serviceDisplayName} bằng lệnh 'kubectl logs -n ${namespaceStr} ${faultyPodName} --tail 50'.`,
+        `Bước 2 [Can thiệp thủ công]: Cầu dao tự động đang ngắt mạch để tránh CrashLoop; kỹ sư kiểm tra và xử lý nguyên nhân gốc rễ.`,
+        `Bước 3 [Mở lại cầu dao]: Bấm nút 'Xác Nhận & Đóng Sự Cố' ở trên để hoàn tất bàn giao và khôi phục chế độ tự động hóa.`
+      ];
+    }
     if (isDbService) {
       return [
         "Bước 1 [Kiểm tra kết nối]: Đăng nhập pod cơ sở dữ liệu và xác minh trạng thái cluster/replica quorum.",
@@ -691,11 +702,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       ];
     }
     return [
-      `Bước 1 [Kiểm tra nhật ký]: Kiểm tra logs container của ${serviceDisplayName} bằng lệnh 'kubectl logs -n test-lab ${faultyPodName} --tail 50'.`,
+      `Bước 1 [Kiểm tra nhật ký]: Kiểm tra logs container của ${serviceDisplayName} bằng lệnh 'kubectl logs -n ${namespaceStr} ${faultyPodName} --tail 50'.`,
       `Bước 2 [Thực thi khắc phục]: Áp dụng đề xuất '${recActionVi || recAction}' đối với deployment ${serviceDisplayName} để phân phối lại tải.`,
       `Bước 3 [Xác nhận SLO]: Theo dõi chỉ số latency và tỉ lệ HTTP 5xx trong 5 phút để bảo đảm dịch vụ đã phục hồi hoàn toàn.`
     ];
-  }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isDbService, serviceDisplayName, faultyPodName, recActionVi, recAction]);
+  }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isCircuitBreakerTripped, recAction, rootCauseType, namespaceStr, faultyPodName, serviceDisplayName, isDbService, recActionVi]);
   // hasActualPendingApproval & requiresApproval already initialized safely above
   const actionPriority = recObj?.priority || 'CRITICAL';
   const actionRiskLevel = recObj?.risk_level || 'HIGH';
@@ -711,7 +722,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // 7. LIÊN KẾT TRI THỨC LỊCH SỬ (Knowledge Base)
   // ========================================================
   const historicalContextUsed = parsedAnalysis?.historical_context_used !== undefined ? parsedAnalysis.historical_context_used : true;
-  const similarIncidentIds = parsedAnalysis?.similar_incident_ids || ["inc-20261015-0089", "inc-20261022-0041"];
+  const similarIncidentIds = Array.isArray(parsedAnalysis?.similar_incident_ids) ? parsedAnalysis.similar_incident_ids : [];
 
   // ========================================================
   // BỘ BIẾN HIỂN THỊ CHUẨN HÓA 100% TIẾNG VIỆT
@@ -989,28 +1000,38 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.75)',
-        backdropFilter: 'blur(5px)',
+        backgroundColor: 'rgba(15, 23, 42, 0.45)',
+        backdropFilter: 'blur(3px)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'flex-end',
+        alignItems: 'stretch',
         zIndex: 9999,
-        padding: '16px',
+        animation: 'rcaOverlayFadeIn 0.2s ease-out',
       }}
       onClick={onClose}
     >
+      <style>{`
+        @keyframes rcaOverlayFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes rcaSlideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
       <div
         style={{
           width: '100%',
-          maxWidth: '960px',
-          maxHeight: '94vh',
+          maxWidth: '820px',
+          height: '100vh',
           backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
-          boxShadow: '0 25px 60px -15px rgba(6, 95, 70, 0.35), 0 0 0 1px rgba(16, 185, 129, 0.25)',
+          boxShadow: '-10px 0 40px rgba(0, 0, 0, 0.16)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          animation: 'fadeIn 0.2s ease-out',
+          animation: 'rcaSlideInRight 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+          borderLeft: '1px solid #E2E8F0',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1059,7 +1080,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               </div>
               <div style={{ fontSize: '0.6875rem', color: '#D1FAE5', marginTop: '1px', fontWeight: 500 }}>
                 Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{serviceDisplayName}</strong> &bull; Cụm K8s:{' '}
-                <strong style={{ color: '#FFFFFF' }}>{incidentDetail?.cluster_name || incident?.cluster_name || incident?.cluster || 'các'}</strong> &bull; Độ tin cậy:{' '}
+                <strong style={{ color: '#FFFFFF' }}>{incidentDetail?.cluster_name || incident?.cluster_name || incident?.cluster || 'fyuyu'}</strong> &bull; Độ tin cậy:{' '}
                 <span
                   style={{
                     backgroundColor: detectedEngine.includes('OpenAI') ? 'rgba(16, 185, 129, 0.25)' : 'rgba(253, 230, 138, 0.25)',
@@ -1133,28 +1154,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
           <button
             type="button"
-            onClick={() => setActiveTab('causal')}
-            style={{
-              padding: '10px 14px',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              color: activeTab === 'causal' ? '#059669' : '#64748B',
-              border: 'none',
-              borderBottom: activeTab === 'causal' ? '2px solid #059669' : '2px solid transparent',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <GitBranch size={14} />
-            <span>2. Chuỗi Nhân Quả &amp; Bằng Chứng</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('io')}
             style={{
               padding: '10px 14px',
@@ -1172,12 +1171,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             }}
           >
             <Database size={14} />
-            <span>3. Viễn Trắc &amp; Dự Báo AI</span>
+            <span>2. Viễn Trắc &amp; Dự Báo AI</span>
           </button>
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '10px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', flex: '1 1 auto' }}>
+        <div style={{ padding: '0 24px 16px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', flex: '1 1 auto' }}>
 
 
           {/* TAB 1: OVERVIEW & PLAYBOOK */}
@@ -1188,10 +1187,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               {/* ======================================================== */}
               <div
                 style={{
-                  padding: '16px 18px',
-                  backgroundColor: isResolved ? '#F0FDF4' : isUnknownOrNoAction ? '#F8FAFC' : '#FEF2F2',
-                  borderRadius: '12px',
-                  border: isResolved ? '1px solid #BBF7D0' : isUnknownOrNoAction ? '1px solid #E2E8F0' : '1px solid #FECACA',
+                  padding: '16px 0',
+                  borderBottom: '1px solid #E2E8F0',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -1259,14 +1256,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 </div>
               </div>
 
-{/* ======================================================== */}
+              {/* ======================================================== */}
               <div
                 style={{
-                  padding: '16px 18px',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '12px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  padding: '16px 0',
+                  borderBottom: '1px solid #E2E8F0',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
@@ -1460,25 +1454,34 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <span>{faultyNodeName}</span>
                         <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 500 }}>({replicaSetRole})</span>
                       </div>
-                      <div style={{ fontSize: '0.625rem', color: '#94A3B8', marginTop: '2px' }}>
-                        UID: {faultyPodUid.substring(0, 18)}...
+                      <div style={{ fontSize: '0.625rem', color: '#166534', marginTop: '2px', fontWeight: 600 }}>
+                        Node: {faultyNodeName} (Ready)
                       </div>
                     </div>
 
-                    <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE AN TOÀN DỰ PHÒNG</div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669' }}>
-                        {recDestNodeName}
-                      </div>
-                      <div style={{ fontSize: '0.625rem', color: '#166534', marginTop: '2px' }}>
-                        RAM trống: <strong>{(destFreeMemBytes / 1024 / 1024 / 1024).toFixed(2)} GB</strong>
-                      </div>
-                    </div>
+                    {(() => {
+                      const hasFailover = recDestNodeName && recDestNodeName !== faultyNodeName && !recDestNodeName.includes('nkljojl');
+                      return (
+                        <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                          <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE AN TOÀN DỰ PHÒNG</div>
+                          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: hasFailover ? '#059669' : '#64748B' }}>
+                            {hasFailover ? recDestNodeName : 'Không có (Cụm đơn node)'}
+                          </div>
+                          <div style={{ fontSize: '0.625rem', color: hasFailover ? '#166534' : '#94A3B8', marginTop: '2px' }}>
+                            {hasFailover ? (
+                              <>RAM trống: <strong>{(destFreeMemBytes / 1024 / 1024 / 1024).toFixed(2)} GB</strong></>
+                            ) : (
+                              'Cụm Minikube 1 Node vật lý'
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div style={{ padding: '8px 10px', backgroundColor: isCircuitBreakerTripped ? '#FEF2F2' : '#F8FAFC', borderRadius: '6px', border: isCircuitBreakerTripped ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.625rem', color: isCircuitBreakerTripped ? '#991B1B' : '#64748B', fontWeight: 700 }}>ANTI-LOOP (CIRCUIT BREAKER)</div>
                       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isCircuitBreakerTripped ? '#DC2626' : '#059669' }}>
-                        {blockedActions.length > 0 ? `Khóa: ${blockedActions.join(', ')}` : 'Trạng thái: Không khóa'}
+                        {isCircuitBreakerTripped ? (blockedActions.length > 0 ? `Đang khóa: ${blockedActions.join(', ')}` : 'Đang khóa (Ngắt mạch an toàn)') : 'Trạng thái: Hoạt động bình thường'}
                       </div>
                       <div style={{ fontSize: '0.625rem', color: isCircuitBreakerTripped ? '#B91C1C' : '#64748B', marginTop: '2px' }}>
                         Đã thất bại: <strong>{consecutiveFailures} lần liên tiếp</strong>
@@ -1542,20 +1545,16 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               </div>
 
               {/* ======================================================== */}
-              {/* 7. LIÊN KẾT TRI THỨC LỊCH SỬ (Knowledge Base) */}
-                            {/* ======================================================== */}
               {/* 6. GIẢI TRÌNH CHI TIẾT DÀNH CHO BÁO CÁO INCIDENT */}
               {/* ======================================================== */}
               <div
                 style={{
-                  padding: '14px 16px',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
+                  padding: '16px 0',
+                  borderBottom: '1px solid #E2E8F0',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.71875rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ fontSize: '0.78125rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <FileText size={15} color="#059669" />
                     <span>BÁO CÁO GIẢI TRÌNH SRE (SRE INCIDENT REPORT)</span>
                   </div>
@@ -1601,10 +1600,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               {/* ======================================================== */}
               <div
                 style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
+                  padding: '14px 0',
+                  borderBottom: '1px solid #E2E8F0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -1650,198 +1647,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   )}
                 </div>
               </div>
+
             </>
           )}
 
-          {/* TAB 2: CAUSAL INFERENCE & 6 MULTI-TIER EVIDENCES */}
-          {activeTab === 'causal' && (
-            <>
-              {/* CHUỖI NHÂN QUẢ SUY DIỄN 4 BƯỚC */}
-              <div>
-                <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <GitBranch size={15} color="#059669" />
-                  <span>CHUỖI NHÂN QUẢ SUY DIỄN CỤ THỂ (CAUSAL INFERENCE CHAIN)</span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                  {causalChainSteps.map((step, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: '12px 14px',
-                        backgroundColor: '#F8FAFC',
-                        borderRadius: '10px',
-                        border: '1px solid #E2E8F0',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#059669' }}>
-                        {step.step}
-                      </div>
-                      <div style={{ fontSize: '0.78125rem', color: '#334155', marginTop: '4px', lineHeight: 1.45 }}>
-                        {step.desc}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ======================================================== */}
-              {/* 4. HỆ THỐNG 6 BẰNG CHỨNG XÁC THỰC ĐA TẦNG (EVIDENCE) */}
-              {/* ======================================================== */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <ShieldCheck size={16} color="#059669" />
-                    <span>HỆ THỐNG BẰNG CHỨNG XÁC THỰC ĐA TẦNG (MULTI-TIER EVIDENCE)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyText(multiTierEvidences.join('\n\n'), 'all_evidences')}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 10px',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      backgroundColor: '#F1F5F9',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {copiedKey === 'all_evidences' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'all_evidences' ? 'Đã sao chép 6 bằng chứng' : 'Sao chép toàn bộ'}</span>
-                  </button>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-                  {multiTierEvidences.map((evText, idx) => {
-                    const meta = getEvidenceMeta(evText, idx);
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          padding: '12px 14px',
-                          backgroundColor: meta.bg,
-                          border: `1px solid ${meta.border}`,
-                          borderRadius: '8px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', fontWeight: 800, color: meta.color }}>
-                            {meta.icon}
-                            <span>{meta.title}</span>
-                          </div>
-                          <span style={{ fontSize: '0.625rem', fontWeight: 700, color: meta.color, opacity: 0.8 }}>
-                            #{idx + 1}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: '#1E293B', lineHeight: 1.35 }}>
-                          {meta.desc}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* BẰNG CHỨNG VIỄN TRẮC & NHẬT KÝ THÔ CONTAINER */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Terminal size={15} color="#0284C7" />
-                    <span>NHẬT KÝ VIỄN TRẮC eBPF &amp; K8S EVENT INSPECTOR (RAW CONTAINER LOGS &amp; EVENTS)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sourceItems = rawLogsAndEvents.length > 0 ? rawLogsAndEvents : evidenceList;
-                      const logText = sourceItems
-                        .map((e) => `${e.timestamp ? `[${e.timestamp}] ` : ''}[${e.type}${e.level ? `:${e.level}` : ''}] (${e.ref}) ${e.summary}`)
-                        .join('\n');
-                      handleCopyText(logText, 'logs');
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 10px',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      backgroundColor: '#F1F5F9',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {copiedKey === 'logs' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'logs' ? 'Đã sao chép' : 'Sao chép nhật ký'}</span>
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    backgroundColor: '#0F172A',
-                    color: '#E2E8F0',
-                    padding: '14px 16px',
-                    borderRadius: '10px',
-                    fontSize: '0.75rem',
-                    lineHeight: 1.6,
-                    maxHeight: '220px',
-                    overflowY: 'auto',
-                    border: '1px solid #1E293B',
-                  }}
-                >
-                  <div style={{ color: '#94A3B8', marginBottom: '8px', borderBottom: '1px solid #1E293B', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                    <span># eBPF Kernel Probe &bull; Service: <strong style={{ color: '#38BDF8' }}>{serviceDisplayName}</strong> &bull; Namespace: <strong style={{ color: '#A7F3D0' }}>{namespaceStr}</strong></span>
-                    <span>RCA ID: {incidentDetail?.rca_id ? incidentDetail.rca_id.slice(0, 8) : (incident?.rawId ? incident?.rawId.slice(0, 8) : 'N/A')}</span>
-                  </div>
-
-                  {rawLogsAndEvents && rawLogsAndEvents.length > 0 ? (
-                    rawLogsAndEvents.map((ev, i) => {
-                      const isEvent = ev.type === 'K8S_EVENT';
-                      const isMetric = ev.type === 'eBPF_METRIC';
-                      const isErr = ev.level === 'ERROR' || ev.level === 'FATAL' || ev.level === 'WARNING';
-                      const badgeColor = isMetric ? '#A78BFA' : isEvent ? '#FB923C' : isErr ? '#F87171' : '#38BDF8';
-                      return (
-                        <div key={i} style={{ marginBottom: '6px', wordBreak: 'break-word' }}>
-                          {ev.timestamp && (
-                            <span style={{ color: '#64748B', marginRight: '6px' }}>[{ev.timestamp}]</span>
-                          )}
-                          <span style={{ color: badgeColor, fontWeight: 700 }}>
-                            [{ev.type}{ev.level ? `:${ev.level}` : ''}]
-                          </span>{' '}
-                          <span style={{ color: '#94A3B8' }}>({ev.ref}):</span>{' '}
-                          <span style={{ color: isMetric ? '#E9D5FF' : isErr ? '#FDE047' : '#E2E8F0' }}>
-                            {ev.summary}
-                          </span>
-                        </div>
-                      );
-                    })
-                  ) : evidenceList && evidenceList.length > 0 ? (
-                    evidenceList.map((ev, i) => (
-                      <div key={i} style={{ marginBottom: '6px' }}>
-                        <span style={{ color: '#38BDF8', fontWeight: 700 }}>[{ev.type}]</span>{' '}
-                        <span style={{ color: '#94A3B8' }}>({ev.ref}):</span>{' '}
-                        <span style={{ color: '#FDE047' }}>{translateSREText(ev.summary)}</span>{' '}
-                        <span style={{ color: '#A7F3D0', fontSize: '0.6875rem' }}>(Trọng số: {ev.score})</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ color: '#94A3B8', fontStyle: 'italic' }}>
-                      Đang đồng bộ luồng nhật ký container &amp; sự kiện K8s cho {serviceDisplayName}...
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* TAB 3: LLM I/O & GRU 7 HEADS */}
+          {/* TAB 2: LLM I/O & GRU 7 HEADS */}
           {activeTab === 'io' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* ======================================================== */}
