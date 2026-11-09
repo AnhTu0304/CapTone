@@ -41,7 +41,7 @@ describe('PersonalHeader Component - Remove "Về Dashboard" Button Suite', () =
 
     // Kiểm tra trang con khác: ví dụ /portal/companies
     render(<PersonalHeader currentPath="/portal/companies" />);
-    expect(screen.getAllByText('Company Của Tôi').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Công Ty Của Tôi').length).toBeGreaterThanOrEqual(1);
   });
 
   test('TC03: Nút Thông Báo vẫn hoạt động và điều hướng đến /portal/notifications', () => {

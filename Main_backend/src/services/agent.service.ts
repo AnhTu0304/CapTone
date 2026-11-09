@@ -2321,6 +2321,24 @@ export class AgentService {
               ]
             );
             if (nsId) existingWl.namespace_id = nsId;
+
+            await client.query(
+              `INSERT INTO deployments (workload_id, desired_replicas, available_replicas, ready_replicas, status, updated_at)
+               VALUES ($1, $2, $3, $4, $5, NOW())
+               ON CONFLICT (workload_id) DO UPDATE
+               SET desired_replicas = EXCLUDED.desired_replicas,
+                   available_replicas = EXCLUDED.available_replicas,
+                   ready_replicas = EXCLUDED.ready_replicas,
+                   status = EXCLUDED.status,
+                   updated_at = NOW()`,
+              [
+                existingWl.id,
+                dep.desired_replicas ?? 0,
+                dep.available_replicas ?? 0,
+                dep.ready_replicas ?? 0,
+                wlStatus,
+              ]
+            );
           } else {
             const insDep = await client.query(
               `INSERT INTO workloads (
@@ -2351,10 +2369,29 @@ export class AgentService {
               ]
             );
             if (insDep.rows[0]) {
+              const newWlId = insDep.rows[0].id;
               workloadMapByName[dep.name] = {
-                id: insDep.rows[0].id,
+                id: newWlId,
                 namespace_id: insDep.rows[0].namespace_id,
               };
+
+              await client.query(
+                `INSERT INTO deployments (workload_id, desired_replicas, available_replicas, ready_replicas, status, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())
+                 ON CONFLICT (workload_id) DO UPDATE
+                 SET desired_replicas = EXCLUDED.desired_replicas,
+                     available_replicas = EXCLUDED.available_replicas,
+                     ready_replicas = EXCLUDED.ready_replicas,
+                     status = EXCLUDED.status,
+                     updated_at = NOW()`,
+                [
+                  newWlId,
+                  dep.desired_replicas ?? 0,
+                  dep.available_replicas ?? 0,
+                  dep.ready_replicas ?? 0,
+                  wlStatus,
+                ]
+              );
             }
           }
         }

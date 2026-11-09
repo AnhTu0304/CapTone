@@ -254,8 +254,8 @@ export const DOCUMENTATION_DATA = [
     category: 'Doanh Nghiệp & Tổ Chức',
     summary: 'Hướng dẫn khởi tạo Company, phân quyền vai trò (Owner, DevOps, Viewer) và gửi email lời mời.',
     steps: [
-      'Bước 1: Truy cập mục "Company Của Tôi" trong Cổng Cá Nhân hoặc vào Bàn điều khiển Doanh Nghiệp.',
-      'Bước 2: Bấm nút "+ Tạo Company Mới", điền tên công ty, định danh slug URL và chọn gói dịch vụ.',
+      'Bước 1: Truy cập mục "Công Ty Của Tôi" trong Cổng Cá Nhân hoặc vào Bàn điều khiển Doanh Nghiệp.',
+      'Bước 2: Bấm nút "+ Tạo Company Mới", điền tên công ty và định danh slug URL.',
       'Bước 3: Tại tab "Thành Viên & Phân Quyền", chọn "+ Mời Thành Viên", nhập email công vụ và chỉ định vai trò (SME_OWNER, DEVOPS hoặc VIEWER).',
       'Bước 4: Thành viên nhận email thông báo và có thể bấm "Chấp Nhận" trực tiếp tại Trung tâm thông báo.',
     ],
@@ -417,24 +417,27 @@ export const personalPortalService = {
     let companies = [];
     let invitations = [];
     let recentActivities = [];
+    let recentNotifications = [];
+    let unreadNotifs = 0;
+    let twoFactorEnabled = false;
 
-    const [companiesRes, invitationsRes, activitiesRes] = await Promise.allSettled([
+    const [companiesRes, invitationsRes, activitiesRes, notifsRes, twoFactorRes] = await Promise.allSettled([
       this.fetchMyCompanies(),
       this.fetchMyInvitations(),
       this.fetchActivityHistory({ limit: 5 }),
+      this.fetchNotifications({ limit: 5 }),
+      this.get2FAStatus(),
     ]);
 
     if (companiesRes.status === 'fulfilled') {
       companies = companiesRes.value || [];
     } else {
-      console.warn('[personalPortalService] fetchMyCompanies lỗi:', companiesRes.reason);
       companies = this.getMyCompanies();
     }
 
     if (invitationsRes.status === 'fulfilled') {
       invitations = invitationsRes.value || [];
     } else {
-      console.warn('[personalPortalService] fetchMyInvitations lỗi:', invitationsRes.reason);
       invitations = this.getMyInvitations();
     }
 
@@ -444,11 +447,21 @@ export const personalPortalService = {
       recentActivities = this.getActivityHistory().slice(0, 5);
     }
 
-    const activeCompanies = companies.filter((c) => c.status === 'ACTIVE').length;
-    const notifs = this.getNotifications();
-    const unreadNotifs = notifs.filter((n) => !n.read).length;
-    const pendingInvitations = invitations.filter((i) => i.status === 'PENDING').length;
+    if (notifsRes.status === 'fulfilled') {
+      recentNotifications = notifsRes.value?.items || [];
+      unreadNotifs = notifsRes.value?.unread_count ?? recentNotifications.filter((n) => !n.read).length;
+    } else {
+      const localNotifs = this.getNotifications();
+      recentNotifications = localNotifs.slice(0, 5);
+      unreadNotifs = localNotifs.filter((n) => !n.read).length;
+    }
 
+    if (twoFactorRes.status === 'fulfilled') {
+      twoFactorEnabled = Boolean(twoFactorRes.value?.is_enabled);
+    }
+
+    const activeCompanies = companies.filter((c) => c.status === 'ACTIVE').length;
+    const pendingInvitations = invitations.filter((i) => i.status === 'PENDING').length;
     const recentCompany = companies[0] || null;
 
     return {
@@ -461,6 +474,8 @@ export const personalPortalService = {
         pendingInvitations,
         recentCompany,
         recentActivities,
+        recentNotifications,
+        twoFactorEnabled,
       },
     };
   },
@@ -501,7 +516,7 @@ export const personalPortalService = {
     }
   },
 
-  async createCompany({ name, slug, plan = 'SME Starter', domain, description }) {
+  async createCompany({ name, slug, domain, description }) {
     const token = getAuthToken();
     if (token) {
       const res = await request('/organizations', {
@@ -523,7 +538,6 @@ export const personalPortalService = {
       id: `org-${Date.now().toString(36)}`,
       name: name.trim(),
       slug: (slug || name).trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
-      plan,
       status: 'ACTIVE',
       role: 'SME_OWNER',
       roleTitle: 'Chủ Doanh Nghiệp (Owner)',
@@ -905,6 +919,37 @@ export const personalPortalService = {
   },
 
   // ================= 5. NOTIFICATIONS =================
+  async fetchNotifications(params = {}) {
+    const token = getAuthToken();
+    if (!token) {
+      const local = this.getNotifications();
+      return { items: local, total: local.length, unread_count: local.filter((n) => !n.read).length };
+    }
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.type && params.type !== 'ALL') queryParams.set('type', params.type);
+      if (params.unreadOnly) queryParams.set('unreadOnly', 'true');
+      if (params.limit) queryParams.set('limit', String(params.limit));
+      if (params.page) queryParams.set('page', String(params.page));
+
+      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
+      const response = await request(`/users/me/notifications${queryStr}`);
+      if (response && response.success && response.data) {
+        const items = response.data.items || [];
+        localStorage.setItem(STORAGE_PERSONAL_NOTIFS_KEY, JSON.stringify(items));
+        return response.data;
+      }
+    } catch (err) {
+      console.warn('[personalPortalService] Lỗi tải thông báo từ server:', err);
+    }
+    const localNotifs = this.getNotifications();
+    return {
+      items: localNotifs,
+      total: localNotifs.length,
+      unread_count: localNotifs.filter((n) => !n.read).length,
+    };
+  },
+
   getNotifications() {
     try {
       const raw = localStorage.getItem(STORAGE_PERSONAL_NOTIFS_KEY);
@@ -921,21 +966,36 @@ export const personalPortalService = {
     }
   },
 
-  markAsRead(notifId) {
+  async markAsRead(notifId) {
+    try {
+      await request(`/users/me/notifications/${notifId}/read`, { method: 'PATCH' });
+    } catch (e) {
+      console.warn('Lỗi markAsRead server:', e);
+    }
     const notifs = this.getNotifications();
-    const updated = notifs.map((n) => (n.id === notifId ? { ...n, read: true } : n));
+    const updated = notifs.map((n) => (n.id === notifId ? { ...n, read: true, is_read: true } : n));
     localStorage.setItem(STORAGE_PERSONAL_NOTIFS_KEY, JSON.stringify(updated));
     return updated;
   },
 
-  markAllAsRead() {
+  async markAllAsRead() {
+    try {
+      await request('/users/me/notifications/read-all', { method: 'PATCH' });
+    } catch (e) {
+      console.warn('Lỗi markAllAsRead server:', e);
+    }
     const notifs = this.getNotifications();
-    const updated = notifs.map((n) => ({ ...n, read: true }));
+    const updated = notifs.map((n) => ({ ...n, read: true, is_read: true }));
     localStorage.setItem(STORAGE_PERSONAL_NOTIFS_KEY, JSON.stringify(updated));
     return updated;
   },
 
-  deleteNotification(notifId) {
+  async deleteNotification(notifId) {
+    try {
+      await request(`/users/me/notifications/${notifId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn('Lỗi deleteNotification server:', e);
+    }
     const notifs = this.getNotifications();
     const updated = notifs.filter((n) => n.id !== notifId);
     localStorage.setItem(STORAGE_PERSONAL_NOTIFS_KEY, JSON.stringify(updated));

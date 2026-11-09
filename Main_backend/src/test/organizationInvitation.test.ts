@@ -41,7 +41,7 @@ describe('Invitation, Acceptance, Role Management & Session Revocation API Suite
     await testRedisConnection();
 
     // 2. Fetch Organization Role IDs
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     devopsRoleId = rolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
     viewerRoleId = rolesRes.rows.find((r) => r.code === 'VIEWER')?.id;

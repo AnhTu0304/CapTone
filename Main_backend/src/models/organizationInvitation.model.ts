@@ -129,7 +129,7 @@ export class OrganizationInvitationModel {
         r.name AS role_name
       FROM organization_invitations oi
       JOIN organizations o ON oi.organization_id = o.id
-      JOIN roles r ON oi.role_id = r.id
+      JOIN organization_roles r ON oi.role_id = r.id
       WHERE oi.token_hash = $1
       LIMIT 1;
     `;
@@ -154,7 +154,7 @@ export class OrganizationInvitationModel {
         inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
       FROM organization_invitations oi
       JOIN organizations o ON oi.organization_id = o.id
-      JOIN roles r ON oi.role_id = r.id
+      JOIN organization_roles r ON oi.role_id = r.id
       LEFT JOIN users inv ON oi.invited_by = inv.id
       WHERE oi.id = $1 AND oi.organization_id = $2
       LIMIT 1;
@@ -283,7 +283,7 @@ export class OrganizationInvitationModel {
         inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
       FROM organization_invitations oi
       JOIN organizations o ON oi.organization_id = o.id
-      JOIN roles r ON oi.role_id = r.id
+      JOIN organization_roles r ON oi.role_id = r.id
       LEFT JOIN users inv ON oi.invited_by = inv.id
       WHERE ${conditions.join(' AND ')}
       ORDER BY oi.created_at DESC

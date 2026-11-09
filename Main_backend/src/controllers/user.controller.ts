@@ -326,4 +326,58 @@ export class UserController {
     }
   }
 
+
+  public static async getMyNotifications(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
+
+      const { type, unreadOnly, limit, page } = req.query;
+      const result = await UserService.getMyNotifications(userId, {
+        type: type as string,
+        unreadOnly: unreadOnly === 'true' || unreadOnly === '1',
+        limit: limit ? parseInt(limit as string, 10) : 20,
+        page: page ? parseInt(page as string, 10) : 1,
+      });
+
+      return ApiResponse.success(res, 'Lấy danh sách thông báo thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async markNotificationAsRead(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      const { id } = req.params;
+      const result = await UserService.markNotificationAsRead(userId, id);
+      return ApiResponse.success(res, 'Đánh dấu thông báo đã đọc thành công', result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async markAllNotificationsAsRead(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      const count = await UserService.markAllNotificationsAsRead(userId);
+      return ApiResponse.success(res, 'Đã đánh dấu tất cả thông báo đã đọc', { count }, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async deleteNotification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      const { id } = req.params;
+      await UserService.deleteNotification(userId, id);
+      return ApiResponse.success(res, 'Xóa thông báo thành công', null, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }

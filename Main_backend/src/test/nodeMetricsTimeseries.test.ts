@@ -67,7 +67,7 @@ describe('Cụm API Truy vấn Chuỗi Thời Gian Node Metrics (CPU, RAM, Disk,
     await testRedisConnection();
     await MetricModel.ensureNodeMetricsTable();
 
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
 
     // Clean any leftover test data

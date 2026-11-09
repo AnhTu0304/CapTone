@@ -40,7 +40,7 @@ describe('RBAC Verification Suite (Admin, DevOps, Viewer)', () => {
 
     // 2. Fetch role IDs
     const srRes = await pool.query(`SELECT id, name FROM system_roles WHERE name IN ('SUPER_ADMIN', 'ADMIN', 'USER')`);
-    const rRes = await pool.query(`SELECT id, code FROM roles WHERE code IN ('DEVOPS', 'VIEWER')`);
+    const rRes = await pool.query(`SELECT id, code FROM organization_roles WHERE code IN ('DEVOPS', 'VIEWER')`);
 
     const superAdminRoleId = srRes.rows.find(r => r.name === 'SUPER_ADMIN')?.id;
     const adminRoleId = srRes.rows.find(r => r.name === 'ADMIN')?.id;

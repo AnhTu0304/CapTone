@@ -110,7 +110,7 @@ describe('PersonalSidebar Component - Company Count Badge & Nav Suite', () => {
 
     // 4. Giữ nguyên toàn bộ 8 mục Chức Năng Cá Nhân
     expect(screen.getByText('Bảng Điều Khiển')).toBeInTheDocument();
-    expect(screen.getByText('Company Của Tôi')).toBeInTheDocument();
+    expect(screen.getByText('Công Ty Của Tôi')).toBeInTheDocument();
     expect(screen.getByText('Hồ Sơ Cá Nhân')).toBeInTheDocument();
     expect(screen.getByText('Bảo Mật Tài Khoản')).toBeInTheDocument();
     expect(screen.getByText('Tùy Chỉnh Cá Nhân')).toBeInTheDocument();

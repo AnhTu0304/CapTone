@@ -44,7 +44,7 @@ describe('Cluster Management, RBAC & Agent Token Lifecycle Suite [PB12 3.1]', ()
     await testRedisConnection();
 
     // 1. Roles
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     const devopsRoleId = rolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
     const viewerRoleId = rolesRes.rows.find((r) => r.code === 'VIEWER')?.id;

@@ -102,7 +102,7 @@ describe('Rule Engine Đánh giá Quy tắc, Phát hiện Ngưỡng K8s/APM & V�
     ]);
 
     // 2. Fetch role IDs
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const roleMap = new Map<string, string>();
     for (const r of rolesRes.rows) {
       roleMap.set(r.code, r.id);

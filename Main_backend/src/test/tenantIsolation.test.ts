@@ -46,7 +46,7 @@ describe('Tenant Data Isolation & Security Enforcement Suite (TC-01 to TC-10)', 
   before(async () => {
     await testRedisConnection();
 
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     devopsRoleId = rolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
 
@@ -236,7 +236,7 @@ describe('Tenant Data Isolation & Security Enforcement Suite (TC-01 to TC-10)', 
     const memberCheck = await pool.query(
       `SELECT om.status, r.code AS role_code
        FROM organization_members om
-       JOIN roles r ON om.role_id = r.id
+       JOIN organization_roles r ON om.role_id = r.id
        WHERE om.organization_id = $1 AND om.user_id = $2`,
       [createdOrgABySuperId, superAdminId]
     );

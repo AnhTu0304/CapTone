@@ -431,7 +431,6 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   <th style={{ padding: '12px', fontWeight: 700 }}>Trạng Thái & Nhịp Tim</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>Phiên Bản</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>CPU / RAM</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Đầu Dò Nhân eBPF</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>Token Hoạt Động</th>
                   <th style={{ padding: '12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
                 </tr>
@@ -497,22 +496,6 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                         ) : (
                           <span style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>N/A (Ngoại tuyến)</span>
                         )}
-                      </td>
-                      <td style={{ padding: '14px 12px' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            backgroundColor: isOnline ? 'var(--dash-mint-100)' : '#F1F5F9',
-                            color: isOnline ? 'var(--dash-mint-600)' : '#64748B',
-                            borderRadius: 'var(--dash-radius-full)',
-                            fontSize: '0.6875rem',
-                            fontWeight: 600,
-                            border: isOnline ? '1px solid var(--dash-mint-200)' : '1px solid #CBD5E1',
-                          }}
-                        >
-                          {isOnline ? 'socket, tcp_drop, sys_enter, kprobe' : 'Chưa kích hoạt'}
-                        </span>
                       </td>
                       <td style={{ padding: '14px 12px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
                         {agent.active_tokens_count ?? 1} token hợp lệ

@@ -187,7 +187,7 @@ export class SystemRoleModel {
                 UNION
                 SELECT r.code AS name
                 FROM organization_members om
-                JOIN roles r ON om.role_id = r.id
+                JOIN organization_roles r ON om.role_id = r.id
                 WHERE om.user_id = $1 AND om.status != 'REMOVED'
             ) all_roles
             WHERE UPPER(all_roles.name) = ANY($2::text[])

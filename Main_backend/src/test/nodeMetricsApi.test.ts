@@ -129,7 +129,7 @@ describe('API Tiếp nhận, Lưu trữ & Truy vấn Node Metrics Suite [S3][PB1
     await testRedisConnection();
     await MetricModel.ensureNodeMetricsTable();
 
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
 
     // Clean any leftover test data

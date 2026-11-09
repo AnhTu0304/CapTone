@@ -324,7 +324,7 @@ export class AuditService {
       LEFT JOIN LATERAL (
         SELECT r.code AS member_role
         FROM organization_members om
-        JOIN roles r ON om.role_id = r.id
+        JOIN organization_roles r ON om.role_id = r.id
         WHERE om.user_id = a.user_id 
           AND (om.organization_id = a.organization_id OR a.organization_id IS NULL)
           AND om.status = 'ACTIVE'
@@ -383,7 +383,7 @@ export class AuditService {
       LEFT JOIN LATERAL (
         SELECT r.code AS member_role
         FROM organization_members om
-        JOIN roles r ON om.role_id = r.id
+        JOIN organization_roles r ON om.role_id = r.id
         WHERE om.user_id = a.user_id 
           AND (om.organization_id = a.organization_id OR a.organization_id IS NULL)
           AND om.status = 'ACTIVE'

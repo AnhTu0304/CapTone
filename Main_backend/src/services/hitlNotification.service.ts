@@ -114,7 +114,7 @@ export class HitlNotificationService {
         SELECT DISTINCT u.id, u.email, u.full_name, r.code AS role_code
         FROM organization_members om
         JOIN users u ON u.id = om.user_id
-        JOIN roles r ON r.id = om.role_id
+        JOIN organization_roles r ON r.id = om.role_id
         WHERE om.organization_id = $1
           AND om.status = 'ACTIVE'
           AND u.status = 'ACTIVE'
@@ -301,7 +301,7 @@ export class HitlNotificationService {
       // Kiểm tra xem user có phải là SME_OWNER / DEVOPS của org hoặc SUPER_ADMIN
       const rbacCheck = await pool.query(
         `SELECT 1 FROM organization_members om
-         JOIN roles r ON r.id = om.role_id
+         JOIN organization_roles r ON r.id = om.role_id
          WHERE om.organization_id = $1 AND om.user_id = $2 AND om.status = 'ACTIVE' AND r.code IN ('SME_OWNER', 'DEVOPS')
          UNION
          SELECT 1 FROM user_system_roles usr

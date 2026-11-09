@@ -70,7 +70,7 @@ describe('Comprehensive RBAC Matrix & Tenant Guard Suite [PB08 4.2]', () => {
       await pool.query(`INSERT INTO user_system_roles (user_id, system_role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;`, [adminId, adminRoleId]);
     }
 
-    const orgRolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const orgRolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = orgRolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     const devopsRoleId = orgRolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
     const viewerRoleId = orgRolesRes.rows.find((r) => r.code === 'VIEWER')?.id;

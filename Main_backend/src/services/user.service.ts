@@ -227,7 +227,7 @@ export class UserService {
             } else if (roleUpper === 'SME_OWNER') {
                 conditions.push(`EXISTS (
                     SELECT 1 FROM organization_members om 
-                    JOIN roles r ON om.role_id = r.id 
+                    JOIN organization_roles r ON om.role_id = r.id 
                     WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code IN ('SME_OWNER', 'OWNER')
                 ) AND NOT EXISTS (
                     SELECT 1 FROM user_system_roles usr 
@@ -237,7 +237,7 @@ export class UserService {
             } else if (roleUpper === 'DEVOPS') {
                 conditions.push(`EXISTS (
                     SELECT 1 FROM organization_members om 
-                    JOIN roles r ON om.role_id = r.id 
+                    JOIN organization_roles r ON om.role_id = r.id 
                     WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code = 'DEVOPS'
                 ) AND NOT EXISTS (
                     SELECT 1 FROM user_system_roles usr 
@@ -245,7 +245,7 @@ export class UserService {
                     WHERE usr.user_id = users.id AND sr.name IN ('SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN')
                 ) AND NOT EXISTS (
                     SELECT 1 FROM organization_members om 
-                    JOIN roles r ON om.role_id = r.id 
+                    JOIN organization_roles r ON om.role_id = r.id 
                     WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code IN ('SME_OWNER', 'OWNER')
                 )`);
             } else if (roleUpper === 'VIEWER') {
@@ -255,7 +255,7 @@ export class UserService {
                     WHERE usr.user_id = users.id AND sr.name IN ('SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN')
                 ) AND NOT EXISTS (
                     SELECT 1 FROM organization_members om 
-                    JOIN roles r ON om.role_id = r.id 
+                    JOIN organization_roles r ON om.role_id = r.id 
                     WHERE om.user_id = users.id AND om.status != 'REMOVED' AND r.code IN ('SME_OWNER', 'OWNER', 'DEVOPS')
                 )`);
             }
@@ -451,8 +451,8 @@ export class UserService {
 
         const conditions: string[] = [
             "(a.user_id = $1 OR (a.target_type = 'USER' AND a.target_id = $1))",
-            "(a.resource_type IS NULL OR a.resource_type != 'HEALING_ACTION')",
-            "(a.action NOT LIKE 'REMEDIATION_%' AND a.action NOT LIKE 'CIRCUIT_BREAKER_%' AND a.action NOT LIKE 'AUTONOMOUS_HEALING_%' AND a.action NOT LIKE 'HITL_%')"
+            "(a.action NOT LIKE 'ACCESS_DENIED_%')",
+            "(a.action NOT LIKE 'REMEDIATION_%' AND a.action NOT LIKE 'CIRCUIT_BREAKER_%' AND a.action NOT LIKE 'AUTONOMOUS_HEALING_%')"
         ];
         const params: any[] = [userId];
         let pIndex = 2;
@@ -509,9 +509,9 @@ export class UserService {
             } else if (action.includes('2FA') || action.includes('PASSWORD') || action.includes('TOKEN')) {
                 category = 'SECURITY';
                 title = action.includes('2FA') ? 'Bảo mật xác thực hai yếu tố (2FA)' : (action.includes('PASSWORD') ? 'Đổi mật khẩu tài khoản' : (action.includes('TOKEN') ? 'Xoay vòng Token Agent' : 'Bảo mật tài khoản'));
-            } else if (action.includes('ORG') || action.includes('MEMBER') || action.includes('INVITATION') || action.includes('CLUSTER') || action.includes('CONFIG') || action.includes('AGENT') || action.includes('POLICY')) {
+            } else if (action.includes('ORG') || action.includes('MEMBER') || action.includes('INVITATION') || action.includes('CLUSTER') || action.includes('CONFIG') || action.includes('AGENT') || action.includes('POLICY') || action.includes('HITL')) {
                 category = 'COMPANY';
-                title = action.includes('ORG_CREATED') ? 'Khởi tạo Company mới' : (action.includes('ORG_UPDATED') ? 'Cập nhật hồ sơ tổ chức' : (action.includes('CLUSTER_CREATED') ? 'Đăng ký Cụm Kubernetes' : (action.includes('CONFIG') ? 'Cập nhật cấu hình Agent' : (action.includes('AGENT') ? 'Kết nối Tác tử Agent' : 'Thao tác tổ chức & hạ tầng'))));
+                title = action.includes('ORG_CREATED') ? 'Khởi tạo Company mới' : (action.includes('ORG_UPDATED') ? 'Cập nhật hồ sơ tổ chức' : (action.includes('CLUSTER_CREATED') ? 'Đăng ký Cụm Kubernetes' : (action.includes('CONFIG') ? 'Cập nhật cấu hình Agent' : (action.includes('AGENT') ? 'Kết nối Tác tử Agent' : (action.includes('HITL') ? 'Phê duyệt tự phục hồi (HITL)' : 'Thao tác tổ chức & hạ tầng')))));
             }
 
             const d = new Date(r.created_at);
@@ -541,7 +541,7 @@ export class UserService {
                 userAgent: r.user_agent || null,
                 category,
                 status: r.status === 'SUCCESS' ? 'SUCCESS' : (r.status === 'FAILURE' ? 'FAILED' : r.status),
-                organizationName: r.organization_name || (r.metadata && r.metadata.organization_name) || null,
+                organizationName: (category === 'AUTH' || category === 'PROFILE' || (category === 'SECURITY' && !action.includes('TOKEN'))) ? null : (r.organization_name || (r.metadata && r.metadata.organization_name) || null),
                 clusterName: (() => {
                     let clName = r.cluster_name || (r.metadata && r.metadata.cluster_name) || null;
                     if (!clName && r.description) {
@@ -555,4 +555,103 @@ export class UserService {
 
         return { items, total, page, limit };
     }
+
+    public static async getMyNotifications(
+        userId: string,
+        query: { type?: string; unreadOnly?: boolean; limit?: number; page?: number }
+    ): Promise<{ items: any[]; total: number; unread_count: number; page: number; limit: number }> {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
+        const offset = (page - 1) * limit;
+
+        const checkCount = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM notifications WHERE user_id = $1', [userId]);
+        if (parseInt(checkCount.rows[0]?.count || '0', 10) === 0) {
+            await pool.query(`
+                INSERT INTO notifications (user_id, notification_type, title, message, severity, is_read, created_at)
+                VALUES 
+                ($1, 'SYSTEM', 'Chào mừng bạn đến với Nền Tảng Tự Phục Hồi AI (AI SRE Platform)', 'Hệ thống đã kích hoạt thành công hồ sơ cá nhân của bạn. Bạn có thể theo dõi viễn trắc eBPF, phê duyệt tự phục hồi HITL và quản lý Company.', 'INFO', FALSE, NOW() - INTERVAL '10 minutes'),
+                ($1, 'SECURITY', 'Khuyến nghị bảo mật: Kích hoạt Xác thực 2 bước (2FA)', 'Bảo vệ tài khoản cá nhân của bạn bằng mã TOTP (Google Authenticator / Authy) tại mục Bảo Mật Tài Khoản.', 'WARNING', FALSE, NOW() - INTERVAL '1 hour'),
+                ($1, 'SYSTEM', 'Cụm Kubernetes & Tác tử eBPF đang hoạt động', 'Tác tử fyuyu-ebpf-agent trên cụm minikube đang trực tuyến và gửi viễn trắc chu kỳ 3s liên tục.', 'SUCCESS', TRUE, NOW() - INTERVAL '1 day')
+            `, [userId]);
+        }
+
+        const conditions: string[] = ['user_id = $1'];
+        const params: any[] = [userId];
+        let pIndex = 2;
+
+        if (query.type && query.type !== 'ALL') {
+            conditions.push('notification_type = $' + pIndex);
+            params.push(query.type.toUpperCase());
+            pIndex++;
+        }
+
+        if (query.unreadOnly) {
+            conditions.push('is_read = FALSE');
+        }
+
+        const whereSql = conditions.join(' AND ');
+        const countRes = await pool.query<{ total: number }>('SELECT COUNT(*)::int AS total FROM notifications WHERE ' + whereSql, params);
+        const total = countRes.rows[0]?.total || 0;
+
+        const unreadRes = await pool.query<{ unread: number }>('SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = $1 AND is_read = FALSE', [userId]);
+        const unread_count = unreadRes.rows[0]?.unread || 0;
+
+        const limitIndex = pIndex++;
+        const offsetIndex = pIndex++;
+        const dataRes = await pool.query(
+            'SELECT id, notification_type, title, message, severity, is_read, created_at, read_at ' +
+            'FROM notifications ' +
+            'WHERE ' + whereSql + ' ' +
+            'ORDER BY created_at DESC ' +
+            'LIMIT $' + limitIndex + ' OFFSET $' + offsetIndex,
+            [...params, limit, offset]
+        );
+
+        const items = dataRes.rows.map((r: any) => {
+            const d = new Date(r.created_at);
+            let timestamp = '';
+            try {
+                timestamp = d.toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false }).replace(',', '');
+            } catch {
+                timestamp = d.toISOString();
+            }
+
+            return {
+                id: r.id,
+                type: r.notification_type,
+                title: r.title,
+                message: r.message,
+                description: r.message,
+                severity: r.severity || 'INFO',
+                read: Boolean(r.is_read),
+                is_read: Boolean(r.is_read),
+                createdAt: r.created_at,
+                timestamp,
+            };
+        });
+
+        return { items, total, unread_count, page, limit };
+    }
+
+    public static async markNotificationAsRead(userId: string, notifId: string): Promise<any> {
+        const res = await pool.query(
+            'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *',
+            [notifId, userId]
+        );
+        return res.rows[0] || null;
+    }
+
+    public static async markAllNotificationsAsRead(userId: string): Promise<number> {
+        const res = await pool.query(
+            'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE user_id = $1 AND is_read = FALSE',
+            [userId]
+        );
+        return res.rowCount || 0;
+    }
+
+    public static async deleteNotification(userId: string, notifId: string): Promise<boolean> {
+        const res = await pool.query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [notifId, userId]);
+        return (res.rowCount || 0) > 0;
+    }
+
 }

@@ -218,7 +218,7 @@ export class OrganizationModel {
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $${paramIndex}
-      LEFT JOIN roles r ON cur_om.role_id = r.id
+      LEFT JOIN organization_roles r ON cur_om.role_id = r.id
       ${whereClause}
       ORDER BY o.${sortBy} ${order}
       LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2};
@@ -351,7 +351,7 @@ export class OrganizationModel {
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $2
-      LEFT JOIN roles r ON cur_om.role_id = r.id
+      LEFT JOIN organization_roles r ON cur_om.role_id = r.id
       WHERE o.id = $1 AND o.deleted_at IS NULL
       LIMIT 1;
     `;
@@ -490,7 +490,7 @@ export class OrganizationModel {
         ) AS workloads_count
       FROM organizations o
       JOIN organization_members cur_om ON o.id = cur_om.organization_id
-      JOIN roles r ON cur_om.role_id = r.id
+      JOIN organization_roles r ON cur_om.role_id = r.id
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       WHERE cur_om.user_id = $1 
         AND cur_om.status = 'ACTIVE' 
@@ -569,7 +569,7 @@ export class OrganizationModel {
         inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
       FROM organization_invitations oi
       JOIN organizations o ON oi.organization_id = o.id
-      JOIN roles r ON oi.role_id = r.id
+      JOIN organization_roles r ON oi.role_id = r.id
       LEFT JOIN users inv ON oi.invited_by = inv.id
       JOIN user_info ui ON LOWER(oi.email) = ui.email
       WHERE oi.status = 'PENDING'
@@ -583,7 +583,7 @@ export class OrganizationModel {
         inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
       FROM organization_members om
       JOIN organizations o ON om.organization_id = o.id
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       LEFT JOIN users inv ON om.invited_by = inv.id
       WHERE om.user_id = $1 
         AND om.status = 'INVITED' 

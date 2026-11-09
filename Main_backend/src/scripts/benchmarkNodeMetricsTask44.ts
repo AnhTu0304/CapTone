@@ -92,7 +92,7 @@ async function runBenchmark() {
   try {
     console.log('=== [Task 4.4 Performance Benchmark] Setting up isolated 10,000-point dataset ===');
 
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
 
     await pool.query(

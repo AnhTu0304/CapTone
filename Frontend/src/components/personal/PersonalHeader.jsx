@@ -20,7 +20,7 @@ export const PersonalHeader = ({
 
   // Compute breadcrumb title based on path
   const getPageTitle = () => {
-    if (currentPath.includes('/companies')) return 'Company Của Tôi';
+    if (currentPath.includes('/companies')) return 'Công Ty Của Tôi';
     if (currentPath.includes('/profile')) return 'Hồ Sơ Cá Nhân';
     if (currentPath.includes('/security')) return 'Bảo Mật Tài Khoản';
     if (currentPath.includes('/preferences')) return 'Tùy Chỉnh Cá Nhân (Preferences)';

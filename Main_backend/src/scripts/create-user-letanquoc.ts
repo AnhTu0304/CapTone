@@ -62,7 +62,7 @@ async function createSuperAdmin() {
 
     // 4. Gán quyền SME_OWNER vào tổ chức mẫu CapTone Secure Workspace (nếu có)
     const orgRes = await client.query("SELECT id FROM organizations WHERE name ILIKE '%CapTone Secure Workspace%' LIMIT 1");
-    const smeRoleRes = await client.query("SELECT id FROM roles WHERE code = 'SME_OWNER' LIMIT 1");
+    const smeRoleRes = await client.query("SELECT id FROM organization_roles WHERE code = 'SME_OWNER' LIMIT 1");
 
     if (orgRes.rows.length > 0 && smeRoleRes.rows.length > 0) {
       const orgId = orgRes.rows[0].id;

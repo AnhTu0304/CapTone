@@ -67,7 +67,7 @@ describe('Kiểm thử Tích hợp Giao diện, Cấu hình Ngưỡng & Kích ho
     await pool.query(`DELETE FROM organizations WHERE id = $1`, [orgAId]);
     await pool.query(`DELETE FROM users WHERE id IN ($1, $2)`, [ownerAId, viewerAId]);
 
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const roleMap = new Map<string, string>();
     for (const r of rolesRes.rows) {
       roleMap.set(r.code, r.id);

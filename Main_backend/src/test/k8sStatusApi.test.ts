@@ -53,7 +53,7 @@ describe('Kubernetes Status API Suite: Node, Pod, Deployment & Replica [S3][PB14
     await testRedisConnection();
     await K8sStatusService.ensureStatusColumns();
 
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     const viewerRoleId = rolesRes.rows.find((r) => r.code === 'VIEWER')?.id;
     const srRes = await pool.query(`SELECT id, name FROM system_roles WHERE name = 'SUPER_ADMIN'`);
