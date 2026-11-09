@@ -21,7 +21,7 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
       }}
     >
       {/* Desktop Sidebar */}
-      <div className="dashboard-desktop-sidebar" style={{ display: 'flex', height: '100%' }}>
+      <div className="dashboard-desktop-sidebar" style={{ display: 'flex', height: '100%', position: 'relative', zIndex: 40 }}>
         <Sidebar currentPath={currentPath} />
       </div>
 

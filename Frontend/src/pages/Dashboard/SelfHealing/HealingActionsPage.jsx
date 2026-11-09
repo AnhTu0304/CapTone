@@ -286,7 +286,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
       const protocol = isSecure ? 'wss:' : 'ws:';
       let host = window.location.host;
       if (window.location.port === '3000' || window.location.port === '3001') {
-        host = `${window.location.hostname}:5000`;
+        const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? '127.0.0.1'
+          : window.location.hostname;
+        host = `${targetHost}:5000`;
       }
       const token =
         localStorage.getItem('selfheal_auth_token') ||

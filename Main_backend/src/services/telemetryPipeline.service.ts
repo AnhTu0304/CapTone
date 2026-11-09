@@ -1,3 +1,4 @@
+import { TelemetryBufferService } from './telemetryBuffer.service';
 import { AuditService } from './audit.service';
 import { HitlNotificationService } from './hitlNotification.service';
 import { TelemetryAggregatorService } from './telemetryAggregator.service';
@@ -26,7 +27,7 @@ export class TelemetryPipelineService {
 
     this.intervalHandle = setInterval(async () => {
       try {
-        const activeServices = await MetricModel.getActiveServices(2);
+        const activeServices = await TelemetryBufferService.getActiveServices(5);
         if (!activeServices || activeServices.length === 0) return;
         await Promise.all(
           activeServices.map((sId) =>
@@ -63,12 +64,12 @@ export class TelemetryPipelineService {
     try {
       const lastBucket = this.lastEvaluatedBucketTimestamp[serviceId];
 
-      // 1. Luôn lấy 12 điểm viễn trắc gần nhất để sơ đồ UI luôn đầy đủ 12 mốc và chèn điểm mới liên tục từ Phải sang Trái
-      const displayPoints = await MetricModel.aggregateByService(serviceId, 5, 12);
+      // 1. Luôn lấy 12 điểm viễn trắc gần nhất từ In-Memory Buffer (RAM / Redis)
+      const displayPoints = await TelemetryBufferService.getDisplayPoints(serviceId, 5, 12);
       if (displayPoints.length === 0) return;
 
-      // 2. Lấy số điểm MỚI TINH phát sinh sau mốc đánh giá gần nhất (Tumbling Batch)
-      const freshBatch = await MetricModel.getFreshBatchByService(
+      // 2. Lấy số điểm MỚI TINH phát sinh sau mốc đánh giá gần nhất (Tumbling Batch từ RAM / Redis)
+      const freshBatch = await TelemetryBufferService.getFreshBatch(
         serviceId,
         5, // 5s bucket
         lastBucket,
@@ -170,6 +171,13 @@ export class TelemetryPipelineService {
           // Nếu phát hiện nguy cơ cao -> Kích hoạt RCA & đề xuất khắc phục
           if (result.rca_triggered && result.rca_diagnosis) {
             console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS on '${serviceId}': ${result.rca_diagnosis.root_cause.cause}`);
+
+            // Lưu snapshot 12 bước viễn trắc lúc xảy ra sự cố từ RAM vào PostgreSQL
+            await TelemetryBufferService.persistIncidentSnapshot(
+              result.rca_diagnosis.incident_id,
+              serviceId,
+              batchPointsSnapshot
+            );
 
             broadcastTelemetryToUi({
               type: 'incident',

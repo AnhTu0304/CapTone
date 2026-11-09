@@ -1,3 +1,5 @@
+import { TelemetryBufferService } from './telemetryBuffer.service';
+import { config } from '../config/env';
 import { LogStreamService } from './logStream.service';
 import crypto from 'crypto';
 
@@ -131,7 +133,7 @@ export class AgentService {
       }
     }
 
-    const result = await MetricModel.create({
+    const metricPayload = {
       organization_id: resolvedOrgId,
       environment_id: resolvedEnvId,
       batch_id: (data as any).batch_id || null,
@@ -149,16 +151,27 @@ export class AgentService {
       pod_restart_count: Number.isInteger(data.pod_restart_count) ? data.pod_restart_count : 0,
       replica_count: Number.isInteger(data.replica_count) && data.replica_count > 0 ? data.replica_count : 1,
       collected_at: collectedAt,
-    }, dbClient);
+    };
 
-    // Synthetic bridging is disabled permanently to avoid polluting node_metrics table
-    // await this.bridgeAgentMetricToNodeMetric(agent, data, collectedAt, serviceId, result.id);
+    // 1. Luôn đẩy vào vòng đệm RAM / Redis (In-Memory Buffer - Phương án 2: Predict-First)
+    TelemetryBufferService.pushMetric(metricPayload);
+
+    let resultId: string | number = `mem-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    let deduplicated = false;
+
+    // 2. Chỉ ghi xuống database nếu cấu hình yêu cầu PERSIST_ALL (dành cho integration tests)
+    if (config.telemetryIngestionMode === 'PERSIST_ALL') {
+      const result = await MetricModel.create(metricPayload, dbClient);
+      resultId = result.id;
+      deduplicated = result.deduplicated;
+    }
+
     if (uuidRegex.test(agent.id)) {
       await AgentModel.touchLastSeen(agent.id);
     }
     return {
-      id: result.id,
-      deduplicated: result.deduplicated,
+      id: resultId,
+      deduplicated,
       service_id: serviceId,
       pod_id: podId,
       collected_at: collectedAt.toISOString(),

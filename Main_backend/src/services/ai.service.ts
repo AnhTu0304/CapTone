@@ -244,7 +244,34 @@ export class AiService {
       );
     }
 
-    // 2. Persist to PostgreSQL database (ai_predictions & prediction_inputs)
+    // 2. Persist to PostgreSQL database ONLY when risk detected (Predict-First / Zero-Write for NORMAL)
+    const hasRisks = aiResponse.detected_risks && aiResponse.detected_risks.length > 0;
+    const primaryRisk = hasRisks ? aiResponse.detected_risks[0].risk_type : 'NORMAL';
+
+    if (!hasRisks || primaryRisk === 'NORMAL') {
+      const horizonMinutes = input.prediction_horizon_minutes || 15;
+      const predictedAt = new Date();
+      const expiresAt = new Date(predictedAt.getTime() + horizonMinutes * 60 * 1000);
+      return {
+        prediction_id: `live-norm-${Date.now()}-${input.service_id}`,
+        service_id: input.service_id,
+        status: 'HEALTHY',
+        primary_risk: 'NORMAL',
+        overall_risk_score: 0,
+        confidence_score: 0,
+        threshold: aiResponse.threshold,
+        thresholds: aiResponse.thresholds,
+        detected_risks: [],
+        risk_outputs: aiResponse.risk_outputs,
+        prediction_horizon_minutes: horizonMinutes,
+        environment_id: input.environment_id || '00000000-0000-0000-0000-000000000001',
+        cluster_id: input.cluster_id || null,
+        inputs_recorded: 0,
+        predicted_at: predictedAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
+      };
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -311,9 +338,7 @@ export class AiService {
         throw new ApiError(500, 'Cannot resolve a valid environment_id for prediction storage');
       }
 
-      // Compute status & risk scores
-      const hasRisks = aiResponse.detected_risks && aiResponse.detected_risks.length > 0;
-      const primaryRisk = hasRisks ? aiResponse.detected_risks[0].risk_type : 'NORMAL';
+      // Compute status & risk scores (already evaluated)
 
       const highestConfidence = hasRisks
         ? Math.max(...aiResponse.detected_risks.map((r) => r.confidence))
