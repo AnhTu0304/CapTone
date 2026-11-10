@@ -1,0 +1,263 @@
+/* =====================================================================
+   SELFHEAL CAD BLUEPRINT FOOTER (GREPTILE ALIGNMENT)
+   - Background: Fog (#EDEDF0) with Technical CAD Paper Dot Matrix
+   - Double-Dashed Technical Horizontal Dividers
+   - Double-Solid Technical Vertical Column Dividers
+   - Monospace Uppercase Tracking with Mint Highlight Hover
+   ===================================================================== */
+
+.footer-greptile {
+  position: relative;
+  z-index: 24;
+  width: 100%;
+  margin-top: auto;
+  background-color: #EDEDF0;
+  background-image: radial-gradient(rgba(61, 59, 79, 0.16) 1px, transparent 1px);
+  background-size: 16px 16px;
+  font-family: var(--font-mono, 'Space Mono', 'Geist Mono', monospace);
+  color: #2B2938;
+  overflow: hidden;
+}
+
+/* ================= TOP & BOTTOM DASHED DIVIDERS ================= */
+.footer-divider-dashed {
+  width: 100%;
+  height: 8px;
+  border-top: 1px dashed rgba(61, 59, 79, 0.22);
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.22);
+  background-color: rgba(61, 59, 79, 0.02);
+}
+
+.footer-divider-single-dashed {
+  width: 100%;
+  height: 1px;
+  border-top: 1px dashed rgba(61, 59, 79, 0.22);
+}
+
+/* ================= MAIN CONTAINER SHELL ================= */
+.footer-shell {
+  max-width: var(--content-max-width, 1400px);
+  margin: 0 auto;
+  display: flex;
+  position: relative;
+  border-left: 1px dashed rgba(61, 59, 79, 0.18);
+  border-right: 1px dashed rgba(61, 59, 79, 0.18);
+}
+
+/* ================= CAD DOUBLE SOLID VERTICAL DIVIDER ================= */
+.footer-divider-double-v {
+  width: 6px;
+  flex-shrink: 0;
+  align-self: stretch;
+  border-left: 1px solid rgba(61, 59, 79, 0.18);
+  border-right: 1px solid rgba(61, 59, 79, 0.18);
+  background-color: rgba(61, 59, 79, 0.015);
+}
+
+/* ================= COLUMN 1: LOGO CAD BLUEPRINT DRAFTING BOX ================= */
+.footer-col-logo {
+  flex: 0 0 280px;
+  max-width: 280px;
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  padding: 32px 20px;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.footer-blueprint-canvas {
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 1 / 1;
+  display: block;
+}
+
+/* ================= LINKS COLUMNS (COL 2, 3, 4, 5) ================= */
+.footer-col-nav {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 32px 24px;
+}
+
+.footer-col-title {
+  font-family: var(--font-mono, 'Space Mono', monospace);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #2B2938;
+  margin-bottom: 4px;
+}
+
+.footer-links-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-link {
+  font-family: var(--font-mono, 'Space Mono', monospace);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #3D3B4F;
+  text-decoration: none;
+  width: fit-content;
+  padding: 2px 5px;
+  margin-left: -5px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  line-height: 1.4;
+}
+
+.footer-link:hover,
+.footer-link:focus-visible {
+  background-color: #28E99F;
+  color: #000000;
+  outline: none;
+}
+
+/* Status Indicator */
+.footer-status-wrapper {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.footer-status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, 'Space Mono', monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2B2938;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  width: fit-content;
+  transition: opacity 0.15s ease;
+}
+
+.footer-status-link:hover {
+  opacity: 0.75;
+}
+
+.footer-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: #28E99F;
+  display: inline-block;
+  box-shadow: 0 0 0 2px rgba(40, 233, 159, 0.35);
+  animation: pulse-dot 2.4s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(40, 233, 159, 0.35);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 4px rgba(40, 233, 159, 0.55);
+  }
+}
+
+/* Social Icons */
+.footer-social-wrapper {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-social-icons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footer-social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #555368;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.footer-social-btn:hover {
+  color: #000000;
+  transform: translateY(-1px);
+}
+
+/* ================= COPYRIGHT BOTTOM BAR ================= */
+.footer-bottom-bar {
+  max-width: var(--content-max-width, 1400px);
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-left: 1px dashed rgba(61, 59, 79, 0.18);
+  border-right: 1px dashed rgba(61, 59, 79, 0.18);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: rgba(61, 59, 79, 0.6);
+}
+
+.footer-bottom-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-transform: uppercase;
+}
+
+.footer-bottom-meta-accent {
+  color: #059669;
+  font-weight: 600;
+}
+
+.footer-bottom-copyright {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+
+/* ================= RESPONSIVE BEHAVIOR ================= */
+@media (max-width: 1024px) {
+  .footer-shell {
+    flex-direction: column;
+  }
+
+  .footer-col-logo {
+    flex: none;
+    max-width: 100%;
+    border-bottom: 1px dashed rgba(61, 59, 79, 0.18);
+    padding: 32px 16px;
+  }
+
+  .footer-divider-double-v {
+    display: none;
+  }
+
+  .footer-col-nav {
+    border-bottom: 1px dashed rgba(61, 59, 79, 0.18);
+    padding: 24px 20px;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  .footer-grid-mobile {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

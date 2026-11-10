@@ -1,0 +1,183 @@
+/* ==========================================================================
+   HERO SECTION — SELFHEAL TWO-COLUMN LAYOUT (ORIGINAL PROPORTIONS & HEIGHT)
+   ========================================================================== */
+
+.hero-section {
+  position: relative;
+  background-color: var(--bg-canvas);
+  padding-top: 48px;
+  padding-bottom: 90px;
+  overflow: visible;
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.16);
+}
+
+.hero-full-canvas {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+  position: relative;
+  z-index: 2;
+  border-left: 1px dashed rgba(61, 59, 79, 0.18);
+  border-right: 1px dashed rgba(61, 59, 79, 0.18);
+}
+
+.hero-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.38fr;
+  gap: 64px;
+  align-items: center;
+  min-height: 572px;
+}
+
+.hero-left-col {
+  max-width: 580px;
+}
+
+.hero-heading {
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 4.8vw, 4.25rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: var(--color-ink);
+  margin-bottom: 24px;
+}
+
+.hero-heading-accent {
+  color: var(--color-accent);
+  display: inline-block;
+}
+
+.hero-description {
+  font-family: var(--font-body);
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 36px;
+}
+
+.hero-cta-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-bottom: 42px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.06));
+}
+
+.hero-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 24px 0 28px;
+  background-color: #3D3B4F;
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  font-family: var(--font-display, 'Inter', sans-serif);
+  border: none;
+  clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 50%, 100% 100%, 12px 100%, 0% 50%);
+  box-shadow: none;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.hero-cta-group:hover .hero-btn-primary {
+  transform: translateX(-4px);
+}
+
+.hero-btn-primary:hover {
+  background-color: #2F2D3D;
+  filter: brightness(1.1);
+}
+
+.hero-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justifyContent: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 28px 0 24px;
+  background-color: #28E99F;
+  color: #000000;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  font-family: var(--font-display, 'Inter', sans-serif);
+  border: none;
+  clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
+  box-shadow: none;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.hero-cta-group:hover .hero-btn-secondary {
+  transform: translateX(4px);
+}
+
+.hero-btn-secondary:hover {
+  background-color: #1FD48F;
+  filter: brightness(1.08);
+}
+
+/* Right Column: Preserves original 572px vertical presence */
+.hero-right-col {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 10px;
+  min-height: 572px;
+  width: 100%;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1240px) {
+  .hero-grid-layout {
+    grid-template-columns: 1fr;
+    gap: 56px;
+    min-height: auto;
+  }
+
+  .hero-left-col {
+    max-width: 100%;
+    text-align: center;
+    margin: 0 auto;
+  }
+
+  .hero-cta-group {
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  .hero-right-col {
+    min-height: 420px;
+    padding: 20px 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-section {
+    padding-top: 36px;
+    padding-bottom: 56px;
+  }
+
+  .hero-full-canvas {
+    padding: 0 var(--space-4);
+  }
+
+  .hero-right-col {
+    min-height: auto;
+    padding: 8px 0 0;
+  }
+}

@@ -1,0 +1,365 @@
+/* ==========================================================================
+   CONNECT CLUSTER SECTION — GREPTILE DARK NAVY FINAL CTA WITH SATELLITE MESH
+   ========================================================================== */
+
+.connect-cluster-section {
+  position: relative;
+  z-index: 24; /* Elevated above blueprint gutter overlays */
+  width: 100%;
+  background-color: #3D3B4F; /* Exact Greptile dark slate navy */
+  padding: 100px 0 112px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-top: 1px solid rgba(198, 249, 226, 0.18);
+}
+
+/* ================= CONTAINER & 2-COLUMN GRID ================= */
+.ccs-container {
+  width: 100%;
+  max-width: var(--content-max-width, 1400px);
+  margin: 0 auto;
+  padding: 0 clamp(24px, 4.5vw, 76px);
+  box-sizing: border-box;
+}
+
+.ccs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.18fr;
+  gap: clamp(36px, 5vw, 72px);
+  align-items: center;
+  width: 100%;
+}
+
+/* ================= LEFT COLUMN: HEADLINE & DUAL HEXAGON PILL ================= */
+.ccs-left-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 620px;
+}
+
+.ccs-title {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(2.35rem, 3.8vw, 3.5rem);
+  font-weight: 800;
+  color: #DDFCEE; /* Luminous pale mint */
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  margin: 0 0 36px 0;
+}
+
+/* Dual-Hexagon Connected Button Group */
+.ccs-btn-group {
+  display: inline-flex;
+  align-items: stretch;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.25));
+}
+
+.ccs-btn-left {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2D2A3B;
+  color: #C6F9E2;
+  border: 1px solid rgba(198, 249, 226, 0.35);
+  border-right: none;
+  clip-path: polygon(14px 0%, 100% 0%, 100% 100%, 14px 100%, 0% 50%);
+  padding: 13px 24px 13px 30px;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ccs-btn-left:hover {
+  background-color: #383448;
+  color: #FFFFFF;
+}
+
+.ccs-btn-right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #E4FF6B; /* Neon lime yellow badge */
+  color: #171C15;
+  border: 1px solid #E4FF6B;
+  border-left: none;
+  clip-path: polygon(0% 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 0% 100%);
+  padding: 13px 30px 13px 24px;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ccs-btn-right:hover {
+  background-color: #EEFF87;
+}
+
+/* ================= RIGHT COLUMN: SATELLITE MESH & DIFF CARD ================= */
+.ccs-mesh-wrapper {
+  position: relative;
+  width: 100%;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  box-sizing: border-box;
+}
+
+/* Background Cybernetic Constellation Mesh SVG */
+.ccs-mesh-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Central Floating Diff Card */
+.ccs-center-card {
+  position: relative;
+  z-index: 5;
+  width: 88%;
+  max-width: 440px;
+  background-color: #FFFFFF;
+  border-radius: 2px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-sizing: border-box;
+  padding: 14px 16px;
+}
+
+.ccs-file-header {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #555368;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ccs-diff-row-pink {
+  background-color: #FFDEE9;
+  color: #9D174D;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ccs-diff-row-mint {
+  background-color: #D4F8E8;
+  color: #065F46;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Comment Thread inside Diff Card */
+.ccs-comments-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #EDEDF0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ccs-comment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.75rem;
+}
+
+.ccs-comment-avatar-agent {
+  width: 18px;
+  height: 18px;
+  background-color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  border-radius: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ccs-comment-avatar-user {
+  width: 18px;
+  height: 18px;
+  background-color: #F97316;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  border-radius: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ccs-comment-sender {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 0.6875rem;
+  color: #1C1A26;
+  margin-right: 6px;
+}
+
+.ccs-comment-time {
+  font-size: 0.625rem;
+  color: #8C8A99;
+}
+
+.ccs-comment-text {
+  color: #3D3B4F;
+  margin: 1px 0 0 0;
+  line-height: 1.4;
+}
+
+/* ================= 6 SATELLITE NODES ================= */
+.ccs-satellite {
+  position: absolute;
+  z-index: 6;
+  background-color: #1E1C2B;
+  border: 1px solid rgba(198, 249, 226, 0.4);
+  padding: 6px 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.ccs-satellite-bar-pink {
+  width: 32px;
+  height: 3px;
+  background-color: #FF8BA7;
+}
+
+.ccs-satellite-bar-mint {
+  width: 32px;
+  height: 3px;
+  background-color: #28E99F;
+}
+
+.ccs-satellite-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  color: #9CE8C9;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+/* Specific Positions of 6 Satellites (Hexagonal Constellation) */
+.ccs-sat-top {
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ccs-sat-top-right {
+  top: 12%;
+  right: 12px;
+}
+
+.ccs-sat-bottom-right {
+  bottom: 12%;
+  right: 12px;
+}
+
+.ccs-sat-bottom {
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ccs-sat-bottom-left {
+  bottom: 12%;
+  left: 12px;
+}
+
+.ccs-sat-top-left {
+  top: 12%;
+  left: 12px;
+}
+
+/* ================= RESPONSIVE BREAKPOINTS ================= */
+@media (max-width: 1024px) {
+  .ccs-grid {
+    grid-template-columns: 1fr;
+    gap: 56px;
+  }
+
+  .ccs-left-col {
+    max-width: 100%;
+    align-items: center;
+    text-align: center;
+  }
+
+  .ccs-mesh-wrapper {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .connect-cluster-section {
+    padding: 72px 0 84px 0;
+  }
+
+  .ccs-satellite {
+    display: none; /* Hide satellite nodes on small screens so card fits comfortably */
+  }
+
+  .ccs-mesh-svg {
+    display: none;
+  }
+
+  .ccs-center-card {
+    width: 100%;
+  }
+
+  .ccs-btn-group {
+    flex-direction: column;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .ccs-btn-left,
+  .ccs-btn-right {
+    clip-path: none;
+    border-radius: 4px;
+    border: 1px solid rgba(198, 249, 226, 0.35);
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 20px;
+  }
+
+  .ccs-btn-right {
+    margin-top: 8px;
+    border: 1px solid #E4FF6B;
+  }
+}

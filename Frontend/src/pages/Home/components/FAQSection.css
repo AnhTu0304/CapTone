@@ -1,0 +1,184 @@
+/* ==========================================================================
+   FAQ SECTION — GREPTILE CAD ACCORDION WITH CONSTELLATION NODE GRIDS
+   ========================================================================== */
+
+.faq-section {
+  position: relative;
+  z-index: 24; /* Elevated above blueprint gutter overlays */
+  width: 100%;
+  background-color: #EDEDF0; /* Cool CAD off-white canvas */
+  padding: 96px 0 108px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-bottom: 1px solid #D6D6D8;
+}
+
+/* ================= TITLE ================= */
+.faq-title {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(2.5rem, 4.5vw, 3.75rem);
+  font-weight: 800;
+  color: #1C1A26;
+  letter-spacing: -0.035em;
+  text-align: center;
+  margin: 0 0 54px 0;
+  line-height: 1.1;
+}
+
+/* ================= AMBIENT CAD CONSTELLATION GRIDS (LEFT & RIGHT) ================= */
+.faq-constellation-left,
+.faq-constellation-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: clamp(100px, 16vw, 240px);
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.faq-constellation-left {
+  left: 0;
+}
+
+.faq-constellation-right {
+  right: 0;
+}
+
+.faq-constellation-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Node pulse effect */
+@keyframes faqNodeGlow {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.faq-constellation-node {
+  animation: faqNodeGlow 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* ================= ACCORDION CONTAINER ================= */
+.faq-accordion-container {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 36px);
+  box-sizing: border-box;
+}
+
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* FAQ Item with Dotted Divider */
+.faq-item {
+  width: 100%;
+  border-bottom: 1px dotted rgba(85, 83, 104, 0.32);
+}
+
+.faq-question-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 22px 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  gap: 18px;
+}
+
+.faq-question-text {
+  font-family: var(--font-display, 'Anybody', 'DM Sans', sans-serif);
+  font-size: clamp(1.05rem, 1.2vw, 1.15rem);
+  font-weight: 600;
+  color: #1C1A26;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  transition: color 0.15s ease;
+}
+
+.faq-question-btn:hover .faq-question-text {
+  color: #059669; /* Greptile emerald accent on hover */
+}
+
+/* Chevron Icon with Rotation */
+.faq-chevron {
+  flex-shrink: 0;
+  color: #555368;
+  transition: transform 0.25s ease, color 0.15s ease;
+}
+
+.faq-chevron-open {
+  transform: rotate(180deg);
+  color: #059669;
+}
+
+/* Smooth Accordion Body */
+.faq-answer-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.faq-answer-collapse-open {
+  grid-template-rows: 1fr;
+}
+
+.faq-answer-inner {
+  overflow: hidden;
+}
+
+.faq-answer-text {
+  font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
+  font-size: 0.95rem;
+  color: #555368;
+  line-height: 1.65;
+  margin: 0 0 22px 0;
+}
+
+/* ================= BOTTOM CONTACT ROW ================= */
+.faq-bottom-contact {
+  margin-top: 52px;
+  text-align: center;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 0.9375rem;
+  color: #555368;
+}
+
+.faq-contact-link {
+  color: #1C1A26;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.faq-contact-link:hover {
+  color: #059669;
+}
+
+/* ================= RESPONSIVE BREAKPOINTS ================= */
+@media (max-width: 900px) {
+  .faq-constellation-left,
+  .faq-constellation-right {
+    display: none;
+  }
+}

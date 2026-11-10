@@ -1,0 +1,302 @@
+/* ==========================================================================
+   HOW IT WORKS SECTION — BLUEPRINT CAD STYLING WITH HATCHED BORDERS
+   ========================================================================== */
+
+.how-it-works-section {
+  position: relative;
+  z-index: 24;
+  width: 100%;
+  background-color: #434154; /* Exact sampled background from reference image */
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 24px 0 44px 0;
+  border-top: 1px solid rgba(107, 127, 127, 0.28);
+  border-bottom: 1px solid rgba(107, 127, 127, 0.28);
+}
+
+/* Header Block with Top Line, Centered Badge, and Sub-Line */
+.hiw-header-block {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Framing Line Tracks (Top, Sub-line under badge, and Bottom) */
+.hiw-track {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hiw-track-bottom {
+  height: 16px;
+  margin-top: 28px;
+}
+
+/* 1px Solid Horizontal Line */
+.hiw-track-line {
+  position: absolute;
+  top: 11px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #6B7F7F; /* Exact sampled teal/sage horizontal line */
+  z-index: 1;
+}
+
+.hiw-track-bottom .hiw-track-line {
+  top: 8px;
+}
+
+/* Circular Node Dots on the Lines */
+.hiw-track-dot {
+  position: absolute;
+  top: 6px; /* 11px circle centered on 1px line at top: 11px */
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background-color: #8AAEA0; /* Exact sampled node dot */
+  box-shadow: 0 0 6px rgba(138, 174, 160, 0.45);
+  z-index: 3;
+}
+
+.hiw-track-bottom .hiw-track-dot {
+  top: 3px;
+}
+
+.hiw-dot-left {
+  left: clamp(20px, 3.5vw, 64px);
+}
+
+.hiw-dot-right {
+  right: clamp(20px, 3.5vw, 64px);
+}
+
+/* Badge centered between Top line and Sub-line */
+.hiw-badge-wrapper {
+  position: relative;
+  z-index: 4;
+  margin: 10px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.hiw-badge-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px;
+  background-color: #5C6B6E; /* Exact sampled badge background */
+  border-radius: 0px;
+  box-sizing: border-box;
+}
+
+.hiw-badge-text {
+  font-family: var(--font-mono, 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #FFFFFF; /* Crisp white */
+  text-transform: uppercase;
+  line-height: 1.25;
+}
+
+/* Main Content Container: Spacing tightened to ~100px below HOW IT WORKS */
+.hiw-content-container {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 100px; /* Exact 100px spacing requested */
+  padding: 0 clamp(20px, 4.5vw, 76px) 24px;
+}
+
+/* Left & Right Vertical Dashed Guidelines spanning continuously from top to bottom */
+.hiw-guide-v-left,
+.hiw-guide-v-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dashed rgba(138, 174, 160, 0.45);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.hiw-guide-v-left {
+  left: calc(clamp(20px, 3.5vw, 64px) + 5px);
+}
+
+.hiw-guide-v-right {
+  right: calc(clamp(20px, 3.5vw, 64px) + 5px);
+}
+
+/* 3-Column Grid */
+.hiw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  width: 100%;
+  position: relative;
+  z-index: 3;
+}
+
+.hiw-card {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ==========================================================================
+   HATCHED RIBBON BORDER (DIAGONAL 45° STRIPES MATCHING REFERENCE IMAGE)
+   ========================================================================== */
+.hiw-screen-frame {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px; /* 12px ribbon of 45° diagonal hatched stripes */
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(138, 174, 160, 0.42) 0px,
+    rgba(138, 174, 160, 0.42) 1.5px,
+    transparent 1.5px,
+    transparent 6px
+  );
+}
+
+/* Inner gap between hatched border and inner screen box */
+.hiw-screen-inner-gap {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  background-color: #434154; /* Exact section background */
+}
+
+/* Inner Graphic Screen Box */
+.hiw-screen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10.5;
+  min-height: 220px;
+  background-color: #2D2A3B; /* Deep dark slate navy card backdrop */
+  border: 1px solid rgba(130, 165, 155, 0.35);
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.45);
+}
+
+/* SVG Canvas styling */
+.hiw-svg-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Micro-animations */
+@keyframes hiwPulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes hiwOrbitRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hiwFloatSubtle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.hiw-core-glow {
+  transform-origin: center;
+  animation: hiwPulseGlow 3.5s ease-in-out infinite;
+}
+
+.hiw-orbit-ring {
+  transform-origin: center;
+  animation: hiwOrbitRotate 16s linear infinite;
+}
+
+.hiw-float-box {
+  animation: hiwFloatSubtle 4s ease-in-out infinite;
+}
+
+/* Typography & Text Block (Exact matching reference image proportions) */
+.hiw-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hiw-step-label {
+  font-family: var(--font-mono, 'JetBrains Mono', SFMono-Regular, monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #A7E4CD; /* Luminous pale mint */
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.hiw-title {
+  font-family: var(--font-display, 'Inter', -apple-system, sans-serif);
+  font-size: clamp(1.35rem, 1.85vw, 1.65rem); /* Prominent, bold title */
+  font-weight: 700;
+  color: #DDFCEE; /* Exact sampled crisp pale mint-white */
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.hiw-desc {
+  font-family: var(--font-body, 'Inter', -apple-system, sans-serif);
+  font-size: clamp(0.9375rem, 1.1vw, 1.05rem); /* Elegant readable description */
+  color: #A7E4CD; /* Luminous soft mint matching reference image */
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1080px) {
+  .hiw-content-container {
+    margin-top: clamp(60px, 10vw, 90px);
+    padding: 0 20px 20px;
+  }
+
+  .hiw-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    max-width: 580px;
+    margin: 0 auto;
+  }
+
+  .hiw-guide-v-left,
+  .hiw-guide-v-right,
+  .agent-guide-v-left,
+  .agent-guide-v-right {
+    display: none;
+  }
+}
