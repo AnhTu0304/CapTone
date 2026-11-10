@@ -2,10 +2,12 @@
 
 from datetime import datetime, timezone
 import logging
+import time
 from typing import Any, Optional
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
+from selfheal_agent.telemetry.otel import record_k8s_api_call
 from selfheal_agent.telemetry.schemas import AgentK8sEventData, K8sEventDetail
 
 logger = logging.getLogger("selfheal_agent.collectors.nodes")
@@ -178,7 +180,8 @@ class NodesCollector:
         self.active_anomalies: dict[str, str] = {}
         self.known_nodes: dict[str, str] = {}
 
-    def _record_api_error(self, err: Exception, operation: str) -> None:
+    def _record_api_error(self, err: Exception, operation: str, duration_sec: float = 0.0) -> None:
+        res_name = "namespaces" if "namespace" in operation else "nodes"
         if isinstance(err, ApiException):
             if err.status in (401, 403):
                 self.last_collection_status = "FORBIDDEN"
@@ -187,10 +190,12 @@ class NodesCollector:
             else:
                 self.last_collection_status = "UNAVAILABLE"
             self.last_error = f"HTTP {err.status}: {err.reason}"
+            record_k8s_api_call(res_name, "list", "error", duration_sec, str(err.status))
             logger.warning("K8s API error during %s (%s): %s", operation, self.last_collection_status, self.last_error)
         else:
             self.last_collection_status = "UNAVAILABLE"
             self.last_error = str(err)
+            record_k8s_api_call(res_name, "list", "error", duration_sec, "exception")
             logger.debug("Failed %s: %s", operation, err)
 
     def _parse_node(self, node: Any, observed_at: str) -> Optional[NodeSummary]:
@@ -327,8 +332,10 @@ class NodesCollector:
 
         results: list[NodeSummary] = []
         observed_at = datetime.now(timezone.utc).isoformat()
+        t0 = time.perf_counter()
         try:
             node_list = self.core_v1.list_node()
+            record_k8s_api_call("nodes", "list", "success", time.perf_counter() - t0)
             self.last_collection_status = "OK"
             self.last_error = None
             for node in getattr(node_list, "items", None) or []:
@@ -336,7 +343,7 @@ class NodesCollector:
                 if parsed:
                     results.append(parsed)
         except Exception as err:
-            self._record_api_error(err, "list_node")
+            self._record_api_error(err, "list_node", time.perf_counter() - t0)
             return []
 
         return results
@@ -425,8 +432,10 @@ class NodesCollector:
         if not self.core_v1:
             return []
         results: list[dict[str, Any]] = []
+        t0 = time.perf_counter()
         try:
             ns_list = self.core_v1.list_namespace()
+            record_k8s_api_call("namespaces", "list", "success", time.perf_counter() - t0)
             for ns in getattr(ns_list, "items", None) or []:
                 if not getattr(ns, "metadata", None) or not getattr(ns.metadata, "name", None):
                     continue
@@ -439,5 +448,5 @@ class NodesCollector:
                     "labels": dict(raw_labels) if isinstance(raw_labels, dict) else {},
                 })
         except Exception as err:
-            self._record_api_error(err, "list_namespace")
+            self._record_api_error(err, "list_namespace", time.perf_counter() - t0)
         return results

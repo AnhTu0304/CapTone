@@ -12,6 +12,12 @@ import aiohttp
 
 from selfheal_agent.authenticator import AgentAuthenticator
 from selfheal_agent.config import AgentConfig
+from selfheal_agent.telemetry.otel import (
+    inject_trace_context,
+    record_agent_retry,
+    record_heartbeat_metric,
+    start_agent_span,
+)
 from selfheal_agent.utils.redaction import mask_token
 
 logger = logging.getLogger("selfheal_agent.heartbeat")
@@ -181,60 +187,72 @@ class AgentHeartbeatClient:
 
             req_start = asyncio.get_event_loop().time()
             try:
-                timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
-                async with session.post(
-                    self.heartbeat_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=timeout,
-                ) as resp:
-                    duration_ms = max(1, int((asyncio.get_event_loop().time() - req_start) * 1000))
+                with start_agent_span("agent.heartbeat", {"http.request.method": "POST"}):
+                    req_headers = inject_trace_context(dict(headers))
+                    timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
+                    async with session.post(
+                        self.heartbeat_url,
+                        headers=req_headers,
+                        json=payload,
+                        timeout=timeout,
+                    ) as resp:
+                        elapsed_sec = max(0.001, asyncio.get_event_loop().time() - req_start)
+                        duration_ms = max(1, int(elapsed_sec * 1000))
 
-                    if 200 <= resp.status < 300:
-                        self.last_latency_ms = duration_ms
-                        self.last_successful_heartbeat = datetime.now(timezone.utc)
-                        self.consecutive_failures = 0
-                        self.last_error = None
-                        self.state = HeartbeatState.HEALTHY
-                        logger.debug("💓 Heartbeat success: status=%d, latency=%dms", resp.status, duration_ms)
-                        return True
+                        if 200 <= resp.status < 300:
+                            self.last_latency_ms = duration_ms
+                            self.last_successful_heartbeat = datetime.now(timezone.utc)
+                            self.consecutive_failures = 0
+                            self.last_error = None
+                            self.state = HeartbeatState.HEALTHY
+                            record_heartbeat_metric(self.state.value, "success", elapsed_sec)
+                            logger.debug("💓 Heartbeat success: status=%d, latency=%dms", resp.status, duration_ms)
+                            return True
 
-                    if resp.status in (401, 403):
-                        self.consecutive_failures += 1
-                        self.state = HeartbeatState.UNAUTHORIZED
-                        self.last_error = f"HTTP {resp.status} Unauthorized / Revoked"
-                        logger.critical(
-                            "❌ Heartbeat rejected with HTTP %d: Token invalid or agent revoked. Halting rapid retries.",
-                            resp.status,
-                        )
-                        return False
+                        if resp.status in (401, 403):
+                            self.consecutive_failures += 1
+                            self.state = HeartbeatState.UNAUTHORIZED
+                            self.last_error = f"HTTP {resp.status} Unauthorized / Revoked"
+                            record_heartbeat_metric(self.state.value, "error", elapsed_sec)
+                            logger.critical(
+                                "❌ Heartbeat rejected with HTTP %d: Token invalid or agent revoked. Halting rapid retries.",
+                                resp.status,
+                            )
+                            return False
 
-                    if resp.status == 400:
-                        self.consecutive_failures += 1
-                        self.state = HeartbeatState.DEGRADED
-                        self.last_error = "HTTP 400 Bad Request"
-                        logger.error("Heartbeat rejected with HTTP 400 Bad Request. Skipping retries for invalid payload.")
-                        return False
+                        if resp.status == 400:
+                            self.consecutive_failures += 1
+                            self.state = HeartbeatState.DEGRADED
+                            self.last_error = "HTTP 400 Bad Request"
+                            record_heartbeat_metric(self.state.value, "error", elapsed_sec)
+                            logger.error("Heartbeat rejected with HTTP 400 Bad Request. Skipping retries for invalid payload.")
+                            return False
 
-                    if resp.status == 429:
-                        self.last_error = "HTTP 429 Too Many Requests"
-                        retry_after_str = resp.headers.get("Retry-After")
-                        sleep_time = self._calculate_retry_after(retry_after_str, attempt)
-                        logger.warning("Heartbeat rate limited (429). Waiting %.2fs before retry (attempt %d/%d)...", sleep_time, attempt, attempts)
-                        if attempt < attempts:
-                            await self._cancellable_sleep(sleep_time)
-                            continue
-                        break
+                        if resp.status == 429:
+                            self.last_error = "HTTP 429 Too Many Requests"
+                            record_heartbeat_metric(HeartbeatState.DEGRADED.value, "error", elapsed_sec)
+                            retry_after_str = resp.headers.get("Retry-After")
+                            sleep_time = self._calculate_retry_after(retry_after_str, attempt)
+                            logger.warning("Heartbeat rate limited (429). Waiting %.2fs before retry (attempt %d/%d)...", sleep_time, attempt, attempts)
+                            if attempt < attempts:
+                                record_agent_retry("heartbeat")
+                                await self._cancellable_sleep(sleep_time)
+                                continue
+                            break
 
-                    # Server error 5xx
-                    self.last_error = f"HTTP {resp.status} Server Error"
-                    logger.warning("Heartbeat server error (status=%d, attempt=%d/%d)", resp.status, attempt, attempts)
+                        # Server error 5xx
+                        self.last_error = f"HTTP {resp.status} Server Error"
+                        record_heartbeat_metric(HeartbeatState.DEGRADED.value, "error", elapsed_sec)
+                        logger.warning("Heartbeat server error (status=%d, attempt=%d/%d)", resp.status, attempt, attempts)
 
             except (asyncio.TimeoutError, aiohttp.ClientError, OSError) as exc:
+                elapsed_sec = max(0.001, asyncio.get_event_loop().time() - req_start)
                 self.last_error = str(exc)
+                record_heartbeat_metric(HeartbeatState.DEGRADED.value, "error", elapsed_sec)
                 logger.warning("Heartbeat request failed (attempt %d/%d): %s", attempt, attempts, exc)
 
             if attempt < attempts and not self._is_stopped:
+                record_agent_retry("heartbeat")
                 backoff = min(
                     (self.backoff_factor ** attempt) + random.uniform(0.05, 0.2),
                     self.max_backoff_seconds,

@@ -2,11 +2,13 @@
 
 from datetime import datetime, timezone
 import logging
+import time
 from typing import Literal, Optional
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
 from selfheal_agent.collectors.pods import EXCLUDED_NAMESPACES, extract_service_id
+from selfheal_agent.telemetry.otel import record_k8s_api_call
 from selfheal_agent.telemetry.schemas import AgentK8sEventData, AgentK8sEventDetail
 
 logger = logging.getLogger("selfheal_agent.collectors.events")
@@ -80,11 +82,13 @@ class EventsCollector:
 
         results: list[AgentK8sEventData] = []
         now_iso = datetime.now(timezone.utc).isoformat()
+        t0 = time.perf_counter()
         try:
             if monitor_all or not namespace:
                 raw_events = self.core_v1.list_event_for_all_namespaces().items
             else:
                 raw_events = self.core_v1.list_namespaced_event(namespace=namespace).items
+            record_k8s_api_call("events", "list", "success", time.perf_counter() - t0)
 
             self.last_collection_status = "OK"
             self.last_error = None
@@ -145,11 +149,13 @@ class EventsCollector:
         except ApiException as err:
             self.last_collection_status = "FORBIDDEN" if err.status in (401, 403) else "UNAVAILABLE"
             self.last_error = f"HTTP {err.status}: {err.reason}"
+            record_k8s_api_call("events", "list", "error", time.perf_counter() - t0, str(err.status))
             logger.warning("K8s API error querying events (%s): %s", self.last_collection_status, self.last_error)
             return []
         except Exception as err:
             self.last_collection_status = "UNAVAILABLE"
             self.last_error = str(err)
+            record_k8s_api_call("events", "list", "error", time.perf_counter() - t0, "exception")
             logger.error("Failed querying cluster events: %s", err)
             return []
 

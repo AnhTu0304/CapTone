@@ -71,4 +71,17 @@ export const config = {
 
   // Google OAuth Config
   googleClientId: process.env.GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com',
+
+  // OpenTelemetry Config
+  otel: {
+    enabled: process.env.OTEL_ENABLED !== 'false',
+    serviceName: process.env.OTEL_SERVICE_NAME || 'selfheal-backend',
+    serviceVersion: process.env.OTEL_SERVICE_VERSION || '1.0.0',
+    serviceNamespace: process.env.OTEL_SERVICE_NAMESPACE || 'selfheal-system',
+    deploymentEnvironment: process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV || 'development',
+    otlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318',
+    exportIntervalMs: process.env.OTEL_METRIC_EXPORT_INTERVAL_MS
+      ? parseInt(process.env.OTEL_METRIC_EXPORT_INTERVAL_MS, 10)
+      : 10000,
+  },
 };

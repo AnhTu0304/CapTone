@@ -4,6 +4,7 @@ import { config } from '../config/env';
 import { ApiError } from '../utils/apiError';
 import { IJwtPayload, UserModel } from '../models/user.model';
 import { SessionRevocationService } from '../services/sessionRevocation.service';
+import { recordAuthFailure } from '../telemetry/metrics';
 
 /**
  * Middleware kiểm tra và giải mã JWT Access Token
@@ -33,6 +34,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
         // Fallback
       }
     }
+    recordAuthFailure('jwt', 'missing_token');
     return next(new ApiError(401, 'Yêu cầu đăng nhập (Thiếu Authorization Header)'));
   }
 
@@ -40,6 +42,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
   const token = match ? match[1].trim() : null;
 
   if (!token) {
+    recordAuthFailure('jwt', 'missing_token');
     return next(new ApiError(401, 'Yêu cầu đăng nhập (Thiếu hoặc sai định dạng Bearer Token)'));
   }
 
@@ -50,11 +53,14 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     }) as IJwtPayload;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
+      recordAuthFailure('jwt', 'expired_token');
       return next(new ApiError(401, 'Token đã hết hạn'));
     }
     if (error instanceof jwt.JsonWebTokenError) {
+      recordAuthFailure('jwt', 'invalid_token');
       return next(new ApiError(401, 'Token không hợp lệ hoặc chữ ký không đúng'));
     }
+    recordAuthFailure('jwt', 'invalid_token');
     return next(new ApiError(401, 'Lỗi xác thực Token'));
   }
 
@@ -62,6 +68,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
   try {
     const isRevoked = await SessionRevocationService.isTokenRevoked(token);
     if (isRevoked) {
+      recordAuthFailure('jwt', 'invalid_token');
       return next(new ApiError(401, 'Phiên đăng nhập đã kết thúc hoặc Token đã bị thu hồi'));
     }
   } catch (err: any) {
@@ -72,11 +79,13 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
   }
 
   if (!decoded || typeof decoded !== 'object' || !decoded.id || !decoded.email) {
+    recordAuthFailure('jwt', 'invalid_token');
     return next(new ApiError(401, 'Token thiếu thông tin xác thực bắt buộc (id, email)'));
   }
 
   // 1. Kiểm tra nhanh claim tĩnh trong token
   if (decoded.status === 'SUSPENDED' || decoded.status === 'INACTIVE') {
+    recordAuthFailure('jwt', 'user_inactive');
     return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
   }
 
@@ -85,16 +94,19 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     const dbUser = await UserModel.findAuthStatus(decoded.id);
 
     if (!dbUser) {
+      recordAuthFailure('jwt', 'user_inactive');
       return next(new ApiError(401, 'Người dùng không tồn tại hoặc đã bị xóa khỏi hệ thống'));
     }
 
     // Tài khoản đã bị xóa mềm
     if (dbUser.deleted_at) {
+      recordAuthFailure('jwt', 'user_inactive');
       return next(new ApiError(401, 'Tài khoản đã bị xóa khỏi hệ thống'));
     }
 
     // Tài khoản bị tạm khóa hoặc ngừng hoạt động
     if (dbUser.status === 'SUSPENDED' || dbUser.status === 'INACTIVE') {
+      recordAuthFailure('jwt', 'user_inactive');
       return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
     }
 

@@ -10,6 +10,7 @@ import aiohttp
 from kubernetes import client
 
 from selfheal_agent.collectors.pods import PodSummary, parse_cpu_to_millicores, parse_memory_to_bytes
+from selfheal_agent.telemetry.otel import record_k8s_api_call
 from selfheal_agent.telemetry.schemas import AgentMetricsData
 
 logger = logging.getLogger("selfheal_agent.telemetry.metrics")
@@ -168,6 +169,7 @@ class MetricsManager:
         self._last_log_times[pod.name] = now
 
         if self.core_v1:
+            t_log = time.perf_counter()
             try:
                 raw_logs = self.core_v1.read_namespaced_pod_log(
                     name=pod.name,
@@ -175,6 +177,7 @@ class MetricsManager:
                     since_seconds=since_sec,
                     tail_lines=150,
                 )
+                record_k8s_api_call("pods", "read_log", "success", time.perf_counter() - t_log)
                 if raw_logs:
                     for raw_line in raw_logs.splitlines():
                         line = raw_line.strip()
@@ -200,6 +203,8 @@ class MetricsManager:
                             requests_in_log += 1
                             errors_5xx_in_log += 1
             except Exception as log_err:
+                err_code = str(getattr(log_err, "status", "exception"))
+                record_k8s_api_call("pods", "read_log", "error", time.perf_counter() - t_log, err_code)
                 logger.debug("Log read error for %s: %s", pod.name, log_err)
 
         # Combine telemetry from /health endpoint, logs, and probe
@@ -231,6 +236,7 @@ class MetricsManager:
             return {}
 
         metrics_dict: dict[str, tuple[float, float]] = {}
+        t0 = time.perf_counter()
         try:
             if monitor_all or not namespace:
                 raw = self.custom_objects.list_cluster_custom_object(
@@ -245,6 +251,7 @@ class MetricsManager:
                     namespace=namespace,
                     plural="pods",
                 )
+            record_k8s_api_call("metrics.k8s.io", "list", "success", time.perf_counter() - t0)
 
             items = raw.get("items", []) if isinstance(raw, dict) else []
             for item in items:
@@ -262,6 +269,8 @@ class MetricsManager:
 
                 metrics_dict[pod_name] = (total_cpu, total_mem)
         except Exception as err:
+            err_code = str(getattr(err, "status", "exception"))
+            record_k8s_api_call("metrics.k8s.io", "list", "error", time.perf_counter() - t0, err_code)
             logger.debug("Metrics server not responding (fallback baseline used): %s", err)
 
         return metrics_dict
@@ -272,12 +281,14 @@ class MetricsManager:
             return {}
 
         node_dict: dict[str, tuple[float, float]] = {}
+        t0 = time.perf_counter()
         try:
             raw = self.custom_objects.list_cluster_custom_object(
                 group="metrics.k8s.io",
                 version="v1beta1",
                 plural="nodes",
             )
+            record_k8s_api_call("metrics.k8s.io", "list", "success", time.perf_counter() - t0)
             items = raw.get("items", []) if isinstance(raw, dict) else []
             for item in items:
                 metadata = item.get("metadata", {})
@@ -290,6 +301,8 @@ class MetricsManager:
                 total_mem = parse_memory_to_bytes(usage.get("memory"))
                 node_dict[node_name] = (total_cpu, total_mem)
         except Exception as err:
+            err_code = str(getattr(err, "status", "exception"))
+            record_k8s_api_call("metrics.k8s.io", "list", "error", time.perf_counter() - t0, err_code)
             logger.debug("Metrics server node query error: %s", err)
 
         return node_dict

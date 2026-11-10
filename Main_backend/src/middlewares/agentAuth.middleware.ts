@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { ApiError } from '../utils/apiError';
 import { AgentModel } from '../models/agent.model';
 import { pool } from '../config/database';
+import { recordAuthFailure } from '../telemetry/metrics';
 
 export interface AuthenticatedAgentContext {
   id: string;
@@ -49,6 +50,7 @@ export const authenticateAgentToken = async (
   }
 
   if (!rawToken) {
+    recordAuthFailure('agent_token', 'missing_token');
     return next(ApiError.unauthorized('Thiếu token xác thực Agent'));
   }
 
@@ -57,6 +59,7 @@ export const authenticateAgentToken = async (
     const agentRow = await AgentModel.findByTokenHash(tokenHash, rawToken);
 
     if (!agentRow) {
+      recordAuthFailure('agent_token', 'agent_revoked');
       return next(ApiError.unauthorized('Token Agent không hợp lệ, đã hết hạn hoặc đã bị thu hồi'));
     }
 

@@ -167,6 +167,13 @@ data:
   LOG_LEVEL: "INFO"
   ENABLE_HEALING_ACTIONS: "false"
   HEALTH_PORT: "8080"
+  OTEL_ENABLED: "true"
+  OTEL_SERVICE_NAME: "selfheal-k8s-agent"
+  OTEL_SERVICE_VERSION: "1.0.0"
+  OTEL_SERVICE_NAMESPACE: "selfheal-system"
+  DEPLOYMENT_ENVIRONMENT: "production"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318"
+  OTEL_METRIC_EXPORT_INTERVAL_MS: "15000"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -213,6 +220,18 @@ spec:
                 secretKeyRef:
                   name: selfheal-agent-secret
                   key: AGENT_TOKEN
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           livenessProbe:
             httpGet:
               path: /healthz

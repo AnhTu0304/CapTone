@@ -13,9 +13,10 @@ from app.api.rca import router as rca_router
 from app.api.model_management import router as model_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.otel import init_ai_otel, shutdown_ai_otel, start_ai_http_span
 from app.services.prediction_service import PredictionService
 from app.services.openai_rca_service import OpenAIRCAService
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_ai_otel()
     app.state.prediction_service = PredictionService(
         settings.model_path, settings.risk_threshold
     )
@@ -47,6 +49,7 @@ async def lifespan(app: FastAPI):
     if app.state.openai_rca_service is not None:
         await app.state.openai_rca_service.client.close()
     app.state.openai_rca_service = None
+    shutdown_ai_otel()
 
 
 app = FastAPI(
@@ -67,7 +70,13 @@ app.include_router(model_router)
 async def request_logging(request: Request, call_next):
     request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
     started = time.perf_counter()
-    response = await call_next(request)
+    with start_ai_http_span(request.method, request.url.path, dict(request.headers)) as span:
+        response = await call_next(request)
+        if span is not None:
+            try:
+                span.set_attribute("http.response.status_code", response.status_code)
+            except Exception:
+                pass
     response.headers["x-request-id"] = request_id
     logger.info(
         "request_id=%s method=%s path=%s status=%d duration_ms=%.2f",

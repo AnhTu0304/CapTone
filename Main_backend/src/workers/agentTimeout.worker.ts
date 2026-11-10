@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import { AgentTimeoutService } from '../services/agentTimeout.service';
+import { recordBackgroundJob } from '../telemetry/metrics';
 
 /**
  * Background Worker kiểm tra và tự động cập nhật trạng thái Agent quá hạn Heartbeat
@@ -26,12 +27,15 @@ async function startWorker() {
     }
 
     isRunning = true;
+    const startHr = process.hrtime.bigint();
     try {
       const stats = await AgentTimeoutService.checkAndMarkStaleAgents(timeoutSeconds);
       if (stats.stale_agents_count > 0) {
         console.log(`⚠️ [AGENT TIMEOUT WORKER] Phát hiện ${stats.stale_agents_count} Agent quá hạn nhịp tim. Đã chuyển sang OFFLINE.`);
       }
+      recordBackgroundJob('agent_timeout', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
     } catch (err: any) {
+      recordBackgroundJob('agent_timeout', 'error', Number(process.hrtime.bigint() - startHr) / 1e9);
       console.error('❌ [AGENT TIMEOUT WORKER] Lỗi khi quét trạng thái Agent:', err.message);
     } finally {
       isRunning = false;

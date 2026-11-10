@@ -62,6 +62,32 @@ spec:
               value: "8080"
             - name: PYTHONUNBUFFERED
               value: "1"
+            - name: OTEL_ENABLED
+              value: {{ .Values.otel.enabled | default true | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otel.serviceName | default "selfheal-k8s-agent" | quote }}
+            - name: OTEL_SERVICE_VERSION
+              value: {{ .Values.otel.serviceVersion | default "1.0.0" | quote }}
+            - name: OTEL_SERVICE_NAMESPACE
+              value: {{ .Values.otel.serviceNamespace | default "selfheal-system" | quote }}
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: {{ .Values.otel.deploymentEnvironment | default "production" | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.exporterEndpoint | default "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318" | quote }}
+            - name: OTEL_METRIC_EXPORT_INTERVAL_MS
+              value: {{ .Values.otel.metricExportIntervalMs | default 15000 | quote }}
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             {{- if and .Values.prometheus .Values.prometheus.enabled }}
             - name: PROMETHEUS_URL
               value: {{ .Values.prometheus.url | quote }}

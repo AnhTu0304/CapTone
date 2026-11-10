@@ -7,6 +7,14 @@ import { AgentService, AuthenticatedAgent } from '../services/agent.service';
 import { AgentWsMessageSchema } from '../schemas/agentWebSocket.schema';
 import { broadcastTelemetryToUi } from './telemetryWebSocket';
 import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
+import {
+  injectTraceContext,
+  recordAgentHeartbeat,
+  recordAuthFailure,
+  recordRemediationAction,
+  recordRemediationDuration,
+  withBackendSpan,
+} from '../telemetry/metrics';
 
 let activeAgentWss: WebSocketServer | null = null;
 const lastKnownRestartsByService: Record<string, number> = {};
@@ -38,6 +46,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
     ws.on('pong', () => {
       ws.isAlive = true;
+      recordAgentHeartbeat('ws', 'success');
     });
 
     // Extract token from query params or headers
@@ -52,6 +61,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
     if (token) {
       const agent = await AgentService.authenticateAgent(token);
       if (!agent) {
+        recordAuthFailure('agent_token', 'agent_revoked');
         ws.send(
           JSON.stringify({
             status: 'error',
@@ -83,6 +93,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
       // Grace period: allow 5 seconds for initial auth message
       const authTimeout = setTimeout(() => {
         if (!ws.agent) {
+          recordAuthFailure('agent_token', 'missing_token');
           ws.send(
             JSON.stringify({
               status: 'error',
@@ -133,6 +144,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
         if (msg.type === 'auth') {
           const agent = await AgentService.authenticateAgent(msg.token);
           if (!agent) {
+            recordAuthFailure('agent_token', 'agent_revoked');
             ws.send(
               JSON.stringify({
                 status: 'error',
@@ -346,6 +358,14 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
           case 'action_result': {
             const { action_id, status, message: rawMessage, duration_ms, details } = msg.data;
+            const actionTypeMetric = String(details?.action || 'RESTART_POD').toUpperCase();
+            recordRemediationAction(actionTypeMetric, status === 'SUCCEEDED' ? 'succeeded' : 'failed');
+            recordRemediationDuration(
+              actionTypeMetric,
+              status === 'SUCCEEDED' ? 'success' : 'failed',
+              Math.max(0.001, Number(duration_ms || 1000) / 1000)
+            );
+
             let message = String(rawMessage || '');
             const targetSvc = details?.target || 'dịch vụ mục tiêu';
             const targetNs = details?.namespace || 'default';
@@ -636,54 +656,67 @@ export async function dispatchHealingActionToAgent(payload: {
   cluster_id?: string;
   environment_id?: string;
 }): Promise<{ dispatched: boolean; recipient_agent?: string }> {
-  if (!activeAgentWss || activeAgentWss.clients.size === 0) {
-    console.warn(`[AgentWebSocket] No connected agents available to receive action '${payload.action_type}' for target '${payload.target_name}'.`);
-    return { dispatched: false };
-  }
+  return withBackendSpan(
+    'remediation.dispatch',
+    { 'action.type': payload.action_type || 'UNKNOWN' },
+    async () => {
+      if (!activeAgentWss || activeAgentWss.clients.size === 0) {
+        console.warn(`[AgentWebSocket] No connected agents available to receive action '${payload.action_type}' for target '${payload.target_name}'.`);
+        return { dispatched: false };
+      }
 
-  let chosenClient: ExtWebSocket | null = null;
-  // Tenant-aware agent selection: match specifically by cluster_id or environment_id if provided
-  for (const client of activeAgentWss.clients) {
-    const extWs = client as ExtWebSocket;
-    if (extWs.isAlive && extWs.agent && extWs.readyState === WebSocket.OPEN) {
-      if (payload.cluster_id && extWs.agent.cluster_id === payload.cluster_id) {
-        chosenClient = extWs;
-        break;
+      let chosenClient: ExtWebSocket | null = null;
+      // Tenant-aware agent selection: match specifically by cluster_id or environment_id if provided
+      for (const client of activeAgentWss.clients) {
+        const extWs = client as ExtWebSocket;
+        if (extWs.isAlive && extWs.agent && extWs.readyState === WebSocket.OPEN) {
+          if (payload.cluster_id && extWs.agent.cluster_id === payload.cluster_id) {
+            chosenClient = extWs;
+            break;
+          }
+          if (payload.environment_id && extWs.agent.environment_id === payload.environment_id) {
+            chosenClient = extWs;
+            break;
+          }
+          if (!chosenClient) {
+            chosenClient = extWs;
+          }
+        }
       }
-      if (payload.environment_id && extWs.agent.environment_id === payload.environment_id) {
-        chosenClient = extWs;
-        break;
+
+      if (!chosenClient || !chosenClient.agent) {
+        console.warn(`[AgentWebSocket] No authenticated, open agent WebSocket socket found.`);
+        return { dispatched: false };
       }
-      if (!chosenClient) {
-        chosenClient = extWs;
+
+      const agentName = chosenClient.agent.name;
+      console.log(`🚀 [AgentWebSocket] Dispatching action '${payload.action_type}' (ID: ${payload.action_id}) to Agent [${agentName}] for target '${payload.target_name}'`);
+
+      try {
+        const traceCarrier = injectTraceContext({});
+        const enrichedParams = {
+          ...(payload.params || {}),
+          ...traceCarrier,
+        };
+
+        chosenClient.send(
+          JSON.stringify({
+            type: 'execute_action',
+            data: {
+              action_id: payload.action_id,
+              action_type: payload.action_type,
+              target_name: payload.target_name,
+              namespace: payload.namespace || 'default',
+              params: enrichedParams,
+            },
+          })
+        );
+        recordRemediationAction(payload.action_type, 'dispatched');
+        return { dispatched: true, recipient_agent: agentName };
+      } catch (sendErr) {
+        console.error(`❌ [AgentWebSocket] Failed transmitting execute_action to agent [${agentName}]:`, sendErr);
+        return { dispatched: false, recipient_agent: agentName };
       }
     }
-  }
-
-  if (!chosenClient || !chosenClient.agent) {
-    console.warn(`[AgentWebSocket] No authenticated, open agent WebSocket socket found.`);
-    return { dispatched: false };
-  }
-
-  const agentName = chosenClient.agent.name;
-  console.log(`🚀 [AgentWebSocket] Dispatching action '${payload.action_type}' (ID: ${payload.action_id}) to Agent [${agentName}] for target '${payload.target_name}'`);
-
-  try {
-    chosenClient.send(
-      JSON.stringify({
-        type: 'execute_action',
-        data: {
-          action_id: payload.action_id,
-          action_type: payload.action_type,
-          target_name: payload.target_name,
-          namespace: payload.namespace || 'default',
-          params: payload.params || {},
-        },
-      })
-    );
-    return { dispatched: true, recipient_agent: agentName };
-  } catch (sendErr) {
-    console.error(`❌ [AgentWebSocket] Failed transmitting execute_action to agent [${agentName}]:`, sendErr);
-    return { dispatched: false, recipient_agent: agentName };
-  }
+  );
 }

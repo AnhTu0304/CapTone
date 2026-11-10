@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import logging
 import signal
 import sys
+import time
 from typing import Any, Optional
 from aiohttp import web
 from kubernetes import client, config as k8s_config
@@ -18,6 +19,16 @@ from selfheal_agent.collectors.pods import PodsCollector
 from selfheal_agent.collectors.services import ServicesCollector
 from selfheal_agent.config import AgentConfig, load_config
 from selfheal_agent.telemetry.metrics import MetricsManager, PrometheusCollector
+from selfheal_agent.telemetry.otel import (
+    init_agent_otel,
+    record_agent_up,
+    record_k8s_api_call,
+    record_monitoring_operation,
+    record_processing_error,
+    record_remediation_execution,
+    shutdown_agent_otel,
+    start_agent_span,
+)
 from selfheal_agent.telemetry.schemas import (
     ActionResultData,
     ActionResultMessage,
@@ -42,6 +53,7 @@ class AgentService:
 
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
+        init_agent_otel(config)
         self._init_k8s()
 
         # Collectors
@@ -117,6 +129,7 @@ class AgentService:
     async def start(self) -> None:
         """Start all services and background loops."""
         self._is_running = True
+        record_agent_up(self.config.AGENT_UID, 1)
 
         # Start health probe server
         self._runner = web.AppRunner(self.app)
@@ -140,6 +153,7 @@ class AgentService:
         """Stop background tasks and disconnect cleanly."""
         logger.info("Initiating graceful shutdown...")
         self._is_running = False
+        record_agent_up(self.config.AGENT_UID, 0)
 
         for task in self._tasks:
             if not task.done():
@@ -159,6 +173,7 @@ class AgentService:
         if self._runner is not None:
             await self._runner.cleanup()
 
+        shutdown_agent_otel()
         logger.info("SelfHeal Agent shutdown complete.")
 
     async def _handle_incoming_ws_message(self, message: IncomingMessage) -> None:
@@ -173,435 +188,496 @@ class AgentService:
         if (len(target_name) == 36 and "-" in target_name) or target_name.startswith("c0000"):
             target_name = "sme-order-service"
         namespace = cmd.namespace or "default"
+        cmd_params = cmd.params or {}
 
-        # Auto-resolve actual namespace and workload kind (Deployment vs StatefulSet) across cluster
-        is_statefulset = False
-        if self.apps_v1:
-            found_workload = False
-            try:
-                self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
-                found_workload = True
-            except Exception:
+        with start_agent_span(
+            "agent.remediation.execute",
+            attributes={
+                "action.type": action_type or "UNKNOWN",
+                "k8s.namespace.name": namespace,
+            },
+            carrier=cmd_params if isinstance(cmd_params, dict) else None,
+        ):
+            # Auto-resolve actual namespace and workload kind (Deployment vs StatefulSet) across cluster
+            is_statefulset = False
+            if self.apps_v1:
+                found_workload = False
                 try:
-                    all_deps = self.apps_v1.list_deployment_for_all_namespaces()
-                    for dep in all_deps.items:
-                        if dep.metadata and dep.metadata.name == target_name:
-                            actual_ns = dep.metadata.namespace
-                            logger.info(
-                                "Auto-resolved Deployment namespace for '%s': '%s' -> '%s'",
-                                target_name,
-                                namespace,
-                                actual_ns,
-                            )
-                            namespace = actual_ns
-                            found_workload = True
-                            break
-                except Exception as scan_err:
-                    logger.debug("Failed scanning deployments for %s: %s", target_name, scan_err)
-
-            if not found_workload:
-                try:
-                    self.apps_v1.read_namespaced_stateful_set(name=target_name, namespace=namespace)
-                    is_statefulset = True
+                    t0 = time.perf_counter()
+                    self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
+                    record_k8s_api_call("deployments", "read", "success", time.perf_counter() - t0)
                     found_workload = True
                 except Exception:
                     try:
-                        all_sts = self.apps_v1.list_stateful_set_for_all_namespaces()
-                        for sts in all_sts.items:
-                            if sts.metadata and sts.metadata.name == target_name:
-                                actual_ns = sts.metadata.namespace
+                        t0 = time.perf_counter()
+                        all_deps = self.apps_v1.list_deployment_for_all_namespaces()
+                        record_k8s_api_call("deployments", "list", "success", time.perf_counter() - t0)
+                        for dep in all_deps.items:
+                            if dep.metadata and dep.metadata.name == target_name:
+                                actual_ns = dep.metadata.namespace
                                 logger.info(
-                                    "Auto-resolved StatefulSet namespace for '%s': '%s' -> '%s'",
+                                    "Auto-resolved Deployment namespace for '%s': '%s' -> '%s'",
                                     target_name,
                                     namespace,
                                     actual_ns,
                                 )
                                 namespace = actual_ns
-                                is_statefulset = True
                                 found_workload = True
                                 break
-                    except Exception as sts_err:
-                        logger.debug("Failed scanning statefulsets for %s: %s", target_name, sts_err)
+                    except Exception as scan_err:
+                        logger.debug("Failed scanning deployments for %s: %s", target_name, scan_err)
 
-        workload_kind_label = "statefulset" if is_statefulset else "deployment"
+                if not found_workload:
+                    try:
+                        t0 = time.perf_counter()
+                        self.apps_v1.read_namespaced_stateful_set(name=target_name, namespace=namespace)
+                        record_k8s_api_call("statefulsets", "read", "success", time.perf_counter() - t0)
+                        is_statefulset = True
+                        found_workload = True
+                    except Exception:
+                        try:
+                            t0 = time.perf_counter()
+                            all_sts = self.apps_v1.list_stateful_set_for_all_namespaces()
+                            record_k8s_api_call("statefulsets", "list", "success", time.perf_counter() - t0)
+                            for sts in all_sts.items:
+                                if sts.metadata and sts.metadata.name == target_name:
+                                    actual_ns = sts.metadata.namespace
+                                    logger.info(
+                                        "Auto-resolved StatefulSet namespace for '%s': '%s' -> '%s'",
+                                        target_name,
+                                        namespace,
+                                        actual_ns,
+                                    )
+                                    namespace = actual_ns
+                                    is_statefulset = True
+                                    found_workload = True
+                                    break
+                        except Exception as sts_err:
+                            logger.debug("Failed scanning statefulsets for %s: %s", target_name, sts_err)
 
-        def _patch_workload(body: dict[str, Any]) -> None:
-            if not self.apps_v1:
-                return
-            if is_statefulset:
-                self.apps_v1.patch_namespaced_stateful_set(name=target_name, namespace=namespace, body=body)
-            else:
-                self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=body)
+            workload_kind_label = "statefulset" if is_statefulset else "deployment"
 
-        def _scale_workload(replicas: int) -> None:
-            if not self.apps_v1:
-                return
-            scale_body = {"spec": {"replicas": replicas}}
-            if is_statefulset:
-                self.apps_v1.patch_namespaced_stateful_set_scale(name=target_name, namespace=namespace, body=scale_body)
-            else:
-                self.apps_v1.patch_namespaced_deployment_scale(name=target_name, namespace=namespace, body=scale_body)
+            def _patch_workload(body: dict[str, Any]) -> None:
+                if not self.apps_v1:
+                    return
+                res_kind = "statefulsets" if is_statefulset else "deployments"
+                t0 = time.perf_counter()
+                try:
+                    if is_statefulset:
+                        self.apps_v1.patch_namespaced_stateful_set(name=target_name, namespace=namespace, body=body)
+                    else:
+                        self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=body)
+                    record_k8s_api_call(res_kind, "patch", "success", time.perf_counter() - t0)
+                except Exception as patch_err:
+                    err_code = str(getattr(patch_err, "status", "exception"))
+                    record_k8s_api_call(res_kind, "patch", "error", time.perf_counter() - t0, err_code)
+                    raise
 
-        logger.info(
-            "🛠️ [SelfHealing Executor] Received action request: ID=%s, Type=%s, Target=%s (%s), NS=%s",
-            action_id,
-            action_type,
-            target_name,
-            workload_kind_label,
-            namespace,
-        )
+            def _scale_workload(replicas: int) -> None:
+                if not self.apps_v1:
+                    return
+                scale_body = {"spec": {"replicas": replicas}}
+                res_kind = "statefulsets" if is_statefulset else "deployments"
+                t0 = time.perf_counter()
+                try:
+                    if is_statefulset:
+                        self.apps_v1.patch_namespaced_stateful_set_scale(name=target_name, namespace=namespace, body=scale_body)
+                    else:
+                        self.apps_v1.patch_namespaced_deployment_scale(name=target_name, namespace=namespace, body=scale_body)
+                    record_k8s_api_call(res_kind, "scale", "success", time.perf_counter() - t0)
+                except Exception as scale_err:
+                    err_code = str(getattr(scale_err, "status", "exception"))
+                    record_k8s_api_call(res_kind, "scale", "error", time.perf_counter() - t0, err_code)
+                    raise
 
-        status = "SUCCEEDED"
-        details: dict[str, Any] = {
-            "target": target_name,
-            "workload_kind": workload_kind_label,
-            "namespace": namespace,
-            "action_type": action_type,
-            "executed_at": datetime.now(timezone.utc).isoformat(),
-        }
-        msg_str = ""
+            logger.info(
+                "🛠️ [SelfHealing Executor] Received action request: ID=%s, Type=%s, Target=%s (%s), NS=%s",
+                action_id,
+                action_type,
+                target_name,
+                workload_kind_label,
+                namespace,
+            )
 
-        try:
+            status = "SUCCEEDED"
+            details: dict[str, Any] = {
+                "target": target_name,
+                "workload_kind": workload_kind_label,
+                "namespace": namespace,
+                "action_type": action_type,
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            msg_str = ""
             start_t = asyncio.get_event_loop().time()
-            if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART_DEPLOYMENT", "RESTART POD", "RESTART DEPLOYMENT"]:
-                if self.apps_v1:
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    patch_body = {
-                        "spec": {
-                            "template": {
-                                "metadata": {
-                                    "annotations": {
-                                        "kubectl.kubernetes.io/restartedAt": now_str
+
+            try:
+                if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART_DEPLOYMENT", "RESTART POD", "RESTART DEPLOYMENT"]:
+                    if self.apps_v1:
+                        now_str = datetime.now(timezone.utc).isoformat()
+                        patch_body = {
+                            "spec": {
+                                "template": {
+                                    "metadata": {
+                                        "annotations": {
+                                            "kubectl.kubernetes.io/restartedAt": now_str
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    _patch_workload(patch_body)
-                    details["strategy"] = "zero_downtime_rolling_restart"
-                    details["restarted_at"] = now_str
-                    msg_str = f"Zero-downtime rolling restart patched successfully on {workload_kind_label}/{target_name} in namespace '{namespace}'"
-                    logger.info("✅ %s", msg_str)
-                else:
-                    msg_str = f"Offline/Dev mode: Zero-downtime restart executed successfully for {target_name}"
-                    logger.info("ℹ️ %s", msg_str)
+                        _patch_workload(patch_body)
+                        details["strategy"] = "zero_downtime_rolling_restart"
+                        details["restarted_at"] = now_str
+                        msg_str = f"Zero-downtime rolling restart patched successfully on {workload_kind_label}/{target_name} in namespace '{namespace}'"
+                        logger.info("✅ %s", msg_str)
+                    else:
+                        msg_str = f"Offline/Dev mode: Zero-downtime restart executed successfully for {target_name}"
+                        logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["REPLACE_POD", "REPLACE POD"]:
-                # Targeted Pod replacement: Delete problematic pod so controller creates a fresh new one
-                deleted_pod = None
-                if self.core_v1:
-                    try:
-                        pod_list = self.core_v1.list_namespaced_pod(namespace=namespace)
-                        specific_pod_name = (cmd.params or {}).get("pod_name") or (cmd.params or {}).get("pod_id")
-                        
-                        candidate_pods = []
-                        for pod in pod_list.items:
-                            p_name = pod.metadata.name if pod.metadata else ""
-                            phase = getattr(pod.status, "phase", "Running") if pod.status else "Running"
-                            # Skip completed one-off Job pods (e.g. mongodb-rs-init)
-                            if phase == "Succeeded" or "-init-" in p_name:
-                                continue
-                            if p_name == target_name or p_name.startswith(f"{target_name}-"):
-                                score = 0
-                                if phase != "Running":
-                                    score += 100
-                                
-                                c_statuses = getattr(pod.status, "container_statuses", None) or []
-                                total_restarts = 0
-                                for cs in c_statuses:
-                                    total_restarts += getattr(cs, "restart_count", 0) or 0
-                                    if not getattr(cs, "ready", True):
-                                        score += 30
-                                    waiting = getattr(cs.state, "waiting", None) if cs.state else None
-                                    if waiting:
-                                        reason = getattr(waiting, "reason", "") or ""
-                                        if reason in ["CrashLoopBackOff", "OOMKilled", "Error", "ContainerCreating"]:
-                                            score += 50
-                                score += total_restarts
-                                
-                                if specific_pod_name and p_name == specific_pod_name:
-                                    score += 1000
-                                
-                                candidate_pods.append((score, p_name))
-                        
-                        if candidate_pods:
-                            candidate_pods.sort(key=lambda x: x[0], reverse=True)
-                            target_pod_to_delete = candidate_pods[0][1]
-                            self.core_v1.delete_namespaced_pod(name=target_pod_to_delete, namespace=namespace)
-                            deleted_pod = target_pod_to_delete
-                    except Exception as p_err:
-                        logger.warning("Pod deletion attempt failed (%s), falling back to rollout restart", p_err)
-
-                if deleted_pod:
-                    details["strategy"] = "targeted_pod_replacement"
-                    details["replaced_pod"] = deleted_pod
-                    msg_str = f"Specific unhealthy pod '{deleted_pod}' terminated and successfully replaced by ReplicaSet in '{namespace}'"
-                    logger.info("✅ %s", msg_str)
-                elif self.apps_v1:
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str}}}}}
-                    _patch_workload(patch_body)
-                    details["strategy"] = "rolling_restart_fallback"
-                    msg_str = f"Replaced pod via rolling restart on {workload_kind_label}/{target_name} in '{namespace}'"
-                    logger.info("✅ %s", msg_str)
-                else:
-                    msg_str = f"Offline/Dev mode: Replaced pod for {target_name}"
-                    logger.info("ℹ️ %s", msg_str)
-
-            elif action_type in ["SCALE_REPLICAS", "SCALE_UP", "SCALE_DOWN", "SCALE_IN", "SCALE REPLICAS"]:
-                default_rep = 1 if ("DOWN" in action_type or "IN" in action_type) else 2
-                new_replicas = int((cmd.params or {}).get("replicas", default_rep))
-                if self.apps_v1:
-                    _scale_workload(new_replicas)
-                    details["strategy"] = "horizontal_scaling"
-                    details["replicas"] = new_replicas
-                    msg_str = f"Deployment/{target_name} scaled successfully to {new_replicas} replicas in '{namespace}'"
-                    logger.info("✅ %s", msg_str)
-                else:
-                    msg_str = f"Offline/Dev mode: Scaled {target_name} to {new_replicas} replicas"
-                    logger.info("ℹ️ %s", msg_str)
-
-            elif action_type in ["ROLLBACK_DEPLOYMENT", "ROLLBACK", "ROLLBACK DEPLOYMENT"]:
-                if self.apps_v1:
-                    try:
-                        if not is_statefulset:
-                            rs_list = self.apps_v1.list_namespaced_replica_set(namespace=namespace)
-                            matching_rs = []
-                            for rs in rs_list.items:
-                                owner_refs = getattr(rs.metadata, "owner_references", None) or []
-                                is_owned = any(getattr(ref, "name", "") == target_name and getattr(ref, "kind", "") == "Deployment" for ref in owner_refs)
-                                if is_owned:
-                                    rev = int(((rs.metadata.annotations or {}) if rs.metadata else {}).get("deployment.kubernetes.io/revision", "0"))
-                                    matching_rs.append((rev, rs))
+                elif action_type in ["REPLACE_POD", "REPLACE POD"]:
+                    # Targeted Pod replacement: Delete problematic pod so controller creates a fresh new one
+                    deleted_pod = None
+                    if self.core_v1:
+                        try:
+                            t0 = time.perf_counter()
+                            pod_list = self.core_v1.list_namespaced_pod(namespace=namespace)
+                            record_k8s_api_call("pods", "list", "success", time.perf_counter() - t0)
+                            specific_pod_name = (cmd.params or {}).get("pod_name") or (cmd.params or {}).get("pod_id")
                             
-                            matching_rs.sort(key=lambda x: x[0], reverse=True)
-                        else:
-                            matching_rs = []
+                            candidate_pods = []
+                            for pod in pod_list.items:
+                                p_name = pod.metadata.name if pod.metadata else ""
+                                phase = getattr(pod.status, "phase", "Running") if pod.status else "Running"
+                                # Skip completed one-off Job pods (e.g. mongodb-rs-init)
+                                if phase == "Succeeded" or "-init-" in p_name:
+                                    continue
+                                if p_name == target_name or p_name.startswith(f"{target_name}-"):
+                                    score = 0
+                                    if phase != "Running":
+                                        score += 100
+                                    
+                                    c_statuses = getattr(pod.status, "container_statuses", None) or []
+                                    total_restarts = 0
+                                    for cs in c_statuses:
+                                        total_restarts += getattr(cs, "restart_count", 0) or 0
+                                        if not getattr(cs, "ready", True):
+                                            score += 30
+                                        waiting = getattr(cs.state, "waiting", None) if cs.state else None
+                                        if waiting:
+                                            reason = getattr(waiting, "reason", "") or ""
+                                            if reason in ["CrashLoopBackOff", "OOMKilled", "Error", "ContainerCreating"]:
+                                                score += 50
+                                    score += total_restarts
+                                    
+                                    if specific_pod_name and p_name == specific_pod_name:
+                                        score += 1000
+                                    
+                                    candidate_pods.append((score, p_name))
+                            
+                            if candidate_pods:
+                                candidate_pods.sort(key=lambda x: x[0], reverse=True)
+                                target_pod_to_delete = candidate_pods[0][1]
+                                t_del = time.perf_counter()
+                                self.core_v1.delete_namespaced_pod(name=target_pod_to_delete, namespace=namespace)
+                                record_k8s_api_call("pods", "delete", "success", time.perf_counter() - t_del)
+                                deleted_pod = target_pod_to_delete
+                        except Exception as p_err:
+                            err_code = str(getattr(p_err, "status", "exception"))
+                            record_k8s_api_call("pods", "delete", "error", 0.01, err_code)
+                            logger.warning("Pod deletion attempt failed (%s), falling back to rollout restart", p_err)
 
-                        if len(matching_rs) >= 2:
-                            prev_rs = matching_rs[1][1]
-                            patch_body = {"spec": {"template": prev_rs.spec.template}}
-                            _patch_workload(patch_body)
-                            details["strategy"] = "replicaset_revision_rollback"
-                            details["restored_revision"] = matching_rs[1][0]
-                            msg_str = f"True Rollback executed: Restored previous ReplicaSet revision {matching_rs[1][0]} on deployment/{target_name} in '{namespace}'"
-                        else:
-                            now_str = datetime.now(timezone.utc).isoformat()
-                            patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/rollback-triggered": "true"}}}}}
-                            _patch_workload(patch_body)
-                            details["strategy"] = "rollback_restart_fallback"
-                            msg_str = f"Rollback restart triggered on {workload_kind_label}/{target_name} to restore stable revision in '{namespace}'"
-                    except Exception as rb_err:
+                    if deleted_pod:
+                        details["strategy"] = "targeted_pod_replacement"
+                        details["replaced_pod"] = deleted_pod
+                        msg_str = f"Specific unhealthy pod '{deleted_pod}' terminated and successfully replaced by ReplicaSet in '{namespace}'"
+                        logger.info("✅ %s", msg_str)
+                    elif self.apps_v1:
                         now_str = datetime.now(timezone.utc).isoformat()
                         patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str}}}}}
                         _patch_workload(patch_body)
-                        details["strategy"] = "rollback_error_fallback"
-                        msg_str = f"Rollback fallback executed for {target_name}: {rb_err}"
-                    logger.info("✅ %s", msg_str)
-                else:
-                    msg_str = f"Offline/Dev mode: Rollback executed for {target_name}"
-                    logger.info("ℹ️ %s", msg_str)
+                        details["strategy"] = "rolling_restart_fallback"
+                        msg_str = f"Replaced pod via rolling restart on {workload_kind_label}/{target_name} in '{namespace}'"
+                        logger.info("✅ %s", msg_str)
+                    else:
+                        msg_str = f"Offline/Dev mode: Replaced pod for {target_name}"
+                        logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["CLEANUP_STORAGE", "CLEANUP_TEMP_FILES", "CLEANUP_TEMPORARY_FILES", "CLEANUP TEMP FILES"]:
-                if self.apps_v1:
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    patch_body = {
-                        "spec": {
-                            "template": {
-                                "metadata": {
-                                    "annotations": {
-                                        "kubectl.kubernetes.io/restartedAt": now_str,
-                                        "selfheal.io/storage-cleanup": "true"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _patch_workload(patch_body)
-                    details["strategy"] = "emptydir_reclaim_rolling_cycle"
-                    msg_str = f"Ephemeral disk cleanup and emptyDir reclamation executed successfully on {target_name} in '{namespace}'"
-                    logger.info("✅ %s", msg_str)
-                else:
-                    msg_str = f"Offline/Dev mode: Storage cleanup completed for {target_name}"
-                    logger.info("ℹ️ %s", msg_str)
+                elif action_type in ["SCALE_REPLICAS", "SCALE_UP", "SCALE_DOWN", "SCALE_IN", "SCALE REPLICAS"]:
+                    default_rep = 1 if ("DOWN" in action_type or "IN" in action_type) else 2
+                    new_replicas = int((cmd.params or {}).get("replicas", default_rep))
+                    if self.apps_v1:
+                        _scale_workload(new_replicas)
+                        details["strategy"] = "horizontal_scaling"
+                        details["replicas"] = new_replicas
+                        msg_str = f"Deployment/{target_name} scaled successfully to {new_replicas} replicas in '{namespace}'"
+                        logger.info("✅ %s", msg_str)
+                    else:
+                        msg_str = f"Offline/Dev mode: Scaled {target_name} to {new_replicas} replicas"
+                        logger.info("ℹ️ %s", msg_str)
 
-            elif action_type in ["ADJUST_RESOURCE_LIMITS", "ADJUST RESOURCE LIMITS"]:
-                if self.apps_v1:
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    patch_body = {
-                        "spec": {
-                            "template": {
-                                "metadata": {
-                                    "annotations": {
-                                        "selfheal.io/resource-limits-adjusted-at": now_str
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _patch_workload(patch_body)
-                    details["strategy"] = "vertical_resource_tuning"
-                    msg_str = f"Adjusted CPU/RAM resource limits and applied rolling update on {workload_kind_label}/{target_name} in '{namespace}'"
-                    logger.info("✅ %s", msg_str)
-                else:
-                    msg_str = f"Offline/Dev mode: Resource limits adjusted for {target_name}"
-                    logger.info("ℹ️ %s", msg_str)
-
-            elif action_type in ["DRAIN_NODE", "DRAIN NODE"]:
-                details["strategy"] = "safe_node_workload_reschedule"
-                if self.apps_v1:
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/node-rescheduled": "true"}}}}}
-                    _patch_workload(patch_body)
-                msg_str = f"Rescheduled pods safely for {target_name} in '{namespace}' to isolate degraded node resources"
-                logger.info("✅ %s", msg_str)
-
-            elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
-                raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or "203.0.113.10"
-                clean_ip = str(raw_ip).strip()
-                ip_cidr = clean_ip if "/" in clean_ip else (f"{clean_ip}/128" if ":" in clean_ip else f"{clean_ip}/32")
-                policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
-                target_ns = namespace or "default"
-                duration_minutes = (cmd.params or {}).get("duration_minutes") or 15
-
-                details["strategy"] = "k8s_native_network_policy_filter"
-                details["blocked_ip"] = clean_ip
-                details["ip_cidr"] = ip_cidr
-                details["network_policy"] = policy_name
-                details["namespace"] = target_ns
-                details["duration_minutes"] = duration_minutes
-
-                # Determine target pod labels
-                target_pod_labels = {"app": target_name}
-                if getattr(self, "apps_v1", None):
-                    try:
-                        dep = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=target_ns)
-                        if dep.spec and dep.spec.selector and dep.spec.selector.match_labels:
-                            target_pod_labels = dep.spec.selector.match_labels
-                    except Exception:
-                        pass
-
-                details["target_labels"] = target_pod_labels
-
-                if getattr(self, "networking_v1", None):
-                    try:
-                        net_policy = client.V1NetworkPolicy(
-                            metadata=client.V1ObjectMeta(
-                                name=policy_name,
-                                namespace=target_ns,
-                                labels={
-                                    "app.kubernetes.io/name": "selfheal-agent-security",
-                                    "app.kubernetes.io/managed-by": "selfheal-agent",
-                                    "selfheal.io/action": "TEMPORARY_IP_BLOCK",
-                                    "selfheal.io/target": target_name,
-                                },
-                                annotations={
-                                    "selfheal.io/blocked-ip": clean_ip,
-                                    "selfheal.io/blocked-at": datetime.now(timezone.utc).isoformat(),
-                                    "selfheal.io/duration-minutes": str(duration_minutes),
-                                }
-                            ),
-                            spec=client.V1NetworkPolicySpec(
-                                pod_selector=client.V1LabelSelector(match_labels=target_pod_labels),
-                                policy_types=["Ingress"],
-                                ingress=[
-                                    client.V1NetworkPolicyIngressRule(
-                                        _from=[
-                                            client.V1NetworkPolicyPeer(namespace_selector=client.V1LabelSelector()),
-                                            client.V1NetworkPolicyPeer(pod_selector=client.V1LabelSelector()),
-                                            client.V1NetworkPolicyPeer(ip_block=client.V1IPBlock(cidr="0.0.0.0/0", _except=[ip_cidr])),
-                                        ]
-                                    )
-                                ]
-                            )
-                        )
+                elif action_type in ["ROLLBACK_DEPLOYMENT", "ROLLBACK", "ROLLBACK DEPLOYMENT"]:
+                    if self.apps_v1:
                         try:
-                            self.networking_v1.create_namespaced_network_policy(namespace=target_ns, body=net_policy)
-                            msg_str = f"NetworkPolicy '{policy_name}' deployed successfully: IP '{clean_ip}' blocked from accessing {target_name} in namespace '{target_ns}' (TTL: {duration_minutes}m)"
-                        except Exception as create_err:
-                            if "already exists" in str(create_err).lower() or getattr(create_err, "status", None) == 409:
-                                self.networking_v1.replace_namespaced_network_policy(name=policy_name, namespace=target_ns, body=net_policy)
-                                msg_str = f"NetworkPolicy '{policy_name}' updated successfully: IP '{clean_ip}' blocked from accessing {target_name} in namespace '{target_ns}' (TTL: {duration_minutes}m)"
+                            if not is_statefulset:
+                                t0 = time.perf_counter()
+                                rs_list = self.apps_v1.list_namespaced_replica_set(namespace=namespace)
+                                record_k8s_api_call("replicasets", "list", "success", time.perf_counter() - t0)
+                                matching_rs = []
+                                for rs in rs_list.items:
+                                    owner_refs = getattr(rs.metadata, "owner_references", None) or []
+                                    is_owned = any(getattr(ref, "name", "") == target_name and getattr(ref, "kind", "") == "Deployment" for ref in owner_refs)
+                                    if is_owned:
+                                        rev = int(((rs.metadata.annotations or {}) if rs.metadata else {}).get("deployment.kubernetes.io/revision", "0"))
+                                        matching_rs.append((rev, rs))
+                                
+                                matching_rs.sort(key=lambda x: x[0], reverse=True)
                             else:
-                                raise create_err
+                                matching_rs = []
 
-                        logger.info("🛡️ %s", msg_str)
+                            if len(matching_rs) >= 2:
+                                prev_rs = matching_rs[1][1]
+                                patch_body = {"spec": {"template": prev_rs.spec.template}}
+                                _patch_workload(patch_body)
+                                details["strategy"] = "replicaset_revision_rollback"
+                                details["restored_revision"] = matching_rs[1][0]
+                                msg_str = f"True Rollback executed: Restored previous ReplicaSet revision {matching_rs[1][0]} on deployment/{target_name} in '{namespace}'"
+                            else:
+                                now_str = datetime.now(timezone.utc).isoformat()
+                                patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/rollback-triggered": "true"}}}}}
+                                _patch_workload(patch_body)
+                                details["strategy"] = "rollback_restart_fallback"
+                                msg_str = f"Rollback restart triggered on {workload_kind_label}/{target_name} to restore stable revision in '{namespace}'"
+                        except Exception as rb_err:
+                            now_str = datetime.now(timezone.utc).isoformat()
+                            patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str}}}}}
+                            _patch_workload(patch_body)
+                            details["strategy"] = "rollback_error_fallback"
+                            msg_str = f"Rollback fallback executed for {target_name}: {rb_err}"
+                        logger.info("✅ %s", msg_str)
+                    else:
+                        msg_str = f"Offline/Dev mode: Rollback executed for {target_name}"
+                        logger.info("ℹ️ %s", msg_str)
 
-                        # Schedule background TTL auto-unblock
-                        ttl_sec = int((cmd.params or {}).get("ttl_seconds", 0)) or (int(duration_minutes) * 60)
-                        async def _auto_unblock(pol_name=policy_name, pol_ns=target_ns, delay=ttl_sec):
+                elif action_type in ["CLEANUP_STORAGE", "CLEANUP_TEMP_FILES", "CLEANUP_TEMPORARY_FILES", "CLEANUP TEMP FILES"]:
+                    if self.apps_v1:
+                        now_str = datetime.now(timezone.utc).isoformat()
+                        patch_body = {
+                            "spec": {
+                                "template": {
+                                    "metadata": {
+                                        "annotations": {
+                                            "kubectl.kubernetes.io/restartedAt": now_str,
+                                            "selfheal.io/storage-cleanup": "true"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _patch_workload(patch_body)
+                        details["strategy"] = "emptydir_reclaim_rolling_cycle"
+                        msg_str = f"Ephemeral disk cleanup and emptyDir reclamation executed successfully on {target_name} in '{namespace}'"
+                        logger.info("✅ %s", msg_str)
+                    else:
+                        msg_str = f"Offline/Dev mode: Storage cleanup completed for {target_name}"
+                        logger.info("ℹ️ %s", msg_str)
+
+                elif action_type in ["ADJUST_RESOURCE_LIMITS", "ADJUST RESOURCE LIMITS"]:
+                    if self.apps_v1:
+                        now_str = datetime.now(timezone.utc).isoformat()
+                        patch_body = {
+                            "spec": {
+                                "template": {
+                                    "metadata": {
+                                        "annotations": {
+                                            "selfheal.io/resource-limits-adjusted-at": now_str
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _patch_workload(patch_body)
+                        details["strategy"] = "vertical_resource_tuning"
+                        msg_str = f"Adjusted CPU/RAM resource limits and applied rolling update on {workload_kind_label}/{target_name} in '{namespace}'"
+                        logger.info("✅ %s", msg_str)
+                    else:
+                        msg_str = f"Offline/Dev mode: Resource limits adjusted for {target_name}"
+                        logger.info("ℹ️ %s", msg_str)
+
+                elif action_type in ["DRAIN_NODE", "DRAIN NODE"]:
+                    details["strategy"] = "safe_node_workload_reschedule"
+                    if self.apps_v1:
+                        now_str = datetime.now(timezone.utc).isoformat()
+                        patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/node-rescheduled": "true"}}}}}
+                        _patch_workload(patch_body)
+                    msg_str = f"Rescheduled pods safely for {target_name} in '{namespace}' to isolate degraded node resources"
+                    logger.info("✅ %s", msg_str)
+
+                elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
+                    raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or "203.0.113.10"
+                    clean_ip = str(raw_ip).strip()
+                    ip_cidr = clean_ip if "/" in clean_ip else (f"{clean_ip}/128" if ":" in clean_ip else f"{clean_ip}/32")
+                    policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+                    target_ns = namespace or "default"
+                    duration_minutes = (cmd.params or {}).get("duration_minutes") or 15
+
+                    details["strategy"] = "k8s_native_network_policy_filter"
+                    details["blocked_ip"] = clean_ip
+                    details["ip_cidr"] = ip_cidr
+                    details["network_policy"] = policy_name
+                    details["namespace"] = target_ns
+                    details["duration_minutes"] = duration_minutes
+
+                    # Determine target pod labels
+                    target_pod_labels = {"app": target_name}
+                    if getattr(self, "apps_v1", None):
+                        try:
+                            dep = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=target_ns)
+                            if dep.spec and dep.spec.selector and dep.spec.selector.match_labels:
+                                target_pod_labels = dep.spec.selector.match_labels
+                        except Exception:
+                            pass
+
+                    details["target_labels"] = target_pod_labels
+
+                    if getattr(self, "networking_v1", None):
+                        try:
+                            net_policy = client.V1NetworkPolicy(
+                                metadata=client.V1ObjectMeta(
+                                    name=policy_name,
+                                    namespace=target_ns,
+                                    labels={
+                                        "app.kubernetes.io/name": "selfheal-agent-security",
+                                        "app.kubernetes.io/managed-by": "selfheal-agent",
+                                        "selfheal.io/action": "TEMPORARY_IP_BLOCK",
+                                        "selfheal.io/target": target_name,
+                                    },
+                                    annotations={
+                                        "selfheal.io/blocked-ip": clean_ip,
+                                        "selfheal.io/blocked-at": datetime.now(timezone.utc).isoformat(),
+                                        "selfheal.io/duration-minutes": str(duration_minutes),
+                                    }
+                                ),
+                                spec=client.V1NetworkPolicySpec(
+                                    pod_selector=client.V1LabelSelector(match_labels=target_pod_labels),
+                                    policy_types=["Ingress"],
+                                    ingress=[
+                                        client.V1NetworkPolicyIngressRule(
+                                            _from=[
+                                                client.V1NetworkPolicyPeer(namespace_selector=client.V1LabelSelector()),
+                                                client.V1NetworkPolicyPeer(pod_selector=client.V1LabelSelector()),
+                                                client.V1NetworkPolicyPeer(ip_block=client.V1IPBlock(cidr="0.0.0.0/0", _except=[ip_cidr])),
+                                            ]
+                                        )
+                                    ]
+                                )
+                            )
+                            t0 = time.perf_counter()
                             try:
-                                await asyncio.sleep(delay)
-                                if getattr(self, "networking_v1", None):
-                                    self.networking_v1.delete_namespaced_network_policy(name=pol_name, namespace=pol_ns)
-                                    logger.info("⏰ [Auto-TTL] Successfully removed temporary NetworkPolicy '%s' in namespace '%s'", pol_name, pol_ns)
-                            except Exception as unblock_err:
-                                logger.warning("[Auto-TTL] NetworkPolicy '%s' cleanup status: %s", pol_name, unblock_err)
-                        
-                        asyncio.create_task(_auto_unblock())
+                                self.networking_v1.create_namespaced_network_policy(namespace=target_ns, body=net_policy)
+                                record_k8s_api_call("networkpolicies", "create", "success", time.perf_counter() - t0)
+                                msg_str = f"NetworkPolicy '{policy_name}' deployed successfully: IP '{clean_ip}' blocked from accessing {target_name} in namespace '{target_ns}' (TTL: {duration_minutes}m)"
+                            except Exception as create_err:
+                                if "already exists" in str(create_err).lower() or getattr(create_err, "status", None) == 409:
+                                    self.networking_v1.replace_namespaced_network_policy(name=policy_name, namespace=target_ns, body=net_policy)
+                                    record_k8s_api_call("networkpolicies", "replace", "success", time.perf_counter() - t0)
+                                    msg_str = f"NetworkPolicy '{policy_name}' updated successfully: IP '{clean_ip}' blocked from accessing {target_name} in namespace '{target_ns}' (TTL: {duration_minutes}m)"
+                                else:
+                                    err_code = str(getattr(create_err, "status", "exception"))
+                                    record_k8s_api_call("networkpolicies", "create", "error", time.perf_counter() - t0, err_code)
+                                    raise create_err
 
-                    except Exception as net_err:
-                        logger.error("❌ Failed to deploy NetworkPolicy '%s': %s", policy_name, net_err)
-                        msg_str = f"Failed to deploy NetworkPolicy for IP '{clean_ip}' on {target_name}: {net_err}"
+                            logger.info("🛡️ %s", msg_str)
+
+                            # Schedule background TTL auto-unblock
+                            ttl_sec = int((cmd.params or {}).get("ttl_seconds", 0)) or (int(duration_minutes) * 60)
+                            async def _auto_unblock(pol_name=policy_name, pol_ns=target_ns, delay=ttl_sec):
+                                try:
+                                    await asyncio.sleep(delay)
+                                    if getattr(self, "networking_v1", None):
+                                        self.networking_v1.delete_namespaced_network_policy(name=pol_name, namespace=pol_ns)
+                                        logger.info("⏰ [Auto-TTL] Successfully removed temporary NetworkPolicy '%s' in namespace '%s'", pol_name, pol_ns)
+                                except Exception as unblock_err:
+                                    logger.warning("[Auto-TTL] NetworkPolicy '%s' cleanup status: %s", pol_name, unblock_err)
+                            
+                            asyncio.create_task(_auto_unblock())
+
+                        except Exception as net_err:
+                            logger.error("❌ Failed to deploy NetworkPolicy '%s': %s", policy_name, net_err)
+                            msg_str = f"Failed to deploy NetworkPolicy for IP '{clean_ip}' on {target_name}: {net_err}"
+                            status = "FAILED"
+                    else:
+                        msg_str = f"Kubernetes Networking API unavailable: IP '{clean_ip}' could not be blocked on {target_name}"
                         status = "FAILED"
+
+                elif action_type in ["UNBLOCK_IP", "REMOVE_IP_BLOCK", "DELETE_IP_BLOCK"]:
+                    raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or ""
+                    clean_ip = str(raw_ip).strip()
+                    policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+                    target_ns = namespace or "default"
+                    details["strategy"] = "k8s_native_unblock"
+                    details["unblocked_ip"] = clean_ip
+
+                    if getattr(self, "networking_v1", None):
+                        t0 = time.perf_counter()
+                        try:
+                            self.networking_v1.delete_namespaced_network_policy(name=policy_name, namespace=target_ns)
+                            record_k8s_api_call("networkpolicies", "delete", "success", time.perf_counter() - t0)
+                            msg_str = f"NetworkPolicy '{policy_name}' removed: IP '{clean_ip}' unblocked successfully in namespace '{target_ns}'"
+                            logger.info("🛡️ %s", msg_str)
+                        except Exception as unblock_err:
+                            if "not found" in str(unblock_err).lower() or getattr(unblock_err, "status", None) == 404:
+                                record_k8s_api_call("networkpolicies", "delete", "success", time.perf_counter() - t0)
+                                msg_str = f"NetworkPolicy '{policy_name}' not found or already removed"
+                            else:
+                                err_code = str(getattr(unblock_err, "status", "exception"))
+                                record_k8s_api_call("networkpolicies", "delete", "error", time.perf_counter() - t0, err_code)
+                                raise unblock_err
+                    else:
+                        msg_str = f"Kubernetes Networking API unavailable to unblock IP '{clean_ip}'"
+
+                elif action_type in ["NO_ACTION", "NO ACTION"]:
+                    details["strategy"] = "zero_impact_observation"
+                    details["status"] = "safe_within_thresholds"
+                    msg_str = f"Zero-downtime preserved: System telemetry verified safe for {target_name}, NO_ACTION applied."
+                    logger.info("🛡️ %s", msg_str)
+
                 else:
-                    msg_str = f"Kubernetes Networking API unavailable: IP '{clean_ip}' could not be blocked on {target_name}"
-                    status = "FAILED"
+                    details["strategy"] = "generic_action"
+                    msg_str = f"Action '{action_type}' processed successfully on {target_name}"
+                    logger.info("✅ %s", msg_str)
 
-            elif action_type in ["UNBLOCK_IP", "REMOVE_IP_BLOCK", "DELETE_IP_BLOCK"]:
-                raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or ""
-                clean_ip = str(raw_ip).strip()
-                policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
-                target_ns = namespace or "default"
-                details["strategy"] = "k8s_native_unblock"
-                details["unblocked_ip"] = clean_ip
+                elapsed_sec = max(0.001, asyncio.get_event_loop().time() - start_t)
+                duration_ms = int(elapsed_sec * 1000)
+                details["duration_ms"] = max(100, duration_ms)
 
-                if getattr(self, "networking_v1", None):
-                    try:
-                        self.networking_v1.delete_namespaced_network_policy(name=policy_name, namespace=target_ns)
-                        msg_str = f"NetworkPolicy '{policy_name}' removed: IP '{clean_ip}' unblocked successfully in namespace '{target_ns}'"
-                        logger.info("🛡️ %s", msg_str)
-                    except Exception as unblock_err:
-                        if "not found" in str(unblock_err).lower() or getattr(unblock_err, "status", None) == 404:
-                            msg_str = f"NetworkPolicy '{policy_name}' not found or already removed"
-                        else:
-                            raise unblock_err
-                else:
-                    msg_str = f"Kubernetes Networking API unavailable to unblock IP '{clean_ip}'"
+            except Exception as exc:
+                elapsed_sec = max(0.001, asyncio.get_event_loop().time() - start_t)
+                logger.error("❌ Action execution failed on %s: %s", target_name, exc)
+                record_processing_error("remediation")
+                status = "FAILED"
+                msg_str = f"Failed to execute {action_type} on {target_name}: {exc}"
+                duration_ms = max(100, int(elapsed_sec * 1000))
+                details = {"error": str(exc)}
 
-            elif action_type in ["NO_ACTION", "NO ACTION"]:
-                details["strategy"] = "zero_impact_observation"
-                details["status"] = "safe_within_thresholds"
-                msg_str = f"Zero-downtime preserved: System telemetry verified safe for {target_name}, NO_ACTION applied."
-                logger.info("🛡️ %s", msg_str)
+            record_remediation_execution(
+                action_type=action_type or "UNKNOWN",
+                workload_kind=workload_kind_label,
+                status="success" if status == "SUCCEEDED" else "failed",
+                duration_seconds=max(0.001, duration_ms / 1000.0),
+            )
 
-            else:
-                details["strategy"] = "generic_action"
-                msg_str = f"Action '{action_type}' processed successfully on {target_name}"
-                logger.info("✅ %s", msg_str)
-
-            duration_ms = int((asyncio.get_event_loop().time() - start_t) * 1000)
-            details["duration_ms"] = max(100, duration_ms)
-
-        except Exception as exc:
-            logger.error("❌ Action execution failed on %s: %s", target_name, exc)
-            status = "FAILED"
-            msg_str = f"Failed to execute {action_type} on {target_name}: {exc}"
-            duration_ms = 500
-            details = {"error": str(exc)}
-
-        # Transmit execution result back to Main Backend
-        await self.ws_client.send(
-            ActionResultMessage(
-                data=ActionResultData(
-                    action_id=action_id,
-                    status=status,
-                    message=msg_str,
-                    duration_ms=max(100, duration_ms),
-                    details=details,
+            # Transmit execution result back to Main Backend
+            await self.ws_client.send(
+                ActionResultMessage(
+                    data=ActionResultData(
+                        action_id=action_id,
+                        status=status,
+                        message=msg_str,
+                        duration_ms=max(100, duration_ms),
+                        details=details,
+                    )
                 )
             )
-        )
 
     async def _metrics_loop(self) -> None:
         interval_sec = max(1.0, self.config.METRICS_INTERVAL_MS / 1000.0)
@@ -616,9 +692,12 @@ class AgentService:
                 node_snapshot = await asyncio.to_thread(self.node_resource_collector.collect_snapshot)
                 node_disk_pct = node_snapshot.disk_usage_percent
                 await self.ws_client.send(NodeMetricsMessage(data=node_snapshot))
+                record_monitoring_operation("nodes", "success")
             except asyncio.CancelledError:
                 break
             except Exception as node_err:
+                record_monitoring_operation("nodes", "error")
+                record_processing_error("metrics")
                 logger.error("Error collecting/sending node resource metrics: %s", node_err)
 
             try:
@@ -627,11 +706,13 @@ class AgentService:
                     self.config.K8S_NAMESPACE,
                     self.config.MONITOR_ALL_NAMESPACES,
                 )
+                record_monitoring_operation("pods", "success")
                 replicas = await asyncio.to_thread(
                     self.deployments_collector.get_replicas_map,
                     self.config.K8S_NAMESPACE,
                     self.config.MONITOR_ALL_NAMESPACES,
                 )
+                record_monitoring_operation("deployments", "success")
                 nodes = await asyncio.to_thread(self.nodes_collector.list_nodes)
                 metrics = await self.metrics_manager.aggregate_metrics(
                     pods,
@@ -646,6 +727,8 @@ class AgentService:
             except asyncio.CancelledError:
                 break
             except Exception as err:
+                record_monitoring_operation("pods", "error")
+                record_processing_error("metrics")
                 logger.error("Error in metrics loop: %s", err)
 
             try:
@@ -667,9 +750,12 @@ class AgentService:
                 logs = await asyncio.to_thread(self.logs_collector.collect_pod_logs, pods)
                 for l in logs:
                     await self.ws_client.send(LogMessage(data=l))
+                record_monitoring_operation("logs", "success")
             except asyncio.CancelledError:
                 break
             except Exception as err:
+                record_monitoring_operation("logs", "error")
+                record_processing_error("logs")
                 logger.error("Error in logs loop: %s", err)
 
             try:
@@ -700,9 +786,12 @@ class AgentService:
                 node_anomalies = await asyncio.to_thread(self.nodes_collector.detect_node_anomalies)
                 for ev in (*events, *pod_anomalies, *dep_anomalies, *node_anomalies):
                     await self.ws_client.send(K8sEventMessage(data=ev))
+                record_monitoring_operation("events", "success")
             except asyncio.CancelledError:
                 break
             except Exception as err:
+                record_monitoring_operation("events", "error")
+                record_processing_error("events")
                 logger.error("Error in events loop: %s", err)
 
             try:
@@ -736,9 +825,12 @@ class AgentService:
                         "services": services,
                         "deployments": deployments,
                     }))
+                record_monitoring_operation("inventory", "success")
             except asyncio.CancelledError:
                 break
             except Exception as err:
+                record_monitoring_operation("inventory", "error")
+                record_processing_error("inventory")
                 logger.error("Error in inventory loop: %s", err)
 
             try:

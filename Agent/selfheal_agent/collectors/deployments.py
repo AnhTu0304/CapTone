@@ -2,10 +2,12 @@
 
 from datetime import datetime, timezone
 import logging
+import time
 from typing import Any, Optional
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
+from selfheal_agent.telemetry.otel import record_k8s_api_call
 from selfheal_agent.telemetry.schemas import AgentK8sEventData, K8sEventDetail
 
 logger = logging.getLogger("selfheal_agent.collectors.deployments")
@@ -177,7 +179,7 @@ class DeploymentsCollector:
         self.active_anomalies: dict[str, str] = {}
         self.known_deployments: dict[str, tuple[str, str]] = {}
 
-    def _record_api_error(self, err: Exception, operation: str) -> None:
+    def _record_api_error(self, err: Exception, operation: str, duration_sec: float = 0.0) -> None:
         if isinstance(err, ApiException):
             if err.status in (401, 403):
                 self.last_collection_status = "FORBIDDEN"
@@ -186,10 +188,12 @@ class DeploymentsCollector:
             else:
                 self.last_collection_status = "UNAVAILABLE"
             self.last_error = f"HTTP {err.status}: {err.reason}"
+            record_k8s_api_call("deployments", "list", "error", duration_sec, str(err.status))
             logger.warning("K8s API error during %s (%s): %s", operation, self.last_collection_status, self.last_error)
         else:
             self.last_collection_status = "UNAVAILABLE"
             self.last_error = str(err)
+            record_k8s_api_call("deployments", "list", "error", duration_sec, "exception")
             logger.debug("Failed %s: %s", operation, err)
 
     def _parse_deployment(self, dep: Any, observed_at: str) -> Optional[DeploymentSummary]:
@@ -274,11 +278,13 @@ class DeploymentsCollector:
 
         results: list[DeploymentSummary] = []
         observed_at = datetime.now(timezone.utc).isoformat()
+        t0 = time.perf_counter()
         try:
             if monitor_all or not namespace:
                 deps = self.apps_v1.list_deployment_for_all_namespaces()
             else:
                 deps = self.apps_v1.list_namespaced_deployment(namespace=namespace)
+            record_k8s_api_call("deployments", "list", "success", time.perf_counter() - t0)
 
             self.last_collection_status = "OK"
             self.last_error = None
@@ -287,7 +293,7 @@ class DeploymentsCollector:
                 if parsed:
                     results.append(parsed)
         except Exception as err:
-            self._record_api_error(err, "list_deployments")
+            self._record_api_error(err, "list_deployments", time.perf_counter() - t0)
             return []
 
         return results

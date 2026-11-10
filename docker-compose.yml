@@ -81,6 +81,16 @@ services:
       SMTP_PASS: ${SMTP_PASS:-sioolyeupmkhpbqg}
       EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <phamthaisang1710@gmail.com>}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3001}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-selfheal-backend}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-1.0.0}
+      OTEL_SERVICE_NAMESPACE: ${OTEL_SERVICE_NAMESPACE:-selfheal-system}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-production}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
+      OTEL_METRIC_EXPORT_INTERVAL_MS: ${OTEL_METRIC_EXPORT_INTERVAL_MS:-15000}
+      K8S_NAMESPACE_NAME: ${K8S_NAMESPACE_NAME:-selfheal-system}
+      K8S_POD_NAME: ${K8S_POD_NAME:-captone-main-backend}
+      K8S_NODE_NAME: ${K8S_NODE_NAME:-minikube}
     volumes:
       - ./Main_backend/dist:/app/dist
     ports:
@@ -107,6 +117,16 @@ services:
       - ./AI_backend/.env
     environment:
       PORT: 8000
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_SERVICE_NAME: selfheal-ai-service
+      OTEL_SERVICE_VERSION: "1.0.0"
+      OTEL_SERVICE_NAMESPACE: selfheal-system
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-production}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
+      OTEL_METRIC_EXPORT_INTERVAL_MS: ${OTEL_METRIC_EXPORT_INTERVAL_MS:-15000}
+      K8S_NAMESPACE_NAME: selfheal-system
+      K8S_POD_NAME: captone-ai-backend
+      K8S_NODE_NAME: minikube
     volumes:
       - ./AI_backend/saved_models:/app/saved_models
     ports:

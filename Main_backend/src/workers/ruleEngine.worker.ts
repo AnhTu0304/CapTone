@@ -3,6 +3,7 @@ dotenv.config();
 
 import { RuleEngineExecutionService } from '../services/ruleEngineExecution.service';
 import { pool } from '../config/database';
+import { recordBackgroundJob } from '../telemetry/metrics';
 
 let isRunning = false;
 let timer: NodeJS.Timeout | null = null;
@@ -15,9 +16,12 @@ async function executeCycle(): Promise<void> {
   }
 
   isRunning = true;
+  const startHr = process.hrtime.bigint();
   try {
     await RuleEngineExecutionService.runEvaluationCycle();
+    recordBackgroundJob('rule_engine', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
   } catch (error) {
+    recordBackgroundJob('rule_engine', 'error', Number(process.hrtime.bigint() - startHr) / 1e9);
     console.error('[RuleEngineWorker] Lỗi trong chu kỳ đánh giá:', error);
   } finally {
     isRunning = false;
