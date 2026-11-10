@@ -34,19 +34,79 @@
   max-width: 580px;
 }
 
+:root {
+  --font-anybody: "Anybody", "Anybody Fallback", sans-serif;
+}
+
+/* Base h1 typography spec requested by user */
+h1 {
+  letter-spacing: -0.04em;
+  font-family: var(--font-anybody), sans-serif !important;
+  font-size: 3rem;
+  font-weight: 600;
+  line-height: 1;
+  --font-anybody: "Anybody", "Anybody Fallback";
+}
+
+/* User-requested Greptile CAD Hero utility classes */
+.font-anybody {
+  font-family: var(--font-anybody), sans-serif;
+}
+
+.text-slate {
+  --tw-text-opacity: 1;
+  color: rgb(61 59 79 / var(--tw-text-opacity, 1));
+}
+
+.tracking-tight {
+  letter-spacing: -0.025em;
+}
+
+.leading-\[0\.9\] {
+  line-height: 0.9;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-6xl {
+  font-size: 3.75rem;
+  line-height: 1;
+}
+
+.animate-hero-fade-up {
+  animation: 0.7s ease-out both hero-fade-up;
+}
+
+@keyframes hero-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .hero-heading {
-  font-family: var(--font-display);
-  font-size: clamp(2.75rem, 4.8vw, 4.25rem);
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.035em;
-  color: var(--color-ink);
+  --font-anybody: "Anybody", "Anybody Fallback";
+  font-family: var(--font-anybody), sans-serif !important;
+  font-size: 3.75rem;
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.025em;
+  color: rgb(61 59 79 / var(--tw-text-opacity, 1));
+  max-width: 520px;
   margin-bottom: 24px;
+  animation: 0.7s ease-out both hero-fade-up;
 }
 
 .hero-heading-accent {
-  color: var(--color-accent);
+  color: var(--color-accent, #28E99F);
   display: inline-block;
+  white-space: nowrap;
 }
 
 .hero-description {
@@ -155,6 +215,11 @@
     margin: 0 auto;
   }
 
+  .hero-heading {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .hero-cta-group {
     justify-content: center;
     margin-bottom: 16px;
@@ -174,6 +239,13 @@
 
   .hero-full-canvas {
     padding: 0 var(--space-4);
+  }
+
+  .hero-heading {
+    font-size: 3rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.04em;
   }
 
   .hero-right-col {

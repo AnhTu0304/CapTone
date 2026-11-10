@@ -33,4 +33,20 @@ describe('HeroSection CTA Buttons', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('/guide');
   });
+  it('renders headline with Anybody font, slate text, and hero-fade-up animation classes', () => {
+    render(<HeroSection />);
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading).toBeInTheDocument();
+    expect(heading).toHaveClass(
+      'hero-heading',
+      'font-anybody',
+      'text-slate',
+      'text-6xl',
+      'font-bold',
+      'tracking-tight',
+      'leading-[0.9]',
+      'animate-hero-fade-up'
+    );
+    expect(heading).toHaveTextContent(/Quan sát\. Dự đoán\.\s*Khôi phục\./i);
+  });
 });

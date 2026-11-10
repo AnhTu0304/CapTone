@@ -22,7 +22,7 @@ export const HeroSection = ({ onNavigate }) => {
           <div className="hero-grid-layout">
             {/* ================= LEFT COLUMN ================= */}
             <div className="hero-left-col">
-              <h1 className="hero-heading">
+              <h1 className="hero-heading font-anybody text-slate text-6xl font-bold tracking-tight leading-[0.9] animate-hero-fade-up">
                 Quan sát. Dự đoán.{' '}
                 <span className="hero-heading-accent">Khôi phục.</span>
               </h1>
