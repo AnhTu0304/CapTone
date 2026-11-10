@@ -22,15 +22,12 @@ export const HeroSection = ({ onNavigate }) => {
           <div className="hero-grid-layout">
             {/* ================= LEFT COLUMN ================= */}
             <div className="hero-left-col">
-              <h1 className="hero-heading font-anybody text-slate text-6xl font-bold tracking-tight leading-[0.9] animate-hero-fade-up">
-                AI Self <br className="hero-title-break" />
-                Healing
+              <h1 className="hero-heading font-anybody text-slate font-bold tracking-tight animate-hero-fade-up">
+                AI Self Healing
               </h1>
 
-              <p className="hero-description">
-                SelfHeal giúp các doanh nghiệp vừa và nhỏ giám sát môi trường
-                Kubernetes, dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch
-                vụ — với sự giám sát của con người khi cần thiết.
+              <p className="hero-description font-dm-sans">
+                AI dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch vụ — với sự giám sát của con người khi cần thiết.
               </p>
 
               <div className="hero-cta-group">
