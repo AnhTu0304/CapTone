@@ -128,7 +128,7 @@
   gap: 4px;
   font-family: var(--font-space-mono, 'Space Mono', monospace);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #555368;
@@ -192,9 +192,9 @@
   padding: 0 10px;
   background-color: transparent;
   border: 1px dashed rgba(61, 59, 79, 0.24);
-  font-family: var(--font-mono, 'Space Mono', monospace);
+  font-family: var(--font-space-mono, 'Space Mono', monospace);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.06em;
   color: #3D3B4F;
   cursor: pointer;
@@ -269,7 +269,7 @@
   color: #FFFFFF;
   font-family: var(--font-dm-sans, 'DM Sans', sans-serif);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 400;
   text-decoration: none;
   white-space: nowrap;
   clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 50%, 100% 100%, 10px 100%, 0% 50%);
@@ -300,7 +300,7 @@
   color: #000000;
   font-family: var(--font-dm-sans, 'DM Sans', sans-serif);
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 400;
   text-decoration: none;
   white-space: nowrap;
   clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);

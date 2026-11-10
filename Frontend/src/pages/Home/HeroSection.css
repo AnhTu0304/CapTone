@@ -31,7 +31,7 @@
 }
 
 .hero-left-col {
-  max-width: 640px;
+  max-width: 660px;
 }
 
 :root {
@@ -107,13 +107,13 @@ h1 {
 .hero-heading {
   --font-anybody: "Anybody", "Anybody Fallback";
   font-family: var(--font-anybody), sans-serif !important;
-  font-size: clamp(3.5rem, 5.5vw, 4.5rem);
+  font-size: 70px;
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.03em;
   color: rgb(61 59 79 / var(--tw-text-opacity, 1));
-  max-width: 640px;
-  margin-bottom: 40px;
+  max-width: 660px;
+  margin-bottom: 76px;
   white-space: nowrap;
   animation: 0.7s ease-out both hero-fade-up;
 }
@@ -150,7 +150,7 @@ h1 {
   padding: 0 24px 0 28px;
   background-color: #3D3B4F;
   color: #FFFFFF;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.9375rem;
   font-family: var(--font-dm-sans), sans-serif;
   border: none;
@@ -182,7 +182,7 @@ h1 {
   padding: 0 28px 0 24px;
   background-color: #28E99F;
   color: #000000;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.9375rem;
   font-family: var(--font-dm-sans), sans-serif;
   border: none;
@@ -257,12 +257,12 @@ h1 {
   }
 
   .hero-heading {
-    font-size: 2.75rem;
+    font-size: clamp(2.25rem, 8vw, 42px);
     font-weight: 700;
     line-height: 1.1;
     letter-spacing: -0.03em;
     white-space: normal;
-    margin-bottom: 28px;
+    margin-bottom: 36px;
   }
 
   .hero-right-col {
