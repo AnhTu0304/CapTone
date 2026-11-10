@@ -690,7 +690,7 @@ CREATE INDEX IF NOT EXISTS idx_rca_evidences_analysis ON rca_evidences(rca_analy
 -- 32. Bảng `healing_action_types`: Danh mục các hành động tự khắc phục chuẩn
 CREATE TABLE IF NOT EXISTS healing_action_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(50),
+    code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(100) UNIQUE NOT NULL,
     description TEXT,
     target_type VARCHAR(50) DEFAULT 'POD',
