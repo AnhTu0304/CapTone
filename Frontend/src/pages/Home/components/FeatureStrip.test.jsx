@@ -30,11 +30,23 @@ describe('FeatureStrip ([ AGENT ] Bridge Banner)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/guide');
   });
 
-  it('renders technical guidelines and pin nodes', () => {
+  it('renders top datum notch, pinstripe scan bar, guidelines, and 4 corner pins', () => {
     const { container } = render(<FeatureStrip />);
+
+    // Datum notch and pinstripe bar
+    expect(container.querySelector('.agent-datum-notch')).toBeInTheDocument();
+    expect(container.querySelector('.agent-scan-track')).toBeInTheDocument();
+
+    // Guidelines and horizontal lines
     expect(container.querySelector('.agent-guide-v-left')).toBeInTheDocument();
     expect(container.querySelector('.agent-guide-v-right')).toBeInTheDocument();
-    expect(container.querySelector('.agent-node-pin-left')).toBeInTheDocument();
-    expect(container.querySelector('.agent-node-pin-right')).toBeInTheDocument();
+    expect(container.querySelector('.agent-line-top')).toBeInTheDocument();
+    expect(container.querySelector('.agent-line-bottom')).toBeInTheDocument();
+
+    // 4 Corner hexagon pins
+    expect(container.querySelector('.pin-tl')).toBeInTheDocument();
+    expect(container.querySelector('.pin-tr')).toBeInTheDocument();
+    expect(container.querySelector('.pin-bl')).toBeInTheDocument();
+    expect(container.querySelector('.pin-br')).toBeInTheDocument();
   });
 });

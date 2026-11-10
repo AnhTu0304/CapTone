@@ -18,40 +18,68 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
       data-testid="agent-bridge-section"
       aria-label="Agent Bridge Section"
     >
-      {/* Continuous Left & Right Vertical Dashed Guidelines spanning through the [ AGENT ] banner */}
+      {/* 1. Center Top Datum Notch */}
+      <div className="agent-datum-notch" aria-hidden="true">
+        <svg width="72" height="15" viewBox="0 0 72 15" fill="none">
+          <polygon points="0,0 72,0 58,15 14,15" fill="#3D3B4F" />
+        </svg>
+      </div>
+
+      {/* 2. Top Parallel Pinstripe Scanline Bar with Guideline Nodes */}
+      <div className="agent-scan-track" aria-hidden="true">
+        <span className="agent-track-node agent-node-top-left" />
+        <span className="agent-track-node agent-node-top-right" />
+      </div>
+
+      {/* 3. Continuous Vertical Guidelines */}
       <span aria-hidden="true" className="agent-guide-v-left" />
       <span aria-hidden="true" className="agent-guide-v-right" />
 
-      {/* Top boundary green hexagon guide pin nodes */}
-      <span aria-hidden="true" className="agent-node-pin agent-node-pin-left" />
-      <span aria-hidden="true" className="agent-node-pin agent-node-pin-right" />
+      {/* 4. Framed Box (Horizontal Tracks + 4 Corner Hexagon Pin Nodes + Inner Content Box) */}
+      <div className="agent-framed-box-wrapper">
+        {/* Full-width Top Horizontal Guideline */}
+        <div className="agent-box-line-track agent-line-top" aria-hidden="true" />
 
-      <div className="agent-bridge-container">
-        {/* Left Content: [ AGENT ] tag, headline, concise bridge description */}
-        <div className="agent-bridge-content">
-          <div className="agent-tag">[ AGENT ]</div>
+        {/* 4 Corner Hexagon Pin Nodes at the 4 Box Intersections */}
+        <span aria-hidden="true" className="agent-corner-pin pin-tl" />
+        <span aria-hidden="true" className="agent-corner-pin pin-tr" />
+        <span aria-hidden="true" className="agent-corner-pin pin-bl" />
+        <span aria-hidden="true" className="agent-corner-pin pin-br" />
 
-          <h2 className="agent-heading">
-            Cách Agent kết nối với dự án của bạn
-          </h2>
+        {/* Inner Content Area framed directly between the vertical guidelines */}
+        <div className="agent-box-inner">
+          {/* Left Content: [ AGENT ] tag, headline, concise bridge description */}
+          <div className="agent-bridge-content">
+            <div className="agent-tag">[ AGENT ]</div>
 
-          <p className="agent-description">
-            SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi, tự động đồng bộ trạng thái hạ tầng và kích hoạt quy trình khôi phục tức thì khi phát hiện sự cố tiềm ẩn.
-          </p>
+            <h2 className="agent-heading">
+              Cách Agent kết nối với dự án của bạn
+            </h2>
+
+            <p className="agent-description">
+              SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi, tự động đồng bộ trạng thái hạ tầng và kích hoạt quy trình khôi phục tức thì khi phát hiện sự cố tiềm ẩn.
+            </p>
+          </div>
+
+          {/* Right Hexagon Button */}
+          <div className="agent-bridge-action">
+            <a
+              href="/guide"
+              onClick={handleLearnMore}
+              className="agent-btn-learn-more"
+              title="Tìm hiểu thêm"
+            >
+              Tìm hiểu thêm
+            </a>
+          </div>
         </div>
 
-        {/* Right Hexagon Button */}
-        <div className="agent-bridge-action">
-          <a
-            href="/guide"
-            onClick={handleLearnMore}
-            className="agent-btn-learn-more"
-            title="Tìm hiểu thêm"
-          >
-            Tìm hiểu thêm
-          </a>
-        </div>
+        {/* Full-width Bottom Horizontal Guideline */}
+        <div className="agent-box-line-track agent-line-bottom" aria-hidden="true" />
       </div>
+
+      {/* Bottom spacer for clean cadence before HowItWorksSection */}
+      <div className="agent-bottom-spacer" aria-hidden="true" />
     </section>
   );
 };
