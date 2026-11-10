@@ -77,9 +77,9 @@ services:
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-phamthaisang1710@gmail.com}
-      SMTP_PASS: ${SMTP_PASS:-sioolyeupmkhpbqg}
-      EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <phamthaisang1710@gmail.com>}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <noreply@selfheal.io>}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3001}
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-selfheal-backend}
@@ -91,8 +91,6 @@ services:
       K8S_NAMESPACE_NAME: ${K8S_NAMESPACE_NAME:-selfheal-system}
       K8S_POD_NAME: ${K8S_POD_NAME:-captone-main-backend}
       K8S_NODE_NAME: ${K8S_NODE_NAME:-minikube}
-    volumes:
-      - ./Main_backend/dist:/app/dist
     ports:
       - "5000:5000"
     healthcheck:
@@ -114,7 +112,8 @@ services:
     container_name: captone-ai-backend
     restart: unless-stopped
     env_file:
-      - ./AI_backend/.env
+      - path: ./AI_backend/.env
+        required: false
     environment:
       PORT: 8000
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
@@ -145,7 +144,7 @@ services:
   # ==========================================
   selfheal-frontend:
     build:
-      context: ./frontend
+      context: ./Frontend
       dockerfile: Dockerfile
     container_name: selfheal_platform_web
     restart: always

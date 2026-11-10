@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json tsconfig.json ./
 
 # Install all dependencies (including devDependencies for building TypeScript)
-RUN npm ci || npm install
+RUN npm ci
 
 # Copy source code
 COPY src ./src
@@ -31,10 +31,11 @@ ENV PORT=5000
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm ci --omit=dev || npm install --omit=dev
+RUN npm ci --omit=dev
 
-# Copy compiled code from builder
+# Copy compiled code and SQL migrations from builder/context
 COPY --from=builder /app/dist ./dist
+COPY migrations ./migrations
 
 # Create a non-root user for security
 USER node

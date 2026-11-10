@@ -1,0 +1,212 @@
+name: SelfHeal Monorepo CD Pipeline (GHCR & Release)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      force_build_all:
+        description: "Đóng gói lại toàn bộ 6 Docker Images (bỏ qua bộ lọc thay đổi)"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ============================================================================
+  # 1. Detect Changed Services: Chỉ đóng gói đúng Image của Service có thay đổi
+  # ============================================================================
+  detect-targets:
+    name: Detect Services to Package
+    runs-on: ubuntu-latest
+    outputs:
+      has_targets: ${{ steps.matrix.outputs.has_targets }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check modified paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            main_backend:
+              - 'Main_backend/**'
+            ai_backend:
+              - 'AI_backend/**'
+              - 'trainGRU/**'
+            frontend:
+              - 'Frontend/**'
+            installer_service:
+              - 'Agent/installer_service/**'
+            agent:
+              - 'Agent/selfheal_agent/**'
+              - 'Agent/Dockerfile'
+              - 'Agent/requirements.txt'
+              - 'Agent/pyproject.toml'
+            nginx_proxy:
+              - 'nginx/**'
+            cd_workflow:
+              - '.github/workflows/cd.yml'
+              - 'docker-compose.yml'
+              - 'docker-compose.prod.yml'
+
+      - name: Generate Dynamic Build Matrix
+        id: matrix
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          FORCE_ALL: ${{ inputs.force_build_all }}
+          CHANGED_MAIN: ${{ steps.filter.outputs.main_backend }}
+          CHANGED_AI: ${{ steps.filter.outputs.ai_backend }}
+          CHANGED_FE: ${{ steps.filter.outputs.frontend }}
+          CHANGED_INSTALLER: ${{ steps.filter.outputs.installer_service }}
+          CHANGED_AGENT: ${{ steps.filter.outputs.agent }}
+          CHANGED_NGINX: ${{ steps.filter.outputs.nginx_proxy }}
+          CHANGED_WORKFLOW: ${{ steps.filter.outputs.cd_workflow }}
+        run: |
+          node << 'EOF'
+          const buildAll =
+            (process.env.EVENT_NAME === "workflow_dispatch" && process.env.FORCE_ALL === "true") ||
+            (process.env.REF_NAME || "").startsWith("refs/tags/v") ||
+            process.env.CHANGED_WORKFLOW === "true";
+
+          const services = [
+            {
+              name: "main-backend",
+              context: "./Main_backend",
+              dockerfile: "./Main_backend/Dockerfile",
+              changed: process.env.CHANGED_MAIN === "true"
+            },
+            {
+              name: "ai-backend",
+              context: "./AI_backend",
+              dockerfile: "./AI_backend/Dockerfile",
+              changed: process.env.CHANGED_AI === "true"
+            },
+            {
+              name: "frontend",
+              context: "./Frontend",
+              dockerfile: "./Frontend/Dockerfile",
+              changed: process.env.CHANGED_FE === "true"
+            },
+            {
+              name: "installer-service",
+              context: "./Agent/installer_service",
+              dockerfile: "./Agent/installer_service/Dockerfile",
+              changed: process.env.CHANGED_INSTALLER === "true"
+            },
+            {
+              name: "agent",
+              context: "./Agent",
+              dockerfile: "./Agent/Dockerfile",
+              changed: process.env.CHANGED_AGENT === "true"
+            },
+            {
+              name: "nginx-proxy",
+              context: "./nginx",
+              dockerfile: "./nginx/Dockerfile",
+              changed: process.env.CHANGED_NGINX === "true"
+            }
+          ];
+
+          const selected = services
+            .filter(s => buildAll || s.changed)
+            .map(({ name, context, dockerfile }) => ({ name, context, dockerfile }));
+
+          const fs = require("fs");
+          if (process.env.GITHUB_OUTPUT) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_targets=${selected.length > 0}\n`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include: selected })}\n`);
+          }
+          console.log("Selected CD targets:", JSON.stringify({ include: selected }));
+          EOF
+
+  # ============================================================================
+  # 2. Build & Push Multi-Stage Docker Images to GitHub Container Registry (GHCR)
+  # ============================================================================
+  build-and-push:
+    name: Package & Push [${{ matrix.name }}] to GHCR
+    needs: detect-targets
+    if: ${{ needs.detect-targets.outputs.has_targets == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-targets.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata (Tags & OCI Labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and Push Docker Image (${{ matrix.name }})
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # ============================================================================
+  # 3. VPS Deployment Gate (Đang tạm khóa theo yêu cầu — Mở khi có VPS)
+  #    Để bật sau này: Vào GitHub Settings > Secrets and variables > Actions
+  #    Tạo Repository Variable: ENABLE_VPS_DEPLOY = true
+  # ============================================================================
+  deploy-vps:
+    name: Deploy to Production VPS (Gated)
+    needs: build-and-push
+    if: ${{ vars.ENABLE_VPS_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH using docker-compose.prod.yml
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ vars.VPS_APP_DIR || '/opt/selfheal' }}
+            echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml exec -T main-backend node dist/scripts/migrate.js
+            docker image prune -f

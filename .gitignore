@@ -5,11 +5,13 @@ agents-skills/
 .env.*
 *.env
 
-# Python bytecode & cache
+# Python bytecode, cache & virtualenvs
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.venv/
+venv/
 
 .aider-desk/
 skills-lock.json

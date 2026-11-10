@@ -1,0 +1,169 @@
+# ============================================================================
+# Production Docker Compose (Pulls pre-built images from GitHub Container Registry)
+# Sử dụng trên VPS / Production:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d --remove-orphans
+# ============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: captone-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      POSTGRES_DB: ${DB_NAME:-captone_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-captone_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - captone-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: captone-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - captone-network
+
+  main-backend:
+    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/main-backend:${IMAGE_TAG:-latest}
+    container_name: captone-main-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      API_PREFIX: /api/v1
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      DB_NAME: ${DB_NAME:-captone_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_CACHE_TTL: ${REDIS_CACHE_TTL:-300}
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      AI_BACKEND_URL: http://ai-backend:8000
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET (min 32 chars) must be set in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <noreply@selfheal.io>}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-selfheal-backend}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-1.0.0}
+      OTEL_SERVICE_NAMESPACE: ${OTEL_SERVICE_NAMESPACE:-selfheal-system}
+      DEPLOYMENT_ENVIRONMENT: production
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - captone-network
+
+  ai-backend:
+    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/ai-backend:${IMAGE_TAG:-latest}
+    container_name: captone-ai-backend
+    restart: unless-stopped
+    env_file:
+      - path: ./AI_backend/.env
+        required: false
+    environment:
+      PORT: 8000
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: selfheal-ai-service
+      OTEL_SERVICE_VERSION: "1.0.0"
+      OTEL_SERVICE_NAMESPACE: selfheal-system
+      DEPLOYMENT_ENVIRONMENT: production
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - captone-network
+
+  selfheal-frontend:
+    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/frontend:${IMAGE_TAG:-latest}
+    container_name: selfheal_platform_web
+    restart: always
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - captone-network
+
+  installer-service:
+    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/installer-service:${IMAGE_TAG:-latest}
+    container_name: captone-installer-service
+    restart: unless-stopped
+    environment:
+      PORT: 8100
+      HOST: 0.0.0.0
+      APP_ENV: production
+      AGENT_VERSION: ${IMAGE_TAG:-1.0.0}
+      DOCKER_IMAGE: "${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/agent:${IMAGE_TAG:-latest}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - captone-network
+
+  nginx-proxy:
+    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/nginx-proxy:${IMAGE_TAG:-latest}
+    container_name: captone-reverse-proxy
+    restart: unless-stopped
+    depends_on:
+      - main-backend
+      - installer-service
+      - selfheal-frontend
+      - ai-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - captone-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  captone-network:
+    driver: bridge

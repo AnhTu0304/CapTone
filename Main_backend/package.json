@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "rimraf dist && tsc",
+    "test:ci": "tsx --test --test-concurrency=1 src/test/rbac.test.ts src/test/agentAuth.test.ts src/test/ruleEngineEvaluation.test.ts",
     "test:security": "tsx test/security.test.ts",
     "test": "tsx src/test/profile.test.ts",
     "test:ws": "tsx test/agent-ws-simulator.ts",
