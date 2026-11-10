@@ -18,6 +18,15 @@ config:
   logLevel: "info"
   enableHealingActions: false
 
+otel:
+  enabled: true
+  serviceName: "selfheal-k8s-agent"
+  serviceVersion: "1.0.0"
+  serviceNamespace: "selfheal-system"
+  deploymentEnvironment: "production"
+  exporterEndpoint: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318"
+  metricExportIntervalMs: 15000
+
 prometheus:
   enabled: false
   # URL of cluster Prometheus for RPS, latency, and 5xx telemetry

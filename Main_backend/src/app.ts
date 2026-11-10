@@ -7,6 +7,7 @@ import { config } from "./config/env";
 import apiRouter from "./routes";
 import { notFoundHandler } from "./middlewares/notFound.middleware";
 import { errorHandler } from "./middlewares/error.middleware";
+import { otelHttpMiddleware } from "./telemetry/metrics";
 
 const app: Application = express();
 
@@ -40,6 +41,7 @@ app.use(
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(otelHttpMiddleware);
 
 // HTTP Request Logger
 if (config.isDevelopment) {

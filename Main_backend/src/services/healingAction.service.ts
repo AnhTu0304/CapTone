@@ -6,6 +6,7 @@ import { ApiError } from '../utils/apiError';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
+import { recordRemediationAction } from '../telemetry/metrics';
 
 export class HealingActionService {
   /**
@@ -124,10 +125,12 @@ export class HealingActionService {
       );
     }
 
-    return await HealingActionModel.createAction({
+    const created = await HealingActionModel.createAction({
       ...data,
       requested_by: userId || null,
     });
+    recordRemediationAction(created?.action_type_code || 'REMEDIATION', 'triggered');
+    return created;
   }
 
   /**
@@ -333,6 +336,7 @@ export class HealingActionService {
     }
 
     const aborted = await HealingActionModel.abortAction(actionId, userId, reason);
+    recordRemediationAction(action.action_type_code || 'REMEDIATION', 'aborted');
 
     // Ghi audit log dừng khẩn cấp
     try {
@@ -692,6 +696,7 @@ export class HealingActionService {
     if (!approved) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể phê duyệt');
     }
+    recordRemediationAction(action?.action_type_code || 'REMEDIATION', 'approved');
 
     try {
       await AuditService.record({
@@ -758,6 +763,7 @@ export class HealingActionService {
     if (!rejected) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể từ chối');
     }
+    recordRemediationAction(action?.action_type_code || 'REMEDIATION', 'rejected');
 
     try {
       await AuditService.record({

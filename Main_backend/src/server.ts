@@ -1,3 +1,5 @@
+import './telemetry/otel';
+import { shutdownOtel } from './telemetry/otel';
 import http from 'http';
 import app from './app';
 import { config } from './config/env';
@@ -44,6 +46,7 @@ const startServer = async () => {
     await EmailWorker.stop();
     uiWss.close();
     await closeRedis();
+    await shutdownOtel();
     wss.close(() => {
       server.close(() => {
         console.log('HTTP & WebSocket server closed.');

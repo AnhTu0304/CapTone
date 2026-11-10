@@ -2,11 +2,11 @@ import { TelemetryBufferService } from './telemetryBuffer.service';
 import { AuditService } from './audit.service';
 import { HitlNotificationService } from './hitlNotification.service';
 import { TelemetryAggregatorService } from './telemetryAggregator.service';
-import { MetricModel } from '../models/metric.model';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
 import { pool } from '../config/database';
 import { RCAResult } from './ai.service';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
+import { recordBackgroundJob, recordRemediationAction } from '../telemetry/metrics';
 
 export class TelemetryPipelineService {
   private static isRunning = false;
@@ -26,9 +26,13 @@ export class TelemetryPipelineService {
     console.log(`⚡ [TelemetryPipeline] Background Tumbling Batch AI Pipeline started (polling every ${intervalSeconds}s for full 12 fresh points)`);
 
     this.intervalHandle = setInterval(async () => {
+      const startHr = process.hrtime.bigint();
       try {
         const activeServices = await TelemetryBufferService.getActiveServices(5);
-        if (!activeServices || activeServices.length === 0) return;
+        if (!activeServices || activeServices.length === 0) {
+          recordBackgroundJob('telemetry_pipeline', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
+          return;
+        }
         await Promise.all(
           activeServices.map((sId) =>
             this.processServiceBatch(sId).catch((err) => {
@@ -36,7 +40,9 @@ export class TelemetryPipelineService {
             })
           )
         );
+        recordBackgroundJob('telemetry_pipeline', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
       } catch (err) {
+        recordBackgroundJob('telemetry_pipeline', 'error', Number(process.hrtime.bigint() - startHr) / 1e9);
         console.error('[TelemetryPipeline] Error in background cycle:', err);
       }
     }, 5000);
@@ -359,6 +365,7 @@ export class TelemetryPipelineService {
       // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold)
       if (!isAuto || policy.requires_approval || confidence < threshold) {
         console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires HITL approval (Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
+        recordRemediationAction(policy.action_code || 'RESTART_POD', 'hitl_pending');
 
         const hitlActInsert = await pool.query(
           `INSERT INTO healing_actions (
@@ -434,6 +441,7 @@ export class TelemetryPipelineService {
       console.log(`   - Target Service: ${serviceId}`);
       console.log(`   - Action: ${policy.action_name} (${policy.action_code})`);
       console.log(`   - AI Confidence: ${(confidence * 100).toFixed(1)}% >= Threshold: ${(threshold * 100).toFixed(1)}%`);
+      recordRemediationAction(policy.action_code || 'RESTART_POD', 'triggered');
 
       // Insert record into healing_actions with status 'RUNNING' and approval 'APPROVED'
       const insertActQuery = `

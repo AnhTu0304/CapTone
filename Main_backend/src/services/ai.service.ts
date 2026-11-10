@@ -12,6 +12,11 @@ import {
   EnvironmentModel,
   OrganizationModel,
 } from '../models';
+import {
+  injectTraceContext,
+  recordExternalCall,
+  withBackendSpan,
+} from '../telemetry/metrics';
 
 export interface AiBackendHealth {
   status: string;
@@ -117,7 +122,7 @@ export interface RCAResult {
   recommendation: RecommendationResult;
   explanation: string;
   historical_context_used?: boolean;
-  similar_incident_ids?: string[];
+  similar_incident_ids?: boolean | string[];
   target?: TargetContext;
   environment_id: string;
   cluster_id?: string | null;
@@ -172,31 +177,41 @@ export class AiService {
    */
   public static async checkAiHealth(): Promise<{ connected: boolean; data?: AiBackendHealth; error?: string }> {
     const targetUrl = `${config.aiBackendUrl}/health`;
-    try {
-      const response = await fetch(targetUrl, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(4000),
-      });
+    const startHr = process.hrtime.bigint();
+    return withBackendSpan('ai.health', { 'peer.service': 'ai-backend', operation: 'health' }, async () => {
+      try {
+        const headers = injectTraceContext({ 'Content-Type': 'application/json' });
+        const response = await fetch(targetUrl, {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(4000),
+        });
+        const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
 
-      if (!response.ok) {
+        if (!response.ok) {
+          recordExternalCall('ai-backend', 'health', 'error', dur);
+          return {
+            connected: false,
+            error: `AI Backend responded with HTTP ${response.status}`,
+          };
+        }
+
+        const data = (await response.json()) as AiBackendHealth;
+        recordExternalCall('ai-backend', 'health', 'success', dur);
+        return {
+          connected: true,
+          data,
+        };
+      } catch (error: any) {
+        const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
+        const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+        recordExternalCall('ai-backend', 'health', isTimeout ? 'timeout' : 'error', dur);
         return {
           connected: false,
-          error: `AI Backend responded with HTTP ${response.status}`,
+          error: `Cannot reach AI Backend at ${config.aiBackendUrl}: ${(error as Error).message}`,
         };
       }
-
-      const data = (await response.json()) as AiBackendHealth;
-      return {
-        connected: true,
-        data,
-      };
-    } catch (error) {
-      return {
-        connected: false,
-        error: `Cannot reach AI Backend at ${config.aiBackendUrl}: ${(error as Error).message}`,
-      };
-    }
+    });
   }
 
   /**
@@ -206,43 +221,57 @@ export class AiService {
     const targetUrl = `${config.aiBackendUrl}/api/v1/predict`;
 
     // 1. Call AI Backend GRU inference
-    let aiResponse: AiBackendPredictionResponse;
-    try {
-      const response = await fetch(targetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_id: input.service_id,
-          sequence: input.sequence.map((pt) => ({
-            cpu: Math.min(100, Math.max(0, Number(pt.cpu || 0))),
-            ram: Math.min(100, Math.max(0, Number(pt.ram || 0))),
-            disk: Math.min(100, Math.max(0, Number(pt.disk || 0))),
-            request_rate: Math.max(0, Number(pt.request_rate || 0)),
-            latency: Math.max(0, Number(pt.latency || 0)),
-            http_5xx_rate: Math.min(100, Math.max(0, Number(pt.http_5xx_rate || 0))),
-            pod_restart_count: Math.max(0, Number(pt.pod_restart_count || 0)),
-            replica_count: Math.max(1, Number(pt.replica_count || 1)),
-          })),
-        }),
-        signal: AbortSignal.timeout(6000),
-      });
+    const aiResponse: AiBackendPredictionResponse = await withBackendSpan(
+      'ai.predict',
+      { 'peer.service': 'ai-backend', operation: 'predict' },
+      async () => {
+        const startHr = process.hrtime.bigint();
+        try {
+          const headers = injectTraceContext({ 'Content-Type': 'application/json' });
+          const response = await fetch(targetUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              service_id: input.service_id,
+              sequence: input.sequence.map((pt) => ({
+                cpu: Math.min(100, Math.max(0, Number(pt.cpu || 0))),
+                ram: Math.min(100, Math.max(0, Number(pt.ram || 0))),
+                disk: Math.min(100, Math.max(0, Number(pt.disk || 0))),
+                request_rate: Math.max(0, Number(pt.request_rate || 0)),
+                latency: Math.max(0, Number(pt.latency || 0)),
+                http_5xx_rate: Math.min(100, Math.max(0, Number(pt.http_5xx_rate || 0))),
+                pod_restart_count: Math.max(0, Number(pt.pod_restart_count || 0)),
+                replica_count: Math.max(1, Number(pt.replica_count || 1)),
+              })),
+            }),
+            signal: AbortSignal.timeout(6000),
+          });
+          const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new ApiError(
-          response.status === 422 ? 400 : 502,
-          `AI Backend prediction failed [HTTP ${response.status}]: ${errorText}`
-        );
+          if (!response.ok) {
+            recordExternalCall('ai-backend', 'predict', 'error', dur);
+            const errorText = await response.text();
+            throw new ApiError(
+              response.status === 422 ? 400 : 502,
+              `AI Backend prediction failed [HTTP ${response.status}]: ${errorText}`
+            );
+          }
+
+          const parsed = (await response.json()) as AiBackendPredictionResponse;
+          recordExternalCall('ai-backend', 'predict', 'success', dur);
+          return parsed;
+        } catch (error: any) {
+          if (error instanceof ApiError) throw error;
+          const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
+          const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+          recordExternalCall('ai-backend', 'predict', isTimeout ? 'timeout' : 'error', dur);
+          throw new ApiError(
+            503,
+            `Failed to communicate with AI Backend at ${targetUrl}: ${(error as Error).message}`
+          );
+        }
       }
-
-      aiResponse = (await response.json()) as AiBackendPredictionResponse;
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-      throw new ApiError(
-        503,
-        `Failed to communicate with AI Backend at ${targetUrl}: ${(error as Error).message}`
-      );
-    }
+    );
 
     // 2. Persist to PostgreSQL database ONLY when risk detected (Predict-First / Zero-Write for NORMAL)
     const hasRisks = aiResponse.detected_risks && aiResponse.detected_risks.length > 0;
@@ -596,7 +625,7 @@ export class AiService {
       } catch (err) {
         console.warn('[AiService] Failed to auto-resolve pod_id:', err);
       }
-    };
+    }
 
     if (prevAction && prevActionResult) {
       rcaPayload.previous_action = prevAction;
@@ -608,31 +637,45 @@ export class AiService {
     }
 
     // 2. Call AI Backend RCA endpoint
-    let aiResponse: AiBackendRCAResponse;
-    try {
-      const response = await fetch(targetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rcaPayload),
-        signal: AbortSignal.timeout(25000),
-      });
+    const aiResponse: AiBackendRCAResponse = await withBackendSpan(
+      'ai.rca',
+      { 'peer.service': 'ai-backend', operation: 'rca' },
+      async () => {
+        const startHr = process.hrtime.bigint();
+        try {
+          const headers = injectTraceContext({ 'Content-Type': 'application/json' });
+          const response = await fetch(targetUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(rcaPayload),
+            signal: AbortSignal.timeout(25000),
+          });
+          const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new ApiError(
-          response.status === 422 ? 400 : 502,
-          `AI Backend RCA failed [HTTP ${response.status}]: ${errorText}`
-        );
+          if (!response.ok) {
+            recordExternalCall('ai-backend', 'rca', 'error', dur);
+            const errorText = await response.text();
+            throw new ApiError(
+              response.status === 422 ? 400 : 502,
+              `AI Backend RCA failed [HTTP ${response.status}]: ${errorText}`
+            );
+          }
+
+          const parsed = (await response.json()) as AiBackendRCAResponse;
+          recordExternalCall('ai-backend', 'rca', 'success', dur);
+          return parsed;
+        } catch (error: any) {
+          if (error instanceof ApiError) throw error;
+          const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
+          const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+          recordExternalCall('ai-backend', 'rca', isTimeout ? 'timeout' : 'error', dur);
+          throw new ApiError(
+            503,
+            `Failed to communicate with AI Backend RCA at ${targetUrl}: ${(error as Error).message}`
+          );
+        }
       }
-
-      aiResponse = (await response.json()) as AiBackendRCAResponse;
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-      throw new ApiError(
-        503,
-        `Failed to communicate with AI Backend RCA at ${targetUrl}: ${(error as Error).message}`
-      );
-    }
+    );
 
     // 2. Persist to PostgreSQL database (incidents -> rca_analyses -> rca_evidences -> ai_recommendations)
     const client = await pool.connect();

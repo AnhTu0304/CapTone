@@ -2,10 +2,12 @@
 
 from datetime import datetime, timezone
 import logging
+import time
 from typing import Any, Optional
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
+from selfheal_agent.telemetry.otel import record_k8s_api_call
 from selfheal_agent.telemetry.schemas import AgentK8sEventData, K8sEventDetail
 
 logger = logging.getLogger("selfheal_agent.collectors.pods")
@@ -304,7 +306,7 @@ class PodsCollector:
         self.active_incidents: dict[tuple[str, str], dict[str, Any]] = {}
         self.known_pods: dict[str, str] = {}
 
-    def _record_api_error(self, err: Exception, operation: str) -> None:
+    def _record_api_error(self, err: Exception, operation: str, duration_sec: float = 0.0) -> None:
         if isinstance(err, ApiException):
             if err.status in (401, 403):
                 self.last_collection_status = "FORBIDDEN"
@@ -313,10 +315,12 @@ class PodsCollector:
             else:
                 self.last_collection_status = "UNAVAILABLE"
             self.last_error = f"HTTP {err.status}: {err.reason}"
+            record_k8s_api_call("pods", "list", "error", duration_sec, str(err.status))
             logger.warning("K8s API error during %s (%s): %s", operation, self.last_collection_status, self.last_error)
         else:
             self.last_collection_status = "UNAVAILABLE"
             self.last_error = str(err)
+            record_k8s_api_call("pods", "list", "error", duration_sec, "exception")
             logger.debug("Failed %s: %s", operation, err)
 
     def _parse_container_status(self, cs: Any, is_init: bool = False) -> ContainerStatusInfo:
@@ -491,11 +495,13 @@ class PodsCollector:
             return []
 
         results: list[PodSummary] = []
+        t0 = time.perf_counter()
         try:
             if monitor_all or not namespace:
                 pod_list = self.core_v1.list_pod_for_all_namespaces()
             else:
                 pod_list = self.core_v1.list_namespaced_pod(namespace=namespace)
+            record_k8s_api_call("pods", "list", "success", time.perf_counter() - t0)
 
             self.last_collection_status = "OK"
             self.last_error = None
@@ -507,7 +513,7 @@ class PodsCollector:
                     continue
                 results.append(parsed)
         except Exception as err:
-            self._record_api_error(err, "list_pods")
+            self._record_api_error(err, "list_pods", time.perf_counter() - t0)
             return []
 
         return results
@@ -521,11 +527,13 @@ class PodsCollector:
             return []
 
         results: list[dict[str, Any]] = []
+        t0 = time.perf_counter()
         try:
             if monitor_all or not namespace:
                 pod_list = self.core_v1.list_pod_for_all_namespaces()
             else:
                 pod_list = self.core_v1.list_namespaced_pod(namespace=namespace)
+            record_k8s_api_call("pods", "list", "success", time.perf_counter() - t0)
 
             self.last_collection_status = "OK"
             self.last_error = None
@@ -534,7 +542,7 @@ class PodsCollector:
                 if parsed:
                     results.append(parsed.to_detail_dict())
         except Exception as err:
-            self._record_api_error(err, "list_pods_detail")
+            self._record_api_error(err, "list_pods_detail", time.perf_counter() - t0)
             return []
 
         return results

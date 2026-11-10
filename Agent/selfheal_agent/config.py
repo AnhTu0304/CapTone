@@ -104,6 +104,35 @@ class AgentConfig(BaseSettings):
         ge=1,
         description="Maximum buffer size for telemetry queue when disconnected",
     )
+    OTEL_ENABLED: bool = Field(
+        default=True,
+        description="Enable OpenTelemetry metrics and trace export",
+    )
+    OTEL_SERVICE_NAME: str = Field(
+        default="selfheal-k8s-agent",
+        description="OpenTelemetry service.name resource attribute",
+    )
+    OTEL_SERVICE_VERSION: str = Field(
+        default="1.0.0",
+        description="OpenTelemetry service.version resource attribute",
+    )
+    OTEL_SERVICE_NAMESPACE: str = Field(
+        default="selfheal-system",
+        description="OpenTelemetry service.namespace resource attribute",
+    )
+    DEPLOYMENT_ENVIRONMENT: str = Field(
+        default="development",
+        description="OpenTelemetry deployment.environment resource attribute",
+    )
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
+        default="http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318",
+        description="OpenTelemetry OTLP/HTTP base endpoint",
+    )
+    OTEL_METRIC_EXPORT_INTERVAL_MS: int = Field(
+        default=10000,
+        ge=1000,
+        description="OpenTelemetry periodic metric export interval in milliseconds",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

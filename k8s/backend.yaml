@@ -11,6 +11,13 @@ data:
   DB_PORT: "5432"
   DB_NAME: "captone_db"
   DB_USER: "postgres"
+  OTEL_ENABLED: "true"
+  OTEL_SERVICE_NAME: "selfheal-backend"
+  OTEL_SERVICE_VERSION: "1.0.0"
+  OTEL_SERVICE_NAMESPACE: "selfheal-system"
+  DEPLOYMENT_ENVIRONMENT: "production"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318"
+  OTEL_METRIC_EXPORT_INTERVAL_MS: "15000"
 ---
 apiVersion: v1
 kind: Secret
@@ -51,6 +58,19 @@ spec:
                 name: backend-config
             - secretRef:
                 name: backend-secret
+          env:
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           resources:
             limits:
               cpu: "500m"

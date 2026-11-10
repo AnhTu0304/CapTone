@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import { AuditRetentionService } from '../services/auditRetention.service';
+import { recordBackgroundJob } from '../telemetry/metrics';
 
 /**
  * Standalone Background Worker Process for Audit Log Data Retention
@@ -26,6 +27,7 @@ async function startWorker() {
     }
 
     isRunning = true;
+    const startHr = process.hrtime.bigint();
     try {
       console.log(`\n⏳ [AUDIT RETENTION WORKER] Checking retention status at ${new Date().toISOString()}...`);
       const stats = await AuditRetentionService.getRetentionStats(retentionDays);
@@ -50,7 +52,9 @@ async function startWorker() {
       } else {
         console.log('✨ [AUDIT RETENTION WORKER] No logs exceed retention cutoff. Everything clean.');
       }
+      recordBackgroundJob('audit_retention', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
     } catch (err: any) {
+      recordBackgroundJob('audit_retention', 'error', Number(process.hrtime.bigint() - startHr) / 1e9);
       console.error('❌ [AUDIT RETENTION WORKER] Error executing retention purge:', err.message);
     } finally {
       isRunning = false;

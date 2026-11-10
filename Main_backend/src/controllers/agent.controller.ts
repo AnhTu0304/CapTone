@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AgentService } from '../services/agent.service';
 import { ApiResponse } from '../utils/apiResponse';
+import { recordAgentHeartbeat } from '../telemetry/metrics';
 
 export class AgentController {
   /**
@@ -206,11 +207,14 @@ export class AgentController {
 
       if ((req as any).agent) {
         const result = await AgentService.recordHeartbeatForAgent((req as any).agent, req.body);
+        recordAgentHeartbeat('http', 'success');
         return ApiResponse.success(res, 'Ghi nhận nhịp tim Agent thành công', result, 200);
       }
       const result = await AgentService.recordHeartbeatFromDaemon(rawToken, req.body);
+      recordAgentHeartbeat('http', 'success');
       return ApiResponse.success(res, 'Ghi nhận nhịp tim Agent thành công', result, 200);
     } catch (error) {
+      recordAgentHeartbeat('http', 'error');
       next(error);
     }
   }

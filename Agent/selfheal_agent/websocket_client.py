@@ -13,6 +13,10 @@ from websockets.exceptions import ConnectionClosed
 
 from selfheal_agent.authenticator import AgentAuthenticator
 from selfheal_agent.config import AgentConfig
+from selfheal_agent.telemetry.otel import (
+    record_agent_retry,
+    record_connection_status,
+)
 from selfheal_agent.telemetry.schemas import (
     AckPayload,
     AuthenticatedPayload,
@@ -71,6 +75,7 @@ class AgentWebSocketClient:
         """Disconnect cleanly and cancel background tasks."""
         self._is_stopped = True
         self.state = ConnectionState.DISCONNECTED
+        record_connection_status(False)
         self._auth_event.clear()
 
         if self._ws is not None:
@@ -135,14 +140,17 @@ class AgentWebSocketClient:
                 break
 
             if self.state == ConnectionState.FATAL_AUTH_ERROR:
+                record_connection_status(False)
                 logger.critical(
                     "❌ Halting WebSocket reconnection loop: Invalid AGENT_TOKEN (4001 Unauthorized)."
                 )
                 break
 
             self.state = ConnectionState.RECONNECTING
+            record_connection_status(False)
             self._auth_event.clear()
             self._reconnect_attempt += 1
+            record_agent_retry("websocket")
 
             backoff = min(
                 1.0 * (2.0 ** min(self._reconnect_attempt, 5)) + random.uniform(0.1, 0.5),
@@ -194,6 +202,7 @@ class AgentWebSocketClient:
 
             if code == 4001 or "unauthorized" in str(reason).lower():
                 self.state = ConnectionState.FATAL_AUTH_ERROR
+                record_connection_status(False)
                 return
         except OSError as oe:
             logger.warning("Network connection failed: %s", oe)
@@ -201,6 +210,7 @@ class AgentWebSocketClient:
             self._ws = None
             if self.state != ConnectionState.FATAL_AUTH_ERROR:
                 self.state = ConnectionState.DISCONNECTED
+            record_connection_status(False)
 
     async def _handle_raw_message(self, raw_message: str | bytes) -> None:
         """Parse incoming JSON frames and dispatch to handlers."""
@@ -217,6 +227,7 @@ class AgentWebSocketClient:
 
         if status == "authenticated":
             self.state = ConnectionState.AUTHENTICATED
+            record_connection_status(True)
             self._auth_event.set()
             logger.info("✅ Agent successfully authenticated by Main Backend! (%s)", data.get("agent"))
             await self._flush_queue()
