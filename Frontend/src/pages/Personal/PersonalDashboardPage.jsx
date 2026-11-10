@@ -21,6 +21,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
   const [apiError, setApiError] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [invitations, setInvitations] = useState([]);
+  const [activeRightTab, setActiveRightTab] = useState('notifications');
   const [summary, setSummary] = useState({
     totalCompanies: 0,
     activeCompanies: 0,
@@ -348,6 +349,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
 
         {/* KPI 3 */}
         <div
+          onClick={() => onNavigate && onNavigate('/portal/notifications')}
           style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
@@ -357,6 +359,8 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -366,25 +370,30 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 width: '36px',
                 height: '36px',
                 borderRadius: '8px',
-                backgroundColor: '#FEF2F2',
+                backgroundColor: summary.unreadNotifs > 0 ? '#FEF2F2' : '#F0FDF4',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Bell size={18} color="#DC2626" />
+              <Bell size={18} color={summary.unreadNotifs > 0 ? '#DC2626' : '#059669'} />
             </div>
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#DC2626', lineHeight: 1 }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: summary.unreadNotifs > 0 ? '#DC2626' : '#059669', lineHeight: 1 }}>
             {isLoading ? '...' : summary.unreadNotifs}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '8px' }}>
-            {isLoading ? 'Đang kiểm tra...' : `${summary.pendingInvitations} lời mời công ty đang chờ`}
+            {isLoading
+              ? 'Đang kiểm tra...'
+              : summary.unreadNotifs > 0
+              ? `${summary.unreadNotifs} thông báo mới cần xem`
+              : 'Đã xem hết toàn bộ thông báo'}
           </div>
         </div>
 
         {/* KPI 4 */}
         <div
+          onClick={() => onNavigate && onNavigate('/portal/security')}
           style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
@@ -394,6 +403,8 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -403,20 +414,20 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 width: '36px',
                 height: '36px',
                 borderRadius: '8px',
-                backgroundColor: '#F0F9FF',
+                backgroundColor: summary.twoFactorEnabled ? '#ECFDF5' : '#FFFBEB',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Shield size={18} color="#0284C7" />
+              <Shield size={18} color={summary.twoFactorEnabled ? '#059669' : '#D97706'} />
             </div>
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0284C7', lineHeight: 1 }}>
-            Đã bật 2FA
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: summary.twoFactorEnabled ? '#059669' : '#D97706', lineHeight: 1 }}>
+            {isLoading ? '...' : summary.twoFactorEnabled ? 'Đã bật 2FA' : 'Chưa bật 2FA'}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '8px', fontWeight: 600 }}>
-            Phiên làm việc bảo vệ an toàn
+          <div style={{ fontSize: '0.75rem', color: summary.twoFactorEnabled ? '#059669' : '#B45309', marginTop: '8px', fontWeight: 600 }}>
+            {isLoading ? 'Đang kiểm tra...' : summary.twoFactorEnabled ? 'Tài khoản được bảo vệ lớp kép' : 'Khuyến nghị kích hoạt TOTP'}
           </div>
         </div>
       </div>
@@ -438,7 +449,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Company Của Tôi — Truy Cập Nhanh
+                Công Ty Của Tôi — Truy Cập Nhanh
               </h3>
               <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: '2px 0 0 0' }}>
                 Danh sách các tổ chức bạn đang nắm giữ vai trò và quyền truy cập
@@ -660,7 +671,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Right Column: Recent Personal Activity */}
+        {/* Right Column: Notifications & Recent Personal Activity */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -672,88 +683,225 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             gap: '16px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Hoạt Động Gần Đây
-              </h3>
-              <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Lịch sử đăng nhập, bảo mật và tương tác Company
-              </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveRightTab('notifications')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: activeRightTab === 'notifications' ? '#FFFFFF' : 'transparent',
+                  color: activeRightTab === 'notifications' ? '#0F172A' : '#64748B',
+                  fontWeight: 700,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  boxShadow: activeRightTab === 'notifications' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Bell size={13} color={activeRightTab === 'notifications' ? '#2563EB' : '#64748B'} />
+                <span>Thông Báo</span>
+                {summary.unreadNotifs > 0 && (
+                  <span
+                    style={{
+                      fontSize: '0.625rem',
+                      fontWeight: 800,
+                      backgroundColor: '#DC2626',
+                      color: '#FFFFFF',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                    }}
+                  >
+                    {summary.unreadNotifs}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveRightTab('activity')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: activeRightTab === 'activity' ? '#FFFFFF' : 'transparent',
+                  color: activeRightTab === 'activity' ? '#0F172A' : '#64748B',
+                  fontWeight: 700,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  boxShadow: activeRightTab === 'activity' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Activity size={13} color={activeRightTab === 'activity' ? '#059669' : '#64748B'} />
+                <span>Hoạt Động</span>
+              </button>
             </div>
+
             <button
               type="button"
-              onClick={() => onNavigate && onNavigate('/portal/activity')}
+              onClick={() => onNavigate && onNavigate(activeRightTab === 'notifications' ? '/portal/notifications' : '/portal/activity')}
               style={{
                 fontSize: '0.78125rem',
-                color: '#059669',
+                color: activeRightTab === 'notifications' ? '#2563EB' : '#059669',
                 fontWeight: 700,
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
               }}
             >
-              Xem nhật ký &rarr;
+              {activeRightTab === 'notifications' ? 'Xem tất cả thông báo →' : 'Xem nhật ký →'}
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {summary.recentActivities && summary.recentActivities.length > 0 ? (
-              summary.recentActivities.map((act) => (
-                <div key={act.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          {activeRightTab === 'notifications' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {summary.recentNotifications && summary.recentNotifications.length > 0 ? (
+                summary.recentNotifications.map((notif) => (
                   <div
+                    key={notif.id}
+                    onClick={() => onNavigate && onNavigate('/portal/notifications')}
                     style={{
-                      width: '30px',
-                      height: '30px',
-                      borderRadius: '8px',
-                      backgroundColor:
-                        act.category === 'AUTH'
-                          ? '#EFF6FF'
-                          : act.category === 'SECURITY'
-                          ? '#FEF3C7'
-                          : act.category === 'COMPANY'
-                          ? '#ECFDF5'
-                          : '#F1F5F9',
-                      color:
-                        act.category === 'AUTH'
-                          ? '#2563EB'
-                          : act.category === 'SECURITY'
-                          ? '#D97706'
-                          : act.category === 'COMPANY'
-                          ? '#059669'
-                          : '#475569',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      marginTop: '2px',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: notif.read ? '#FFFFFF' : '#F0FDF4',
+                      border: notif.read ? '1px solid #F1F5F9' : '1px solid #BBF7D0',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease',
                     }}
                   >
-                    <Activity size={15} />
+                    <div
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '8px',
+                        backgroundColor:
+                          notif.type === 'INVITATION'
+                            ? '#EFF6FF'
+                            : notif.type === 'SECURITY'
+                            ? '#FEF2F2'
+                            : notif.type === 'SUCCESS' || notif.severity === 'SUCCESS'
+                            ? '#ECFDF5'
+                            : '#F8FAFC',
+                        color:
+                          notif.type === 'INVITATION'
+                            ? '#2563EB'
+                            : notif.type === 'SECURITY'
+                            ? '#DC2626'
+                            : notif.type === 'SUCCESS' || notif.severity === 'SUCCESS'
+                            ? '#059669'
+                            : '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        marginTop: '2px',
+                      }}
+                    >
+                      {notif.type === 'INVITATION' ? (
+                        <Building2 size={16} />
+                      ) : notif.type === 'SECURITY' ? (
+                        <Shield size={16} />
+                      ) : (
+                        <Bell size={16} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>{notif.title}</div>
+                        {!notif.read && (
+                          <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#059669', flexShrink: 0 }} />
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px', lineHeight: 1.4 }}>{notif.message || notif.description}</div>
+                      <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '3px' }}>{notif.timestamp}</div>
+                    </div>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>{act.title}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '1px' }}>{act.description}</div>
-                    <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>{act.timestamp}</div>
-                  </div>
+                ))
+              ) : (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '30px 16px',
+                    color: '#94A3B8',
+                    fontSize: '0.8125rem',
+                    border: '1px dashed #E2E8F0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  Chưa có thông báo mới nào
                 </div>
-              ))
-            ) : (
-              <div
-                style={{
-                  textAlign: 'center',
-                  padding: '30px 16px',
-                  color: '#94A3B8',
-                  fontSize: '0.8125rem',
-                  border: '1px dashed #E2E8F0',
-                  borderRadius: '8px',
-                }}
-              >
-                Chưa có hoạt động gần đây
-              </div>
-            )}
-          </div>
-        </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {summary.recentActivities && summary.recentActivities.length > 0 ? (
+                summary.recentActivities.map((act) => (
+                  <div key={act.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '8px',
+                        backgroundColor:
+                          act.category === 'AUTH'
+                            ? '#EFF6FF'
+                            : act.category === 'SECURITY'
+                            ? '#FEF3C7'
+                            : act.category === 'COMPANY'
+                            ? '#ECFDF5'
+                            : '#F1F5F9',
+                        color:
+                          act.category === 'AUTH'
+                            ? '#2563EB'
+                            : act.category === 'SECURITY'
+                            ? '#D97706'
+                            : act.category === 'COMPANY'
+                            ? '#059669'
+                            : '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        marginTop: '2px',
+                      }}
+                    >
+                      <Activity size={15} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>{act.title}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '1px' }}>{act.description}</div>
+                      <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>{act.timestamp}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '30px 16px',
+                    color: '#94A3B8',
+                    fontSize: '0.8125rem',
+                    border: '1px dashed #E2E8F0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  Chưa có hoạt động gần đây
+                </div>
+              )}
+            </div>
+          )}        </div>
       </div>
     </div>
   );

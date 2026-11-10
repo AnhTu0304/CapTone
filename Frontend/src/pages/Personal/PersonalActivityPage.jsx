@@ -10,37 +10,67 @@ import {
   CheckCircle2,
   RefreshCw,
   AlertTriangle,
+  Server,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
 
+export const formatActivityDescription = (desc, fallbackTitle) => {
+  if (!desc) return fallbackTitle || "";
+  let cleaned = desc
+    .replace(/^Người dùng \[[^\]]+\]\s*/i, "")
+    .replace(/\[[^\]]+@[^\]]+\]\s*/i, "")
+    .trim();
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  return cleaned || fallbackTitle || "";
+};
+
 export const PersonalActivityPage = () => {
-  const [activities, setActivities] = useState(() => personalPortalService.getActivityHistory());
-  const [isLoading, setIsLoading] = useState(false);
+  const [activities, setActivities] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
   const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL' | 'AUTH' | 'PROFILE' | 'COMPANY' | 'SECURITY'
   const [searchTerm, setSearchTerm] = useState('');
 
   // Tải dữ liệu từ database thông qua personalPortalService
-  const loadActivities = useCallback(async (cat, search) => {
+  const loadActivities = useCallback(async (cat = categoryFilter, search = searchTerm, page = currentPage, limit = pageSize) => {
     setIsLoading(true);
     try {
       const data = await personalPortalService.fetchActivityHistory({
         category: cat !== 'ALL' ? cat : undefined,
         search: search && search.trim() ? search.trim() : undefined,
+        page,
+        limit,
       });
-      setActivities(data || []);
+      if (Array.isArray(data)) {
+        setActivities(data);
+        setTotalItems(typeof data.total === 'number' ? data.total : data.length);
+      } else if (data?.items) {
+        setActivities(data.items);
+        setTotalItems(typeof data.total === 'number' ? data.total : data.items.length);
+      } else {
+        setActivities([]);
+        setTotalItems(0);
+      }
     } catch (err) {
       console.error('Error fetching activities:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentPage, pageSize]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadActivities(categoryFilter, searchTerm);
+      loadActivities(categoryFilter, searchTerm, currentPage, pageSize);
     }, 200);
     return () => clearTimeout(timer);
-  }, [categoryFilter, searchTerm, loadActivities]);
+  }, [categoryFilter, searchTerm, currentPage, pageSize, loadActivities]);
 
   // Client-side filter safeguard
   const filtered = activities.filter((act) => {
@@ -50,16 +80,16 @@ export const PersonalActivityPage = () => {
     const matchesSearch =
       (act.title && act.title.toLowerCase().includes(searchLower)) ||
       (act.description && act.description.toLowerCase().includes(searchLower)) ||
-      (act.ipAddress && String(act.ipAddress).includes(searchLower));
+      (act.ipAddress && String(act.ipAddress).includes(searchLower)) || (act.organizationName && act.organizationName.toLowerCase().includes(searchLower)) || (act.clusterName && act.clusterName.toLowerCase().includes(searchLower));
     return matchesCategory && matchesSearch;
   });
 
   const handleExportCSV = () => {
-    const headers = 'ID,Hành động,Mô tả,Thời gian,IP,Danh mục,Trạng thái\n';
+    const headers = 'ID,Hành động,Mô tả,Công ty,Cụm K8s,Thời gian,IP,Danh mục,Trạng thái\n';
     const rows = filtered
       .map(
         (a) =>
-          `"${a.id || ''}","${(a.title || '').replace(/"/g, '""')}","${(a.description || '').replace(/"/g, '""')}","${a.timestamp || ''}","${a.ipAddress || ''}","${a.category || ''}","${a.status || ''}"`
+          `"${a.id || ''}","${(a.title || '').replace(/"/g, '""')}","${(a.description || '').replace(/"/g, '""')}","${(a.organizationName || '').replace(/"/g, '""')}","${(a.clusterName || '').replace(/"/g, '""')}","${a.timestamp || ''}","${a.ipAddress || ''}","${a.category || ''}","${a.status || ''}"`
       )
       .join('\n');
     const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -112,7 +142,7 @@ export const PersonalActivityPage = () => {
             type="button"
             onClick={() => loadActivities(categoryFilter, searchTerm)}
             disabled={isLoading}
-            title="Làm mới dữ liệu từ Database"
+            title="Làm mới dữ liệu"
             style={{
               padding: '8px 14px',
               borderRadius: '8px',
@@ -183,7 +213,7 @@ export const PersonalActivityPage = () => {
             type="text"
             placeholder="Tìm theo hành động, IP, chi tiết sự kiện..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             style={{
               width: '100%',
               padding: '8px 12px 8px 36px',
@@ -198,7 +228,7 @@ export const PersonalActivityPage = () => {
         {/* Category Filter */}
         <select
           value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
+          onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
           style={{
             padding: '8px 12px',
             borderRadius: '8px',
@@ -208,7 +238,7 @@ export const PersonalActivityPage = () => {
             outline: 'none',
           }}
         >
-          <option value="ALL">Tất cả hành động ({activities.length})</option>
+          <option value="ALL">Tất cả hành động ({totalItems || activities.length})</option>
           <option value="AUTH">Đăng nhập / Đăng xuất</option>
           <option value="PROFILE">Cập nhật hồ sơ</option>
           <option value="COMPANY">Tổ chức & Cụm K8s</option>
@@ -246,8 +276,22 @@ export const PersonalActivityPage = () => {
                   <tr key={act.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ fontWeight: 700, color: '#0F172A' }}>{act.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
-                        {act.description}
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: 1.4 }}>
+                        <span>{act.description}</span>
+                        {act.organizationName && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#0284C7', fontWeight: 600 }}>
+                            <span style={{ color: '#CBD5E1' }}>•</span>
+                            <Building2 size={12} style={{ flexShrink: 0 }} />
+                            <span>{act.organizationName}</span>
+                          </span>
+                        )}
+                        {act.clusterName && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#7C3AED', fontWeight: 600 }}>
+                            <span style={{ color: '#CBD5E1' }}>•</span>
+                            <Server size={11} style={{ flexShrink: 0 }} />
+                            <span>Cụm: {act.clusterName}</span>
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -320,6 +364,103 @@ export const PersonalActivityPage = () => {
           </table>
         </div>
 
+        {/* Pagination Bar */}
+        {filtered.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '14px 16px',
+              borderTop: '1px solid #F1F5F9',
+              fontSize: '0.8125rem',
+              color: '#334155',
+            }}
+          >
+            {/* Cụm trái: Hiển thị mỗi trang */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Hiển thị mỗi trang:</span>
+              <select
+                aria-label="Hiển thị mỗi trang"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#0F172A',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+
+            {/* Cụm phải: Số trang và nút Trước / Sau */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span>
+                Trang {currentPage} trên tổng {totalPages}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1 || isLoading}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: currentPage <= 1 || isLoading ? '#94A3B8' : '#0F172A',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    cursor: currentPage <= 1 || isLoading ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  &lsaquo; Trước
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages || isLoading}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: currentPage >= totalPages || isLoading ? '#94A3B8' : '#0F172A',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    cursor: currentPage >= totalPages || isLoading ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  Sau &rsaquo;
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isLoading && filtered.length === 0 && (
           <div
             style={{
@@ -331,14 +472,11 @@ export const PersonalActivityPage = () => {
             <RefreshCw
               size={28}
               style={{
-                margin: '0 auto 12px auto',
+                margin: '0 auto',
                 color: '#3B82F6',
                 animation: 'spinSlow 1s linear infinite',
               }}
             />
-            <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}>
-              Đang tải lịch sử hoạt động từ Database...
-            </div>
           </div>
         )}
 

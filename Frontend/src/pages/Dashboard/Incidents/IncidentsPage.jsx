@@ -337,7 +337,7 @@ export const IncidentsPage = ({ onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Bộ lọc thời gian: mặc định là 'today' (ngày hôm nay) theo yêu cầu người dùng
-  const [timeFilterMode, setTimeFilterMode] = useState('all'); // 'all' | 'today' | 'date' | 'month' | 'year'
+  const [timeFilterMode, setTimeFilterMode] = useState('today'); // 'today' | 'date' | 'month' | 'year'
   const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedMonth, setSelectedMonth] = useState(() => getThisMonthStr());
   const [selectedYear, setSelectedYear] = useState(() => getThisYearStr());
@@ -432,7 +432,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       const activeOrgId = currentOrg?.id;
 
       const params = {
-        limit: 2000,
+        limit: 250,
         cluster_id: selectedCluster === 'all' ? undefined : selectedCluster,
         organization_id: activeOrgId,
         status: selectedStatus,
@@ -927,21 +927,21 @@ export const IncidentsPage = ({ onNavigate }) => {
                 fontSize: '0.75rem',
                 fontWeight: 600,
                 borderRadius: '6px',
-                border: isCalendarOpen || timeFilterMode !== 'today' ? '1px solid #3B82F6' : '1px solid var(--dash-border)',
-                backgroundColor: timeFilterMode !== 'today' ? '#EFF6FF' : '#FFFFFF',
-                color: timeFilterMode !== 'today' ? '#1D4ED8' : 'var(--dash-text-primary)',
+                border: isCalendarOpen ? '1px solid #CBD5E1' : '1px solid var(--dash-border)',
+                backgroundColor: '#F8FAFC',
+                color: 'var(--dash-text-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 cursor: 'pointer',
-                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none',
+                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(15, 23, 42, 0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
               title="Mở bảng lịch chọn ngày, tháng hoặc năm"
             >
-              <Calendar size={14} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-primary)'} />
+              <Calendar size={14} color="var(--dash-text-secondary)" />
               <span>{currentFilterLabel}</span>
-              <ChevronDown size={12} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-text-secondary)'} />
+              <ChevronDown size={12} color="var(--dash-text-secondary)" />
             </button>
 
             {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
@@ -963,8 +963,8 @@ export const IncidentsPage = ({ onNavigate }) => {
                   gap: '12px',
                 }}
               >
-                {/* Tabs Chế Độ: Ngày | Tháng | Năm | Tất Cả */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+                {/* Tabs Chế Độ: Ngày | Tháng | Năm */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('date')}
@@ -1015,26 +1015,6 @@ export const IncidentsPage = ({ onNavigate }) => {
                     }}
                   >
                     📆 Năm
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTimeFilterMode('all');
-                      setIsCalendarOpen(false);
-                    }}
-                    style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      borderRadius: '6px',
-                      border: 'none',
-                      backgroundColor: timeFilterMode === 'all' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'all' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🌐 Tất cả
                   </button>
                 </div>
 
@@ -1312,11 +1292,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                 height: '32px',
                 padding: '0 8px',
                 fontSize: '0.75rem',
-                fontWeight: 600,
-                border: '1px solid #BBF7D0',
+                border: '1px solid var(--dash-border)',
                 borderRadius: '6px',
-                backgroundColor: '#F0FDF4',
-                color: '#15803D',
+                backgroundColor: '#F8FAFC',
+                color: 'var(--dash-text-primary)',
                 outline: 'none',
                 cursor: 'pointer',
               }}
@@ -1353,7 +1332,7 @@ export const IncidentsPage = ({ onNavigate }) => {
         </div>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-          Hiển thị <strong>{totalFiltered > 0 ? startIndex + 1 : 0} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố (tổng <strong>{incidents.length}</strong>)
+          Hiển thị <strong>{totalFiltered > 0 ? startIndex + 1 : 0} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố
         </div>
       </div>
 
@@ -1444,10 +1423,18 @@ export const IncidentsPage = ({ onNavigate }) => {
                   return (
                     <tr
                       key={item.id}
+                      onClick={() => setActiveModalIncident(item)}
                       style={{
                         borderBottom: '1px solid #F1F5F9',
                         backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
                         transition: 'background-color 0.15s ease',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#F0FDF4';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
                       }}
                     >
                       <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
@@ -1584,7 +1571,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                           {/* Nút Xem Chi Tiết -> BẬT KHUNG CỬA SỔ NHỎ (MODAL) */}
                           <button
                             type="button"
-                            onClick={() => setActiveModalIncident(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveModalIncident(item);
+                            }}
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',

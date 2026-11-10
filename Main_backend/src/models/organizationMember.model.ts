@@ -111,7 +111,7 @@ export class OrganizationMemberModel {
     const query = `
       SELECT om.*, r.code AS role_code
       FROM organization_members om
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       WHERE om.organization_id = $1 AND om.user_id = $2
       LIMIT 1;
     `;
@@ -134,7 +134,7 @@ export class OrganizationMemberModel {
     const query = `
       SELECT r.code AS role_code, om.status
       FROM organization_members om
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       WHERE om.organization_id = $1 AND om.user_id = $2 AND om.status = 'ACTIVE'
       LIMIT 1;
     `;
@@ -190,11 +190,12 @@ export class OrganizationMemberModel {
       SELECT 
         om.id, om.organization_id, om.user_id, om.role_id, om.status, om.invited_by, om.joined_at, om.created_at, om.updated_at,
         u.email AS user_email, u.full_name AS user_full_name, u.avatar_url AS user_avatar_url, u.status AS user_status,
+        u.phone AS user_phone, u.job_title AS user_job_title, u.last_login_at AS user_last_login_at,
         r.code AS role_code, r.name AS role_name, r.description AS role_description,
         inv.id AS inviter_id, inv.email AS inviter_email, inv.full_name AS inviter_full_name
       FROM organization_members om
       JOIN users u ON om.user_id = u.id
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       LEFT JOIN users inv ON om.invited_by = inv.id
       ${whereClause}
       ORDER BY 
@@ -279,7 +280,7 @@ export class OrganizationMemberModel {
       SELECT COUNT(*)::int AS total
       FROM organization_members om
       JOIN users u ON om.user_id = u.id
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       ${whereClause};
     `;
     const res = await db.query<{ total: number }>(query, params);
@@ -299,7 +300,7 @@ export class OrganizationMemberModel {
       SELECT om.id, o.name AS org_name, r.code AS role_code
       FROM organization_members om
       JOIN organizations o ON om.organization_id = o.id
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       WHERE om.organization_id = $1 
         AND om.user_id = $2 
         AND om.status = 'INVITED' 
@@ -325,7 +326,7 @@ export class OrganizationMemberModel {
     const query = `
       SELECT COUNT(*)::int AS count 
       FROM organization_members om 
-      JOIN roles r ON om.role_id = r.id 
+      JOIN organization_roles r ON om.role_id = r.id 
       WHERE om.organization_id = $1 AND r.code = $2 AND om.status = 'ACTIVE';
     `;
     const res = await db.query<{ count: number }>(query, [organizationId, roleCode]);
@@ -414,7 +415,7 @@ export class OrganizationMemberModel {
         inv.id AS inviter_id, inv.email AS inviter_email, inv.full_name AS inviter_full_name
       FROM organization_members om
       JOIN users u ON om.user_id = u.id
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       LEFT JOIN users inv ON om.invited_by = inv.id
       WHERE om.organization_id = $1 AND om.user_id = $2
       LIMIT 1;

@@ -352,3 +352,18 @@ a:focus-visible,
 }
 
 
+
+/* Hide Sidebar Scrollbar */
+.dashboard-sidebar-nav::-webkit-scrollbar,
+.dashboard-sidebar::-webkit-scrollbar,
+.dashboard-desktop-sidebar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.dashboard-sidebar-nav,
+.dashboard-sidebar,
+.dashboard-desktop-sidebar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}

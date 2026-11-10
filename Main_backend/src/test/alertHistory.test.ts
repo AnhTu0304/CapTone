@@ -94,7 +94,7 @@ describe('[S5][PBI22] Alert History & Query API Test Suite (Task 4.1 & 4.2)', ()
       );
 
       // 4. Role lookup & membership
-      const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+      const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
       const roleMap = new Map<string, string>();
       for (const r of rolesRes.rows) {
         roleMap.set(r.code, r.id);

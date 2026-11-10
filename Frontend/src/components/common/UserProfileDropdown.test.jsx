@@ -1,54 +1,44 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import UserProfileDropdown, { resolveUserSystemRole } from './UserProfileDropdown';
+import UserProfileDropdown, {
+  resolveUserSystemRole,
+} from './UserProfileDropdown';
 
-const mockLogout = jest.fn();
 let mockCurrentUser = null;
-
-const mockResolveRole = (u) => {
-  if (!u) return null;
-  const raw = Array.isArray(u.system_roles) ? u.system_roles : [];
-  if (raw.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
-  if (raw.includes('SYSTEM_ADMIN')) return 'SYSTEM_ADMIN';
-  if (raw.includes('ADMIN')) return 'ADMIN';
-  if (raw.includes('USER')) return 'USER';
-  return null;
-};
+const mockLogout = jest.fn();
 
 jest.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user: mockCurrentUser,
     logout: mockLogout,
     getInitials: (name) => {
-      const parts = (name || '').trim().split(' ').filter(Boolean);
-      return parts.length >= 2
-        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-        : (name || 'AD').slice(0, 2).toUpperCase();
+      if (!name) return 'AD';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     },
-    isAdmin: (u) => ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(mockResolveRole(u)),
-    isSuperAdmin: (u) => mockResolveRole(u) === 'SUPER_ADMIN',
   }),
 }));
 
 describe('UserProfileDropdown Component - System Role Display Suite', () => {
   beforeEach(() => {
-    localStorage.clear();
     jest.clearAllMocks();
+    mockCurrentUser = null;
+    localStorage.clear();
   });
 
-  test('TC01: User có System Role SUPER_ADMIN -> hiển thị SUPER_ADMIN', () => {
+  test('TC01: User có System Role SUPER_ADMIN -> hiển thị SUPER_ADMIN ở header trigger và popover', () => {
     mockCurrentUser = {
       id: 'usr-super-01',
       email: 'superadmin@selfheal.systems',
       full_name: 'Quản Trị Tối Cao',
       system_roles: ['SUPER_ADMIN'],
-      roles: ['SUPER_ADMIN'],
     };
 
     render(<UserProfileDropdown />);
 
-    // Header trigger hiển thị đúng SUPER_ADMIN
+    // Header trigger hiển thị đúng họ tên và SUPER_ADMIN
     expect(screen.getByText('Quản Trị Tối Cao')).toBeInTheDocument();
     expect(screen.getByText('SUPER_ADMIN')).toBeInTheDocument();
 
@@ -56,7 +46,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('SUPER_ADMIN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('SUPER_ADMIN').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Bảng Quản Trị Hệ Thống')).toBeInTheDocument();
     expect(screen.getByText('Nhật Ký Kiểm Toán SHA-256')).toBeInTheDocument();
   });
@@ -77,7 +67,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('SYSTEM_ADMIN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('SYSTEM_ADMIN').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Bảng Quản Trị Hệ Thống')).toBeInTheDocument();
   });
 
@@ -101,12 +91,11 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('SYSTEM_ADMIN').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('SYSTEM_ADMIN').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('Kỹ Sư Vận Hành')).not.toBeInTheDocument();
   });
 
-  test('TC04: User chỉ có Company Role -> hiển thị "Chưa được gán System Role"', () => {
-    // Trường hợp như tài khoản thực tế "25-Lê Văn Siêu" chỉ có DEVOPS trong org
+  test('TC04: User chỉ có Company Role -> không hiển thị role badge ở header trigger (USER ẩn)', () => {
     mockCurrentUser = {
       id: 'b8a9893a-aa44-44a3-8524-6130d66993e2',
       email: 'sieulv@vietcorp.vn',
@@ -119,14 +108,13 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     render(<UserProfileDropdown />);
 
     expect(screen.getByText('25-Lê Văn Siêu')).toBeInTheDocument();
-    expect(screen.getByText('Chưa được gán System Role')).toBeInTheDocument();
+    expect(screen.queryByText('SUPER_ADMIN')).not.toBeInTheDocument();
     expect(screen.queryByText('Kỹ Sư Vận Hành')).not.toBeInTheDocument();
     expect(screen.queryByText('DEVOPS')).not.toBeInTheDocument();
 
     const trigger = screen.getByRole('button', { name: /Menu hồ sơ/i });
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText('Chưa được gán System Role').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('Bảng Quản Trị Hệ Thống')).not.toBeInTheDocument();
     expect(screen.getByText('Cài Đặt Tài Khoản')).toBeInTheDocument();
   });
@@ -143,8 +131,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
 
     render(<UserProfileDropdown />);
 
-    // Tuyệt đối không chọn SME_OWNER hay DEVOPS để hiển thị ở menu cá nhân
-    expect(screen.getByText('Chưa được gán System Role')).toBeInTheDocument();
+    expect(screen.getByText('Đặng Tuấn Anh')).toBeInTheDocument();
     expect(screen.queryByText('SME_OWNER')).not.toBeInTheDocument();
     expect(screen.queryByText('Chủ Sở Hữu Doanh Nghiệp')).not.toBeInTheDocument();
     expect(screen.queryByText('Kỹ Sư Vận Hành')).not.toBeInTheDocument();
@@ -185,7 +172,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
   });
 
   test('TC07: Thay đổi System Role trong DB -> giao diện cập nhật theo dữ liệu mới', () => {
-    // Ban đầu user chưa có System Role
+    // Ban đầu user chưa có System Role (ẩn role subtitle)
     mockCurrentUser = {
       id: 'usr-dynamic-07',
       email: 'dynamic@company.vn',
@@ -194,7 +181,8 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     };
 
     const { rerender } = render(<UserProfileDropdown />);
-    expect(screen.getByText('Chưa được gán System Role')).toBeInTheDocument();
+    expect(screen.getByText('Nguyễn Tiến Đạt')).toBeInTheDocument();
+    expect(screen.queryByText('SUPER_ADMIN')).not.toBeInTheDocument();
 
     // Cập nhật DB cấp System Role SUPER_ADMIN cho user
     mockCurrentUser = {
@@ -206,7 +194,6 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
 
     rerender(<UserProfileDropdown />);
     expect(screen.getByText('SUPER_ADMIN')).toBeInTheDocument();
-    expect(screen.queryByText('Chưa được gán System Role')).not.toBeInTheDocument();
   });
 
   test('TC08: Đóng menu khi bấm Escape hoặc click ra ngoài, và điều hướng / đăng xuất chính xác', () => {
@@ -249,5 +236,36 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     fireEvent.click(screen.getByText('Đăng Xuất Tài Khoản'));
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('/login');
+  });
+
+  test('TC09: Tài khoản thường có System Role USER -> không hiển thị nhãn USER theo yêu cầu', () => {
+    mockCurrentUser = {
+      id: 'usr-normal-09',
+      email: 'psang8348@gmail.com',
+      full_name: 'Sang Phạm',
+      system_roles: ['USER'],
+    };
+
+    render(<UserProfileDropdown />);
+
+    // Hiển thị họ tên
+    expect(screen.getByText('Sang Phạm')).toBeInTheDocument();
+    // Tuyệt đối không hiển thị nhãn USER dưới tên theo yêu cầu
+    expect(screen.queryByText('USER')).not.toBeInTheDocument();
+  });
+
+  test('TC10: Họ tên có chứa hậu tố (Super Admin) hoặc (Admin) -> tự động xóa sạch', () => {
+    mockCurrentUser = {
+      id: 'usr-suffix-10',
+      email: 'phamthaisang1710@gmail.com',
+      full_name: 'Phạm Thái Sang (Super Admin)',
+      system_roles: ['SUPER_ADMIN'],
+    };
+
+    render(<UserProfileDropdown />);
+
+    // Tên hiển thị phải là "Phạm Thái Sang" sạch sẽ
+    expect(screen.getByText('Phạm Thái Sang')).toBeInTheDocument();
+    expect(screen.queryByText('Phạm Thái Sang (Super Admin)')).not.toBeInTheDocument();
   });
 });

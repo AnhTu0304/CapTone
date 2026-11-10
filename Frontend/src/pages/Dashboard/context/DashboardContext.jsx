@@ -29,7 +29,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   const [currentOrg, setCurrentOrg] = useState(() => {
     const savedId = localStorage.getItem('selfheal_active_org_id');
     const savedName = localStorage.getItem('selfheal_active_org_name');
-    const savedRole = localStorage.getItem('selfheal_active_org_role') || 'SME_OWNER';
+    const savedRole = localStorage.getItem('selfheal_active_org_role') || 'VIEWER';
     if (!savedId || savedId === 'org-empty') {
       return null;
     }

@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
 
@@ -159,7 +160,7 @@ CREATE INDEX IF NOT EXISTS idx_user_system_roles_role ON user_system_roles(syste
 -- ====================================================================
 
 -- 6. Bảng `roles`: Vai trò cấp tổ chức
-CREATE TABLE IF NOT EXISTS roles (
+CREATE TABLE IF NOT EXISTS organization_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -167,6 +168,10 @@ CREATE TABLE IF NOT EXISTS roles (
     scope VARCHAR(30) NOT NULL DEFAULT 'ORGANIZATION',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- View tương thích ngược
+CREATE OR REPLACE VIEW roles AS SELECT * FROM organization_roles;
+CREATE OR REPLACE VIEW roles_organizations AS SELECT * FROM organization_roles;
 
 -- 7. Bảng `organizations`: Danh mục các doanh nghiệp / tổ chức
 CREATE TABLE IF NOT EXISTS organizations (
@@ -206,7 +211,7 @@ CREATE TABLE IF NOT EXISTS organization_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id UUID NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+    role_id UUID NOT NULL REFERENCES organization_roles(id) ON DELETE RESTRICT,
     status member_status NOT NULL DEFAULT 'INVITED',
     invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
     joined_at TIMESTAMPTZ,
@@ -876,7 +881,7 @@ ON CONFLICT (name) DO UPDATE
 SET description = EXCLUDED.description, updated_at = NOW();
 
 -- 2. Vai trò cấp Tổ chức (Organization Roles)
-INSERT INTO roles (code, name, description, scope) VALUES
+INSERT INTO organization_roles (code, name, description, scope) VALUES
     ('ADMIN', 'Platform Admin', 'Quản trị toàn bộ nền tảng', 'PLATFORM'),
     ('SME_OWNER', 'SME Owner', 'Quản lý tổ chức và kiểm soát self-healing', 'ORGANIZATION'),
     ('DEVOPS', 'DevOps', 'Quản lý hạ tầng, agent và vận hành kỹ thuật', 'ORGANIZATION'),
@@ -890,7 +895,7 @@ VALUES (
     'd3a26d55-0b9f-48e7-a328-846badf96cd7',
     'phamthaisang1710@gmail.com',
     '$2b$10$APWkvgW0lABeeSJJR0u8ru4uj8oKZymvphd5b3TM4kGbP3d6vV8Ey',
-    'Phạm Thái Sang (Super Admin)',
+    'Phạm Thái Sang',
     'ACTIVE',
     NOW()
 )
@@ -901,7 +906,7 @@ INSERT INTO users (email, password_hash, full_name, status, email_verified_at)
 VALUES (
     'superadmin@selfheal.com',
     crypt('AdminPassword123@', gen_salt('bf', 10)),
-    'Quản Trị Viên Tối Cao (Super Admin)',
+    'Quản Trị Viên Tối Cao',
     'ACTIVE',
     NOW()
 )
@@ -968,7 +973,7 @@ DECLARE
     v_role_id UUID;
 BEGIN
     SELECT id INTO v_user_id FROM users WHERE email = 'phamthaisang1710@gmail.com' LIMIT 1;
-    SELECT id INTO v_role_id FROM roles WHERE code = 'SME_OWNER' LIMIT 1;
+    SELECT id INTO v_role_id FROM organization_roles WHERE code = 'SME_OWNER' LIMIT 1;
     
     IF v_user_id IS NOT NULL AND v_role_id IS NOT NULL THEN
         INSERT INTO organization_members (organization_id, user_id, role_id, status, joined_at)

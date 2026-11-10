@@ -4,7 +4,7 @@ import { config } from '../config/env';
 
 async function seedAdmin() {
   const email = 'phamthaisang1710@gmail.com';
-  const fullName = 'Phạm Thái Sang (Super Admin)';
+  const fullName = 'Phạm Thái Sang';
   const rawPassword = 'AdminPassword123@';
 
   console.log(`🚀 Đang khởi tạo tài khoản Quản trị viên (Admin) cho: ${email}...`);

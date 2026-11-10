@@ -16,6 +16,8 @@ import { UserModel } from '../models/user.model';
 import { SystemRoleService } from './systemRole.service';
 import { EmailQueue } from './emailQueue.service';
 import { resolvePrimarySystemRole } from './user.service';
+import { TwoFactorModel } from '../models/twoFactor.model';
+import { TwoFactorService } from './twoFactor.service';
 
 export class AuthService {
     /**
@@ -91,6 +93,52 @@ export class AuthService {
     }
 
     // 2. Đăng nhập tài khoản - Chỉ trả về id, email và token (Không bắt buộc xác thực email)
+    public static async verify2FALogin(tempToken: string, code: string): Promise<ILoginResult> {
+        let decoded: any;
+        try {
+            decoded = jwt.verify(tempToken, config.jwt.secret);
+        } catch {
+            throw new ApiError(401, 'Phiên xác thực 2FA đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
+        }
+
+        if (!decoded || decoded.purpose !== '2fa_login' || !decoded.tempUserId) {
+            throw new ApiError(401, 'Token xác thực 2FA không hợp lệ.');
+        }
+
+        const userId = decoded.tempUserId;
+        const verification = await TwoFactorService.verifyLoginCode(userId, code);
+        if (!verification.success) {
+            throw new ApiError(400, 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.');
+        }
+
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            throw new ApiError(404, 'Không tìm thấy người dùng');
+        }
+
+        await UserModel.updateLastLogin(user.id);
+
+        const systemRoles = await UserModel.getUserSystemRoles(user.id);
+        const orgRoles = await UserModel.getUserOrganizations(user.id);
+        const primarySystemRole = resolvePrimarySystemRole(systemRoles);
+
+        const token = this.generateToken(user, systemRoles);
+        return {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            avatar_url: user.avatar_url || null,
+            avatarUrl: user.avatar_url || null,
+            token,
+            system_roles: systemRoles,
+            systemRole: primarySystemRole,
+            system_role: primarySystemRole,
+            has_organization: orgRoles.length > 0,
+            organization_roles: orgRoles,
+            require_2fa: false,
+        };
+    }
+
     public static async login(data: ILoginDto): Promise<ILoginResult> {
         const user = await UserModel.findByEmailWithPassword(data.email.toLowerCase().trim());
         if (!user) {
@@ -114,7 +162,23 @@ export class AuthService {
             user.status = 'ACTIVE';
         }
 
-        await UserModel.updateLastLogin(user.id);
+                // 2.3. Kiem tra Xac thuc 2 yeu to (2FA)
+        const twoFactor = await TwoFactorModel.findByUserId(user.id);
+        if (twoFactor && twoFactor.is_enabled) {
+            const tempToken = jwt.sign(
+                { tempUserId: user.id, email: user.email, purpose: '2fa_login' },
+                config.jwt.secret,
+                { expiresIn: '5m' }
+            );
+            return {
+                id: user.id,
+                email: user.email,
+                require_2fa: true,
+                temp_token: tempToken,
+            };
+        }
+
+await UserModel.updateLastLogin(user.id);
 
         // Lấy danh sách các vai trò hệ thống hiện có của người dùng qua UserModel (thuần túy từ user_system_roles)
         const systemRoles = await UserModel.getUserSystemRoles(user.id);
@@ -126,6 +190,8 @@ export class AuthService {
             id: user.id,
             email: user.email,
             full_name: user.full_name,
+            avatar_url: user.avatar_url || null,
+            avatarUrl: user.avatar_url || null,
             token,
             system_roles: systemRoles,
             systemRole: primarySystemRole,

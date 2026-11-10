@@ -93,7 +93,7 @@ describe('Security Audit Logging & Tenant Governance Suite [PB08 4.3]', () => {
     );
 
     // 4. Seed Organization Members
-    const orgRolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const orgRolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const smeOwnerRoleId = orgRolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
     const devopsRoleId = orgRolesRes.rows.find((r) => r.code === 'DEVOPS')?.id;
     const viewerRoleId = orgRolesRes.rows.find((r) => r.code === 'VIEWER')?.id;

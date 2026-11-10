@@ -193,7 +193,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 boxShadow: scopeMode === 'CURRENT_CLUSTER' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
-              Cụm này ({currentEnv?.name})
+              {currentEnv?.name || 'Cụm hiện tại'}
             </button>
             <button
               type="button"
@@ -236,6 +236,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <span>Làm mới</span>
           </button>
 
+          {can(PERMISSIONS.AGENT_MANAGE) && (
           <button
             onClick={() => setIsInstallModalOpen(true)}
             style={{
@@ -256,6 +257,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <Plus size={16} />
             <span>Cài đặt Tác tử Mới</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -402,6 +404,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', maxWidth: '460px', margin: '4px auto 16px auto' }}>
                 Triển khai Tác tử eBPF vào cụm Kubernetes của bạn để tự động thu thập viễn trắc và kích hoạt cơ chế tự phục hồi AI.
               </p>
+              {can(PERMISSIONS.AGENT_MANAGE) && (
               <button
                 onClick={() => setIsInstallModalOpen(true)}
                 style={{
@@ -417,6 +420,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               >
                 + Cài đặt Tác tử Mới
               </button>
+              )}
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
@@ -427,7 +431,6 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   <th style={{ padding: '12px', fontWeight: 700 }}>Trạng Thái & Nhịp Tim</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>Phiên Bản</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>CPU / RAM</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Đầu Dò Nhân eBPF</th>
                   <th style={{ padding: '12px', fontWeight: 700 }}>Token Hoạt Động</th>
                   <th style={{ padding: '12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
                 </tr>
@@ -493,22 +496,6 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                         ) : (
                           <span style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>N/A (Ngoại tuyến)</span>
                         )}
-                      </td>
-                      <td style={{ padding: '14px 12px' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            backgroundColor: isOnline ? 'var(--dash-mint-100)' : '#F1F5F9',
-                            color: isOnline ? 'var(--dash-mint-600)' : '#64748B',
-                            borderRadius: 'var(--dash-radius-full)',
-                            fontSize: '0.6875rem',
-                            fontWeight: 600,
-                            border: isOnline ? '1px solid var(--dash-mint-200)' : '1px solid #CBD5E1',
-                          }}
-                        >
-                          {isOnline ? 'socket, tcp_drop, sys_enter, kprobe' : 'Chưa kích hoạt'}
-                        </span>
                       </td>
                       <td style={{ padding: '14px 12px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
                         {agent.active_tokens_count ?? 1} token hợp lệ

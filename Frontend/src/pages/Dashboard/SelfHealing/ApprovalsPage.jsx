@@ -312,6 +312,9 @@ export const ApprovalsPage = () => {
       detectedAt: req.rawRequestedAt,
       analysisResult: req.actionResult,
       fromApprovals: true,
+      hasPendingApproval: true,
+      approvalStatus: 'PENDING',
+      status: 'AWAITING_APPROVAL',
     });
   };
 
@@ -813,7 +816,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <Eye size={14} color="#475569" />
-                        <span>Xem bằng chứng RCA</span>
+                        <span>Chi tiết</span>
                       </button>
 
                       {/* Nút Xem Trước Diff (YAML) */}
@@ -919,6 +922,19 @@ export const ApprovalsPage = () => {
         <RootCauseModal
           incident={evidenceIncident}
           onClose={() => setEvidenceIncident(null)}
+          onResolve={() => {
+            const req = approvalRequests.find(
+              (r) =>
+                r.id === evidenceIncident.approvalId ||
+                r.approvalId === evidenceIncident.approvalId ||
+                r.rawId === evidenceIncident.rawId ||
+                r.incidentId === evidenceIncident.incidentId
+            );
+            if (req) {
+              handleApprove(req.id);
+            }
+            setEvidenceIncident(null);
+          }}
         />
       )}
 

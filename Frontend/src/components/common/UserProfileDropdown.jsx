@@ -36,7 +36,7 @@ export const resolveUserSystemRole = (u) => {
   if (normalized.includes('USER')) return 'USER';
 
   // 2. Kiểm tra trường đơn lẻ systemRole / system_role trả về trực tiếp từ API backend
-  const directRole = (u.systemRole || u.system_role || '').toString().toUpperCase().trim();
+  const directRole = (u.systemRole || u.system_role || u.role || '').toString().toUpperCase().trim();
   if (directRole === 'SUPER_ADMIN') return 'SUPER_ADMIN';
   if (directRole === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
   if (directRole === 'ADMIN') return 'ADMIN';
@@ -77,18 +77,39 @@ export const UserProfileDropdown = ({
     return () => window.removeEventListener('selfheal_profile_updated', handleProfileUpdate);
   }, []);
 
-  const displayName =
+  useEffect(() => {
+    try {
+      setProfileData(getStoredProfile());
+    } catch {}
+  }, [user]);
+
+    // Đảm bảo chỉ dùng profileData nếu cùng tài khoản email
+  const isProfileDataOwnedByCurrentUser = Boolean(
+    user?.email && profileData?.email && user.email.toLowerCase().trim() === profileData.email.toLowerCase().trim()
+  );
+
+  const rawDisplayName =
     user?.full_name ||
     user?.name ||
-    profileData?.fullName ||
+    (isProfileDataOwnedByCurrentUser ? profileData?.fullName : null) ||
     (user?.email ? user.email.split('@')[0] : 'Quản Trị Viên');
+
+  // Chuẩn hóa họ tên, xóa hậu tố (Super Admin) hoặc (Admin) nếu có
+  const displayName = useMemo(() => {
+    if (!rawDisplayName) return '';
+    return rawDisplayName.replace(/\s*\((?:Super\s*Admin|Admin|User|SME\s*Owner|DevOps)\)/gi, '').trim();
+  }, [rawDisplayName]);
 
   const displayEmail =
     user?.email ||
-    profileData?.email ||
+    (isProfileDataOwnedByCurrentUser ? profileData?.email : null) ||
     'admin@selfheal.systems';
 
-  const displayAvatar = user?.avatar || profileData?.avatar || null;
+  // Tuyệt đối không fallback sang avatar của tài khoản khác
+  const displayAvatar =
+    user?.avatar_url ||
+    user?.avatar ||
+    (isProfileDataOwnedByCurrentUser ? profileData?.avatar : null);
 
   const monogram = useMemo(() => {
     if (auth?.getInitials && displayName) {
@@ -128,7 +149,11 @@ export const UserProfileDropdown = ({
   }, [activeSystemRole]);
 
   const roleSubtitle = roleDisplay;
-  const roleBadgeText = roleDisplay;
+
+  // Không hiển thị nhãn USER theo yêu cầu, chỉ hiển thị khi là Admin / Super Admin (hoặc chưa gán role)
+  const shouldShowRoleSubtitle = useMemo(() => {
+    return ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(activeSystemRole);
+  }, [activeSystemRole]);
 
   // Xử lý đóng khi click bên ngoài và khi nhấn Escape
   useEffect(() => {
@@ -330,20 +355,22 @@ export const UserProfileDropdown = ({
           >
             {displayName}
           </div>
-          <div
-            style={{
-              fontSize: '0.6875rem',
-              color: activeSystemRole ? '#059669' : '#64748B',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              marginTop: '1px',
-            }}
-          >
-            <Shield size={10} color={activeSystemRole ? '#059669' : '#64748B'} />
-            <span>{roleSubtitle}</span>
-          </div>
+          {shouldShowRoleSubtitle && (
+            <div
+              style={{
+                fontSize: '0.6875rem',
+                color: activeSystemRole ? '#059669' : '#64748B',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                marginTop: '1px',
+              }}
+            >
+              <Shield size={10} color={activeSystemRole ? '#059669' : '#64748B'} />
+              <span>{roleSubtitle}</span>
+            </div>
+          )}
         </div>
 
         <ChevronDown
@@ -404,23 +431,29 @@ export const UserProfileDropdown = ({
               </div>
             </div>
 
-            <div
-              style={{
-                marginTop: '10px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '2px 8px',
-                borderRadius: '9999px',
-                backgroundColor: activeSystemRole ? 'rgba(5, 150, 105, 0.15)' : 'rgba(100, 116, 139, 0.15)',
-                color: activeSystemRole ? '#065F46' : '#475569',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-              }}
-            >
-              <Shield size={11} color={activeSystemRole ? '#059669' : '#64748B'} />
-              <span>{roleBadgeText}</span>
-            </div>
+            {/* Hiển thị huy hiệu vai trò quản trị viên nếu là Admin / Super Admin (USER ẩn hoàn toàn) */}
+            {['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(activeSystemRole) && (
+              <div style={{ marginTop: '8px' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#D1FAE5',
+                    color: '#065F46',
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    border: '1px solid #A7F3D0',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  <Shield size={10} color="#059669" />
+                  {activeSystemRole}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Menu Items */}

@@ -37,7 +37,9 @@ export interface IJwtPayload {
  */
 export interface IAuthResult {
     user: IUserResponse;
-    token: string;
+    token?: string;
+    require_2fa?: boolean;
+    temp_token?: string;
     verification_token?: string;
 }
 
@@ -47,8 +49,12 @@ export interface IAuthResult {
 export interface ILoginResult {
     id: string;
     email: string;
-    full_name?: string;
-    token: string;
+        full_name?: string;
+    avatar_url?: string | null;
+    avatarUrl?: string | null;
+    token?: string;
+    require_2fa?: boolean;
+    temp_token?: string;
     system_roles?: string[];
     systemRole?: string | null;
     system_role?: string | null;
@@ -74,7 +80,9 @@ export interface IEmailVerificationToken {
 export interface ISendVerificationResult {
     email: string;
     code: string;
-    token: string;
+    token?: string;
+    require_2fa?: boolean;
+    temp_token?: string;
 }
 
 /**

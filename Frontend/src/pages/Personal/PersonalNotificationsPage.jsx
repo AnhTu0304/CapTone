@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   CheckCheck,
@@ -20,18 +20,28 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
   const [settings, setSettings] = useState(() => personalPortalService.getNotificationSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
 
-  const handleMarkAsRead = (id) => {
-    const updated = personalPortalService.markAsRead(id);
+  useEffect(() => {
+    let isMounted = true;
+    personalPortalService.fetchNotifications().then((res) => {
+      if (isMounted && res && res.items) {
+        setNotifications(res.items);
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleMarkAsRead = async (id) => {
+    const updated = await personalPortalService.markAsRead(id);
     setNotifications([...updated]);
   };
 
-  const handleMarkAllAsRead = () => {
-    const updated = personalPortalService.markAllAsRead();
+  const handleMarkAllAsRead = async () => {
+    const updated = await personalPortalService.markAllAsRead();
     setNotifications([...updated]);
   };
 
-  const handleDelete = (id) => {
-    const updated = personalPortalService.deleteNotification(id);
+  const handleDelete = async (id) => {
+    const updated = await personalPortalService.deleteNotification(id);
     setNotifications([...updated]);
   };
 

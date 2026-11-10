@@ -58,12 +58,15 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   const auth = useAuth();
 
   const user = auth?.user || null;
-  // Quyền hạn tenant trong Tổ chức đang chọn có ưu tiên tối cao trong Dashboard
+  const isSuperAdmin = auth?.isSuperAdmin ? auth.isSuperAdmin(user) : false;
+  const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(user) : false;
+  const isOwnerUser = auth?.isOwner ? auth.isOwner(user) : false;
+  // Quyền hạn tenant trong Tổ chức đang chọn có ưu tiên tối cao trong Dashboard (Principle of Least Privilege: Mặc định VIEWER)
   const effectiveRole = (
     currentUserRole ||
     currentOrg?.role_in_org ||
     currentOrg?.role ||
-    (auth?.isViewer && auth.isViewer(user) ? 'VIEWER' : auth?.isDevOps && auth.isDevOps(user) ? 'DEVOPS' : 'SME_OWNER')
+    (isSuperAdmin || isSystemAdmin || isOwnerUser ? 'SME_OWNER' : (auth?.isDevOps && auth.isDevOps(user)) ? 'DEVOPS' : 'VIEWER')
   ).toUpperCase();
 
   const isDevOpsUser = effectiveRole === 'DEVOPS';
@@ -113,8 +116,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           name: 'Dự báo rủi ro AI',
           path: '/dashboard/ai/predictions',
           icon: Sparkles,
-          badge: newPredictionsCount > 0 ? `${newPredictionsCount}` : null,
-          badgeType: 'mint',
         },
         {
           name: 'Quản lý sự cố & RCA',
@@ -264,12 +265,53 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
         flexDirection: 'column',
         height: '100%',
         transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        overflowY: 'auto',
-        overflowX: 'hidden',
         position: 'relative',
-        zIndex: 30,
+        zIndex: 40,
       }}
     >
+      {/* Floating Border Edge Toggle Button (Màu xanh, hình tròn đè lên đường viền) */}
+      <button
+        type="button"
+        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        title={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+        aria-label={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+        style={{
+          position: 'absolute',
+          top: '20px',
+          right: '-13px',
+          width: '26px',
+          height: '26px',
+          borderRadius: '50%',
+          backgroundColor: '#059669',
+          color: '#FFFFFF',
+          border: '2px solid #FFFFFF',
+          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 60,
+          transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease',
+          padding: 0,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.15)';
+          e.currentTarget.style.backgroundColor = '#047857';
+          e.currentTarget.style.boxShadow = '0 3px 8px rgba(5, 150, 105, 0.35)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.backgroundColor = '#059669';
+          e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.2)';
+        }}
+      >
+        {isSidebarCollapsed ? (
+          <ChevronRight size={15} strokeWidth={2.8} />
+        ) : (
+          <ChevronLeft size={15} strokeWidth={2.8} />
+        )}
+      </button>
+
       {/* Brand Header inside Sidebar */}
       <div
         style={{
@@ -277,12 +319,13 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           borderBottom: '1px solid var(--dash-border)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
+          justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
           minHeight: '64px',
         }}
       >
         <div
-          onClick={() => handleItemClick('/dashboard')}
+          onClick={() => (isSidebarCollapsed ? setIsSidebarCollapsed(false) : handleItemClick('/dashboard'))}
+          title={isSidebarCollapsed ? 'Nhấp để mở rộng thanh điều hướng' : 'Trang chủ Dashboard'}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -321,12 +364,17 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
 
       {/* Navigation Groups */}
       <div
+        className="dashboard-sidebar-nav"
         style={{
           padding: isSidebarCollapsed ? '12px 8px' : '16px 12px',
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
           flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
         }}
       >
         {filteredNavGroups.map((group, gIdx) => (
@@ -444,40 +492,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
         ))}
       </div>
 
-      {/* Collapse Toggle Footer */}
-      <div
-        style={{
-          padding: '12px',
-          borderTop: '1px solid var(--dash-border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
-        }}
-      >
-        {!isSidebarCollapsed && (
-          <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-            v1.4.2 &bull; Bản Doanh nghiệp SME
-          </span>
-        )}
-        <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          title={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
-          style={{
-            background: 'var(--dash-bg-subtle)',
-            border: '1px solid var(--dash-border)',
-            borderRadius: 'var(--dash-radius-md)',
-            width: '32px',
-            height: '32px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: 'var(--dash-text-secondary)',
-          }}
-        >
-          {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      </div>
     </aside>
   );
 };

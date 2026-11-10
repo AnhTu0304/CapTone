@@ -16,7 +16,18 @@ export const PersonalProfilePage = () => {
   const { user } = useAuth();
   const toast = useToast();
 
-  const [profile, setProfile] = useState(() => personalPortalService.getProfile());
+  const [profile, setProfile] = useState(() => {
+    const p = personalPortalService.getProfile();
+    if (user?.email && p?.email && user.email.toLowerCase().trim() !== p.email.toLowerCase().trim()) {
+      return {
+        ...p,
+        email: user.email,
+        fullName: user.full_name || '',
+        avatar: user.avatar_url || user.avatar || null,
+      };
+    }
+    return p;
+  });
   const [formData, setFormData] = useState({
     fullName: profile.fullName || user?.full_name || '',
     email: profile.email || user?.email || '',
@@ -26,7 +37,9 @@ export const PersonalProfilePage = () => {
     bio: profile.bio || 'Kỹ sư chịu trách nhiệm giám sát độ khả dụng 99.99% và tự động hóa phục hồi hạ tầng K8s.',
   });
 
-  const [avatarPreview, setAvatarPreview] = useState(profile.avatar || null);
+  const [avatarPreview, setAvatarPreview] = useState(
+    user?.avatar_url || user?.avatar || (user?.email === profile?.email ? profile?.avatar : null) || null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -52,9 +65,7 @@ export const PersonalProfilePage = () => {
           department: remoteData.department || prev.department,
           bio: remoteData.bio || prev.bio,
         }));
-        if (remoteData.avatar) {
-          setAvatarPreview(remoteData.avatar);
-        }
+        setAvatarPreview(remoteData.avatar || null);
       } catch (err) {
         console.warn('Profile fetch error, using local fallback:', err);
       } finally {

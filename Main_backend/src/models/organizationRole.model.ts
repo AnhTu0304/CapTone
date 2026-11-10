@@ -25,8 +25,7 @@ export class OrganizationRoleModel {
     const db = client || pool;
     const res = await db.query<IOrganizationRole>(
       `SELECT id, code, name, description, scope, created_at 
-       FROM roles 
-       WHERE scope = 'ORGANIZATION' 
+       FROM organization_roles WHERE scope = 'ORGANIZATION' 
        ORDER BY 
          CASE 
            WHEN code = 'SME_OWNER' THEN 1
@@ -47,7 +46,7 @@ export class OrganizationRoleModel {
   ): Promise<IOrganizationRole | null> {
     const db = client || pool;
     const res = await db.query<IOrganizationRole>(
-      "SELECT id, code, name, description, scope, created_at FROM roles WHERE UPPER(code) = UPPER($1) AND scope = 'ORGANIZATION' LIMIT 1;",
+      "SELECT id, code, name, description, scope, created_at FROM organization_roles WHERE UPPER(code) = UPPER($1) AND scope = 'ORGANIZATION' LIMIT 1;",
       [code.trim()]
     );
     return res.rows[0] || null;
@@ -62,7 +61,7 @@ export class OrganizationRoleModel {
   ): Promise<IOrganizationRole | null> {
     const db = client || pool;
     const res = await db.query<IOrganizationRole>(
-      "SELECT id, code, name, description, scope, created_at FROM roles WHERE id = $1 AND scope = 'ORGANIZATION' LIMIT 1;",
+      "SELECT id, code, name, description, scope, created_at FROM organization_roles WHERE id = $1 AND scope = 'ORGANIZATION' LIMIT 1;",
       [id]
     );
     return res.rows[0] || null;

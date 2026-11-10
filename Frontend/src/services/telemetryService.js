@@ -6,7 +6,8 @@
 
 import { getAuthToken, getActiveOrganizationId, request } from './apiClient';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
+const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api/v1';
+const API_BASE_URL = rawApiUrl.replace('//localhost:5000', '//127.0.0.1:5000');
 
 const getHeaders = () => {
   const token =
@@ -759,7 +760,10 @@ export const telemetryService = {
         // Connect to port 5000 if running locally on port 3000, else window.location.host
         let host = window.location.host;
         if (window.location.port === '3000' || window.location.port === '3001') {
-          host = `${window.location.hostname}:5000`;
+          const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? '127.0.0.1'
+            : window.location.hostname;
+          host = `${targetHost}:5000`;
         }
         const token =
           getAuthToken() ||

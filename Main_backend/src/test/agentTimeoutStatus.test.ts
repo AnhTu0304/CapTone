@@ -45,7 +45,7 @@ describe('Agent Timeout, Status Transition & Audit Logging Suite [PB11 2.3]', ()
     await testRedisConnection();
 
     // Setup base organization, user, environment, cluster
-    const rolesRes = await pool.query(`SELECT id, code FROM roles WHERE scope = 'ORGANIZATION'`);
+    const rolesRes = await pool.query(`SELECT id, code FROM organization_roles WHERE scope = 'ORGANIZATION'`);
     const ownerRoleId = rolesRes.rows.find((r) => r.code === 'SME_OWNER')?.id;
 
     await pool.query(

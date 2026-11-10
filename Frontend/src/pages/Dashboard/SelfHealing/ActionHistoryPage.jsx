@@ -69,7 +69,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
   const ITEMS_PER_PAGE = 10;
 
   // Filter States
-  const [timeFilterMode, setTimeFilterMode] = useState('all'); // 'today' | 'date' | 'month' | 'year' | 'all'
+  const [timeFilterMode, setTimeFilterMode] = useState('today'); // 'today' | 'date' | 'month' | 'year' | 'all'
   const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedMonth, setSelectedMonth] = useState(() => getThisMonthStr());
   const [selectedYear, setSelectedYear] = useState(() => getThisYearStr());
@@ -103,22 +103,24 @@ export const ActionHistoryPage = ({ onNavigate }) => {
   const currentFilterLabel = useMemo(() => {
     if (timeFilterMode === 'today') {
       const parts = getTodayStr().split('-');
-      return `24 giờ qua (${parts[2]}/${parts[1]}/${parts[0]})`;
+      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
     }
     if (timeFilterMode === 'date') {
       if (!selectedDate) return 'Chọn ngày';
       const parts = selectedDate.split('-');
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      const isToday = selectedDate === getTodayStr();
+      return isToday ? `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})` : `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
     if (timeFilterMode === 'month') {
       if (!selectedMonth) return 'Chọn tháng';
       const parts = selectedMonth.split('-');
-      return `${parts[1]}/${parts[0]}`;
+      return `Tháng ${parts[1]}/${parts[0]}`;
     }
     if (timeFilterMode === 'year') {
       return `Năm ${selectedYear}`;
     }
-    return 'Tất cả thời gian';
+    const parts = getTodayStr().split('-');
+    return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
   }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
 
   const activeClusterId = useMemo(() => {
@@ -659,23 +661,23 @@ export const ActionHistoryPage = ({ onNavigate }) => {
                 height: '32px',
                 padding: '0 10px',
                 fontSize: '0.75rem',
-                fontWeight: 600,
+                fontWeight: 500,
                 borderRadius: '6px',
-                border: isCalendarOpen || timeFilterMode !== 'today' ? '1px solid #3B82F6' : '1px solid var(--dash-border)',
-                backgroundColor: timeFilterMode !== 'today' ? '#EFF6FF' : '#FFFFFF',
-                color: timeFilterMode !== 'today' ? '#1D4ED8' : 'var(--dash-text-primary)',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#1E293B',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 cursor: 'pointer',
-                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none',
+                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(15, 23, 42, 0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
               title="Mở bảng lịch chọn ngày, tháng hoặc năm"
             >
-              <Calendar size={14} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-primary)'} />
+              <Calendar size={14} color="#64748B" />
               <span>{currentFilterLabel}</span>
-              <ChevronDown size={12} color={timeFilterMode !== 'today' ? '#2563EB' : 'var(--dash-text-secondary)'} />
+              <ChevronDown size={12} color="#64748B" />
             </button>
 
             {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
@@ -697,8 +699,8 @@ export const ActionHistoryPage = ({ onNavigate }) => {
                   gap: '12px',
                 }}
               >
-                {/* Tabs Chế Độ: Ngày | Tháng | Năm | Tất Cả */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+                {/* Tabs Chế Độ: Ngày | Tháng | Năm */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('date')}
@@ -749,26 +751,6 @@ export const ActionHistoryPage = ({ onNavigate }) => {
                     }}
                   >
                     📆 Năm
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTimeFilterMode('all');
-                      setIsCalendarOpen(false);
-                    }}
-                    style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      borderRadius: '6px',
-                      border: 'none',
-                      backgroundColor: timeFilterMode === 'all' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'all' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'all' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🌐 Tất cả
                   </button>
                 </div>
 
@@ -1058,7 +1040,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
                 maxWidth: '220px',
               }}
             >
-              <option value="ALL">Tất cả hành động ({allActionTypes.length} loại chuẩn)</option>
+              <option value="ALL">Tất cả hành động</option>
               {allActionTypes.map((t) => (
                 <option key={t.code} value={t.code}>{t.label}</option>
               ))}
@@ -1066,7 +1048,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Nhóm Bên Phải: Tìm kiếm + Đặt lại + Số lượng khớp */}
+        {/* Nhóm Bên Phải: Tìm kiếm */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           {/* Search Box */}
           <div style={{ position: 'relative' }}>
@@ -1077,7 +1059,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 height: '32px',
-                width: '210px',
+                width: '240px',
                 padding: '0 10px 0 28px',
                 fontSize: '0.75rem',
                 border: '1px solid var(--dash-border)',
@@ -1087,34 +1069,6 @@ export const ActionHistoryPage = ({ onNavigate }) => {
               }}
             />
             <Search size={13} style={{ position: 'absolute', left: '8px', top: '9px', color: 'var(--dash-text-muted)' }} />
-          </div>
-
-          {isFiltered && (
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '0 8px',
-                height: '32px',
-                borderRadius: '6px',
-                border: '1px solid #FECACA',
-                backgroundColor: '#FEF2F2',
-                color: '#B91C1C',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              <RotateCcw size={12} />
-              <span>Đặt lại</span>
-            </button>
-          )}
-
-          <div style={{ fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap' }}>
-            Khớp: <strong style={{ color: 'var(--dash-primary)' }}>{filteredHistory.length}</strong> / {actions.length} ca
           </div>
         </div>
       </div>
@@ -1138,7 +1092,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
           <div>
             <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Nhật Ký Hành Động Đã Lọc ({filteredHistory.length} ca)
+              Nhật Ký Hành Động
             </h3>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
               Thời gian hồi phục trung bình: <strong style={{ color: '#059669' }}>{dynamicAnalytics.averageRecoveryTime}</strong> &bull; Tỷ lệ thành công:{' '}

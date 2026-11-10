@@ -28,6 +28,7 @@ export interface IOrganizationDetail extends IOrganization {
   role_in_org?: string | null;
   members_count?: number;
   clusters_count?: number;
+  workloads_count?: number;
   pods_count?: number;
   agents_count?: number;
   online_agents_count?: number;
@@ -201,13 +202,23 @@ export class OrganizationModel {
         r.code AS role_in_org,
         (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
         (SELECT COUNT(DISTINCT c.id)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS clusters_count,
+        (SELECT COUNT(DISTINCT w.name)::int 
+         FROM workloads w 
+         JOIN clusters c2 ON (w.cluster_id = c2.id::text OR w.cluster_id = c2.name OR w.cluster_id = c2.cluster_uid) 
+         JOIN environments e2 ON c2.environment_id = e2.id 
+         WHERE e2.organization_id = o.id 
+           AND w.deleted_at IS NULL 
+           AND c2.deleted_at IS NULL 
+           AND e2.deleted_at IS NULL
+           AND w.name NOT IN ('coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-controller', 'storage-provisioner', 'kube-apiserver-minikube', 'kube-controller-manager-minikube', 'kube-scheduler-minikube', 'selfheal-agent', 'metrics-server')
+        ) AS workloads_count,
         (SELECT COUNT(DISTINCT p.id)::int FROM pods p JOIN clusters c ON p.cluster_id = c.id JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS pods_count,
         (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS agents_count,
         (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.status = 'ONLINE' AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS online_agents_count
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $${paramIndex}
-      LEFT JOIN roles r ON cur_om.role_id = r.id
+      LEFT JOIN organization_roles r ON cur_om.role_id = r.id
       ${whereClause}
       ORDER BY o.${sortBy} ${order}
       LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2};
@@ -232,6 +243,7 @@ export class OrganizationModel {
         role_in_org: row.role_in_org || null,
         members_count: row.members_count || 0,
         clusters_count: Number(row.clusters_count) || 0,
+        workloads_count: Number(row.workloads_count) || 0,
         pods_count: Number(row.pods_count) || 0,
         agents_count: agentsCount,
         online_agents_count: onlineAgentsCount,
@@ -323,13 +335,23 @@ export class OrganizationModel {
         r.code AS role_in_org, cur_om.status AS member_status,
         (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
         (SELECT COUNT(DISTINCT c.id)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS clusters_count,
+        (SELECT COUNT(DISTINCT w.name)::int 
+         FROM workloads w 
+         JOIN clusters c2 ON (w.cluster_id = c2.id::text OR w.cluster_id = c2.name OR w.cluster_id = c2.cluster_uid) 
+         JOIN environments e2 ON c2.environment_id = e2.id 
+         WHERE e2.organization_id = o.id 
+           AND w.deleted_at IS NULL 
+           AND c2.deleted_at IS NULL 
+           AND e2.deleted_at IS NULL
+           AND w.name NOT IN ('coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-controller', 'storage-provisioner', 'kube-apiserver-minikube', 'kube-controller-manager-minikube', 'kube-scheduler-minikube', 'selfheal-agent', 'metrics-server')
+        ) AS workloads_count,
         (SELECT COUNT(DISTINCT p.id)::int FROM pods p JOIN clusters c ON p.cluster_id = c.id JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS pods_count,
         (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS agents_count,
         (SELECT COUNT(*)::int FROM agents a JOIN environments e ON a.environment_id = e.id WHERE e.organization_id = o.id AND a.status = 'ONLINE' AND a.revoked_at IS NULL AND e.deleted_at IS NULL) AS online_agents_count
       FROM organizations o
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       LEFT JOIN organization_members cur_om ON o.id = cur_om.organization_id AND cur_om.user_id = $2
-      LEFT JOIN roles r ON cur_om.role_id = r.id
+      LEFT JOIN organization_roles r ON cur_om.role_id = r.id
       WHERE o.id = $1 AND o.deleted_at IS NULL
       LIMIT 1;
     `;
@@ -353,6 +375,7 @@ export class OrganizationModel {
       member_status: row.member_status || undefined,
       members_count: row.members_count || 0,
       clusters_count: Number(row.clusters_count) || 0,
+      workloads_count: Number(row.workloads_count) || 0,
       pods_count: Number(row.pods_count) || 0,
       agents_count: agentsCount,
       online_agents_count: onlineAgentsCount,
@@ -454,10 +477,20 @@ export class OrganizationModel {
         op.address AS profile_address, op.city AS profile_city, op.country AS profile_country, op.timezone AS profile_timezone,
         r.code AS role_in_org,
         (SELECT COUNT(*)::int FROM organization_members om2 WHERE om2.organization_id = o.id AND om2.status = 'ACTIVE') AS members_count,
-        (SELECT COUNT(*)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND c.deleted_at IS NULL AND e.deleted_at IS NULL) AS clusters_count
+        (SELECT COUNT(*)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND c.deleted_at IS NULL AND e.deleted_at IS NULL) AS clusters_count,
+        (SELECT COUNT(DISTINCT w.name)::int 
+         FROM workloads w 
+         JOIN clusters c2 ON (w.cluster_id = c2.id::text OR w.cluster_id = c2.name OR w.cluster_id = c2.cluster_uid) 
+         JOIN environments e2 ON c2.environment_id = e2.id 
+         WHERE e2.organization_id = o.id 
+           AND w.deleted_at IS NULL 
+           AND c2.deleted_at IS NULL 
+           AND e2.deleted_at IS NULL
+           AND w.name NOT IN ('coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-controller', 'storage-provisioner', 'kube-apiserver-minikube', 'kube-controller-manager-minikube', 'kube-scheduler-minikube', 'selfheal-agent', 'metrics-server')
+        ) AS workloads_count
       FROM organizations o
       JOIN organization_members cur_om ON o.id = cur_om.organization_id
-      JOIN roles r ON cur_om.role_id = r.id
+      JOIN organization_roles r ON cur_om.role_id = r.id
       LEFT JOIN organization_profiles op ON o.id = op.organization_id
       WHERE cur_om.user_id = $1 
         AND cur_om.status = 'ACTIVE' 
@@ -478,6 +511,7 @@ export class OrganizationModel {
       role_in_org: row.role_in_org,
       members_count: row.members_count || 0,
       clusters_count: row.clusters_count || 0,
+      workloads_count: Number(row.workloads_count) || 0,
       profile: row.profile_id
         ? {
             id: row.profile_id,
@@ -535,7 +569,7 @@ export class OrganizationModel {
         inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
       FROM organization_invitations oi
       JOIN organizations o ON oi.organization_id = o.id
-      JOIN roles r ON oi.role_id = r.id
+      JOIN organization_roles r ON oi.role_id = r.id
       LEFT JOIN users inv ON oi.invited_by = inv.id
       JOIN user_info ui ON LOWER(oi.email) = ui.email
       WHERE oi.status = 'PENDING'
@@ -549,11 +583,18 @@ export class OrganizationModel {
         inv.id AS inviter_id, inv.full_name AS inviter_full_name, inv.email AS inviter_email
       FROM organization_members om
       JOIN organizations o ON om.organization_id = o.id
-      JOIN roles r ON om.role_id = r.id
+      JOIN organization_roles r ON om.role_id = r.id
       LEFT JOIN users inv ON om.invited_by = inv.id
       WHERE om.user_id = $1 
         AND om.status = 'INVITED' 
         AND o.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM organization_invitations oi2
+          JOIN user_info ui2 ON LOWER(oi2.email) = ui2.email
+          WHERE oi2.organization_id = om.organization_id
+            AND oi2.status = 'PENDING'
+            AND oi2.expires_at > NOW()
+        )
       ORDER BY created_at DESC;
     `;
     const res = await db.query(query, [userId]);

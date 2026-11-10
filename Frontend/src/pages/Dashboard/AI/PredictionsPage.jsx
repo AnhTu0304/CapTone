@@ -894,19 +894,12 @@ export const PredictionsPage = () => {
   // Bộ lọc & điều khiển biểu đồ 12 bước
 
   const [activeSeries, setActiveSeries] = useState({
-
     cpu: true,
-
     ram: true,
-
-    disk: false,
-
-    latency: false,
-
-    request_rate: false,
-
-    http_5xx_rate: false,
-
+    disk: true,
+    latency: true,
+    request_rate: true,
+    http_5xx_rate: true,
   });
 
   const [scaleMode, setScaleMode] = useState('auto'); // 'auto' | 'standard'
@@ -3810,31 +3803,49 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
 
-              Trạng Thái Bình Thường
+              Nguy Cơ &amp; Dị Thường
 
             </span>
 
-            <ShieldCheck size={18} color="#10B981" />
+            <AlertTriangle size={18} color={isAgentConnected && (displayStats.total - (displayStats.by_type?.NORMAL || 0)) > 0 ? "#DC2626" : "#059669"} />
 
           </div>
 
-          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: isAgentConnected ? '#059669' : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
-
-            {isAgentConnected && displayStats.total > 0
-
-              ? `${(((displayStats.by_type?.NORMAL || displayStats.total) / displayStats.total) * 100).toFixed(1)}%`
-
-              : '0%'}
-
-          </div>
-
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: isAgentConnected && (displayStats.total - (displayStats.by_type?.NORMAL || 0)) > 0 ? '#DC2626' : (isAgentConnected ? '#059669' : '#94A3B8'), fontFamily: 'var(--font-mono)' }}>
 
             {isAgentConnected
 
-              ? `${(displayStats.by_type?.NORMAL || displayStats.total).toLocaleString()} / ${displayStats.total.toLocaleString()} chu kỳ an toàn`
+              ? (displayStats.total - (displayStats.by_type?.NORMAL || 0)).toLocaleString()
 
-              : '0 / 0 chu kỳ an toàn'}
+              : 0}
+
+          </div>
+
+          <div style={{ fontSize: '0.75rem', color: isAgentConnected && (displayStats.total - (displayStats.by_type?.NORMAL || 0)) > 0 ? '#DC2626' : 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+
+            {isAgentConnected ? (
+
+              <>
+
+                <ShieldAlert size={13} />
+
+                <span>
+
+                  {displayStats.total > 0
+
+                    ? `${(((displayStats.total - (displayStats.by_type?.NORMAL || 0)) / displayStats.total) * 100).toFixed(1)}% chu kỳ phát hiện dị thường`
+
+                    : '0 chu kỳ phát hiện dị thường'}
+
+                </span>
+
+              </>
+
+            ) : (
+
+              '0 chu kỳ phát hiện dị thường'
+
+            )}
 
           </div>
 
@@ -3880,7 +3891,7 @@ export const PredictionsPage = () => {
 
                   : (noActionRecommendations.length > 0
 
-                      ? `${noActionRecommendations.length} đề xuất tự động an toàn (NO_ACTION)`
+                      ? '0 đề xuất đang chờ kích hoạt'
 
                       : '0 đề xuất đang chờ kích hoạt'))
 
@@ -3966,7 +3977,7 @@ export const PredictionsPage = () => {
 
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
 
-                    Chuỗi 12 Mốc Viễn Trắc Đầu Vào Của GRU (60 Giây)
+                    Chuỗi Viễn Trắc Telemetry Thời Gian Thực (60 Giây)
 
                   </h3>
 
@@ -4246,73 +4257,7 @@ export const PredictionsPage = () => {
 
 
 
-              {/* 3 nút thao tác nhanh nằm ngang hàng với Dịch vụ */}
-
-              <button
-
-                type="button"
-
-                onClick={setCpuRamOnly}
-
-                style={{
-
-                  padding: '5px 10px',
-
-                  fontSize: '0.75rem',
-
-                  fontWeight: 600,
-
-                  backgroundColor: '#EFF6FF',
-
-                  color: '#1D4ED8',
-
-                  border: '1px solid #BFDBFE',
-
-                  borderRadius: '6px',
-
-                  cursor: 'pointer',
-
-                }}
-
-              >
-
-                Chỉ CPU & RAM
-
-              </button>
-
-
-
-              <button
-
-                type="button"
-
-                onClick={setAllSeries}
-
-                style={{
-
-                  padding: '5px 10px',
-
-                  fontSize: '0.75rem',
-
-                  fontWeight: 600,
-
-                  backgroundColor: '#F8FAFC',
-
-                  color: '#475569',
-
-                  border: '1px solid #CBD5E1',
-
-                  borderRadius: '6px',
-
-                  cursor: 'pointer',
-
-                }}
-
-              >
-
-                Tất cả 6 chỉ số
-
-              </button>
+              {/* Nút chuyển đổi thang đo nằm ngang hàng với Dịch vụ */}
 
 
 
