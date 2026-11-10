@@ -12,17 +12,6 @@
   overflow: visible;
 }
 
-/* 1. Center Top Datum Notch */
-.agent-datum-notch {
-  position: absolute;
-  top: -15px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-  line-height: 0;
-  pointer-events: none;
-}
-
 /* 2. Top Parallel Pinstripe Scanline Bar */
 .agent-scan-track {
   position: relative;

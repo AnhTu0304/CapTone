@@ -18,13 +18,6 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
       data-testid="agent-bridge-section"
       aria-label="Agent Bridge Section"
     >
-      {/* 1. Center Top Datum Notch */}
-      <div className="agent-datum-notch" aria-hidden="true">
-        <svg width="72" height="15" viewBox="0 0 72 15" fill="none">
-          <polygon points="0,0 72,0 58,15 14,15" fill="#3D3B4F" />
-        </svg>
-      </div>
-
       {/* 2. Top Parallel Pinstripe Scanline Bar with Guideline Nodes */}
       <div className="agent-scan-track" aria-hidden="true">
         <span className="agent-track-node agent-node-top-left" />

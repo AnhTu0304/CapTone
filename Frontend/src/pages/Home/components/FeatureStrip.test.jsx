@@ -30,11 +30,10 @@ describe('FeatureStrip ([ AGENT ] Bridge Banner)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/guide');
   });
 
-  it('renders top datum notch, pinstripe scan bar, guidelines, and 4 corner pins', () => {
+  it('renders pinstripe scan bar, guidelines, and 4 corner pins', () => {
     const { container } = render(<FeatureStrip />);
 
-    // Datum notch and pinstripe bar
-    expect(container.querySelector('.agent-datum-notch')).toBeInTheDocument();
+    // Pinstripe bar
     expect(container.querySelector('.agent-scan-track')).toBeInTheDocument();
 
     // Guidelines and horizontal lines
