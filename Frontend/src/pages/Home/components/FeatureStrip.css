@@ -1,0 +1,154 @@
+/* =====================================================================
+   FEATURE STRIP — [ AGENT ] BRIDGE BANNER (GREPTILE CAD CYBERNETIC SPEC)
+   ===================================================================== */
+
+.agent-bridge-banner {
+  position: relative;
+  z-index: 25;
+  width: 100%;
+  background-color: var(--bg-navy, #3D3B4F);
+  border-top: 1px solid rgba(197, 255, 214, 0.2);
+  border-bottom: 1px solid rgba(197, 255, 214, 0.2);
+  overflow: hidden;
+}
+
+/* Vertical guide lines */
+.agent-guide-v-left,
+.agent-guide-v-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dashed rgba(197, 255, 214, 0.25);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.agent-guide-v-left {
+  left: calc(clamp(20px, 3.5vw, 64px) + 5px);
+}
+
+.agent-guide-v-right {
+  right: calc(clamp(20px, 3.5vw, 64px) + 5px);
+}
+
+/* Corner hexagon pin nodes */
+.agent-node-pin {
+  position: absolute;
+  top: -5px;
+  width: 11px;
+  height: 11px;
+  background-color: rgb(197, 255, 214);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  box-shadow: 0 0 6px rgba(197, 255, 214, 0.5);
+  z-index: 5;
+}
+
+.agent-node-pin-left {
+  left: calc(clamp(20px, 3.5vw, 64px));
+}
+
+.agent-node-pin-right {
+  right: calc(clamp(20px, 3.5vw, 64px));
+}
+
+/* Content Container */
+.agent-bridge-container {
+  position: relative;
+  width: 100%;
+  max-width: var(--content-max-width, 1400px);
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 44px clamp(24px, 4.5vw, 80px) 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.agent-bridge-content {
+  flex: 1 1 560px;
+  max-width: 960px;
+}
+
+.agent-tag {
+  font-family: var(--font-space-mono, "Space Mono", monospace);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: rgb(197, 255, 214);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+/* Heading with exact user-requested CSS properties */
+.agent-heading {
+  box-sizing: border-box;
+  color: rgb(197, 255, 214);
+  color-scheme: light;
+  display: block;
+  font-family: Anybody, "Anybody Fallback", sans-serif;
+  font-feature-settings: normal;
+  font-size: 36px;
+  font-variation-settings: normal;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0 0 14px 0;
+}
+
+.agent-description {
+  font-family: var(--font-dm-sans, "DM Sans", sans-serif);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  color: #9EBFB3;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 880px;
+}
+
+.agent-bridge-action {
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+/* Dual-pointed hexagon button matching design */
+.agent-btn-learn-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 28px;
+  background-color: rgb(197, 255, 214);
+  color: #262433;
+  font-family: var(--font-dm-sans, "DM Sans", sans-serif);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
+  transition: background-color 0.15s ease, transform 0.15s ease, filter 0.15s ease;
+  cursor: pointer;
+  border: none;
+  user-select: none;
+}
+
+.agent-btn-learn-more:hover {
+  background-color: #A6F8C2;
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  .agent-bridge-container {
+    padding: 32px 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  .agent-heading {
+    font-size: 28px;
+  }
+}
