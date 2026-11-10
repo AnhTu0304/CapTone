@@ -22,6 +22,9 @@ const lastKnownRestartsByService: Record<string, number> = {};
 interface ExtWebSocket extends WebSocket {
   isAlive: boolean;
   agent?: AuthenticatedAgent;
+  remoteIp?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
 }
 
 export function initAgentWebSocket(server: HttpServer): WebSocketServer {
@@ -43,6 +46,15 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
   wss.on('connection', async (ws: ExtWebSocket, request) => {
     ws.isAlive = true;
+    const rawForwarded = request.headers['x-forwarded-for'];
+    const rawIp = Array.isArray(rawForwarded)
+      ? rawForwarded[0]
+      : (rawForwarded as string | undefined) || request.socket?.remoteAddress || null;
+    ws.remoteIp = AuditService.sanitizeIp(rawIp);
+    const rawUa = request.headers['user-agent'];
+    ws.userAgent = typeof rawUa === 'string' && rawUa.trim() ? rawUa.trim().substring(0, 500) : null;
+    const rawReqId = request.headers['x-request-id'];
+    ws.requestId = typeof rawReqId === 'string' && rawReqId.trim() ? rawReqId.trim().substring(0, 100) : null;
 
     ws.on('pong', () => {
       ws.isAlive = true;
@@ -522,6 +534,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                 resource_type: 'HEALING_ACTION',
                 resource_id: action_id,
                 target_type: 'WORKLOAD',
+                request_id: ws.requestId || null,
+                user_agent: ws.userAgent || null,
+                ip_address: ws.remoteIp || null,
                 description: status === 'SUCCEEDED'
                   ? `Tác vụ tự phục hồi hoàn tất thành công bởi Agent ${ws.agent.name}: ${message}`
                   : `Tác vụ tự phục hồi thất bại bởi Agent ${ws.agent.name}: ${message}`,

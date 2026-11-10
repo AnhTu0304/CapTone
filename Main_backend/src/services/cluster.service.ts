@@ -2,6 +2,7 @@ import { ClusterModel, IClusterDetail } from '../models/cluster.model';
 import { EnvironmentModel } from '../models/environment.model';
 import { ApiError } from '../utils/apiError';
 import { pool } from '../config/database';
+import type { IAuditRequestContext } from './audit.service';
 
 export class ClusterService {
   public static async getClustersByOrg(orgId: string): Promise<IClusterDetail[]> {
@@ -62,7 +63,8 @@ export class ClusterService {
     clusterId: string,
     data: { expires_in_days?: number | null; revoke_previous?: boolean },
     orgId?: string,
-    userId?: string
+    userId?: string,
+    reqContext?: IAuditRequestContext
   ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
@@ -70,54 +72,97 @@ export class ClusterService {
     if (orgId || userId) {
       await this.getClusterDetail(clusterId, orgId, userId);
     }
-    return await ClusterModel.rotateAgentToken(clusterId, data, orgId);
+    return await ClusterModel.rotateAgentToken(clusterId, data, orgId, undefined, {
+      ...reqContext,
+      user_id: reqContext?.user_id || userId || null,
+    });
   }
 
-  public static async revokeAgentToken(clusterId: string, tokenId: string, orgId?: string, userId?: string) {
+  public static async revokeAgentToken(
+    clusterId: string,
+    tokenId: string,
+    orgId?: string,
+    userId?: string,
+    reqContext?: IAuditRequestContext
+  ) {
     if (!clusterId || !tokenId) {
       throw new ApiError(400, 'Mã cụm hoặc mã Token không hợp lệ');
     }
     if (orgId || userId) {
       await this.getClusterDetail(clusterId, orgId, userId);
     }
-    const revoked = await ClusterModel.revokeAgentToken(clusterId, tokenId, orgId);
+    const revoked = await ClusterModel.revokeAgentToken(clusterId, tokenId, orgId, undefined, {
+      ...reqContext,
+      user_id: reqContext?.user_id || userId || null,
+    });
     if (!revoked) {
       throw new ApiError(404, 'Không tìm thấy Token hoặc Token không thuộc cụm chỉ định');
     }
     return revoked;
   }
 
-  public static async updateAgentConfig(clusterId: string, configData: any, orgId?: string, userId?: string) {
+  public static async updateAgentConfig(
+    clusterId: string,
+    configData: any,
+    orgId?: string,
+    userId?: string,
+    reqContext?: IAuditRequestContext
+  ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
     if (orgId || userId) {
       await this.getClusterDetail(clusterId, orgId, userId);
     }
-    return await ClusterModel.updateAgentConfig(clusterId, configData);
+    return await ClusterModel.updateAgentConfig(clusterId, configData, undefined, {
+      ...reqContext,
+      user_id: reqContext?.user_id || userId || null,
+    });
   }
 
-  public static async connectAgent(clusterId: string, orgId?: string, userId?: string) {
+  public static async connectAgent(
+    clusterId: string,
+    orgId?: string,
+    userId?: string,
+    reqContext?: IAuditRequestContext
+  ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
     if (orgId || userId) {
       await this.getClusterDetail(clusterId, orgId, userId);
     }
-    return await ClusterModel.connectAgent(clusterId);
+    return await ClusterModel.connectAgent(clusterId, undefined, {
+      ...reqContext,
+      user_id: reqContext?.user_id || userId || null,
+    });
   }
 
-  public static async disconnectAgent(clusterId: string, orgId?: string, userId?: string) {
+  public static async disconnectAgent(
+    clusterId: string,
+    orgId?: string,
+    userId?: string,
+    reqContext?: IAuditRequestContext
+  ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
     if (orgId || userId) {
       await this.getClusterDetail(clusterId, orgId, userId);
     }
-    return await ClusterModel.disconnectAgent(clusterId);
+    return await ClusterModel.disconnectAgent(clusterId, undefined, {
+      ...reqContext,
+      user_id: reqContext?.user_id || userId || null,
+    });
   }
 
-  public static async removeCluster(clusterId: string, orgId?: string, force?: boolean, userId?: string) {
+  public static async removeCluster(
+    clusterId: string,
+    orgId?: string,
+    force?: boolean,
+    userId?: string,
+    reqContext?: IAuditRequestContext
+  ) {
     if (!clusterId) {
       throw new ApiError(400, 'Mã cụm Kubernetes không hợp lệ');
     }
@@ -125,7 +170,10 @@ export class ClusterService {
       await this.getClusterDetail(clusterId, orgId, userId);
     }
     try {
-      return await ClusterModel.removeCluster(clusterId, orgId, force);
+      return await ClusterModel.removeCluster(clusterId, orgId, force, undefined, {
+        ...reqContext,
+        user_id: reqContext?.user_id || userId || null,
+      });
     } catch (err: any) {
       if (err.message === 'CANNOT_DELETE_ONLINE_CLUSTER') {
         throw new ApiError(400, 'Không thể xóa Cụm Kubernetes khi Agent đang hoạt động (ONLINE). Vui lòng ngắt kết nối Agent hoặc xác nhận xóa bắt buộc.');
@@ -143,7 +191,8 @@ export class ClusterService {
       provider?: string;
       endpoint?: string;
       kubernetes_version?: string;
-    }
+    },
+    reqContext?: IAuditRequestContext
   ): Promise<any> {
     if (!data.name || !data.name.trim()) {
       throw new ApiError(400, 'Tên cụm Kubernetes là bắt buộc');
@@ -173,14 +222,18 @@ export class ClusterService {
       }
     }
 
-    const cluster = await ClusterModel.create({
-      environment_id: envId,
-      name: data.name.trim(),
-      provider: data.provider || 'MINIKUBE',
-      endpoint: data.endpoint,
-      kubernetes_version: data.kubernetes_version || 'v1.29.4',
-      status: 'CONNECTED',
-    });
+    const cluster = await ClusterModel.create(
+      {
+        environment_id: envId,
+        name: data.name.trim(),
+        provider: data.provider || 'MINIKUBE',
+        endpoint: data.endpoint,
+        kubernetes_version: data.kubernetes_version || 'v1.29.4',
+        status: 'CONNECTED',
+      },
+      undefined,
+      reqContext
+    );
 
     return cluster;
   }

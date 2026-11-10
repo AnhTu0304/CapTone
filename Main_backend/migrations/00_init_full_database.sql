@@ -182,10 +182,6 @@ CREATE TABLE IF NOT EXISTS organization_roles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- View tương thích ngược
-CREATE OR REPLACE VIEW roles AS SELECT * FROM organization_roles;
-CREATE OR REPLACE VIEW roles_organizations AS SELECT * FROM organization_roles;
-
 -- 7. Bảng `organizations`: Danh mục các doanh nghiệp / tổ chức
 CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

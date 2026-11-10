@@ -1,6 +1,7 @@
 import { HitlNotificationService } from '../services/hitlNotification.service';
 import { Request, Response, NextFunction } from 'express';
 import { HealingActionService } from '../services/healingAction.service';
+import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 
 export class HealingActionController {
@@ -113,7 +114,7 @@ export class HealingActionController {
     try {
       const { id } = req.params;
       const user = (req as any).user;
-      const result = await HealingActionService.executeAction(id, user?.id || null, user);
+      const result = await HealingActionService.executeAction(id, user?.id || null, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Thực thi hành động tự phục hồi thành công', result, 200);
     } catch (error) {
       next(error);
@@ -130,7 +131,7 @@ export class HealingActionController {
       const user = (req as any).user;
       const { reason } = req.body || {};
 
-      const aborted = await HealingActionService.abortAction(id, user?.id || null, reason, user);
+      const aborted = await HealingActionService.abortAction(id, user?.id || null, reason, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Hủy bỏ hành động tự phục hồi thành công', aborted, 200);
     } catch (error) {
       next(error);
@@ -212,7 +213,7 @@ export class HealingActionController {
     try {
       const { id } = req.params;
       const user = (req as any).user;
-      const updated = await HealingActionService.updatePolicyConfig(id, req.body, user);
+      const updated = await HealingActionService.updatePolicyConfig(id, req.body, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Cập nhật cấu hình chính sách thành công', updated, 200);
     } catch (error) {
       next(error);
@@ -227,7 +228,7 @@ export class HealingActionController {
     try {
       const { id } = req.params;
       const user = (req as any).user;
-      const updated = await HealingActionService.togglePolicyActive(id, user);
+      const updated = await HealingActionService.togglePolicyActive(id, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Chuyển đổi trạng thái kích hoạt chính sách thành công', updated, 200);
     } catch (error) {
       next(error);
@@ -246,7 +247,7 @@ export class HealingActionController {
         created_by: user?.id,
         organization_id: req.body.organization_id || user?.organization_id,
       };
-      const created = await HealingActionService.createPolicy(policyData, user);
+      const created = await HealingActionService.createPolicy(policyData, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Tạo chính sách tự phục hồi mới thành công', created, 201);
     } catch (error) {
       next(error);
@@ -261,7 +262,7 @@ export class HealingActionController {
     try {
       const { id } = req.params;
       const user = (req as any).user;
-      const result = await HealingActionService.deletePolicy(id, user);
+      const result = await HealingActionService.deletePolicy(id, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Xóa chính sách tự phục hồi thành công', result, 200);
     } catch (error) {
       next(error);
@@ -310,7 +311,7 @@ export class HealingActionController {
       const user = (req as any).user;
       const { reason } = req.body || {};
 
-      const approved = await HealingActionService.approveAction(id, user?.id || null, reason, user);
+      const approved = await HealingActionService.approveAction(id, user?.id || null, reason, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Phê duyệt hành động tự phục hồi thành công', approved, 200);
     } catch (error) {
       next(error);
@@ -327,7 +328,7 @@ export class HealingActionController {
       const user = (req as any).user;
       const { reason } = req.body || {};
 
-      const rejected = await HealingActionService.rejectAction(id, user?.id || null, reason, user);
+      const rejected = await HealingActionService.rejectAction(id, user?.id || null, reason, user, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Từ chối thực thi hành động tự phục hồi', rejected, 200);
     } catch (error) {
       next(error);
@@ -362,7 +363,7 @@ export class HealingActionController {
         return res.status(400).send('<h1>Thiếu mã xác thực token phê duyệt</h1>');
       }
 
-      const result = await HitlNotificationService.processQuickApprove(token);
+      const result = await HitlNotificationService.processQuickApprove(token, AuditService.extractRequestContext(req));
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(result.statusCode).send(result.html);
     } catch (error) {
@@ -381,7 +382,7 @@ export class HealingActionController {
         return res.status(400).send('<h1>Thiếu mã xác thực token</h1>');
       }
 
-      const result = await HitlNotificationService.processQuickReject(token);
+      const result = await HitlNotificationService.processQuickReject(token, AuditService.extractRequestContext(req));
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(result.statusCode).send(result.html);
     } catch (error) {

@@ -2,7 +2,7 @@
 -- Migration: 21_rename_roles_to_organization_roles.sql
 -- Mô tả: Chuẩn hóa tên bảng `roles` thành `organization_roles` để đối xứng
 --        với `system_roles`, phản ánh đúng vai trò cấp tổ chức/doanh nghiệp.
---        Bổ sung VIEW `roles` và `roles_organizations` để tương thích 100%.
+--        Gỡ bỏ 2 VIEW tương thích cũ `roles` và `roles_organizations` (nếu còn).
 -- ====================================================================
 
 DO $$
@@ -20,5 +20,5 @@ BEGIN
     END IF;
 END $$;
 
-CREATE OR REPLACE VIEW roles AS SELECT * FROM organization_roles;
-CREATE OR REPLACE VIEW roles_organizations AS SELECT * FROM organization_roles;
+DROP VIEW IF EXISTS roles;
+DROP VIEW IF EXISTS roles_organizations;

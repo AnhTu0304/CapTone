@@ -188,6 +188,8 @@ export class IncidentModel {
         i.target_type,
         i.target_id,
         w.name AS workload_name,
+        w.workload_type,
+        w.kubernetes_uid AS workload_kubernetes_uid,
         COALESCE(w.name, ha.target_name, i.target_id) AS service_name,
         i.incident_type,
         i.title,
@@ -198,14 +200,35 @@ export class IncidentModel {
         i.started_at,
         i.resolved_at,
         i.created_at,
+        pred.prediction_type,
+        pred.confidence_score AS prediction_confidence,
+        pred.risk_score AS prediction_risk_score,
         r.id AS rca_id,
         r.root_cause_type,
         r.root_cause_description,
         r.confidence_score AS rca_confidence,
         r.analysis_method,
         r.analysis_result,
-        COALESCE(ns.name, 'default') AS namespace,
-        COALESCE(nd.name, 'minikube') AS node_name,
+        COALESCE(
+          ns.name,
+          CASE
+            WHEN r.analysis_result IS NOT NULL AND left(btrim(r.analysis_result), 1) = '{'
+              THEN NULLIF(r.analysis_result::jsonb->>'namespace', '')
+            ELSE NULL
+          END
+        ) AS namespace,
+        COALESCE(pod_info.pod_node_name, nd.name) AS node_name,
+        COALESCE(pod_info.pod_node_id, nd.id) AS node_id,
+        pod_info.pod_name AS actual_pod_name,
+        pod_info.pod_id AS actual_pod_id,
+        pod_info.pod_uid AS kubernetes_uid,
+        (SELECT COUNT(*)::int FROM nodes nd_cnt WHERE nd_cnt.cluster_id = c.id) AS cluster_node_count,
+        rec_info.recommendation_id,
+        rec_info.recommendation_action,
+        rec_info.recommendation_reason,
+        rec_info.recommendation_risk_level,
+        rec_info.recommendation_priority,
+        rec_info.requires_approval_by_default,
         ha.id AS healing_action_id,
         ha.execution_status AS healing_status,
         ha.approval_status AS healing_approval_status,
@@ -225,12 +248,33 @@ export class IncidentModel {
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-      LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
+      LEFT JOIN ai_predictions pred ON pred.id = i.prediction_id
+      LEFT JOIN LATERAL (
+        SELECT w.id, w.name, w.namespace_id, w.workload_type, w.kubernetes_uid
+        FROM workloads w
+        WHERE w.id::text = i.target_id
+           OR (w.name = i.target_id AND (c.id IS NULL OR w.cluster_id = c.id::text OR w.cluster_id = i.cluster_id))
+        ORDER BY (w.id::text = i.target_id) DESC, (w.deleted_at IS NULL) DESC, w.created_at DESC
+        LIMIT 1
+      ) w ON true
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
       LEFT JOIN LATERAL (
-        SELECT nd.name
+        SELECT p.id AS pod_id, p.name AS pod_name, p.kubernetes_uid AS pod_uid, nd_p.id AS pod_node_id, nd_p.name AS pod_node_name
+        FROM pods p
+        LEFT JOIN nodes nd_p ON nd_p.id = p.node_id
+        WHERE p.deleted_at IS NULL
+          AND (
+            (w.id IS NOT NULL AND p.workload_id = w.id)
+            OR (w.id IS NULL AND c.id IS NOT NULL AND p.cluster_id = c.id AND i.target_id IS NOT NULL AND (p.name = i.target_id OR p.name LIKE i.target_id || '-%'))
+          )
+        ORDER BY p.restart_count DESC NULLS LAST, p.created_at DESC
+        LIMIT 1
+      ) pod_info ON true
+      LEFT JOIN LATERAL (
+        SELECT nd.id, nd.name
         FROM nodes nd
         WHERE nd.cluster_id = c.id
+        ORDER BY (nd.status = 'Ready') DESC, nd.created_at ASC
         LIMIT 1
       ) nd ON true
       LEFT JOIN LATERAL (
@@ -240,6 +284,26 @@ export class IncidentModel {
         ORDER BY r.analyzed_at DESC
         LIMIT 1
       ) r ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          rec.id AS recommendation_id,
+          rec.recommendation AS recommendation_action,
+          rec.reasoning AS recommendation_reason,
+          COALESCE(rec.risk_level::text, hat.default_risk_level::text) AS recommendation_risk_level,
+          CASE rec.priority
+            WHEN 1 THEN 'CRITICAL'
+            WHEN 2 THEN 'HIGH'
+            WHEN 3 THEN 'MEDIUM'
+            WHEN 4 THEN 'LOW'
+            ELSE NULL
+          END AS recommendation_priority,
+          COALESCE(hat.requires_approval_by_default, false) AS requires_approval_by_default
+        FROM ai_recommendations rec
+        LEFT JOIN healing_action_types hat ON hat.id = rec.action_type_id
+        WHERE rec.incident_id = i.id
+        ORDER BY (rec.rca_analysis_id = r.id) DESC NULLS LAST, rec.priority ASC NULLS LAST, rec.created_at DESC
+        LIMIT 1
+      ) rec_info ON true
       LEFT JOIN LATERAL (
         SELECT
           ha.id,
@@ -287,7 +351,9 @@ export class IncidentModel {
         i.target_type,
         i.target_id,
         w.name AS workload_name,
-        COALESCE(w.name, i.target_id) AS service_name,
+        w.workload_type,
+        w.kubernetes_uid AS workload_kubernetes_uid,
+        COALESCE(w.name, ha.target_name, i.target_id) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -297,6 +363,9 @@ export class IncidentModel {
         i.started_at,
         i.resolved_at,
         i.created_at,
+        pred.prediction_type,
+        pred.confidence_score AS prediction_confidence,
+        pred.risk_score AS prediction_risk_score,
         r.id AS rca_id,
         r.root_cause_type,
         r.root_cause_description,
@@ -304,8 +373,26 @@ export class IncidentModel {
         r.analysis_method,
         r.analysis_result,
         r.analyzed_at,
-        COALESCE(ns.name, 'default') AS namespace,
-        COALESCE(nd.name, 'minikube') AS node_name,
+        COALESCE(
+          ns.name,
+          CASE
+            WHEN r.analysis_result IS NOT NULL AND left(btrim(r.analysis_result), 1) = '{'
+              THEN NULLIF(r.analysis_result::jsonb->>'namespace', '')
+            ELSE NULL
+          END
+        ) AS namespace,
+        COALESCE(pod_info.pod_node_name, nd.name) AS node_name,
+        COALESCE(pod_info.pod_node_id, nd.id) AS node_id,
+        pod_info.pod_name AS actual_pod_name,
+        pod_info.pod_id AS actual_pod_id,
+        pod_info.pod_uid AS kubernetes_uid,
+        (SELECT COUNT(*)::int FROM nodes nd_cnt WHERE nd_cnt.cluster_id = c.id) AS cluster_node_count,
+        rec_info.recommendation_id,
+        rec_info.recommendation_action,
+        rec_info.recommendation_reason,
+        rec_info.recommendation_risk_level,
+        rec_info.recommendation_priority,
+        rec_info.requires_approval_by_default,
         ha.id AS healing_action_id,
         ha.execution_status AS healing_status,
         ha.approval_status AS healing_approval_status,
@@ -318,12 +405,33 @@ export class IncidentModel {
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-      LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
+      LEFT JOIN ai_predictions pred ON pred.id = i.prediction_id
+      LEFT JOIN LATERAL (
+        SELECT w.id, w.name, w.namespace_id, w.workload_type, w.kubernetes_uid
+        FROM workloads w
+        WHERE w.id::text = i.target_id
+           OR (w.name = i.target_id AND (c.id IS NULL OR w.cluster_id = c.id::text OR w.cluster_id = i.cluster_id))
+        ORDER BY (w.id::text = i.target_id) DESC, (w.deleted_at IS NULL) DESC, w.created_at DESC
+        LIMIT 1
+      ) w ON true
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
       LEFT JOIN LATERAL (
-        SELECT nd.name
+        SELECT p.id AS pod_id, p.name AS pod_name, p.kubernetes_uid AS pod_uid, nd_p.id AS pod_node_id, nd_p.name AS pod_node_name
+        FROM pods p
+        LEFT JOIN nodes nd_p ON nd_p.id = p.node_id
+        WHERE p.deleted_at IS NULL
+          AND (
+            (w.id IS NOT NULL AND p.workload_id = w.id)
+            OR (w.id IS NULL AND c.id IS NOT NULL AND p.cluster_id = c.id AND i.target_id IS NOT NULL AND (p.name = i.target_id OR p.name LIKE i.target_id || '-%'))
+          )
+        ORDER BY p.restart_count DESC NULLS LAST, p.created_at DESC
+        LIMIT 1
+      ) pod_info ON true
+      LEFT JOIN LATERAL (
+        SELECT nd.id, nd.name
         FROM nodes nd
         WHERE nd.cluster_id = c.id
+        ORDER BY (nd.status = 'Ready') DESC, nd.created_at ASC
         LIMIT 1
       ) nd ON true
       LEFT JOIN LATERAL (
@@ -333,6 +441,26 @@ export class IncidentModel {
         ORDER BY r.analyzed_at DESC
         LIMIT 1
       ) r ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          rec.id AS recommendation_id,
+          rec.recommendation AS recommendation_action,
+          rec.reasoning AS recommendation_reason,
+          COALESCE(rec.risk_level::text, hat.default_risk_level::text) AS recommendation_risk_level,
+          CASE rec.priority
+            WHEN 1 THEN 'CRITICAL'
+            WHEN 2 THEN 'HIGH'
+            WHEN 3 THEN 'MEDIUM'
+            WHEN 4 THEN 'LOW'
+            ELSE NULL
+          END AS recommendation_priority,
+          COALESCE(hat.requires_approval_by_default, false) AS requires_approval_by_default
+        FROM ai_recommendations rec
+        LEFT JOIN healing_action_types hat ON hat.id = rec.action_type_id
+        WHERE rec.incident_id = i.id
+        ORDER BY (rec.rca_analysis_id = r.id) DESC NULLS LAST, rec.priority ASC NULLS LAST, rec.created_at DESC
+        LIMIT 1
+      ) rec_info ON true
       LEFT JOIN LATERAL (
         SELECT
           ha.id,

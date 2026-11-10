@@ -712,6 +712,14 @@ export class AiPredictionModel {
 
   ): Promise<{ environment_id: string; cluster_id?: string | null; workload_id?: string | null } | null> {
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (!predictionId || !uuidRegex.test(predictionId)) {
+
+      return null;
+
+    }
+
     const db = client || pool;
 
     try {

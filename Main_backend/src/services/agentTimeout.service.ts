@@ -67,6 +67,13 @@ export class AgentTimeoutService {
           description: `Agent '${agent.name}' timed out after missing heartbeats (> ${threshold}s). Status transitioned from ONLINE to OFFLINE.`,
           before_data: { status: 'ONLINE', last_seen_at: agent.last_seen_at },
           after_data: { status: 'OFFLINE' },
+          metadata: {
+            agent_id: agent.id,
+            agent_name: agent.name,
+            agent_uid: agent.agent_uid,
+            cluster_id: agent.cluster_id,
+            timeout_threshold_seconds: threshold,
+          },
         });
       } catch (err) {
         console.warn(`[AgentTimeoutService] Failed to record audit log for agent ${agent.id}:`, err);

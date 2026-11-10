@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import crypto from 'crypto';
 import { pool } from '../config/database';
+import type { IAuditRequestContext } from '../services/audit.service';
 
 export interface ICluster {
   id: string;
@@ -546,7 +547,8 @@ export class ClusterModel {
     clusterId: string,
     data: { expires_in_days?: number | null; revoke_previous?: boolean },
     orgId?: string,
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ) {
     const db = client || pool;
     let clusterQuery = `
@@ -623,13 +625,30 @@ export class ClusterModel {
     );
     const tokenRecord = tokenRes.rows[0];
 
-    // Ghi audit log xoay vòng token
+    // Ghi audit log xoay vòng token (tuyệt đối không ghi raw token / token prefix)
     try {
-      await db.query(
-        `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
-         VALUES ($1, 'USER', 'TOKEN_ROTATED', 'CLUSTER', $2, 'Mã Token của Agent đã được xoay vòng thành công. Token cũ đã bị thu hồi.', 'SUCCESS', NOW())`,
-        [cluster.organization_id || null, cluster.id]
-      );
+      const { AuditService } = await import('../services/audit.service');
+      await AuditService.record({
+        organization_id: cluster.organization_id || null,
+        user_id: reqContext?.user_id || null,
+        actor_type: 'USER',
+        action: 'TOKEN_ROTATED',
+        resource_type: 'CLUSTER',
+        resource_id: cluster.id,
+        target_type: 'AGENT',
+        target_id: agentId,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
+        description: 'Mã Token của Agent đã được xoay vòng thành công. Token cũ đã bị thu hồi.',
+        status: 'SUCCESS',
+        metadata: {
+          cluster_id: cluster.id,
+          cluster_name: cluster.name,
+          agent_id: agentId,
+          token_id: tokenRecord.id,
+        },
+      });
     } catch (e) {
       // Bỏ qua lỗi log để không ảnh hưởng luồng chính
     }
@@ -650,11 +669,12 @@ export class ClusterModel {
   public static async updateAgentConfig(
     clusterId: string,
     configData: any,
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ) {
     const db = client || pool;
     const clusterRes = await db.query(
-      `SELECT c.id, e.organization_id, a.id AS agent_id
+      `SELECT c.id, c.name, e.organization_id, a.id AS agent_id, a.name AS agent_name
        FROM clusters c
        LEFT JOIN environments e ON c.environment_id = e.id
        LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
@@ -666,11 +686,29 @@ export class ClusterModel {
     const cluster = clusterRes.rows[0];
 
     try {
-      await db.query(
-        `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, after_data, created_at)
-         VALUES ($1, 'USER', 'CONFIG_UPDATED', 'CLUSTER', $2, 'Cấu hình Agent (chu kỳ metrics, probes, namespaces) đã được cập nhật thành công.', 'SUCCESS', $3, NOW())`,
-        [cluster.organization_id || null, cluster.id, JSON.stringify(configData)]
-      );
+      const { AuditService } = await import('../services/audit.service');
+      await AuditService.record({
+        organization_id: cluster.organization_id || null,
+        user_id: reqContext?.user_id || null,
+        actor_type: 'USER',
+        action: 'CONFIG_UPDATED',
+        resource_type: 'CLUSTER',
+        resource_id: cluster.id,
+        target_type: cluster.agent_id ? 'AGENT' : 'CLUSTER',
+        target_id: cluster.agent_id || cluster.id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
+        description: 'Cấu hình Agent (chu kỳ metrics, probes, namespaces) đã được cập nhật thành công.',
+        status: 'SUCCESS',
+        after_data: configData,
+        metadata: {
+          cluster_id: cluster.id,
+          cluster_name: cluster.name,
+          agent_id: cluster.agent_id || null,
+          agent_name: cluster.agent_name || null,
+        },
+      });
     } catch (e) {
       // ignore
     }
@@ -683,11 +721,12 @@ export class ClusterModel {
    */
   public static async connectAgent(
     clusterId: string,
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ) {
     const db = client || pool;
     const clusterRes = await db.query(
-      `SELECT c.id, e.organization_id, a.id AS agent_id
+      `SELECT c.id, c.name, e.organization_id, a.id AS agent_id, a.name AS agent_name, a.status AS previous_status
        FROM clusters c
        JOIN environments e ON c.environment_id = e.id
        LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
@@ -713,11 +752,29 @@ export class ClusterModel {
     await ClusterModel.seedClusterResources(cluster.id, cluster.name || 'k8s-cluster', db);
 
     try {
-      await db.query(
-        `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
-         VALUES ($1, 'AGENT', 'AGENT_CONNECTED', 'CLUSTER', $2, 'Tác tử eBPF Agent đã kết nối thành công và truyền tải dữ liệu giám sát.', 'SUCCESS', NOW())`,
-        [cluster.organization_id || null, cluster.id]
-      );
+      const { AuditService } = await import('../services/audit.service');
+      await AuditService.record({
+        organization_id: cluster.organization_id || null,
+        actor_type: 'AGENT',
+        action: 'AGENT_CONNECTED',
+        resource_type: 'CLUSTER',
+        resource_id: cluster.id,
+        target_type: 'AGENT',
+        target_id: cluster.agent_id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
+        description: 'Tác tử eBPF Agent đã kết nối thành công và truyền tải dữ liệu giám sát.',
+        status: 'SUCCESS',
+        before_data: cluster.previous_status ? { status: cluster.previous_status } : null,
+        after_data: { status: 'ONLINE' },
+        metadata: {
+          cluster_id: cluster.id,
+          cluster_name: cluster.name,
+          agent_id: cluster.agent_id,
+          agent_name: cluster.agent_name,
+        },
+      });
     } catch {}
 
     return { success: true, status: 'ONLINE', message: 'Tác tử eBPF Agent đã kết nối thành công' };
@@ -728,12 +785,14 @@ export class ClusterModel {
    */
   public static async disconnectAgent(
     clusterId: string,
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ) {
     const db = client || pool;
     const clusterRes = await db.query(
-      `SELECT c.id, a.id AS agent_id
+      `SELECT c.id, c.name, e.organization_id, a.id AS agent_id, a.name AS agent_name, a.status AS previous_status
        FROM clusters c
+       LEFT JOIN environments e ON c.environment_id = e.id
        LEFT JOIN agents a ON (a.cluster_id = c.id OR a.cluster_id::text = c.id::text OR a.cluster_id::text = c.name)
        WHERE (c.id::text = $1 OR c.name = $1) AND c.deleted_at IS NULL
        LIMIT 1`,
@@ -753,11 +812,30 @@ export class ClusterModel {
     );
 
     try {
-      await db.query(
-        `INSERT INTO audit_logs (actor_type, action, resource_type, resource_id, description, status, created_at)
-         VALUES ('USER', 'DISCONNECTED', 'CLUSTER', $1, 'Người quản trị đã ngắt kết nối Agent khỏi Cụm Kubernetes và thu hồi toàn bộ token.', 'WARN', NOW())`,
-        [cluster.id]
-      );
+      const { AuditService } = await import('../services/audit.service');
+      await AuditService.record({
+        organization_id: cluster.organization_id || null,
+        user_id: reqContext?.user_id || null,
+        actor_type: 'USER',
+        action: 'DISCONNECTED',
+        resource_type: 'CLUSTER',
+        resource_id: cluster.id,
+        target_type: 'AGENT',
+        target_id: cluster.agent_id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
+        description: 'Người quản trị đã ngắt kết nối Agent khỏi Cụm Kubernetes và thu hồi toàn bộ token.',
+        status: 'WARN',
+        before_data: cluster.previous_status ? { status: cluster.previous_status } : null,
+        after_data: { status: 'OFFLINE' },
+        metadata: {
+          cluster_id: cluster.id,
+          cluster_name: cluster.name,
+          agent_id: cluster.agent_id,
+          agent_name: cluster.agent_name,
+        },
+      });
     } catch (e) {
       // ignore
     }
@@ -772,7 +850,8 @@ export class ClusterModel {
     clusterId: string,
     orgId?: string,
     force?: boolean,
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ) {
     const db = client || pool;
     let query = `SELECT c.id, c.name, e.organization_id, a.id AS agent_id, a.status AS agent_status
@@ -817,11 +896,30 @@ export class ClusterModel {
       } catch (e) {}
 
       try {
-        await db.query(
-          `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
-           VALUES ($1, 'USER', 'CLUSTER_REMOVED', 'CLUSTER', $2, 'Cụm Kubernetes đã bị xóa khỏi hệ thống bởi người quản trị.', 'SUCCESS', NOW())`,
-          [cluster.organization_id || null, cluster.id]
-        );
+        const { AuditService } = await import('../services/audit.service');
+        await AuditService.record({
+          organization_id: cluster.organization_id || null,
+          user_id: reqContext?.user_id || null,
+          actor_type: 'USER',
+          action: 'CLUSTER_REMOVED',
+          resource_type: 'CLUSTER',
+          resource_id: cluster.id,
+          target_type: 'CLUSTER',
+          target_id: cluster.id,
+          request_id: reqContext?.request_id || null,
+          user_agent: reqContext?.user_agent || null,
+          ip_address: reqContext?.ip_address || null,
+          description: 'Cụm Kubernetes đã bị xóa khỏi hệ thống bởi người quản trị.',
+          status: 'SUCCESS',
+          before_data: { cluster_name: cluster.name, agent_status: cluster.agent_status },
+          after_data: { status: 'DELETED', agent_status: 'REVOKED' },
+          metadata: {
+            cluster_id: cluster.id,
+            cluster_name: cluster.name,
+            agent_id: cluster.agent_id,
+            force: Boolean(force),
+          },
+        });
       } catch (e) {
         // ignore
       }
@@ -837,7 +935,8 @@ export class ClusterModel {
     clusterId: string,
     tokenId: string,
     orgId?: string,
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ) {
     const db = client || pool;
     let clusterQuery = `
@@ -887,11 +986,28 @@ export class ClusterModel {
       }
 
       try {
-        await db.query(
-          `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
-           VALUES ($1, 'USER', 'TOKEN_REVOKED', 'CLUSTER', $2, $3, 'SUCCESS', NOW())`,
-          [cluster.organization_id || null, cluster.id, `Mã Token Agent '${tokenId}' đã bị thu hồi.`]
-        );
+        const { AuditService } = await import('../services/audit.service');
+        await AuditService.record({
+          organization_id: cluster.organization_id || null,
+          user_id: reqContext?.user_id || null,
+          actor_type: 'USER',
+          action: 'TOKEN_REVOKED',
+          resource_type: 'CLUSTER',
+          resource_id: cluster.id,
+          target_type: 'TOKEN',
+          target_id: tokenId,
+          request_id: reqContext?.request_id || null,
+          user_agent: reqContext?.user_agent || null,
+          ip_address: reqContext?.ip_address || null,
+          description: `Mã Token Agent '${tokenId}' đã bị thu hồi.`,
+          status: 'SUCCESS',
+          metadata: {
+            cluster_id: cluster.id,
+            cluster_name: cluster.name,
+            agent_id: row.agent_id,
+            token_id: tokenId,
+          },
+        });
       } catch (e) {}
     }
     return (res.rowCount || 0) > 0;
@@ -910,7 +1026,8 @@ export class ClusterModel {
       kubernetes_version?: string;
       status?: string;
     },
-    client?: PoolClient
+    client?: PoolClient,
+    reqContext?: IAuditRequestContext
   ): Promise<any> {
     const db = client || pool;
     const cleanName = data.name.trim();
@@ -972,15 +1089,38 @@ export class ClusterModel {
     };
     newCluster.install_command = `helm repo add selfheal https://charts.selfheal.ai\nhelm install selfheal-agent selfheal/ebpf-sensor --set cluster.id=${newCluster.id} --set token=${rawToken}`;
 
-    // 5. Ghi log kiểm toán audit_logs
+    // 5. Ghi log kiểm toán audit_logs (không bao giờ lưu token bí mật)
     try {
       const envRes = await db.query('SELECT organization_id FROM environments WHERE id::text = $1::text', [data.environment_id]);
       const orgId = envRes.rows[0]?.organization_id || null;
-      await db.query(
-        `INSERT INTO audit_logs (organization_id, actor_type, action, resource_type, resource_id, description, status, created_at)
-         VALUES ($1, 'USER', 'CLUSTER_CREATED', 'CLUSTER', $2, $3, 'SUCCESS', NOW())`,
-        [orgId, newCluster.id, `Cụm Kubernetes '${cleanName}' và Tác tử Agent đã được đăng ký thành công.`]
-      );
+      const { AuditService } = await import('../services/audit.service');
+      await AuditService.record({
+        organization_id: orgId,
+        user_id: reqContext?.user_id || null,
+        actor_type: 'USER',
+        action: 'CLUSTER_CREATED',
+        resource_type: 'CLUSTER',
+        resource_id: newCluster.id,
+        target_type: 'CLUSTER',
+        target_id: newCluster.id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
+        description: `Cụm Kubernetes '${cleanName}' và Tác tử Agent đã được đăng ký thành công.`,
+        status: 'SUCCESS',
+        after_data: {
+          name: cleanName,
+          provider,
+          status,
+        },
+        metadata: {
+          cluster_id: newCluster.id,
+          cluster_name: cleanName,
+          agent_id: newAgent.id,
+          agent_name: newAgent.name,
+          provider,
+        },
+      });
     } catch {
       // ignore
     }

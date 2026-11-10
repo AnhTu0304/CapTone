@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { config } from '../config/env';
 import { EmailService } from './email.service';
 import { HealingActionService } from './healingAction.service';
+import type { IAuditRequestContext } from './audit.service';
 
 export interface HitlTokenPayload {
   approvalId: string;
@@ -192,7 +193,7 @@ export class HitlNotificationService {
   /**
    * Xử lý khi kỹ sư click "Phê Duyệt Ngay" từ Email (1-Click Approval)
    */
-  public static async processQuickApprove(token: string): Promise<{ success: boolean; html: string; statusCode: number }> {
+  public static async processQuickApprove(token: string, reqContext?: IAuditRequestContext): Promise<{ success: boolean; html: string; statusCode: number }> {
     const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
     const dashboardUrl = `${clientUrl}/dashboard/self-healing/approvals`;
 
@@ -328,7 +329,8 @@ export class HitlNotificationService {
         decoded.healingActionId,
         user.id,
         'Phê duyệt nhanh 1-Click an toàn từ Email thông báo',
-        user
+        user,
+        reqContext
       );
 
       // Cập nhật kênh phê duyệt là EMAIL
@@ -375,7 +377,7 @@ export class HitlNotificationService {
   /**
    * Xử lý khi kỹ sư click "Từ Chối" từ Email (1-Click Reject)
    */
-  public static async processQuickReject(token: string): Promise<{ success: boolean; html: string; statusCode: number }> {
+  public static async processQuickReject(token: string, reqContext?: IAuditRequestContext): Promise<{ success: boolean; html: string; statusCode: number }> {
     const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
     const dashboardUrl = `${clientUrl}/dashboard/self-healing/approvals`;
 
@@ -484,7 +486,9 @@ export class HitlNotificationService {
       await HealingActionService.rejectAction(
         decoded.healingActionId,
         user.id,
-        'Từ chối 1-Click an toàn từ Email thông báo'
+        'Từ chối 1-Click an toàn từ Email thông báo',
+        undefined,
+        reqContext
       );
 
       // Cập nhật kênh phê duyệt là EMAIL

@@ -46,6 +46,14 @@ code {
     display: none !important;
   }
 
+  .print-keep-btn {
+    display: flex !important;
+  }
+
+  .no-print .print-keep-btn {
+    display: none !important;
+  }
+
   body, html {
     background: #ffffff !important;
     color: #0f172a !important;
@@ -71,16 +79,43 @@ code {
     overflow: visible !important;
   }
 
+  .dash-table-container {
+    overflow: visible !important;
+  }
+
+  .dash-table-container table {
+    width: 100% !important;
+    font-size: 8pt !important;
+    table-layout: auto !important;
+  }
+
+  .dash-table-container th,
+  .dash-table-container td {
+    padding: 5px 6px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+
+  .dash-table-container tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  .dash-card, .dash-table-container, .print-signature-block {
+  .dash-card, .print-signature-block {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
     box-shadow: none !important;
     border: 1px solid #cbd5e1 !important;
     margin-bottom: 14px !important;
+  }
+
+  .dash-table-card {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
   }
 }

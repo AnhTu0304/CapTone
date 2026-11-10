@@ -1,118 +1,28 @@
-import { request, executeWithFallback } from './apiClient';
+import { request } from './apiClient';
 
 /**
  * @file dashboardAuditLogsService.js
- * Dịch vụ cung cấp Nhật ký kiểm toán bất biến & Thống kê cho Tổ chức (Tenant Scope).
+ * Dịch vụ cung cấp Nhật ký kiểm toán bất biến & Thống kê cho Tổ chức (Tenant Scope)
+ * từ API thực tế của Main Backend (không sử dụng dữ liệu cứng / mock fallback).
  */
 
-const FALLBACK_AUDIT_LOGS = [
-  {
-    id: 'AUD-000055',
-    timestamp: '27/10/2026 22:09:38',
-    actor: 'Phạm Thái Sang (SME Owner)',
-    role: 'SME_OWNER',
-    event: 'ACCESS_DENIED_ROLE',
-    description: 'Bị từ chối truy cập do thiếu vai trò hợp lệ theo chính sách RBAC',
-    target: 'System/RBAC',
-    ip: '127.0.0.1',
-    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-    status: 'DENIED',
-    before_data: null,
-    after_data: null,
-    metadata: {
-      required_roles: ['ADMIN', 'SUPER_ADMIN'],
-      current_roles: ['SME_OWNER'],
-    },
-  },
-  {
-    id: 'AUD-000050',
-    timestamp: '27/10/2026 21:18:55',
-    actor: 'MAPE-K Autonomous Engine',
-    role: 'SYSTEM_AI',
-    event: 'AUTONOMOUS_SCALE_UP',
-    description: 'Tự động mở rộng số lượng Replicas từ 2 lên 3 cho payment-service theo dự báo tải',
-    target: 'Deployment/payment-service',
-    ip: '10.244.0.1 (Internal Cluster)',
-    sha256: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
-    status: 'SUCCESS',
-    before_data: { replicas: 2 },
-    after_data: { replicas: 3 },
-    metadata: {
-      model: 'GRU-v2.1',
-      confidence: 0.94,
-    },
-  },
-  {
-    id: 'AUD-000048',
-    timestamp: '27/10/2026 20:50:12',
-    actor: 'Trần Đình Tuấn (DevOps Lead)',
-    role: 'DEVOPS',
-    event: 'POLICY_THRESHOLD_MODIFIED',
-    description: 'Cập nhật ngưỡng kích hoạt cổng HITL từ 25% lên 30% bán kính ảnh hưởng Pods',
-    target: 'Policy/POL-RESTART-CRASHED-POD',
-    ip: '14.162.180.92',
-    sha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
-    status: 'SUCCESS',
-    before_data: { blastRadiusLimit: 0.25 },
-    after_data: { blastRadiusLimit: 0.30 },
-    metadata: { policyId: 'POL-01' },
-  },
-  {
-    id: 'AUD-000045',
-    timestamp: '27/10/2026 19:15:30',
-    actor: 'MAPE-K Autonomous Engine',
-    role: 'SYSTEM_AI',
-    event: 'POD_MEMORY_RESTART',
-    description: 'Khởi động lại Pod order-processor-66bf sau tín hiệu cảnh báo rò rỉ RAM',
-    target: 'Pod/order-processor-66bf',
-    ip: '10.244.0.1 (Internal Cluster)',
-    sha256: 'ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d',
-    status: 'SUCCESS',
-    before_data: { memoryUsage: '94.2%' },
-    after_data: { memoryUsage: '22.5%' },
-    metadata: { rootCause: 'MEMORY_LEAK' },
-  },
-  {
-    id: 'AUD-000040',
-    timestamp: '27/10/2026 16:42:10',
-    actor: 'Phạm Thái Sang (SME Owner)',
-    role: 'SME_OWNER',
-    event: 'HITL_APPROVAL_GRANTED',
-    description: 'Phê duyệt tháo tải và cô lập máy chủ Node/worker-03 (Cordon & Drain)',
-    target: 'Node/worker-03',
-    ip: '113.161.72.45',
-    sha256: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
-    status: 'SUCCESS',
-    before_data: { nodeStatus: 'Ready' },
-    after_data: { nodeStatus: 'SchedulingDisabled' },
-    metadata: { approvalId: 'APP-901' },
-  },
-  {
-    id: 'AUD-000035',
-    timestamp: '27/10/2026 09:30:00',
-    actor: 'Phạm Thái Sang (SME Owner)',
-    role: 'SME_OWNER',
-    event: 'AUTH_LOGIN_SUCCESS_2FA',
-    description: 'Đăng nhập thành công vào bảng điều khiển qua cơ chế xác thực đa yếu tố 2FA',
-    target: 'Identity/SSO',
-    ip: '113.161.72.45',
-    sha256: '04f8996da763b7a969b1028ee3007569eaf3a635486ddab211d512c85b9df8fb',
-    status: 'SUCCESS',
-    before_data: null,
-    after_data: null,
-    metadata: { provider: 'TOTP-2FA' },
-  },
-];
+const getLocalTodayStr = () => {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const mo = String(now.getMonth() + 1).padStart(2, '0');
+  const dy = String(now.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${dy}`;
+};
 
 /**
  * Chuẩn hóa bản ghi từ Backend về định dạng hiển thị thống nhất trên giao diện
  */
-const mapBackendLog = (raw) => {
-  const rawMeta = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
+export const mapBackendLog = (raw) => {
+  const rawMeta = raw?.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
 
-  let formattedDate = raw.created_at;
+  let formattedDate = raw?.created_at || raw?.timestamp || '';
   try {
-    const d = new Date(raw.created_at);
+    const d = new Date(raw?.created_at || raw?.timestamp);
     if (!isNaN(d.getTime())) {
       const dd = String(d.getDate()).padStart(2, '0');
       const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -123,292 +33,330 @@ const mapBackendLog = (raw) => {
       formattedDate = `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
     }
   } catch (e) {
-    formattedDate = String(raw.created_at);
+    formattedDate = String(raw?.created_at || '');
   }
 
-  // Tác tử
-  let actor = raw.user_name || raw.user_email || 'Hệ Thống Tự Động (System)';
-  let role = raw.actor_role || raw.role || raw.member_role || 'SME_OWNER';
-  if (raw.actor_type === 'SYSTEM' || raw.actor_type === 'AGENT') {
-    actor = 'MAPE-K Autonomous Engine';
-    role = 'SYSTEM_AI';
+  const actorType = String(raw?.actor_type || raw?.actorType || 'USER').toUpperCase();
+
+  let actor;
+  if (actorType === 'AGENT') {
+    actor =
+      rawMeta.agent_name ||
+      raw?.agent_name ||
+      raw?.user_name ||
+      raw?.actor ||
+      (raw?.resource_id ? `Agent (${String(raw.resource_id).substring(0, 8)}...)` : 'Agent K8s');
+  } else if (actorType === 'SYSTEM') {
+    actor =
+      rawMeta.actor_name ||
+      rawMeta.engine_name ||
+      rawMeta.triggered_by ||
+      raw?.user_name ||
+      raw?.actor ||
+      'Hệ thống AI (MAPE-K)';
   } else {
-    const lowerActor = String(actor).toLowerCase();
-    const lowerRole = String(role).toLowerCase();
-    if (
-      lowerRole.includes('owner') ||
-      lowerRole.includes('admin') ||
-      lowerActor.includes('sang') ||
-      lowerActor.includes('admin') ||
-      lowerActor.includes('owner') ||
-      (raw.action && raw.action.includes('HITL'))
-    ) {
-      role = 'SME_OWNER';
-    } else if (
-      lowerRole.includes('devops') ||
-      lowerActor.includes('tuan') ||
-      (raw.action && (raw.action.includes('POLICY') || raw.action.includes('DRAIN')))
-    ) {
-      role = 'DEVOPS';
-    }
+    actor =
+      raw?.user_name ||
+      raw?.actor ||
+      raw?.user_email ||
+      rawMeta.executed_by ||
+      rawMeta.approved_by ||
+      rawMeta.email ||
+      (raw?.user_id ? `User (${String(raw.user_id).substring(0, 8)}...)` : 'Người dùng chưa xác định');
   }
 
-  const logId = typeof raw.id === 'string' && raw.id.startsWith('AUD-')
-    ? raw.id
-    : `AUD-${String(raw.id || '').padStart(6, '0')}`;
+  const rawRole = raw?.actor_role || raw?.role || raw?.member_role || null;
+  let role = rawRole ? String(rawRole).toUpperCase() : null;
+  if (actorType === 'AGENT') {
+    role = 'AGENT';
+  } else if (actorType === 'SYSTEM') {
+    role = 'SYSTEM_AI';
+  } else if (!role && raw?.user_id) {
+    role = 'USER';
+  }
 
-  const status = raw.status === 'DENIED' ? 'DENIED' : raw.status === 'FAILURE' || raw.status === 'ERROR' ? 'FAILED' : 'VERIFIED';
+  const logId =
+    typeof raw?.id === 'string' && raw.id.startsWith('AUD-')
+      ? raw.id
+      : `AUD-${String(raw?.id || '').padStart(6, '0')}`;
 
-  const sha256 = raw.sha256 || rawMeta.sha256 || '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
+  const rawStatus = String(raw?.status || '').toUpperCase();
+  let status = rawStatus || 'UNKNOWN';
+  if (rawStatus === 'FAILURE' || rawStatus === 'FAILED' || rawStatus === 'ERROR') {
+    status = 'FAILED';
+  } else if (rawStatus === 'DENIED' || rawStatus === 'BLOCKED') {
+    status = 'DENIED';
+  } else if (rawStatus === 'SUCCESS' || rawStatus === 'VERIFIED') {
+    status = 'SUCCESS';
+  }
 
-  let target = 'System';
-  if (rawMeta.target_name || rawMeta.target_service) {
-    const svc = rawMeta.target_name || rawMeta.target_service;
-    target = rawMeta.namespace ? `${rawMeta.namespace}/${svc}` : svc;
-  } else if (rawMeta.policy_name) {
-    target = rawMeta.policy_name;
-  } else if (raw.resource_type) {
+  const sha256 = raw?.sha256 || rawMeta.sha256 || null;
+
+  let target = '-';
+  const metaTargetService =
+    rawMeta.target_name ||
+    raw?.healing_target_name ||
+    rawMeta.target_service ||
+    rawMeta.service_id ||
+    rawMeta.pod_name ||
+    rawMeta.node_name;
+  const resolvedPolicyName = rawMeta.policy_name || raw?.policy_name;
+  const resolvedClusterId = raw?.cluster_id || rawMeta.cluster_id || null;
+  const resolvedClusterName = rawMeta.cluster_name || raw?.cluster_name;
+  const rawServiceName =
+    raw?.service_name ||
+    raw?.healing_target_name ||
+    rawMeta.target_service ||
+    rawMeta.service_id ||
+    rawMeta.target_name ||
+    rawMeta.pod_name ||
+    null;
+  const resolvedServiceName =
+    typeof rawServiceName === 'string' && rawServiceName.trim() !== '' ? rawServiceName.trim() : null;
+  const resolvedAgentName = rawMeta.agent_name || raw?.agent_name;
+  const resolvedTargetUser =
+    raw?.target_user_name ||
+    raw?.target_user_email ||
+    rawMeta.target_email;
+
+  if (metaTargetService) {
+    target = rawMeta.namespace ? `${rawMeta.namespace}/${metaTargetService}` : metaTargetService;
+  } else if (
+    resolvedPolicyName &&
+    (raw?.resource_type === 'POLICY' || raw?.target_type === 'POLICY' || !raw?.resource_type || raw?.resource_type === 'HEALING_ACTION')
+  ) {
+    target = resolvedPolicyName;
+  } else if (raw?.resource_type === 'AGENT' && resolvedAgentName) {
+    target = resolvedAgentName;
+  } else if (raw?.resource_type === 'CLUSTER' && resolvedClusterName) {
+    target = resolvedClusterName;
+  } else if (raw?.target_type === 'AGENT' && resolvedAgentName) {
+    target = resolvedAgentName;
+  } else if ((raw?.target_type === 'USER' || raw?.resource_type === 'USER') && resolvedTargetUser) {
+    target = resolvedTargetUser;
+  } else if (resolvedPolicyName) {
+    target = resolvedPolicyName;
+  } else if (resolvedClusterName) {
+    target = resolvedClusterName;
+  } else if (resolvedAgentName) {
+    target = resolvedAgentName;
+  } else if (raw?.resource_type === 'ORGANIZATION' && (rawMeta.organization_name || raw?.organization_name)) {
+    target = rawMeta.organization_name || raw.organization_name;
+  } else if (raw?.resource_type) {
     if (raw.resource_type === 'HEALING_ACTION') {
-      target = rawMeta.action_code || rawMeta.action_type || 'Tự phục hồi';
+      target =
+        rawMeta.action_code ||
+        rawMeta.action_type ||
+        (raw.resource_id ? `HEALING_ACTION/${String(raw.resource_id).substring(0, 8)}...` : 'HEALING_ACTION');
     } else if (raw.resource_id && typeof raw.resource_id === 'string' && raw.resource_id.length > 18) {
       target = `${raw.resource_type}/${raw.resource_id.substring(0, 8)}...`;
     } else {
       target = raw.resource_id ? `${raw.resource_type}/${raw.resource_id}` : raw.resource_type;
     }
-  } else if (raw.target_type) {
-    target = raw.target_id && typeof raw.target_id === 'string' && raw.target_id.length > 18
-      ? `${raw.target_type}/${raw.target_id.substring(0, 8)}...`
-      : (raw.target_id ? `${raw.target_type}/${raw.target_id}` : raw.target_type);
+  } else if (raw?.target_type) {
+    target =
+      raw.target_id && typeof raw.target_id === 'string' && raw.target_id.length > 18
+        ? `${raw.target_type}/${raw.target_id.substring(0, 8)}...`
+        : raw.target_id
+        ? `${raw.target_type}/${raw.target_id}`
+        : raw.target_type;
+  } else if (rawMeta.organization_name || raw?.organization_name) {
+    target = rawMeta.organization_name || raw.organization_name;
+  } else if (rawMeta.email) {
+    target = rawMeta.email;
+  } else if (rawMeta.path) {
+    target = rawMeta.method ? `${rawMeta.method} ${rawMeta.path}` : rawMeta.path;
   }
+
+  const rawIp = raw?.ip_address || raw?.ip || null;
+  const ip = rawIp ? String(rawIp).replace('/32', '') : null;
 
   return {
     id: logId,
-    rawId: raw.id,
+    rawId: raw?.id,
     timestamp: formattedDate,
-    created_at: raw.created_at,
-    raw_created_at: raw.created_at,
+    created_at: raw?.created_at,
+    raw_created_at: raw?.created_at,
     rawItem: raw,
     actor,
-    actorType: raw.actor_type || 'USER',
+    actorEmail: raw?.user_email || rawMeta.email || null,
+    actorType,
     role,
-    event: raw.action,
-    description: raw.description || raw.action,
+    organizationName: raw?.organization_name || rawMeta.organization_name || null,
+    clusterId: resolvedClusterId,
+    clusterName: resolvedClusterName || null,
+    serviceName: resolvedServiceName,
+    event: raw?.action || '',
+    description: raw?.description || raw?.action || '',
     target,
-    ip: (raw.ip_address || '127.0.0.1').replace('/32', ''),
+    resourceType: raw?.resource_type || null,
+    resourceId: raw?.resource_id ? String(raw.resource_id) : null,
+    targetType: raw?.target_type || null,
+    targetId: raw?.target_id ? String(raw.target_id) : null,
+    targetUserEmail: raw?.target_user_email || rawMeta.target_email || null,
+    ip,
     sha256,
     status,
-    before_data: raw.before_data || rawMeta.before_data || null,
-    after_data: raw.after_data || rawMeta.after_data || null,
+    before_data:
+      raw?.before_data !== undefined
+        ? raw.before_data
+        : rawMeta.before_data !== undefined
+        ? rawMeta.before_data
+        : null,
+    after_data:
+      raw?.after_data !== undefined
+        ? raw.after_data
+        : rawMeta.after_data !== undefined
+        ? rawMeta.after_data
+        : null,
     metadata: {
+      ...(raw?.cluster_name && !rawMeta.cluster_name ? { cluster_name: raw.cluster_name } : {}),
+      ...(raw?.policy_name && !rawMeta.policy_name ? { policy_name: raw.policy_name } : {}),
+      ...(raw?.agent_name && !rawMeta.agent_name ? { agent_name: raw.agent_name } : {}),
       ...rawMeta,
-      requestId: raw.request_id,
-      userAgent: raw.user_agent,
-      reasonCode: raw.reason_code,
+      requestId: raw?.request_id || null,
+      userAgent: raw?.user_agent || rawMeta.userAgent || null,
+      reasonCode: raw?.reason_code || null,
     },
   };
 };
 
 /**
- * Lấy danh sách nhật ký kiểm toán theo Tổ chức
+ * Lấy danh sách nhật ký kiểm toán thực tế theo Tổ chức
  */
 export const fetchOrgAuditLogs = async (
   orgId,
   filters = {},
   pagination = { page: 1, pageSize: 10 }
 ) => {
+  const requestedPage = pagination.page || 1;
+  const requestedPageSize = pagination.pageSize || 10;
+
   if (!orgId) {
-    return { data: FALLBACK_AUDIT_LOGS, total: FALLBACK_AUDIT_LOGS.length, page: 1, pageSize: 10, totalPages: 1 };
+    return {
+      data: [],
+      total: 0,
+      page: requestedPage,
+      pageSize: requestedPageSize,
+      totalPages: 1,
+    };
   }
 
-  return executeWithFallback(
-    async () => {
-      const params = new URLSearchParams();
-      params.set('page', String(pagination.page || 1));
-      params.set('limit', String(pagination.pageSize || 10));
+  const params = new URLSearchParams();
+  params.set('page', String(requestedPage));
+  params.set('limit', String(requestedPageSize));
 
-      if (filters.action && filters.action !== 'ALL') params.set('action', filters.action);
-      if (filters.status && filters.status !== 'ALL') params.set('status', filters.status);
-      if (filters.role && filters.role !== 'ALL') params.set('role', filters.role);
-      if (filters.search) params.set('search', filters.search);
+  if (filters.action && filters.action !== 'ALL') params.set('action', filters.action);
+  if (filters.status && filters.status !== 'ALL') params.set('status', filters.status);
+  if (filters.role && filters.role !== 'ALL') params.set('role', filters.role);
+  if (filters.cluster_id && filters.cluster_id !== 'ALL') params.set('cluster_id', filters.cluster_id);
+  if (filters.service_name && filters.service_name !== 'ALL') params.set('service_name', filters.service_name);
+  if (filters.search) params.set('search', filters.search);
 
-      // Xử lý bộ lọc thời gian: Hỗ trợ Ngày, Tháng, Năm, Tất cả và Date range
-      let startDate = null;
-      let endDate = null;
+  let startDate = null;
+  let endDate = null;
 
-      if (filters.start_date && filters.end_date) {
-        startDate = filters.start_date;
-        endDate = filters.end_date;
-      } else if (filters.timeFilterMode === 'today' || filters.timeFilterMode === 'date') {
-        const targetDate = filters.selectedDate || new Date().toISOString().split('T')[0];
-        const [y, m, d] = targetDate.split('-').map(Number);
-        startDate = new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
-        endDate = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
-      } else if (filters.timeFilterMode === 'month') {
-        const targetMonth = filters.selectedMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'));
-        const [y, m] = targetMonth.split('-').map(Number);
-        startDate = new Date(y, m - 1, 1, 0, 0, 0, 0).toISOString();
-        endDate = new Date(y, m, 0, 23, 59, 59, 999).toISOString();
-      } else if (filters.timeFilterMode === 'year') {
-        const y = Number(filters.selectedYear || new Date().getFullYear());
-        startDate = new Date(y, 0, 1, 0, 0, 0, 0).toISOString();
-        endDate = new Date(y, 11, 31, 23, 59, 59, 999).toISOString();
-      } else if (filters.dateRange && filters.dateRange !== 'ALL') {
-        const now = new Date();
-        if (filters.dateRange === '24H') {
-          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-        } else if (filters.dateRange === '7D') {
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        } else if (filters.dateRange === '30D') {
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        }
-      }
-
-      if (startDate) params.set('start_date', startDate);
-      if (endDate) params.set('end_date', endDate);
-
-      const res = await request(`organizations/${orgId}/audit-logs?${params.toString()}`);
-      if (res && res.success && res.data) {
-        const rawItems = Array.isArray(res.data.data)
-          ? res.data.data
-          : Array.isArray(res.data.items)
-          ? res.data.items
-          : Array.isArray(res.data)
-          ? res.data
-          : [];
-
-        const mapped = rawItems.map(mapBackendLog);
-        const total = res.data.pagination?.total ?? (typeof res.data.total === 'number' ? res.data.total : mapped.length);
-        const page = res.data.pagination?.page || pagination.page || 1;
-        const pageSize = res.data.pagination?.limit || pagination.pageSize || 10;
-        const totalPages = res.data.pagination?.totalPages || Math.ceil(total / pageSize) || 1;
-
-        return {
-          data: mapped,
-          total,
-          page,
-          pageSize,
-          totalPages,
-        };
-      }
-      throw new Error('Định dạng phản hồi API không hợp lệ');
-    },
-    async () => {
-      // Mock Fallback filtering
-      let result = [...FALLBACK_AUDIT_LOGS];
-      if (filters.search) {
-        const q = filters.search.toLowerCase().trim();
-        result = result.filter(
-          (l) =>
-            l.id.toLowerCase().includes(q) ||
-            l.actor.toLowerCase().includes(q) ||
-            l.event.toLowerCase().includes(q) ||
-            l.description.toLowerCase().includes(q) ||
-            l.ip.toLowerCase().includes(q) ||
-            l.sha256.toLowerCase().includes(q)
-        );
-      }
-      if (filters.role && filters.role !== 'ALL') {
-        result = result.filter((l) => l.role === filters.role);
-      }
-      if (filters.status && filters.status !== 'ALL') {
-        result = result.filter((l) => l.status === filters.status);
-      }
-      const page = pagination.page || 1;
-      const pageSize = pagination.pageSize || 10;
-      const start = (page - 1) * pageSize;
-      return {
-        data: result.slice(start, start + pageSize),
-        total: result.length,
-        page,
-        pageSize,
-        totalPages: Math.ceil(result.length / pageSize) || 1,
-      };
+  if (filters.start_date && filters.end_date) {
+    startDate = filters.start_date;
+    endDate = filters.end_date;
+  } else if (filters.timeFilterMode === 'today') {
+    const [y, m, d] = getLocalTodayStr().split('-').map(Number);
+    startDate = new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+    endDate = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+  } else if (filters.timeFilterMode === 'date') {
+    const targetDate = filters.selectedDate || getLocalTodayStr();
+    const [y, m, d] = targetDate.split('-').map(Number);
+    startDate = new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+    endDate = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+  } else if (filters.timeFilterMode === 'month') {
+    const now = new Date();
+    const fallbackMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const targetMonth = filters.selectedMonth || fallbackMonth;
+    const [y, m] = targetMonth.split('-').map(Number);
+    startDate = new Date(y, m - 1, 1, 0, 0, 0, 0).toISOString();
+    endDate = new Date(y, m, 0, 23, 59, 59, 999).toISOString();
+  } else if (filters.timeFilterMode === 'year') {
+    const y = Number(filters.selectedYear || new Date().getFullYear());
+    startDate = new Date(y, 0, 1, 0, 0, 0, 0).toISOString();
+    endDate = new Date(y, 11, 31, 23, 59, 59, 999).toISOString();
+  } else if (filters.dateRange && filters.dateRange !== 'ALL') {
+    const now = new Date();
+    if (filters.dateRange === '24H') {
+      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    } else if (filters.dateRange === '7D') {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (filters.dateRange === '30D') {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     }
-  );
+  }
+
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+
+  const res = await request(`organizations/${orgId}/audit-logs?${params.toString()}`);
+  if (res && res.success && res.data) {
+    const rawItems = Array.isArray(res.data.data)
+      ? res.data.data
+      : Array.isArray(res.data.items)
+      ? res.data.items
+      : Array.isArray(res.data)
+      ? res.data
+      : [];
+
+    const mapped = rawItems.map(mapBackendLog);
+    const total =
+      res.data.pagination?.total ??
+      (typeof res.data.total === 'number' ? res.data.total : mapped.length);
+    const page = res.data.pagination?.page || requestedPage;
+    const pageSize = res.data.pagination?.limit || requestedPageSize;
+    const totalPages = res.data.pagination?.totalPages || Math.ceil(total / pageSize) || 1;
+
+    return {
+      data: mapped,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
+  }
+  throw new Error('Định dạng phản hồi API nhật ký kiểm toán không hợp lệ');
 };
 
 /**
- * Lấy số liệu thống kê 7 ngày phục vụ biểu đồ và thẻ KPI
+ * Lấy số liệu thống kê thực tế phục vụ KPI & đối chiếu biểu đồ từ backend
  */
 export const fetchOrgAuditStats = async (orgId) => {
   if (!orgId) {
     return null;
   }
 
-  return executeWithFallback(
-    async () => {
-      const res = await request(`organizations/${orgId}/audit-logs/stats`);
-      if (res && res.success && res.data) {
-        return res.data;
-      }
-      throw new Error('Không thể lấy thống kê kiểm toán');
-    },
-    async () => {
-      // Fallback static 7 days
-      return {
-        summary: {
-          totalLogs: FALLBACK_AUDIT_LOGS.length,
-          autonomousActions: 2,
-          hitlApprovals: 1,
-          policyChanges: 1,
-          authEvents: 2,
-          blockedViolations: 1,
-          verifiedIntegrity: '100% (SHA-256 Validated)',
-        },
-        days: [
-          { day: '22/10', autonomous: 5, hitl: 1, policy: 0, auth: 4, total: 10 },
-          { day: '23/10', autonomous: 8, hitl: 2, policy: 1, auth: 6, total: 17 },
-          { day: '24/10', autonomous: 12, hitl: 0, policy: 2, auth: 8, total: 22 },
-          { day: '25/10', autonomous: 6, hitl: 1, policy: 0, auth: 5, total: 12 },
-          { day: '26/10', autonomous: 15, hitl: 3, policy: 2, auth: 10, total: 30 },
-          { day: '27/10', autonomous: 10, hitl: 2, policy: 1, auth: 7, total: 20 },
-          { day: '28/10 (Hôm nay)', autonomous: 4, hitl: 1, policy: 1, auth: 3, total: 9 },
-        ],
-      };
-    }
-  );
+  const res = await request(`organizations/${orgId}/audit-logs/stats`);
+  if (res && res.success && res.data) {
+    return res.data;
+  }
+  throw new Error('Không thể lấy thống kê nhật ký kiểm toán từ máy chủ');
 };
 
 /**
- * Xác thực tính toàn vẹn bất biến của toàn bộ chuỗi nhật ký kiểm toán (SHA-256 Cryptographic Hash Chain)
+ * Xác thực tính toàn vẹn sổ cái kiểm toán từ backend
  */
 export const verifyOrgAuditIntegrity = async (orgId) => {
   if (!orgId) {
-    return {
-      verified: true,
-      totalChecked: FALLBACK_AUDIT_LOGS.length,
-      validCount: FALLBACK_AUDIT_LOGS.length,
-      tamperedCount: 0,
-      integrityStatus: '100%_SECURE_VERIFIED',
-      algorithm: 'SHA-256 Cryptographic Hash Chain',
-      verifiedAt: new Date().toISOString(),
-    };
+    return null;
   }
 
-  return executeWithFallback(
-    async () => {
-      const res = await request(`organizations/${orgId}/audit-logs/verify`);
-      if (res && res.success && res.data) {
-        return res.data;
-      }
-      throw new Error('Không thể xác thực tính toàn vẹn sổ cái');
-    },
-    async () => {
-      return {
-        verified: true,
-        totalChecked: FALLBACK_AUDIT_LOGS.length,
-        validCount: FALLBACK_AUDIT_LOGS.length,
-        tamperedCount: 0,
-        integrityStatus: '100%_SECURE_VERIFIED',
-        algorithm: 'SHA-256 Cryptographic Hash Chain',
-        verifiedAt: new Date().toISOString(),
-      };
-    }
-  );
+  const res = await request(`organizations/${orgId}/audit-logs/verify`);
+  if (res && res.success && res.data) {
+    return res.data;
+  }
+  throw new Error('Không thể xác thực tính toàn vẹn sổ cái từ máy chủ');
 };
 
-export default {
+const dashboardAuditLogsService = {
+  mapBackendLog,
   fetchOrgAuditLogs,
   fetchOrgAuditStats,
   verifyOrgAuditIntegrity,
 };
+
+export default dashboardAuditLogsService;

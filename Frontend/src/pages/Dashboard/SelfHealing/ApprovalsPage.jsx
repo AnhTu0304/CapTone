@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 
 export const ApprovalsPage = () => {
-  const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh, selectedCluster } = useDashboard();
+  const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh } = useDashboard();
   const { success: toastSuccess, warning: toastWarning } = useToast();
   const getQueryTarget = () => {
     try {
@@ -79,13 +79,13 @@ export const ApprovalsPage = () => {
     else if (upperCode.includes('CLEANUP')) actionFriendlyName = 'Cleanup Storage';
     else if (upperCode.includes('NO_ACTION')) actionFriendlyName = 'No Action';
 
-    const rootCause = item.root_cause_type || (item.incident_title ? item.incident_title.replace(/^\[.*?\]\s*/, '') : 'Pod ứng dụng bất ổn định / CrashLoop');
+    const rootCause = item.root_cause_type || (item.incident_title ? item.incident_title.replace(/^\[.*?\]\s*/, '') : 'Chưa xác định nguyên nhân gốc rễ');
     const confidence = item.confidence_score !== null && item.confidence_score !== undefined
       ? Math.round(Number(item.confidence_score) <= 1 ? Number(item.confidence_score) * 100 : Number(item.confidence_score))
-      : 75;
+      : null;
 
-    const rawRisk = (item.risk_level || 'HIGH').toUpperCase();
-    let riskLevelVi = 'Trung bình';
+    const rawRisk = (item.risk_level || item.recommendation_risk_level || '').toUpperCase();
+    let riskLevelVi = 'Chưa phân loại';
     if (rawRisk === 'LOW') riskLevelVi = 'Thấp';
     else if (rawRisk === 'MEDIUM') riskLevelVi = 'Trung bình';
     else if (rawRisk === 'HIGH') riskLevelVi = 'Cao';
@@ -110,6 +110,7 @@ export const ApprovalsPage = () => {
       rawId: item.healing_action_id || item.id,
       approvalId: item.id,
       incidentId: item.incident_id,
+      predictionId: item.prediction_id || null,
       recommendationId: item.recommendation_id,
       actionCode: rawActionCode,
       actionName: actionFriendlyName,
@@ -118,16 +119,19 @@ export const ApprovalsPage = () => {
       title: cleanTitle,
       targetName,
       target: targetName,
-      clusterName: item.cluster_name || selectedCluster?.name || currentEnv?.clusterName || "các",
-      clusterId: item.cluster_id || selectedCluster?.id || currentEnv?.clusterId || currentEnv?.id,
+      clusterName: item.cluster_name || null,
+      clusterId: item.cluster_id || null,
+      recommendationRiskLevel: item.recommendation_risk_level || item.risk_level || null,
+      recommendationPriority: item.recommendation_priority || null,
+      analysisMethod: item.analysis_method || null,
       rootCauseType: rootCause,
-      rootCauseDesc: item.root_cause_description || `AI phân tích viễn trắc ghi nhận sự cố trên dịch vụ ${targetName}.`,
+      rootCauseDesc: item.root_cause_description || null,
       confidenceScore: confidence,
-      aiReasoning: item.ai_reasoning || item.reason || `Bổ sung số lượng Pod replica để phân phối tải và phục hồi năng lực xử lý (hạ độ trễ dịch vụ).`,
+      aiReasoning: item.ai_reasoning || item.reason || `Đề xuất thực thi ${actionFriendlyName} trên dịch vụ ${targetName}.`,
       policyName,
       requestedBy: 'Hệ thống AI Tự thích ứng (MAPE-K)',
       riskLevelVi,
-      urgency: riskLevelVi,
+      urgency: rawRisk || 'Chưa phân loại',
       reason: item.reason || `Chính sách ${policyName} yêu cầu phê duyệt con người trước khi thực thi.`,
       blastRadius: `Môi trường Production (Bảo vệ qua PDB)`,
       rawRequestedAt: item.requested_at,
@@ -294,19 +298,23 @@ export const ApprovalsPage = () => {
       id: req.incidentId || req.rawId,
       rawId: req.incidentId || req.rawId,
       incidentId: req.incidentId,
+      predictionId: req.predictionId,
       approvalId: req.approvalId || req.id,
       title: req.title,
       service: req.targetName,
       target_name: req.targetName,
-      cluster: req.clusterName || selectedCluster?.name || 'các',
-      cluster_name: req.clusterName || selectedCluster?.name || 'các',
-      cluster_id: req.clusterId || selectedCluster?.id,
+      cluster: req.clusterName || null,
+      cluster_name: req.clusterName || null,
+      cluster_id: req.clusterId || null,
       severity: req.urgency,
       confidence: req.confidenceScore,
       primaryRisk: req.rootCauseType,
       rootCauseType: req.rootCauseType,
       rootCauseDescription: req.rootCauseDesc,
       recommendationAction: req.actionCode,
+      recommendationRiskLevel: req.recommendationRiskLevel,
+      recommendationPriority: req.recommendationPriority,
+      analysisMethod: req.analysisMethod,
       recommendationReason: req.aiReasoning,
       aiReasoning: req.aiReasoning,
       detectedAt: req.rawRequestedAt,
@@ -507,7 +515,7 @@ export const ApprovalsPage = () => {
               }}
               title="Lọc yêu cầu phê duyệt theo Cụm Kubernetes"
             >
-              <option value="all">Tất cả các cụm (Toàn tổ chức)</option>
+              <option value="all">Tất cả các cụm</option>
               <option value="current">Cụm đang xem: {currentEnv?.cluster || 'Mặc định'}</option>
               {envList && envList.filter(c => (c.cluster || c.name) !== currentEnv?.cluster).map((c) => (
                 <option key={c.id} value={c.id}>
@@ -681,7 +689,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <Layers size={13} color="#64748B" />
-                        <span>Cụm: <strong>{req.clusterName || 'các'}</strong></span>
+                        <span>Cụm: <strong>{req.clusterName || 'Chưa xác định'}</strong></span>
                       </span>
 
                       <span
@@ -775,7 +783,7 @@ export const ApprovalsPage = () => {
                         <Sparkles size={13} color="#D97706" />
                         <span>Độ tin cậy AI:</span>
                         <strong style={{ color: '#059669', fontWeight: 700 }}>
-                          {req.confidenceScore}%
+                          {req.confidenceScore !== null && req.confidenceScore !== undefined ? `${req.confidenceScore}%` : 'Chưa đánh giá'}
                         </strong>
                       </span>
                     </div>

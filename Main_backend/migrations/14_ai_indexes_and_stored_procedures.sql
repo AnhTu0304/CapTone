@@ -301,7 +301,7 @@ RETURNS TABLE (
   cluster_id VARCHAR,
   target_name TEXT,
   target_id TEXT,
-  incident_title VARCHAR,
+  incident_title TEXT,
   analysis_result TEXT,
   action_parameters JSONB,
   manual_playbook JSONB,
@@ -331,7 +331,7 @@ BEGIN
       i.cluster_id,
       COALESCE(w.name, NULLIF(i.target_id::text, ''), '')::TEXT AS target_name,
       COALESCE(w.name, NULLIF(i.target_id::text, ''), '')::TEXT AS target_id,
-      i.title AS incident_title,
+      i.title::TEXT AS incident_title,
       rca.analysis_result,
       CASE
         WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result <> ''

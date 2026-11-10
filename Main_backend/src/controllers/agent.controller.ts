@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AgentService } from '../services/agent.service';
+import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { recordAgentHeartbeat } from '../telemetry/metrics';
 
@@ -13,7 +14,7 @@ export class AgentController {
     try {
       const orgId = req.params.orgId || req.params.id;
       const userId = (req as any).user?.id;
-      const result = await AgentService.createAgent(orgId, userId, req.body);
+      const result = await AgentService.createAgent(orgId, userId, req.body, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Tạo Agent và sinh Token kết nối thành công', result, 201);
     } catch (error) {
       next(error);
@@ -76,7 +77,7 @@ export class AgentController {
     try {
       const orgId = req.params.orgId || req.params.id;
       const agentId = req.params.agentId || req.params.id;
-      const result = await AgentService.revokeAgent(orgId, agentId);
+      const result = await AgentService.revokeAgent(orgId, agentId, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Thu hồi Agent thành công (tất cả token đã bị vô hiệu hóa)', result, 200);
     } catch (error) {
       next(error);
@@ -93,7 +94,7 @@ export class AgentController {
       const orgId = req.params.orgId || req.params.id;
       const agentId = req.params.agentId || req.params.id;
       const userId = (req as any).user?.id;
-      const result = await AgentService.disconnectAgent(orgId, agentId, userId);
+      const result = await AgentService.disconnectAgent(orgId, agentId, userId, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Ngắt kết nối Agent thành công', result, 200);
     } catch (error) {
       next(error);
@@ -111,7 +112,7 @@ export class AgentController {
       const agentId = req.params.agentId || req.params.id;
       const userId = (req as any).user?.id;
       const force = req.query.force === 'true' || req.body?.force === true;
-      await AgentService.deleteAgent(orgId, agentId, userId, force);
+      await AgentService.deleteAgent(orgId, agentId, userId, force, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Xóa Agent thành công', { id: agentId }, 200);
     } catch (error) {
       next(error);
@@ -129,7 +130,7 @@ export class AgentController {
       const agentId = req.params.agentId || req.params.id;
       const userId = (req as any).user?.id;
       const expiresInDays = req.body?.expires_in_days;
-      const result = await AgentService.createAgentToken(orgId, agentId, userId, expiresInDays);
+      const result = await AgentService.createAgentToken(orgId, agentId, userId, expiresInDays, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Tạo Token kết nối mới thành công', result, 201);
     } catch (error) {
       next(error);
@@ -162,7 +163,7 @@ export class AgentController {
       const orgId = req.params.orgId || req.params.id;
       const agentId = req.params.agentId || req.params.id;
       const tokenId = req.params.tokenId;
-      const result = await AgentService.revokeAgentToken(orgId, agentId, tokenId);
+      const result = await AgentService.revokeAgentToken(orgId, agentId, tokenId, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Thu hồi Token Agent thành công', result, 200);
     } catch (error) {
       next(error);
@@ -205,12 +206,13 @@ export class AgentController {
         }
       }
 
+      const reqContext = AuditService.extractRequestContext(req);
       if ((req as any).agent) {
-        const result = await AgentService.recordHeartbeatForAgent((req as any).agent, req.body);
+        const result = await AgentService.recordHeartbeatForAgent((req as any).agent, req.body, reqContext);
         recordAgentHeartbeat('http', 'success');
         return ApiResponse.success(res, 'Ghi nhận nhịp tim Agent thành công', result, 200);
       }
-      const result = await AgentService.recordHeartbeatFromDaemon(rawToken, req.body);
+      const result = await AgentService.recordHeartbeatFromDaemon(rawToken, req.body, reqContext);
       recordAgentHeartbeat('http', 'success');
       return ApiResponse.success(res, 'Ghi nhận nhịp tim Agent thành công', result, 200);
     } catch (error) {
@@ -301,7 +303,7 @@ export class AgentController {
     try {
       const agentId = req.params.agentId || req.params.id;
       const userId = (req as any).user?.id;
-      const result = await AgentService.disconnectAgentGlobal(agentId, userId);
+      const result = await AgentService.disconnectAgentGlobal(agentId, userId, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Ngắt kết nối Agent thành công', result, 200);
     } catch (error) {
       next(error);
@@ -311,7 +313,7 @@ export class AgentController {
   public static async revokeAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const agentId = req.params.agentId || req.params.id;
-      const result = await AgentService.revokeAgentGlobal(agentId);
+      const result = await AgentService.revokeAgentGlobal(agentId, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Thu hồi Agent thành công (tất cả token đã bị vô hiệu hóa)', result, 200);
     } catch (error) {
       next(error);
@@ -323,7 +325,7 @@ export class AgentController {
       const agentId = req.params.agentId || req.params.id;
       const userId = (req as any).user?.id;
       const expiresInDays = req.body?.expires_in_days;
-      const result = await AgentService.rotateAgentTokenGlobal(agentId, userId, expiresInDays);
+      const result = await AgentService.rotateAgentTokenGlobal(agentId, userId, expiresInDays, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Xoay vòng và cấp mới Token Agent thành công', result, 201);
     } catch (error) {
       next(error);
@@ -335,7 +337,7 @@ export class AgentController {
       const agentId = req.params.agentId || req.params.id;
       const userId = (req as any).user?.id;
       const force = req.query.force === 'true' || req.body?.force === true;
-      await AgentService.deleteAgentGlobal(agentId, userId, force);
+      await AgentService.deleteAgentGlobal(agentId, userId, force, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Xóa Agent thành công', { id: agentId }, 200);
     } catch (error) {
       next(error);

@@ -18,6 +18,8 @@ export class AuditController {
 
       const filter = {
         organization_id: req.query.organization_id as string,
+        cluster_id: req.query.cluster_id as string,
+        service_name: req.query.service_name as string,
         user_id: req.query.user_id as string,
         action: req.query.action as string,
         status: req.query.status as string,
@@ -60,6 +62,8 @@ export class AuditController {
 
       const filter = {
         organization_id: (req.query.organization_id as string) || orgId,
+        cluster_id: req.query.cluster_id as string,
+        service_name: req.query.service_name as string,
         user_id: req.query.user_id as string,
         action: req.query.action as string,
         status: req.query.status as string,

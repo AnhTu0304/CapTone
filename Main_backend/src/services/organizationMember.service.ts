@@ -7,7 +7,7 @@ import {
   OrganizationMemberModel,
 } from '../models/organizationMember.model';
 import { OrganizationModel } from '../models/organization.model';
-import { AuditService } from './audit.service';
+import { AuditService, IAuditRequestContext } from './audit.service';
 import { OrganizationRoleModel } from '../models/organizationRole.model';
 import { IPaginatedResult } from '../models/user.model';
 import { EmailQueue } from './emailQueue.service';
@@ -228,7 +228,8 @@ export class OrganizationMemberService {
     targetUserId: string,
     currentUserId: string,
     currentUserRoles: string[] = [],
-    dto: IUpdateMemberDto
+    dto: IUpdateMemberDto,
+    reqContext?: IAuditRequestContext
   ): Promise<IOrganizationMemberDetail> {
     const hasPermission = await this.isSuperAdminOrOwner(orgId, currentUserId, currentUserRoles);
     if (!hasPermission) {
@@ -299,11 +300,21 @@ export class OrganizationMemberService {
       user_id: currentUserId,
       action: 'MEMBER_ROLE_CHANGED',
       status: 'SUCCESS',
+      resource_type: 'USER',
+      resource_id: targetUserId,
       target_type: 'USER',
       target_id: targetUserId,
+      request_id: reqContext?.request_id || null,
+      user_agent: reqContext?.user_agent || null,
+      ip_address: reqContext?.ip_address || null,
       description: 'Thay đổi vai trò thành viên trong tổ chức',
       before_data: { role_code: currentMember.role_code, status: currentMember.status },
       after_data: { role_code: dto.role_code || currentMember.role_code, status: dto.status || currentMember.status },
+      metadata: {
+        target_user_id: targetUserId,
+        target_email: detail.user?.email || null,
+        target_name: detail.user?.full_name || null,
+      },
     }).catch(() => {});
 
     return detail;
@@ -317,7 +328,8 @@ export class OrganizationMemberService {
     orgId: string,
     targetUserId: string,
     currentUserId: string,
-    currentUserRoles: string[] = []
+    currentUserRoles: string[] = [],
+    reqContext?: IAuditRequestContext
   ): Promise<{ success: boolean; message: string }> {
     const isSelfLeaving = targetUserId === currentUserId;
     const isOwnerOrAdmin = await this.isSuperAdminOrOwner(orgId, currentUserId, currentUserRoles);
@@ -361,10 +373,15 @@ export class OrganizationMemberService {
       user_id: currentUserId,
       action: 'MEMBER_REMOVED',
       status: 'SUCCESS',
+      resource_type: 'USER',
+      resource_id: targetUserId,
       target_type: 'USER',
       target_id: targetUserId,
+      request_id: reqContext?.request_id || null,
+      user_agent: reqContext?.user_agent || null,
+      ip_address: reqContext?.ip_address || null,
       description: isSelfLeaving ? 'Thành viên tự rời khỏi tổ chức' : 'Loại bỏ thành viên khỏi tổ chức',
-      metadata: { is_self: isSelfLeaving },
+      metadata: { is_self: isSelfLeaving, target_user_id: targetUserId },
     }).catch(() => {});
 
     return {

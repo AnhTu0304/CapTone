@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrganizationMemberService } from '../services/organizationMember.service';
+import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 
 export class OrganizationMemberController {
@@ -72,7 +73,8 @@ export class OrganizationMemberController {
         targetUserId,
         user.id,
         user.roles || [],
-        req.body
+        req.body,
+        AuditService.extractRequestContext(req)
       );
       return ApiResponse.success(res, 'Cập nhật thành viên thành công', result, 200);
     } catch (error) {
@@ -93,7 +95,8 @@ export class OrganizationMemberController {
         orgId,
         targetUserId,
         user.id,
-        user.roles || []
+        user.roles || [],
+        AuditService.extractRequestContext(req)
       );
       return ApiResponse.success(res, result.message, null, 200);
     } catch (error) {

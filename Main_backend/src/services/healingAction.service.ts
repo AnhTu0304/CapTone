@@ -1,4 +1,4 @@
-import { AuditService } from './audit.service';
+import { AuditService, IAuditRequestContext } from './audit.service';
 import { AuditAction } from '../models/auditLog.model';
 import { pool } from '../config/database';
 import { HealingActionModel, IHealingActionFilter } from '../models/healingAction.model';
@@ -136,7 +136,7 @@ export class HealingActionService {
   /**
    * 4. Execute or retry an action
    */
-  public static async executeAction(actionId: string, executedBy?: string | null, user?: any) {
+  public static async executeAction(actionId: string, executedBy?: string | null, user?: any, reqContext?: IAuditRequestContext) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
@@ -279,6 +279,9 @@ export class HealingActionService {
         resource_id: actionId,
         target_type: 'WORKLOAD',
         target_id: null,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: isSuccess
           ? `Thực thi thành công tự phục hồi [${actionCode}] cho mục tiêu ${targetWorkloadName} (${targetNamespace})`
           : `Thực thi tự phục hồi [${actionCode}] cho mục tiêu ${targetWorkloadName} không thành công`,
@@ -311,7 +314,8 @@ export class HealingActionService {
     actionId: string,
     userId: string | null,
     reason?: string,
-    user?: any
+    user?: any,
+    reqContext?: IAuditRequestContext
   ) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
@@ -349,6 +353,9 @@ export class HealingActionService {
         resource_id: actionId,
         target_type: 'WORKLOAD',
         target_id: null,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Dừng khẩn cấp hành động tự phục hồi trên [${action.target_name || 'Workload'}]: ${reason || 'Người vận hành yêu cầu hủy bỏ'}`,
         status: 'SUCCESS',
         before_data: { execution_status: action.execution_status },
@@ -464,7 +471,8 @@ export class HealingActionService {
       execution_mode?: string;
       risk_level?: string;
     },
-    user?: any
+    user?: any,
+    reqContext?: IAuditRequestContext
   ) {
     if (!id) {
       throw new ApiError(400, 'Mã chính sách không hợp lệ');
@@ -491,6 +499,9 @@ export class HealingActionService {
         resource_id: id,
         target_type: 'POLICY',
         target_id: id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: isThresholdModified
           ? `Điều chỉnh ngưỡng tin cậy chính sách [${updated.name}] từ ${(Number(beforePolicy?.confidence_threshold || 0) * 100).toFixed(0)}% sang ${(Number(updated.confidence_threshold || 0) * 100).toFixed(0)}%`
           : `Cập nhật cấu hình chính sách tự phục hồi [${updated.name}]`,
@@ -528,7 +539,7 @@ export class HealingActionService {
   /**
    * 10. Toggle policy active
    */
-  public static async togglePolicyActive(id: string, user?: any) {
+  public static async togglePolicyActive(id: string, user?: any, reqContext?: IAuditRequestContext) {
     if (!id) {
       throw new ApiError(400, 'Mã chính sách không hợp lệ');
     }
@@ -551,6 +562,9 @@ export class HealingActionService {
         resource_id: id,
         target_type: 'POLICY',
         target_id: id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Thay đổi trạng thái chính sách [${updated.name}] thành ${updated.is_active ? 'HOẠT ĐỘNG (ACTIVE)' : 'TẠM DỪNG (INACTIVE)'}`,
         status: 'SUCCESS',
         before_data: { is_active: beforePolicy?.is_active },
@@ -588,7 +602,7 @@ export class HealingActionService {
     is_active?: boolean;
     action_type_id?: string;
     created_by?: string;
-  }, user?: any) {
+  }, user?: any, reqContext?: IAuditRequestContext) {
     if (!data.name || !data.organization_id) {
       throw new ApiError(400, 'Tên chính sách và tổ chức là bắt buộc');
     }
@@ -604,6 +618,9 @@ export class HealingActionService {
         resource_id: created?.id,
         target_type: 'POLICY',
         target_id: created?.id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Khởi tạo chính sách tự phục hồi mới [${data.name}] với chế độ [${data.execution_mode || 'SUPERVISED'}]`,
         status: 'SUCCESS',
         after_data: data,
@@ -626,7 +643,7 @@ export class HealingActionService {
   /**
    * 10c. Soft-delete policy
    */
-  public static async deletePolicy(id: string, user?: any) {
+  public static async deletePolicy(id: string, user?: any, reqContext?: IAuditRequestContext) {
     if (!id) {
       throw new ApiError(400, 'Mã chính sách không hợp lệ');
     }
@@ -648,6 +665,9 @@ export class HealingActionService {
         resource_id: id,
         target_type: 'POLICY',
         target_id: id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Xóa chính sách tự phục hồi [${beforePolicy?.name || id}]`,
         status: 'SUCCESS',
         before_data: beforePolicy ? { name: beforePolicy.name, is_active: beforePolicy.is_active } : null,
@@ -684,7 +704,7 @@ export class HealingActionService {
     return await HealingActionModel.findApprovals(filters);
   }
 
-  public static async approveAction(actionId: string, approvedBy: string, reason?: string, user?: any) {
+  public static async approveAction(actionId: string, approvedBy: string, reason?: string, user?: any, reqContext?: IAuditRequestContext) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
@@ -708,6 +728,9 @@ export class HealingActionService {
         resource_id: actionId,
         target_type: 'WORKLOAD',
         target_id: null,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Phê duyệt hành động tự phục hồi [${action?.action_type_code || 'REMEDIATION'}] cho mục tiêu ${action?.target_name || 'Workload'}${reason ? `: ${reason}` : ''}`,
         status: 'SUCCESS',
         before_data: { approval_status: action?.approval_status || 'PENDING', execution_status: action?.execution_status },
@@ -727,7 +750,7 @@ export class HealingActionService {
 
     // Sau khi phê duyệt HITL thành công, tự động kích hoạt thực thi xuống K8s Agent
     try {
-      await this.executeAction(actionId, approvedBy, user);
+      await this.executeAction(actionId, approvedBy, user, reqContext);
     } catch (execErr) {
       console.warn('[HealingActionService] Auto-execute after HITL approval warning:', execErr);
     }
@@ -751,7 +774,7 @@ export class HealingActionService {
     return await HealingActionModel.findActionById(actionId);
   }
 
-  public static async rejectAction(actionId: string, rejectedBy: string, reason?: string, user?: any) {
+  public static async rejectAction(actionId: string, rejectedBy: string, reason?: string, user?: any, reqContext?: IAuditRequestContext) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
@@ -775,6 +798,9 @@ export class HealingActionService {
         resource_id: actionId,
         target_type: 'WORKLOAD',
         target_id: null,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Từ chối hành động tự phục hồi [${action?.action_type_code || 'REMEDIATION'}] cho mục tiêu ${action?.target_name || 'Workload'}${reason ? `: ${reason}` : ''}`,
         status: 'SUCCESS',
         before_data: { approval_status: action?.approval_status || 'PENDING' },

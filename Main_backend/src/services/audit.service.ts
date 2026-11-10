@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import crypto from 'crypto';
+import net from 'net';
 import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
 import {
@@ -13,6 +14,13 @@ import {
 
 const SENSITIVE_KEYS_REGEX = /password|token|secret|authorization|cookie|jwt|credential|private_key|api_?key/i;
 
+export interface IAuditRequestContext {
+  ip_address?: string | null;
+  user_agent?: string | null;
+  request_id?: string | null;
+  user_id?: string | null;
+}
+
 export class AuditService {
   /**
    * Khử thông tin nhạy cảm (Redaction) đệ quy khỏi object trước khi ghi vào audit log
@@ -20,6 +28,10 @@ export class AuditService {
   public static redactSensitiveData(data: any): any {
     if (!data || typeof data !== 'object') {
       return data;
+    }
+
+    if (data instanceof Date) {
+      return isNaN(data.getTime()) ? null : data.toISOString();
     }
 
     if (Array.isArray(data)) {
@@ -30,6 +42,8 @@ export class AuditService {
     for (const [key, value] of Object.entries(data)) {
       if (SENSITIVE_KEYS_REGEX.test(key)) {
         cleaned[key] = '[REDACTED]';
+      } else if (value instanceof Date) {
+        cleaned[key] = isNaN(value.getTime()) ? null : value.toISOString();
       } else if (value && typeof value === 'object') {
         cleaned[key] = this.redactSensitiveData(value);
       } else {
@@ -51,6 +65,12 @@ export class AuditService {
       ip = ip.split(',')[0].trim();
     }
 
+    // Bỏ ngoặc vuông IPv6 kèm port nếu có (e.g. [::1]:8080)
+    const bracketMatch = ip.match(/^\[([^\]]+)\]:\d+$/);
+    if (bracketMatch) {
+      ip = bracketMatch[1];
+    }
+
     // Chuyển IPv4-mapped IPv6 ::ffff:127.0.0.1 -> 127.0.0.1
     if (ip.startsWith('::ffff:')) {
       ip = ip.substring(7);
@@ -61,11 +81,34 @@ export class AuditService {
       ip = ip.split(':')[0];
     }
 
-    // Kiểm tra định dạng IPv4 hoặc IPv6 hợp lệ
-    const isIpv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(ip);
-    const isIpv6 = /^([0-9a-fA-F]{1,4}:){1,7}[0-9a-fA-F]{1,4}$/.test(ip) || ip === '::1';
+    // Kiểm tra định dạng IPv4 hoặc IPv6 chuẩn (kể cả IPv6 rút gọn như fe80::1)
+    return net.isIP(ip) !== 0 ? ip : null;
+  }
 
-    return isIpv4 || isIpv6 ? ip : null;
+  /**
+   * Trích xuất thông tin request thật (IP, User-Agent, Request ID, User ID) từ Express Request
+   */
+  public static extractRequestContext(req?: Request | null): IAuditRequestContext {
+    if (!req) return {};
+    const forwardedFor = req.headers?.['x-forwarded-for'];
+    const rawIp = Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : (forwardedFor as string | undefined) || req.socket?.remoteAddress || req.ip || null;
+    const rawUa = req.headers?.['user-agent'];
+    const rawReqId = req.headers?.['x-request-id'] || (req as any).id;
+    const userId = (req as any).user?.id || null;
+
+    return {
+      ip_address: typeof rawIp === 'string' ? this.sanitizeIp(rawIp) : null,
+      user_agent: typeof rawUa === 'string' && rawUa.trim() ? rawUa.trim().substring(0, 500) : null,
+      request_id:
+        typeof rawReqId === 'string' && rawReqId.trim()
+          ? rawReqId.trim().substring(0, 100)
+          : Array.isArray(rawReqId) && rawReqId[0]
+          ? String(rawReqId[0]).trim().substring(0, 100)
+          : null,
+      user_id: userId,
+    };
   }
 
   /**
@@ -116,8 +159,8 @@ export class AuditService {
         input.description || null,
         input.status || 'SUCCESS',
         input.reason_code || null,
-        input.request_id || null,
-        input.user_agent ? input.user_agent.substring(0, 500) : null,
+        input.request_id && String(input.request_id).trim() ? String(input.request_id).trim().substring(0, 100) : null,
+        input.user_agent && String(input.user_agent).trim() ? String(input.user_agent).trim().substring(0, 500) : null,
         sanitizedIp,
         sanitizedBefore ? JSON.stringify(sanitizedBefore) : null,
         sanitizedAfter ? JSON.stringify(sanitizedAfter) : null,
@@ -169,10 +212,8 @@ export class AuditService {
           (req.headers['x-organization-id'] as string) ||
           null;
 
+    const reqCtx = this.extractRequestContext(req);
     const userId = input.user_id !== undefined ? input.user_id : user?.id || null;
-    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
-    const userAgent = req.headers['user-agent'] as string;
-    const requestId = (req.headers['x-request-id'] as string) || (req as any).id || null;
 
     return this.record({
       organization_id: orgId,
@@ -186,9 +227,9 @@ export class AuditService {
       description: input.description || null,
       status: input.status,
       reason_code: input.reason_code || null,
-      request_id: requestId,
-      user_agent: userAgent,
-      ip_address: typeof ip === 'string' ? ip : null,
+      request_id: input.request_id !== undefined ? input.request_id : reqCtx.request_id || null,
+      user_agent: input.user_agent !== undefined ? input.user_agent : reqCtx.user_agent || null,
+      ip_address: input.ip_address !== undefined ? input.ip_address : reqCtx.ip_address || null,
       before_data: input.before_data,
       after_data: input.after_data,
       metadata: input.metadata,
@@ -228,7 +269,7 @@ export class AuditService {
     }
 
     const page = Math.max(1, Number(filter.page) || 1);
-    const limit = Math.min(2000, Math.max(1, Number(filter.limit) || 20));
+    const limit = Math.min(5000, Math.max(1, Number(filter.limit) || 20));
     const offset = (page - 1) * limit;
 
     const conditions: string[] = [];
@@ -238,6 +279,30 @@ export class AuditService {
     if (enforcedOrgId) {
       conditions.push(`a.organization_id = $${paramIndex++}`);
       values.push(enforcedOrgId);
+    }
+
+    if (filter.cluster_id && String(filter.cluster_id).trim() !== '' && String(filter.cluster_id).trim() !== 'ALL') {
+      conditions.push(`cl.id::text = $${paramIndex++}`);
+      values.push(String(filter.cluster_id).trim());
+    }
+
+    if (filter.service_name && String(filter.service_name).trim() !== '' && String(filter.service_name).trim() !== 'ALL') {
+      conditions.push(`(
+        COALESCE(
+          NULLIF(ha.target_name, ''),
+          NULLIF(pod_wl.name, ''),
+          NULLIF(wl.name, ''),
+          NULLIF(pod.name, ''),
+          NULLIF(a.metadata->>'target_service', ''),
+          NULLIF(a.metadata->>'service_id', ''),
+          NULLIF(a.metadata->>'target_name', ''),
+          NULLIF(a.metadata->>'pod_name', '')
+        ) = $${paramIndex}
+        OR a.metadata->>'target_name' = $${paramIndex}
+        OR a.metadata->>'pod_name' = $${paramIndex}
+      )`);
+      values.push(String(filter.service_name).trim());
+      paramIndex++;
     }
 
     if (filter.user_id) {
@@ -252,19 +317,31 @@ export class AuditService {
     }
 
     if (filter.status) {
-      conditions.push(`a.status = ${paramIndex++}`);
-      values.push(filter.status);
+      const normalizedStatus = String(filter.status).trim().toUpperCase();
+      if (normalizedStatus === 'FAILED' || normalizedStatus === 'FAILURE') {
+        conditions.push(`a.status IN ('FAILURE', 'FAILED', 'ERROR')`);
+      } else if (normalizedStatus === 'DENIED' || normalizedStatus === 'BLOCKED') {
+        conditions.push(`a.status IN ('DENIED', 'BLOCKED')`);
+      } else {
+        conditions.push(`a.status = $${paramIndex++}`);
+        values.push(normalizedStatus);
+      }
     }
 
     if (filter.role && filter.role !== 'ALL') {
-      if (filter.role === 'SYSTEM_AI') {
-        conditions.push(`(a.actor_type IN ('SYSTEM', 'AGENT'))`);
+      if (filter.role === 'AGENT' || filter.role === 'K8S_AGENT') {
+        conditions.push(`a.actor_type = 'AGENT'`);
+      } else if (filter.role === 'SYSTEM_AI') {
+        conditions.push(`a.actor_type = 'SYSTEM'`);
       } else if (filter.role === 'SME_OWNER') {
-        conditions.push(`(mem_role.member_role = 'SME_OWNER' OR sys_role.sys_role IN ('SUPER_ADMIN', 'SYSTEM_ADMIN') OR a.action LIKE '%HITL%')`);
+        conditions.push(`a.actor_type = 'USER' AND (mem_role.member_role = 'SME_OWNER' OR sys_role.sys_role = 'SUPER_ADMIN')`);
       } else if (filter.role === 'DEVOPS') {
-        conditions.push(`(mem_role.member_role = 'DEVOPS' OR a.action LIKE '%POLICY%' OR a.action LIKE '%DRAIN%')`);
+        conditions.push(`a.actor_type = 'USER' AND (mem_role.member_role = 'DEVOPS' OR (mem_role.member_role IS NULL AND sys_role.sys_role IN ('SYSTEM_ADMIN', 'ADMIN')))`);
       } else if (filter.role === 'VIEWER') {
-        conditions.push(`(mem_role.member_role = 'VIEWER' OR (mem_role.member_role IS NULL AND a.actor_type = 'USER'))`);
+        conditions.push(`a.actor_type = 'USER' AND (mem_role.member_role = 'VIEWER' OR (mem_role.member_role IS NULL AND sys_role.sys_role IS NULL AND a.user_id IS NOT NULL))`);
+      } else {
+        conditions.push(`COALESCE(mem_role.member_role, sys_role.sys_role) = $${paramIndex++}`);
+        values.push(filter.role);
       }
     }
 
@@ -300,14 +377,32 @@ export class AuditService {
 
     if (filter.search) {
       conditions.push(`(
-        a.action ILIKE $${paramIndex} OR 
-        a.description ILIKE $${paramIndex} OR 
-        a.resource_type ILIKE $${paramIndex} OR 
-        a.resource_id::text ILIKE $${paramIndex} OR 
+        a.action ILIKE $${paramIndex} OR
+        a.description ILIKE $${paramIndex} OR
+        a.reason_code ILIKE $${paramIndex} OR
+        a.request_id ILIKE $${paramIndex} OR
+        a.resource_type ILIKE $${paramIndex} OR
+        a.resource_id::text ILIKE $${paramIndex} OR
         a.ip_address::text ILIKE $${paramIndex} OR
         u.full_name ILIKE $${paramIndex} OR
         u.email ILIKE $${paramIndex} OR
-        o.name ILIKE $${paramIndex}
+        o.name ILIKE $${paramIndex} OR
+        ag.name ILIKE $${paramIndex} OR
+        cl.name ILIKE $${paramIndex} OR
+        hp.name ILIKE $${paramIndex} OR
+        ha.target_name ILIKE $${paramIndex} OR
+        pod_wl.name ILIKE $${paramIndex} OR
+        wl.name ILIKE $${paramIndex} OR
+        pod.name ILIKE $${paramIndex} OR
+        tu.full_name ILIKE $${paramIndex} OR
+        tu.email ILIKE $${paramIndex} OR
+        a.metadata->>'agent_name' ILIKE $${paramIndex} OR
+        a.metadata->>'cluster_name' ILIKE $${paramIndex} OR
+        a.metadata->>'policy_name' ILIKE $${paramIndex} OR
+        a.metadata->>'target_name' ILIKE $${paramIndex} OR
+        a.metadata->>'target_service' ILIKE $${paramIndex} OR
+        a.metadata->>'service_id' ILIKE $${paramIndex} OR
+        a.metadata->>'executed_by' ILIKE $${paramIndex}
       )`);
       values.push(`%${filter.search}%`);
       paramIndex++;
@@ -315,17 +410,75 @@ export class AuditService {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    const entityJoinSql = `
+      LEFT JOIN agents ag ON ag.id = COALESCE(
+        CASE
+          WHEN a.metadata->>'agent_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (a.metadata->>'agent_id')::uuid
+          ELSE NULL
+        END,
+        CASE
+          WHEN a.resource_type = 'AGENT' THEN a.resource_id
+          ELSE NULL
+        END,
+        CASE
+          WHEN a.target_type = 'AGENT' THEN a.target_id
+          ELSE NULL
+        END
+      )
+      LEFT JOIN healing_actions ha ON a.resource_type = 'HEALING_ACTION' AND ha.id = a.resource_id
+      LEFT JOIN incidents i ON i.id = COALESCE(
+        ha.incident_id,
+        CASE
+          WHEN a.metadata->>'incident_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (a.metadata->>'incident_id')::uuid
+          ELSE NULL
+        END
+      )
+      LEFT JOIN pods pod ON a.resource_type = 'POD' AND pod.id = a.resource_id
+      LEFT JOIN workloads pod_wl ON pod_wl.id = pod.workload_id
+      LEFT JOIN workloads wl ON a.target_type = 'WORKLOAD' AND wl.id = a.target_id
+      LEFT JOIN clusters cl ON cl.id::text = COALESCE(
+        CASE
+          WHEN a.resource_type = 'CLUSTER' THEN a.resource_id::text
+          ELSE NULL
+        END,
+        CASE
+          WHEN a.metadata->>'cluster_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN a.metadata->>'cluster_id'
+          ELSE NULL
+        END,
+        ag.cluster_id::text,
+        i.cluster_id,
+        pod.cluster_id::text,
+        wl.cluster_id::text
+      )
+      LEFT JOIN healing_policies hp ON hp.id = COALESCE(
+        CASE
+          WHEN a.resource_type = 'POLICY' THEN a.resource_id
+          ELSE NULL
+        END,
+        CASE
+          WHEN a.metadata->>'policy_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (a.metadata->>'policy_id')::uuid
+          ELSE NULL
+        END
+      )
+      LEFT JOIN users tu ON a.target_type = 'USER' AND tu.id = a.target_id
+    `;
+
     // Đếm tổng số bản ghi
     const countSql = `
-      SELECT COUNT(*)::int AS total 
+      SELECT COUNT(*)::int AS total
       FROM audit_logs a
       LEFT JOIN users u ON a.user_id = u.id
       LEFT JOIN organizations o ON a.organization_id = o.id
+      ${entityJoinSql}
       LEFT JOIN LATERAL (
         SELECT r.code AS member_role
         FROM organization_members om
         JOIN organization_roles r ON om.role_id = r.id
-        WHERE om.user_id = a.user_id 
+        WHERE om.user_id = a.user_id
           AND (om.organization_id = a.organization_id OR a.organization_id IS NULL)
           AND om.status = 'ACTIVE'
         LIMIT 1
@@ -335,7 +488,7 @@ export class AuditService {
         FROM user_system_roles usr
         JOIN system_roles sr ON usr.system_role_id = sr.id
         WHERE usr.user_id = a.user_id
-        ORDER BY CASE WHEN sr.name = 'SUPER_ADMIN' THEN 1 WHEN sr.name = 'SYSTEM_ADMIN' THEN 2 ELSE 3 END
+        ORDER BY CASE WHEN sr.name = 'SUPER_ADMIN' THEN 1 WHEN sr.name = 'SYSTEM_ADMIN' THEN 2 WHEN sr.name = 'ADMIN' THEN 3 ELSE 4 END
         LIMIT 1
       ) sys_role ON true
       ${whereClause};
@@ -345,21 +498,59 @@ export class AuditService {
 
     // Lấy dữ liệu trang
     const dataSql = `
-      SELECT 
+      SELECT
         a.id,
         a.organization_id,
         o.name AS organization_name,
         a.user_id,
         CASE
-          WHEN a.actor_type IN ('SYSTEM', 'AGENT') THEN 'MAPE-K Autonomous Engine'
-          ELSE COALESCE(u.full_name, u.email, 'Ng??i d?ng h? th?ng')
+          WHEN a.actor_type = 'AGENT' THEN COALESCE(NULLIF(a.metadata->>'agent_name', ''), ag.name, 'Agent K8s')
+          WHEN a.actor_type = 'SYSTEM' THEN COALESCE(
+            NULLIF(a.metadata->>'actor_name', ''),
+            NULLIF(a.metadata->>'engine_name', ''),
+            NULLIF(a.metadata->>'triggered_by', ''),
+            CASE
+              WHEN a.action IN ('AUTONOMOUS_HEALING_TRIGGERED', 'CIRCUIT_BREAKER_TRIPPED') OR a.resource_type = 'HEALING_ACTION'
+                THEN 'Hệ thống AI (MAPE-K)'
+              ELSE 'Hệ thống tự động (System)'
+            END
+          )
+          ELSE COALESCE(
+            NULLIF(u.full_name, ''),
+            NULLIF(u.email, ''),
+            NULLIF(a.metadata->>'executed_by', ''),
+            NULLIF(a.metadata->>'approved_by', ''),
+            NULLIF(a.metadata->>'email', ''),
+            'Người dùng chưa xác định'
+          )
         END AS user_name,
         u.email AS user_email,
+        ag.name AS agent_name,
+        cl.id AS cluster_id,
+        cl.name AS cluster_name,
+        hp.name AS policy_name,
+        ha.target_name AS healing_target_name,
+        COALESCE(
+          NULLIF(ha.target_name, ''),
+          NULLIF(pod_wl.name, ''),
+          NULLIF(wl.name, ''),
+          NULLIF(pod.name, ''),
+          NULLIF(a.metadata->>'target_service', ''),
+          NULLIF(a.metadata->>'service_id', ''),
+          NULLIF(a.metadata->>'target_name', ''),
+          NULLIF(a.metadata->>'pod_name', '')
+        ) AS service_name,
+        tu.full_name AS target_user_name,
+        tu.email AS target_user_email,
         CASE
-          WHEN a.actor_type IN ('SYSTEM', 'AGENT') THEN 'SYSTEM_AI'
-          WHEN sys_role.sys_role = 'SUPER_ADMIN' OR mem_role.member_role = 'SME_OWNER' THEN 'SME_OWNER'
-          WHEN sys_role.sys_role = 'SYSTEM_ADMIN' OR mem_role.member_role = 'DEVOPS' THEN 'DEVOPS'
-          ELSE COALESCE(mem_role.member_role, sys_role.sys_role, 'VIEWER')
+          WHEN a.actor_type = 'AGENT' THEN 'AGENT'
+          WHEN a.actor_type = 'SYSTEM' THEN 'SYSTEM_AI'
+          WHEN mem_role.member_role IS NOT NULL THEN mem_role.member_role
+          WHEN sys_role.sys_role = 'SUPER_ADMIN' THEN 'SME_OWNER'
+          WHEN sys_role.sys_role IN ('SYSTEM_ADMIN', 'ADMIN') THEN 'DEVOPS'
+          WHEN sys_role.sys_role IS NOT NULL THEN sys_role.sys_role
+          WHEN a.user_id IS NOT NULL THEN 'USER'
+          ELSE NULL
         END AS actor_role,
         a.actor_type,
         a.action,
@@ -380,11 +571,12 @@ export class AuditService {
       FROM audit_logs a
       LEFT JOIN users u ON a.user_id = u.id
       LEFT JOIN organizations o ON a.organization_id = o.id
+      ${entityJoinSql}
       LEFT JOIN LATERAL (
         SELECT r.code AS member_role
         FROM organization_members om
         JOIN organization_roles r ON om.role_id = r.id
-        WHERE om.user_id = a.user_id 
+        WHERE om.user_id = a.user_id
           AND (om.organization_id = a.organization_id OR a.organization_id IS NULL)
           AND om.status = 'ACTIVE'
         LIMIT 1
@@ -394,7 +586,7 @@ export class AuditService {
         FROM user_system_roles usr
         JOIN system_roles sr ON usr.system_role_id = sr.id
         WHERE usr.user_id = a.user_id
-        ORDER BY CASE WHEN sr.name = 'SUPER_ADMIN' THEN 1 WHEN sr.name = 'SYSTEM_ADMIN' THEN 2 ELSE 3 END
+        ORDER BY CASE WHEN sr.name = 'SUPER_ADMIN' THEN 1 WHEN sr.name = 'SYSTEM_ADMIN' THEN 2 WHEN sr.name = 'ADMIN' THEN 3 ELSE 4 END
         LIMIT 1
       ) sys_role ON true
       ${whereClause}

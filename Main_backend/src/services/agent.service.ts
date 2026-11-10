@@ -14,7 +14,7 @@ import {
   ClusterModel,
 } from '../models';
 import { ApiError } from '../utils/apiError';
-import { AuditService } from './audit.service';
+import { AuditService, IAuditRequestContext } from './audit.service';
 import {
   AgentMetricsPayload,
   AgentNodeMetricsPayload,
@@ -64,6 +64,7 @@ export class AgentService {
         agent_uid: agentRow.agent_uid,
         cluster_id: agentRow.cluster_id,
         environment_id: agentRow.environment_id,
+        organization_id: (agentRow as any).organization_id,
         status: 'ONLINE',
       };
     } catch (error) {
@@ -1324,7 +1325,8 @@ export class AgentService {
       version?: string;
       token_expires_in_days?: number | null;
       initial_token?: string;
-    }
+    },
+    reqContext?: IAuditRequestContext
   ) {
     // 1. Kiểm tra môi trường có tồn tại và thuộc tổ chức này không
     const env = await EnvironmentModel.findById(data.environment_id);
@@ -1393,13 +1395,24 @@ export class AgentService {
       const { AuditService } = await import('./audit.service');
       await AuditService.record({
         organization_id: orgId,
-        user_id: userId,
+        user_id: userId || reqContext?.user_id || null,
         actor_type: 'USER',
         action: 'AGENT_CREATED',
         resource_type: 'AGENT',
         resource_id: agent.id,
+        target_type: 'AGENT',
+        target_id: agent.id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Tạo mới Tác tử Agent [${agent.name}]`,
         status: 'SUCCESS',
+        metadata: {
+          agent_id: agent.id,
+          agent_name: agent.name,
+          agent_uid: agent.agent_uid,
+          cluster_id: clusterId,
+        },
       });
     } catch {}
 
@@ -1454,23 +1467,23 @@ export class AgentService {
   /**
    * Ngắt kết nối Agent dành cho System Admin
    */
-  public static async disconnectAgentGlobal(agentId: string, userId?: string) {
+  public static async disconnectAgentGlobal(agentId: string, userId?: string, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || !agent.organization_id) {
       throw ApiError.notFound('Agent không tồn tại trên hệ thống');
     }
-    return this.disconnectAgent(agent.organization_id, agentId, userId);
+    return this.disconnectAgent(agent.organization_id, agentId, userId, reqContext);
   }
 
   /**
    * Thu hồi Agent dành cho System Admin
    */
-  public static async revokeAgentGlobal(agentId: string) {
+  public static async revokeAgentGlobal(agentId: string, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || !agent.organization_id) {
       throw ApiError.notFound('Agent không tồn tại trên hệ thống');
     }
-    return this.revokeAgent(agent.organization_id, agentId);
+    return this.revokeAgent(agent.organization_id, agentId, reqContext);
   }
 
   /**
@@ -1479,7 +1492,8 @@ export class AgentService {
   public static async rotateAgentTokenGlobal(
     agentId: string,
     userId: string,
-    expiresInDays?: number | null
+    expiresInDays?: number | null,
+    reqContext?: IAuditRequestContext
   ) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || !agent.organization_id) {
@@ -1494,18 +1508,18 @@ export class AgentService {
     }
     // Thu hồi các token cũ trước khi cấp phát token mới
     await AgentModel.revokeAllTokensByAgentId(agentId);
-    return this.createAgentToken(agent.organization_id, agentId, userId, expiresInDays);
+    return this.createAgentToken(agent.organization_id, agentId, userId, expiresInDays, reqContext);
   }
 
   /**
    * Xóa Agent dành cho System Admin
    */
-  public static async deleteAgentGlobal(agentId: string, userId?: string, force?: boolean) {
+  public static async deleteAgentGlobal(agentId: string, userId?: string, force?: boolean, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || !agent.organization_id) {
       throw ApiError.notFound('Agent không tồn tại trên hệ thống');
     }
-    return this.deleteAgent(agent.organization_id, agentId, userId, force);
+    return this.deleteAgent(agent.organization_id, agentId, userId, force, reqContext);
   }
 
   /**
@@ -1554,7 +1568,7 @@ export class AgentService {
   /**
    * Thu hồi Agent và vô hiệu hóa toàn bộ Token
    */
-  public static async revokeAgent(orgId: string, agentId: string) {
+  public static async revokeAgent(orgId: string, agentId: string, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organization_id !== orgId) {
       throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
@@ -1572,12 +1586,26 @@ export class AgentService {
       const { AuditService } = await import('./audit.service');
       await AuditService.record({
         organization_id: orgId,
+        user_id: reqContext?.user_id || null,
         actor_type: 'USER',
         action: 'AGENT_REVOKED',
         resource_type: 'AGENT',
         resource_id: agentId,
+        target_type: 'AGENT',
+        target_id: agentId,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Thu hồi toàn bộ Agent [${agent.name}] và vô hiệu hóa tất cả token`,
         status: 'SUCCESS',
+        before_data: { status: agent.status },
+        after_data: { status: 'REVOKED' },
+        metadata: {
+          agent_id: agentId,
+          agent_name: agent.name,
+          agent_uid: agent.agent_uid,
+          cluster_id: agent.cluster_id,
+        },
       });
     } catch {}
 
@@ -1587,7 +1615,7 @@ export class AgentService {
   /**
    * Ngắt kết nối Agent (chuyển sang OFFLINE, thu hồi token hiện có, ngắt WebSocket)
    */
-  public static async disconnectAgent(orgId: string, agentId: string, userId?: string) {
+  public static async disconnectAgent(orgId: string, agentId: string, userId?: string, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organization_id !== orgId) {
       throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
@@ -1617,7 +1645,7 @@ export class AgentService {
       const { AuditService } = await import('./audit.service');
       await AuditService.record({
         organization_id: orgId,
-        user_id: userId || null,
+        user_id: userId || reqContext?.user_id || null,
         actor_type: 'USER',
         action: 'AGENT_DISCONNECTED',
         reason_code: 'USER_DISCONNECTED',
@@ -1625,10 +1653,19 @@ export class AgentService {
         resource_id: agentId,
         target_type: 'AGENT',
         target_id: agentId,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Người quản trị đã ngắt kết nối Agent [${agent.name}] và thu hồi token kết nối`,
         status: 'SUCCESS',
         before_data: { status: agent.status },
         after_data: { status: 'OFFLINE' },
+        metadata: {
+          agent_id: agentId,
+          agent_name: agent.name,
+          agent_uid: agent.agent_uid,
+          cluster_id: agent.cluster_id,
+        },
       });
     } catch (auditErr) {
       console.warn('[AgentService] Failed to record disconnect audit log:', auditErr);
@@ -1645,7 +1682,7 @@ export class AgentService {
   /**
    * Xóa Agent khỏi hệ thống (kiểm tra an toàn nếu Agent đang ONLINE)
    */
-  public static async deleteAgent(orgId: string, agentId: string, userId?: string, force?: boolean) {
+  public static async deleteAgent(orgId: string, agentId: string, userId?: string, force?: boolean, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organization_id !== orgId) {
       throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
@@ -1670,16 +1707,26 @@ export class AgentService {
       const { AuditService } = await import('./audit.service');
       await AuditService.record({
         organization_id: orgId,
-        user_id: userId || null,
+        user_id: userId || reqContext?.user_id || null,
         actor_type: 'USER',
         action: 'AGENT_DELETED',
         resource_type: 'AGENT',
         resource_id: agentId,
         target_type: 'AGENT',
         target_id: agentId,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Xóa Agent [${agent.name}] khỏi hệ thống`,
         status: 'SUCCESS',
         before_data: { status: agent.status, cluster_id: agent.cluster_id, environment_id: agent.environment_id },
+        metadata: {
+          agent_id: agentId,
+          agent_name: agent.name,
+          agent_uid: agent.agent_uid,
+          cluster_id: agent.cluster_id,
+          force: Boolean(force),
+        },
       });
     } catch (auditErr) {
       console.warn('[AgentService] Failed to record delete audit log:', auditErr);
@@ -1696,7 +1743,8 @@ export class AgentService {
     orgId: string,
     agentId: string,
     userId: string,
-    expiresInDays?: number | null
+    expiresInDays?: number | null,
+    reqContext?: IAuditRequestContext
   ) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organization_id !== orgId) {
@@ -1726,15 +1774,24 @@ export class AgentService {
       const { AuditService } = await import('./audit.service');
       await AuditService.record({
         organization_id: orgId,
-        user_id: userId,
+        user_id: userId || reqContext?.user_id || null,
         actor_type: 'USER',
         action: 'AGENT_TOKEN_CREATED',
         resource_type: 'AGENT',
         resource_id: agentId,
         target_type: 'TOKEN',
         target_id: tokenRecord.id,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Cấp phát mã Token mới cho Agent [${agent.name}] (Prefix: ${tokenPrefix})`,
         status: 'SUCCESS',
+        metadata: {
+          agent_id: agentId,
+          agent_name: agent.name,
+          cluster_id: agent.cluster_id,
+          token_id: tokenRecord.id,
+        },
       });
     } catch {}
 
@@ -1762,7 +1819,7 @@ export class AgentService {
   /**
    * Thu hồi một Token cụ thể của Agent
    */
-  public static async revokeAgentToken(orgId: string, agentId: string, tokenId: string) {
+  public static async revokeAgentToken(orgId: string, agentId: string, tokenId: string, reqContext?: IAuditRequestContext) {
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organization_id !== orgId) {
       throw ApiError.notFound('Agent không tồn tại hoặc không thuộc tổ chức của bạn');
@@ -1788,14 +1845,24 @@ export class AgentService {
       const { AuditService } = await import('./audit.service');
       await AuditService.record({
         organization_id: orgId,
+        user_id: reqContext?.user_id || null,
         actor_type: 'USER',
         action: 'AGENT_TOKEN_REVOKED',
         resource_type: 'AGENT',
         resource_id: agentId,
         target_type: 'TOKEN',
         target_id: tokenId,
+        request_id: reqContext?.request_id || null,
+        user_agent: reqContext?.user_agent || null,
+        ip_address: reqContext?.ip_address || null,
         description: `Thu hồi Token của Agent [${agent.name}]`,
         status: 'SUCCESS',
+        metadata: {
+          agent_id: agentId,
+          agent_name: agent.name,
+          cluster_id: agent.cluster_id,
+          token_id: tokenId,
+        },
       });
     } catch {}
 
@@ -1813,7 +1880,8 @@ export class AgentService {
       status?: any;
       timestamp?: string | null;
       metadata?: Record<string, unknown> | null;
-    }
+    },
+    reqContext?: IAuditRequestContext
   ) {
     if (!agent || !agent.id) {
       throw ApiError.unauthorized('Agent chưa được xác thực');
@@ -1844,9 +1912,21 @@ export class AgentService {
           resource_type: 'AGENT',
           resource_id: agent.id,
           status: 'SUCCESS',
+          request_id: reqContext?.request_id || null,
+          user_agent: reqContext?.user_agent || null,
+          ip_address: reqContext?.ip_address || null,
           description: `Agent '${agent.name}' recovered connection via valid heartbeat. Status transitioned from OFFLINE to ONLINE.`,
           before_data: { status: 'OFFLINE' },
           after_data: { status: 'ONLINE', last_seen_at: heartbeat.reported_at },
+          metadata: {
+            agent_id: agent.id,
+            agent_name: agent.name,
+            agent_uid: agent.agent_uid,
+            cluster_id: agent.cluster_id,
+            agent_version: heartbeat.agent_version || data.agent_version || null,
+            latency_ms: heartbeat.latency_ms ?? data.latency_ms ?? null,
+            heartbeat_id: heartbeat.id,
+          },
         });
       } catch (auditErr) {
         console.warn(`[AgentService] Non-fatal: Failed to record recovery audit log for agent ${agent.id}:`, auditErr);
@@ -1873,7 +1953,8 @@ export class AgentService {
       status?: any;
       timestamp?: string | null;
       metadata?: Record<string, unknown> | null;
-    }
+    },
+    reqContext?: IAuditRequestContext
   ) {
     if (!rawToken) {
       throw ApiError.unauthorized('Thiếu token xác thực Agent');
@@ -1900,7 +1981,8 @@ export class AgentService {
         organization_id: (agentRow as any).organization_id,
         status: agentRow.status,
       },
-      data
+      data,
+      reqContext
     );
   }
 

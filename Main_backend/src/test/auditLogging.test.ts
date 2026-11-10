@@ -451,8 +451,29 @@ describe('Security Audit Logging & Tenant Governance Suite [PB08 4.3]', () => {
       assert.strictEqual(AuditService.sanitizeIp('::ffff:192.168.1.1'), '192.168.1.1');
       assert.strictEqual(AuditService.sanitizeIp('10.0.0.1, 192.168.1.1'), '10.0.0.1');
       assert.strictEqual(AuditService.sanitizeIp('10.0.0.1:8080'), '10.0.0.1');
+      assert.strictEqual(AuditService.sanitizeIp('fe80::1'), 'fe80::1');
       assert.strictEqual(AuditService.sanitizeIp('invalid-ip-string'), null);
       assert.strictEqual(AuditService.sanitizeIp(null), null);
+    });
+
+    test('4.3. AuditService.redactSensitiveData preserves Date objects as ISO-8601 strings instead of {}', () => {
+      const seenAt = new Date('2026-11-10T11:53:04.123Z');
+      const invalidDate = new Date('invalid-date');
+      const payload = {
+        status: 'ONLINE',
+        last_seen_at: seenAt,
+        token_expires_at: seenAt,
+        bad_date: invalidDate,
+        timeline: [seenAt],
+      };
+
+      const redacted = AuditService.redactSensitiveData(payload);
+      assert.strictEqual(redacted.status, 'ONLINE');
+      assert.strictEqual(redacted.last_seen_at, '2026-11-10T11:53:04.123Z');
+      assert.strictEqual(redacted.token_expires_at, '[REDACTED]');
+      assert.strictEqual(redacted.bad_date, null);
+      assert.strictEqual(redacted.timeline[0], '2026-11-10T11:53:04.123Z');
+      assert.strictEqual(AuditService.redactSensitiveData(seenAt), '2026-11-10T11:53:04.123Z');
     });
   });
 
@@ -557,6 +578,77 @@ describe('Security Audit Logging & Tenant Governance Suite [PB08 4.3]', () => {
 
       const deleteRes = await requestApi('/api/v1/audit-logs/1', { method: 'DELETE', token: adminToken });
       assert.ok([404, 405].includes(deleteRes.status), 'DELETE to /audit-logs must be rejected');
+    });
+
+    test('5.12. Cluster & Service filtering resolves HEALING_ACTION -> incident cluster_id without leaking other clusters', async () => {
+      const actionTypeRes = await pool.query(`SELECT id FROM healing_action_types LIMIT 1;`);
+      const actionTypeId = actionTypeRes.rows[0]?.id;
+      assert.ok(actionTypeId, 'Expected at least 1 healing_action_types row in DB');
+
+      const incidentAId = '7f000000-0000-0000-0000-000000000001';
+      const healingAId = '7f000000-0000-0000-0000-000000000002';
+      const incidentBId = '7f000000-0000-0000-0000-000000000003';
+      const healingBId = '7f000000-0000-0000-0000-000000000004';
+
+      await pool.query(
+        `INSERT INTO incidents (id, organization_id, environment_id, cluster_id, source_type, target_type, incident_type, title, severity, status)
+         VALUES
+           ($1, $3, $4, $5, 'AI_DETECTOR', 'WORKLOAD', 'HIGH_LATENCY', 'Audit test A', 'HIGH', 'RESOLVED'),
+           ($2, $3, $4, $6, 'AI_DETECTOR', 'WORKLOAD', 'HIGH_LATENCY', 'Audit test B', 'HIGH', 'RESOLVED')
+         ON CONFLICT (id) DO UPDATE SET cluster_id = EXCLUDED.cluster_id;`,
+        [incidentAId, incidentBId, orgAId, envAId, clusterAId, clusterBId]
+      );
+
+      await pool.query(
+        `INSERT INTO healing_actions (id, incident_id, environment_id, action_type_id, target_type, target_name, risk_level, execution_mode, execution_status)
+         VALUES
+           ($1, $3, $5, $6, 'WORKLOAD', 'audit-svc-a', 'LOW', 'AUTO', 'SUCCESS'),
+           ($2, $4, $5, $6, 'WORKLOAD', 'audit-svc-b', 'LOW', 'AUTO', 'SUCCESS')
+         ON CONFLICT (id) DO UPDATE SET target_name = EXCLUDED.target_name, incident_id = EXCLUDED.incident_id;`,
+        [healingAId, healingBId, incidentAId, incidentBId, envAId, actionTypeId]
+      );
+
+      await AuditService.record({
+        organization_id: orgAId,
+        actor_type: 'SYSTEM',
+        action: 'AUTONOMOUS_HEALING_TRIGGERED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: healingAId,
+        target_type: 'WORKLOAD',
+        description: 'Triggered healing on cluster A svc A',
+        status: 'SUCCESS',
+        metadata: { target_service: 'audit-svc-a' },
+      });
+
+      await AuditService.record({
+        organization_id: orgAId,
+        actor_type: 'SYSTEM',
+        action: 'AUTONOMOUS_HEALING_TRIGGERED',
+        resource_type: 'HEALING_ACTION',
+        resource_id: healingBId,
+        target_type: 'WORKLOAD',
+        description: 'Triggered healing on cluster B svc B',
+        status: 'SUCCESS',
+        metadata: { target_service: 'audit-svc-b' },
+      });
+
+      const clusterRes = await requestApi(
+        `/api/v1/organizations/${orgAId}/audit-logs?cluster_id=${clusterAId}`,
+        { token: ownerAToken }
+      );
+      assert.strictEqual(clusterRes.status, 200);
+      const clusterLogs = clusterRes.data?.data?.data || [];
+      assert.ok(clusterLogs.some((l: any) => l.resource_id === healingAId && l.cluster_id === clusterAId && l.service_name === 'audit-svc-a'));
+      assert.ok(!clusterLogs.some((l: any) => l.resource_id === healingBId));
+
+      const serviceRes = await requestApi(
+        `/api/v1/organizations/${orgAId}/audit-logs?cluster_id=${clusterAId}&service_name=audit-svc-a`,
+        { token: ownerAToken }
+      );
+      assert.strictEqual(serviceRes.status, 200);
+      const svcLogs = serviceRes.data?.data?.data || [];
+      assert.ok(svcLogs.length > 0);
+      assert.ok(svcLogs.every((l: any) => l.cluster_id === clusterAId && l.service_name === 'audit-svc-a'));
     });
   });
 });

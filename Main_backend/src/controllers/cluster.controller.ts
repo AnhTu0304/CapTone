@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ClusterService } from '../services/cluster.service';
 import { K8sStatusService } from '../services/k8sStatus.service';
+import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 
@@ -76,7 +77,7 @@ export class ClusterController {
     try {
       const orgId = req.params.orgId || req.params.id || req.orgMember?.organizationId;
       if (!orgId) throw new ApiError(400, 'Mã tổ chức không hợp lệ');
-      const cluster = await ClusterService.createCluster(orgId, req.body);
+      const cluster = await ClusterService.createCluster(orgId, req.body, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Đăng ký cụm Kubernetes thành công', cluster, 201);
     } catch (error) {
       next(error);
@@ -88,7 +89,7 @@ export class ClusterController {
       const user = (req as any).user;
       const clusterId = req.params.clusterId || req.params.id;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
-      const token = await ClusterService.rotateAgentToken(clusterId, req.body, orgId, user?.id);
+      const token = await ClusterService.rotateAgentToken(clusterId, req.body, orgId, user?.id, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Cấp lại token thành công', token, 200);
     } catch (error) {
       next(error);
@@ -101,7 +102,7 @@ export class ClusterController {
       const clusterId = req.params.clusterId || req.params.id;
       const tokenId = req.params.tokenId;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
-      await ClusterService.revokeAgentToken(clusterId, tokenId, orgId, user?.id);
+      await ClusterService.revokeAgentToken(clusterId, tokenId, orgId, user?.id, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Thu hồi token thành công', { id: tokenId }, 200);
     } catch (error) {
       next(error);
@@ -113,7 +114,7 @@ export class ClusterController {
       const user = (req as any).user;
       const clusterId = req.params.clusterId || req.params.id;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
-      const updated = await ClusterService.updateAgentConfig(clusterId, req.body, orgId, user?.id);
+      const updated = await ClusterService.updateAgentConfig(clusterId, req.body, orgId, user?.id, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Cập nhật cấu hình Agent thành công', updated, 200);
     } catch (error) {
       next(error);
@@ -125,7 +126,7 @@ export class ClusterController {
       const user = (req as any).user;
       const clusterId = req.params.clusterId || req.params.id;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
-      const result = await ClusterService.connectAgent(clusterId, orgId, user?.id);
+      const result = await ClusterService.connectAgent(clusterId, orgId, user?.id, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Kết nối Agent thành công', result, 200);
     } catch (error) {
       next(error);
@@ -137,7 +138,7 @@ export class ClusterController {
       const user = (req as any).user;
       const clusterId = req.params.clusterId || req.params.id;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
-      const result = await ClusterService.disconnectAgent(clusterId, orgId, user?.id);
+      const result = await ClusterService.disconnectAgent(clusterId, orgId, user?.id, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Ngắt kết nối Agent thành công', result, 200);
     } catch (error) {
       next(error);
@@ -150,7 +151,7 @@ export class ClusterController {
       const clusterId = req.params.clusterId || req.params.id;
       const orgId = req.params.orgId || req.orgMember?.organizationId;
       const force = req.query.force === 'true' || req.body?.force === true;
-      await ClusterService.removeCluster(clusterId, orgId, force, user?.id);
+      await ClusterService.removeCluster(clusterId, orgId, force, user?.id, AuditService.extractRequestContext(req));
       return ApiResponse.success(res, 'Xóa cụm Kubernetes thành công', { id: clusterId }, 200);
     } catch (error) {
       next(error);

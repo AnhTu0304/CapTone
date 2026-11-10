@@ -1148,12 +1148,16 @@ export class HealingActionModel {
       SELECT 
         ap.id,
         ap.healing_action_id,
+        cl.id AS cluster_id,
         h.target_name,
         h.target_type,
         h.risk_level,
         t.code AS action_code,
         t.name AS action_name,
+        rec.risk_level AS recommendation_risk_level,
+        rec.priority AS recommendation_priority,
         i.id AS incident_id,
+        i.prediction_id,
         i.title AS incident_title,
         i.severity AS incident_severity,
         env.name AS environment_name,
@@ -1171,6 +1175,7 @@ export class HealingActionModel {
         rca.root_cause_type,
         rca.root_cause_description,
         rca.confidence_score,
+        rca.analysis_method,
         p.name AS policy_name,
         h.result AS action_result
       FROM approvals ap

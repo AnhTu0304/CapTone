@@ -51,26 +51,32 @@ const classifyLog = (item) => {
   const actorType = (item.actorType || item.actor_type || '').toUpperCase();
   const desc = (item.description || '').toUpperCase();
 
-  // 1. AI MAPE-K Autonomous
+  if (action === 'AGENT_DELETED') {
+    return 'policy';
+  }
+
+  // 1. AI MAPE-K Autonomous & Agent Execution
   if (
     actorType === 'SYSTEM' ||
     actorType === 'AGENT' ||
     action.includes('AUTONOMOUS') ||
-    action.includes('REMEDIATION') ||
-    action.includes('AGENT_') ||
+    action.includes('CIRCUIT_BREAKER') ||
+    action === 'AGENT_CONNECTED' ||
+    action === 'AGENT_DISCONNECTED' ||
     action.includes('SCALE') ||
     action.includes('POD_MEMORY_RESTART') ||
-    desc.includes('MAPE-K') ||
-    desc.includes('TỰ ĐỘNG')
+    (action.includes('REMEDIATION') && actorType !== 'USER') ||
+    desc.includes('MAPE-K')
   ) {
     return 'autonomous';
   }
 
-  // 2. Human-in-the-Loop (HITL)
+  // 2. Human-in-the-Loop (HITL) & Manual Remediation
   if (
     action.includes('HITL') ||
     action.includes('APPROVAL') ||
     action.includes('REJECT') ||
+    (actorType === 'USER' && action.includes('REMEDIATION')) ||
     desc.includes('PHÊ DUYỆT')
   ) {
     return 'hitl';

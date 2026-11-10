@@ -682,15 +682,21 @@ export class AiService {
     try {
       await client.query('BEGIN');
 
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validPredictionId: string | null =
+        input.prediction_id && uuidRegex.test(input.prediction_id) ? input.prediction_id : null;
+
       // Resolve cluster, environment, organization, and workload safely
-      let workloadId: string | null = input.workload_id || null;
+      let workloadId: string | null =
+        input.workload_id && uuidRegex.test(input.workload_id) ? input.workload_id : null;
       let clusterId: string | null = input.cluster_id || null;
-      let environmentId: string | null = input.environment_id || null;
+      let environmentId: string | null =
+        input.environment_id && uuidRegex.test(input.environment_id) ? input.environment_id : null;
       let organizationId: string | null = null;
 
-      // If prediction_id provided, pull linked context from ai_predictions
-      if (input.prediction_id) {
-        const predContext = await AiPredictionModel.findContextById(input.prediction_id, client);
+      // If valid UUID prediction_id provided, pull linked context from ai_predictions
+      if (validPredictionId) {
+        const predContext = await AiPredictionModel.findContextById(validPredictionId, client);
         if (predContext) {
           if (!environmentId) environmentId = predContext.environment_id;
           if (!clusterId) clusterId = predContext.cluster_id || null;
@@ -787,7 +793,7 @@ export class AiService {
             environment_id: environmentId,
             cluster_id: clusterId,
             workload_id: workloadId,
-            prediction_id: input.prediction_id || null,
+            prediction_id: validPredictionId,
             created_at: incidentCreatedAt,
           };
         }
@@ -796,7 +802,7 @@ export class AiService {
           organization_id: organizationId,
           environment_id: environmentId,
           cluster_id: clusterId,
-          prediction_id: input.prediction_id || null,
+          prediction_id: validPredictionId,
           source_type: 'AI_PREDICTION',
           target_type: targetType,
           target_id: workloadId,
@@ -843,7 +849,7 @@ export class AiService {
       const recRecord = await RecommendationModel.create(client, {
         incident_id: incidentId,
         rca_analysis_id: rcaAnalysisId,
-        prediction_id: input.prediction_id || null,
+        prediction_id: validPredictionId,
         action_type_id: actionTypeId,
         recommendation: aiResponse.recommendation.action,
         reasoning: aiResponse.recommendation.reason,
@@ -875,7 +881,7 @@ export class AiService {
         environment_id: environmentId,
         cluster_id: clusterId,
         workload_id: workloadId,
-        prediction_id: input.prediction_id || null,
+        prediction_id: validPredictionId,
         created_at: incidentCreatedAt,
         previous_action: prevAction,
         previous_action_result: prevActionResult,

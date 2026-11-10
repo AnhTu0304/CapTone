@@ -223,7 +223,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     }
   }
 
-  const recAction = rcaParsed?.recommendation?.action || item.recommendation || (item.title?.includes('UNKNOWN') ? 'NO_ACTION' : 'RESTART_POD & RESCALE');
+  const recAction = rcaParsed?.recommendation?.action || item.recommendation_action || item.recommendation || (item.title?.includes('UNKNOWN') ? 'NO_ACTION' : null);
   const isNoAction = recAction === 'NO_ACTION' || (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
 
   // Trạng thái vòng đời sự cố: Phản ánh trung thực trạng thái thực tế từ CSDL
@@ -244,10 +244,10 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   } else if (item.status) {
     statusLabel = item.status;
   }
-  const recReason = rcaParsed?.recommendation?.reason || 'Tự động giải phóng tiến trình và điều chỉnh ngưỡng tài nguyên an toàn theo MAPE-K';
+  const recReason = rcaParsed?.recommendation?.reason || item.recommendation_reason || null;
 
   // Chuẩn hóa confidence an toàn, giữ nguyên 0 và không fallback về 92%
-  const rcaConfidence = parseConfidence(item.rca_confidence);
+  const rcaConfidence = parseConfidence(item.rca_confidence ?? item.prediction_confidence);
 
   // Chỉ chấp nhận predictedRisk khi thuộc VALID_RISKS, không lấy tên hành động thay cho rủi ro
   let predictedRisk = null;
@@ -260,17 +260,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     predictedRisk = String(rawRiskCandidate).toUpperCase();
   }
 
-  let evidencesList = [
-    {
-      type: 'AI_TELEMETRY',
-      ref: serviceName,
-      summary: predictedRisk
-        ? `Mô hình AI phát hiện nguy cơ ${predictedRisk}${rcaConfidence !== null ? ` với độ tin cậy ${rcaConfidence}%` : ''}`
-        : 'Mô hình AI theo dõi chuỗi viễn trắc telemetry',
-      score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
-    },
-  ];
-
+  let evidencesList = [];
   if (rcaParsed?.evidence && Array.isArray(rcaParsed.evidence) && rcaParsed.evidence.length > 0) {
     evidencesList = rcaParsed.evidence.map((ev, idx) => ({
       type: idx === 0 ? 'AI_TELEMETRY' : 'K8S_EVENT',
@@ -289,33 +279,33 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     clusterName: item.cluster_name,
     title: translateIncidentTitle(item.title),
     service: serviceName,
-    namespace: item.namespace || 'default',
-    node: item.node_name || (item.cluster_name ? `${item.cluster_name}-node-1` : (item.cluster_id || 'worker-01')),
+    namespace: item.namespace || null,
+    node: item.node_name || null,
+    actualPodName: item.actual_pod_name || null,
+    clusterNodeCount: item.cluster_node_count ?? null,
+    workloadType: item.workload_type || null,
     severity: (item.severity || 'HIGH').toUpperCase(),
     status: statusLabel,
     time: formatRelativeTime(item.detected_at || item.created_at),
     detectedAt: item.detected_at || item.created_at,
     impact: item.description || `Ảnh hưởng hiệu năng dịch vụ ${serviceName}`,
-    rootCause: item.root_cause_description || item.description || 'Hệ thống tự động phát hiện mẫu hành vi bất thường từ chuỗi viễn trắc AI.',
+    rootCause: item.root_cause_description || item.description || null,
     rootCauseType: item.root_cause_type || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Bất thường dịch vụ'),
     confidence: rcaConfidence,
     rcaConfidence: rcaConfidence,
     predictedRisk: predictedRisk,
     primaryRisk: predictedRisk ? `${predictedRisk}${rcaConfidence !== null ? ` (${rcaConfidence}%)` : ''}` : null,
-    mttr: isResolved ? 'Đã khắc phục hoàn tất' : 'Đang chạy (1.4s)',
+    mttr: item.mttr_seconds !== null && item.mttr_seconds !== undefined ? `${item.mttr_seconds}s` : (isResolved ? 'Đã khắc phục hoàn tất' : 'Đang theo dõi'),
     hasPendingApproval: hasPendingApproval,
     pendingApprovalId: item.pending_approval_id || null,
     healingStatus: item.healing_status || null,
     healingApprovalStatus: item.healing_approval_status || null,
     recommendationAction: recAction,
     recommendationReason: recReason,
+    recommendationRiskLevel: item.recommendation_risk_level || rcaParsed?.recommendation?.risk_level || null,
+    recommendationPriority: item.recommendation_priority || rcaParsed?.recommendation?.priority || null,
+    analysisMethod: item.analysis_method || null,
     evidences: evidencesList,
-    causalSteps: [
-      { step: '1. Tín hiệu sơ cấp', desc: `Đột biến lưu lượng hoặc viễn trắc trên ${serviceName}` },
-      { step: '2. Tích tụ tài nguyên', desc: 'Mô hình AI phát hiện chuỗi trượt viễn trắc vượt ngưỡng an toàn' },
-      { step: '3. Hệ quả hạ tầng', desc: `Kubelet ghi nhận cảnh báo bất thường trên pod ${serviceName}` },
-      { step: '4. Tác động & Tự lành', desc: isResolved ? 'Vòng lặp MAPE-K đã hoàn tất tự khắc phục' : 'Vòng lặp MAPE-K đang can thiệp khôi phục tự động' }
-    ]
   };
 };
 
@@ -1484,7 +1474,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                           {item.service}
                         </div>
                         <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '2px' }}>
-                          <span style={{ color: "#94A3B8" }}>Namespace:</span> {item.namespace} &bull; <span style={{ color: "#94A3B8" }}>Node:</span> {item.node}
+                          <span style={{ color: "#94A3B8" }}>Namespace:</span> {item.namespace || 'Chưa rõ'} &bull; <span style={{ color: "#94A3B8" }}>Node:</span> {item.node || 'Chưa rõ'}
                         </div>
                       </td>
 

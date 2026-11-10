@@ -75,6 +75,14 @@ export interface IAuditLog {
   user_name?: string | null;
   user_email?: string | null;
   actor_role?: string | null;
+  agent_name?: string | null;
+  cluster_id?: string | null;
+  cluster_name?: string | null;
+  policy_name?: string | null;
+  healing_target_name?: string | null;
+  service_name?: string | null;
+  target_user_name?: string | null;
+  target_user_email?: string | null;
   actor_type: AuditActorType;
   action: AuditAction | string;
   resource_type?: string | null;
@@ -115,6 +123,8 @@ export interface ICreateAuditLogInput {
 
 export interface IAuditLogFilter {
   organization_id?: string;
+  cluster_id?: string;
+  service_name?: string;
   user_id?: string;
   action?: string;
   status?: string;
