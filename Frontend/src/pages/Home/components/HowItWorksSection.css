@@ -6,7 +6,8 @@
   position: relative;
   z-index: 24;
   width: 100%;
-  background-color: #434154; /* Exact sampled background from reference image */
+  background-color: #434154;
+  /* Exact sampled background from reference image */
   overflow: hidden;
   box-sizing: border-box;
   padding: 24px 0 44px 0;
@@ -35,7 +36,7 @@
 
 .hiw-track-bottom {
   height: 16px;
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 /* 1px Solid Horizontal Line */
@@ -45,7 +46,8 @@
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #6B7F7F; /* Exact sampled teal/sage horizontal line */
+  background-color: #6B7F7F;
+  /* Exact sampled teal/sage horizontal line */
   z-index: 1;
 }
 
@@ -56,11 +58,13 @@
 /* Circular Node Dots on the Lines */
 .hiw-track-dot {
   position: absolute;
-  top: 6px; /* 11px circle centered on 1px line at top: 11px */
+  top: 6px;
+  /* 11px circle centered on 1px line at top: 11px */
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background-color: #8AAEA0; /* Exact sampled node dot */
+  background-color: #8AAEA0;
+  /* Exact sampled node dot */
   box-shadow: 0 0 6px rgba(138, 174, 160, 0.45);
   z-index: 3;
 }
@@ -81,7 +85,6 @@
 .hiw-badge-wrapper {
   position: relative;
   z-index: 4;
-  margin: 10px 0;
   display: flex;
   justify-content: center;
 }
@@ -91,7 +94,8 @@
   align-items: center;
   justify-content: center;
   padding: 4px 14px;
-  background-color: #5C6B6E; /* Exact sampled badge background */
+  background-color: #5C6B6E;
+  /* Exact sampled badge background */
   border-radius: 0px;
   box-sizing: border-box;
 }
@@ -101,7 +105,8 @@
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.18em;
-  color: #FFFFFF; /* Crisp white */
+  color: #FFFFFF;
+  /* Crisp white */
   text-transform: uppercase;
   line-height: 1.25;
 }
@@ -111,7 +116,8 @@
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  margin-top: 100px; /* Exact 100px spacing requested */
+  margin-top: 100px;
+  /* Exact 100px spacing requested */
   padding: 0 clamp(20px, 4.5vw, 76px) 24px;
 }
 
@@ -158,14 +164,13 @@
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  padding: 12px; /* 12px ribbon of 45° diagonal hatched stripes */
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(138, 174, 160, 0.42) 0px,
-    rgba(138, 174, 160, 0.42) 1.5px,
-    transparent 1.5px,
-    transparent 6px
-  );
+  padding: 12px;
+  /* 12px ribbon of 45° diagonal hatched stripes */
+  background: repeating-linear-gradient(45deg,
+      rgba(138, 174, 160, 0.42) 0px,
+      rgba(138, 174, 160, 0.42) 1.5px,
+      transparent 1.5px,
+      transparent 6px);
 }
 
 /* Inner gap between hatched border and inner screen box */
@@ -174,7 +179,8 @@
   width: 100%;
   box-sizing: border-box;
   padding: 12px;
-  background-color: #434154; /* Exact section background */
+  background-color: #434154;
+  /* Exact section background */
 }
 
 /* Inner Graphic Screen Box */
@@ -183,7 +189,8 @@
   width: 100%;
   aspect-ratio: 16 / 10.5;
   min-height: 220px;
-  background-color: #2D2A3B; /* Deep dark slate navy card backdrop */
+  background-color: #2D2A3B;
+  /* Deep dark slate navy card backdrop */
   border: 1px solid rgba(130, 165, 155, 0.35);
   box-sizing: border-box;
   overflow: hidden;
@@ -202,10 +209,13 @@
 
 /* Micro-animations */
 @keyframes hiwPulseGlow {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.85;
   }
+
   50% {
     transform: scale(1.05);
     opacity: 1;
@@ -216,15 +226,19 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
 @keyframes hiwFloatSubtle {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-4px);
   }
@@ -256,16 +270,19 @@
   font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.18em;
-  color: #A7E4CD; /* Luminous pale mint */
+  color: #A7E4CD;
+  /* Luminous pale mint */
   text-transform: uppercase;
   margin-bottom: 2px;
 }
 
 .hiw-title {
   font-family: var(--font-display, 'Inter', -apple-system, sans-serif);
-  font-size: clamp(1.35rem, 1.85vw, 1.65rem); /* Prominent, bold title */
+  font-size: clamp(1.35rem, 1.85vw, 1.65rem);
+  /* Prominent, bold title */
   font-weight: 700;
-  color: #DDFCEE; /* Exact sampled crisp pale mint-white */
+  color: #DDFCEE;
+  /* Exact sampled crisp pale mint-white */
   letter-spacing: -0.03em;
   line-height: 1.2;
   margin: 0;
@@ -273,8 +290,10 @@
 
 .hiw-desc {
   font-family: var(--font-body, 'Inter', -apple-system, sans-serif);
-  font-size: clamp(0.9375rem, 1.1vw, 1.05rem); /* Elegant readable description */
-  color: #A7E4CD; /* Luminous soft mint matching reference image */
+  font-size: clamp(0.9375rem, 1.1vw, 1.05rem);
+  /* Elegant readable description */
+  color: #A7E4CD;
+  /* Luminous soft mint matching reference image */
   line-height: 1.55;
   margin: 0;
 }

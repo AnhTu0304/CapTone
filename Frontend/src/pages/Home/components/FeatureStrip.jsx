@@ -50,7 +50,7 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
             </h2>
 
             <p className="agent-description">
-              SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi, tự động đồng bộ trạng thái hạ tầng và kích hoạt quy trình khôi phục tức thì khi phát hiện sự cố tiềm ẩn.
+              SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi.
             </p>
           </div>
 
