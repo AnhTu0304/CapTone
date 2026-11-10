@@ -36,6 +36,16 @@
 
 :root {
   --font-anybody: "Anybody", "Anybody Fallback", sans-serif;
+  --font-dm-sans: "DM Sans", "DM Sans Fallback", sans-serif;
+  --font-space-mono: "Space Mono", "Space Mono Fallback", monospace;
+}
+
+.font-dm-sans {
+  font-family: var(--font-dm-sans), sans-serif;
+}
+
+.font-space-mono {
+  font-family: var(--font-space-mono), monospace;
 }
 
 /* Base h1 typography spec requested by user */
@@ -90,6 +100,10 @@ h1 {
   }
 }
 
+.hero-title-break {
+  display: block;
+}
+
 .hero-heading {
   --font-anybody: "Anybody", "Anybody Fallback";
   font-family: var(--font-anybody), sans-serif !important;
@@ -110,7 +124,7 @@ h1 {
 }
 
 .hero-description {
-  font-family: var(--font-body);
+  font-family: var(--font-dm-sans), var(--font-body), sans-serif;
   font-size: 1.125rem;
   color: var(--text-secondary);
   line-height: 1.6;
@@ -137,7 +151,7 @@ h1 {
   color: #FFFFFF;
   font-weight: 700;
   font-size: 0.9375rem;
-  font-family: var(--font-display, 'Inter', sans-serif);
+  font-family: var(--font-dm-sans), sans-serif;
   border: none;
   clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 50%, 100% 100%, 12px 100%, 0% 50%);
   box-shadow: none;
@@ -169,7 +183,7 @@ h1 {
   color: #000000;
   font-weight: 700;
   font-size: 0.9375rem;
-  font-family: var(--font-display, 'Inter', sans-serif);
+  font-family: var(--font-dm-sans), sans-serif;
   border: none;
   clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
   box-shadow: none;
@@ -252,4 +266,27 @@ h1 {
     min-height: auto;
     padding: 8px 0 0;
   }
+}
+
+.hero-sublink-wrapper {
+  margin-top: -24px;
+  margin-bottom: 36px;
+}
+
+.hero-sublink {
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #555368;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  letter-spacing: 0.02em;
+  transition: color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-sublink:hover {
+  color: #000000;
 }

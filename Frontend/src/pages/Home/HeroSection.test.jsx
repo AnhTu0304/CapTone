@@ -47,6 +47,12 @@ describe('HeroSection CTA Buttons', () => {
       'leading-[0.9]',
       'animate-hero-fade-up'
     );
-    expect(heading).toHaveTextContent(/Quan sát\. Dự đoán\.\s*Khôi phục\./i);
+    expect(heading).toHaveTextContent(/AI Self\s*Healing/i);
+  });
+  it('renders "onboard with your agent" monospace sublink', () => {
+    render(<HeroSection />);
+    const sublink = screen.getByRole('link', { name: /onboard with your agent/i });
+    expect(sublink).toBeInTheDocument();
+    expect(sublink).toHaveClass('hero-sublink');
   });
 });

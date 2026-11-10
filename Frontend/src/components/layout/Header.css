@@ -1,3 +1,8 @@
+:root {
+  --font-space-mono: "Space Mono", "Space Mono Fallback", monospace;
+  --font-dm-sans: "DM Sans", "DM Sans Fallback", sans-serif;
+}
+
 /* =====================================================================
    SELFHEAL CAD BLUEPRINT HEADER (GREPTILE ALIGNMENT)
    - Left: Logo (justify-self: start)
@@ -114,13 +119,14 @@
   display: flex;
   align-items: center;
   gap: clamp(16px, 2.2vw, 32px);
-  font-family: var(--font-mono, 'Space Mono', 'Geist Mono', monospace);
+  font-family: var(--font-space-mono, 'Space Mono', monospace);
 }
 
 .header-nav-item {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-family: var(--font-space-mono, 'Space Mono', monospace);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -261,7 +267,7 @@
   padding: 0 16px 0 20px;
   background-color: #3D3B4F;
   color: #FFFFFF;
-  font-family: var(--font-display, 'Inter', sans-serif);
+  font-family: var(--font-dm-sans, 'DM Sans', sans-serif);
   font-size: 0.8125rem;
   font-weight: 600;
   text-decoration: none;
@@ -292,7 +298,7 @@
   padding: 0 18px 0 18px;
   background-color: #28E99F;
   color: #000000;
-  font-family: var(--font-display, 'Inter', sans-serif);
+  font-family: var(--font-dm-sans, 'DM Sans', sans-serif);
   font-size: 0.8125rem;
   font-weight: 700;
   text-decoration: none;

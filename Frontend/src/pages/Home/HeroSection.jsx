@@ -23,8 +23,8 @@ export const HeroSection = ({ onNavigate }) => {
             {/* ================= LEFT COLUMN ================= */}
             <div className="hero-left-col">
               <h1 className="hero-heading font-anybody text-slate text-6xl font-bold tracking-tight leading-[0.9] animate-hero-fade-up">
-                Quan sát. Dự đoán.{' '}
-                <span className="hero-heading-accent">Khôi phục.</span>
+                AI Self <br className="hero-title-break" />
+                Healing
               </h1>
 
               <p className="hero-description">
@@ -52,6 +52,16 @@ export const HeroSection = ({ onNavigate }) => {
                 >
                   <BookOpen size={18} strokeWidth={2.2} color="#000000" />
                   <span>Xem hướng dẫn</span>
+                </a>
+              </div>
+
+              <div className="hero-sublink-wrapper">
+                <a
+                  href="/guide"
+                  onClick={(e) => handleLinkClick(e, '/guide')}
+                  className="hero-sublink"
+                >
+                  onboard with your agent &rarr;
                 </a>
               </div>
             </div>
