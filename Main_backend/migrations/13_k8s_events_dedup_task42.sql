@@ -13,6 +13,8 @@ ALTER TABLE kubernetes_events
     ADD COLUMN IF NOT EXISTS observed_at TIMESTAMPTZ DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
+DROP INDEX IF EXISTS idx_k8s_events_cluster_dedup;
+
 -- 2. Backfill dedup_hash cho các bản ghi sự kiện đã lưu trước đó
 UPDATE kubernetes_events
 SET dedup_hash = md5(

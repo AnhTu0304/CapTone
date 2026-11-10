@@ -160,6 +160,19 @@ CREATE INDEX IF NOT EXISTS idx_user_system_roles_role ON user_system_roles(syste
 -- ====================================================================
 
 -- 6. Bảng `roles`: Vai trò cấp tổ chức
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles' AND table_type = 'BASE TABLE') THEN
+        ALTER TABLE roles RENAME TO organization_roles;
+        IF EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'roles_pkey') THEN
+            ALTER INDEX roles_pkey RENAME TO organization_roles_pkey;
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'roles_code_key') THEN
+            ALTER INDEX roles_code_key RENAME TO organization_roles_code_key;
+        END IF;
+    END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS organization_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(50) UNIQUE NOT NULL,
