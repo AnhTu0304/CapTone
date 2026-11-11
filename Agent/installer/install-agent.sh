@@ -26,13 +26,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd || echo "")
 HELM_CHART_DIR="${SCRIPT_DIR}/../deploy/helm/selfheal-agent"
 
 echo -e "${CYAN}${BOLD}==============================================================================${NC}"
-echo -e "${RED}${BOLD}          _/\_/\_${NC}"
-echo -e "${RED}${BOLD}         (  o.o  )${NC}     ${CYAN}${BOLD}S E L F H E A L   K U B E R N E T E S   A G E N T${NC}"
-echo -e "${YELLOW}${BOLD}        <   (v)   >${NC}    ${CYAN}AI-Driven Proactive Self-Healing Infrastructure for SMEs${NC}"
-echo -e "${GREEN}       /  \     /  \   ${GREEN}Autonomous eBPF Telemetry & Anomaly Self-Recovery${NC}"
-echo -e "${GREEN}      |    | AI|    |  ${GREEN}Target Engine  : Native Manifests (kubectl) / Helm${NC}"
-echo -e "${GREEN}      \___/     \___/  ${NC}Deployment Mode: Autonomous Kubernetes Agent"
-echo -e "${YELLOW}          / / \ \ ${NC}"
+echo -e "${RED}${BOLD}   ,~.${NC}"
+echo -e "${CYAN}${BOLD}  (o.o)        S E L F H E A L   K U B E R N E T E S   A G E N T${NC}"
+echo -e "${CYAN} /| (v) |\     AI-Driven Proactive Self-Healing Infrastructure for SMEs${NC}"
+echo -e "${GREEN}   / \         Autonomous eBPF Telemetry & Anomaly Self-Recovery${NC}"
+echo -e "${YELLOW}  /_/ \_\      ${NC}Target Engine  : Native Manifests (kubectl) / Helm"
 echo -e "${CYAN}${BOLD}==============================================================================${NC}"
 echo ""
 
