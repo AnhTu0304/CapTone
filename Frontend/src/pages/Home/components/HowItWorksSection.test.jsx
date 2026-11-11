@@ -10,33 +10,32 @@ describe('HowItWorksSection (3-step Cybernetic Blueprint)', () => {
 
   test('renders all 3 steps: Quan sát, Dự đoán, and Khôi phục', () => {
     render(<HowItWorksSection />);
-    expect(screen.getByText('Bước 1')).toBeInTheDocument();
+    expect(screen.getByText(/Bước 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Thu thập & Quan sát đa chiều/i)).toBeInTheDocument();
 
-    expect(screen.getByText('Bước 2')).toBeInTheDocument();
+    expect(screen.getByText(/Bước 2/i)).toBeInTheDocument();
     expect(screen.getByText(/Mô hình AI dự báo suy thoái/i)).toBeInTheDocument();
 
-    expect(screen.getByText('Bước 3')).toBeInTheDocument();
+    expect(screen.getByText(/Bước 3/i)).toBeInTheDocument();
     expect(screen.getByText(/Tự động phục hồi có kiểm soát/i)).toBeInTheDocument();
   });
 
-  test('renders step 1 looped video, step 2 AI predictive inference illustration, and step 3 SVG canvas', () => {
+  test('renders step 1 and step 2 looped videos and step 3 SVG canvas', () => {
     const { container } = render(<HowItWorksSection />);
     
-    // Verify Step 1 video exists with loop and muted attributes
-    const videoEl = container.querySelector('video.hiw-screen-video');
-    expect(videoEl).toBeInTheDocument();
-    expect(videoEl).toHaveAttribute('src', expect.stringContaining('videocard1.mp4'));
-    expect(videoEl).toHaveAttribute('loop');
+    // Verify 2 videos exist (Step 1 and Step 2) with loop and muted attributes
+    const videoElements = container.querySelectorAll('video.hiw-screen-video');
+    expect(videoElements.length).toBe(2);
 
-    // Cards 2 and 3 render SVG canvases
+    expect(videoElements[0]).toHaveAttribute('src', expect.stringContaining('videocard1.mp4'));
+    expect(videoElements[0]).toHaveAttribute('loop');
+
+    expect(videoElements[1]).toHaveAttribute('src', expect.stringContaining('card2.mp4'));
+    expect(videoElements[1]).toHaveAttribute('loop');
+
+    // Card 3 renders SVG canvas
     const svgList = container.querySelectorAll('svg.hiw-svg-canvas');
-    expect(svgList.length).toBe(2);
-
-    // Verify Step 2 AI illustration
-    expect(
-      screen.getByLabelText(/Mô hình AI dự báo suy thoái với các luồng dữ liệu K8s hội tụ vào đầu não trung tâm/i)
-    ).toBeInTheDocument();
+    expect(svgList.length).toBe(1);
   });
 
   test('renders continuous vertical guidelines', () => {

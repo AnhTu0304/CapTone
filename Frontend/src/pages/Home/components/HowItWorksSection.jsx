@@ -1,7 +1,7 @@
 import React from 'react';
 import './HowItWorksSection.css';
 import videocard1 from '../../../assets/videocard1.mp4';
-import { AiPredictiveInferenceIllustration } from './illustrations/AiPredictiveInferenceIllustration';
+import videocard2 from '../../../assets/card2.mp4';
 
 export const HowItWorksSection = ({ className = '' }) => {
   return (
@@ -80,7 +80,21 @@ export const HowItWorksSection = ({ className = '' }) => {
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
-                  <AiPredictiveInferenceIllustration className="hiw-svg-canvas" />
+                  <video
+                    className="hiw-screen-video"
+                    src={videocard2}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    ref={(el) => {
+                      if (el) el.playbackRate = 1.75;
+                    }}
+                    onLoadedMetadata={(e) => {
+                      e.currentTarget.playbackRate = 1.75;
+                    }}
+                    aria-label="Video mô phỏng mô hình AI dự báo suy thoái Kubernetes"
+                  />
                 </div>
               </div>
             </div>
