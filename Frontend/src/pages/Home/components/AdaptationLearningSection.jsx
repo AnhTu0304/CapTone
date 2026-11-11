@@ -21,7 +21,7 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
     >
       {/* ================= TOP HEADER ================= */}
       <div className="als-header-container">
-        <span className="als-label-badge">[ ADAPTATION &amp; LEARNING ]</span>
+        <span className="als-label-badge">[ Sự thích nghi &amp; Học hỏi ]</span>
         <h2 className="als-heading">Hệ thống tự thích ứng &amp; học hỏi sau mỗi sự cố</h2>
         <p className="als-subtitle">
           Từ quy tắc tùy chỉnh theo đặc thù hạ tầng đến cơ chế học hỏi liên tục, SelfHeal ngày càng am hiểu
@@ -90,11 +90,10 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
             </div>
 
             <div className="als-card-info">
-              <span className="als-card-tag">[ CUSTOM RULES ]</span>
-              <h3 className="als-card-title">Quy tắc của bạn, quyền kiểm soát của bạn</h3>
+              <span className="als-card-tag">[ Quy Tắc Tùy Chỉnh ]</span>
+              <p className="als-card-title">Quy tắc của bạn, quyền kiểm soát của bạn</p>
               <p className="als-card-desc">
-                Viết chính sách bằng ngôn ngữ tự nhiên hoặc cấu hình YAML declarative. Chỉ định rõ ngữ
-                cảnh cụ thể cho từng cụm k8s và áp dụng nhất quán các ranh giới an toàn tuyệt đối.
+                Chỉ định rõ ngữ cảnh cụ thể cho từng cụm k8s và áp dụng nhất quán các ranh giới an toàn tuyệt đối.
               </p>
               <a
                 href="/guide"
@@ -163,8 +162,8 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
             </div>
 
             <div className="als-card-info">
-              <span className="als-card-tag">[ LEARNING &amp; MEMORY ]</span>
-              <h3 className="als-card-title">Học hỏi liên tục từ các lỗi xảy ra</h3>
+              <span className="als-card-tag">[ Học Tập &amp; Ghi Nhớ ]</span>
+              <p className="als-card-title">Học hỏi liên tục từ các lỗi xảy ra</p>
               <p className="als-card-desc">
                 SelfHeal liên tục phân tích phản hồi và hành động can thiệp thực tế của đội ngũ kỹ sư,
                 tự động hoàn thiện tri thức vận hành để không lặp lại sai số cũ.

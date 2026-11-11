@@ -75,10 +75,30 @@
   height: 14px;
   opacity: 0.95;
 }
-.ch-tl { top: 0; left: 0; transform: translate(-50%, -50%); }
-.ch-tr { top: 0; right: 0; transform: translate(50%, -50%); }
-.ch-bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
-.ch-br { bottom: 0; right: 0; transform: translate(50%, 50%); }
+
+.ch-tl {
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+.ch-tr {
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+}
+
+.ch-bl {
+  bottom: 0;
+  left: 0;
+  transform: translate(-50%, 50%);
+}
+
+.ch-br {
+  bottom: 0;
+  right: 0;
+  transform: translate(50%, 50%);
+}
 
 .header-datum-tab {
   position: absolute;
@@ -127,7 +147,7 @@
   align-items: center;
   gap: 4px;
   font-family: var(--font-space-mono, 'Space Mono', monospace);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 400;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -338,12 +358,15 @@
     display: flex;
     justify-content: space-between;
   }
+
   .header-center-wrapper {
     display: none !important;
   }
+
   .header-dual-hex-group {
     display: none !important;
   }
+
   .mobile-menu-toggle {
     display: flex !important;
   }

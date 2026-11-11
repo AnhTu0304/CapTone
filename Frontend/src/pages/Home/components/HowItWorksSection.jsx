@@ -9,7 +9,7 @@ export const HowItWorksSection = ({ className = '' }) => {
       data-testid="how-it-works-section"
       aria-label="Cách thức SelfHeal hoạt động"
     >
-      {/* Continuous Left & Right Vertical Dashed Guidelines spanning the entire section */}
+      {/* Continuous Left & Right Vertical Dashed Guidelines spanning the section down to the bottom scan track dots */}
       <span className="hiw-guide-v-left" aria-hidden="true" />
       <span className="hiw-guide-v-right" aria-hidden="true" />
 
@@ -52,10 +52,10 @@ export const HowItWorksSection = ({ className = '' }) => {
             </div>
 
             <div className="hiw-info">
-              <span className="hiw-step-label">STEP 01</span>
+              <span className="hiw-step-label">Bước 1</span>
               <h3 className="hiw-title">Thu thập &amp; Quan sát đa chiều</h3>
               <p className="hiw-desc">
-                Lập bản đồ topo toàn bộ cụm k8s — liên tục thu nạp eBPF telemetry, pod metrics và event stream thời gian thực mà không gây ảnh hưởng hiệu năng.
+                Liên tục thu thập và giám sát dữ liệu hạ tầng Kubernetes, giúp phát hiện sớm những dấu hiệu bất thường.
               </p>
             </div>
           </article>
@@ -156,10 +156,10 @@ export const HowItWorksSection = ({ className = '' }) => {
             </div>
 
             <div className="hiw-info">
-              <span className="hiw-step-label">STEP 02</span>
+              <span className="hiw-step-label">Bước 2</span>
               <h3 className="hiw-title">Mô hình AI dự báo suy thoái</h3>
               <p className="hiw-desc">
-                Phân tích chuỗi thời gian và độ dốc tài nguyên nhằm phát hiện sớm nguy cơ rò rỉ bộ nhớ (OOM) cùng chuỗi lỗi pod trước khi người dùng gặp sự cố.
+                Phân tích dữ liệu vận hành để dự đoán rủi ro, nhận diện nguy cơ trước khi sự cố xảy ra.
               </p>
             </div>
           </article>
@@ -225,21 +225,52 @@ export const HowItWorksSection = ({ className = '' }) => {
             </div>
 
             <div className="hiw-info">
-              <span className="hiw-step-label">STEP 03</span>
+              <span className="hiw-step-label">Bước 3</span>
               <h3 className="hiw-title">Tự động phục hồi có kiểm soát</h3>
               <p className="hiw-desc">
-                Kích hoạt chính sách tự phục hồi tất định (rolling restart, scale pod, rollback) với cơ chế bảo vệ ranh giới an toàn và con người giám sát (HITL).
+                Tự động thực thi biện pháp khắc phục, với cơ chế phê duyệt và giám sát từ con người.
               </p>
             </div>
           </article>
         </div>
       </div>
 
-      {/* ================= BOTTOM FRAMING TRACK (HORIZONTAL LINE AT FOOTER) ================= */}
-      <div className="hiw-track hiw-track-bottom" aria-hidden="true">
-        <div className="hiw-track-line" />
-        <span className="hiw-track-dot hiw-dot-left" />
-        <span className="hiw-track-dot hiw-dot-right" />
+      {/* ================= PREDICTION SUMMARY FRAMED BLOCK (BELOW 3 STEPS) ================= */}
+      <div className="hiw-prediction-block">
+        {/* Top Horizontal Line of Prediction Block */}
+        <div className="hiw-track hiw-track-divider" aria-hidden="true">
+          <div className="hiw-track-line" />
+          <span className="hiw-track-dot hiw-dot-left" />
+          <span className="hiw-track-dot hiw-dot-right" />
+        </div>
+
+        {/* Centered Title & Description */}
+        <div className="hiw-prediction-content">
+          <h2 className="hiw-prediction-title">Dự đoán các sự cố</h2>
+          <p className="hiw-prediction-desc">
+            Từ khả năng quan sát theo thời gian thực đến dự báo dựa trên AI và tự động phục hồi
+          </p>
+        </div>
+
+        {/* Bottom Horizontal Line of Prediction Block */}
+        <div className="hiw-track hiw-track-bottom" aria-hidden="true">
+          <div className="hiw-track-line" />
+          <span className="hiw-track-dot hiw-dot-left" />
+          <span className="hiw-track-dot hiw-dot-right" />
+        </div>
+
+        {/* Bottom Monospace Badge under the 2nd Line */}
+        <div className="hiw-badge-wrapper hiw-prediction-badge-wrapper">
+          <div className="hiw-badge-box">
+            <span className="hiw-badge-text">BA GIAI ĐOẠN BẢO VỆ HẠ TẦNG PRODUCTION.</span>
+          </div>
+        </div>
+
+        {/* Multi-line Horizontal Pinstripe Band Covering Below Badge */}
+        <div className="hiw-bottom-scan-track" data-testid="hiw-bottom-scan-track" aria-hidden="true">
+          <span className="hiw-track-dot hiw-dot-left hiw-scan-dot" />
+          <span className="hiw-track-dot hiw-dot-right hiw-scan-dot" />
+        </div>
       </div>
     </section>
   );

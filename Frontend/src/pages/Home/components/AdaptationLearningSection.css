@@ -4,9 +4,11 @@
 
 .adaptation-learning-section {
   position: relative;
-  z-index: 24; /* Elevated above blueprint gutter overlays */
+  z-index: 24;
+  /* Elevated above blueprint gutter overlays */
   width: 100%;
-  background-color: #F3F3F5; /* Exact Greptile light canvas background */
+  background-color: #EDEDF0;
+  /* Exact Greptile light canvas background */
   padding: 88px 0 96px 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -26,28 +28,31 @@
 .als-label-badge {
   font-family: var(--font-mono, 'Space Mono', 'JetBrains Mono', SFMono-Regular, monospace);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 900;
   letter-spacing: 0.18em;
-  color: #059669; /* Greptile luminous mint green */
+  color: rgb(61, 59, 79);
+  /* Greptile luminous mint green */
   text-transform: uppercase;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   display: inline-block;
 }
 
 .als-heading {
   font-family: var(--font-display, 'Anybody', 'Inter', -apple-system, sans-serif);
   font-size: clamp(2rem, 3.6vw, 3.125rem);
-  font-weight: 800;
-  color: #242232; /* Deep slate black */
-  letter-spacing: -0.035em;
+  font-weight: 600;
+  color: rgb(61, 59, 79);
+  /* Deep slate black */
+  letter-spacing: -0.04em;
   line-height: 1.15;
   margin: 0 0 18px 0;
 }
 
 .als-subtitle {
   font-family: var(--font-body, 'DM Sans', 'Inter', -apple-system, sans-serif);
-  font-size: clamp(1rem, 1.25vw, 1.125rem);
-  color: #5A586B; /* Slate grey body */
+  font-size: 1.125rem;
+  color: rgb(61, 59, 79);
+  /* Slate grey body */
   line-height: 1.6;
   max-width: 760px;
   margin: 0 auto;
@@ -62,13 +67,11 @@
   margin: 48px 0 56px 0;
   border-top: 1px solid #D6D6D8;
   border-bottom: 1px solid #D6D6D8;
-  background: repeating-linear-gradient(
-    to right,
-    #B8B8BD 0px,
-    #B8B8BD 1px,
-    transparent 1px,
-    transparent 10px
-  );
+  background: repeating-linear-gradient(to right,
+      #B8B8BD 0px,
+      #B8B8BD 1px,
+      transparent 1px,
+      transparent 10px);
   opacity: 0.85;
 }
 
@@ -80,13 +83,11 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: repeating-linear-gradient(
-    to right,
-    #7B7B85 0px,
-    #7B7B85 1.5px,
-    transparent 1.5px,
-    transparent 50px
-  );
+  background: repeating-linear-gradient(to right,
+      #7B7B85 0px,
+      #7B7B85 1.5px,
+      transparent 1.5px,
+      transparent 50px);
   pointer-events: none;
 }
 
@@ -118,14 +119,13 @@
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  padding: 12px; /* 12px hatched ribbon */
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(85, 83, 104, 0.18) 0px,
-    rgba(85, 83, 104, 0.18) 1.5px,
-    transparent 1.5px,
-    transparent 6px
-  );
+  padding: 12px;
+  /* 12px hatched ribbon */
+  background: repeating-linear-gradient(45deg,
+      rgba(85, 83, 104, 0.18) 0px,
+      rgba(85, 83, 104, 0.18) 1.5px,
+      transparent 1.5px,
+      transparent 6px);
   border: 1px solid rgba(85, 83, 104, 0.12);
 }
 
@@ -134,7 +134,8 @@
   width: 100%;
   box-sizing: border-box;
   padding: 12px;
-  background-color: #F3F3F5; /* Matches section background */
+  background-color: #F3F3F5;
+  /* Matches section background */
 }
 
 /* Graphic Screen Box */
@@ -297,7 +298,8 @@
 }
 
 .als-chat-bubble-agent {
-  background-color: #D4F8E8; /* Mint green luminous Greptile learning box */
+  background-color: #D4F8E8;
+  /* Mint green luminous Greptile learning box */
   border: 1px solid rgba(40, 233, 159, 0.45);
   box-shadow: 0 4px 14px rgba(40, 233, 159, 0.12);
   padding: 12px 14px;
@@ -322,7 +324,8 @@
   font-family: var(--font-body, 'DM Sans', sans-serif);
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #065F46; /* Deep emerald text */
+  color: #065F46;
+  /* Deep emerald text */
   line-height: 1.4;
   margin: 0;
 }
@@ -337,17 +340,18 @@
 .als-card-tag {
   font-family: var(--font-mono, monospace);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.18em;
-  color: #717082; /* Muted grey monospace tag matching Greptile */
+  color: #717082;
+  /* Muted grey monospace tag matching Greptile */
   text-transform: uppercase;
 }
 
 .als-card-title {
-  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
-  font-size: clamp(1.4rem, 1.8vw, 1.65rem);
-  font-weight: 700;
-  color: #1C1A26;
+  font-family: var(--font-display, 'DM Sans', 'Inter', sans-serif);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: rgb(61, 59, 79);
   letter-spacing: -0.03em;
   line-height: 1.22;
   margin: 0;
@@ -355,7 +359,7 @@
 
 .als-card-desc {
   font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
-  font-size: clamp(0.9375rem, 1.05vw, 1.05rem);
+  font-size: clamp(0.9rem, 1.08vw, 1.08rem);
   color: #555368;
   line-height: 1.6;
   margin: 0;
@@ -368,14 +372,14 @@
   align-self: flex-start;
   margin-top: 6px;
   padding: 11px 24px;
-  background-color: #2B2938; /* Greptile dark button */
+  background-color: #3D3B4F;
+  /* Greptile dark button */
   color: #FFFFFF;
   font-family: var(--font-body, 'DM Sans', sans-serif);
   font-size: 0.875rem;
-  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  border: 1px solid #2B2938;
+  border: 1px dashed rgba(61, 59, 79, 0.24);
   transition: background-color 0.15s ease, transform 0.15s ease;
 }
 

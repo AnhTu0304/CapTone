@@ -121,7 +121,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                     <span>{link.label}</span>
                     {link.hasDropdown && (
                       <ChevronDown
-                        size={12}
+                        size={0}
                         strokeWidth={2.5}
                         className="header-nav-chevron"
                         aria-hidden="true"

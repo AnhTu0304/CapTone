@@ -10,7 +10,7 @@
   /* Exact sampled background from reference image */
   overflow: hidden;
   box-sizing: border-box;
-  padding: 24px 0 44px 0;
+  padding: 24px 0 0 0;
   border-top: 1px solid rgba(107, 127, 127, 0.28);
   border-bottom: 1px solid rgba(107, 127, 127, 0.28);
 }
@@ -24,7 +24,7 @@
   align-items: center;
 }
 
-/* Framing Line Tracks (Top, Sub-line under badge, and Bottom) */
+/* Framing Line Tracks (Top, Sub-line under badge, Divider, and Bottom) */
 .hiw-track {
   position: relative;
   width: 100%;
@@ -34,9 +34,13 @@
   justify-content: center;
 }
 
+.hiw-track-divider {
+  height: 24px;
+  margin-top: 24px;
+}
+
 .hiw-track-bottom {
   height: 16px;
-  margin-top: 20px;
 }
 
 /* 1px Solid Horizontal Line */
@@ -111,6 +115,90 @@
   line-height: 1.25;
 }
 
+/* Prediction Summary Framed Block (Catch them all style below 3 steps) */
+.hiw-prediction-block {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 3;
+}
+
+.hiw-prediction-content {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: clamp(68px, 8.5vw, 100px) clamp(24px, 5vw, 80px);
+  box-sizing: border-box;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.hiw-prediction-title {
+  font-family: Anybody, "Anybody Fallback", var(--font-display, 'Inter', sans-serif);
+  font-size: clamp(2.25rem, 4vw, 3.125rem);
+  font-weight: 600;
+  color: rgb(197, 255, 214);
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.hiw-prediction-desc {
+  font-family: var(--font-dm-sans, "DM Sans", var(--font-body, 'Inter', sans-serif));
+  font-size: clamp(1.05rem, 1.35vw, 1.2rem);
+  font-weight: 400;
+  color: #A7E4CD;
+  line-height: 1.6;
+  max-width: 780px;
+  margin: 0;
+}
+
+.hiw-prediction-badge-wrapper {
+  margin-top: 4px;
+}
+
+/* Multi-line Parallel Horizontal Pinstripe Band Below Badge (matching reference screenshot) */
+.hiw-bottom-scan-track {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  margin-top: 10px;
+  background-image: linear-gradient(to bottom,
+      rgba(156, 232, 201, 0.62) 0px,
+      rgba(156, 232, 201, 0.62) 1px,
+      transparent 1px,
+      transparent 4px,
+      rgba(156, 232, 201, 0.62) 4px,
+      rgba(156, 232, 201, 0.62) 5px,
+      transparent 5px,
+      transparent 8px,
+      rgba(138, 174, 160, 0.34) 8px,
+      rgba(138, 174, 160, 0.34) 9px,
+      transparent 9px,
+      transparent 12px,
+      rgba(138, 174, 160, 0.34) 12px,
+      rgba(138, 174, 160, 0.34) 13px,
+      transparent 13px,
+      transparent 16px,
+      rgba(138, 174, 160, 0.34) 16px,
+      rgba(138, 174, 160, 0.34) 17px,
+      transparent 17px,
+      transparent 20px,
+      rgba(138, 174, 160, 0.34) 20px,
+      rgba(138, 174, 160, 0.34) 21px,
+      transparent 21px);
+}
+
+.hiw-scan-dot {
+  top: -3px;
+}
+
 /* Main Content Container: Spacing tightened to ~100px below HOW IT WORKS */
 .hiw-content-container {
   position: relative;
@@ -121,12 +209,12 @@
   padding: 0 clamp(20px, 4.5vw, 76px) 24px;
 }
 
-/* Left & Right Vertical Dashed Guidelines spanning continuously from top to bottom */
+/* Left & Right Vertical Dashed Guidelines spanning continuously from top down to the bottom scan track dots */
 .hiw-guide-v-left,
 .hiw-guide-v-right {
   position: absolute;
   top: 0;
-  bottom: 0;
+  bottom: 19px;
   width: 1px;
   border-left: 1px dashed rgba(138, 174, 160, 0.45);
   pointer-events: none;
@@ -278,9 +366,9 @@
 
 .hiw-title {
   font-family: var(--font-display, 'Inter', -apple-system, sans-serif);
-  font-size: clamp(1.35rem, 1.85vw, 1.65rem);
+  font-size: 1.3rem;
   /* Prominent, bold title */
-  font-weight: 700;
+  font-weight: 600;
   color: #DDFCEE;
   /* Exact sampled crisp pale mint-white */
   letter-spacing: -0.03em;
@@ -290,7 +378,7 @@
 
 .hiw-desc {
   font-family: var(--font-body, 'Inter', -apple-system, sans-serif);
-  font-size: clamp(0.9375rem, 1.1vw, 1.05rem);
+  font-size: 1.01rem;
   /* Elegant readable description */
   color: #A7E4CD;
   /* Luminous soft mint matching reference image */
