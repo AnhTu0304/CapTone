@@ -21,7 +21,7 @@ export const HumanControlSection = ({ className = '', onNavigate }) => {
     >
       {/* ================= HEADER BLOCK ================= */}
       <div className="hcs-header-container">
-        <span className="hcs-label-badge">[ HITL_POLICY:= @VERIFIED ]</span>
+        <span className="hcs-label-badge">[ Chính Sách & Xác Minh ]</span>
         <h2 className="hcs-heading">Tự hành thông minh, Con người kiểm soát</h2>
         <p className="hcs-subtitle">
           SelfHeal vận hành tự động trong ranh giới an toàn tuyệt đối, tự động tạm dừng để bạn phê duyệt

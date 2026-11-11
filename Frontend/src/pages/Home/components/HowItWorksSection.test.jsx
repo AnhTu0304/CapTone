@@ -20,13 +20,23 @@ describe('HowItWorksSection (3-step Cybernetic Blueprint)', () => {
     expect(screen.getByText(/Tự động phục hồi có kiểm soát/i)).toBeInTheDocument();
   });
 
-  test('renders SVG canvases and parallel agent tags for step 2', () => {
+  test('renders step 1 looped video, step 2 AI predictive inference illustration, and step 3 SVG canvas', () => {
     const { container } = render(<HowItWorksSection />);
-    const svgList = container.querySelectorAll('svg.hiw-svg-canvas');
-    expect(svgList.length).toBe(3);
+    
+    // Verify Step 1 video exists with loop and muted attributes
+    const videoEl = container.querySelector('video.hiw-screen-video');
+    expect(videoEl).toBeInTheDocument();
+    expect(videoEl).toHaveAttribute('src', expect.stringContaining('videocard1.mp4'));
+    expect(videoEl).toHaveAttribute('loop');
 
-    const parallelAgentTags = screen.getAllByText(/PARALLEL AGENT/i);
-    expect(parallelAgentTags.length).toBe(3);
+    // Cards 2 and 3 render SVG canvases
+    const svgList = container.querySelectorAll('svg.hiw-svg-canvas');
+    expect(svgList.length).toBe(2);
+
+    // Verify Step 2 AI illustration
+    expect(
+      screen.getByLabelText(/Mô hình AI dự báo suy thoái với các luồng dữ liệu K8s hội tụ vào đầu não trung tâm/i)
+    ).toBeInTheDocument();
   });
 
   test('renders continuous vertical guidelines', () => {

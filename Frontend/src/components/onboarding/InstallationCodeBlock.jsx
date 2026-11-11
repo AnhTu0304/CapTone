@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Terminal } from 'lucide-react';
 import CopyButton from './CopyButton';
+import AgentInstallerBanner from './AgentInstallerBanner';
 
 export const InstallationCodeBlock = ({
   clusterName = 'k8s-prod-east-01',
@@ -186,6 +187,9 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </button>
         </div>
       </div>
+
+      {/* SelfHeal Agent Mascot Branding Banner */}
+      <AgentInstallerBanner clusterName={clusterName} compact={true} />
 
       {/* Terminal Output Window */}
       <div

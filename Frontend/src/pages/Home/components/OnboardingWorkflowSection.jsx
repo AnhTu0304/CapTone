@@ -23,7 +23,7 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
       <div className="ows-header-container">
         <div className="ows-header-flex">
           <div className="ows-header-left">
-            <span className="ows-label-badge">[ YOUR WORKFLOW ]</span>
+            <span className="ows-label-badge">[ Quy Trình ]</span>
             <h2 className="ows-heading">Quy trình thiết lập &amp; Khởi chạy trong 4 bước</h2>
             <p className="ows-subtitle">
               Được thiết kế tối ưu cho kỹ sư Kubernetes, SelfHeal kết nối liền mạch vào hạ tầng của bạn chỉ
@@ -41,19 +41,25 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
         </div>
       </div>
 
-      {/* ================= RULER DIVIDER WITH NEON LIME BADGE ================= */}
+      {/* ================= FULL-WIDTH CAD RULER & BADGE BAND ================= */}
       <div className="ows-divider-container" aria-hidden="true">
-        <div className="ows-divider-ruler" />
+        {/* Top Full-Width CAD Ruler Track with Precision Millimeter Ticks */}
+        <div className="ows-ruler-track" />
+
+        {/* Centered Neon Lime Badge aligned right in the middle between the 2 lines */}
         <span className="ows-neon-pill">CÁC BƯỚC THIẾT LẬP &amp; VẬN HÀNH WORKFLOW</span>
+
+        {/* Bottom Full-Width Horizontal Dashed Guideline */}
+        <div className="ows-band-bottom-line" />
       </div>
 
-      {/* ================= 4-CARD GRID ================= */}
+      {/* ================= FULL-WIDTH 4-CARD BLUEPRINT GRID ================= */}
       <div className="ows-grid-container">
         <div className="ows-grid">
           {/* ================= STEP 01: TẠO TỔ CHỨC & THIẾT LẬP MÔI TRƯỜNG ================= */}
           <article className="ows-card">
-            <div className="ows-card-frame">
-              <div className="ows-card-inner-gap">
+            <div className="ows-card-frame-row">
+              <div className="ows-card-frame">
                 <div className="ows-screen-box">
                   {/* Subtle CAD grid curve */}
                   <svg
@@ -103,8 +109,8 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
           {/* ================= STEP 02: KẾT NỐI AGENT ================= */}
           <article className="ows-card">
-            <div className="ows-card-frame">
-              <div className="ows-card-inner-gap">
+            <div className="ows-card-frame-row">
+              <div className="ows-card-frame">
                 <div className="ows-screen-box">
                   {/* Subtle CAD rings */}
                   <svg
@@ -147,8 +153,8 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
           {/* ================= STEP 03: MỜI NGƯỜI VÀO TỔ CHỨC ================= */}
           <article className="ows-card">
-            <div className="ows-card-frame">
-              <div className="ows-card-inner-gap">
+            <div className="ows-card-frame-row">
+              <div className="ows-card-frame">
                 <div className="ows-screen-box">
                   {/* Subtle CAD mesh */}
                   <svg
@@ -197,8 +203,8 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
           {/* ================= STEP 04: QUẢN LÝ NGƯỜI DÙNG VÀ POLICY VỚI AI ================= */}
           <article className="ows-card">
-            <div className="ows-card-frame">
-              <div className="ows-card-inner-gap">
+            <div className="ows-card-frame-row">
+              <div className="ows-card-frame">
                 <div className="ows-screen-box">
                   {/* Subtle CAD lines */}
                   <svg

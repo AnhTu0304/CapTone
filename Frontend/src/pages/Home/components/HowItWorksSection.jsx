@@ -1,6 +1,7 @@
 import React from 'react';
 import './HowItWorksSection.css';
-import { TelemetryStreamIllustration } from './illustrations/TelemetryStreamIllustration';
+import videocard1 from '../../../assets/videocard1.mp4';
+import { AiPredictiveInferenceIllustration } from './illustrations/AiPredictiveInferenceIllustration';
 
 export const HowItWorksSection = ({ className = '' }) => {
   return (
@@ -46,7 +47,21 @@ export const HowItWorksSection = ({ className = '' }) => {
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
-                  <TelemetryStreamIllustration className="hiw-svg-canvas" />
+                  <video
+                    className="hiw-screen-video"
+                    src={videocard1}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    ref={(el) => {
+                      if (el) el.playbackRate = 1.75;
+                    }}
+                    onLoadedMetadata={(e) => {
+                      e.currentTarget.playbackRate = 1.75;
+                    }}
+                    aria-label="Video mô phỏng thu thập và quan sát đa chiều Kubernetes"
+                  />
                 </div>
               </div>
             </div>
@@ -65,92 +80,7 @@ export const HowItWorksSection = ({ className = '' }) => {
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
-                  <svg
-                    className="hiw-svg-canvas"
-                    viewBox="0 0 420 270"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <defs>
-                      <radialGradient id="hiw-core-glow-2" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor="#28E99F" stopOpacity="0.75" />
-                        <stop offset="60%" stopColor="#3B67F6" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#3B67F6" stopOpacity="0" />
-                      </radialGradient>
-                    </defs>
-
-                    {/* Perspective Top Ceiling Plane */}
-                    <g stroke="#9CE8C9" strokeOpacity="0.22" strokeWidth="0.9">
-                      <line x1="200" y1="20" x2="330" y2="20" />
-                      <line x1="175" y1="40" x2="355" y2="40" />
-                      <line x1="150" y1="65" x2="380" y2="65" />
-                      <line x1="200" y1="20" x2="150" y2="65" />
-                      <line x1="240" y1="20" x2="220" y2="65" />
-                      <line x1="290" y1="20" x2="300" y2="65" />
-                      <line x1="330" y1="20" x2="380" y2="65" />
-                    </g>
-
-                    {/* Perspective Bottom Floor Plane */}
-                    <g stroke="#9CE8C9" strokeOpacity="0.22" strokeWidth="0.9">
-                      <line x1="150" y1="205" x2="380" y2="205" />
-                      <line x1="175" y1="230" x2="355" y2="230" />
-                      <line x1="200" y1="250" x2="330" y2="250" />
-                      <line x1="150" y1="205" x2="200" y2="250" />
-                      <line x1="220" y1="205" x2="240" y2="250" />
-                      <line x1="300" y1="205" x2="290" y2="250" />
-                      <line x1="380" y1="205" x2="330" y2="250" />
-                    </g>
-
-                    {/* Target Connecting Leader Lines */}
-                    <polyline points="145,95 240,95 245,115" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.7" fill="none" />
-                    <polyline points="145,135 230,135" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.7" fill="none" />
-                    <polyline points="145,175 238,175 245,155" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.7" fill="none" />
-
-                    {/* 3 Parallel Agent Badges on Left */}
-                    <g transform="translate(30, 83)">
-                      <rect width="112" height="24" fill="#1C1A26" stroke="#9CE8C9" strokeOpacity="0.5" rx="2" />
-                      <circle cx="12" cy="12" r="3" fill="#28E99F" />
-                      <text x="24" y="16" fill="#C6F9E2" fontFamily="var(--font-mono)" fontSize="9" fontWeight="600" letterSpacing="0.08em">
-                        PARALLEL AGENT
-                      </text>
-                    </g>
-
-                    <g transform="translate(30, 123)">
-                      <rect width="112" height="24" fill="#1C1A26" stroke="#9CE8C9" strokeOpacity="0.5" rx="2" />
-                      <circle cx="12" cy="12" r="3" fill="#28E99F" />
-                      <text x="24" y="16" fill="#C6F9E2" fontFamily="var(--font-mono)" fontSize="9" fontWeight="600" letterSpacing="0.08em">
-                        PARALLEL AGENT
-                      </text>
-                    </g>
-
-                    <g transform="translate(30, 163)">
-                      <rect width="112" height="24" fill="#1C1A26" stroke="#9CE8C9" strokeOpacity="0.5" rx="2" />
-                      <circle cx="12" cy="12" r="3" fill="#28E99F" />
-                      <text x="24" y="16" fill="#C6F9E2" fontFamily="var(--font-mono)" fontSize="9" fontWeight="600" letterSpacing="0.08em">
-                        PARALLEL AGENT
-                      </text>
-                    </g>
-
-                    {/* Center Inference Predictive Core Box */}
-                    <rect x="232" y="92" width="85" height="85" fill="#3B67F6" rx="2" />
-                    <circle cx="274" cy="135" r="42" fill="url(#hiw-core-glow-2)" />
-
-                    {/* Globe with Target Beacon */}
-                    <circle cx="274" cy="135" r="30" stroke="#FFFFFF" strokeWidth="1" strokeOpacity="0.8" fill="none" />
-                    <ellipse cx="274" cy="135" rx="30" ry="12" stroke="#ECFFA3" strokeWidth="0.9" fill="none" />
-                    <ellipse cx="274" cy="135" rx="12" ry="30" stroke="#9CE8C9" strokeWidth="0.9" fill="none" />
-
-                    {/* Target Pins */}
-                    <circle cx="245" cy="115" r="3" fill="#28E99F" />
-                    <circle cx="232" cy="135" r="3" fill="#28E99F" />
-                    <circle cx="245" cy="155" r="3" fill="#28E99F" />
-
-                    {/* Corner Markers */}
-                    <rect x="228" y="88" width="7" height="7" fill="#ECFFA3" rx="1" />
-                    <rect x="312" y="88" width="7" height="7" fill="#ECFFA3" rx="1" />
-                    <rect x="228" y="172" width="7" height="7" fill="#ECFFA3" rx="1" />
-                    <rect x="312" y="172" width="7" height="7" fill="#ECFFA3" rx="1" />
-                  </svg>
+                  <AiPredictiveInferenceIllustration className="hiw-svg-canvas" />
                 </div>
               </div>
             </div>

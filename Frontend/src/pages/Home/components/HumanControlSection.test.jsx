@@ -7,7 +7,7 @@ describe('HumanControlSection (Cybernetic Topographic CAD Landscape)', () => {
     const mockNavigate = jest.fn();
     render(<HumanControlSection onNavigate={mockNavigate} />);
 
-    expect(screen.getByText(/\[ HITL_POLICY:= @VERIFIED \]/i)).toBeInTheDocument();
+    expect(screen.getByText(/(\[ HITL_POLICY:= @VERIFIED \]|\[ Chính Sách & Xác Minh \])/i)).toBeInTheDocument();
     expect(screen.getByText(/Tự hành thông minh, Con người kiểm soát/i)).toBeInTheDocument();
     expect(screen.getByText(/SelfHeal vận hành tự động trong ranh giới an toàn tuyệt đối/i)).toBeInTheDocument();
 

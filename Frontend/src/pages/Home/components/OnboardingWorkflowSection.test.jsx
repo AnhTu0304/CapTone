@@ -7,7 +7,7 @@ describe('OnboardingWorkflowSection (4-Step CAD Workflow)', () => {
     const mockNavigate = jest.fn();
     render(<OnboardingWorkflowSection onNavigate={mockNavigate} />);
 
-    expect(screen.getByText(/\[ YOUR WORKFLOW \]/i)).toBeInTheDocument();
+    expect(screen.getByText(/\[ Quy Trình \]/i)).toBeInTheDocument();
     expect(screen.getByText(/Quy trình thiết lập & Khởi chạy trong 4 bước/i)).toBeInTheDocument();
 
     const ctaBtn = screen.getByRole('link', { name: /Bắt đầu ngay/i });

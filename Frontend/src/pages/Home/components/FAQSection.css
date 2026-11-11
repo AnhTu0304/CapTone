@@ -4,9 +4,11 @@
 
 .faq-section {
   position: relative;
-  z-index: 24; /* Elevated above blueprint gutter overlays */
+  z-index: 24;
+  /* Elevated above blueprint gutter overlays */
   width: 100%;
-  background-color: #EDEDF0; /* Cool CAD off-white canvas */
+  background-color: #EDEDF0;
+  /* Cool CAD off-white canvas */
   padding: 96px 0 108px 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -16,9 +18,9 @@
 /* ================= TITLE ================= */
 .faq-title {
   font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
-  font-size: clamp(2.5rem, 4.5vw, 3.75rem);
-  font-weight: 800;
-  color: #1C1A26;
+  font-size: 50px;
+  font-weight: 600;
+  color: rgb(61, 59, 79);
   letter-spacing: -0.035em;
   text-align: center;
   margin: 0 0 54px 0;
@@ -53,10 +55,13 @@
 
 /* Node pulse effect */
 @keyframes faqNodeGlow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.8;
     transform: scale(1);
   }
+
   50% {
     opacity: 1;
     transform: scale(1.2);
@@ -106,17 +111,18 @@
 }
 
 .faq-question-text {
-  font-family: var(--font-display, 'Anybody', 'DM Sans', sans-serif);
-  font-size: clamp(1.05rem, 1.2vw, 1.15rem);
+  font-family: var(--font-display, 'DM Sans', sans-serif);
+  font-size: 16px;
   font-weight: 600;
-  color: #1C1A26;
+  color: rgb(61, 59, 79);
   letter-spacing: -0.015em;
   line-height: 1.35;
   transition: color 0.15s ease;
 }
 
 .faq-question-btn:hover .faq-question-text {
-  color: #059669; /* Greptile emerald accent on hover */
+  color: #059669;
+  /* Greptile emerald accent on hover */
 }
 
 /* Chevron Icon with Rotation */
@@ -148,7 +154,7 @@
 
 .faq-answer-text {
   font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
-  font-size: 0.95rem;
+  font-size: 15px;
   color: #555368;
   line-height: 1.65;
   margin: 0 0 22px 0;
@@ -159,13 +165,13 @@
   margin-top: 52px;
   text-align: center;
   font-family: var(--font-body, 'DM Sans', sans-serif);
-  font-size: 0.9375rem;
-  color: #555368;
+  font-size: 15px;
+  color: rgb(61, 59, 79);
 }
 
 .faq-contact-link {
-  color: #1C1A26;
-  text-decoration: underline;
+  color: rgb(61, 59, 79);
+  text-decoration: none;
   text-underline-offset: 4px;
   font-weight: 600;
   transition: color 0.15s ease;
@@ -177,6 +183,7 @@
 
 /* ================= RESPONSIVE BREAKPOINTS ================= */
 @media (max-width: 900px) {
+
   .faq-constellation-left,
   .faq-constellation-right {
     display: none;

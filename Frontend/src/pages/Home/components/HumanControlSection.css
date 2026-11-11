@@ -4,9 +4,11 @@
 
 .human-control-section {
   position: relative;
-  z-index: 24; /* Elevated above blueprint gutter overlays */
+  z-index: 24;
+  /* Elevated above blueprint gutter overlays */
   width: 100%;
-  background-color: #EAEAEF; /* Cool technical CAD off-white canvas */
+  background-color: #EAEAEF;
+  /* Cool technical CAD off-white canvas */
   padding: 88px 0 32px 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -36,9 +38,9 @@
 
 .hcs-heading {
   font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
-  font-size: clamp(2rem, 3.8vw, 3.25rem);
-  font-weight: 800;
-  color: #1C1A26;
+  font-size: 2.25rem;
+  font-weight: 600;
+  color: rgb(61, 59, 79);
   letter-spacing: -0.035em;
   line-height: 1.15;
   margin: 0 0 16px 0;
@@ -46,8 +48,8 @@
 
 .hcs-subtitle {
   font-family: var(--font-body, 'DM Sans', 'Inter', sans-serif);
-  font-size: clamp(1rem, 1.2vw, 1.125rem);
-  color: #555368;
+  font-size: 1.0rem;
+  color: rgb(61, 59, 79);
   line-height: 1.6;
   max-width: 760px;
   margin: 0 auto 28px auto;
@@ -60,11 +62,10 @@
   justify-content: center;
   gap: 8px;
   padding: 12px 30px;
-  background-color: #2B2938;
+  background-color: #3D3B4F;
   color: #FFFFFF;
   font-family: var(--font-body, 'DM Sans', sans-serif);
   font-size: 0.9375rem;
-  font-weight: 600;
   text-decoration: none;
   clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
   border: 1px solid #2B2938;
@@ -107,7 +108,8 @@
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: rgba(59, 130, 246, 0.55); /* Subtle blue telemetry */
+  color: rgba(59, 130, 246, 0.55);
+  /* Subtle blue telemetry */
   pointer-events: none;
   z-index: 2;
   user-select: none;
@@ -124,7 +126,8 @@
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: rgba(236, 72, 153, 0.45); /* Subtle pink/magenta telemetry */
+  color: rgba(236, 72, 153, 0.45);
+  /* Subtle pink/magenta telemetry */
   text-align: right;
   pointer-events: none;
   z-index: 2;
@@ -175,10 +178,13 @@
 
 /* Pulse animation for yellow marker nodes */
 @keyframes hcsNodePulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.9;
   }
+
   50% {
     transform: scale(1.25);
     opacity: 1;
@@ -208,13 +214,11 @@
   height: 24px;
   border-top: 1px solid #D0D0D5;
   border-bottom: 1px solid #D0D0D5;
-  background: repeating-linear-gradient(
-    to right,
-    #B0B0B8 0px,
-    #B0B0B8 1px,
-    transparent 1px,
-    transparent 12px
-  );
+  background: repeating-linear-gradient(to right,
+      #B0B0B8 0px,
+      #B0B0B8 1px,
+      transparent 1px,
+      transparent 12px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -238,13 +242,11 @@
 .hcs-bottom-hatch {
   width: 100%;
   height: 14px;
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(85, 83, 104, 0.18) 0px,
-    rgba(85, 83, 104, 0.18) 1.5px,
-    transparent 1.5px,
-    transparent 6px
-  );
+  background: repeating-linear-gradient(45deg,
+      rgba(85, 83, 104, 0.18) 0px,
+      rgba(85, 83, 104, 0.18) 1.5px,
+      transparent 1.5px,
+      transparent 6px);
   margin-top: 4px;
 }
 

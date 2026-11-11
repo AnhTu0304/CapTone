@@ -1,0 +1,215 @@
+/* ==============================================================================
+   SelfHeal Agent Installer Mascot Banner (CAD Blueprint / Greptile High-Contrast)
+   ============================================================================== */
+
+.agent-installer-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  background-color: #161521;
+  background-image: 
+    linear-gradient(rgba(40, 233, 159, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40, 233, 159, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  border: 1px solid rgba(40, 233, 159, 0.28);
+  border-radius: 0px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+.agent-installer-banner.aib-compact {
+  padding: 12px 16px;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+/* CAD 4 Corner Notch Pins */
+.aib-corner {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #28E99F;
+  pointer-events: none;
+}
+.aib-corner-tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.aib-corner-tr { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+.aib-corner-bl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+.aib-corner-br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+/* Mascot Left Column */
+.aib-mascot-col {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aib-mascot-frame {
+  position: relative;
+  width: 92px;
+  height: 118px;
+  background: radial-gradient(circle at center, rgba(40, 233, 159, 0.16) 0%, rgba(22, 21, 33, 0) 72%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(40, 233, 159, 0.2);
+  border-radius: 0px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.agent-installer-banner.aib-compact .aib-mascot-frame {
+  width: 76px;
+  height: 98px;
+}
+
+.aib-mascot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
+}
+
+.aib-mascot-halo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 30%, rgba(40, 233, 159, 0.1) 0%, transparent 60%);
+}
+
+/* Content Right Column */
+.aib-content-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.aib-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.aib-badge-tag {
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #28E99F;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aib-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background-color: rgba(40, 233, 159, 0.1);
+  border: 1px solid rgba(40, 233, 159, 0.35);
+  border-radius: 0px;
+}
+
+.aib-status-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #28E99F;
+  box-shadow: 0 0 8px #28E99F;
+}
+
+.aib-status-text {
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: #C5FFD6;
+  letter-spacing: 0.04em;
+}
+
+.aib-title {
+  margin: 0 0 3px 0;
+  font-family: var(--font-anybody), "Anybody", sans-serif;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.agent-installer-banner.aib-compact .aib-title {
+  font-size: 1rem;
+}
+
+.aib-subtitle {
+  margin: 0 0 6px 0;
+  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
+  font-size: 0.78125rem;
+  font-weight: 600;
+  color: #28E99F;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.aib-desc {
+  margin: 0 0 8px 0;
+  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  color: #9CA3AF;
+  line-height: 1.45;
+}
+
+.aib-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.6875rem;
+  color: #6B7280;
+  margin-top: 2px;
+}
+
+.aib-meta-label {
+  letter-spacing: 0.05em;
+  color: #9CA3AF;
+}
+
+.aib-meta-cluster {
+  background-color: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #E2E8F0;
+  border-radius: 0px;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 600px) {
+  .agent-installer-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .aib-mascot-col {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .aib-mascot-frame {
+    width: 70px;
+    height: 90px;
+  }
+
+  .aib-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

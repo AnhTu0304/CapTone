@@ -371,7 +371,8 @@
   justify-content: center;
   align-self: flex-start;
   margin-top: 6px;
-  padding: 11px 24px;
+  height: 38px;
+  padding: 0 24px;
   background-color: #3D3B4F;
   /* Greptile dark button */
   color: #FFFFFF;
@@ -379,12 +380,16 @@
   font-size: 0.875rem;
   text-decoration: none;
   cursor: pointer;
-  border: 1px dashed rgba(61, 59, 79, 0.24);
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  border: none;
+  white-space: nowrap;
+  user-select: none;
+  clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
+  transition: background-color 0.15s ease, transform 0.15s ease, filter 0.15s ease;
 }
 
 .als-card-btn:hover {
-  background-color: #171520;
+  background-color: #2F2D3D;
+  filter: brightness(1.1);
   transform: translateY(-1px);
 }
 

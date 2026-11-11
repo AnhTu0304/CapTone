@@ -13,6 +13,7 @@ import CopyButton from '../../components/onboarding/CopyButton';
 import PrimaryButton from '../../components/onboarding/PrimaryButton';
 import SecondaryButton from '../../components/onboarding/SecondaryButton';
 import TroubleshootingAccordion from '../../components/onboarding/TroubleshootingAccordion';
+import AgentInstallerBanner from '../../components/onboarding/AgentInstallerBanner';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useAuth } from '../../context/AuthContext';
 import { onboardingService } from '../../services/onboardingService';
@@ -524,6 +525,9 @@ kubectl apply -f "${origin}/agent/manifest.yaml"`;
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-ink-muted)', marginBottom: '14px', lineHeight: 1.5 }}>
             Chọn công cụ bạn đang sử dụng và chạy lệnh tương ứng trên Terminal hoặc máy chủ điều khiển (Bastion Host):
           </p>
+
+          {/* SelfHeal Agent Mascot Branding Banner */}
+          <AgentInstallerBanner clusterName={clusterName} />
 
           {/* Tab chọn công cụ */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', borderBottom: '1px solid var(--border-default)', paddingBottom: '8px' }}>

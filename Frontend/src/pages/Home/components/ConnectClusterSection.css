@@ -4,9 +4,11 @@
 
 .connect-cluster-section {
   position: relative;
-  z-index: 24; /* Elevated above blueprint gutter overlays */
+  z-index: 24;
+  /* Elevated above blueprint gutter overlays */
   width: 100%;
-  background-color: #3D3B4F; /* Exact Greptile dark slate navy */
+  background-color: #3D3B4F;
+  /* Exact Greptile dark slate navy */
   padding: 100px 0 112px 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -24,7 +26,7 @@
 
 .ccs-grid {
   display: grid;
-  grid-template-columns: 1fr 1.18fr;
+  grid-template-columns: 1.4fr 1.18fr;
   gap: clamp(36px, 5vw, 72px);
   align-items: center;
   width: 100%;
@@ -35,14 +37,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  max-width: 620px;
+  max-width: 720px;
 }
 
 .ccs-title {
   font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
-  font-size: clamp(2.35rem, 3.8vw, 3.5rem);
-  font-weight: 800;
-  color: #DDFCEE; /* Luminous pale mint */
+  font-size: 50px;
+  font-weight: 600;
+  color: rgb(232, 247, 170);
   letter-spacing: -0.035em;
   line-height: 1.15;
   margin: 0 0 36px 0;
@@ -82,7 +84,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background-color: #E4FF6B; /* Neon lime yellow badge */
+  background-color: #E4FF6B;
+  /* Neon lime yellow badge */
   color: #171C15;
   border: 1px solid #E4FF6B;
   border-left: none;
@@ -331,7 +334,8 @@
   }
 
   .ccs-satellite {
-    display: none; /* Hide satellite nodes on small screens so card fits comfortably */
+    display: none;
+    /* Hide satellite nodes on small screens so card fits comfortably */
   }
 
   .ccs-mesh-svg {
