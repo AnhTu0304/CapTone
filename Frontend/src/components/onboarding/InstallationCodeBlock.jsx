@@ -17,9 +17,12 @@ export const InstallationCodeBlock = ({
 
   const getOrigin = () => {
     if (typeof window === 'undefined') return 'http://localhost';
+    if (process.env.REACT_APP_INSTALLER_URL) {
+      return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
+    }
     const { protocol, hostname, port } = window.location;
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
-      return `${protocol}//${hostname}`;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '443') {
+      return `${protocol}//${hostname}:8100`;
     }
     return window.location.origin;
   };

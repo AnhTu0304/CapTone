@@ -15,9 +15,13 @@ param (
 $ErrorActionPreference = "Stop"
 
 Write-Host "==============================================================================" -ForegroundColor Cyan
-Write-Host "     __//   S E L F H E A L   K U B E R N E T E S   A G E N T                 " -ForegroundColor Cyan
-Write-Host "    /.__.\  AI-Driven Proactive Self-Healing Infrastructure for SMEs          " -ForegroundColor Cyan
-Write-Host "    \ \/ /  Autonomous eBPF Telemetry & Anomaly Self-Recovery                 " -ForegroundColor Cyan
+Write-Host "          _/\_/\_                                                             " -ForegroundColor Red
+Write-Host "         (  o.o  )     S E L F H E A L   K U B E R N E T E S   A G E N T      " -ForegroundColor Cyan
+Write-Host "        <   (v)   >    AI-Driven Proactive Self-Healing Infrastructure for SMEs" -ForegroundColor Cyan
+Write-Host "       /  \     /  \   Autonomous eBPF Telemetry & Anomaly Self-Recovery      " -ForegroundColor Green
+Write-Host "      |    | AI|    |  Target Engine  : Native Manifests (kubectl) / Helm     " -ForegroundColor Green
+Write-Host "      \___/     \___/  Deployment Mode: Autonomous Kubernetes Agent           " -ForegroundColor Gray
+Write-Host "          / / \ \                                                             " -ForegroundColor Yellow
 Write-Host "==============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
