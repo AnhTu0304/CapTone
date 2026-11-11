@@ -20,12 +20,12 @@ describe('HowItWorksSection (3-step Cybernetic Blueprint)', () => {
     expect(screen.getByText(/Tự động phục hồi có kiểm soát/i)).toBeInTheDocument();
   });
 
-  test('renders step 1 and step 2 looped videos and step 3 SVG canvas', () => {
+  test('renders all 3 steps as looped videos with high-frame-rate playback', () => {
     const { container } = render(<HowItWorksSection />);
     
-    // Verify 2 videos exist (Step 1 and Step 2) with loop and muted attributes
+    // Verify 3 videos exist (Step 1, Step 2, and Step 3) with loop and muted attributes
     const videoElements = container.querySelectorAll('video.hiw-screen-video');
-    expect(videoElements.length).toBe(2);
+    expect(videoElements.length).toBe(3);
 
     expect(videoElements[0]).toHaveAttribute('src', expect.stringContaining('videocard1.mp4'));
     expect(videoElements[0]).toHaveAttribute('loop');
@@ -33,9 +33,8 @@ describe('HowItWorksSection (3-step Cybernetic Blueprint)', () => {
     expect(videoElements[1]).toHaveAttribute('src', expect.stringContaining('card2.mp4'));
     expect(videoElements[1]).toHaveAttribute('loop');
 
-    // Card 3 renders SVG canvas
-    const svgList = container.querySelectorAll('svg.hiw-svg-canvas');
-    expect(svgList.length).toBe(1);
+    expect(videoElements[2]).toHaveAttribute('src', expect.stringContaining('card3.mp4'));
+    expect(videoElements[2]).toHaveAttribute('loop');
   });
 
   test('renders continuous vertical guidelines', () => {
