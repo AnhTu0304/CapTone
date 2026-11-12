@@ -62,7 +62,6 @@ export const HealBotAnimation = ({ className = '', reducedMotion = false }) => {
   }, [phaseIndex, reducedMotion]);
 
   const currentPhase = PHASES[phaseIndex];
-  const isGuardian = currentPhase.id === 'guardian';
   const isDissolve = currentPhase.id === 'dissolve';
 
   return (
@@ -71,60 +70,14 @@ export const HealBotAnimation = ({ className = '', reducedMotion = false }) => {
       data-testid="healbot-animation-stage"
       aria-label="Hoạt ảnh tiến hóa linh vật HealBot Kubernetes Guardian"
     >
-      {/* ================= TOP TECHNICAL HEADER BADGE ================= */}
-      <div className="healbot-header-bar">
-        <span className="healbot-header-tag">SELFHEAL // KUBERNETES GUARDIAN</span>
-        <div className="healbot-status-pill">
-          <span className="healbot-status-dot" aria-hidden="true" />
-          <span className="healbot-status-text">{currentPhase.label}</span>
-        </div>
-      </div>
-
-      {/* ================= MASCOT VISUAL CENTER STAGE ================= */}
-      <div className="healbot-character-canvas">
-        {/* Floating Speech Bubble (Active when HealBot reaches Guardian State) */}
-        <div
-          className={`healbot-speech-bubble ${isGuardian ? 'healbot-speech-bubble-visible' : ''}`}
-          aria-hidden={!isGuardian}
-        >
-          <span className="healbot-bubble-greeting">Hello, I'm HealBot!</span>
-          <span className="healbot-bubble-sub">Your Kubernetes Guardian</span>
-        </div>
-
-        {/* Ambient Holographic Ring & Floating Particles */}
-        <div className="healbot-aura-glow" aria-hidden="true" />
-        <div className="healbot-particles" aria-hidden="true">
-          <span className="healbot-particle p1" />
-          <span className="healbot-particle p2" />
-          <span className="healbot-particle p3" />
-        </div>
-
-        {/* Pixel Sprite Frame */}
-        <div className={`healbot-sprite-frame healbot-frame-${currentPhase.id}`}>
-          <img
-            src={currentPhase.image}
-            alt={currentPhase.alt}
-            className={`healbot-pixel-img ${isDissolve ? 'healbot-img-dissolve' : ''}`}
-            data-testid="healbot-sprite-image"
-          />
-        </div>
-
-        {/* Cybernetic Pedestal Base Beneath HealBot */}
-        <div className="healbot-pedestal" aria-hidden="true">
-          <div className="healbot-pedestal-ring" />
-          <div className="healbot-pedestal-grid-lines" />
-          <span className="healbot-pedestal-marker m-left" />
-          <span className="healbot-pedestal-marker m-right" />
-        </div>
-      </div>
-
-      {/* ================= BOTTOM METRICS FOOTER ================= */}
-      <div className="healbot-footer-meta">
-        <span className="healbot-meta-item">PODS: 100% HEALTHY</span>
-        <span className="healbot-meta-sep">•</span>
-        <span className="healbot-meta-item">DOWNTIME: 0s</span>
-        <span className="healbot-meta-sep">•</span>
-        <span className="healbot-meta-item healbot-meta-accent">AUTONOMOUS GUARD</span>
+      {/* Pixel Sprite Frame — Pure Character Frames on Section Background */}
+      <div className={`healbot-sprite-frame healbot-frame-${currentPhase.id}`}>
+        <img
+          src={currentPhase.image}
+          alt={currentPhase.alt}
+          className={`healbot-pixel-img ${isDissolve ? 'healbot-img-dissolve' : ''}`}
+          data-testid="healbot-sprite-image"
+        />
       </div>
     </div>
   );

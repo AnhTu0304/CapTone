@@ -127,7 +127,7 @@
 
 .ccs-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: clamp(36px, 5vw, 72px);
   align-items: center;
   width: 100%;
@@ -181,7 +181,7 @@
   content: '';
   position: absolute;
   inset: 1.2px;
-  background-color: #2F2D3D;
+  background-color: #3D3B4F;
   clip-path: polygon(14px 0%, 100% 0%, calc(100% - 14px) 50%, 100% 100%, 14px 100%, 0% 50%);
   z-index: 1;
   transition: background-color 0.15s ease;
@@ -204,7 +204,7 @@
 }
 
 .ccs-btn-left:hover::before {
-  background-color: #242231;
+  background-color: #2F2D3D;
 }
 
 .ccs-btn-left:hover {
@@ -247,11 +247,13 @@
 .ccs-mesh-wrapper {
   position: relative;
   width: 100%;
+  max-width: 100%;
   display: flex;
   align-items: center;
   justifyContent: center;
   padding: 20px 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* ================= RESPONSIVE BREAKPOINTS ================= */

@@ -29,7 +29,7 @@ describe('ConnectClusterSection (Greptile Dark Navy Final CTA with HealBot Masco
     const mascotStage = screen.getByTestId('healbot-animation-stage');
     expect(mascotStage).toBeInTheDocument();
 
-    expect(screen.getByText('SELFHEAL // KUBERNETES GUARDIAN')).toBeInTheDocument();
+    expect(screen.getByTestId('healbot-sprite-image')).toBeInTheDocument();
   });
 
   test('renders Greptile-inspired vertical architectural background grid with markers', () => {
