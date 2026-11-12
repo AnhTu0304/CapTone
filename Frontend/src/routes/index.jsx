@@ -3,6 +3,7 @@ import HomePage from '../pages/Home';
 import GuidePage from '../pages/Guide';
 import FeaturesPage from '../pages/Features';
 import AboutPage from '../pages/About';
+import ContactPage from '../pages/Contact';
 import DocsPage from '../pages/Docs';
 import LoginPage from '../pages/Login';
 import RegisterPage from '../pages/Register';
@@ -41,6 +42,7 @@ import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
   HOME: '/',
+  CONTACT: '/contact',
   DASHBOARD: '/dashboard',
   PORTAL: '/portal',
   PORTAL_DASHBOARD: '/portal/dashboard',
@@ -394,6 +396,13 @@ export const RouteRenderer = ({
       return (
         <PublicLayout currentPath={ROUTES.FEATURES} onNavigate={onNavigate}>
           <FeaturesPage onNavigate={onNavigate} />
+        </PublicLayout>
+      );
+
+    case ROUTES.CONTACT:
+      return (
+        <PublicLayout currentPath={ROUTES.CONTACT} onNavigate={onNavigate}>
+          <ContactPage onNavigate={onNavigate} />
         </PublicLayout>
       );
 
