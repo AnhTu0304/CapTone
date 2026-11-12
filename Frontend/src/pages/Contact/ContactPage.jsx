@@ -10,6 +10,7 @@ import {
   Loader2,
   ChevronDown
 } from 'lucide-react';
+import PixelWaveCanvas from './components/PixelWaveCanvas';
 import './ContactPage.css';
 
 export const ContactPage = () => {
@@ -54,88 +55,24 @@ export const ContactPage = () => {
     }, 400);
   };
 
-  const isFilled = (val) => Boolean(val && val.trim().length > 0);
-
   return (
     <div className="contact-page-container">
-      {/* ================= SECTION 1: CONTACT SALES HERO BANNER ================= */}
+      {/* ================= SECTION 1: CONTACT SALES HERO BANNER (HEIGHT 300PX) ================= */}
       <section className="contact-hero-banner" data-testid="contact-hero-banner">
-        {/* Architectural Hatched Ruler Borders */}
+        {/* Architectural Hatched CAD Borders */}
         <div className="contact-banner-hatched-top" aria-hidden="true" />
         <div className="contact-banner-hatched-left" aria-hidden="true" />
         <div className="contact-banner-hatched-right" aria-hidden="true" />
         <div className="contact-banner-hatched-bottom" aria-hidden="true" />
 
-        {/* Digital Matrix Mint Pixel Wave Canvas */}
-        <div className="contact-hero-pixel-wave" aria-hidden="true">
-          <svg
-            className="contact-pixel-svg"
-            viewBox="0 0 1200 180"
-            preserveAspectRatio="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <pattern
-                id="pixelColPattern"
-                width="24"
-                height="24"
-                patternUnits="userSpaceOnUse"
-              >
-                <rect x="2" y="2" width="6" height="6" fill="#28E99F" fillOpacity="0.32" />
-                <rect x="14" y="14" width="6" height="6" fill="#28E99F" fillOpacity="0.45" />
-                <rect x="14" y="2" width="6" height="6" fill="#28E99F" fillOpacity="0.18" />
-                <rect x="2" y="14" width="6" height="6" fill="#28E99F" fillOpacity="0.22" />
-              </pattern>
-              <linearGradient id="waveMask" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#28E99F" stopOpacity="0.85" />
-                <stop offset="20%" stopColor="#28E99F" stopOpacity="0.65" />
-                <stop offset="50%" stopColor="#28E99F" stopOpacity="0.25" />
-                <stop offset="80%" stopColor="#28E99F" stopOpacity="0.65" />
-                <stop offset="100%" stopColor="#28E99F" stopOpacity="0.85" />
-              </linearGradient>
-            </defs>
+        {/* Dynamic Electric Neon Mint Pixel Wave (Canvas 2D) */}
+        <PixelWaveCanvas height={300} />
 
-            {/* Generative Pixel Column Rectangles with Varied Equalizer Heights */}
-            <g opacity="0.85">
-              {/* Left Wave Cluster */}
-              <rect x="60" y="20" width="16" height="140" fill="#B2F8D5" opacity="0.65" />
-              <rect x="84" y="40" width="14" height="100" fill="#28E99F" opacity="0.5" />
-              <rect x="106" y="10" width="18" height="160" fill="#C6F9E2" opacity="0.75" />
-              <rect x="132" y="50" width="12" height="90" fill="#28E99F" opacity="0.4" />
-              <rect x="152" y="30" width="20" height="120" fill="#B2F8D5" opacity="0.6" />
-              <rect x="180" y="60" width="14" height="70" fill="#C6F9E2" opacity="0.5" />
-              <rect x="202" y="40" width="16" height="110" fill="#28E99F" opacity="0.45" />
-              <rect x="226" y="20" width="18" height="130" fill="#B2F8D5" opacity="0.55" />
-              <rect x="252" y="50" width="14" height="80" fill="#C6F9E2" opacity="0.4" />
-              <rect x="274" y="70" width="16" height="60" fill="#28E99F" opacity="0.3" />
-              <rect x="298" y="30" width="14" height="110" fill="#B2F8D5" opacity="0.4" />
-              <rect x="320" y="60" width="18" height="80" fill="#C6F9E2" opacity="0.3" />
-
-              {/* Center Subtle Cloud Dispersion */}
-              <rect x="360" y="40" width="480" height="100" fill="url(#pixelColPattern)" opacity="0.45" />
-
-              {/* Right Wave Cluster */}
-              <rect x="862" y="60" width="18" height="80" fill="#C6F9E2" opacity="0.3" />
-              <rect x="888" y="30" width="14" height="110" fill="#B2F8D5" opacity="0.4" />
-              <rect x="910" y="70" width="16" height="60" fill="#28E99F" opacity="0.3" />
-              <rect x="934" y="50" width="14" height="80" fill="#C6F9E2" opacity="0.4" />
-              <rect x="956" y="20" width="18" height="130" fill="#B2F8D5" opacity="0.55" />
-              <rect x="982" y="40" width="16" height="110" fill="#28E99F" opacity="0.45" />
-              <rect x="1006" y="60" width="14" height="70" fill="#C6F9E2" opacity="0.5" />
-              <rect x="1028" y="30" width="20" height="120" fill="#B2F8D5" opacity="0.6" />
-              <rect x="1056" y="50" width="12" height="90" fill="#28E99F" opacity="0.4" />
-              <rect x="1076" y="10" width="18" height="160" fill="#C6F9E2" opacity="0.75" />
-              <rect x="1102" y="40" width="14" height="100" fill="#28E99F" opacity="0.5" />
-              <rect x="1124" y="20" width="16" height="140" fill="#B2F8D5" opacity="0.65" />
-            </g>
-          </svg>
-        </div>
-
-        {/* Banner Central Typography */}
+        {/* Banner Central Typography in Vietnamese */}
         <div className="contact-hero-content">
-          <h1 className="contact-hero-title">Contact Sales</h1>
+          <h1 className="contact-hero-title">Liên Hệ Tư Vấn</h1>
           <p className="contact-hero-subtitle">
-            Thanks for your interest in SelfHeal. Fill out the form and our team will reach out ASAP.
+            Cảm ơn bạn đã quan tâm đến SelfHeal. Vui lòng điền thông tin bên dưới, đội ngũ kỹ sư của chúng tôi sẽ liên hệ trong thời gian sớm nhất.
           </p>
         </div>
       </section>
@@ -187,7 +124,7 @@ export const ContactPage = () => {
                   });
                 }}
               >
-                <span>Gửi thông tin khác</span>
+                <span>Gửi yêu cầu khác</span>
               </button>
             </div>
           ) : (
@@ -198,12 +135,12 @@ export const ContactPage = () => {
                 </div>
               )}
 
-              {/* Row 1: First Name & Last Name (2 columns) */}
+              {/* Row 1: Tên & Họ (2 columns) */}
               <div className="contact-row contact-row-2col">
                 <div className="contact-field-group">
                   <label htmlFor="firstName" className="contact-label">
                     <User size={13} strokeWidth={2.2} />
-                    <span>FIRST NAME</span>
+                    <span>TÊN</span>
                   </label>
                   <input
                     id="firstName"
@@ -212,7 +149,7 @@ export const ContactPage = () => {
                     placeholder="Tú"
                     value={formData.firstName}
                     onChange={(e) => handleChange('firstName', e.target.value)}
-                    className={`contact-input ${isFilled(formData.firstName) ? 'contact-input-filled' : ''}`}
+                    className="contact-input"
                     autoComplete="given-name"
                   />
                 </div>
@@ -220,7 +157,7 @@ export const ContactPage = () => {
                 <div className="contact-field-group">
                   <label htmlFor="lastName" className="contact-label">
                     <User size={13} strokeWidth={2.2} />
-                    <span>LAST NAME</span>
+                    <span>HỌ</span>
                   </label>
                   <input
                     id="lastName"
@@ -229,17 +166,17 @@ export const ContactPage = () => {
                     placeholder="Ngô"
                     value={formData.lastName}
                     onChange={(e) => handleChange('lastName', e.target.value)}
-                    className={`contact-input ${isFilled(formData.lastName) ? 'contact-input-filled' : ''}`}
+                    className="contact-input"
                     autoComplete="family-name"
                   />
                 </div>
               </div>
 
-              {/* Row 2: Work Email */}
+              {/* Row 2: Email Doanh Nghiệp */}
               <div className="contact-field-group">
                 <label htmlFor="workEmail" className="contact-label">
                   <Mail size={13} strokeWidth={2.2} />
-                  <span>WORK EMAIL</span>
+                  <span>EMAIL DOANH NGHIỆP</span>
                 </label>
                 <input
                   id="workEmail"
@@ -248,34 +185,34 @@ export const ContactPage = () => {
                   placeholder="tungo342005@gmail.com"
                   value={formData.workEmail}
                   onChange={(e) => handleChange('workEmail', e.target.value)}
-                  className={`contact-input ${isFilled(formData.workEmail) ? 'contact-input-filled' : ''}`}
+                  className="contact-input"
                   autoComplete="email"
                 />
               </div>
 
-              {/* Row 3: Phone Number (Optional) */}
+              {/* Row 3: Số Điện Thoại (Tùy chọn) */}
               <div className="contact-field-group">
                 <label htmlFor="phoneNumber" className="contact-label">
                   <Phone size={13} strokeWidth={2.2} />
-                  <span>PHONE NUMBER (OPTIONAL)</span>
+                  <span>SỐ ĐIỆN THOẠI (TÙY CHỌN)</span>
                 </label>
                 <input
                   id="phoneNumber"
                   name="phoneNumber"
                   type="tel"
-                  placeholder="+1 555 123 4567"
+                  placeholder="+84 912 345 678"
                   value={formData.phoneNumber}
                   onChange={(e) => handleChange('phoneNumber', e.target.value)}
-                  className={`contact-input ${isFilled(formData.phoneNumber) ? 'contact-input-filled' : ''}`}
+                  className="contact-input"
                   autoComplete="tel"
                 />
               </div>
 
-              {/* Row 4: Company Name */}
+              {/* Row 4: Tên Doanh Nghiệp / Công Ty */}
               <div className="contact-field-group">
                 <label htmlFor="companyName" className="contact-label">
                   <Building2 size={13} strokeWidth={2.2} />
-                  <span>COMPANY NAME</span>
+                  <span>TÊN DOANH NGHIỆP / CÔNG TY</span>
                 </label>
                 <input
                   id="companyName"
@@ -284,16 +221,16 @@ export const ContactPage = () => {
                   placeholder="Acme Inc."
                   value={formData.companyName}
                   onChange={(e) => handleChange('companyName', e.target.value)}
-                  className={`contact-input ${isFilled(formData.companyName) ? 'contact-input-filled' : ''}`}
+                  className="contact-input"
                   autoComplete="organization"
                 />
               </div>
 
-              {/* Row 5: How Many Engineers? Dropdown */}
+              {/* Row 5: Quy Mô Đội Ngũ Kỹ Sư? Dropdown */}
               <div className="contact-field-group">
                 <label htmlFor="teamSize" className="contact-label">
                   <Users size={13} strokeWidth={2.2} />
-                  <span>HOW MANY ENGINEERS?</span>
+                  <span>QUY MÔ ĐỘI NGŨ KỸ SƯ?</span>
                 </label>
                 <div className="contact-select-wrapper">
                   <select
@@ -301,33 +238,33 @@ export const ContactPage = () => {
                     name="teamSize"
                     value={formData.teamSize}
                     onChange={(e) => handleChange('teamSize', e.target.value)}
-                    className={`contact-select ${isFilled(formData.teamSize) ? 'contact-input-filled' : ''}`}
+                    className="contact-select"
                   >
-                    <option value="" disabled>Select team size</option>
-                    <option value="1-10">1-10 engineers</option>
-                    <option value="11-50">11-50 engineers</option>
-                    <option value="51-200">51-200 engineers</option>
-                    <option value="201-500">201-500 engineers</option>
-                    <option value="500+">500+ engineers</option>
+                    <option value="" disabled>Chọn quy mô đội ngũ</option>
+                    <option value="1-10">1 - 10 kỹ sư</option>
+                    <option value="11-50">11 - 50 kỹ sư</option>
+                    <option value="51-200">51 - 200 kỹ sư</option>
+                    <option value="201-500">201 - 500 kỹ sư</option>
+                    <option value="500+">Trên 500 kỹ sư</option>
                   </select>
                   <ChevronDown size={14} className="contact-select-caret" aria-hidden="true" />
                 </div>
               </div>
 
-              {/* Row 6: Textarea Notes */}
+              {/* Row 6: Textarea Ghi Chú Hỗ Trợ */}
               <div className="contact-field-group">
                 <label htmlFor="notes" className="contact-label">
                   <HelpCircle size={13} strokeWidth={2.2} />
-                  <span>WHAT WOULD BE HELPFUL FOR US TO KNOW BEFORE THE CALL?</span>
+                  <span>BẠN CẦN CHÚNG TÔI HỖ TRỢ ĐIỀU GÌ TRƯỚC CUỘC HẸN?</span>
                 </label>
                 <textarea
                   id="notes"
                   name="notes"
                   rows={4}
-                  placeholder="Tell us about your team, your codebase, and what you're looking to achieve..."
+                  placeholder="Hãy chia sẻ về đội ngũ, quy mô hạ tầng Kubernetes hiện tại và mục tiêu bạn muốn tối ưu tự phục hồi..."
                   value={formData.notes}
                   onChange={(e) => handleChange('notes', e.target.value)}
-                  className={`contact-textarea ${isFilled(formData.notes) ? 'contact-input-filled' : ''}`}
+                  className="contact-textarea"
                 />
               </div>
 
@@ -337,15 +274,15 @@ export const ContactPage = () => {
                   type="submit"
                   disabled={loading}
                   className="contact-btn-submit"
-                  aria-label="Submit"
+                  aria-label="Gửi Yêu Cầu Tư Vấn"
                 >
                   {loading ? (
                     <>
                       <Loader2 size={16} className="contact-btn-spinner" />
-                      <span>Sending...</span>
+                      <span>Đang gửi...</span>
                     </>
                   ) : (
-                    <span>Submit</span>
+                    <span>Gửi Yêu Cầu Tư Vấn</span>
                   )}
                 </button>
               </div>
