@@ -11,7 +11,9 @@ export const HomePage = ({ onNavigate }) => {
   return (
     <div className="home-page">
       {/* 1. HERO SECTION + [ AGENT ] BRIDGE BANNER */}
-      <HeroSectionSlot onNavigate={onNavigate} />
+      <div id="overview">
+        <HeroSectionSlot onNavigate={onNavigate} />
+      </div>
 
       {/* 2. [ HOW IT WORKS ] 3-STEP CYBERNETIC BLUEPRINT SECTION */}
       <HowItWorksSection />

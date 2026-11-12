@@ -16,6 +16,7 @@ export const HumanControlSection = ({ className = '', onNavigate }) => {
 
   return (
     <section
+      id="human-approval"
       className={`human-control-section ${className}`.trim()}
       data-testid="human-control-section"
       aria-label="Tự hành thông minh, Con người kiểm soát"

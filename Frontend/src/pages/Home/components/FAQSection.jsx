@@ -38,7 +38,7 @@ export const FAQSection = ({ className = '', onNavigate }) => {
     },
     {
       q: 'Có bản dùng thử miễn phí hoặc gói dành cho doanh nghiệp SME không?',
-      a: 'SelfHeal cung cấp gói Free Tier đầy đủ tính năng quan sát và dự đoán cho tối đa 3 cụm Kubernetes, cùng bản dùng thử 14 ngày không giới hạn cho tính năng tự phục hồi nâng cao.',
+      a: 'Hoàn toàn có. SelfHeal cung cấp gói Community miễn phí trọn đời cho cụm K8s quy mô dưới 15 nodes và gói Enterprise với đầy đủ tính năng suy luận AI, RCA 3D chuyên sâu cùng SLA hỗ trợ 24/7.',
     },
     {
       q: 'Dữ liệu log và chỉ số của hệ thống có được bảo mật không?',
@@ -48,6 +48,7 @@ export const FAQSection = ({ className = '', onNavigate }) => {
 
   return (
     <section
+      id="faq"
       className={`faq-section ${className}`.trim()}
       data-testid="faq-section"
       aria-label="Câu hỏi thường gặp"

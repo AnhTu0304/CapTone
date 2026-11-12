@@ -44,7 +44,7 @@ export const HowItWorksSection = ({ className = '' }) => {
         {/* 3 Step Cards Grid */}
         <div className="hiw-grid">
           {/* ================= STEP 01: QUAN SÁT ================= */}
-          <article className="hiw-card">
+          <article className="hiw-card" id="monitoring">
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
@@ -77,7 +77,7 @@ export const HowItWorksSection = ({ className = '' }) => {
           </article>
 
           {/* ================= STEP 02: DỰ ĐOÁN ================= */}
-          <article className="hiw-card">
+          <article className="hiw-card" id="prediction">
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
@@ -110,7 +110,7 @@ export const HowItWorksSection = ({ className = '' }) => {
           </article>
 
           {/* ================= STEP 03: KHÔI PHỤC ================= */}
-          <article className="hiw-card">
+          <article className="hiw-card" id="self-healing">
             <div className="hiw-screen-frame">
               <div className="hiw-screen-inner-gap">
                 <div className="hiw-screen" aria-hidden="true">
