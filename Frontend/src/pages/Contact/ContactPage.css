@@ -1,18 +1,125 @@
 /* ==========================================================================
    CONTACT PAGE — GREPTILE-STYLE ARCHITECTURAL TECHNICAL CONTACT FORM
+   FULL-WIDTH BACKGROUND WITH HERO BANNER & MATRIX MINT PIXEL WAVE
    ========================================================================== */
 
 .contact-page-container {
   position: relative;
+  z-index: 24; /* Elevated above blueprint-gutter-left/right (z-index: 20) for 100% full-width */
   width: 100%;
   min-height: calc(100vh - 140px);
-  background-color: #E6E6E5; /* Exact light architectural gray tone */
-  padding: 60px 24px 100px 24px;
+  background-color: #E6E6E5; /* Light architectural gray tone */
+  padding: 0;
   box-sizing: border-box;
   overflow: hidden;
 }
 
-/* ================= ARCHITECTURAL GRID & GUTTER GUIDES ================= */
+/* ================= SECTION 1: HERO BANNER WITH HATCHED BORDERS & PIXEL WAVE ================= */
+.contact-hero-banner {
+  position: relative;
+  width: 100%;
+  background-color: #E6E6E5;
+  padding: 44px 36px 48px 36px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Hatched Ruler Borders (45-degree diagonal technical CAD hatching) */
+.contact-banner-hatched-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.15) 0px, rgba(61, 59, 79, 0.15) 1.5px, transparent 1.5px, transparent 6px);
+  border-bottom: 1px solid rgba(61, 59, 79, 0.18);
+}
+
+.contact-banner-hatched-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.15) 0px, rgba(61, 59, 79, 0.15) 1.5px, transparent 1.5px, transparent 6px);
+  border-top: 1px solid rgba(61, 59, 79, 0.18);
+}
+
+.contact-banner-hatched-left {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 28px;
+  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.12) 0px, rgba(61, 59, 79, 0.12) 1.5px, transparent 1.5px, transparent 6px);
+  border-right: 1px solid rgba(61, 59, 79, 0.15);
+}
+
+.contact-banner-hatched-right {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  right: 0;
+  width: 28px;
+  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.12) 0px, rgba(61, 59, 79, 0.12) 1.5px, transparent 1.5px, transparent 6px);
+  border-left: 1px solid rgba(61, 59, 79, 0.15);
+}
+
+/* Digital Matrix Mint Pixel Wave Canvas */
+.contact-hero-pixel-wave {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  overflow: hidden;
+}
+
+.contact-pixel-svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Banner Typography */
+.contact-hero-content {
+  position: relative;
+  z-index: 3;
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.contact-hero-title {
+  font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
+  font-size: clamp(38px, 4.5vw, 56px);
+  font-weight: 700;
+  color: #262335;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  margin: 0 0 12px 0;
+}
+
+.contact-hero-subtitle {
+  font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
+  font-size: clamp(14px, 1.4vw, 16px);
+  color: #4A475A;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ================= SECTION 2: FULL-WIDTH ARCHITECTURAL FORM SECTION ================= */
+.contact-form-section {
+  position: relative;
+  width: 100%;
+  background-color: #E6E6E5;
+  padding: 50px 24px 100px 24px;
+  box-sizing: border-box;
+}
+
+/* Background Architectural Grid Overlay with Side Guide Lines & Mint Crosshair Dots */
 .contact-bg-grid {
   position: absolute;
   inset: 0;
@@ -198,7 +305,7 @@
 .contact-btn-submit {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justifyContent: center;
   gap: 8px;
   background-color: #3D3B4F;
   color: #FFFFFF;
@@ -277,14 +384,20 @@
 
 /* ================= RESPONSIVE ================= */
 @media (max-width: 900px) {
+  .contact-banner-hatched-left,
+  .contact-banner-hatched-right,
   .contact-gutter-guide {
     display: none;
   }
 }
 
 @media (max-width: 640px) {
-  .contact-page-container {
-    padding: 40px 16px 80px 16px;
+  .contact-hero-banner {
+    padding: 32px 16px 36px 16px;
+  }
+
+  .contact-form-section {
+    padding: 36px 16px 80px 16px;
   }
 
   .contact-row-2col {

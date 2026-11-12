@@ -3,6 +3,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ContactPage from './ContactPage';
 
 describe('ContactPage (Greptile-Style Architectural Contact Form)', () => {
+  it('renders the Contact Sales hero banner with title and subtitle', () => {
+    render(<ContactPage />);
+
+    expect(screen.getByRole('heading', { level: 1, name: /Contact Sales/i })).toBeInTheDocument();
+    expect(screen.getByText(/Thanks for your interest in SelfHeal\. Fill out the form and our team will reach out ASAP\./i)).toBeInTheDocument();
+    expect(screen.getByTestId('contact-hero-banner')).toBeInTheDocument();
+  });
+
   it('renders all form fields matching the technical specification', () => {
     render(<ContactPage />);
 
