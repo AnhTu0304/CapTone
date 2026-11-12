@@ -3,9 +3,10 @@
    ========================================================================== */
 
 .connect-cluster-section {
-  --ccs-grid-col-width: 160px;
-  --ccs-grid-line-color: rgba(198, 249, 226, 0.055);
-  --ccs-grid-h-line-color: rgba(198, 249, 226, 0.03);
+  --ccs-grid-col-width: 168px;
+  --ccs-grid-line-color: rgba(0, 0, 0, 0.45);
+  --ccs-grid-line-bevel: rgba(255, 255, 255, 0.08);
+  --ccs-grid-h-line-color: rgba(0, 0, 0, 0.28);
   position: relative;
   z-index: 24;
   /* Elevated above blueprint gutter overlays */
@@ -28,31 +29,51 @@
   background-image:
     /* Subtle horizontal reference lines */
     linear-gradient(to bottom, var(--ccs-grid-h-line-color) 1px, transparent 1px),
-    /* Perfectly spaced vertical architectural grid lines */
-    linear-gradient(to right, var(--ccs-grid-line-color) 1px, transparent 1px);
+    /* Bold, pronounced architectural vertical groove: 1px dark seam + 1px subtle light bevel */
+    linear-gradient(to right, var(--ccs-grid-line-color) 1px, var(--ccs-grid-line-bevel) 1px, transparent 2px);
   background-size: 100% 160px, var(--ccs-grid-col-width) 100%;
   background-position: center top, center top;
 }
 
-/* Decorative Technical Crosshair / Square Markers at Selected Grid Intersections */
+/* Decorative Technical Crosshair Markers at Selected Grid Intersections */
 .ccs-grid-marker {
   position: absolute;
-  width: 4px;
-  height: 4px;
-  background-color: rgb(236, 255, 163);
-  opacity: 0.35;
-  border-radius: 1px;
+  width: 9px;
+  height: 9px;
   transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.55;
   animation: ccs-marker-pulse 4s ease-in-out infinite;
+}
+
+.ccs-grid-marker::before,
+.ccs-grid-marker::after {
+  content: '';
+  position: absolute;
+  background-color: rgba(236, 255, 163, 0.7);
+}
+
+.ccs-grid-marker::before {
+  top: 4px;
+  left: 0;
+  width: 9px;
+  height: 1px;
+}
+
+.ccs-grid-marker::after {
+  top: 0;
+  left: 4px;
+  width: 1px;
+  height: 9px;
 }
 
 @keyframes ccs-marker-pulse {
   0%, 100% {
-    opacity: 0.2;
+    opacity: 0.35;
     transform: translate(-50%, -50%) scale(0.9);
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.75;
     transform: translate(-50%, -50%) scale(1.15);
   }
 }
@@ -70,15 +91,25 @@
 
 .ccs-marker-2 {
   top: 320px;
-  left: calc(50% - var(--ccs-grid-col-width) * 1);
+  left: calc(50% - var(--ccs-grid-col-width) * 2);
 }
 
 .ccs-marker-3 {
   top: 160px;
-  left: calc(50% + var(--ccs-grid-col-width) * 2);
+  left: calc(50% - var(--ccs-grid-col-width) * 1);
 }
 
 .ccs-marker-4 {
+  top: 320px;
+  left: calc(50% + var(--ccs-grid-col-width) * 1);
+}
+
+.ccs-marker-5 {
+  top: 160px;
+  left: calc(50% + var(--ccs-grid-col-width) * 2);
+}
+
+.ccs-marker-6 {
   top: 320px;
   left: calc(50% + var(--ccs-grid-col-width) * 3);
 }
@@ -433,6 +464,10 @@
     top: 120px;
   }
 
+  .ccs-marker-5 {
+    top: 120px;
+  }
+
   .ccs-grid {
     grid-template-columns: 1fr;
     gap: 56px;
@@ -453,8 +488,9 @@
 @media (max-width: 640px) {
   .connect-cluster-section {
     --ccs-grid-col-width: 80px;
-    --ccs-grid-line-color: rgba(198, 249, 226, 0.035);
-    --ccs-grid-h-line-color: rgba(198, 249, 226, 0.02);
+    --ccs-grid-line-color: rgba(0, 0, 0, 0.35);
+    --ccs-grid-line-bevel: rgba(255, 255, 255, 0.05);
+    --ccs-grid-h-line-color: rgba(0, 0, 0, 0.18);
     padding: 72px 0 84px 0;
   }
 

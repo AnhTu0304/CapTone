@@ -25,6 +25,8 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
         <span className="ccs-grid-marker ccs-marker-2" />
         <span className="ccs-grid-marker ccs-marker-3" />
         <span className="ccs-grid-marker ccs-marker-4" />
+        <span className="ccs-grid-marker ccs-marker-5" />
+        <span className="ccs-grid-marker ccs-marker-6" />
       </div>
 
       <div className="ccs-container">
