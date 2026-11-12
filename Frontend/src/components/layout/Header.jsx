@@ -33,7 +33,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
 
   const navLinks = [
     { label: 'HƯỚNG DẪN', path: '/guide', hasDropdown: false },
-    { label: 'TÍNH NĂNG', path: '/features', hasDropdown: true },
+    { label: 'TÍNH NĂNG', path: '/features', hasDropdown: false },
     { label: 'GIỚI THIỆU', path: '/about', hasDropdown: false },
     { label: 'TÀI LIỆU', path: '/docs', hasDropdown: true },
   ];
@@ -121,8 +121,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                     <span>{link.label}</span>
                     {link.hasDropdown && (
                       <ChevronDown
-                        size={0}
-                        strokeWidth={2.5}
+                        size={14}
                         className="header-nav-chevron"
                         aria-hidden="true"
                       />

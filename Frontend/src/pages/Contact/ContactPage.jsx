@@ -59,21 +59,26 @@ export const ContactPage = () => {
     <div className="contact-page-container">
       {/* ================= SECTION 1: CONTACT SALES HERO BANNER (HEIGHT 300PX) ================= */}
       <section className="contact-hero-banner" data-testid="contact-hero-banner">
-        {/* Architectural Hatched CAD Borders */}
+        {/* Full-width Architectural Hatched CAD Horizontal Rulers */}
         <div className="contact-banner-hatched-top" aria-hidden="true" />
-        <div className="contact-banner-hatched-left" aria-hidden="true" />
-        <div className="contact-banner-hatched-right" aria-hidden="true" />
         <div className="contact-banner-hatched-bottom" aria-hidden="true" />
 
-        {/* Dynamic Electric Neon Mint Pixel Wave (Canvas 2D) */}
-        <PixelWaveCanvas height={300} />
+        {/* Centered Contained Architectural Frame (matching Greptile reference) */}
+        <div className="contact-hero-frame">
+          {/* Vertical Hatched Dividing Columns defining the neat inner box */}
+          <div className="contact-banner-hatched-left" aria-hidden="true" />
+          <div className="contact-banner-hatched-right" aria-hidden="true" />
 
-        {/* Banner Central Typography in Vietnamese */}
-        <div className="contact-hero-content">
-          <h1 className="contact-hero-title">Liên Hệ Tư Vấn</h1>
-          <p className="contact-hero-subtitle">
-            Cảm ơn bạn đã quan tâm đến SelfHeal. Vui lòng điền thông tin bên dưới, đội ngũ kỹ sư của chúng tôi sẽ liên hệ trong thời gian sớm nhất.
-          </p>
+          {/* Soft Light Mint Dense Pixel Wave Canvas (strictly contained inside frame) */}
+          <PixelWaveCanvas height={300} />
+
+          {/* Banner Central Typography in Vietnamese */}
+          <div className="contact-hero-content">
+            <h1 className="contact-hero-title">Liên Hệ Tư Vấn</h1>
+            <p className="contact-hero-subtitle">
+              Cảm ơn bạn đã quan tâm đến SelfHeal. Vui lòng điền thông tin bên dưới, đội ngũ kỹ sư của chúng tôi sẽ liên hệ trong thời gian sớm nhất.
+            </p>
+          </div>
         </div>
       </section>
 

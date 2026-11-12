@@ -3,7 +3,8 @@ import React, { useRef, useEffect } from 'react';
 /**
  * PixelWaveCanvas
  * High-performance 2D Canvas rendering an animated matrix pixel wave
- * with vibrant electric neon green/mint squares (#00FF88, #00FFA3, #10B981)
+ * with soft, bright pastel mint squares (#C4FBD4, #B8F8CE, #D2FCE3, #A5F3C8)
+ * densely packed in an architectural CAD frame.
  */
 export const PixelWaveCanvas = ({ className = '', height = 300 }) => {
   const canvasRef = useRef(null);
@@ -38,17 +39,18 @@ export const PixelWaveCanvas = ({ className = '', height = 300 }) => {
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    // Vibrant Electric Neon Mint Colors
+    // Soft, light, bright pastel mint colors (sampled from reference image: #C4FBD4)
     const COLORS = [
-      '#00FF88', // Electric Spring Green
-      '#00FFA3', // Vibrant Neon Mint
-      '#10B981', // Crisp Emerald
-      '#34D399', // Bright Mint
-      '#6EE7B7', // Soft Pale Mint
+      '#C4FBD4', // Soft pale mint
+      '#B8F8CE', // Fresh bright mint
+      '#CCF9DA', // Airy luminous mint
+      '#A7F3C8', // Clean mint tone
+      '#DDFBEB', // Light pastel highlight
     ];
 
-    const PIXEL_SIZE = 7;
-    const GAP = 5;
+    // Tight pixel grid for dense ("dằn dặn") matrix columns
+    const PIXEL_SIZE = 5;
+    const GAP = 2.5;
     const STEP = PIXEL_SIZE + GAP;
 
     const render = () => {
@@ -59,49 +61,60 @@ export const PixelWaveCanvas = ({ className = '', height = 300 }) => {
       const centerX = width / 2;
       const centerY = canvasHeight / 2;
 
-      // Draw columns of animated pixel squares
       for (let c = 0; c < cols; c++) {
         const x = c * STEP;
-        const distFromCenter = Math.abs(x - centerX) / (width / 2); // 0 at center, 1 at edges
+        const normDistX = Math.abs(x - centerX) / (width / 2); // 0 at center, 1 at edges
 
-        // Multi-frequency wave calculation
-        const wave1 = Math.sin(c * 0.14 + time * 1.8) * 45;
-        const wave2 = Math.cos(c * 0.08 - time * 1.2) * 35;
-        const wave3 = Math.sin(c * 0.22 + time * 0.9) * 20;
+        // Multi-frequency smooth wave motion
+        const wave1 = Math.sin(c * 0.12 + time * 1.6) * 38;
+        const wave2 = Math.cos(c * 0.07 - time * 1.1) * 26;
+        const wave3 = Math.sin(c * 0.22 + time * 0.7) * 16;
         const totalWave = wave1 + wave2 + wave3;
 
-        // Density increases towards left/right sides (matching Greptile reference)
-        const densityFactor = 0.25 + Math.pow(distFromCenter, 1.4) * 0.75;
-        const colHeight = (canvasHeight * 0.6 + totalWave) * densityFactor;
+        // Density & column height increase significantly towards the flanks
+        const columnSpanFactor = 0.35 + Math.pow(normDistX, 1.2) * 0.65;
+        const colHeight = (canvasHeight * 0.72 + totalWave) * columnSpanFactor;
 
         const startY = centerY - colHeight / 2;
         const endY = centerY + colHeight / 2;
 
         for (let r = 0; r < rows; r++) {
           const y = r * STEP;
+          const normDistY = Math.abs(y - centerY) / (canvasHeight / 2);
 
-          // Check if within current column wave bounds
+          // Center clearance zone for title & subtitle legibility
+          const inCenterTextZone = normDistX < 0.42 && normDistY < 0.44;
+
+          // Check if pixel falls inside column wave envelope
           if (y >= startY && y <= endY) {
-            // Subtle pseudo-random dispersion
-            const noise = Math.sin(c * 17.3 + r * 31.7 + time * 0.5);
-            if (noise > -0.6) {
-              const colorIndex = Math.abs(Math.floor((c + r + Math.floor(time * 2)) % COLORS.length));
-              const baseColor = COLORS[colorIndex];
+            // Pseudorandom matrix noise for organic yet structured column density
+            const cellNoise = Math.sin(c * 19.3 + r * 37.1 + time * 0.4);
 
-              // Center text clearance: fade opacity near center
-              const centerFade = Math.min(1, Math.max(0.12, Math.pow(distFromCenter, 1.2)));
-              const alpha = (0.35 + (noise + 1) * 0.3) * centerFade;
+            let shouldDraw = false;
+            let alpha = 0.85;
+
+            if (inCenterTextZone) {
+              // Very faint, occasional light pixels in text area for subtle depth
+              if (cellNoise > 0.45 && normDistY > 0.28) {
+                shouldDraw = true;
+                alpha = 0.18;
+              }
+            } else {
+              // Dense ("dằn dặn") coverage outside center text zone
+              const densityThreshold = normDistX > 0.38 ? -0.7 : -0.25;
+              if (cellNoise > densityThreshold) {
+                shouldDraw = true;
+                alpha = normDistX > 0.45 ? 0.88 : (0.4 + normDistX * 0.5);
+              }
+            }
+
+            if (shouldDraw) {
+              const colorIdx = Math.abs((c * 3 + r * 5 + Math.floor(time * 2)) % COLORS.length);
+              const color = COLORS[colorIdx];
 
               ctx.save();
-              ctx.globalAlpha = Math.min(alpha, 0.9);
-              ctx.fillStyle = baseColor;
-
-              // Neon glow for edge clusters
-              if (distFromCenter > 0.45 && noise > 0.2) {
-                ctx.shadowColor = '#00FF88';
-                ctx.shadowBlur = 6;
-              }
-
+              ctx.globalAlpha = Math.min(alpha, 0.95);
+              ctx.fillStyle = color;
               ctx.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE);
               ctx.restore();
             }
@@ -110,7 +123,7 @@ export const PixelWaveCanvas = ({ className = '', height = 300 }) => {
       }
 
       if (!prefersReducedMotion) {
-        time += 0.022;
+        time += 0.016;
         animationFrameId = requestAnimationFrame(render);
       }
     };

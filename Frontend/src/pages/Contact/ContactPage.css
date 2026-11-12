@@ -21,24 +21,30 @@
   height: 300px;
   min-height: 300px;
   background-color: #E6E6E5;
+  background-image: 
+    linear-gradient(to right, rgba(61, 59, 79, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(61, 59, 79, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
   display: flex;
   align-items: center;
-  justifyContent: center;
-  padding: 24px 36px;
+  justify-content: center;
+  padding: 0 24px;
   box-sizing: border-box;
   overflow: hidden;
 }
 
-/* Hatched Ruler Borders (45-degree diagonal technical CAD hatching) */
+/* Full-width Horizontal Hatched CAD Rulers */
 .contact-banner-hatched-top {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 14px;
+  height: 12px;
   background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.15) 0px, rgba(61, 59, 79, 0.15) 1.5px, transparent 1.5px, transparent 6px);
-  border-bottom: 1px solid rgba(61, 59, 79, 0.18);
-  z-index: 4;
+  border-bottom: 1px solid rgba(61, 59, 79, 0.2);
+  border-top: 1px solid rgba(61, 59, 79, 0.2);
+  z-index: 6;
+  pointer-events: none;
 }
 
 .contact-banner-hatched-bottom {
@@ -46,35 +52,56 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 14px;
+  height: 12px;
   background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.15) 0px, rgba(61, 59, 79, 0.15) 1.5px, transparent 1.5px, transparent 6px);
-  border-top: 1px solid rgba(61, 59, 79, 0.18);
-  z-index: 4;
+  border-top: 1px solid rgba(61, 59, 79, 0.2);
+  border-bottom: 1px solid rgba(61, 59, 79, 0.2);
+  z-index: 6;
+  pointer-events: none;
 }
 
+/* Centered Contained Inner Frame (matching Greptile reference) */
+.contact-hero-frame {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Vertical Dividing Hatched CAD Columns defining the inner box */
 .contact-banner-hatched-left {
   position: absolute;
-  top: 14px;
-  bottom: 14px;
+  top: 0;
+  bottom: 0;
   left: 0;
-  width: 28px;
-  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.12) 0px, rgba(61, 59, 79, 0.12) 1.5px, transparent 1.5px, transparent 6px);
-  border-right: 1px solid rgba(61, 59, 79, 0.15);
-  z-index: 4;
+  width: 22px;
+  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.14) 0px, rgba(61, 59, 79, 0.14) 1.5px, transparent 1.5px, transparent 6px);
+  border-left: 1px solid rgba(61, 59, 79, 0.18);
+  border-right: 1px solid rgba(61, 59, 79, 0.18);
+  z-index: 5;
+  pointer-events: none;
 }
 
 .contact-banner-hatched-right {
   position: absolute;
-  top: 14px;
-  bottom: 14px;
+  top: 0;
+  bottom: 0;
   right: 0;
-  width: 28px;
-  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.12) 0px, rgba(61, 59, 79, 0.12) 1.5px, transparent 1.5px, transparent 6px);
-  border-left: 1px solid rgba(61, 59, 79, 0.15);
-  z-index: 4;
+  width: 22px;
+  background: repeating-linear-gradient(45deg, rgba(61, 59, 79, 0.14) 0px, rgba(61, 59, 79, 0.14) 1.5px, transparent 1.5px, transparent 6px);
+  border-left: 1px solid rgba(61, 59, 79, 0.18);
+  border-right: 1px solid rgba(61, 59, 79, 0.18);
+  z-index: 5;
+  pointer-events: none;
 }
 
-/* Digital Matrix Neon Mint Pixel Wave Canvas Wrapper */
+/* Digital Matrix Pastel Mint Pixel Wave Canvas Wrapper (Strictly Contained) */
 .contact-pixel-wave-wrapper {
   position: absolute;
   inset: 0;
@@ -89,32 +116,33 @@
   display: block;
 }
 
-/* Banner Typography */
+/* Banner Typography (Contained inside Frame) */
 .contact-hero-content {
   position: relative;
-  z-index: 3;
-  max-width: 760px;
+  z-index: 4;
+  max-width: 680px;
   margin: 0 auto;
+  padding: 0 32px;
   text-align: center;
   pointer-events: auto;
 }
 
 .contact-hero-title {
   font-family: var(--font-display, 'Anybody', 'Inter', sans-serif);
-  font-size: clamp(38px, 4.5vw, 54px);
+  font-size: clamp(34px, 4vw, 48px);
   font-weight: 700;
-  color: #242132;
+  color: #232035;
   letter-spacing: -0.035em;
   line-height: 1.15;
-  margin: 0 0 14px 0;
+  margin: 0 0 10px 0;
 }
 
 .contact-hero-subtitle {
   font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
-  font-size: clamp(14px, 1.3vw, 16px);
+  font-size: clamp(13px, 1.2vw, 15px);
   color: #4A475A;
-  line-height: 1.55;
-  max-width: 680px;
+  line-height: 1.5;
+  max-width: 580px;
   margin: 0 auto;
 }
 
