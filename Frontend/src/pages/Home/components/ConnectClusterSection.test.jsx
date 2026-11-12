@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ConnectClusterSection from './ConnectClusterSection';
 
-describe('ConnectClusterSection (Greptile Dark Navy Final CTA with Satellite Mesh)', () => {
+describe('ConnectClusterSection (Greptile Dark Navy Final CTA with HealBot Mascot)', () => {
   test('renders title and dual-hexagon button group', () => {
     const mockNavigate = jest.fn();
     render(<ConnectClusterSection onNavigate={mockNavigate} />);
@@ -20,19 +20,16 @@ describe('ConnectClusterSection (Greptile Dark Navy Final CTA with Satellite Mes
     expect(mockNavigate).toHaveBeenCalledWith('/get-started');
   });
 
-  test('renders central diff card and satellite nodes', () => {
-    const { container } = render(<ConnectClusterSection />);
+  test('renders HealBot pixel mascot animation stage inside wrapper', () => {
+    render(<ConnectClusterSection />);
 
-    // Central card
-    expect(screen.getByText(/deployment\/order-processor\.yaml/i)).toBeInTheDocument();
-    expect(screen.getByText(/replicas: 3 # high availability cluster/i)).toBeInTheDocument();
+    const mascotWrapper = screen.getByTestId('ccs-mascot-wrapper');
+    expect(mascotWrapper).toBeInTheDocument();
 
-    // 6 Satellite nodes
-    const diffBadges = screen.getAllByText('DIFF');
-    expect(diffBadges.length).toBe(6);
+    const mascotStage = screen.getByTestId('healbot-animation-stage');
+    expect(mascotStage).toBeInTheDocument();
 
-    // SVG mesh
-    expect(container.querySelector('.ccs-mesh-svg')).toBeInTheDocument();
+    expect(screen.getByText('SELFHEAL // KUBERNETES GUARDIAN')).toBeInTheDocument();
   });
 
   test('renders Greptile-inspired vertical architectural background grid with markers', () => {
