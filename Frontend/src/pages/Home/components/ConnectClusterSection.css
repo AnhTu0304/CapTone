@@ -58,43 +58,66 @@
   filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.25));
 }
 
+/* Button 1: Left Button (Outline Border with rgb(236, 255, 163)) */
 .ccs-btn-left {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  justifyContent: center;
-  background-color: #3D3B4F;
-  color: #FFFFFF;
-  clip-path: polygon(14px 0%, 100% 0%, calc(100% - 14px) 50%, 100% 100%, 14px 100%, 0% 50%);
-  padding: 13px 26px 13px 28px;
-  font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
-  font-size: 0.9375rem;
-  font-weight: 500;
+  justify-content: center;
+  background-color: rgb(236, 255, 163);
+  clip-path: polygon(14px 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0% 50%);
+  padding: 1px;
   text-decoration: none;
   white-space: nowrap;
   user-select: none;
   border: none;
   cursor: pointer;
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s ease;
   will-change: transform;
+}
+
+.ccs-btn-left::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  background-color: #3D3B4F;
+  clip-path: polygon(14px 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0% 50%);
+  z-index: 1;
+  transition: background-color 0.15s ease;
+}
+
+.ccs-btn-left span {
+  position: relative;
+  z-index: 2;
+  color: rgb(236, 255, 163);
+  font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
+  font-size: 0.9375rem;
+  font-weight: 500;
+  padding: 13px 28px;
+  display: inline-block;
 }
 
 .ccs-btn-group:hover .ccs-btn-left {
   transform: translateX(-4px);
 }
 
-.ccs-btn-left:hover {
+.ccs-btn-left:hover::before {
   background-color: #2F2D3D;
-  filter: brightness(1.1);
 }
 
+.ccs-btn-left:hover {
+  filter: brightness(1.12);
+}
+
+/* Button 2: Right Button (Filled rgb(236, 255, 163) with Inward Notch) */
 .ccs-btn-right {
   display: inline-flex;
   align-items: center;
-  justifyContent: center;
-  background-color: #28E99F;
-  color: #000000;
-  clip-path: polygon(14px 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0% 50%);
-  padding: 13px 28px 13px 26px;
+  justify-content: center;
+  background-color: rgb(236, 255, 163);
+  color: #171C15;
+  clip-path: polygon(0% 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 0% 100%, 14px 50%);
+  padding: 14px 28px 14px 30px;
   font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
   font-size: 0.9375rem;
   font-weight: 600;
@@ -112,8 +135,8 @@
 }
 
 .ccs-btn-right:hover {
-  background-color: #1FD48F;
-  filter: brightness(1.08);
+  background-color: #F4FFBD;
+  filter: brightness(1.05);
 }
 
 /* ================= RIGHT COLUMN: SATELLITE MESH & DIFF CARD ================= */
@@ -381,10 +404,20 @@
   }
 
   .ccs-btn-left {
-    border: 1px solid rgba(198, 249, 226, 0.35);
+    background-color: transparent;
+    border: 1px solid rgb(236, 255, 163);
+  }
+
+  .ccs-btn-left::before {
+    display: none;
+  }
+
+  .ccs-btn-left span {
+    padding: 0;
   }
 
   .ccs-btn-right {
-    border: 1px solid #28E99F;
+    border: 1px solid rgb(236, 255, 163);
+    background-color: rgb(236, 255, 163);
   }
 }
