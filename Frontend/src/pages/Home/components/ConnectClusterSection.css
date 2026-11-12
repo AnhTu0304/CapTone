@@ -50,57 +50,70 @@
   margin: 0 0 36px 0;
 }
 
-/* Dual-Hexagon Connected Button Group */
+/* Dual-Hexagon Connected Button Group (Header Hex Style) */
 .ccs-btn-group {
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 2px;
   filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.25));
 }
 
 .ccs-btn-left {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background-color: #2D2A3B;
-  color: #C6F9E2;
-  border: 1px solid rgba(198, 249, 226, 0.35);
-  border-right: none;
-  clip-path: polygon(14px 0%, 100% 0%, 100% 100%, 14px 100%, 0% 50%);
-  padding: 13px 24px 13px 30px;
-  font-family: var(--font-body, 'DM Sans', sans-serif);
+  justifyContent: center;
+  background-color: #3D3B4F;
+  color: #FFFFFF;
+  clip-path: polygon(14px 0%, 100% 0%, calc(100% - 14px) 50%, 100% 100%, 14px 100%, 0% 50%);
+  padding: 13px 26px 13px 28px;
+  font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  border: none;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.ccs-btn-group:hover .ccs-btn-left {
+  transform: translateX(-4px);
 }
 
 .ccs-btn-left:hover {
-  background-color: #383448;
-  color: #FFFFFF;
+  background-color: #2F2D3D;
+  filter: brightness(1.1);
 }
 
 .ccs-btn-right {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background-color: #E4FF6B;
-  /* Neon lime yellow badge */
-  color: #171C15;
-  border: 1px solid #E4FF6B;
-  border-left: none;
-  clip-path: polygon(0% 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 0% 100%);
-  padding: 13px 30px 13px 24px;
-  font-family: var(--font-body, 'DM Sans', sans-serif);
+  justifyContent: center;
+  background-color: #28E99F;
+  color: #000000;
+  clip-path: polygon(14px 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0% 50%);
+  padding: 13px 28px 13px 26px;
+  font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
   font-size: 0.9375rem;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  border: none;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.ccs-btn-group:hover .ccs-btn-right {
+  transform: translateX(4px);
 }
 
 .ccs-btn-right:hover {
-  background-color: #EEFF87;
+  background-color: #1FD48F;
+  filter: brightness(1.08);
 }
 
 /* ================= RIGHT COLUMN: SATELLITE MESH & DIFF CARD ================= */
@@ -110,7 +123,7 @@
   min-height: 400px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justifyContent: center;
   padding: 40px 20px;
   box-sizing: border-box;
 }
@@ -148,7 +161,7 @@
   margin-bottom: 8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justifyContent: space-between;
 }
 
 .ccs-diff-row-pink {
@@ -201,7 +214,7 @@
   background-color: #059669;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justifyContent: center;
   color: #FFFFFF;
   border-radius: 2px;
   flex-shrink: 0;
@@ -214,7 +227,7 @@
   background-color: #F97316;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justifyContent: center;
   color: #FFFFFF;
   border-radius: 2px;
   flex-shrink: 0;
@@ -350,20 +363,28 @@
     flex-direction: column;
     width: 100%;
     max-width: 320px;
+    gap: 8px;
+  }
+
+  .ccs-btn-group:hover .ccs-btn-left,
+  .ccs-btn-group:hover .ccs-btn-right {
+    transform: none;
   }
 
   .ccs-btn-left,
   .ccs-btn-right {
     clip-path: none;
     border-radius: 4px;
-    border: 1px solid rgba(198, 249, 226, 0.35);
     width: 100%;
     box-sizing: border-box;
     padding: 12px 20px;
   }
 
+  .ccs-btn-left {
+    border: 1px solid rgba(198, 249, 226, 0.35);
+  }
+
   .ccs-btn-right {
-    margin-top: 8px;
-    border: 1px solid #E4FF6B;
+    border: 1px solid #28E99F;
   }
 }
