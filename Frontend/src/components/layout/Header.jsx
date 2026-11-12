@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Menu, ChevronDown, LayoutDashboard, LogOut, Shield, Globe } from 'lucide-react';
 import Logo from '../common/Logo';
+import ResourcesMegaMenu from './ResourcesMegaMenu';
 import MobileNavigation from './MobileNavigation';
 import useScrollHeader from '../../hooks/useScrollHeader';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +12,8 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [resourcesMenuOpen, setResourcesMenuOpen] = useState(false);
+  const resourcesMenuRef = useRef(null);
   const [currentLang, setCurrentLang] = useState('VI');
 
   const userDropdownRef = useRef(null);
@@ -26,9 +29,25 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
       if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
         setLangDropdownOpen(false);
       }
+      if (resourcesMenuRef.current && !resourcesMenuRef.current.contains(e.target)) {
+        setResourcesMenuOpen(false);
+      }
     };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setUserDropdownOpen(false);
+        setLangDropdownOpen(false);
+        setResourcesMenuOpen(false);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const navLinks = [
@@ -40,6 +59,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
 
   const handleLinkClick = (e, path) => {
     e.preventDefault();
+    setResourcesMenuOpen(false);
     if (onNavigate) {
       onNavigate(path);
     } else {
@@ -111,6 +131,31 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
             >
               {navLinks.map((link) => {
                 const isActive = currentPath === link.path;
+                if (link.hasDropdown) {
+                  return (
+                    <div key={link.label} ref={resourcesMenuRef} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setResourcesMenuOpen(!resourcesMenuOpen);
+                        }}
+                        className={`header-nav-item ${isActive || resourcesMenuOpen ? 'active' : ''}`}
+                        aria-expanded={resourcesMenuOpen}
+                        aria-haspopup="true"
+                        aria-controls="resources-mega-menu"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        <span>{link.label}</span>
+                        <ChevronDown
+                          size={14}
+                          className={`header-nav-chevron ${resourcesMenuOpen ? 'chevron-rotated' : ''}`}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </div>
+                  );
+                }
                 return (
                   <a
                     key={link.label}
@@ -119,13 +164,6 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                     className={`header-nav-item ${isActive ? 'active' : ''}`}
                   >
                     <span>{link.label}</span>
-                    {link.hasDropdown && (
-                      <ChevronDown
-                        size={14}
-                        className="header-nav-chevron"
-                        aria-hidden="true"
-                      />
-                    )}
                   </a>
                 );
               })}
@@ -425,6 +463,11 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
               </button>
             </div>
           </div>
+          <ResourcesMegaMenu
+            isOpen={resourcesMenuOpen}
+            onClose={() => setResourcesMenuOpen(false)}
+            onNavigate={onNavigate}
+          />
         </header>
       </div>
 

@@ -181,12 +181,16 @@
 
 .header-nav-chevron {
   opacity: 0.65;
-  transition: transform 0.15s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+}
+
+.header-nav-chevron.chevron-rotated {
+  transform: rotate(180deg) !important;
+  opacity: 1;
 }
 
 .header-nav-item:hover .header-nav-chevron {
   opacity: 1;
-  transform: translateY(1px);
 }
 
 /* ================= 3. RIGHT ZONE: ACTIONS & CONTROLS ================= */

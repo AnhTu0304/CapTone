@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, ArrowRight, LayoutDashboard, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, ArrowRight, LayoutDashboard, LogOut, ChevronDown, BookOpen, Scale, Mail, ShieldCheck, Share2, Info } from 'lucide-react';
 import Logo from '../common/Logo';
 import { useAuth } from '../../context/AuthContext';
 
@@ -10,6 +10,7 @@ export const MobileNavigation = ({
   onNavigate,
 }) => {
   const { user, isAuthenticated, logout, getInitials, getPrimaryRole } = useAuth();
+  const [docsExpanded, setDocsExpanded] = useState(false);
 
   if (!isOpen) return null;
 
@@ -72,6 +73,103 @@ export const MobileNavigation = ({
       <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, fontFamily: 'var(--font-body)' }}>
         {navLinks.map((link) => {
           const isActive = currentPath === link.path;
+          if (link.path === '/docs') {
+            return (
+              <div key={link.path} style={{ borderBottom: '1px solid var(--border-default)' }}>
+                <button
+                  type="button"
+                  onClick={() => setDocsExpanded(!docsExpanded)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '1.125rem',
+                    fontWeight: isActive || docsExpanded ? 600 : 400,
+                    color: isActive ? 'var(--color-primary)' : 'var(--color-ink)',
+                    padding: '10px 0',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  aria-expanded={docsExpanded}
+                >
+                  <span>{link.label}</span>
+                  <ChevronDown
+                    size={18}
+                    style={{
+                      transform: docsExpanded ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.2s ease',
+                      opacity: 0.7,
+                    }}
+                  />
+                </button>
+
+                {docsExpanded && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 0 16px 12px' }}>
+                    {[
+                      { label: 'Tài liệu hướng dẫn', path: '/docs', icon: BookOpen },
+                      { label: 'Điều khoản & Điều kiện', path: '/terms', icon: Scale },
+                      { label: 'Liên hệ tư vấn', path: '/contact', icon: Mail },
+                      { label: 'Bảo mật & Quyền riêng tư', path: '/privacy', icon: ShieldCheck },
+                      { label: 'Mạng xã hội & Cộng đồng', path: 'https://github.com/phamthaisang1710/captone', isExternal: true, icon: Share2 },
+                      { label: 'Giới thiệu SelfHeal', path: '/about', icon: Info },
+                    ].map((sub) => {
+                      const SubIcon = sub.icon;
+                      if (sub.isExternal) {
+                        return (
+                          <a
+                            key={sub.label}
+                            href={sub.path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={onClose}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              fontSize: '0.95rem',
+                              color: '#555368',
+                              textDecoration: 'none',
+                              padding: '8px 0',
+                            }}
+                          >
+                            <SubIcon size={16} color="#28E99F" />
+                            <span>{sub.label}</span>
+                          </a>
+                        );
+                      }
+                      return (
+                        <a
+                          key={sub.label}
+                          href={sub.path}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            onClose();
+                            onNavigate(sub.path);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            fontSize: '0.95rem',
+                            color: currentPath === sub.path ? 'var(--color-primary)' : '#555368',
+                            textDecoration: 'none',
+                            padding: '8px 0',
+                          }}
+                        >
+                          <SubIcon size={16} color="#28E99F" />
+                          <span>{sub.label}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           return (
             <a
               key={link.path}

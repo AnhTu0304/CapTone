@@ -38,11 +38,9 @@ describe('Header Component (Greptile CAD Alignment with Symmetrical Center Nav)'
     expect(langBtn).toBeInTheDocument();
     expect(screen.getByText('VI')).toBeInTheDocument();
 
-    // Click to open dropdown
     fireEvent.click(langBtn);
     expect(screen.getByText('English')).toBeInTheDocument();
 
-    // Select English
     fireEvent.click(screen.getByText('English'));
     expect(screen.getByText('EN')).toBeInTheDocument();
   });
@@ -58,7 +56,7 @@ describe('Header Component (Greptile CAD Alignment with Symmetrical Center Nav)'
     expect(screen.getByText('Đăng ký')).toBeInTheDocument();
   });
 
-  it('calls onNavigate when a navigation link is clicked', () => {
+  it('calls onNavigate when a standard navigation link is clicked', () => {
     const mockNavigate = jest.fn();
     render(<Header onNavigate={mockNavigate} />);
 
@@ -66,6 +64,34 @@ describe('Header Component (Greptile CAD Alignment with Symmetrical Center Nav)'
     fireEvent.click(featuresLink);
 
     expect(mockNavigate).toHaveBeenCalledWith('/features');
+  });
+
+  it('toggles ResourcesMegaMenu when TÀI LIỆU is clicked', () => {
+    render(<Header />);
+
+    const docsBtn = screen.getByRole('button', { name: /TÀI LIỆU/i });
+    expect(docsBtn).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).not.toBeInTheDocument();
+
+    fireEvent.click(docsBtn);
+    expect(docsBtn).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).toBeInTheDocument();
+    expect(screen.getByText('Tài Liệu Hướng Dẫn')).toBeInTheDocument();
+
+    fireEvent.click(docsBtn);
+    expect(docsBtn).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).not.toBeInTheDocument();
+  });
+
+  it('closes ResourcesMegaMenu when Escape key is pressed', () => {
+    render(<Header />);
+
+    const docsBtn = screen.getByRole('button', { name: /TÀI LIỆU/i });
+    fireEvent.click(docsBtn);
+    expect(screen.getByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).not.toBeInTheDocument();
   });
 
   it('calls onNavigate when Đăng nhập button is clicked', () => {

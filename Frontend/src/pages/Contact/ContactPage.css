@@ -5,10 +5,12 @@
 
 .contact-page-container {
   position: relative;
-  z-index: 24; /* Elevated above blueprint-gutter-left/right (z-index: 20) for 100% full-width */
+  z-index: 24;
+  /* Elevated above blueprint-gutter-left/right (z-index: 20) for 100% full-width */
   width: 100%;
   min-height: calc(100vh - 140px);
-  background-color: #E6E6E5; /* Light architectural gray tone */
+  background-color: #E6E6E5;
+  /* Light architectural gray tone */
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -21,7 +23,7 @@
   height: 300px;
   min-height: 300px;
   background-color: #E6E6E5;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(61, 59, 79, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(61, 59, 79, 0.05) 1px, transparent 1px);
   background-size: 32px 32px;
@@ -192,19 +194,65 @@
   box-shadow: 0 0 6px rgba(40, 233, 159, 0.55);
 }
 
-.gutter-left .dot-1 { top: 6%; left: 0px; }
-.gutter-left .dot-2 { top: 18%; left: 70px; }
-.gutter-left .dot-3 { top: 38%; left: 35px; }
-.gutter-left .dot-4 { top: 56%; left: 105px; }
-.gutter-left .dot-5 { top: 72%; left: 0px; }
-.gutter-left .dot-6 { top: 90%; left: 70px; }
+.gutter-left .dot-1 {
+  top: 6%;
+  left: 0px;
+}
 
-.gutter-right .dot-7 { top: 10%; right: 70px; }
-.gutter-right .dot-8 { top: 28%; right: 0px; }
-.gutter-right .dot-9 { top: 44%; right: 105px; }
-.gutter-right .dot-10 { top: 64%; right: 35px; }
-.gutter-right .dot-11 { top: 82%; right: 70px; }
-.gutter-right .dot-12 { top: 95%; right: 0px; }
+.gutter-left .dot-2 {
+  top: 18%;
+  left: 70px;
+}
+
+.gutter-left .dot-3 {
+  top: 38%;
+  left: 35px;
+}
+
+.gutter-left .dot-4 {
+  top: 56%;
+  left: 105px;
+}
+
+.gutter-left .dot-5 {
+  top: 72%;
+  left: 0px;
+}
+
+.gutter-left .dot-6 {
+  top: 90%;
+  left: 70px;
+}
+
+.gutter-right .dot-7 {
+  top: 10%;
+  right: 70px;
+}
+
+.gutter-right .dot-8 {
+  top: 28%;
+  right: 0px;
+}
+
+.gutter-right .dot-9 {
+  top: 44%;
+  right: 105px;
+}
+
+.gutter-right .dot-10 {
+  top: 64%;
+  right: 35px;
+}
+
+.gutter-right .dot-11 {
+  top: 82%;
+  right: 70px;
+}
+
+.gutter-right .dot-12 {
+  top: 95%;
+  right: 0px;
+}
 
 /* ================= CENTRAL FORM WRAPPER ================= */
 .contact-form-wrapper {
@@ -263,7 +311,8 @@
   font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
   font-size: 0.875rem;
   color: #171C15;
-  background-color: #E6E6E5; /* Match outer page background */
+  background-color: #E6E6E5;
+  /* Match outer page background */
   border: 1px solid #BAC0CB;
   border-radius: 2px;
   box-sizing: border-box;
@@ -328,14 +377,14 @@
 /* ================= SUBMIT BUTTON (DOUBLE-HEXAGON CHEVRON) ================= */
 .contact-btn-container {
   display: flex;
-  justifyContent: center;
+  justify-content: center;
   margin-top: 16px;
 }
 
 .contact-btn-submit {
   display: inline-flex;
   align-items: center;
-  justifyContent: center;
+  justify-content: center;
   gap: 8px;
   background-color: #3D3B4F;
   color: #FFFFFF;
@@ -343,7 +392,6 @@
   padding: 13px 64px;
   font-family: var(--font-dm-sans, var(--font-body, 'DM Sans', sans-serif));
   font-size: 0.875rem;
-  font-weight: 600;
   border: none;
   cursor: pointer;
   white-space: nowrap;
@@ -373,8 +421,13 @@
 }
 
 @keyframes contact-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ================= SUCCESS STATE CARD ================= */
@@ -414,6 +467,7 @@
 
 /* ================= RESPONSIVE ================= */
 @media (max-width: 900px) {
+
   .contact-banner-hatched-left,
   .contact-banner-hatched-right,
   .contact-gutter-guide {
