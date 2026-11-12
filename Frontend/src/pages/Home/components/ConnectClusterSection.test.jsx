@@ -34,4 +34,11 @@ describe('ConnectClusterSection (Greptile Dark Navy Final CTA with Satellite Mes
     // SVG mesh
     expect(container.querySelector('.ccs-mesh-svg')).toBeInTheDocument();
   });
+
+  test('renders Greptile-inspired vertical architectural background grid with markers', () => {
+    render(<ConnectClusterSection />);
+    const bgGrid = screen.getByTestId('ccs-bg-grid');
+    expect(bgGrid).toBeInTheDocument();
+    expect(bgGrid).toHaveAttribute('aria-hidden', 'true');
+  });
 });

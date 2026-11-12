@@ -19,6 +19,14 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
       data-testid="connect-cluster-section"
       aria-label="Kết nối môi trường Kubernetes với SelfHeal"
     >
+      {/* Greptile-Inspired Vertical Architectural Background Grid */}
+      <div className="ccs-bg-grid" data-testid="ccs-bg-grid" aria-hidden="true">
+        <span className="ccs-grid-marker ccs-marker-1" />
+        <span className="ccs-grid-marker ccs-marker-2" />
+        <span className="ccs-grid-marker ccs-marker-3" />
+        <span className="ccs-grid-marker ccs-marker-4" />
+      </div>
+
       <div className="ccs-container">
         <div className="ccs-grid">
           {/* ================= LEFT COLUMN ================= */}
@@ -64,67 +72,62 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
               <line x1="60" y1="330" x2="60" y2="90" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.45" />
               <line x1="60" y1="90" x2="270" y2="30" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.45" />
 
-              {/* Radial Spokes connecting Satellites to Center Card */}
-              <line x1="270" y1="40" x2="270" y2="105" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.55" />
-              <line x1="470" y1="100" x2="400" y2="150" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.55" />
-              <line x1="470" y1="320" x2="400" y2="280" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.55" />
-              <line x1="270" y1="380" x2="270" y2="320" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.55" />
-              <line x1="70" y1="320" x2="140" y2="280" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.55" />
-              <line x1="70" y1="100" x2="140" y2="150" stroke="#9CE8C9" strokeWidth="1" strokeDasharray="2 2" strokeOpacity="0.55" />
+              {/* Diagonal Cross-Link Guidance Lines */}
+              <line x1="270" y1="30" x2="270" y2="390" stroke="#60A5FA" strokeWidth="0.75" strokeDasharray="4 4" strokeOpacity="0.25" />
+              <line x1="60" y1="90" x2="480" y2="330" stroke="#60A5FA" strokeWidth="0.75" strokeDasharray="4 4" strokeOpacity="0.25" />
+              <line x1="60" y1="330" x2="480" y2="90" stroke="#60A5FA" strokeWidth="0.75" strokeDasharray="4 4" strokeOpacity="0.25" />
             </svg>
 
-            {/* Central Floating K8s Diff Card */}
+            {/* Central Diff Card with YAML Manifest & Comment Thread */}
             <div className="ccs-center-card">
               <div className="ccs-file-header">
                 <span>deployment/order-processor.yaml</span>
-                <span style={{ color: '#059669', fontWeight: 700 }}>SYNCHRONIZED</span>
+                <span style={{ color: '#10B981' }}>+1 auto-remediation</span>
               </div>
 
-              {/* Code Diff Rows */}
+              {/* Diff Code Rows */}
               <div className="ccs-diff-row-pink">
-                <span>01 -</span>
-                <span>replicas: 1  # single point of failure</span>
+                <span>-</span>
+                <span>replicas: 1 # failure: single point of failure</span>
               </div>
               <div className="ccs-diff-row-mint">
-                <span>01 +</span>
-                <span>replicas: 3  # high availability cluster</span>
-              </div>
-              <div className="ccs-diff-row-mint">
-                <span>02 +</span>
-                <span>auto-recovery: enabled (OOM threshold: 85%)</span>
+                <span>+</span>
+                <span>replicas: 3 # high availability cluster</span>
               </div>
 
-              {/* Comments Thread */}
+              {/* In-Line Audit Comment Thread */}
               <div className="ccs-comments-box">
+                {/* Agent Remediated */}
                 <div className="ccs-comment-row">
                   <div className="ccs-comment-avatar-agent">
-                    <Bot size={12} />
+                    <Bot size={11} strokeWidth={2.5} />
                   </div>
                   <div>
-                    <span className="ccs-comment-sender">selfheal-agent</span>
-                    <span className="ccs-comment-time">vừa xong</span>
+                    <span className="ccs-comment-sender">SelfHeal Agent</span>
+                    <span className="ccs-comment-time">14:02:18</span>
                     <p className="ccs-comment-text">
-                      Cụm k8s-prod-01 đã đồng bộ telemetry. Toàn bộ 3 pods sẵn sàng tự phục hồi.
+                      Đã áp dụng chính sách: tăng replicas lên 3 pods để giảm thiểu tắc nghẽn queue.
                     </p>
                   </div>
                 </div>
 
+                {/* SRE Verified */}
                 <div className="ccs-comment-row">
                   <div className="ccs-comment-avatar-user">
-                    <User size={12} />
+                    <User size={11} strokeWidth={2.5} />
                   </div>
                   <div>
-                    <span className="ccs-comment-sender">sre-lead</span>
-                    <span className="ccs-comment-time">1 phút trước</span>
+                    <span className="ccs-comment-sender">Minh (SRE Lead)</span>
+                    <span className="ccs-comment-time">14:02:40</span>
                     <p className="ccs-comment-text">
-                      Chính sách đã được xác thực, sẵn sàng deploy!
+                      Đã xác minh qua telemetry: zero downtime ghi nhận.
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 6 Satellite Nodes (Hexagon Constellation) */}
+            {/* 6 Satellite Diagnostic Badges */}
             {/* 1. Top */}
             <div className="ccs-satellite ccs-sat-top">
               <div className="ccs-satellite-bar-pink" />
