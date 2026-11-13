@@ -204,7 +204,7 @@ export class OrganizationModel {
         (SELECT COUNT(DISTINCT c.id)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS clusters_count,
         (SELECT COUNT(DISTINCT w.name)::int 
          FROM workloads w 
-         JOIN clusters c2 ON (w.cluster_id = c2.id::text OR w.cluster_id = c2.name OR w.cluster_id = c2.cluster_uid) 
+         JOIN clusters c2 ON (w.cluster_id = c2.id OR w.cluster_id::text = c2.name OR w.cluster_id::text = c2.cluster_uid) 
          JOIN environments e2 ON c2.environment_id = e2.id 
          WHERE e2.organization_id = o.id 
            AND w.deleted_at IS NULL 
@@ -337,7 +337,7 @@ export class OrganizationModel {
         (SELECT COUNT(DISTINCT c.id)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND e.deleted_at IS NULL AND c.deleted_at IS NULL) AS clusters_count,
         (SELECT COUNT(DISTINCT w.name)::int 
          FROM workloads w 
-         JOIN clusters c2 ON (w.cluster_id = c2.id::text OR w.cluster_id = c2.name OR w.cluster_id = c2.cluster_uid) 
+         JOIN clusters c2 ON (w.cluster_id = c2.id OR w.cluster_id::text = c2.name OR w.cluster_id::text = c2.cluster_uid) 
          JOIN environments e2 ON c2.environment_id = e2.id 
          WHERE e2.organization_id = o.id 
            AND w.deleted_at IS NULL 
@@ -480,7 +480,7 @@ export class OrganizationModel {
         (SELECT COUNT(*)::int FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE e.organization_id = o.id AND c.deleted_at IS NULL AND e.deleted_at IS NULL) AS clusters_count,
         (SELECT COUNT(DISTINCT w.name)::int 
          FROM workloads w 
-         JOIN clusters c2 ON (w.cluster_id = c2.id::text OR w.cluster_id = c2.name OR w.cluster_id = c2.cluster_uid) 
+         JOIN clusters c2 ON (w.cluster_id = c2.id OR w.cluster_id::text = c2.name OR w.cluster_id::text = c2.cluster_uid) 
          JOIN environments e2 ON c2.environment_id = e2.id 
          WHERE e2.organization_id = o.id 
            AND w.deleted_at IS NULL 

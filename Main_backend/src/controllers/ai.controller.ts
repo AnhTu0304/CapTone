@@ -313,12 +313,12 @@ export class AiController {
       const params: any[] = [];
       let idx = 1;
       if (cluster_id && cluster_id !== 'ALL' && cluster_id !== 'all') {
-        query += ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
+        query += ` AND (w.cluster_id::text = $${idx} OR w.cluster_id IN (SELECT id FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
         params.push(cluster_id);
         idx++;
       }
       if (effectiveOrgId) {
-        query += ` AND EXISTS (SELECT 1 FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE (c.id::text = w.cluster_id OR c.name = w.cluster_id OR c.cluster_uid = w.cluster_id) AND e.organization_id = $${idx})`;
+        query += ` AND EXISTS (SELECT 1 FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE (c.id = w.cluster_id OR c.name = w.cluster_id::text OR c.cluster_uid = w.cluster_id::text) AND e.organization_id = $${idx})`;
         params.push(effectiveOrgId);
         idx++;
       }
