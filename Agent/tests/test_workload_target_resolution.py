@@ -89,9 +89,9 @@ async def test_controllerless_standalone_pod_fails_explicitly_without_404():
 
     bare_pod = types.SimpleNamespace(
         metadata=types.SimpleNamespace(
-            name="storage-provisioner",
-            namespace="kube-system",
-            labels={"addonmanager.kubernetes.io/mode": "Reconcile"},
+            name="standalone-worker",
+            namespace="default",
+            labels={"app": "standalone-worker"},
             deletion_timestamp=None,
             owner_references=None,
         )
@@ -113,7 +113,7 @@ async def test_controllerless_standalone_pod_fails_explicitly_without_404():
         data=ExecuteActionData(
             action_id="act-bare-1",
             action_type="RESTART_POD",
-            target_name="storage-provisioner",
+            target_name="standalone-worker",
             namespace="default",
             params={},
         ),
@@ -121,6 +121,6 @@ async def test_controllerless_standalone_pod_fails_explicitly_without_404():
     await agent._handle_incoming_ws_message(payload)
 
     assert captured["data"]["status"] == "FAILED"
-    assert "kube-system" in captured["data"]["message"]
+    assert "default" in captured["data"]["message"]
     assert "standalone Pod" in captured["data"]["message"]
-    assert captured["data"]["details"]["namespace"] == "kube-system"
+    assert captured["data"]["details"]["namespace"] == "default"
