@@ -47,7 +47,7 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate }) => {
       description: 'Kết nối trực tiếp với đội ngũ phát triển và kỹ sư SelfHeal.',
       icon: Mail,
       route: '/contact',
-      isExternal: true,
+      isExternal: false,
     },
     {
       id: 'privacy',
