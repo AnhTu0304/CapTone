@@ -86,7 +86,7 @@ export class HitlNotificationService {
         LEFT JOIN environments env ON env.id = h.environment_id
         LEFT JOIN incidents i ON i.id = h.incident_id
         LEFT JOIN organizations o ON o.id = COALESCE(env.organization_id, i.organization_id)
-        LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.cluster_uid = i.cluster_id OR c.name = i.cluster_id)
+        LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text OR c.name = i.cluster_id::text)
         LEFT JOIN healing_action_types t ON t.id = h.action_type_id
         LEFT JOIN healing_policies p ON p.id = h.policy_id
         LEFT JOIN ai_recommendations rec ON rec.id = h.recommendation_id

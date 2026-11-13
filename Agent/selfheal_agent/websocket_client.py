@@ -247,6 +247,9 @@ class AgentWebSocketClient:
 
         for handler in self._message_handlers:
             try:
-                await handler(payload)
+                if msg_type == "execute_action":
+                    asyncio.create_task(handler(payload))
+                else:
+                    await handler(payload)
             except Exception as handler_err:
                 logger.error("Error in WebSocket message handler: %s", handler_err)

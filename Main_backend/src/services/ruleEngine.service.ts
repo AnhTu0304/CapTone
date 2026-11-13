@@ -54,13 +54,22 @@ export class RuleEngineService {
    * NOT triggered by a single snapshot rule in Rule Engine.
    */
   public static evaluate(input: RuleEngineInput): RuleEvaluationResult {
-    const { service_id, metrics, pod_status, k8s_events = [], root_cause } = input;
+    const {
+      service_id,
+      metrics,
+      pod_status,
+      k8s_events = [],
+      root_cause,
+      restart_delta,
+      active_pod_issue,
+    } = input;
     const th = this.thresholds;
 
     const triggeredRules: string[] = [];
     const anomalies: string[] = [];
 
-    const k8sText = `${pod_status || ''} ${k8s_events.join(' ')}`.toLowerCase();
+    const normPodStatus = String(pod_status || 'Running').trim();
+    const k8sText = `${normPodStatus} ${k8s_events.join(' ')}`.toLowerCase();
 
     // =========================================================================
     // 1. ANOMALY DETECTION (Deterministic Rule Evaluation)
@@ -99,12 +108,25 @@ export class RuleEngineService {
       anomalies.push('HTTP_5XX_SPIKE');
     }
 
-    // Rule 5: Pod Instability (Treat restart_count as evidence of instability, not standalone root cause)
-    const hasCrashLoop = k8sText.includes('crashloopbackoff');
-    const hasProbeFail = k8sText.includes('probe failed');
-    if (metrics.pod_restart_count >= th.podRestartThreshold || hasCrashLoop || hasProbeFail) {
+    // Rule 5: Pod Instability (Use window restart_delta + live pod state / active K8s events when provided)
+    const hasCrashLoop =
+      k8sText.includes('crashloopbackoff') || normPodStatus.toLowerCase() === 'crashloopbackoff';
+    const hasProbeFail = k8sText.includes('probe failed') || k8sText.includes('unhealthy');
+    const hasBadPodStatus =
+      !['running', 'succeeded'].includes(normPodStatus.toLowerCase()) || Boolean(active_pod_issue);
+    const hasRestartSpike =
+      restart_delta !== undefined
+        ? restart_delta >= 1
+        : metrics.pod_restart_count >= th.podRestartThreshold;
+
+    if (hasRestartSpike || hasCrashLoop || hasProbeFail || hasBadPodStatus) {
+      const restartSummary =
+        restart_delta !== undefined
+          ? `restart_delta (${restart_delta} >= 1)`
+          : `restarts (${metrics.pod_restart_count} >= ${th.podRestartThreshold})`;
+      const statusSummary = hasBadPodStatus ? `, status=${normPodStatus}` : '';
       triggeredRules.push(
-        `Rule 5 [Pod Instability]: restarts (${metrics.pod_restart_count} >= ${th.podRestartThreshold}) or CrashLoop/Probe failure in events`
+        `Rule 5 [Pod Instability]: ${restartSummary}${statusSummary} or CrashLoop/Probe failure in events`
       );
       anomalies.push('POD_INSTABILITY');
     }

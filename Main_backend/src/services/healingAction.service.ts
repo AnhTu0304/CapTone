@@ -6,6 +6,7 @@ import { ApiError } from '../utils/apiError';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
+import { WorkloadModel } from '../models';
 import { recordRemediationAction } from '../telemetry/metrics';
 
 export class HealingActionService {
@@ -146,6 +147,33 @@ export class HealingActionService {
       throw new ApiError(404, 'Không tìm thấy hành động tự phục hồi yêu cầu');
     }
 
+    if (action.execution_status === 'RUNNING') {
+      throw new ApiError(409, 'Hành động tự phục hồi này đang trong trạng thái thực thi');
+    }
+
+    // Target Concurrency Lock: Prevent multiple actions running concurrently on the same target workload/incident
+    if (action.target_name || action.incident_id) {
+      const activeRunningCheck = await pool.query(
+        `SELECT id, action_type_code, execution_status, created_at 
+         FROM healing_actions 
+         WHERE id != $1 
+           AND execution_status IN ('RUNNING', 'PENDING')
+           AND (
+             (target_name IS NOT NULL AND target_name = $2)
+             OR (incident_id IS NOT NULL AND incident_id = $3)
+           )
+         LIMIT 1;`,
+        [actionId, action.target_name, action.incident_id]
+      );
+      if (activeRunningCheck.rows.length > 0) {
+        const running = activeRunningCheck.rows[0];
+        throw new ApiError(
+          409,
+          `Đang có hành động '${running.action_type_code || 'REMEDIATION'}' (${running.execution_status}) đang chạy trên mục tiêu '${action.target_name || action.incident_id}'. Vui lòng chờ hành động trước hoàn tất.`
+        );
+      }
+    }
+
     // Tenant & Cluster Access Validation
     if (user) {
       await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
@@ -170,31 +198,15 @@ export class HealingActionService {
 
     const result = await HealingActionModel.executeAction(actionId, executedBy || undefined);
 
-    // Resolve actual namespace and canonical workload name
+    // Resolve actual namespace and canonical workload name dynamically
     let targetNamespace = 'default';
     let targetWorkloadName = action.target_name || 'sme-order-service';
     if (action.target_name || action.target_id) {
       try {
         const lookupKey = action.target_name || action.target_id;
-        const wlRes = await pool.query(
-          `SELECT w.name as workload_name, n.name as namespace_name 
-           FROM workloads w 
-           LEFT JOIN namespaces n ON n.id = w.namespace_id 
-           WHERE w.name = $1 OR w.id::text = $1 
-           ORDER BY w.updated_at DESC NULLS LAST
-           LIMIT 1`,
-          [lookupKey]
-        );
-        if (wlRes.rows.length > 0) {
-          if (wlRes.rows[0].workload_name) targetWorkloadName = wlRes.rows[0].workload_name;
-          if (wlRes.rows[0].namespace_name) targetNamespace = wlRes.rows[0].namespace_name;
-        } else if (
-          ['chaos-testagent2', 'ecommerce-store-app', 'attack-injector-app', 'selfheal-test-app', 'mongodb'].some((svc) =>
-            String(targetWorkloadName).startsWith(svc)
-          )
-        ) {
-          targetNamespace = 'test-lab';
-        }
+        const resolved = await WorkloadModel.resolveK8sTarget(String(lookupKey), action.cluster_id || null);
+        if (resolved.targetName) targetWorkloadName = resolved.targetName;
+        if (resolved.namespace) targetNamespace = resolved.namespace;
       } catch {}
     }
 
@@ -207,7 +219,7 @@ export class HealingActionService {
       console.log(`🛡️ [HealingActionService] Action is NO_ACTION (Circuit Breaker). Skipping automated agent dispatch.`);
     } else {
       try {
-        const dispatched = await dispatchHealingActionToAgent({
+        const dispatchResult = await dispatchHealingActionToAgent({
           action_id: actionId,
           action_type: actionCode,
           target_name: targetWorkloadName,
@@ -216,33 +228,56 @@ export class HealingActionService {
           environment_id: action.environment_id,
           params: action.result?.params || {},
         });
-        if (dispatched) {
+        if (dispatchResult?.dispatched) {
+          // Fallback safety timeout: nếu K8s Agent không phản hồi sau 60 giây, đánh dấu FAILED tránh kẹt RUNNING
+          setTimeout(async () => {
+            try {
+              await pool.query(
+                `UPDATE healing_actions 
+                 SET execution_status = 'FAILED', 
+                     completed_at = COALESCE(completed_at, NOW()),
+                     error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
+                     result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Agent execution timeout after 60s"'::jsonb) 
+                 WHERE id = $1 AND execution_status = 'RUNNING'`,
+                [actionId]
+              );
+              if (action.incident_id) {
+                await pool.query(
+                  `UPDATE incidents SET status = 'OPEN', resolved_at = NULL WHERE id = $1 AND status = 'RESOLVED'`,
+                  [action.incident_id]
+                ).catch(() => {});
+              }
+            } catch (e) {
+              // ignore
+            }
+          }, 60000);
+
           // Wait briefly for K8s Agent WebSocket action_result callback to persist actual K8s outcome
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          let refreshed = await HealingActionModel.findActionById(actionId);
-          if (refreshed && refreshed.execution_status === 'RUNNING') {
-            await pool.query(
-              `UPDATE healing_actions 
-               SET execution_status = 'SUCCEEDED', 
-                   completed_at = COALESCE(completed_at, NOW()), 
-                   result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', $2::jsonb) 
-               WHERE id = $1 AND execution_status = 'RUNNING'`,
-              [actionId, JSON.stringify("Đã gửi lệnh can thiệp và thực thi tự phục hồi thành công trên cụm Kubernetes.")]
-            );
-            refreshed = await HealingActionModel.findActionById(actionId);
-          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const refreshed = await HealingActionModel.findActionById(actionId);
           if (refreshed) {
             result.action = refreshed;
           }
         } else {
           await pool.query(
             `UPDATE healing_actions 
-             SET execution_status = 'SUCCEEDED', 
-                 completed_at = NOW(), 
-                 result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', $2::jsonb) 
+             SET execution_status = 'FAILED', 
+                 completed_at = NOW(),
+                 error_message = 'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
+                 result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Không có Agent K8s trực tuyến"'::jsonb) 
              WHERE id = $1 AND execution_status = 'RUNNING'`,
-            [actionId, JSON.stringify("Lệnh can thiệp đã được điều phối và hoàn tất thành công.")]
+            [actionId]
           );
+          if (action.incident_id) {
+            await pool.query(
+              'UPDATE incidents SET status = \'OPEN\', resolved_at = NULL WHERE id = $1 AND status = \'RESOLVED\'',
+              [action.incident_id]
+            ).catch(() => {});
+          }
+          const refreshed = await HealingActionModel.findActionById(actionId);
+          if (refreshed) {
+            result.action = refreshed;
+          }
         }
       } catch (e) {
         console.warn('[HealingActionService] Dispatch to agent failed:', e);

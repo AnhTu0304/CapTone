@@ -71,6 +71,7 @@ export const RCARequestSchema = z.object({
   previous_action_result_source: z.literal('POST_ACTION_VERIFICATION').optional().nullable(),
   previous_rca_root_cause: z.string().optional().nullable(),
   action_history: z.any().optional(),
+  rule_engine: z.array(z.string()).optional(),
 });
 
 export type GRUMetricPoint = z.infer<typeof GRUMetricPointSchema>;

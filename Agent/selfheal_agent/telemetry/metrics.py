@@ -171,11 +171,13 @@ class MetricsManager:
         if self.core_v1:
             t_log = time.perf_counter()
             try:
-                raw_logs = self.core_v1.read_namespaced_pod_log(
+                raw_logs = await asyncio.to_thread(
+                    self.core_v1.read_namespaced_pod_log,
                     name=pod.name,
                     namespace=pod.namespace,
                     since_seconds=since_sec,
                     tail_lines=150,
+                    _request_timeout=2,
                 )
                 record_k8s_api_call("pods", "read_log", "success", time.perf_counter() - t_log)
                 if raw_logs:
@@ -320,8 +322,10 @@ class MetricsManager:
         if not pods:
             return []
 
-        metrics_map = self.get_pod_metrics(namespace, monitor_all)
-        node_metrics_map = self.get_node_metrics()
+        metrics_map, node_metrics_map = await asyncio.gather(
+            asyncio.to_thread(self.get_pod_metrics, namespace, monitor_all),
+            asyncio.to_thread(self.get_node_metrics),
+        )
         prom_data = (
             await self.prom_collector.collect_http_metrics(namespace)
             if self.prom_collector

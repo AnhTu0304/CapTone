@@ -17,6 +17,9 @@ import {
   updateOrgStatusSchema,
   orgIdParamSchema,
   orgQuerySchema,
+  orgAlertSettingsParamSchema,
+  updateOrgAlertSettingsSchema,
+  sendTestAlertEmailSchema,
 } from '../validations/organization.validation';
 import {
   inviteMemberSchema,
@@ -323,5 +326,51 @@ router.get(
     requireOrgRole('SME_OWNER', 'DEVOPS', 'VIEWER'),
     AuditController.verifyOrganizationAuditLogs
   );
+
+/* ==========================================================================
+   6. CẤU HÌNH CẢNH BÁO KHẨN CẤP TỔ CHỨC (CRITICAL ALERT SETTINGS)
+   ========================================================================== */
+router.get(
+  '/:id/alert-settings',
+  validate(orgAlertSettingsParamSchema),
+  requireOrgMember,
+  OrganizationController.getAlertSettings
+);
+router.get(
+  '/:orgId/alert-settings',
+  validate(orgAlertSettingsParamSchema),
+  requireOrgMember,
+  OrganizationController.getAlertSettings
+);
+
+router.put(
+  '/:id/alert-settings',
+  validate(orgAlertSettingsParamSchema),
+  validate(updateOrgAlertSettingsSchema),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  OrganizationController.updateAlertSettings
+);
+router.put(
+  '/:orgId/alert-settings',
+  validate(orgAlertSettingsParamSchema),
+  validate(updateOrgAlertSettingsSchema),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  OrganizationController.updateAlertSettings
+);
+
+router.post(
+  '/:id/alert-settings/test-email',
+  validate(orgAlertSettingsParamSchema),
+  validate(sendTestAlertEmailSchema),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  OrganizationController.sendTestAlertEmail
+);
+router.post(
+  '/:orgId/alert-settings/test-email',
+  validate(orgAlertSettingsParamSchema),
+  validate(sendTestAlertEmailSchema),
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
+  OrganizationController.sendTestAlertEmail
+);
 
   export const organizationRoutes = router;

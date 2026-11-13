@@ -105,12 +105,15 @@ export class AgentService {
     const namespaceName = (data.namespace || 'default').trim();
     if (clusterId && serviceId) {
       try {
+        const resolvedTarget = await WorkloadModel.resolveK8sTarget(serviceId, clusterId);
+        const canonicalName = resolvedTarget.targetName || serviceId;
+        const effectiveNsName = resolvedTarget.namespace || namespaceName;
         const nsRes = await pool.query(
           `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $1 OR name = $1 OR cluster_uid = $1)) AND name = $2 LIMIT 1`,
-          [clusterId, namespaceName]
+          [clusterId, effectiveNsName]
         );
         const namespaceId = nsRes.rows[0]?.id || null;
-        await WorkloadModel.findOrCreateByName(serviceId, clusterId, undefined, namespaceId);
+        await WorkloadModel.findOrCreateByName(canonicalName, clusterId, undefined, namespaceId);
       } catch {
         // Non-blocking workload sync
       }
@@ -2102,6 +2105,8 @@ export class AgentService {
           active_pressures: node.active_pressures ?? [],
           ready_reason: node.ready_reason ?? null,
           ready_message: node.ready_message ?? null,
+          unschedulable: Boolean((node as any).unschedulable),
+          taints: (node as any).taints ?? [],
         };
 
         if (nodeMap[node.name]) {
@@ -2341,12 +2346,31 @@ export class AgentService {
 
       // 5. Sync Workloads from explicit deployments (if reported) and pods
       const existingWlRes = await client.query(
-        'SELECT id, name, namespace_id FROM workloads WHERE cluster_id = $1',
+        `SELECT id, name, namespace_id, workload_type
+         FROM workloads
+         WHERE cluster_id = $1 AND deleted_at IS NULL
+         ORDER BY (observed_at IS NOT NULL) DESC, updated_at DESC NULLS LAST, created_at ASC`,
         [clusterId]
       );
-      const workloadMapByName: Record<string, { id: string; namespace_id: string | null }> = {};
+      const workloadMapByName: Record<string, { id: string; namespace_id: string | null; workload_type?: string | null }> = {};
+      const duplicateWorkloadRows: Array<{ keepId: string; dupId: string; name: string }> = [];
       for (const row of existingWlRes.rows) {
-        workloadMapByName[row.name] = { id: row.id, namespace_id: row.namespace_id };
+        if (!workloadMapByName[row.name]) {
+          workloadMapByName[row.name] = {
+            id: row.id,
+            namespace_id: row.namespace_id,
+            workload_type: row.workload_type,
+          };
+        } else {
+          duplicateWorkloadRows.push({ keepId: workloadMapByName[row.name].id, dupId: row.id, name: row.name });
+        }
+      }
+      for (const dup of duplicateWorkloadRows) {
+        await client.query('UPDATE pods SET workload_id = $1 WHERE workload_id = $2', [dup.keepId, dup.dupId]);
+        await client.query('UPDATE incidents SET target_id = $1 WHERE target_id = $2', [dup.keepId, dup.dupId]);
+        await client.query('UPDATE ai_predictions SET workload_id = $1 WHERE workload_id = $2', [dup.keepId, dup.dupId]).catch(() => {});
+        await client.query('DELETE FROM deployments WHERE workload_id = $1', [dup.dupId]).catch(() => {});
+        await client.query('DELETE FROM workloads WHERE id = $1', [dup.dupId]).catch(() => {});
       }
 
       const reportedDeploymentNames = new Set<string>();
@@ -2478,26 +2502,71 @@ export class AgentService {
           }
         }
 
-        // Remove stale deployments that are no longer reported by the cluster
-        for (const row of existingWlRes.rows) {
-          if (!reportedDeploymentNames.has(row.name)) {
-            await client.query('DELETE FROM workloads WHERE id = $1', [row.id]);
-            delete workloadMapByName[row.name];
+        // Preserve active non-Deployment workloads (e.g. StatefulSet, DaemonSet) while pruning stale phantoms
+        const activeLiveWorkloadNames = new Set<string>();
+        for (const pod of data.pods) {
+          if (pod.labels?.['app.kubernetes.io/name']) activeLiveWorkloadNames.add(pod.labels['app.kubernetes.io/name']);
+          if (pod.labels?.app) activeLiveWorkloadNames.add(pod.labels.app);
+          const baseName = String(pod.name || '')
+            .replace(/-(?:[a-f0-9]{8,10}|[0-9a-z]{9,10})-[a-z0-9]{5}$/i, '')
+            .replace(/-\d+$/, '')
+            .replace(/-[a-z0-9]{5}$/i, '');
+          if (baseName) activeLiveWorkloadNames.add(baseName);
+        }
+
+        for (const [wlName, wlMeta] of Object.entries(workloadMapByName)) {
+          const isDeployment = !wlMeta.workload_type || wlMeta.workload_type === 'Deployment';
+          if (isDeployment && !reportedDeploymentNames.has(wlName) && !activeLiveWorkloadNames.has(wlName)) {
+            await client.query('UPDATE pods SET workload_id = NULL WHERE workload_id = $1', [wlMeta.id]);
+            await client.query('DELETE FROM deployments WHERE workload_id = $1', [wlMeta.id]).catch(() => {});
+            await client.query('DELETE FROM workloads WHERE id = $1', [wlMeta.id]).catch(() => {});
+            delete workloadMapByName[wlName];
           }
         }
       }
 
       for (const pod of data.pods) {
         const nsId = namespaceMap[pod.namespace] || Object.values(namespaceMap)[0] || null;
-        const wlName =
-          pod.service_id ||
-          pod.labels?.app ||
-          pod.labels?.['app.kubernetes.io/name'] ||
-          pod.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, '');
+        const podStripped = String(pod.name || '')
+          .replace(/-(?:[a-f0-9]{8,10}|[0-9a-z]{9,10})-[a-z0-9]{5}$/i, '')
+          .replace(/-\d+$/, '')
+          .replace(/-[a-z0-9]{5}$/i, '');
+        const candidateNames = [
+          pod.labels?.['app.kubernetes.io/name'],
+          pod.labels?.app,
+          podStripped,
+          pod.service_id,
+        ].filter(Boolean) as string[];
 
+        const wlName = candidateNames[0];
         if (!wlName) continue;
 
-        let wlInfo = workloadMapByName[wlName];
+        let wlInfo: { id: string; namespace_id: string | null; workload_type?: string | null } | undefined;
+        // Priority 1: Exact candidate match against existing workloads
+        for (const cand of candidateNames) {
+          if (workloadMapByName[cand]) {
+            wlInfo = workloadMapByName[cand];
+            break;
+          }
+        }
+        // Priority 2: Conservative suffix match (e.g. node-exporter matching prometheus-node-exporter)
+        // Avoid broad k.startsWith(cand) because a generic chart release name (e.g. 'prometheus')
+        // would falsely match unrelated chart subcomponents (e.g. 'prometheus-kube-state-metrics').
+        if (!wlInfo) {
+          const genericChartTokens = new Set(['prometheus', 'kube', 'stack', 'operator', 'app', 'service']);
+          for (const cand of candidateNames) {
+            const candLower = cand.toLowerCase();
+            if (genericChartTokens.has(candLower) || cand.length < 5) continue;
+            const matchedKey = Object.keys(workloadMapByName).find((k) => {
+              const kLower = k.toLowerCase();
+              return kLower.endsWith(`-${candLower}`) || candLower.endsWith(`-${kLower}`);
+            });
+            if (matchedKey) {
+              wlInfo = workloadMapByName[matchedKey];
+              break;
+            }
+          }
+        }
         if (wlInfo) {
           if (nsId && !wlInfo.namespace_id) {
             await client.query(
@@ -2506,15 +2575,30 @@ export class AgentService {
             );
             wlInfo.namespace_id = nsId;
           }
-        } else if (!Array.isArray(data.deployments) || data.deployments.length === 0) {
+          if (/-\d+$/.test(String(pod.name || '')) && wlInfo.workload_type === 'StatefulSet') {
+            await client.query(
+              'UPDATE workloads SET observed_at = NOW(), updated_at = NOW() WHERE id = $1',
+              [wlInfo.id]
+            );
+          }
+        } else if (
+          !Array.isArray(data.deployments) ||
+          data.deployments.length === 0 ||
+          /-\d+$/.test(String(pod.name || ''))
+        ) {
+          const isStsPod = /-\d+$/.test(String(pod.name || ''));
           const insWl = await client.query(
-            `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, created_at, updated_at)
-             VALUES ($1, $2, $3, 'Deployment', 'UNKNOWN', $4, NOW(), NOW())
-             RETURNING id, namespace_id`,
-            [clusterId, nsId, wlName, JSON.stringify(pod.labels || {})]
+            `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, observed_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, 'UNKNOWN', $5, NOW(), NOW(), NOW())
+             RETURNING id, namespace_id, workload_type`,
+            [clusterId, nsId, wlName, isStsPod ? 'StatefulSet' : 'Deployment', JSON.stringify(pod.labels || {})]
           );
           if (insWl.rows[0]) {
-            wlInfo = { id: insWl.rows[0].id, namespace_id: insWl.rows[0].namespace_id };
+            wlInfo = {
+              id: insWl.rows[0].id,
+              namespace_id: insWl.rows[0].namespace_id,
+              workload_type: insWl.rows[0].workload_type,
+            };
             workloadMapByName[wlName] = wlInfo;
           }
         }

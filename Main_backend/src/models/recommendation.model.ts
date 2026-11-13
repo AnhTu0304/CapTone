@@ -442,6 +442,8 @@ export class RecommendationModel {
 
     target_type: string;
 
+    target_id?: string | null;
+
     target_name?: string;
 
     risk_level?: string;
@@ -476,6 +478,10 @@ export class RecommendationModel {
 
     const safeResult = typeof data.result === 'object' ? JSON.stringify(data.result) : (data.result || '{}');
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    const validTargetId = data.target_id && uuidRegex.test(String(data.target_id)) ? String(data.target_id) : null;
+
 
 
     const query = `
@@ -491,6 +497,8 @@ export class RecommendationModel {
         action_type_id,
 
         target_type,
+
+        target_id,
 
         target_name,
 
@@ -514,7 +522,7 @@ export class RecommendationModel {
 
       ) VALUES (
 
-        $1, $2, $3, $4, $5, $6, $7::risk_level, $8::execution_mode, $9::approval_status, $10::execution_status, $11, $12, NOW(), NOW(), $13::jsonb
+        $1, $2, $3, $4, $5, $6::uuid, $7, $8::risk_level, $9::execution_mode, $10::approval_status, $11::execution_status, $12, $13, NOW(), NOW(), $14::jsonb
 
       ) RETURNING *;
 
@@ -533,6 +541,8 @@ export class RecommendationModel {
       data.action_type_id,
 
       data.target_type || 'WORKLOAD',
+
+      validTargetId,
 
       data.target_name || '',
 

@@ -3,7 +3,11 @@ import { redisClient, isRedisReady } from '../config/redis';
 import { config } from '../config/env';
 import { EmailService } from './email.service';
 
-export type EmailJobType = 'VERIFICATION_EMAIL' | 'INVITATION_EMAIL' | 'WELCOME_GOOGLE_EMAIL';
+export type EmailJobType =
+  | 'VERIFICATION_EMAIL'
+  | 'INVITATION_EMAIL'
+  | 'WELCOME_GOOGLE_EMAIL'
+  | 'CRITICAL_INCIDENT_EMAIL';
 
 export interface BaseEmailJob {
   id: string;
@@ -35,7 +39,37 @@ export interface GoogleWelcomeEmailJob extends BaseEmailJob {
   fullName: string;
 }
 
-export type EmailJob = VerificationEmailJob | InvitationEmailJob | GoogleWelcomeEmailJob;
+export interface CriticalIncidentEmailJob extends BaseEmailJob {
+  type: 'CRITICAL_INCIDENT_EMAIL';
+  recipientName: string;
+  recipientRole?: string;
+  incidentId: string;
+  incidentCode?: string;
+  title: string;
+  severity: string;
+  serviceName: string;
+  podName?: string | null;
+  nodeName?: string | null;
+  namespace?: string | null;
+  clusterName?: string | null;
+  organizationName?: string | null;
+  rootCauseType?: string | null;
+  rootCauseDescription?: string | null;
+  confidenceScore?: number | null;
+  recommendationAction?: string | null;
+  recommendationReason?: string | null;
+  reasonStage: string;
+  failureMessage?: string | null;
+  occurrenceCount?: number | null;
+  detectedAt?: string | null;
+  manualPlaybook?: string[] | null;
+}
+
+export type EmailJob =
+  | VerificationEmailJob
+  | InvitationEmailJob
+  | GoogleWelcomeEmailJob
+  | CriticalIncidentEmailJob;
 
 export interface EmailQueueStats {
   pendingJobs: number;
@@ -76,6 +110,7 @@ export class EmailQueue {
       | Omit<VerificationEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
       | Omit<InvitationEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
       | Omit<GoogleWelcomeEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
+      | Omit<CriticalIncidentEmailJob, 'id' | 'createdAt' | 'attempts' | 'maxAttempts'>
   ): Promise<string> {
     const jobId = crypto.randomUUID();
     const job: EmailJob = {
@@ -102,6 +137,8 @@ export class EmailQueue {
             ? `(token: ${maskSecret((job as VerificationEmailJob).token)})`
             : job.type === 'INVITATION_EMAIL'
             ? `(org: ${(job as InvitationEmailJob).orgName})`
+            : job.type === 'CRITICAL_INCIDENT_EMAIL'
+            ? `(incident: ${(job as CriticalIncidentEmailJob).incidentCode || (job as CriticalIncidentEmailJob).incidentId})`
             : `(name: ${(job as GoogleWelcomeEmailJob).fullName})`;
 
         console.log(`📥 [EMAIL QUEUE] Enqueued job ${job.id} [${job.type}] to ${job.toEmail} ${safeDetail}`);
@@ -178,6 +215,18 @@ export class EmailQueue {
   /**
    * Lấy thống kê chi tiết trạng thái hàng đợi
    */
+  /**
+   * Enqueue email cảnh báo khẩn cấp sự cố CRITICAL
+   */
+  public static async enqueueCriticalIncidentAlert(
+    payload: Omit<CriticalIncidentEmailJob, 'id' | 'type' | 'createdAt' | 'attempts' | 'maxAttempts'>
+  ): Promise<string> {
+    return this.enqueue({
+      type: 'CRITICAL_INCIDENT_EMAIL',
+      ...payload,
+    });
+  }
+
   public static async getQueueStats(): Promise<EmailQueueStats> {
     if (!isRedisReady()) {
       return {
@@ -347,6 +396,32 @@ export class EmailWorker {
           iJob.orgName,
           iJob.roleName
         );
+      } else if (job.type === 'CRITICAL_INCIDENT_EMAIL') {
+        const cJob = job as CriticalIncidentEmailJob;
+        success = await EmailService.sendCriticalIncidentAlertEmail({
+          toEmail: cJob.toEmail,
+          recipientName: cJob.recipientName,
+          recipientRole: cJob.recipientRole,
+          incidentId: cJob.incidentId,
+          incidentCode: cJob.incidentCode,
+          title: cJob.title,
+          severity: cJob.severity,
+          serviceName: cJob.serviceName,
+          podName: cJob.podName,
+          nodeName: cJob.nodeName,
+          namespace: cJob.namespace,
+          clusterName: cJob.clusterName,
+          organizationName: cJob.organizationName,
+          rootCauseType: cJob.rootCauseType,
+          rootCauseDescription: cJob.rootCauseDescription,
+          confidenceScore: cJob.confidenceScore,
+          recommendationAction: cJob.recommendationAction,
+          recommendationReason: cJob.recommendationReason,
+          reasonStage: cJob.reasonStage,
+          failureMessage: cJob.failureMessage,
+          occurrenceCount: cJob.occurrenceCount,
+          detectedAt: cJob.detectedAt,
+        });
       } else if (job.type === 'WELCOME_GOOGLE_EMAIL') {
         const gJob = job as GoogleWelcomeEmailJob;
         success = await EmailService.sendGoogleWelcomeEmail(gJob.toEmail, gJob.fullName);

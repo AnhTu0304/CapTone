@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-captone_db}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -73,14 +73,14 @@ services:
       AI_BACKEND_URL: http://ai-backend:8000
       JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_development_only}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001,http://demo.giahungtrieu.net:8090,http://112.78.1.150:8090}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <noreply@selfheal.io>}
-      CLIENT_URL: ${CLIENT_URL:-http://localhost:3001}
+      CLIENT_URL: ${CLIENT_URL:-http://demo.giahungtrieu.net:8090}
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-selfheal-backend}
       OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-1.0.0}
@@ -202,7 +202,7 @@ services:
       - selfheal-frontend
       - ai-backend
     ports:
-      - "80:80"
+      - "${WEB_PORT:-8090}:80"
       - "443:443"
     networks:
       - captone-network

@@ -89,6 +89,7 @@ class NodeConditions(BaseModel):
     MemoryPressure: bool = False
     DiskPressure: bool = False
     PIDPressure: bool = False
+    NetworkUnavailable: bool = False
     Ready: bool = True
 
 
@@ -98,11 +99,15 @@ class NodeInfo(BaseModel):
     node_id: str | None = None
     node_name: str
     status: str = "Ready"
+    unschedulable: bool = False
+    taints: list[Any] = Field(default_factory=list)
     cpu_cores: float | None = None
     cpu_usage_pct: float | None = None
     ram_capacity_bytes: int | None = None
     ram_usage_bytes: int | None = None
     ram_usage_pct: float | None = None
+    disk_usage_pct: float | None = None
+    pods_allocatable: int | None = None
     conditions: NodeConditions | dict[str, Any] = Field(default_factory=dict)
     allocatable_memory_bytes: int | None = None
     free_memory_bytes: int | None = None

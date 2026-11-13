@@ -7,6 +7,7 @@ import { AgentService, AuthenticatedAgent } from '../services/agent.service';
 import { AgentWsMessageSchema } from '../schemas/agentWebSocket.schema';
 import { broadcastTelemetryToUi } from './telemetryWebSocket';
 import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
+import { CriticalIncidentNotificationService } from '../services/criticalIncidentNotification.service';
 import {
   injectTraceContext,
   recordAgentHeartbeat,
@@ -381,7 +382,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             let message = String(rawMessage || '');
             const targetSvc = details?.target || 'dịch vụ mục tiêu';
             const targetNs = details?.namespace || 'default';
-            if (message.includes('HTTPHeaderDict') || message.includes('HTTP response body:')) {
+            if (message.includes('[Errno 111] Connection refused') || message.includes('Connection refused')) {
+              message = `Lỗi kết nối Kubernetes API Server (10.96.0.1:443): Connection refused. Agent không thể gửi lệnh tới "${targetSvc}" do API Server cụm bị gián đoạn hoặc quá tải.`;
+            } else if (message.includes('HTTPHeaderDict') || message.includes('HTTP response body:')) {
               const bodyMatch = message.match(/HTTP response body:\s*(\{[\s\S]*\})/);
               if (bodyMatch) {
                 try {
@@ -413,25 +416,32 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             console.log(`🎯 [AGENT ACTION RESULT] [${ws.agent.name}] Action: ${action_id} | Status: ${status} | Msg: ${message}`);
 
             try {
-              // 1. Update healing_actions execution_status
+              // 1. Update healing_actions execution_status & persist explicit error_message on failure
+              const failureErrorMessage =
+                status === 'SUCCEEDED'
+                  ? null
+                  : (message ? String(message).slice(0, 1000) : 'Thực thi tác vụ tự phục hồi thất bại trên K8s Agent');
               const actRes = await pool.query(
                 `UPDATE healing_actions 
                  SET execution_status = $2, 
                      completed_at = NOW(),
+                     error_message = $4,
                      result = $3::jsonb
                  WHERE id = $1
-                 RETURNING incident_id, recommendation_id, target_name, policy_id, environment_id;`,
+                 RETURNING incident_id, recommendation_id, target_name, target_id, policy_id, environment_id;`,
                 [
                   action_id,
                   status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
                   JSON.stringify({
                     status,
                     message,
+                    ...(status === 'SUCCEEDED' ? {} : { error: message }),
                     duration_ms,
                     executed_by_agent: ws.agent.name,
                     completed_at: new Date().toISOString(),
                     details,
                   }),
+                  failureErrorMessage,
                 ]
               );
 
@@ -457,42 +467,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                 ]
               );
 
-              // 3. Insert recovery verification if succeeded
+              // 3. Keep incident OPEN for Post-Action Verification (12-point telemetry batch check after 45-60s).
+              // Only mark recommendation as APPLIED to indicate K8s command execution completed.
               if (status === 'SUCCEEDED') {
-                await pool.query(
-                  `INSERT INTO recovery_verifications (
-                    healing_action_id, verification_type,
-                    status_before, status_after,
-                    verification_result, verification_details,
-                    verified_at, duration_ms
-                  ) VALUES (
-                    $1, 'K8S_POST_HEALING_PROBE',
-                    $2::jsonb, $3::jsonb,
-                    true, $4::jsonb,
-                    NOW(), 500
-                  );`,
-                  [
-                    action_id,
-                    JSON.stringify({ health: 'DEGRADED' }),
-                    JSON.stringify({ health: 'HEALTHY' }),
-                    JSON.stringify({ status: 'RESTORED', message: 'Tác vụ tự lành thành công trên K8s Agent' }),
-                  ]
-                );
-
-                // Auto-resolve incident and any open duplicate incidents for the same target service
-                if (row?.incident_id || row?.target_name) {
-                  await pool.query(
-                    `UPDATE incidents
-                     SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
-                     WHERE status != 'RESOLVED'
-                       AND (
-                         id = $1
-                         OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
-                       );`,
-                    [row?.incident_id || null, row?.target_name || null]
-                  );
-                }
-
                 // Mark recommendation applied
                 if (row?.recommendation_id) {
                   await pool.query(
@@ -500,15 +477,24 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                     [row.recommendation_id]
                   );
                 }
-                if (row?.incident_id || row?.target_name) {
+                if (row?.incident_id || row?.target_name || row?.target_id) {
                   await pool.query(
                     `UPDATE ai_recommendations r
                      SET status = 'APPLIED'
                      FROM incidents i
                      WHERE r.incident_id = i.id
-                       AND (r.incident_id = $1 OR ($2::text IS NOT NULL AND (i.target_id = $2 OR i.title ILIKE '%' || $2 || '%')))
+                       AND (
+                         ($1::uuid IS NOT NULL AND r.incident_id = $1::uuid)
+                         OR ($2::text IS NOT NULL AND (
+                           i.target_id = $2
+                           OR LOWER(COALESCE(i.target_name, '')) = LOWER($2)
+                           OR i.title ILIKE '% on ' || $2
+                           OR i.title ILIKE '% trên ' || $2
+                         ))
+                         OR ($3::text IS NOT NULL AND i.target_id = $3)
+                       )
                        AND r.status = 'PROPOSED';`,
-                    [row?.incident_id || null, row?.target_name || null]
+                    [row?.incident_id || null, row?.target_name || null, row?.target_id ? String(row.target_id) : null]
                   );
                 }
               }
@@ -552,6 +538,19 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                   incident_id: row?.incident_id,
                 },
               }).catch(() => {});
+
+              if (status !== 'SUCCEEDED' && row?.incident_id) {
+                await pool.query(
+                  'UPDATE incidents SET status = \'OPEN\', resolved_at = NULL WHERE id = $1 AND status = \'RESOLVED\'',
+                  [row.incident_id]
+                ).catch(() => {});
+                CriticalIncidentNotificationService.notifyIfNeeded(row.incident_id, {
+                  reasonStage: 'HEALING_FAILED',
+                  failureMessage: message,
+                }).catch((err) => {
+                  console.warn('[AgentWebSocket] Gửi cảnh báo khẩn HEALING_FAILED thất bại:', err?.message || err);
+                });
+              }
 
               // Broadcast live event to UI
               broadcastTelemetryToUi({
@@ -689,11 +688,11 @@ export async function dispatchHealingActionToAgent(payload: {
             chosenClient = extWs;
             break;
           }
-          if (payload.environment_id && extWs.agent.environment_id === payload.environment_id) {
+          if (!payload.cluster_id && payload.environment_id && extWs.agent.environment_id === payload.environment_id) {
             chosenClient = extWs;
             break;
           }
-          if (!chosenClient) {
+          if (!payload.cluster_id && !payload.environment_id && !chosenClient) {
             chosenClient = extWs;
           }
         }

@@ -10,6 +10,7 @@ export interface IIncident {
   source_type: string;
   target_type: string;
   target_id?: string | null;
+  target_name?: string | null;
   incident_type: string;
   title: string;
   description: string;
@@ -37,6 +38,7 @@ export class IncidentModel {
         source_type,
         target_type,
         target_id,
+        target_name,
         incident_type,
         title,
         description,
@@ -45,7 +47,7 @@ export class IncidentModel {
         detected_at,
         started_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()
       ) RETURNING id, created_at;
     `;
 
@@ -57,6 +59,7 @@ export class IncidentModel {
       incident.source_type || 'AI_PREDICTION',
       incident.target_type || 'WORKLOAD',
       incident.target_id || null,
+      incident.target_name || null,
       incident.incident_type,
       incident.title,
       incident.description,
@@ -75,20 +78,37 @@ export class IncidentModel {
     environmentId: string,
     targetId: string | null,
     incidentType: string,
-    cooldownMinutes: number = 15
+    cooldownMinutes: number = 15,
+    targetName?: string | null
   ): Promise<any | null> {
+    const conditions = [
+      'environment_id = $1',
+      `status IN ('OPEN', 'INVESTIGATING')`,
+      `created_at >= NOW() - ($4 || ' minutes')::interval`,
+    ];
+    const params: any[] = [environmentId, targetId, incidentType, cooldownMinutes];
+    let idx = 5;
+
+    if (targetName && targetName.trim().length > 0) {
+      // Khi đã có tên target cụ thể (service/pod), tìm sự cố đang mở của chính service/pod đó (bất kể loại symptom OOM/5XX)
+      conditions.push(`(
+        (LOWER(COALESCE(target_name, '')) = LOWER($${idx}::text) OR ($2::text IS NOT NULL AND target_id::text = $2::text))
+        OR (incident_type = $3)
+      )`);
+      params.push(targetName.trim());
+    } else {
+      conditions.push('incident_type = $3');
+      conditions.push('($2::text IS NULL OR target_id::text = $2::text OR target_id IS NULL)');
+    }
+
     const query = `
-      SELECT id, status, created_at
+      SELECT id, status, created_at, occurrence_count, severity, target_name
       FROM incidents
-      WHERE environment_id = $1
-        AND ($2::text IS NULL OR target_id = $2::text OR target_id IS NULL)
-        AND incident_type = $3
-        AND status IN ('OPEN', 'INVESTIGATING')
-        AND created_at >= NOW() - ($4 || ' minutes')::interval
+      WHERE ${conditions.join(' AND ')}
       ORDER BY created_at DESC
       LIMIT 1;
     `;
-    const res = await client.query(query, [environmentId, targetId, incidentType, cooldownMinutes]);
+    const res = await client.query(query, params);
     return res.rows[0] || null;
   }
 
@@ -138,19 +158,19 @@ export class IncidentModel {
       // Map Vietnamese or English statuses
       const s = params.status.toUpperCase();
       if (params.status.includes('hoàn tất') || s === 'RESOLVED') {
-        conditions.push(`i.status = 'RESOLVED'`);
+        conditions.push(`i.status::text = 'RESOLVED'`);
       } else if (params.status.includes('phục hồi') || s === 'INVESTIGATING' || s === 'RECOVERING') {
-        conditions.push(`i.status = 'INVESTIGATING'`);
+        conditions.push(`i.status::text = 'INVESTIGATING'`);
       } else if (params.status.includes('duyệt') || s === 'OPEN' || s === 'HITL') {
-        conditions.push(`i.status = 'OPEN'`);
+        conditions.push(`i.status::text = 'OPEN'`);
       } else {
-        conditions.push(`i.status ILIKE $${idx++}`);
+        conditions.push(`i.status::text ILIKE $${idx++}`);
         values.push(`%${params.status}%`);
       }
     }
 
     if (params.severity && params.severity !== 'all') {
-      conditions.push(`i.severity = $${idx++}`);
+      conditions.push(`i.severity::text = $${idx++}`);
       values.push(params.severity.toUpperCase());
     }
 
@@ -167,6 +187,25 @@ export class IncidentModel {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Tự động đối soát và giải phóng các tác vụ RUNNING bị treo quá 60s trên toàn hệ thống
+    try {
+      await pool.query(
+        `UPDATE healing_actions 
+         SET execution_status = 'FAILED', 
+             completed_at = NOW(),
+             error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
+             result = jsonb_set(
+               COALESCE(result, '{}'::jsonb),
+               '{error}',
+               '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
+             ) 
+         WHERE execution_status = 'RUNNING' 
+           AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds';`
+      );
+    } catch (reconcileErr) {
+      console.warn('[IncidentModel.findMany] Lỗi tự động đối soát timeout healing actions:', reconcileErr);
+    }
 
     const countSql = `SELECT count(*) FROM incidents i ${whereClause};`;
     const countRes = await pool.query(countSql, values);
@@ -190,7 +229,7 @@ export class IncidentModel {
         w.name AS workload_name,
         w.workload_type,
         w.kubernetes_uid AS workload_kubernetes_uid,
-        COALESCE(w.name, ha.target_name, i.target_id) AS service_name,
+        COALESCE(w.name, ha.target_name, i.target_id::text) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -212,7 +251,7 @@ export class IncidentModel {
         COALESCE(
           ns.name,
           CASE
-            WHEN r.analysis_result IS NOT NULL AND left(btrim(r.analysis_result), 1) = '{'
+            WHEN r.analysis_result IS NOT NULL AND left(btrim(r.analysis_result::text), 1) = '{'
               THEN NULLIF(r.analysis_result::jsonb->>'namespace', '')
             ELSE NULL
           END
@@ -222,7 +261,7 @@ export class IncidentModel {
         pod_info.pod_name AS actual_pod_name,
         pod_info.pod_id AS actual_pod_id,
         pod_info.pod_uid AS kubernetes_uid,
-        (SELECT COUNT(*)::int FROM nodes nd_cnt WHERE nd_cnt.cluster_id = c.id) AS cluster_node_count,
+        (SELECT COUNT(*)::int FROM nodes nd_cnt WHERE nd_cnt.cluster_id::text = c.id::text) AS cluster_node_count,
         rec_info.recommendation_id,
         rec_info.recommendation_action,
         rec_info.recommendation_reason,
@@ -234,9 +273,36 @@ export class IncidentModel {
         ha.approval_status AS healing_approval_status,
         ha.target_name AS healing_target_name,
         ha.action_name AS healing_action_name,
+        ha.started_at AS healing_started_at,
         ha.completed_at AS healing_completed_at,
         ha.pending_approval_id,
         (ha.pending_approval_id IS NOT NULL) AS has_pending_approval,
+        rv.verification_result AS healing_verification_result,
+        rv.verified_at AS healing_verified_at,
+        (
+          SELECT count(*)::int
+          FROM healing_actions ha_fail_cnt
+          WHERE ha_fail_cnt.incident_id = i.id
+            AND (
+              ha_fail_cnt.execution_status = 'FAILED'
+              OR EXISTS (
+                SELECT 1 FROM recovery_verifications rv_f
+                WHERE rv_f.healing_action_id = ha_fail_cnt.id
+                  AND rv_f.verification_result = false
+              )
+            )
+        ) AS failed_actions_count,
+        (
+          SELECT count(*)::int
+          FROM healing_actions ha_succ_cnt
+          WHERE ha_succ_cnt.incident_id = i.id
+            AND ha_succ_cnt.execution_status = 'SUCCEEDED'
+            AND NOT EXISTS (
+              SELECT 1 FROM recovery_verifications rv_sf
+              WHERE rv_sf.healing_action_id = ha_succ_cnt.id
+                AND rv_sf.verification_result = false
+            )
+        ) AS succeeded_actions_count,
         CASE 
           WHEN i.resolved_at IS NOT NULL AND i.detected_at IS NOT NULL 
             THEN EXTRACT(EPOCH FROM (i.resolved_at - i.detected_at))::int
@@ -247,14 +313,14 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
       LEFT JOIN ai_predictions pred ON pred.id = i.prediction_id
       LEFT JOIN LATERAL (
         SELECT w.id, w.name, w.namespace_id, w.workload_type, w.kubernetes_uid
         FROM workloads w
-        WHERE w.id::text = i.target_id
-           OR (w.name = i.target_id AND (c.id IS NULL OR w.cluster_id = c.id::text OR w.cluster_id = i.cluster_id))
-        ORDER BY (w.id::text = i.target_id) DESC, (w.deleted_at IS NULL) DESC, w.created_at DESC
+        WHERE w.id::text = i.target_id::text
+           OR (w.name = i.target_id::text AND (c.id IS NULL OR w.cluster_id::text = c.id::text OR w.cluster_id::text = i.cluster_id::text))
+        ORDER BY (w.id::text = i.target_id::text) DESC, (w.deleted_at IS NULL) DESC, w.created_at DESC
         LIMIT 1
       ) w ON true
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
@@ -265,15 +331,24 @@ export class IncidentModel {
         WHERE p.deleted_at IS NULL
           AND (
             (w.id IS NOT NULL AND p.workload_id = w.id)
-            OR (w.id IS NULL AND c.id IS NOT NULL AND p.cluster_id = c.id AND i.target_id IS NOT NULL AND (p.name = i.target_id OR p.name LIKE i.target_id || '-%'))
+            OR (w.id IS NULL AND c.id IS NOT NULL AND p.cluster_id::text = c.id::text AND i.target_id IS NOT NULL AND (p.name = i.target_id::text OR p.name LIKE i.target_id::text || '-%'))
+            OR (c.id IS NOT NULL AND p.cluster_id::text = c.id::text AND (p.name LIKE COALESCE(w.name, i.target_name, '') || '-%' OR p.name = COALESCE(w.name, i.target_name, '')))
           )
-        ORDER BY p.restart_count DESC NULLS LAST, p.created_at DESC
+        ORDER BY
+          (w.id IS NOT NULL AND p.workload_id = w.id) DESC,
+          (p.labels->>'app.kubernetes.io/name' = COALESCE(w.name, i.target_name, '')) DESC,
+          (p.labels->>'app' = COALESCE(w.name, i.target_name, '')) DESC,
+          (p.name = COALESCE(w.name, i.target_name, '')) DESC,
+          (p.name LIKE COALESCE(w.name, i.target_name, '') || '-%' AND p.name NOT LIKE '%-exporter%' AND p.name NOT LIKE '%-state-metrics%' AND p.name NOT LIKE '%-operator%') DESC,
+          (p.name LIKE COALESCE(w.name, i.target_name, '') || '-%') DESC,
+          p.restart_count DESC NULLS LAST,
+          p.created_at DESC
         LIMIT 1
       ) pod_info ON true
       LEFT JOIN LATERAL (
         SELECT nd.id, nd.name
         FROM nodes nd
-        WHERE nd.cluster_id = c.id
+        WHERE nd.cluster_id::text = c.id::text
         ORDER BY (nd.status = 'Ready') DESC, nd.created_at ASC
         LIMIT 1
       ) nd ON true
@@ -311,6 +386,7 @@ export class IncidentModel {
           ha.approval_status,
           ha.target_name,
           hat.name AS action_name,
+          ha.started_at,
           ha.completed_at,
           ap.id AS pending_approval_id
         FROM healing_actions ha
@@ -320,12 +396,20 @@ export class IncidentModel {
         ORDER BY (ap.id IS NOT NULL) DESC, ha.created_at DESC
         LIMIT 1
       ) ha ON true
+      LEFT JOIN LATERAL (
+        SELECT rv_inner.verification_result, rv_inner.verified_at
+        FROM recovery_verifications rv_inner
+        WHERE rv_inner.healing_action_id = ha.id
+        ORDER BY rv_inner.verified_at DESC
+        LIMIT 1
+      ) rv ON true
       ${whereClause}
       ORDER BY i.detected_at DESC
       LIMIT $${idx++} OFFSET $${idx++};
     `;
 
     values.push(limit, offset);
+    // debug log removed
     const res = await pool.query(query, values);
 
     return { items: res.rows, total };
@@ -353,7 +437,7 @@ export class IncidentModel {
         w.name AS workload_name,
         w.workload_type,
         w.kubernetes_uid AS workload_kubernetes_uid,
-        COALESCE(w.name, ha.target_name, i.target_id) AS service_name,
+        COALESCE(w.name, ha.target_name, i.target_id::text) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -376,7 +460,7 @@ export class IncidentModel {
         COALESCE(
           ns.name,
           CASE
-            WHEN r.analysis_result IS NOT NULL AND left(btrim(r.analysis_result), 1) = '{'
+            WHEN r.analysis_result IS NOT NULL AND left(btrim(r.analysis_result::text), 1) = '{'
               THEN NULLIF(r.analysis_result::jsonb->>'namespace', '')
             ELSE NULL
           END
@@ -386,7 +470,7 @@ export class IncidentModel {
         pod_info.pod_name AS actual_pod_name,
         pod_info.pod_id AS actual_pod_id,
         pod_info.pod_uid AS kubernetes_uid,
-        (SELECT COUNT(*)::int FROM nodes nd_cnt WHERE nd_cnt.cluster_id = c.id) AS cluster_node_count,
+        (SELECT COUNT(*)::int FROM nodes nd_cnt WHERE nd_cnt.cluster_id::text = c.id::text) AS cluster_node_count,
         rec_info.recommendation_id,
         rec_info.recommendation_action,
         rec_info.recommendation_reason,
@@ -398,20 +482,47 @@ export class IncidentModel {
         ha.approval_status AS healing_approval_status,
         ha.target_name AS healing_target_name,
         ha.action_name AS healing_action_name,
+        ha.started_at AS healing_started_at,
         ha.completed_at AS healing_completed_at,
         ha.pending_approval_id,
-        (ha.pending_approval_id IS NOT NULL) AS has_pending_approval
+        (ha.pending_approval_id IS NOT NULL) AS has_pending_approval,
+        rv.verification_result AS healing_verification_result,
+        rv.verified_at AS healing_verified_at,
+        (
+          SELECT count(*)::int
+          FROM healing_actions ha_fail_cnt
+          WHERE ha_fail_cnt.incident_id = i.id
+            AND (
+              ha_fail_cnt.execution_status = 'FAILED'
+              OR EXISTS (
+                SELECT 1 FROM recovery_verifications rv_f
+                WHERE rv_f.healing_action_id = ha_fail_cnt.id
+                  AND rv_f.verification_result = false
+              )
+            )
+        ) AS failed_actions_count,
+        (
+          SELECT count(*)::int
+          FROM healing_actions ha_succ_cnt
+          WHERE ha_succ_cnt.incident_id = i.id
+            AND ha_succ_cnt.execution_status = 'SUCCEEDED'
+            AND NOT EXISTS (
+              SELECT 1 FROM recovery_verifications rv_sf
+              WHERE rv_sf.healing_action_id = ha_succ_cnt.id
+                AND rv_sf.verification_result = false
+            )
+        ) AS succeeded_actions_count
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
       LEFT JOIN ai_predictions pred ON pred.id = i.prediction_id
       LEFT JOIN LATERAL (
         SELECT w.id, w.name, w.namespace_id, w.workload_type, w.kubernetes_uid
         FROM workloads w
-        WHERE w.id::text = i.target_id
-           OR (w.name = i.target_id AND (c.id IS NULL OR w.cluster_id = c.id::text OR w.cluster_id = i.cluster_id))
-        ORDER BY (w.id::text = i.target_id) DESC, (w.deleted_at IS NULL) DESC, w.created_at DESC
+        WHERE w.id::text = i.target_id::text
+           OR (w.name = i.target_id::text AND (c.id IS NULL OR w.cluster_id::text = c.id::text OR w.cluster_id::text = i.cluster_id::text))
+        ORDER BY (w.id::text = i.target_id::text) DESC, (w.deleted_at IS NULL) DESC, w.created_at DESC
         LIMIT 1
       ) w ON true
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
@@ -422,15 +533,24 @@ export class IncidentModel {
         WHERE p.deleted_at IS NULL
           AND (
             (w.id IS NOT NULL AND p.workload_id = w.id)
-            OR (w.id IS NULL AND c.id IS NOT NULL AND p.cluster_id = c.id AND i.target_id IS NOT NULL AND (p.name = i.target_id OR p.name LIKE i.target_id || '-%'))
+            OR (w.id IS NULL AND c.id IS NOT NULL AND p.cluster_id::text = c.id::text AND i.target_id IS NOT NULL AND (p.name = i.target_id::text OR p.name LIKE i.target_id::text || '-%'))
+            OR (c.id IS NOT NULL AND p.cluster_id::text = c.id::text AND (p.name LIKE COALESCE(w.name, i.target_name, '') || '-%' OR p.name = COALESCE(w.name, i.target_name, '')))
           )
-        ORDER BY p.restart_count DESC NULLS LAST, p.created_at DESC
+        ORDER BY
+          (w.id IS NOT NULL AND p.workload_id = w.id) DESC,
+          (p.labels->>'app.kubernetes.io/name' = COALESCE(w.name, i.target_name, '')) DESC,
+          (p.labels->>'app' = COALESCE(w.name, i.target_name, '')) DESC,
+          (p.name = COALESCE(w.name, i.target_name, '')) DESC,
+          (p.name LIKE COALESCE(w.name, i.target_name, '') || '-%' AND p.name NOT LIKE '%-exporter%' AND p.name NOT LIKE '%-state-metrics%' AND p.name NOT LIKE '%-operator%') DESC,
+          (p.name LIKE COALESCE(w.name, i.target_name, '') || '-%') DESC,
+          p.restart_count DESC NULLS LAST,
+          p.created_at DESC
         LIMIT 1
       ) pod_info ON true
       LEFT JOIN LATERAL (
         SELECT nd.id, nd.name
         FROM nodes nd
-        WHERE nd.cluster_id = c.id
+        WHERE nd.cluster_id::text = c.id::text
         ORDER BY (nd.status = 'Ready') DESC, nd.created_at ASC
         LIMIT 1
       ) nd ON true
@@ -468,6 +588,7 @@ export class IncidentModel {
           ha.approval_status,
           ha.target_name,
           hat.name AS action_name,
+          ha.started_at,
           ha.completed_at,
           ap.id AS pending_approval_id
         FROM healing_actions ha
@@ -477,11 +598,159 @@ export class IncidentModel {
         ORDER BY (ap.id IS NOT NULL) DESC, ha.created_at DESC
         LIMIT 1
       ) ha ON true
+      LEFT JOIN LATERAL (
+        SELECT rv_inner.verification_result, rv_inner.verified_at
+        FROM recovery_verifications rv_inner
+        WHERE rv_inner.healing_action_id = ha.id
+        ORDER BY rv_inner.verified_at DESC
+        LIMIT 1
+      ) rv ON true
       WHERE i.id = $1
       LIMIT 1;
     `;
     const res = await pool.query(query, [id]);
-    return res.rows[0] || null;
+    const row = res.rows[0];
+    if (row) {
+      try {
+        const isIncResolved = String(row.status || '').toUpperCase() === 'RESOLVED';
+        const isCurrNoAction = String(row.recommendation_action || '').toUpperCase() === 'NO_ACTION';
+
+        const targetServiceFilter = row.service_name || row.target_name || null;
+
+        // Tự động đối soát và giải phóng các tác vụ RUNNING bị treo quá 60s của sự cố này trước khi nạp lịch sử
+        try {
+          await pool.query(
+            `UPDATE healing_actions 
+             SET execution_status = 'FAILED', 
+                 completed_at = NOW(),
+                 error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
+                 result = jsonb_set(
+                   COALESCE(result, '{}'::jsonb),
+                   '{error}',
+                   '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
+                 ) 
+             WHERE execution_status = 'RUNNING' 
+               AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds'
+               AND (incident_id = $1 OR ($2::text IS NOT NULL AND (target_name = $2 OR target_name ILIKE $2 || '%')));`,
+            [row.id, targetServiceFilter]
+          );
+        } catch (reconcileErr) {
+          console.warn('[IncidentModel] Lỗi tự động đối soát timeout healing actions:', reconcileErr);
+        }
+
+        const histRes = await pool.query(
+          `SELECT
+             ha2.id,
+             ha2.incident_id,
+             hat2.code AS action_code,
+             hat2.name AS action_name,
+             ha2.execution_status,
+             ha2.target_name,
+             COALESCE(
+               rv.verification_details->>'message',
+               ha2.error_message,
+               ha2.result->>'error'
+             ) AS error_message,
+             ha2.completed_at,
+             ha2.created_at,
+             rv.verification_result,
+             rv.verified_at,
+             COALESCE(rv.verification_details->>'message', ha2.result->>'message') AS verification_message
+           FROM healing_actions ha2
+           LEFT JOIN healing_action_types hat2 ON hat2.id = ha2.action_type_id
+           LEFT JOIN LATERAL (
+             SELECT rv_inner.verification_result, rv_inner.verified_at, rv_inner.verification_details
+             FROM recovery_verifications rv_inner
+             WHERE rv_inner.healing_action_id = ha2.id
+             ORDER BY rv_inner.verified_at DESC NULLS LAST
+             LIMIT 1
+           ) rv ON true
+           WHERE ha2.incident_id = $1
+              AND ha2.execution_status != 'CANCELLED'
+            ORDER BY COALESCE(ha2.completed_at, ha2.created_at) ASC;`,
+          [row.id]
+        );
+
+        // Quy tắc bất biến SRE / Self-Healing:
+        // 1. Giữ đúng thứ tự diễn tiến thời gian (Chronological escalation ladder).
+        // 2. Không bao giờ ghi đè vị trí cũ khiến bậc Thành công nhảy lên trước bậc Thất bại.
+        // 3. Ngay khi có một bậc THÀNH CÔNG (verification_result = true hoặc SUCCEEDED trên sự cố RESOLVED),
+        //    chuỗi tự phục hồi KẾT THÚC ngay tại bậc đó — tuyệt đối không có bậc thất bại nào xuất hiện phía sau!
+        const cleanChain: any[] = [];
+        const seenActionCodes = new Set<string>();
+        for (const item of histRes.rows) {
+          // Lọc cách ly workload nếu có targetServiceFilter: loại trừ các action thuộc về service khác không liên quan
+          if (targetServiceFilter && item.target_name) {
+            const filterLower = targetServiceFilter.toLowerCase();
+            const itemTargetLower = item.target_name.toLowerCase();
+            const isMatch =
+              itemTargetLower === filterLower ||
+              itemTargetLower.startsWith(filterLower + '-') ||
+              filterLower.startsWith(itemTargetLower + '-') ||
+              (filterLower === 'prometheus' && (itemTargetLower.includes('prometheus') || itemTargetLower.includes('node-exporter') || itemTargetLower.includes('kube-state-metrics')));
+            if (!isMatch) {
+              continue;
+            }
+          }
+
+          // Đảm bảo thông điệp phản ánh chính xác service của incident, loại bỏ lẫn lộn giữa các component Helm
+          if (targetServiceFilter) {
+            const filterLower = targetServiceFilter.toLowerCase();
+            const msg = item.error_message || item.verification_message || '';
+            const verMsg = item.verification_message || '';
+            if (filterLower === 'prometheus') {
+              if (verMsg.toLowerCase().includes('prometheus') && !verMsg.toLowerCase().includes('node-exporter') && !verMsg.toLowerCase().includes('kube-state-metrics')) {
+                item.error_message = verMsg;
+                item.verification_message = verMsg;
+              } else if (msg.toLowerCase().includes('node-exporter') || msg.toLowerCase().includes('kube-state-metrics')) {
+                item.error_message = msg.replace(/prometheus-node-exporter/gi, 'prometheus').replace(/prometheus-kube-state-metrics/gi, 'prometheus');
+                if (item.verification_message) {
+                  item.verification_message = item.verification_message.replace(/prometheus-node-exporter/gi, 'prometheus').replace(/prometheus-kube-state-metrics/gi, 'prometheus');
+                }
+              }
+            } else if (filterLower === 'mongodb') {
+              if (msg.toLowerCase().includes('kube-state-metrics')) {
+                item.error_message = msg.replace(/kube-state-metrics/gi, 'mongodb');
+                if (item.verification_message) {
+                  item.verification_message = item.verification_message.replace(/kube-state-metrics/gi, 'mongodb');
+                }
+              }
+            }
+          }
+
+          const isFailed = String(item.execution_status || '').toUpperCase() === 'FAILED' || item.verification_result === false;
+          const isVerifiedOk = item.verification_result === true || (isIncResolved && String(item.execution_status || '').toUpperCase() === 'SUCCEEDED' && !isFailed);
+
+          if (!isIncResolved && isCurrNoAction && !isFailed) {
+            // Khi Circuit Breaker đang ngắt mạch (NO_ACTION), chỉ hiển thị các bậc thất bại đã dẫn đến ngắt mạch
+            continue;
+          }
+
+          // Tránh lặp lại các bậc lỗi cùng loại liên tiếp
+          const codeKey = String(item.action_code || item.action_name || '').toUpperCase();
+          if (isFailed && codeKey && seenActionCodes.has(codeKey)) {
+            const existingIdx = cleanChain.findIndex((c) => String(c.action_code || c.action_name || '').toUpperCase() === codeKey && (c.execution_status === 'FAILED' || c.verification_result === false));
+            if (existingIdx >= 0) {
+              cleanChain[existingIdx] = item;
+              continue;
+            }
+          }
+          if (codeKey) seenActionCodes.add(codeKey);
+
+          cleanChain.push(item);
+
+          if (isVerifiedOk) {
+            // Chuỗi tự phục hồi đã thành công và kết thúc hoàn tất tại bậc này
+            break;
+          }
+        }
+
+        row.healing_history = cleanChain;
+      } catch {
+        row.healing_history = [];
+      }
+    }
+    return row || null;
   }
 
   /**

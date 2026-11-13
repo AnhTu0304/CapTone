@@ -297,7 +297,7 @@ export const PoliciesPage = () => {
     }
   };
 
-  const handleTogglePolicy = (id) => {
+  const handleTogglePolicy = async (id) => {
     if (!canManagePolicies) {
       toastWarning('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.', 'Quyền Hạn');
       return;
@@ -307,11 +307,26 @@ export const PoliciesPage = () => {
     const newEnabled = !target.enabled;
     const updatedList = policies.map((p) => (p.id === id ? { ...p, enabled: newEnabled } : p));
     setPolicies(updatedList);
+    const clusterMap = {};
+    updatedList.forEach((p) => {
+      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+    });
+    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
+    if (isUsingLiveDb) {
+      try {
+        await selfHealingService.updatePolicyConfig(id, {
+          is_active: newEnabled,
+        });
+      } catch (err) {
+        console.warn('Lỗi cập nhật trạng thái bật/tắt chính sách:', err.message);
+      }
+    }
     setHasUnsavedChanges(true);
     setSaveSuccess(false);
   };
 
-  const handleToggleHitl = (id) => {
+  const handleToggleHitl = async (id) => {
     if (!canManagePolicies) {
       toastWarning('Chỉ SME Owner và DevOps mới có quyền cấu hình cổng HITL.', 'Quyền Hạn');
       return;
@@ -321,6 +336,22 @@ export const PoliciesPage = () => {
     const newHitl = !target.hitlRequired;
     const updatedList = policies.map((p) => (p.id === id ? { ...p, hitlRequired: newHitl } : p));
     setPolicies(updatedList);
+    const clusterMap = {};
+    updatedList.forEach((p) => {
+      clusterMap[p.id] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+      if (p.code) clusterMap[p.code] = { enabled: p.enabled, hitlRequired: p.hitlRequired };
+    });
+    localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
+    if (isUsingLiveDb) {
+      try {
+        await selfHealingService.updatePolicyConfig(id, {
+          requires_approval: newHitl,
+          execution_mode: newHitl ? 'MANUAL' : 'AUTO',
+        });
+      } catch (err) {
+        console.warn('Lỗi cập nhật chế độ HITL chính sách:', err.message);
+      }
+    }
     setHasUnsavedChanges(true);
     setSaveSuccess(false);
   };
@@ -351,7 +382,7 @@ export const PoliciesPage = () => {
     });
     localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
 
-    if (isUsingLiveDb && isClusterOnline && policies.length > 0) {
+    if (isUsingLiveDb && policies.length > 0) {
       try {
         await Promise.all(
           policies.map((p) =>

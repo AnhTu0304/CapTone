@@ -15,10 +15,60 @@ import {
   AlertTriangle,
   Database,
   ShieldAlert,
+  ShieldCheck,
   BookOpen,
   ChevronRight,
-  History
+  ChevronDown,
+  History,
+  Clock,
+  Box,
+  Layers,
+  Terminal,
+  Info,
+  HelpCircle,
+  XCircle,
 } from 'lucide-react';
+
+const ACTION_DISPLAY_NAMES = {
+  SCALE_REPLICAS: 'Scale Replicas',
+  RESTART_POD: 'Restart Pod',
+  REPLACE_POD: 'Replace Pod',
+  DRAIN_NODE: 'Drain Node',
+  RESTART_DEPLOYMENT: 'Restart Deployment',
+  ROLLBACK_DEPLOYMENT: 'Rollback Deployment',
+  CLEANUP_STORAGE: 'Cleanup Storage',
+  TEMPORARY_IP_BLOCK: 'Temporary IP Block',
+};
+
+const getTimelineShortReason = (reason, code) => {
+  if (!reason) return 'Thao tác không thành công.';
+  const r = String(reason).toLowerCase();
+  if (r.includes('daemonset') || r.includes('cannot scale')) return 'Không thể scale DaemonSet.';
+  if (r.includes('agent không phản hồi') || r.includes('agent chưa phản hồi') || r.includes('quá thời gian chờ') || r.includes('timeout')) return 'Agent không phản hồi.';
+  if (r.includes('chưa giải quyết triệt để') || r.includes('vẫn lỗi') || r.includes('hậu kiểm') || r.includes('sau hành động')) return 'Kiểm tra sau hành động vẫn lỗi.';
+  if (r.includes('1 node') || r.includes('chỉ có 1 node') || r.includes('không có node dự phòng') || r.includes('single-node')) return 'Cụm chỉ có 1 Node.';
+  if (r.includes('oom') || r.includes('cạn kiệt') || r.includes('ram')) return 'Container bị tràn RAM (OOM).';
+  if (r.includes('crashloop') || r.includes('sập')) return 'Pod bị CrashLoopBackOff.';
+  return reason.length > 50 ? `${reason.substring(0, 48)}...` : reason;
+};
+
+const getTimelineStatusBadge = (st) => {
+  const code = String(st.code || '').toUpperCase();
+  const reason = String(st.reason || '').toLowerCase();
+  if (code === 'DRAIN_NODE' || reason.includes('bị chặn') || reason.includes('không có node') || reason.includes('1 node')) {
+    return { label: 'Bị chặn', bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' };
+  }
+  if (st.isVerifiedSuccess) {
+    return { label: 'Thành công', bg: '#DCFCE7', color: '#16A34A', border: '#86EFAC' };
+  }
+  if (st.isVerifying) {
+    return { label: 'Đang kiểm tra', bg: '#DBEAFE', color: '#2563EB', border: '#BFDBFE' };
+  }
+  if (reason.includes('chưa giải quyết triệt để') || reason.includes('vẫn lỗi') || reason.includes('chưa phục hồi') || st.metrics) {
+    return { label: 'Chưa phục hồi', bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
+  }
+  return { label: 'Thất bại', bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
+};
 
 // Chuẩn hóa confidence: không tự gán mặc định, giữ nguyên giá trị 0, trả về null nếu không hợp lệ
 const parseConfidence = (val) => {
@@ -52,6 +102,7 @@ const VALID_RISKS = new Set([
   'HTTP_5XX_SPIKE',
   'TRAFFIC_OVERLOAD',
   'UNSTABLE_POD',
+  'POD_INSTABILITY',
   'SCALE_DOWN_CANDIDATE',
 ]);
 
@@ -71,13 +122,14 @@ const SRE_DICTIONARY_VI = {
   'Kubernetes scheduling failure': 'Lỗi lập lịch điều phối Kubernetes',
   'Workload underutilized (scale down opportunity)': 'Tài nguyên dư thừa (Có thể thu hẹp quy mô)',
   'OOM_WIREDTIGER_CACHE_PRESSURE_DUE_TO_UNINDEXED_QUERY': 'Tràn bộ nhớ đệm WiredTiger do truy vấn quét thiếu chỉ mục (Index)',
-  'UNKNOWN': 'CHƯA XÁC ĐỊNH',
+  'UNKNOWN': 'CHƯA XÁC ĐỊNH (THIẾU BẰNG CHỨNG XÁC THỰC)',
 
   // 2. Categories
   'DATABASE_RESOURCE_SATURATION': 'BÃO HÒA TÀI NGUYÊN CSDL',
   'INFRASTRUCTURE_SATURATION': 'BÃO HÒA HẠ TẦNG',
   'APPLICATION_SATURATION': 'QUÁ TẢI ỨNG DỤNG',
   'NETWORK_CONGESTION': 'NGHẼN MẠNG',
+  'INSUFFICIENT_EVIDENCE': 'CHƯA ĐỦ BẰNG CHỨNG XÁC THỰC',
 
   // 3. Severities & Priorities
   'CRITICAL': 'KHẨN CẤP',
@@ -90,6 +142,7 @@ const SRE_DICTIONARY_VI = {
   'TEMPORARY_IP_BLOCK': 'CHẶN TẠM THỜI IP NGUỒN',
   'RESTART_POD': 'KHỞI ĐỘNG LẠI POD',
   'REPLACE_POD': 'THAY THẾ POD (REPLACE)',
+  'DRAIN_NODE': 'DI DỜI POD KHỎI NODE LỖI (DRAIN_NODE)',
   'SCALE_REPLICAS': 'MỞ RỘNG POD REPLICAS',
   'ROLLBACK_DEPLOYMENT': 'ROLLBACK DEPLOYMENT',
   'CLEANUP_STORAGE': 'DỌN DẸP LƯU TRỮ',
@@ -102,7 +155,9 @@ const SRE_DICTIONARY_VI = {
   'HIGH_LATENCY': 'ĐỘ TRỄ CAO',
   'HTTP_5XX_SPIKE': 'ĐỘT BIẾN LỖI 5XX',
   'TRAFFIC_OVERLOAD': 'QUÁ TẢI TRUY CẬP',
-  'SCALE_DOWN_CANDIDATE': 'DƯ THỪA TÀI NGUYÊN',
+  'UNSTABLE_POD': 'POD BẤT ỔN ĐỊNH',
+  'POD_INSTABILITY': 'POD BẤT ỔN ĐỊNH',
+  'SCALE_DOWN_CANDIDATE': 'XU HƯỚNG CÓ THỂ GIẢM REPLICA',
 };
 
 // Hàm dịch động thông minh nhận diện mẫu câu log & giải trình cho cả dữ liệu cũ trong DB
@@ -209,8 +264,183 @@ const parseAnalysisPayload = (raw) => {
   }
 };
 
+// Tên tiếng Việt chuẩn SRE cho các loại rủi ro dự báo từ GRU
+const GRU_RISK_NAMES_VI = {
+  SCALE_DOWN_CANDIDATE: 'Dự báo khả năng giảm replica',
+  OOM: 'Nguy cơ cạn kiệt bộ nhớ RAM',
+  CPU_OVERLOAD: 'Nguy cơ quá tải xử lý CPU',
+  HIGH_LATENCY: 'Nguy cơ tăng cao độ trễ phản hồi',
+  HTTP_5XX_SPIKE: 'Nguy cơ đột biến lỗi ứng dụng 5xx',
+  TRAFFIC_OVERLOAD: 'Nguy cơ quá tải lưu lượng truy cập',
+  DISK_FULL: 'Nguy cơ đầy dung lượng ổ đĩa',
+};
+
+// Từ điển câu hỏi nghiệp vụ SRE Checklist ngắn gọn (chỉ câu hỏi ngắn, tham số kỹ thuật đưa vào tooltip)
+const SRE_CHECKLIST_QUESTIONS = {
+  'Application health endpoint response': {
+    tech: 'Application health endpoint response',
+    question: 'Ứng dụng có mở cổng kiểm tra sức khỏe không?',
+    detail: 'Kiểm tra xem ứng dụng có thực sự đang chạy và phản hồi HTTP 200 tại cổng/endpoint kiểm tra sức khỏe (/health) không.',
+  },
+  'Probe configuration': {
+    tech: 'Probe configuration',
+    question: 'Cấu hình Probe có chính xác không?',
+    detail: 'Kiểm tra cấu hình Liveness/Readiness Probe (cổng port, đường dẫn path, timeout, periodSeconds) có khớp với thiết kế của ứng dụng không.',
+  },
+  'Application logs': {
+    tech: 'Application logs',
+    question: 'Log ứng dụng có ghi nhận lỗi khởi động không?',
+    detail: 'Nhật ký ứng dụng (Application logs) có ghi nhận lỗi ngoại lệ khi khởi động (exception/panic/database connection error) không.',
+  },
+  'CPU throttling metrics': {
+    tech: 'CPU throttling metrics',
+    question: 'CPU có bị giới hạn quá mức không?',
+    detail: 'Ứng dụng có bị bóp nghẽn CPU (CPU throttling) do giới hạn tài nguyên (cpu limit) bị đặt quá thấp không.',
+  },
+  'Historical latency': {
+    tech: 'Historical latency',
+    question: 'Latency trước sự cố có tăng không?',
+    detail: 'Độ trễ xử lý (Latency) trước thời điểm xảy ra sự cố có dấu hiệu tăng đột biến bất thường không.',
+  },
+  'Kubernetes events chưa được cung cấp': {
+    tech: 'Kubernetes events',
+    question: 'Kubernetes Events có ghi nhận cảnh báo bất thường không?',
+    detail: 'Cần kiểm tra bảng Kubernetes Events của Pod/Namespace xem có cảnh báo bất thường nào từ cụm không.',
+  },
+};
+
+const getSREChecklistQuestion = (rawKey) => {
+  const trimmed = String(rawKey || '').trim();
+  if (SRE_CHECKLIST_QUESTIONS[trimmed]) {
+    return SRE_CHECKLIST_QUESTIONS[trimmed];
+  }
+  return {
+    tech: trimmed,
+    question: translateSREText(trimmed),
+    detail: trimmed,
+  };
+};
+
+// Helper phân tích và bóc tách thông tin kỹ thuật K8s gốc kèm diễn giải SRE trực quan
+const parseSREEventEvidence = (raw) => {
+  if (!raw) {
+    return {
+      originalText: '',
+      title: 'Bất thường viễn trắc',
+      podName: null,
+      count: 1,
+      port: null,
+      ip: null,
+      url: null,
+      timestamp: null,
+      errorSnippet: 'Bất thường viễn trắc',
+      explanation: 'Ghi nhận tín hiệu bất thường qua viễn trắc.',
+      rawLog: '',
+    };
+  }
+  const str = String(raw).trim();
+  const lower = str.toLowerCase();
+
+  // 1. Trích xuất tên Pod nếu có
+  const podMatch = str.match(/(?:Pod|pod)[:\s]+([a-zA-Z0-9_\-\.]+)/i);
+  const podName = podMatch ? podMatch[1] : null;
+
+  // 2. Trích xuất số lần xảy ra (count)
+  const countMatch = str.match(/\(count:\s*(\d+)\)/i) || str.match(/\((\d+)\s*(?:lần|times)\)/i);
+  const count = countMatch ? parseInt(countMatch[1], 10) : 1;
+
+  // 3. Trích xuất timestamp
+  const timeMatch = str.match(/\[(\d{4}-\d{2}-\d{2}T[\d:\.]+Z?)\]/);
+  const timestamp = timeMatch ? timeMatch[1] : null;
+
+  // 4. Trích xuất URL, IP, Port
+  const urlMatch = str.match(/(?:Get|Post|Put|Delete)\s+"([^"]+)"/i) || str.match(/(https?:\/\/[^\s"']+)/i);
+  const url = urlMatch ? urlMatch[1] : null;
+
+  const portMatch = str.match(/:(\d{2,5})(?:[\/\s"'\)]|$)/) || (url && url.match(/:(\d{2,5})/));
+  const port = portMatch ? portMatch[1] : null;
+
+  const ipMatch = str.match(/(?:dial tcp\s+|http:\/\/)([\d\.]+):/) || str.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+  const ip = ipMatch ? ipMatch[1] || ipMatch[0] : null;
+
+  // 5. Xác định tên triệu chứng (title)
+  let title = 'Bất thường viễn trắc';
+  if (lower.includes('liveness probe failed') || lower.includes('liveness probe') || lower.includes('tính sống còn')) {
+    title = 'Liveness Probe thất bại';
+  } else if (lower.includes('readiness probe failed') || lower.includes('readiness probe') || lower.includes('tính sẵn sàng')) {
+    title = 'Readiness Probe thất bại';
+  } else if (lower.includes('startup probe failed') || lower.includes('startup probe')) {
+    title = 'Startup Probe thất bại';
+  } else if (lower.includes('oomkilled') || lower.includes('exit code 137') || lower.includes('exitcode 137')) {
+    title = 'Container bị OOMKilled';
+  } else if (lower.includes('crashloopbackoff') || lower.includes('back-off restarting')) {
+    title = 'Pod rơi vào CrashLoopBackOff';
+  } else if (lower.includes('imagepullbackoff') || lower.includes('errimagepull')) {
+    title = 'Không thể tải Image (ImagePullBackOff)';
+  } else if (lower.includes('failedscheduling')) {
+    title = 'Không thể xếp lịch Pod (FailedScheduling)';
+  } else if (str.includes(':')) {
+    title = translateSREText(str.split(':')[0].trim());
+  } else {
+    title = translateSREText(str);
+  }
+
+  // 6. Xác định lỗi vắn tắt (errorSnippet) và 1 câu giải thích tiếng Việt ngắn (explanation)
+  let errorSnippet = null;
+  let explanation = null;
+
+  if (lower.includes('connection refused') || lower.includes('connect: connection refused')) {
+    errorSnippet = 'connection refused';
+    explanation = `Không thể kết nối tới cổng ${port || '8080'} của ứng dụng.`;
+  } else if (lower.includes('context deadline exceeded') || lower.includes('client.timeout') || lower.includes('timeout exceeded')) {
+    errorSnippet = 'context deadline exceeded (timeout)';
+    explanation = 'Ứng dụng không phản hồi kịp trong thời gian Kubernetes cho phép.';
+  } else if (lower.includes('oomkilled') || lower.includes('exit code 137') || lower.includes('exitcode 137')) {
+    errorSnippet = 'exitCode 137 (OOM)';
+    explanation = 'Tiến trình bị hệ điều hành tiêu diệt do cạn kiệt bộ nhớ RAM.';
+  } else if (lower.includes('crashloopbackoff') || lower.includes('back-off restarting')) {
+    errorSnippet = 'CrashLoopBackOff';
+    explanation = 'Pod bị rơi vào vòng lặp sập và khởi động lại liên tục.';
+  } else if (lower.includes('imagepullbackoff') || lower.includes('errimagepull')) {
+    errorSnippet = 'ErrImagePull';
+    explanation = 'Không thể tải container image từ Registry.';
+  } else if (lower.includes('failedscheduling')) {
+    errorSnippet = 'FailedScheduling';
+    explanation = 'Kubernetes Scheduler không thể xếp lịch do thiếu tài nguyên hoặc Node phù hợp.';
+  } else {
+    errorSnippet = 'Bất thường hoạt động';
+    explanation = translateSREText(str);
+  }
+
+  // Trích xuất log K8s gốc nguyên bản
+  let rawLog = str;
+  const quoteMatch = str.match(/:\s*['"](\[.+?\][\s\S]+?)['"]$/);
+  if (quoteMatch) {
+    rawLog = quoteMatch[1];
+  }
+
+  return {
+    originalText: str,
+    title,
+    podName,
+    count,
+    port,
+    ip,
+    url,
+    timestamp,
+    errorSnippet,
+    explanation,
+    rawLog,
+  };
+};
+
 export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'io'
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
+  const [isPlaybookExpanded, setIsPlaybookExpanded] = useState(false);
+  const [isEvidenceDrawerOpen, setIsEvidenceDrawerOpen] = useState(false);
+  const [isChecklistDrawerOpen, setIsChecklistDrawerOpen] = useState(false);
+  const [isGruDrawerOpen, setIsGruDrawerOpen] = useState(false); // 'overview' | 'io'
   const [copiedKey, setCopiedKey] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [evidenceList, setEvidenceList] = useState(incident?.evidences || []);
@@ -222,6 +452,29 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const [isLoadingDetail, setIsLoadingDetail] = useState(() =>
     Boolean(incident?.rawId || incident?.id)
   );
+  const [expandedSymptomKeys, setExpandedSymptomKeys] = useState(new Set());
+  const [isExpandedEvidenceList, setIsExpandedEvidenceList] = useState(false);
+  const [expandedSymptoms, setExpandedSymptoms] = useState({});
+  const [isEvidenceForExpanded, setIsEvidenceForExpanded] = useState(false);
+
+  const toggleSymptomKey = (key) => {
+    setExpandedSymptomKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const toggleSymptom = (groupKey) => {
+    setExpandedSymptoms((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
 
   const handleCopyText = (text, key) => {
     if (!text) return;
@@ -336,12 +589,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     incident?.pendingApprovalId
   );
 
-  // QUAN TRỌNG: Nếu yêu cầu này đang nằm trong luồng chờ phê duyệt (HITL Pending),
-  // nó CHƯA THỂ là "ĐÃ KHẮC PHỤC" vì kỹ sư chưa bấm duyệt hành động!
+  // QUAN TRỌNG: Chỉ coi là "ĐÃ KHẮC PHỤC" khi sự cố thực sự đã RESOLVED (đã vượt qua bước Verification 12 điểm viễn trắc)
   const isResolved = !hasActualPendingApproval && (
     (incidentDetail?.status || incident?.status || '').toLowerCase().includes('resolve') ||
-    (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'SUCCEEDED' ||
     (incident?.status && incident?.status.includes('hoàn tất'))
+  );
+
+  const isVerifyingAfterAction = !isResolved && !hasActualPendingApproval && (
+    (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'SUCCEEDED' ||
+    (incident?.status && incident?.status.includes('Đang xác minh'))
   );
 
   const requiresApproval = hasActualPendingApproval && !isResolved;
@@ -359,6 +615,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     }
     return s || incident?.service || incident?.target_name || 'dịch vụ ứng dụng';
   }, [incident?.service, incident?.target_name, incidentDetail]);
+
+  const incidentTitle = useMemo(() => {
+    const rawTitle = incidentDetail?.title || incident?.title || '';
+    if (!rawTitle) return '';
+    let t = rawTitle.replace(/\s+on\s+/i, ' trên ');
+    t = t.replace(/\bUNKNOWN\b/gi, 'Chưa xác định nguyên nhân');
+    return t;
+  }, [incidentDetail?.title, incident?.title]);
 
   const rawConfidence =
     incidentDetail?.rca_confidence ??
@@ -387,6 +651,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const isUnknown = rootCauseType === 'UNKNOWN' || String(rootCauseType).toLowerCase().includes('unknown');
   const isNoAction = recAction === 'NO_ACTION';
   const isUnknownOrNoAction = isUnknown || isNoAction;
+  const severityUpper = severity ? String(severity).toUpperCase() : '';
+  const isCriticalNoAction = isNoAction && severityUpper === 'CRITICAL';
+  const occurrenceCount = Number(incidentDetail?.occurrence_count ?? incident?.occurrenceCount ?? 1);
+  const healingErrorMessage = incidentDetail?.healing_error_message || incidentDetail?.healing_result_error || incident?.healingErrorMessage || null;
   const isAlreadyInApprovals = Boolean(
     incident?.fromApprovals ||
     incident?.approvalId ||
@@ -405,6 +673,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const clusterIdStr = clusterDisplayName || 'Chưa xác định';
   const rawNamespace = incidentDetail?.namespace || parsedAnalysis?.namespace || (incident?.namespace && incident.namespace !== '' ? incident.namespace : null);
   const kubectlNsFlag = rawNamespace ? `-n ${rawNamespace} ` : '';
+  const namespaceName = rawNamespace || 'default';
   const workloadIdStr = incidentDetail?.target_id || parsedAnalysis?.workload_id || incident?.workloadId || incidentIdStr || '';
   const analyzedAtStr = incidentDetail?.detected_at || incident?.detectedAt || parsedAnalysis?.analyzed_at || null;
   const analysisDurationMs = parsedAnalysis?.analysis_duration_ms ?? incidentDetail?.analysis_duration_ms ?? null;
@@ -439,9 +708,117 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const riskOutputsAll = gruPrediction?.risk_outputs || incidentDetail?.risk_outputs || null;
 
   // ========================================================
+  // 2.1 TRÍCH XUẤT CẤU TRÚC BẰNG CHỨNG XÁC THỰC (EVIDENCE PIPELINE)
+  // ========================================================
+  const evidenceStatus = parsedAnalysis?.root_cause?.evidence_status || parsedAnalysis?.evidence_status || null;
+  const isInsufficient = Boolean(
+    evidenceStatus === 'INSUFFICIENT_EVIDENCE' ||
+    isUnknown ||
+    (confidence !== null && confidence < 50)
+  );
+  const hasEvaluatedGru = Boolean(
+    incidentDetail?.prediction_confidence !== undefined ||
+    (parsedAnalysis?.prediction?.risk_outputs && Object.keys(parsedAnalysis.prediction.risk_outputs).length > 0)
+  );
+  const gruPredictionConfidence = incidentDetail?.prediction_confidence ?? 
+    (parsedAnalysis?.prediction?.detected_risks?.[0]?.confidence !== undefined 
+      ? parsedAnalysis.prediction.detected_risks[0].confidence 
+      : (hasEvaluatedGru ? 0 : null));
+  const symptomsList = Array.isArray(parsedAnalysis?.root_cause?.symptoms)
+    ? parsedAnalysis.root_cause.symptoms
+    : (Array.isArray(parsedAnalysis?.symptoms) ? parsedAnalysis.symptoms : []);
+  const evidenceForList = Array.isArray(parsedAnalysis?.root_cause?.evidence_for)
+    ? parsedAnalysis.root_cause.evidence_for
+    : (Array.isArray(parsedAnalysis?.evidence_for) ? parsedAnalysis.evidence_for : []);
+  const evidenceAgainstList = Array.isArray(parsedAnalysis?.root_cause?.evidence_against)
+    ? parsedAnalysis.root_cause.evidence_against
+    : (Array.isArray(parsedAnalysis?.evidence_against) ? parsedAnalysis.evidence_against : []);
+  const missingEvidenceList = Array.isArray(parsedAnalysis?.root_cause?.missing_evidence)
+    ? parsedAnalysis.root_cause.missing_evidence
+    : (Array.isArray(parsedAnalysis?.missing_evidence) ? parsedAnalysis.missing_evidence : []);
+  const relatedRisksList = Array.isArray(parsedAnalysis?.root_cause?.related_risks)
+    ? parsedAnalysis.root_cause.related_risks
+    : (Array.isArray(parsedAnalysis?.related_risks) ? parsedAnalysis.related_risks : []);
+
+  // Gộp các triệu chứng tương tự theo loại lỗi và Pod (UX Information Density)
+  const groupedSymptoms = useMemo(() => {
+    if (!symptomsList || symptomsList.length === 0) return [];
+    const groups = {};
+    symptomsList.forEach((sym, idx) => {
+      const parsed = parseSREEventEvidence(sym);
+      const groupKey = `${parsed.title}__${parsed.podName || 'all'}__${parsed.errorSnippet || 'general'}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          id: `sym-grp-${idx}`,
+          key: groupKey,
+          title: parsed.title,
+          podName: parsed.podName,
+          count: parsed.count || 1,
+          port: parsed.port,
+          ip: parsed.ip,
+          url: parsed.url,
+          errorSnippet: parsed.errorSnippet,
+          explanation: parsed.explanation,
+          records: [
+            {
+              originalText: parsed.originalText,
+              rawLog: parsed.rawLog,
+              timestamp: parsed.timestamp,
+              ip: parsed.ip,
+              port: parsed.port,
+              count: parsed.count || 1,
+            },
+          ],
+        };
+      } else {
+        groups[groupKey].count += (parsed.count || 1);
+        groups[groupKey].records.push({
+          originalText: parsed.originalText,
+          rawLog: parsed.rawLog,
+          timestamp: parsed.timestamp,
+          ip: parsed.ip,
+          port: parsed.port,
+          count: parsed.count || 1,
+        });
+      }
+    });
+    return Object.values(groups);
+  }, [symptomsList]);
+
+  // Bóc tách danh sách bằng chứng ủng hộ K8s gốc
+  const parsedEvidenceFor = useMemo(() => {
+    if (!evidenceForList || evidenceForList.length === 0) return [];
+    return evidenceForList.map((item) => parseSREEventEvidence(item));
+  }, [evidenceForList]);
+
+  // Tóm tắt bằng chứng ủng hộ theo nhóm Pod (tránh lặp nguyên văn Symptoms)
+  const evidenceForSummary = useMemo(() => {
+    if (parsedEvidenceFor.length === 0) return [];
+    const podMap = {};
+    parsedEvidenceFor.forEach((ev) => {
+      const pName = ev.podName || 'workload';
+      if (!podMap[pName]) {
+        podMap[pName] = { podName: pName, count: 0, issues: new Set(), errors: new Set() };
+      }
+      podMap[pName].count += 1;
+      if (ev.title) podMap[pName].issues.add(ev.title);
+      if (ev.errorSnippet) podMap[pName].errors.add(ev.errorSnippet);
+    });
+    return Object.values(podMap).map((item) => ({
+      podName: item.podName,
+      count: item.count,
+      issueDesc: Array.from(item.issues).join(' & '),
+      errorDesc: Array.from(item.errors).join(', '),
+    }));
+  }, [parsedEvidenceFor]);
+
+  // ========================================================
   // 3. KẾT LUẬN NGUYÊN NHÂN GỐC RỄ (ROOT CAUSE)
   // ========================================================
   const rootCauseCategory = useMemo(() => {
+    if (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) {
+      return 'INSUFFICIENT_EVIDENCE';
+    }
     if (parsedAnalysis?.root_cause?.category) return parsedAnalysis.root_cause.category;
     if (incidentDetail?.root_cause_category) return incidentDetail.root_cause_category;
     const rc = String(rootCauseType || '').toLowerCase();
@@ -457,7 +834,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       return 'INFRASTRUCTURE_SATURATION';
     }
     return 'APPLICATION_SATURATION';
-  }, [parsedAnalysis?.root_cause?.category, incidentDetail?.root_cause_category, rootCauseType, serviceDisplayName]);
+  }, [evidenceStatus, isUnknown, parsedAnalysis?.root_cause?.category, incidentDetail?.root_cause_category, rootCauseType, serviceDisplayName]);
 
   // ========================================================
   // 4. BẰNG CHỨNG XÁC THỰC ĐA TẦNG (EVIDENCE - KHÔNG TẠO DỮ LIỆU GIẢ)
@@ -466,43 +843,374 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     let raw = [];
     if (Array.isArray(parsedAnalysis?.evidence) && parsedAnalysis.evidence.length > 0) {
       raw = parsedAnalysis.evidence;
+    } else if (evidenceForList && evidenceForList.length > 0) {
+      raw = evidenceForList;
     } else if (evidenceList && evidenceList.length > 0) {
       raw = evidenceList.map((e) => `[${e.type || 'EVIDENCE'}] ${e.ref ? `${e.ref}: ` : ''}${e.summary}`);
     }
     return raw.map((item) => translateSREText(item));
-  }, [parsedAnalysis?.evidence, evidenceList]);
+  }, [parsedAnalysis?.evidence, evidenceForList, evidenceList]);
 
   // ========================================================
   // 5. ĐỀ XUẤT HÀNH ĐỘNG VỚI THAM SỐ KỸ THUẬT THỰC TẾ TỪ CSDL
   // ========================================================
+  const cleanExecutionError = (msg) => {
+    if (!msg) return '';
+    let str = String(msg).trim();
+    if (str.includes('[Errno 111] Connection refused') || str.includes('Connection refused')) {
+      const matchTarget = str.match(/on\s+([a-zA-Z0-9_-]+):/i);
+      const svcName = matchTarget ? matchTarget[1] : (serviceDisplayName || 'dịch vụ');
+      return `Lỗi kết nối Kubernetes API Server (10.96.0.1:443): Connection refused. Không thể gửi lệnh điều phối tới ${svcName} do API Server cụm bị sập hoặc đang khởi động lại.`;
+    }
+    // Bỏ các từ tiếng Anh kỹ thuật lặp
+    str = str.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':');
+    str = str.replace(/Hậu kiểm thất bại:\s*/gi, '');
+    str = str.replace(/^Hậu kiểm thất bại\s*/gi, '');
+    if (serviceDisplayName && serviceDisplayName.toLowerCase() === 'prometheus') {
+      str = str.replace(/prometheus-node-exporter/gi, 'prometheus');
+      str = str.replace(/prometheus-kube-state-metrics/gi, 'prometheus');
+    }
+    if (serviceDisplayName && serviceDisplayName.toLowerCase() === 'mongodb') {
+      str = str.replace(/kube-state-metrics/gi, 'mongodb');
+    }
+    return str.trim();
+  };
+
+  // Trích xuất các chỉ số viễn trắc thực tế cho Kỹ sư DevOps
+  const extractDevOpsMetrics = (msg) => {
+    if (!msg) return null;
+    const str = String(msg);
+    const cpuMatch = str.match(/CPU:\s*([0-9.]+)\s*%/i);
+    const ramMatch = str.match(/RAM:\s*([0-9.]+)\s*%/i);
+    const restartMatch = str.match(/Restart:\s*([0-9]+)/i);
+    const latencyMatch = str.match(/(?:Độ trễ|Latency):\s*([0-9.]+)\s*ms/i);
+    const http5xxMatch = str.match(/(?:5xx|Lỗi 5xx):\s*([0-9.]+)\s*%/i);
+
+    if (!cpuMatch && !ramMatch && !restartMatch && !latencyMatch && !http5xxMatch) {
+      return null;
+    }
+    return {
+      cpu: cpuMatch ? parseFloat(cpuMatch[1]) : null,
+      ram: ramMatch ? parseFloat(ramMatch[1]) : null,
+      restart: restartMatch ? parseInt(restartMatch[1], 10) : null,
+      latency: latencyMatch ? parseFloat(latencyMatch[1]) : null,
+      http5xx: http5xxMatch ? parseFloat(http5xxMatch[1]) : null,
+    };
+  };
+
+  // Nhận định SRE súc tích, tránh lặp lại văn phong mẫu
+  const getDevOpsVerdict = (metrics, isVerifiedSuccess, isFailed, rawReason) => {
+    if (isVerifiedSuccess && !isFailed) {
+      return 'Chỉ số viễn trắc đã trở về ngưỡng an toàn. Dịch vụ phục hồi ổn định hoàn toàn.';
+    }
+    if (metrics) {
+      if (metrics.ram !== null && metrics.ram >= 90) {
+        return `Bộ nhớ RAM vẫn cạn kiệt ở mức ${metrics.ram}% (ngưỡng an toàn < 90%). Pod chưa giải phóng bộ nhớ sau thao tác.`;
+      }
+      if (metrics.cpu !== null && metrics.cpu >= 80) {
+        return `Mức tải CPU vẫn vượt ngưỡng (${metrics.cpu}%). Tải xử lý chưa hạ nhiệt sau khi thao tác.`;
+      }
+      if (metrics.latency !== null && metrics.latency > 500) {
+        return `Độ trễ phản hồi vẫn cao (${metrics.latency}ms > 500ms). Dịch vụ vẫn bị nghẽn mạng hoặc quá tải.`;
+      }
+      if (metrics.http5xx !== null && metrics.http5xx > 0) {
+        return `Tỷ lệ lỗi HTTP 5xx vẫn còn (${metrics.http5xx}%). Ứng dụng chưa xử lý ổn định yêu cầu.`;
+      }
+      if (metrics.restart !== null && metrics.restart > 0) {
+        return `Pod vẫn tiếp tục khởi động lại (${metrics.restart} lần). Container chưa ổn định.`;
+      }
+      if (isFailed) {
+        if (rawReason && !rawReason.includes('vẫn còn bất thường (CPU:')) {
+          return rawReason;
+        }
+        return `Hậu kiểm viễn trắc ghi nhận thao tác chưa giải quyết triệt để sự cố.`;
+      }
+    }
+    return rawReason || (isFailed ? 'Sự cố chưa được giải quyết sau khi thực thi hành động.' : 'Đang theo dõi kiểm tra.');
+  };
+
   const recObj = parsedAnalysis?.recommendation || {};
   const isDbService = ['mongo', 'postgres', 'redis', 'mysql', 'database'].some(db => (serviceDisplayName || '').toLowerCase().includes(db));
   const rawActionParams = recObj.action_parameters || incident?.actionParameters || incidentDetail?.action_parameters || {};
 
-  const blockedActions = Array.isArray(rawActionParams.blocked_actions) ? rawActionParams.blocked_actions : [];
+  const TIER_ORDER_PRIORITY = {
+    SCALE_REPLICAS: 1,
+    CLEANUP_DISK: 1,
+    RESTART_POD: 2,
+    REPLACE_POD: 3,
+    ROLLBACK_DEPLOYMENT: 3,
+    DRAIN_NODE: 4,
+  };
+  const blockedActionsRaw = Array.isArray(rawActionParams.blocked_actions) ? rawActionParams.blocked_actions : [];
+  const blockedActions = [...blockedActionsRaw].sort(
+    (a, b) => (TIER_ORDER_PRIORITY[a] || 99) - (TIER_ORDER_PRIORITY[b] || 99)
+  );
   const consecutiveFailures = Number(rawActionParams.consecutive_failures ?? 0);
   const isCircuitBreakerTripped = Boolean(
     rawActionParams.circuit_breaker_tripped === true ||
-    (consecutiveFailures >= 3 && blockedActions.length > 0)
+    (consecutiveFailures >= 2 && blockedActions.length > 0)
   );
 
-  const realPodName = rawActionParams.faulty_pod_name || rawActionParams.pod_name || incidentDetail?.actual_pod_name || incident?.actualPodName || null;
-  const workloadKindRaw = incidentDetail?.workload_type || incident?.workloadType || recObj?.target_type || (isDbService ? 'StatefulSet' : 'Deployment');
+  // Lựa chọn pod thực tế chính xác: Ưu tiên actual_pod_name từ DB, phòng ngừa rawActionParams mang tên subcomponent cũ
+  let detectedPod = incidentDetail?.actual_pod_name || incident?.actualPodName;
+  if (!detectedPod || (serviceDisplayName && serviceDisplayName.toLowerCase() === 'prometheus' && (detectedPod.includes('state-metrics') || detectedPod.includes('node-exporter')))) {
+    if (incidentDetail?.actual_pod_name && !incidentDetail.actual_pod_name.includes('state-metrics') && !incidentDetail.actual_pod_name.includes('node-exporter')) {
+      detectedPod = incidentDetail.actual_pod_name;
+    } else if (rawActionParams.faulty_pod_name && !rawActionParams.faulty_pod_name.includes('state-metrics') && !rawActionParams.faulty_pod_name.includes('node-exporter')) {
+      detectedPod = rawActionParams.faulty_pod_name;
+    } else {
+      detectedPod = incidentDetail?.actual_pod_name || rawActionParams.faulty_pod_name || rawActionParams.pod_name || null;
+    }
+  }
+  const realPodName = detectedPod;
+  const faultyPodName = realPodName || recObj.target_name || serviceDisplayName;
+  const isPrometheusOrDaemon = (serviceDisplayName && serviceDisplayName.toLowerCase().includes('prometheus')) ||
+    (faultyPodName && /-\d+$/.test(faultyPodName) && !isDbService) ||
+    (healingErrorMessage && healingErrorMessage.toLowerCase().includes('daemonset'));
+  const workloadKindRaw = incidentDetail?.workload_type || incident?.workloadType || (isPrometheusOrDaemon ? 'DaemonSet' : (recObj?.target_type || (isDbService ? 'StatefulSet' : 'Deployment')));
   const workloadKindLower = String(workloadKindRaw).toLowerCase().includes('stateful')
     ? 'statefulset'
     : String(workloadKindRaw).toLowerCase().includes('daemon')
       ? 'daemonset'
       : 'deployment';
-  const faultyPodName = realPodName || recObj.target_name || serviceDisplayName;
   const faultyPodId = rawActionParams.faulty_pod_id || rawActionParams.pod_id || incidentDetail?.actual_pod_id || recObj.target_id || incidentDetail?.target_id || incident?.id || '';
   const faultyPodUid = rawActionParams.faulty_pod_uid || incidentDetail?.kubernetes_uid || '';
   const faultyNodeName = rawActionParams.faulty_node_name || recObj.target_node || incidentDetail?.node_name || incident?.node || null;
   const faultyNodeId = rawActionParams.faulty_node_id || incidentDetail?.node_id || '';
   const clusterNodeCount = incidentDetail?.cluster_node_count ?? incident?.clusterNodeCount ?? null;
-  const replicaSetRole = rawActionParams.replica_set_role || (isDbService ? 'StatefulSet (Stateful)' : 'Deployment (Stateless)');
+  const clusterSubLabel = clusterNodeCount === 1
+    ? 'Cụm hiện có 1 Node'
+    : clusterNodeCount > 1
+      ? `Cụm hiện có ${clusterNodeCount} Node`
+      : (clusterDisplayName ? `Cụm: ${clusterDisplayName}` : 'Chưa xác định');
+  const replicaSetRole = rawActionParams.replica_set_role || (isDbService || workloadKindLower === 'statefulset' ? 'StatefulSet (Stateful)' : workloadKindLower === 'daemonset' ? 'DaemonSet (Node-Bound)' : 'Deployment (Stateless)');
   const recDestNodeName = rawActionParams.recommended_destination_node_name || rawActionParams.recommended_destination_node || '';
   const recDestNodeId = rawActionParams.recommended_destination_node_id || rawActionParams.destination_node_id || '';
   const destFreeMemBytes = Number(rawActionParams.destination_node_free_memory_bytes || 0);
+
+  // Danh sách các hành động tự động đã thực hiện trước đó và kết quả kiểm tra lại (Post-Action Verification)
+  const previousActionSteps = useMemo(() => {
+    const dbHistoryRaw = Array.isArray(incidentDetail?.healing_history) ? incidentDetail.healing_history : [];
+    const currentSvc = String(serviceDisplayName || incident?.service || incidentDetail?.target_name || '').toLowerCase().trim();
+
+    // Lọc cách ly dịch vụ (Service Isolation Guard) để ngăn dữ liệu của workload khác xâm nhập vào timeline
+    const filteredHistory = dbHistoryRaw.filter((item) => {
+      if (!currentSvc) return true;
+      const itemTarget = String(item.target_name || '').toLowerCase().trim();
+      if (!itemTarget) return true;
+      if (itemTarget === currentSvc || itemTarget.startsWith(currentSvc + '-') || currentSvc.startsWith(itemTarget + '-')) {
+        return true;
+      }
+      if (currentSvc === 'prometheus' && (itemTarget.includes('prometheus') || itemTarget.includes('node-exporter') || itemTarget.includes('kube-state-metrics'))) {
+        return true;
+      }
+      return false;
+    });
+
+    const dbHistory = [...filteredHistory].sort((a, b) => {
+      const ta = new Date(a.verified_at || a.completed_at || a.created_at || 0).getTime();
+      const tb = new Date(b.verified_at || b.completed_at || b.created_at || 0).getTime();
+      return ta - tb;
+    });
+    let steps = [];
+    if (dbHistory.length > 0) {
+      steps = dbHistory.map((item, idx) => {
+        const code = item.action_code || item.action_name || 'UNKNOWN_ACTION';
+        const labelVi = SRE_DICTIONARY_VI[code] || item.action_name || code;
+        const execStatus = String(item.execution_status || '').toUpperCase();
+        const verResult = item.verification_result;
+        const isStaleRunning = execStatus === 'RUNNING' && (item.started_at || item.created_at) && (Date.now() - new Date(item.started_at || item.created_at).getTime() > 60000);
+        const isFailed = execStatus === 'FAILED' || verResult === false || isStaleRunning;
+        const isVerifiedSuccess = !isFailed && (verResult === true || (execStatus === 'SUCCEEDED' && isResolved));
+        const isVerifying = execStatus === 'SUCCEEDED' && !isVerifiedSuccess && !isFailed;
+        const timeStr = (item.verified_at || item.completed_at || item.created_at)
+          ? new Date(item.verified_at || item.completed_at || item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          : null;
+
+        const rawReason = cleanExecutionError(
+          item.error_message || item.verification_message || (isStaleRunning ? 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.' : null)
+        );
+        const metrics = extractDevOpsMetrics(rawReason);
+        const conciseVerdict = getDevOpsVerdict(metrics, isVerifiedSuccess, isFailed, rawReason);
+
+        return {
+          stepIndex: idx + 1,
+          code,
+          labelVi,
+          isFailed,
+          isVerifiedSuccess,
+          isVerifying,
+          timeStr,
+          verificationLabel: isFailed
+            ? (isStaleRunning ? 'Xác minh: Thất bại (Timeout >60s)' : 'Xác minh: Thất bại')
+            : isVerifiedSuccess
+              ? 'Xác minh: Thành công'
+              : isVerifying
+                ? 'Đang kiểm tra lại'
+                : `Trạng thái: ${execStatus || 'Đang xử lý'}`,
+          reason: rawReason,
+          metrics,
+          conciseVerdict,
+        };
+      });
+
+      // Bổ sung các action đã bị Circuit Breaker ghi nhận thất bại và khóa (blockedActions) nếu DB chưa kịp link
+      if (blockedActions.length > 0) {
+        const existingCodes = new Set(steps.map((s) => s.code));
+        blockedActions.forEach((code) => {
+          if (!existingCodes.has(code)) {
+            const rawReason = cleanExecutionError(healingErrorMessage || 'Hậu kiểm viễn trắc xác nhận sự cố vẫn chưa được khắc phục.');
+            const metrics = extractDevOpsMetrics(rawReason);
+            const conciseVerdict = getDevOpsVerdict(metrics, false, true, rawReason);
+            steps.push({
+              stepIndex: steps.length + 1,
+              code,
+              labelVi: SRE_DICTIONARY_VI[code] || code,
+              isFailed: true,
+              isVerifiedSuccess: false,
+              isVerifying: false,
+              timeStr: null,
+              verificationLabel: 'Xác minh: Thất bại (Khóa chống lặp)',
+              reason: rawReason,
+              metrics,
+              conciseVerdict,
+            });
+            existingCodes.add(code);
+          }
+        });
+      }
+    } else if (blockedActions.length > 0) {
+      steps = blockedActions.map((code, idx) => {
+        const rawReason = cleanExecutionError(idx === blockedActions.length - 1 ? healingErrorMessage : 'Hậu kiểm viễn trắc xác nhận sự cố vẫn chưa được khắc phục.');
+        const metrics = extractDevOpsMetrics(rawReason);
+        const conciseVerdict = getDevOpsVerdict(metrics, false, true, rawReason);
+
+        return {
+          stepIndex: idx + 1,
+          code,
+          labelVi: SRE_DICTIONARY_VI[code] || code,
+          isFailed: true,
+          isVerifiedSuccess: false,
+          isVerifying: false,
+          timeStr: null,
+          verificationLabel: 'Xác minh: Thất bại (Khóa chống lặp)',
+          reason: rawReason,
+          metrics,
+          conciseVerdict,
+        };
+      });
+    }
+
+    // Hiển thị rõ Bậc 3 (Kiểm tra Node dự phòng & Di tản Pod - DRAIN_NODE) khi Bậc 1 & Bậc 2 đã thất bại và hệ thống chuyển sang Ngắt mạch an toàn (NO_ACTION)
+    const hasDrainNodeStep = steps.some((s) => s.code === 'DRAIN_NODE');
+    const allPriorFailed = (steps.length >= 2 || (isCircuitBreakerTripped && (consecutiveFailures >= 2 || blockedActions.length >= 2))) && steps.every((s) => s.isFailed);
+    if (!isResolved && !hasDrainNodeStep && allPriorFailed && (isCircuitBreakerTripped || recAction === 'NO_ACTION')) {
+      const noStandbyNode = (clusterNodeCount !== null && Number(clusterNodeCount) <= 1) || !recDestNodeName;
+      const isPrimaryDbBlocked = isDbService && Boolean(rawActionParams.is_primary_database);
+      const nodeLabel = faultyNodeName || 'minikube';
+      steps.push({
+        stepIndex: steps.length + 1,
+        code: 'DRAIN_NODE',
+        labelVi: 'KIỂM TRA NODE DỰ PHÒNG & DI TẢN POD',
+        isFailed: true,
+        isVerifiedSuccess: false,
+        isVerifying: false,
+        timeStr: steps[steps.length - 1]?.timeStr || null,
+        verificationLabel: noStandbyNode
+          ? `Đã kiểm tra Node: KHÔNG CÓ NODE DỰ PHÒNG (Cụm 1 Node: ${nodeLabel}) → Ngắt mạch`
+          : isPrimaryDbBlocked
+            ? 'Đã kiểm tra Node: CHẶN DI TẢN PRIMARY DB (Chống Split-Brain) → Ngắt mạch'
+            : 'Đã kiểm tra Node: LỖI TẦNG ỨNG DỤNG (Node vật lý bình thường) → Ngắt mạch',
+        reason: noStandbyNode
+          ? `Hệ thống đã kiểm tra hạ tầng cụm để đưa Pod sang Node khác (DRAIN_NODE), nhưng cụm hiện chỉ có 1 Node (${nodeLabel}) — không có Node dự phòng khỏe mạnh. Hệ thống tự động kích hoạt Ngắt mạch an toàn (NO_ACTION) và chuyển sang Cẩm nang 3 bước.`
+          : isPrimaryDbBlocked
+            ? `Hệ thống đã kiểm tra Node dự phòng (${recDestNodeName}), nhưng đây là cơ sở dữ liệu trạng thái Primary nên chặn tự động Drain Node để tránh mất mát dữ liệu. Kích hoạt Ngắt mạch an toàn (NO_ACTION).`
+            : `Hệ thống đã kiểm tra Node vật lý (${nodeLabel}) và Node dự phòng (${recDestNodeName}), xác nhận hạ tầng Node ổn định nên không thể khắc phục bằng Drain Node. Kích hoạt Ngắt mạch an toàn (NO_ACTION).`,
+        conciseVerdict: noStandbyNode
+          ? `Cụm hiện chỉ có 1 Node (${nodeLabel}) — không có Node dự phòng an toàn để di tản Pod. Kích hoạt Ngắt mạch an toàn để bảo vệ tính toàn vẹn của cụm.`
+          : isPrimaryDbBlocked
+            ? `Cơ sở dữ liệu đang ở vai trò Primary trên Node (${nodeLabel}), chặn tự động di tản để phòng ngừa sự cố phân mảnh dữ liệu (Split-Brain).`
+            : `Hạ tầng phần cứng và tài nguyên Node (${nodeLabel}) vẫn ổn định, nguyên nhân xuất phát từ tầng ứng dụng. Di tản Node không giải quyết được gốc rễ.`,
+      });
+    }
+
+    // Quy tắc bất biến SRE: Bậc THÀNH CÔNG luôn là bậc kết thúc của chuỗi tự phục hồi (không bao giờ có bậc lỗi phía sau)
+    const successIdx = steps.findIndex((s) => s.isVerifiedSuccess);
+    if (successIdx >= 0) {
+      steps = steps.slice(0, successIdx + 1);
+    }
+    steps.forEach((s, i) => {
+      s.stepIndex = i + 1;
+    });
+
+    return steps;
+  }, [
+    incidentDetail?.healing_history,
+    blockedActions,
+    isResolved,
+    healingErrorMessage,
+    isCircuitBreakerTripped,
+    recAction,
+    clusterNodeCount,
+    recDestNodeName,
+    faultyNodeName,
+    isDbService,
+    rawActionParams.is_primary_database,
+  ]);
+
+  const totalFailedSteps = previousActionSteps.filter((s) => s.isFailed).length;
+  const allPriorStepsFailed = previousActionSteps.length > 0 && (previousActionSteps.every((s) => s.isFailed) || totalFailedSteps >= 2);
+  const isTrulyResolved = isResolved && !allPriorStepsFailed;
+
+  const modalStatus = useMemo(() => {
+    const failedCount = previousActionSteps.filter((s) => s.isFailed).length;
+    const succeededCount = previousActionSteps.filter((s) => s.isVerifiedSuccess).length;
+    const hasActions = previousActionSteps.length > 0;
+
+    if (isResolved) {
+      if (succeededCount > 0 && failedCount === 0) {
+        return { label: '🟢 Đã tự khắc phục thành công', color: '#15803D' };
+      }
+      if (succeededCount > 0 && failedCount > 0) {
+        return { label: '🟢 Khắc phục thành công (Sau thử lại)', color: '#15803D' };
+      }
+      if (failedCount > 0 && succeededCount === 0) {
+        return { label: '⚪ Đã đóng (Can thiệp thủ công)', color: '#475569' };
+      }
+      if (!hasActions || isNoAction) {
+        return { label: '🔵 Tự ổn định (Telemetry bình thường)', color: '#1D4ED8' };
+      }
+      return { label: '🟢 Đã phục hồi', color: '#15803D' };
+    }
+
+    if (failedCount > 0 && succeededCount === 0) {
+      return { label: '🔴 Chưa phục hồi (Tự khắc phục thất bại)', color: '#DC2626' };
+    }
+    if (isVerifyingAfterAction) {
+      return { label: '🟡 Đang xác minh hậu kiểm', color: '#D97706' };
+    }
+    if (hasActualPendingApproval) {
+      return { label: '🟠 Chờ phê duyệt HITL', color: '#D97706' };
+    }
+    if (isNoAction) {
+      return { label: '🔵 Giám sát an toàn (NO_ACTION)', color: '#1D4ED8' };
+    }
+    return { label: '🔴 Chưa phục hồi', color: '#DC2626' };
+  }, [isResolved, previousActionSteps, isNoAction, isVerifyingAfterAction, hasActualPendingApproval]);
+
+  const isCircuitBreakerActive = Boolean(
+    isCircuitBreakerTripped ||
+    totalFailedSteps >= 2 ||
+    (allPriorStepsFailed && previousActionSteps.length >= 2) ||
+    (consecutiveFailures >= 2)
+  );
+  const effectiveRecAction = (isCircuitBreakerActive && !isResolved)
+    ? 'NO_ACTION'
+    : recAction;
+  const effectiveRecActionVi = SRE_DICTIONARY_VI[effectiveRecAction] || effectiveRecAction;
+  const effectiveRecReason = (isCircuitBreakerActive && !isResolved)
+    ? `Hệ thống đã thực thi ${previousActionSteps.length} cấp tự phục hồi liên tiếp nhưng sự cố chưa được khắc phục triệt để. Cầu dao an toàn (Circuit Breaker - NO_ACTION) đã kích hoạt ngắt mạch để tránh vòng lặp tự động vô hạn. Kỹ sư vui lòng kiểm tra cụm theo Cẩm nang thao tác (Manual Playbook) bên dưới.`
+    : recReason;
 
   const actionParams = {
     ...rawActionParams,
@@ -525,11 +1233,22 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   );
 
   const manualPlaybookSteps = useMemo(() => {
+    let rawSteps = [];
     if (Array.isArray(rawActionParams.manual_playbook) && rawActionParams.manual_playbook.length > 0) {
-      return rawActionParams.manual_playbook;
+      rawSteps = rawActionParams.manual_playbook;
+    } else if (Array.isArray(incident?.manualPlaybook) && incident.manualPlaybook.length > 0) {
+      rawSteps = incident.manualPlaybook;
     }
-    if (Array.isArray(incident?.manualPlaybook) && incident.manualPlaybook.length > 0) {
-      return incident.manualPlaybook;
+
+    if (rawSteps.length > 0) {
+      return rawSteps.map((step) => {
+        let s = String(step || '').trim();
+        // Lược bỏ câu chi tiết lỗi dài dòng bị gắn ở cuối bước 1
+        s = s.replace(/\[Chi tiết lỗi gần nhất:.*?\]/is, '').trim();
+        s = s.replace(/Lỗi gần nhất:\s*Hậu kiểm thất bại.*?$/is, '').trim();
+        s = s.replace(/\s*\(Post-Action Verification Failed\)/gi, '');
+        return s;
+      });
     }
 
     const kubectlTarget = realPodName || `${workloadKindLower}/${serviceDisplayName}`;
@@ -599,13 +1318,27 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // ========================================================
   // BỘ BIẾN HIỂN THỊ CHUẨN HÓA 100% TIẾNG VIỆT
   // ========================================================
-  const rootCauseCategoryVi = SRE_DICTIONARY_VI[rootCauseCategory] || rootCauseCategory;
+  const rootCauseCategoryVi = (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown)
+    ? 'CHƯA ĐỦ BẰNG CHỨNG XÁC THỰC'
+    : (SRE_DICTIONARY_VI[rootCauseCategory] || rootCauseCategory);
   const severityVi = severity ? (SRE_DICTIONARY_VI[String(severity).toUpperCase()] || severity) : 'CHƯA PHÂN LOẠI';
   const rootCauseTypeVi = SRE_DICTIONARY_VI[rootCauseType] || translateSREText(rootCauseType);
   const actionPriorityVi = actionPriority ? (SRE_DICTIONARY_VI[String(actionPriority).toUpperCase()] || actionPriority) : 'Chưa phân loại';
   const actionRiskLevelVi = actionRiskLevel ? (SRE_DICTIONARY_VI[String(actionRiskLevel).toUpperCase()] || actionRiskLevel) : 'Chưa phân loại';
-  const predictedRiskVi = SRE_DICTIONARY_VI[predictedRisk] || predictedRisk;
-  const recReasonVi = translateSREText(recReason);
+  const predictedRiskVi = predictedRisk === 'SCALE_DOWN_CANDIDATE'
+    ? 'Xu hướng có thể giảm replica'
+    : (GRU_RISK_NAMES_VI[predictedRisk] || SRE_DICTIONARY_VI[predictedRisk] || predictedRisk);
+  const recReasonVi = useMemo(() => {
+    let text = translateSREText(recReason || '');
+    if (!text) return '';
+    // Lược bỏ câu lỗi gần nhất lặp lại trong đoạn văn bản đề xuất (đã có dòng riêng bên dưới)
+    text = text.replace(/Lỗi gần nhất:\s*Hậu kiểm thất bại.*?$/is, '').trim();
+    text = text.replace(/Lỗi gần nhất:.*?$/is, '').trim();
+    text = text.replace(/\s*\(Post-Action Verification Failed\)/gi, '');
+    text = text.replace(/Human-in-the-Loop/gi, 'Kỹ sư vận hành');
+    text = text.replace(/Circuit Breaker/gi, 'Cầu dao an toàn');
+    return text.trim();
+  }, [recReason]);
 
   const detectedEngine = useMemo(() => {
     if (parsedAnalysis?.engine) return parsedAnalysis.engine;
@@ -703,7 +1436,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     };
   }, [formattedTimesteps]);
 
-  // Tổng hợp giải trình chi tiết báo cáo sự cố SRE (dữ liệu đã xác thực, không suy diễn giả)
+  // Tổng hợp giải trình chi tiết báo cáo sự cố SRE dạng bullet points (dữ liệu đã xác thực, không suy diễn giả)
   const fullExplanationVi = useMemo(() => {
     const rawTranslated = translateSREText(fullExplanation || '');
     const isShortGeneric =
@@ -720,9 +1453,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       : (faultyNodeName ? `${workloadKindRaw}: ${serviceDisplayName} trên Node ${faultyNodeName}` : `${workloadKindRaw}: ${serviceDisplayName}`);
 
     const lines = [];
-    lines.push(
-      `• Sự cố phát hiện: Dịch vụ "${serviceDisplayName}" (${targetDesc}) gặp sự cố "${rootCauseTypeVi}" (${rootCauseCategoryVi}, mức độ ${severityVi}).`
-    );
+    const isUnknownOrInsufficient =
+      isUnknown ||
+      evidenceStatus === 'INSUFFICIENT_EVIDENCE' ||
+      /chưa xác định|thiếu bằng chứng/i.test(rootCauseTypeVi);
+
+    if (isUnknownOrInsufficient) {
+      lines.push(
+        `• Sự cố phát hiện: Dịch vụ "${serviceDisplayName}" (${targetDesc}) đang gặp bất thường (Mức độ: ${severityVi}) nhưng chưa đủ bằng chứng để xác định nguyên nhân gốc rễ.`
+      );
+    } else {
+      const cleanCause = rootCauseTypeVi.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+      lines.push(
+        `• Sự cố phát hiện: Dịch vụ "${serviceDisplayName}" (${targetDesc}) gặp sự cố "${cleanCause || rootCauseTypeVi}" (Mức độ: ${severityVi}).`
+      );
+    }
 
     if (metricSummary) {
       lines.push(
@@ -737,16 +1482,55 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     if (Array.isArray(multiTierEvidences) && multiTierEvidences.length > 0) {
       const topEvs = multiTierEvidences
         .slice(0, 2)
-        .map((e) => String(e).replace(/\.$/, '').trim())
+        .map((e) => {
+          const rawStr = String(e || '').trim();
+          if (!rawStr || rawStr === 'insufficient_evidence' || /insufficient_evidence/i.test(rawStr)) {
+            return 'Chưa đủ dữ liệu nhật ký sự kiện để kết luận';
+          }
+          const parsed = parseSREEventEvidence(e);
+          if (parsed.podName && parsed.title) {
+            return `${parsed.title} trên Pod ${parsed.podName} (${parsed.count || 1} lần)${parsed.errorSnippet ? ` - ${parsed.errorSnippet}` : ''}`;
+          }
+          let s = rawStr.replace(/\.$/, '').trim();
+          const jsonIdx = s.indexOf('{"resource":');
+          if (jsonIdx > 25) {
+            s = s.substring(0, jsonIdx).trim();
+          } else if (s.length > 180) {
+            s = `${s.substring(0, 180).trim()}...`;
+          }
+          return s;
+        })
         .filter(Boolean);
       if (topEvs.length > 0) {
         lines.push(`• Bằng chứng xác thực: ${topEvs.join('; ')}.`);
       }
     }
 
-    lines.push(
-      `• Phương án tự khắc phục: Đề xuất thực thi hành động "${recActionVi}" (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi}) để nhanh chóng đưa dịch vụ trở về trạng thái ổn định theo chuẩn MAPE-K.`
-    );
+    const lastStep = previousActionSteps.length > 0 ? previousActionSteps[previousActionSteps.length - 1] : null;
+    if (recAction === 'NO_ACTION') {
+      const cleanReason = (recReasonVi || '')
+        .replace(/\(?NO_ACTION\)?/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const actionMsg = isCircuitBreakerTripped
+        ? `Kích hoạt Ngắt mạch an toàn (Mức ưu tiên: ${actionPriorityVi}). ${cleanReason}`
+        : `Chưa thực hiện hành động tự động (Mức ưu tiên: ${actionPriorityVi}). ${cleanReason}`;
+      lines.push(
+        `• Phương án xử lý & Đề xuất hiện tại: ${actionMsg.trim()} Kỹ sư vui lòng thực hiện theo 3 bước trong Cẩm nang thao tác (Manual Playbook) phía trên.`
+      );
+    } else if (lastStep && lastStep.isVerifiedSuccess) {
+      lines.push(
+        `• Kết luận tự phục hồi: Hệ thống đã tự động khắc phục thành công qua Bậc ${lastStep.stepIndex} ("${lastStep.labelVi}") và xác nhận dịch vụ ổn định hoàn toàn.`
+      );
+    } else if (lastStep && lastStep.isVerifying && lastStep.code === recAction) {
+      lines.push(
+        `• Trạng thái hiện tại: Đã thực thi "${recActionVi}" (Bậc ${lastStep.stepIndex}), hệ thống đang thu thập 12 điểm viễn trắc tiếp theo để hậu kiểm độ ổn định.`
+      );
+    } else {
+      lines.push(
+        `• Phương án tự khắc phục tiếp theo: Đề xuất thực thi hành động "${recActionVi}" (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi}) để nhanh chóng đưa dịch vụ trở về trạng thái ổn định theo chuẩn MAPE-K.`
+      );
+    }
 
     return lines.join('\n');
   }, [
@@ -761,12 +1545,78 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     metricSummary,
     predictedRiskVi,
     multiTierEvidences,
+    previousActionSteps,
+    recAction,
     recActionVi,
+    recReasonVi,
     actionPriorityVi,
     actionRiskLevelVi,
+    isCircuitBreakerTripped,
   ]);
 
-  if (!incident) return null;
+// Cẩm nang thao tác chuẩn Mockup 3 bước
+  const defaultPlaybookSteps = useMemo(() => {
+    const isProbe = groupedSymptoms.some(g => g.title.includes('Probe')) || symptomsList.some(s => String(s).toLowerCase().includes('probe'));
+    if (isProbe) {
+      return [
+        'Kiểm tra trạng thái Pod và log ứng dụng',
+        'Kiểm tra cấu hình Probe, tài nguyên',
+        'Khắc phục nguyên nhân và xác nhận phục hồi',
+      ];
+    }
+    return [
+      'Kiểm tra trạng thái Pod và log dịch vụ',
+      'Kiểm tra mức sử dụng tài nguyên CPU, RAM',
+      'Xác minh cấu hình dịch vụ và phục hồi',
+    ];
+  }, [groupedSymptoms, symptomsList]);
+
+  // Danh sách dòng thời gian Lịch sử tự phục hồi (Timeline Data) - Phản ánh chính xác từ dữ liệu thực tế
+  const timelineList = useMemo(() => {
+    if (previousActionSteps.length > 0) {
+      return previousActionSteps.map((st) => ({
+        stepIndex: st.stepIndex,
+        actionName: ACTION_DISPLAY_NAMES[st.code] || st.labelVi || st.code,
+        statusBadge: getTimelineStatusBadge(st),
+        shortReason: getTimelineShortReason(st.reason, st.code),
+        timeStr: st.timeStr || '--:--:--',
+        metrics: st.metrics,
+        rawReason: st.reason,
+      }));
+    }
+    return [];
+  }, [previousActionSteps]);
+
+  // Tổng số lần triệu chứng xảy ra
+  const totalSymptomCount = useMemo(() => {
+    if (groupedSymptoms.length === 0) return symptomsList.length || 0;
+    return groupedSymptoms.reduce((sum, g) => sum + (g.count || 1), 0);
+  }, [groupedSymptoms, symptomsList]);
+
+  // Format thời gian phân tích
+  const analyzedTimeFormatted = useMemo(() => {
+    if (!analyzedAtStr) return 'Chưa ghi nhận';
+    const d = new Date(analyzedAtStr);
+    if (isNaN(d.getTime())) return analyzedAtStr;
+    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return `~ ${time} (${date})`;
+  }, [analyzedAtStr]);
+
+  // Nội dung tóm tắt Báo cáo SRE chuẩn Mockup
+  const sreSummaryText = useMemo(() => {
+    const isProbe = groupedSymptoms.some(g => g.title.includes('Probe')) || symptomsList.some(s => String(s).toLowerCase().includes('probe'));
+    const isInsufficient = evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown;
+    if (isInsufficient) {
+      if (isProbe) {
+        return `SelfAI đã phát hiện sự cố liên quan đến Probe của ${serviceDisplayName}. Hiện chưa đủ bằng chứng để xác định nguyên nhân gốc và đã tạm dừng hành động tự động để đảm bảo an toàn.`;
+      }
+      return `SelfAI ghi nhận dấu hiệu bất thường trên dịch vụ ${serviceDisplayName}. Hiện chưa đủ bằng chứng xác thực để kết luận nguyên nhân gốc rễ và tạm thời dừng hành động tự động để đảm bảo an toàn.`;
+    }
+    return `SelfAI xác định nguyên nhân gốc rễ của sự cố trên dịch vụ ${serviceDisplayName} là "${rootCauseTypeVi}". Đề xuất phương án xử lý: ${recActionVi}.`;
+  }, [groupedSymptoms, symptomsList, evidenceStatus, isUnknown, serviceDisplayName, rootCauseTypeVi, recActionVi]);
+
+    if (!incident) return null;
 
   return (
     <div
@@ -800,7 +1650,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       <div
         style={{
           width: '100%',
-          maxWidth: '820px',
+          maxWidth: '920px',
           height: '100vh',
           backgroundColor: '#FFFFFF',
           boxShadow: '-10px 0 40px rgba(0, 0, 0, 0.16)',
@@ -841,7 +1691,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             </div>
             <div>
               <div style={{ fontSize: '0.9125rem', fontWeight: 800, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '8px', lineHeight: 1.2 }}>
-                <span>Chi Tiết Sự Cố &amp; Phân Tích Nguyên Nhân Gốc Rễ (RCA)</span>
+                <span>Chi tiết sự cố Self-Healing</span>
                 <span
                   style={{
                     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -854,6 +1704,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 >
                   {incidentIdStr}
                 </span>
+                {occurrenceCount > 1 && (
+                  <span
+                    style={{
+                      backgroundColor: 'rgba(254, 243, 199, 0.92)',
+                      color: '#92400E',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Lặp lại {occurrenceCount} lần
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: '0.6875rem', color: '#D1FAE5', marginTop: '1px', fontWeight: 500 }}>
                 Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{serviceDisplayName}</strong> &bull; Cụm K8s:{' '}
@@ -899,6 +1763,108 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         </div>
 
 
+
+        {/* Status Sub-bar (Mockup Header Bar) */}
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderBottom: '1px solid #E2E8F0',
+            padding: '10px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Root cause badge */}
+            <span
+              style={{
+                backgroundColor: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '#FEE2E2' : '#EDE9FE',
+                color: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '#B91C1C' : '#6D28D9',
+                border: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '1px solid #FECACA' : '1px solid #DDD6FE',
+                borderRadius: '16px',
+                padding: '3px 12px',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              {(evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? (
+                <>
+                  <AlertTriangle size={12} color="#DC2626" />
+                  <span>Chưa xác định nguyên nhân</span>
+                </>
+              ) : (
+                <>
+                  <span>{rootCauseTypeVi}</span>
+                </>
+              )}
+            </span>
+
+            {/* Info tooltip icon */}
+            <span
+              title={`Phân loại: ${rootCauseCategoryVi} • Mức độ: ${severityVi}`}
+              style={{
+                color: '#0284C7',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                backgroundColor: '#E0F2FE',
+              }}
+            >
+              <Info size={12} color="#0284C7" />
+            </span>
+
+            {/* RCA confidence */}
+            <span style={{ fontSize: '0.78125rem', color: '#64748B' }}>
+              Độ tin cậy RCA:{' '}
+              <strong style={{ color: '#047857' }}>
+                {confidence !== null ? `${confidence}%` : 'Chưa đánh giá'}
+              </strong>
+            </span>
+
+            <span style={{ color: '#CBD5E1' }}>|</span>
+
+            {/* Status */}
+            <span style={{ fontSize: '0.78125rem', color: '#64748B' }}>
+              Trạng thái:{' '}
+              <strong style={{ color: modalStatus.color }}>
+                {modalStatus.label}
+              </strong>
+            </span>
+          </div>
+
+          {/* Right: GRU prediction pill */}
+          <div
+            onClick={() => setIsGruDrawerOpen(!isGruDrawerOpen)}
+            style={{
+              backgroundColor: '#F3E8FF',
+              color: '#7E22CE',
+              border: '1px solid #E9D5FF',
+              borderRadius: '8px',
+              padding: '3px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            <Activity size={13} color="#7E22CE" />
+            <span>
+              Dự báo GRU <strong>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : 'Chưa đánh giá'}</strong>
+            </span>
+          </div>
+        </div>
 
         {/* Sub-navigation Tabs */}
         <div
@@ -986,505 +1952,873 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
           {/* TAB 1: OVERVIEW & PLAYBOOK */}
           {activeTab === 'overview' && (
-            <>
-              {/* ======================================================== */}
-              {/* 3. KẾT LUẬN NGUYÊN NHÂN GỐC RỄ (ROOT CAUSE) */}
-              {/* ======================================================== */}
-              <div
-                style={{
-                  padding: '16px 0',
-                  borderBottom: '1px solid #E2E8F0',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: isResolved ? '#166534' : isUnknownOrNoAction ? '#334155' : '#991B1B', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Sparkles size={15} />
-                    <span>KẾT LUẬN NGUYÊN NHÂN GỐC RỄ (ROOT CAUSE ANALYSIS)</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span
-                      style={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        backgroundColor: '#EDE9FE',
-                        color: '#6D28D9',
-                        border: '1px solid #DDD6FE',
-                      }}
-                    >
-                      {rootCauseCategoryVi}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        backgroundColor: isResolved ? '#DCFCE7' : isUnknownOrNoAction ? '#F1F5F9' : '#FEE2E2',
-                        color: isResolved ? '#15803D' : isUnknownOrNoAction ? '#475569' : '#B91C1C',
-                        border: isUnknownOrNoAction ? '1px solid #CBD5E1' : 'none',
-                      }}
-                    >
-                      Mức độ: {severityVi}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ fontWeight: 800, fontSize: '1.0625rem', color: isResolved ? '#15803D' : isUnknownOrNoAction ? '#334155' : '#B91C1C', marginBottom: '6px' }}>
-                  {rootCauseTypeVi}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    Dự báo rủi ro:{' '}
-                    <strong style={{ color: '#1D4ED8' }}>
-                      {predictedRiskVi || (detectedRisksList.length > 0 ? 'Phát hiện nguy cơ' : (gruPrediction || incidentDetail?.prediction_id ? 'Không suy biến tài nguyên' : 'Chưa có dữ liệu dự báo'))}
-                    </strong>
-                  </span>
-                  <span style={{ color: '#CBD5E1' }}>&bull;</span>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    Độ tin cậy RCA: <strong style={{ color: '#047857' }}>{confidence !== null ? `${confidence}%` : 'Chưa đánh giá'}</strong>
-                  </span>
-
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    &bull; Trạng thái:{' '}
-                    <strong style={{ color: isResolved ? '#10B981' : isUnknownOrNoAction ? '#059669' : '#DC2626' }}>
-                      {isResolved
-                        ? 'ĐÃ KHẮC PHỤC'
-                        : isCircuitBreakerTripped
-                          ? 'NGẮT MẠCH AN TOÀN (CIRCUIT BREAKER)'
-                          : isUnknownOrNoAction
-                            ? 'AN TOÀN (KHÔNG CẦN CAN THIỆP)'
-                            : requiresApproval
-                              ? 'CHỜ PHÊ DUYỆT (HITL)'
-                              : 'CHỜ KHẮC PHỤC'}
-                    </strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* ======================================================== */}
-              <div
-                style={{
-                  padding: '16px 0',
-                  borderBottom: '1px solid #E2E8F0',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '14px' }}>
+              {/* URGENT BANNER: CRITICAL + NO_ACTION */}
+              {isCriticalNoAction && (
+                <div
+                  style={{
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FCA5A5',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                  }}
+                >
+                  <ShieldAlert size={18} color="#DC2626" />
                   <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <Zap size={16} color="#059669" />
-                      <span>KẾ HOẠCH TỰ KHẮC PHỤC: {recActionVi}</span>
-                      <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
-                      <span style={{ fontSize: '0.75rem', color: '#B91C1C', fontWeight: 700 }}>
-                        Ưu tiên: {actionPriorityVi}
-                      </span>
-                      <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
-                      <span style={{ fontSize: '0.75rem', color: '#1D4ED8', fontWeight: 700 }}>
-                        Rủi ro: {actionRiskLevelVi}
-                      </span>
-                      {requiresApproval && (
-                        <>
-                          <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
-                          <span style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: 700 }}>
-                            Cần Kỹ sư duyệt (HITL)
-                          </span>
-                        </>
-                      )}
+                    <div style={{ fontWeight: 800, fontSize: '0.8125rem', color: '#991B1B' }}>
+                      KHẨN CẤP - CẦN KỸ SƯ KIỂM TRA (NO_ACTION)
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '2px', lineHeight: 1.35 }}>
-                      {recReasonVi}
+                    <div style={{ fontSize: '0.75rem', color: '#B91C1C' }}>
+                      Khẩn Cấp — Cần Kiểm Tra Thủ Công
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ======================================================== */}
+              {/* CARD 1: THÔNG TIN SỰ CỐ */}
+              {/* ======================================================== */}
+              <div
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0',
+                  padding: '14px 18px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Box size={16} color="#2563EB" />
+                    <span>Thông tin sự cố</span>
+                  </div>
+                </div>
+
+                {incidentTitle && (
+                  <div
+                    data-testid="incident-title-banner"
+                    style={{
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      marginBottom: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        color: '#64748B',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Tiêu đề sự cố:
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '0.8125rem',
+                        fontWeight: 800,
+                        color: '#0F172A',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {incidentTitle}
+                    </span>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                    gap: '12px 20px',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  {/* Cột 1: Dịch vụ & Pod */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div>
+                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Dịch vụ</div>
+                      <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.8125rem' }}>
+                        {serviceDisplayName}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>
+                        {realPodName ? 'Pod lỗi' : 'WORKLOAD MỤC TIÊU'}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: '#0F172A', fontSize: '0.75rem', wordBreak: 'break-all' }}>
+                        {realPodName || 'Chưa xác định'}
+                      </div>
                     </div>
                   </div>
 
-                  {recAction === 'NO_ACTION' ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '7px 12px',
-                          backgroundColor: '#FEF2F2',
-                          color: '#B91C1C',
-                          borderRadius: '8px',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          border: '1px solid #FECACA',
-                        }}
-                      >
-                        <ShieldAlert size={15} />
-                        <span>Cầu Dao Đang Khóa ({consecutiveFailures} Lần Lỗi)</span>
+                  {/* Cột 2: Namespace & Node */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div>
+                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Namespace</div>
+                      <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.8125rem' }}>
+                        {namespaceName || 'default'}
                       </div>
-                      {!isResolved && (
-                        <button
-                          type="button"
-                          onClick={handleExecuteRemediation}
-                          disabled={isExecuting}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '7px 14px',
-                            backgroundColor: '#FFFFFF',
-                            color: '#065F46',
-                            border: '1px solid #059669',
-                            borderRadius: '8px',
-                            fontSize: '0.78125rem',
-                            fontWeight: 700,
-                            cursor: isExecuting ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          <Check size={14} />
-                          <span>{isExecuting ? 'Đang lưu...' : 'Xác Nhận & Đóng Sự Cố'}</span>
-                        </button>
-                      )}
                     </div>
-                  ) : !isResolved ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      {isApprovalContext && onResolve && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsExecuting(true);
-                            setTimeout(() => {
-                              setIsExecuting(false);
-                              if (onResolve) onResolve(incident?.id, incident?.rawId);
-                            }, 400);
-                          }}
-                          disabled={isExecuting}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '8px 16px',
-                            background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                            color: '#FFFFFF',
-                            borderRadius: '8px',
-                            border: 'none',
-                            fontSize: '0.78125rem',
-                            fontWeight: 700,
-                            cursor: isExecuting ? 'not-allowed' : 'pointer',
-                            boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
-                          }}
-                        >
-                          <CheckCircle2 size={14} />
-                          <span>{isExecuting ? 'Đang gửi phê duyệt...' : 'Phê Duyệt Hành Động Ngay'}</span>
-                        </button>
-                      )}
+                    <div>
+                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Node</div>
+                      <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.8125rem' }}>
+                        {faultyNodeName || 'Chưa xác định'}
+                      </div>
+                      <div style={{ color: '#94A3B8', fontSize: '0.65625rem', marginTop: '1px' }}>
+                        {clusterSubLabel}
+                      </div>
+                    </div>
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isAlreadyInApprovals) {
-                            onClose();
-                          } else if (requiresApproval && onNavigate) {
-                            onClose();
-                            onNavigate(`/dashboard/self-healing/approvals?target=${encodeURIComponent(serviceDisplayName)}`);
-                          } else {
-                            handleExecuteRemediation();
-                          }
-                        }}
-                        disabled={isExecuting}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 16px',
-                          background: isAlreadyInApprovals
-                            ? '#F1F5F9'
-                            : requiresApproval
-                            ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)'
-                            : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                          color: isAlreadyInApprovals ? '#334155' : '#FFFFFF',
-                          borderRadius: '8px',
-                          border: isAlreadyInApprovals ? '1px solid #CBD5E1' : 'none',
-                          fontSize: '0.78125rem',
-                          fontWeight: 700,
-                          cursor: isExecuting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {requiresApproval ? <CheckCircle2 size={14} /> : <Zap size={14} />}
-                        <span>
-                          {isExecuting
-                            ? 'Đang thực thi...'
-                            : isAlreadyInApprovals
-                            ? (onResolve ? 'Đóng & Xem Danh Sách' : 'Đóng & Phê Duyệt Tại Danh Sách Phía Dưới')
-                            : requiresApproval
-                            ? 'Chuyển Sang Cổng Phê Duyệt (HITL) →'
-                            : 'Kích Hoạt Tự Khắc Phục Ngay'}
-                        </span>
-                      </button>
+                  {/* Cột 3: Workload & Thời gian */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Layers size={15} color="#2563EB" />
+                      <div>
+                        <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Loại workload</div>
+                        <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.8125rem' }}>
+                          {workloadKindRaw || 'Chưa xác định'}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 12px',
-                        backgroundColor: '#DCFCE7',
-                        color: '#15803D',
-                        borderRadius: '8px',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        border: '1px solid #86EFAC',
-                      }}
-                    >
-                      <CheckCircle2 size={15} />
-                      <span>Đã Tự Khắc Phục Hoàn Tất</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={15} color="#2563EB" />
+                      <div>
+                        <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Thời gian bắt đầu</div>
+                        <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.75rem' }}>
+                          {analyzedTimeFormatted}
+                        </div>
+                      </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Dữ liệu phục vụ kiểm tra hệ thống & DevOps */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0', fontSize: '0.6875rem', color: '#64748B' }}>
+                  <span>Cụm K8s: <strong style={{ color: '#334155' }}>{clusterDisplayName || 'Chưa xác định'}</strong></span>
+                  <span>Mức độ: <strong style={{ color: '#334155' }}>{severityVi}</strong></span>
+                  <span>{`Ưu tiên: ${actionPriorityVi}`}</span>
+                  <span>{`Rủi ro: ${actionRiskLevelVi}`}</span>
+                  {rawActionParams.pod_ip && (
+                    <span>IP/Port: <strong style={{ color: '#334155' }}>{rawActionParams.pod_ip}:{rawActionParams.port || 8080}</strong></span>
                   )}
                 </div>
 
-                {/* BẢNG THAM SỐ KỸ THUẬT CHI TIẾT (ACTION PARAMETERS GRID) */}
-                <div style={{ marginTop: '6px', borderTop: '1px solid #E2E8F0', paddingTop: '6px' }}>
-                  <div style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#1E40AF', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Sliders size={13} color="#2563EB" />
-                    <span>THAM SỐ KỸ THUẬT ĐIỀU PHỐI (ACTION PARAMETERS):</span>
+                {/* Lỗi thực thi gần nhất (nếu có) */}
+                {healingErrorMessage && (
+                  <div style={{ marginTop: '8px', padding: '8px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', fontSize: '0.75rem', color: '#B91C1C' }}>
+                    <div><strong>Lỗi thực thi gần nhất:</strong> {healingErrorMessage}</div>
                   </div>
+                )}
+              </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '8px' }}>
-                    <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>
-                        {realPodName ? 'POD MỤC TIÊU (TARGET POD)' : 'WORKLOAD MỤC TIÊU'}
+              {/* ======================================================== */}
+              {/* GRID 2 CỘT (CARD 2 & 4 vs CARD 3 & 5) */}
+              {/* ======================================================== */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+                  gap: '14px',
+                  alignItems: 'start',
+                }}
+              >
+                {/* ---------------------------------------------------- */}
+                {/* CỘT TRÁI: CARD 2 (TRIỆU CHỨNG) & CARD 4 (LỊCH SỬ PHỤC HỒI) */}
+                {/* ---------------------------------------------------- */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* CARD 2: TRIỆU CHỨNG CHÍNH */}
+                  <div
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      border: '1px solid #E2E8F0',
+                      padding: '14px 16px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Activity size={16} color="#2563EB" />
+                        <span>Triệu chứng chính</span>
                       </div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', wordBreak: 'break-all' }}>
-                        {faultyPodName}
-                      </div>
-                      <div style={{ fontSize: '0.625rem', color: '#94A3B8', marginTop: '2px' }}>
-                        {realPodName ? `${workloadKindRaw}: ${serviceDisplayName}` : `Loại workload: ${workloadKindRaw}`}
-                        {faultyPodId ? ` • ID: ${String(faultyPodId).substring(0, 18)}...` : ''}
-                      </div>
+                      {groupedSymptoms.length > 0 && (
+                        <span
+                          style={{
+                            backgroundColor: '#EFF6FF',
+                            color: '#1D4ED8',
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                          }}
+                        >
+                          {groupedSymptoms.length} loại lỗi · {totalSymptomCount} lần
+                        </span>
+                      )}
                     </div>
 
-                    <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE &amp; VAI TRÒ REPLICA SET</div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span>{faultyNodeName || 'Chưa xác định'}</span>
-                        <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 500 }}>({replicaSetRole})</span>
-                      </div>
-                      <div style={{ fontSize: '0.625rem', color: faultyNodeName ? '#166534' : '#94A3B8', marginTop: '2px', fontWeight: 600 }}>
-                        {faultyNodeName ? `Node: ${faultyNodeName}` : 'Chưa gắn với Node cụ thể'}
-                      </div>
+                    {/* Danh sách Triệu chứng */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {groupedSymptoms.length > 0 ? (
+                        groupedSymptoms.map((grp) => {
+                          const isExpanded = expandedSymptomKeys.has(grp.key);
+                          const isWarning = grp.title.includes('Liveness') || grp.errorSnippet?.includes('timeout');
+                          const alertBg = isWarning ? '#FEF3C7' : '#FEE2E2';
+                          const alertColor = isWarning ? '#D97706' : '#DC2626';
+
+                          return (
+                            <div
+                              key={grp.key}
+                              style={{
+                                border: '1px solid #F1F5F9',
+                                borderRadius: '8px',
+                                padding: '10px 12px',
+                                backgroundColor: '#FAFAFA',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flex: 1, minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      width: '26px',
+                                      height: '26px',
+                                      borderRadius: '6px',
+                                      backgroundColor: alertBg,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexShrink: 0,
+                                      marginTop: '2px',
+                                    }}
+                                  >
+                                    <AlertTriangle size={14} color={alertColor} />
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                        {grp.title}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '0.65625rem',
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: '10px',
+                                          backgroundColor: alertBg,
+                                          color: alertColor,
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {grp.count} lần
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', lineHeight: 1.35 }}>
+                                      {grp.explanation}
+                                    </div>
+                                    <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>
+                                      Pod: {grp.podName} · {grp.count} lần
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Nút xem chi tiết K8s */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSymptomKey(grp.key)}
+                                  aria-label="Xem chi tiết K8s"
+                                  style={{
+                                    border: '1px solid #E2E8F0',
+                                    backgroundColor: '#FFFFFF',
+                                    borderRadius: '6px',
+                                    padding: '3px 8px',
+                                    fontSize: '0.6875rem',
+                                    fontWeight: 600,
+                                    color: '#475569',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    flexShrink: 0,
+                                    whiteSpace: 'nowrap',
+                                    marginTop: '2px',
+                                  }}
+                                >
+                                  <span>
+                                    {grp.errorSnippet?.includes('timeout') ? 'timeout' : (grp.errorSnippet || 'Chi tiết')}
+                                  </span>
+                                  {grp.errorSnippet?.includes('timeout') && (
+                                    <span style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+                                      {grp.errorSnippet}
+                                    </span>
+                                  )}
+                                  <ChevronDown
+                                    size={12}
+                                    color="#64748B"
+                                    style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+                                  />
+                                </button>
+                              </div>
+
+                              {/* Vùng mở rộng Log K8s gốc */}
+                              {isExpanded && (
+                                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                                  {grp.records.map((rec, rIdx) => (
+                                    <div key={rIdx} style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono, monospace)', backgroundColor: '#0F172A', color: '#F8FAFC', padding: '6px 8px', borderRadius: '4px', overflowX: 'auto', marginBottom: '4px' }}>
+                                      {rec.rawLog || rec.originalText}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{ fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic', padding: '8px 0' }}>
+                          Không ghi nhận triệu chứng bất thường đơn lẻ
+                        </div>
+                      )}
                     </div>
 
-                    {(() => {
-                      const hasFailover = recDestNodeName && recDestNodeName !== faultyNodeName && !recDestNodeName.includes('nkljojl');
-                      const nodeSummaryTitle = clusterNodeCount === 1
-                        ? 'Không có (Đơn node)'
-                        : clusterNodeCount > 1
-                          ? 'Chưa chỉ định'
-                          : 'Chưa xác định';
-                      const clusterSubLabel = clusterNodeCount === 1
-                        ? 'Cụm hiện có 1 Node'
-                        : clusterNodeCount > 1
-                          ? `Cụm hiện có ${clusterNodeCount} Node`
-                          : `Cụm: ${clusterIdStr}`;
-                      return (
-                        <div style={{ padding: '4px 8px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                          <div style={{ fontSize: '0.625rem', color: '#64748B', fontWeight: 600 }}>NODE AN TOÀN DỰ PHÒNG</div>
-                          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: hasFailover ? '#059669' : '#64748B' }}>
-                            {hasFailover ? recDestNodeName : nodeSummaryTitle}
+                    {/* Vùng Bằng chứng xác thực & SRE Checklist */}
+                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {/* Bằng chứng xác thực */}
+                      {parsedEvidenceFor.length > 0 && (
+                        <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 10px', fontSize: '0.71875rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <CheckCircle2 size={13} color="#16A34A" />
+                              <span style={{ fontWeight: 700, color: '#166534', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px', fontSize: '0.65625rem' }}>
+                                {parsedEvidenceFor.length} ghi nhận
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.6875rem' }}>
+                                {evidenceForSummary.map((item, idx) => (
+                                  <span key={idx}>
+                                    • {item.count} sự kiện trên Pod {item.podName}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsExpandedEvidenceList(!isExpandedEvidenceList)}
+                              style={{
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid #CBD5E1',
+                                borderRadius: '4px',
+                                padding: '1px 6px',
+                                fontSize: '0.65625rem',
+                                fontWeight: 600,
+                                color: '#2563EB',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Xem toàn bộ {parsedEvidenceFor.length} bản ghi Kubernetes Event gốc
+                            </button>
                           </div>
-                          <div style={{ fontSize: '0.625rem', color: hasFailover ? '#166534' : '#94A3B8', marginTop: '2px' }}>
-                            {hasFailover ? (
-                              destFreeMemBytes > 0
-                                ? <>RAM trống: <strong>{(destFreeMemBytes / 1024 / 1024 / 1024).toFixed(2)} GB</strong></>
-                                : clusterSubLabel
-                            ) : (
-                              clusterSubLabel
-                            )}
+
+                          {isExpandedEvidenceList && (
+                            <div style={{ marginTop: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                              {parsedEvidenceFor.map((ev, eIdx) => (
+                                <div key={eIdx} style={{ fontSize: '0.65625rem', fontFamily: 'monospace', backgroundColor: '#FFFFFF', padding: '4px 6px', borderRadius: '4px', border: '1px solid #E2E8F0', marginBottom: '3px' }}>
+                                  <div style={{ fontWeight: 700, color: '#166534' }}>
+                                    {`Bản ghi #${eIdx + 1} • Pod: ${ev.podName || 'workload'}`}
+                                  </div>
+                                  <div style={{ color: '#475569', wordBreak: 'break-all', marginTop: '2px' }}>
+                                    {ev.rawLog || ev.originalText}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SRE Checklist */}
+                      {missingEvidenceList.length > 0 && (
+                        <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 10px', fontSize: '0.71875rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
+                            <HelpCircle size={13} color="#D97706" />
+                            <span style={{ fontWeight: 700, color: '#92400E', fontSize: '0.6875rem' }}>
+                              Hồ sơ bằng chứng thiếu (SRE Checklist)
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            {missingEvidenceList.map((item, idx) => {
+                              const question = SRE_CHECKLIST_QUESTIONS[item]?.question || translateSREText(item);
+                              return (
+                                <div key={idx} style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.6875rem' }}>
+                                  <span style={{ fontWeight: 800, color: '#D97706' }}>?</span>
+                                  <span>{question}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      );
-                    })()}
-
-                    <div style={{ padding: '8px 10px', backgroundColor: isCircuitBreakerTripped ? '#FEF2F2' : '#F8FAFC', borderRadius: '6px', border: isCircuitBreakerTripped ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '0.625rem', color: isCircuitBreakerTripped ? '#991B1B' : '#64748B', fontWeight: 700 }}>ANTI-LOOP (CIRCUIT BREAKER)</div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isCircuitBreakerTripped ? '#DC2626' : '#059669' }}>
-                        {isCircuitBreakerTripped ? (blockedActions.length > 0 ? `Đang khóa: ${blockedActions.join(', ')}` : 'Đang khóa (Ngắt mạch an toàn)') : 'Trạng thái: Hoạt động bình thường'}
-                      </div>
-                      <div style={{ fontSize: '0.625rem', color: isCircuitBreakerTripped ? '#B91C1C' : '#64748B', marginTop: '2px' }}>
-                        Đã thất bại: <strong>{consecutiveFailures} lần liên tiếp</strong>
-                      </div>
+                      )}
                     </div>
+                  </div>
+
+                  {/* CARD 4: LỊCH SỬ TỰ PHỤC HỒI (TIMELINE CHUẨN MOCKUP) */}
+                  <div
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      border: '1px solid #E2E8F0',
+                      padding: '14px 16px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <History size={16} color="#2563EB" />
+                        <span>Lịch sử tự phục hồi</span>
+                      </div>
+                      <span
+                        style={{
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                        }}
+                      >
+                        {timelineList.length} hành động đã thử
+                      </span>
+                    </div>
+
+                    {timelineList.length > 0 ? (
+                      <>
+                        {/* Timeline các bước */}
+                        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: '8px' }}>
+                          {/* Đường line kết nối dọc */}
+                          {timelineList.length > 1 && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '12px',
+                                bottom: '16px',
+                                left: '19px',
+                                width: '2px',
+                                backgroundColor: '#DBEAFE',
+                                zIndex: 1,
+                              }}
+                            />
+                          )}
+
+                          {timelineList.map((st, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '10px',
+                                padding: '8px 0',
+                                position: 'relative',
+                                zIndex: 2,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                                {/* Vòng tròn số thứ tự bước */}
+                                <div
+                                  style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#2563EB',
+                                    color: '#FFFFFF',
+                                    fontSize: '0.6875rem',
+                                    fontWeight: 800,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    boxShadow: '0 1px 2px rgba(37, 99, 235, 0.25)',
+                                  }}
+                                >
+                                  {st.stepIndex}
+                                </div>
+
+                                {/* Tên hành động */}
+                                <span style={{ fontWeight: 800, fontSize: '0.8125rem', color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                  {st.actionName}
+                                </span>
+
+                                {/* Badge trạng thái */}
+                                <span
+                                  style={{
+                                    fontSize: '0.65625rem',
+                                    fontWeight: 700,
+                                    padding: '1px 6px',
+                                    borderRadius: '10px',
+                                    backgroundColor: st.statusBadge.bg,
+                                    color: st.statusBadge.color,
+                                    border: `1px solid ${st.statusBadge.border}`,
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {st.statusBadge.label}
+                                </span>
+
+                                {/* Lý do ngắn gọn */}
+                                <span style={{ fontSize: '0.75rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {st.shortReason}
+                                </span>
+                              </div>
+
+                              {/* Thời gian */}
+                              <span style={{ fontSize: '0.6875rem', color: '#64748B', flexShrink: 0, fontFamily: 'monospace' }}>
+                                {st.timeStr}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Vùng mở rộng Chi tiết lịch sử (Metrics Chips) */}
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0' }}>
+                          <button
+                            type="button"
+                            onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#2563EB',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: 0,
+                            }}
+                          >
+                            <span>{isTimelineExpanded ? 'Thu gọn lịch sử ↑' : 'Xem chi tiết lịch sử →'}</span>
+                          </button>
+
+                          {isTimelineExpanded && (
+                            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {timelineList.map((st, idx) => (
+                                <div key={idx} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 10px', fontSize: '0.71875rem' }}>
+                                  <div style={{ fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                                    Bước {st.stepIndex}: {st.actionName} — {st.statusBadge.label}
+                                  </div>
+                                  <div style={{ color: '#64748B', lineHeight: 1.35 }}>
+                                    {st.rawReason}
+                                  </div>
+                                  {st.metrics && (
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                                      {st.metrics.ram !== null && <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>RAM: {st.metrics.ram}%</span>}
+                                      {st.metrics.cpu !== null && <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>CPU: {st.metrics.cpu}%</span>}
+                                      {st.metrics.restart !== null && <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>Restart: {st.metrics.restart} lần</span>}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic', padding: '10px 8px', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px dashed #CBD5E1' }}>
+                        {isResolved
+                          ? 'Chưa thực hiện hành động tự động nào. Dịch vụ đã tự ổn định qua viễn trắc Kubernetes.'
+                          : (recAction === 'NO_ACTION' || isUnknown || evidenceStatus === 'INSUFFICIENT_EVIDENCE'
+                              ? 'Chưa thực hiện hành động tự động nào (Hệ thống dừng an toàn do Rule Engine chặn hoặc thiếu bằng chứng xác thực)'
+                              : 'Chưa ghi nhận hành động tự phục hồi nào trước đó')}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* MANUAL PLAYBOOK DÀNH CHO KỸ SƯ SRE / DBA */}
-                <div style={{ marginTop: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <BookOpen size={13} color="#059669" />
-                      <span>CẨM NANG THAO TÁC KỸ SƯ (MANUAL PLAYBOOK):</span>
-                      <span
-                        style={{
-                          fontSize: '0.625rem',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          backgroundColor: isAiPlaybook ? '#DCFCE7' : '#EFF6FF',
-                          color: isAiPlaybook ? '#15803D' : '#1D4ED8',
-                          border: isAiPlaybook ? '1px solid #BBF7D0' : '1px solid #BFDBFE',
-                        }}
-                      >
+                {/* ---------------------------------------------------- */}
+                {/* CỘT PHẢI: CARD 3 (QUYẾT ĐỊNH SELFAI) & CARD 5 (PLAYBOOK KỸ SƯ) */}
+                {/* ---------------------------------------------------- */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* CARD 3: QUYẾT ĐỊNH CỦA SELFAI */}
+                  <div
+                    style={{
+                      backgroundColor: '#F0FDF4',
+                      borderRadius: '10px',
+                      border: '1px solid #BBF7D0',
+                      padding: '12px 14px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <ShieldCheck size={15} color="#16A34A" />
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#166534' }}>
+                        Quyết định của SelfAI
+                      </span>
+                    </div>
+
+                    {/* Prominent Action Pill */}
+                    <div
+                      style={{
+                        backgroundColor: '#FFEDD5',
+                        color: '#C2410C',
+                        border: '1px solid #FDBA74',
+                        borderRadius: '8px',
+                        padding: '3px 14px',
+                        fontSize: '0.84375rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.01em',
+                        boxShadow: '0 1px 2px rgba(194, 65, 12, 0.1)',
+                        margin: '2px 0 6px 0',
+                      }}
+                    >
+                      {recAction || 'NO_ACTION'}
+                    </div>
+
+                    {/* Subtitle / Decision Reason */}
+                    <div style={{ fontSize: '0.75rem', color: '#334155', lineHeight: 1.4, maxWidth: '320px', marginBottom: '10px' }}>
+                      {previousActionSteps.length > 0 || isCircuitBreakerActive
+                        ? 'Cầu dao an toàn (Circuit Breaker) đã ngắt mạch sau khi các bước tự phục hồi trước đó chưa thành công.'
+                        : isInsufficient
+                          ? 'Chưa thực hiện hành động tự động do thiếu bằng chứng xác thực.'
+                          : (recReasonVi || 'Chưa có hành động hạ tầng nào đủ an toàn dựa trên bằng chứng hiện tại.')}
+                    </div>
+
+                    {/* Rule Engine & Circuit Breaker Badges */}
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', paddingTop: '8px', borderTop: '1px solid #DCFCE7', fontSize: '0.71875rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span style={{ color: '#475569' }}>Rule Engine</span>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '0.65625rem',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: (recAction === 'NO_ACTION' || isInsufficient) ? '#FEE2E2' : '#DCFCE7',
+                            color: (recAction === 'NO_ACTION' || isInsufficient) ? '#B91C1C' : '#15803D',
+                            border: (recAction === 'NO_ACTION' || isInsufficient) ? '1px solid #FECACA' : '1px solid #86EFAC',
+                          }}
+                        >
+                          {rawActionParams.rule_verdict || (recAction === 'NO_ACTION' ? 'BLOCK' : 'ALLOW')}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span style={{ color: '#475569' }}>Circuit Breaker</span>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '0.65625rem',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '#FEE2E2' : '#DCFCE7',
+                            color: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '#B91C1C' : '#15803D',
+                            border: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '1px solid #FECACA' : '1px solid #86EFAC',
+                          }}
+                        >
+                          {(isCircuitBreakerActive || isCircuitBreakerTripped) ? 'OPEN' : 'CLOSED'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Dự báo GRU Risks */}
+                    {predictedRisk && (
+                      <div style={{ width: '100%', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #DCFCE7', textAlign: 'left', fontSize: '0.6875rem' }}>
+                        <div style={{ color: '#6B21A8', fontWeight: 700, fontSize: '0.65625rem', marginBottom: '2px' }}>
+                          Dự báo từ mô hình GRU — Không phải bằng chứng RCA hoặc lệnh thực thi
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7E22CE' }}>
+                          <span style={{ fontWeight: 700 }}>{GRU_RISK_NAMES_VI[predictedRisk] || predictedRiskVi}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontFamily: 'monospace', backgroundColor: '#F3E8FF', padding: '1px 5px', borderRadius: '4px', fontSize: '0.625rem' }}>
+                              {predictedRisk}
+                            </span>
+                            <span style={{ fontWeight: 800, color: '#7E22CE', fontSize: '0.6875rem' }}>
+                              {`${Math.round((gruPredictionConfidence ?? 0.965) * 100)}%`}
+                            </span>
+                          </div>
+                        </div>
+                        {predictedRisk === 'SCALE_DOWN_CANDIDATE' && (
+                          <div style={{ color: '#581C87', fontSize: '0.625rem', marginTop: '2px', fontStyle: 'italic' }}>
+                            Chưa cho phép giảm replica khi workload đang bất ổn.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CARD 5: CẨM NANG THAO TÁC KỸ SƯ */}
+                  <div
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      border: '1px solid #E2E8F0',
+                      padding: '16px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <BookOpen size={16} color="#2563EB" />
+                        <span>Cẩm nang thao tác kỹ sư</span>
+                      </div>
+                      <span style={{ fontSize: '0.65625rem', fontWeight: 600, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px' }}>
                         {isAiPlaybook ? 'Từ AI Playbook' : 'Tự sinh theo ngữ cảnh RCA'}
                       </span>
                     </div>
+
+                    {/* 3 Numbered Steps */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                      {manualPlaybookSteps.map((stepText, sIdx) => (
+                        <div key={sIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.75rem', color: '#1E293B', lineHeight: 1.4 }}>
+                          <div
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              backgroundColor: '#2563EB',
+                              color: '#FFFFFF',
+                              fontSize: '0.625rem',
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              marginTop: '1px',
+                            }}
+                          >
+                            {sIdx + 1}
+                          </div>
+                          <span>{stepText}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Button Xem lệnh chi tiết */}
                     <button
                       type="button"
-                      onClick={() => handleCopyText(manualPlaybookSteps.join('\n'), 'playbook')}
+                      onClick={() => setIsPlaybookExpanded(!isPlaybookExpanded)}
                       style={{
+                        width: '100%',
+                        backgroundColor: '#2563EB',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '9px 14px',
+                        fontSize: '0.78125rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '4px',
-                        padding: '3px 8px',
-                        fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        backgroundColor: '#F1F5F9',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        color: '#334155',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(37, 99, 235, 0.2)',
                       }}
                     >
-                      {copiedKey === 'playbook' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                      <span>{copiedKey === 'playbook' ? 'Đã chép Playbook' : 'Sao chép 3 bước'}</span>
+                      <Terminal size={14} color="#FFFFFF" />
+                      <span>{isPlaybookExpanded ? 'Ẩn lệnh chi tiết ↑' : 'Xem lệnh chi tiết →'}</span>
                     </button>
-                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {manualPlaybookSteps.map((step, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          padding: '8px 12px',
-                          backgroundColor: '#F0FDF4',
-                          border: '1px solid #BBF7D0',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
-                          color: '#166534',
-                          lineHeight: 1.45,
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '6px',
-                        }}
-                      >
-                        <ChevronRight size={14} color="#059669" style={{ flexShrink: 0, marginTop: '2px' }} />
-                        <span>{step}</span>
+                    {/* Terminal Command Drawer */}
+                    {isPlaybookExpanded && (
+                      <div style={{ marginTop: '10px', backgroundColor: '#0F172A', borderRadius: '6px', padding: '10px 12px', fontSize: '0.71875rem', fontFamily: 'var(--font-mono, monospace)', color: '#F8FAFC' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ color: '#94A3B8', fontSize: '0.65625rem' }}># Lệnh điều tra nhanh:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(`kubectl logs ${kubectlNsFlag}${realPodName || serviceDisplayName} --tail=50\nkubectl describe pod ${kubectlNsFlag}${realPodName || serviceDisplayName}\nkubectl get pods ${kubectlNsFlag}`, 'playbook-cli')}
+                            style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', fontSize: '0.65625rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            {copiedKey === 'playbook-cli' ? <Check size={11} color="#4ADE80" /> : <Copy size={11} />}
+                            <span>{copiedKey === 'playbook-cli' ? 'Đã sao chép' : 'Sao chép lệnh'}</span>
+                          </button>
+                        </div>
+                        <div style={{ color: '#38BDF8', marginBottom: '4px' }}>
+                          kubectl logs {kubectlNsFlag}{realPodName || serviceDisplayName} --tail=50
+                        </div>
+                        <div style={{ color: '#38BDF8', marginBottom: '4px' }}>
+                          kubectl describe pod {kubectlNsFlag}{realPodName || serviceDisplayName}
+                        </div>
+                        <div style={{ color: '#38BDF8' }}>
+                          kubectl get pods {kubectlNsFlag} -l app={serviceDisplayName}
+                        </div>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* ======================================================== */}
-              {/* 6. GIẢI TRÌNH CHI TIẾT DÀNH CHO BÁO CÁO INCIDENT */}
+              {/* CARD 6: BÁO CÁO SRE (TÓM TẮT) */}
               {/* ======================================================== */}
               <div
                 style={{
-                  padding: '16px 0',
-                  borderBottom: '1px solid #E2E8F0',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0',
+                  padding: '14px 18px',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.78125rem', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <FileText size={15} color="#059669" />
-                    <span>BÁO CÁO GIẢI TRÌNH SRE (SRE INCIDENT REPORT)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={16} color="#2563EB" />
+                    <span style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B' }}>
+                      Báo cáo SRE (Tóm tắt)
+                    </span>
+                    <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#166534', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
+                      BÁO CÁO GIẢI TRÌNH SRE (SRE INCIDENT REPORT)
+                    </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyText(fullExplanationVi, 'explanation')}
+                    onClick={() => handleCopyText(`${sreSummaryText}\n\n${fullExplanationVi}`, 'sre-report-copy')}
+                    aria-label="Sao chép giải trình"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
-                      padding: '3px 8px',
-                      fontSize: '0.6875rem',
+                      padding: '4px 10px',
+                      fontSize: '0.71875rem',
                       fontWeight: 600,
                       backgroundColor: '#FFFFFF',
                       border: '1px solid #CBD5E1',
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       cursor: 'pointer',
                       color: '#334155',
                     }}
                   >
-                    {copiedKey === 'explanation' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'explanation' ? 'Đã sao chép' : 'Sao chép giải trình'}</span>
+                    {copiedKey === 'sre-report-copy' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                    <span>{copiedKey === 'sre-report-copy' ? 'Đã sao chép' : 'Sao chép báo cáo'}</span>
                   </button>
                 </div>
-                <div
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    fontSize: '0.8125rem',
-                    color: '#334155',
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-line',
-                  }}
-                >
-                  {fullExplanationVi}
+
+                <div style={{ fontSize: '0.78125rem', color: '#334155', lineHeight: 1.5, marginBottom: '8px' }}>
+                  {sreSummaryText}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '8px', borderTop: '1px dashed #CBD5E1' }}>
+                  {fullExplanationVi.split('\n').filter(Boolean).map((line, idx) => (
+                    <div key={idx} style={{ fontSize: '0.75rem', color: '#475569', lineHeight: 1.45 }}>
+                      {line}
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* ======================================================== */}
-              {/* 5. ĐỀ XUẤT HÀNH ĐỘNG & THAM SỐ KỸ THUẬT CỤ THỂ */}
-              {/* ======================================================== */}
-              <div
-                style={{
-                  padding: '14px 0',
-                  borderBottom: '1px solid #E2E8F0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <History size={16} color="#6366F1" />
-                  <div>
-                    <div style={{ fontSize: '0.78125rem', fontWeight: 800, color: '#334155' }}>
-                      ĐỐI CHIẾU TRI THỨC LỊCH SỬ (KNOWLEDGE BASE RETRIEVAL)
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                      Đối soát sự cố tương đồng từ vector database: <strong style={{ color: historicalContextUsed ? '#059669' : '#64748B' }}>{historicalContextUsed ? 'KÍCH HOẠT (ACTIVE)' : 'KHÔNG (Chẩn đoán độc lập từ tín hiệu trực tiếp)'}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>Sự cố đối chiếu:</span>
-                  {similarIncidentIds && similarIncidentIds.length > 0 ? (
-                    similarIncidentIds.map((simId, idx) => (
-                      <span
-                        key={idx}
-                        style={{
-                          padding: '2px 6px',
-                          backgroundColor: '#EEF2FF',
-                          color: '#4F46E5',
-                          border: '1px solid #C7D2FE',
-                          borderRadius: '4px',
-                          fontSize: '0.65rem',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {simId}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontStyle: 'italic' }}>
-                      Không có tiền lệ tương tự (Sự cố mới xuất hiện)
-                    </span>
-                  )}
-                </div>
-              </div>
-
-            </>
+            </div>
           )}
 
           {/* TAB 2: LLM I/O & GRU 7 HEADS */}
@@ -1848,6 +3182,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               if (!rawDate) return 'Chưa ghi nhận';
               const d = new Date(rawDate);
               return isNaN(d.getTime()) ? String(rawDate) : d.toLocaleString('vi-VN');
+            })()}
+            {occurrenceCount > 1 && (incidentDetail?.last_occurred_at || incident?.lastOccurredAt) && (() => {
+              const rawLast = incidentDetail?.last_occurred_at || incident?.lastOccurredAt;
+              const dLast = new Date(rawLast);
+              const formattedLast = isNaN(dLast.getTime()) ? String(rawLast) : dLast.toLocaleString('vi-VN');
+              return ` • Lần gần nhất: ${formattedLast}`;
             })()}
           </div>
 

@@ -68,7 +68,7 @@ describe('IncidentModel Honesty Queries', () => {
       assert.strictEqual(detail.node_name, 'worker-02');
       assert.strictEqual(detail.cluster_node_count, 3);
 
-      const mainQueries = executedSql.filter((q) => !/^\s*select\s+count\(\*\)\s+from\s+incidents/i.test(q));
+      const mainQueries = executedSql.filter((q) => /^\s*SELECT\s+i\.id/i.test(q));
       assert.strictEqual(mainQueries.length, 2);
       for (const sql of mainQueries) {
         assert.ok(!sql.includes("'minikube'"), 'SQL must never hardcode minikube fallback');

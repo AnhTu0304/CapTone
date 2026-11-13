@@ -6,24 +6,30 @@ import { clusterService } from '../../../services/clusterService';
 import { selfHealingService } from '../../../services/selfHealingService';
 import telemetryService from '../../../services/telemetryService';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
+import { useToast } from '../../../context/ToastContext';
 
 const DashboardContext = createContext(null);
 
 const normalizeNotification = (item) => {
   const isRead = item.read !== undefined ? Boolean(item.read) : !Boolean(item.unread);
+  const linkUrl = item.link || item.actionPath || (item.incidentId ? `/dashboard/incidents?incident=${item.incidentId}` : null);
   return {
     ...item,
     read: isRead,
     unread: !isRead,
     desc: item.desc || item.message,
+    message: item.message || item.desc,
     time: item.time || item.timestamp,
-    link: item.link || item.actionPath,
+    timestamp: item.timestamp || item.time,
+    link: linkUrl,
+    actionPath: item.actionPath || linkUrl,
   };
 };
 
 export const DashboardProvider = ({ children, onNavigate }) => {
   // Ref để chống race condition khi chuyển đổi tổ chức / tải cụm K8s
   const activeOrgFetchIdRef = useRef(null);
+  const { error: toastError } = useToast();
 
   // 1. Organization State
   const [currentOrg, setCurrentOrg] = useState(() => {
@@ -171,6 +177,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     if (currentOrg?.id) {
       fetchOrgEnvironmentsAndClusters(currentOrg.id);
     }
+    fetchNotifications();
     setTimeout(() => {
       const now = new Date();
       setLastUpdated(now.toLocaleTimeString());
@@ -385,6 +392,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
     const unsubLogin = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGIN, () => {
       fetchUserOrgs();
+      fetchNotifications();
     });
 
     return () => {
@@ -398,6 +406,31 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   const [notifications, setNotifications] = useState(() => {
     return getStoredNotifications().map(normalizeNotification);
   });
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const token =
+        sessionStorage.getItem('admin_access_token') ||
+        localStorage.getItem('admin_access_token') ||
+        localStorage.getItem('selfheal_auth_token') ||
+        localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await request('/users/me/notifications?limit=30');
+      const items = res?.data?.items;
+      if (Array.isArray(items)) {
+        const normalized = items.map(normalizeNotification);
+        setNotifications(normalized);
+        saveStoredNotifications(normalized);
+      }
+    } catch {
+      // Giữ nguyên danh sách hiện tại nếu mất kết nối tạm thời
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications, currentOrg?.id]);
 
   // Sidebar collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -413,7 +446,19 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     return () => clearInterval(interval);
   }, [isAutoRefresh]);
 
+  const syncMarkAllNotificationsReadApi = () => {
+    const token =
+      sessionStorage.getItem('admin_access_token') ||
+      localStorage.getItem('admin_access_token') ||
+      localStorage.getItem('selfheal_auth_token') ||
+      localStorage.getItem('token');
+    if (token) {
+      request('/users/me/notifications/read-all', { method: 'PATCH' }).catch(() => {});
+    }
+  };
+
   const markAllNotificationsRead = () => {
+    syncMarkAllNotificationsReadApi();
     setNotifications((prev) => {
       const updated = prev.map((n) => ({ ...n, unread: false, read: true }));
       saveStoredNotifications(updated);
@@ -421,10 +466,28 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     });
   };
 
-  const toggleNotificationRead = (id) => {
+  const toggleNotificationRead = (id, forcedReadState) => {
+    const token =
+      sessionStorage.getItem('admin_access_token') ||
+      localStorage.getItem('admin_access_token') ||
+      localStorage.getItem('selfheal_auth_token') ||
+      localStorage.getItem('token');
+    const currentItem = notifications.find((n) => n.id === id);
+    const currentRead = currentItem
+      ? currentItem.read !== undefined
+        ? Boolean(currentItem.read)
+        : !Boolean(currentItem.unread)
+      : false;
+    const targetRead = forcedReadState !== undefined ? Boolean(forcedReadState) : !currentRead;
+    if (token && /^[0-9a-f-]{36}$/i.test(String(id || ''))) {
+      request(`/users/me/notifications/${id}/read`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_read: targetRead }),
+      }).catch(() => {});
+    }
     setNotifications((prev) => {
       const updated = prev.map((n) =>
-        n.id === id ? { ...n, read: !n.read, unread: n.read } : n
+        n.id === id ? { ...n, read: targetRead, unread: !targetRead } : n
       );
       saveStoredNotifications(updated);
       return updated;
@@ -499,7 +562,10 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         const isNoAction =
           recAction === 'NO_ACTION' ||
           (item.title && item.title.includes('UNKNOWN') && (item.severity === 'LOW' || !item.severity));
-        if (isNoAction) return false;
+        const sevUpper = String(item.severity || '').toUpperCase();
+        const isCriticalNoAction = recAction === 'NO_ACTION' && sevUpper === 'CRITICAL';
+        if (isNoAction && !isCriticalNoAction) return false;
+        if (isCriticalNoAction) return true;
 
         const isActivelyRecoveringOrPending = Boolean(
           item.has_pending_approval ||
@@ -585,10 +651,56 @@ export const DashboardProvider = ({ children, onNavigate }) => {
             type: 'error',
             read: false,
             unread: true,
-            link: '/dashboard/incidents',
+            link: payload.data.id ? `/dashboard/incidents?incident=${payload.data.id}` : '/dashboard/incidents',
           };
           setNotifications((prev) => {
             const updated = [newNotif, ...prev.slice(0, 49)];
+            saveStoredNotifications(updated);
+            return updated;
+          });
+        }
+
+        // 2b. Khi có cảnh báo KHẨN CẤP (CRITICAL NO_ACTION / HEALING_FAILED / MANUAL_TRIGGER)
+        if (payload.type === 'critical_incident_alert' && payload.data) {
+          fetchActiveIncidentsCount();
+          fetchNotifications();
+          const incId = payload.data.incident_id || payload.data.id;
+          const incCode =
+            payload.data.incident_code ||
+            (incId ? `INC-${String(incId).slice(0, 8).toUpperCase()}` : 'CRITICAL');
+          const svc = payload.data.service_name || 'dịch vụ';
+          const deepLink =
+            payload.data.link || (incId ? `/dashboard/incidents?incident=${incId}` : '/dashboard/incidents');
+
+          toastError(
+            `${payload.data.message || payload.data.title || 'Sự cố khẩn cấp cần kỹ sư kiểm tra ngay!'} (Dịch vụ: ${svc})`,
+            `🚨 CẢNH BÁO KHẨN CẤP [${incCode}]`
+          );
+
+          const critNotif = normalizeNotification({
+            id: `notif-crit-${incId || Date.now()}`,
+            type: 'INFRASTRUCTURE',
+            severity: 'CRITICAL',
+            title: `🚨 [${incCode}] Khẩn cấp trên ${svc}`,
+            desc:
+              payload.data.message ||
+              payload.data.title ||
+              `Sự cố nghiêm trọng trên ${svc} cần kiểm tra ngay.`,
+            message:
+              payload.data.message ||
+              payload.data.title ||
+              `Sự cố nghiêm trọng trên ${svc} cần kiểm tra ngay.`,
+            time: 'Vừa xong',
+            read: false,
+            unread: true,
+            link: deepLink,
+            actionPath: deepLink,
+            actionText: 'Xem Sự Cố',
+            incidentId: incId || null,
+          });
+          setNotifications((prev) => {
+            const deduped = prev.filter((item) => item.id !== critNotif.id);
+            const updated = [critNotif, ...deduped.slice(0, 49)];
             saveStoredNotifications(updated);
             return updated;
           });
@@ -620,6 +732,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     const fallbackTimer = setInterval(() => {
       fetchPendingApprovalsCount();
       fetchActiveIncidentsCount();
+      fetchNotifications();
     }, 60000);
 
     return () => {

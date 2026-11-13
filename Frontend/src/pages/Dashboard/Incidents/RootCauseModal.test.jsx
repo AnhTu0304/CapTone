@@ -317,4 +317,90 @@ describe('RootCauseModal', () => {
     expect(screen.getByText('DỮ LIỆU ĐẦU VÀO AI (0 MỐC VIỄN TRẮC TELEMETRY)')).toBeInTheDocument();
     expect(screen.getByText('Không có dữ liệu telemetry')).toBeInTheDocument();
   });
+
+  it('shows urgent warning status for CRITICAL + NO_ACTION without rendering any manual send-email button', async () => {
+    aiService.getIncidentEvidences.mockResolvedValue([]);
+    aiService.getIncidentDetail.mockResolvedValue({
+      id: 'crit-no-action-1',
+      service_name: 'mongodb',
+      workload_type: 'StatefulSet',
+      namespace: 'test-lab',
+      node_name: 'minikube',
+      cluster_name: 'fyuyu',
+      severity: 'CRITICAL',
+      root_cause_type: 'Service performance degradation',
+      recommendation_action: 'NO_ACTION',
+      recommendation_reason: 'Không có playbook tự động phù hợp cho trạng thái DB bị nghẽn',
+      rca_confidence: 0.85,
+      analysis_result: null,
+    });
+    aiService.getPredictionInputs.mockResolvedValue([]);
+
+    render(
+      <RootCauseModal
+        incident={{
+          id: 'INC-200CF5C3',
+          rawId: 'crit-no-action-1',
+          service: 'mongodb',
+          severity: 'CRITICAL',
+          recommendationAction: 'NO_ACTION',
+        }}
+        onClose={jest.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('rca-loading-state')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText('KHẨN CẤP - CẦN KỸ SƯ KIỂM TRA (NO_ACTION)')).toBeInTheDocument();
+    expect(screen.queryByText('AN TOÀN (KHÔNG CẦN CAN THIỆP)')).not.toBeInTheDocument();
+    expect(screen.getByText('Khẩn Cấp — Cần Kiểm Tra Thủ Công')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Gửi Email Khẩn Cấp/i })).not.toBeInTheDocument();
+  });
+
+  it('displays recurrence count badge and latest healing error message when provided', async () => {
+    aiService.getIncidentEvidences.mockResolvedValue([]);
+    aiService.getIncidentDetail.mockResolvedValue({
+      id: 'recurring-err-1',
+      service_name: 'kube-state-metrics',
+      workload_type: 'Deployment',
+      namespace: 'monitoring',
+      node_name: 'minikube',
+      cluster_name: 'fyuyu',
+      severity: 'CRITICAL',
+      occurrence_count: 4,
+      last_occurred_at: '2026-11-10T10:30:00.000Z',
+      root_cause_type: 'Unstable application pod',
+      recommendation_action: 'NO_ACTION',
+      recommendation_reason: 'Kích hoạt Circuit Breaker. Lỗi gần nhất: Deployment not found.',
+      healing_status: 'FAILED',
+      healing_error_message: 'Deployment.apps "kube-state-metrics" not found in namespace "default"',
+      rca_confidence: 0.9,
+      analysis_result: null,
+    });
+    aiService.getPredictionInputs.mockResolvedValue([]);
+
+    render(
+      <RootCauseModal
+        incident={{
+          id: 'INC-REC004',
+          rawId: 'recurring-err-1',
+          service: 'kube-state-metrics',
+          severity: 'CRITICAL',
+          occurrenceCount: 4,
+        }}
+        onClose={jest.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('rca-loading-state')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Lặp lại 4 lần')).toBeInTheDocument();
+    expect(screen.getByText(/Lỗi thực thi gần nhất:/)).toBeInTheDocument();
+    expect(screen.getByText(/Deployment\.apps "kube-state-metrics" not found/)).toBeInTheDocument();
+    expect(screen.getByText(/Lần gần nhất:/)).toBeInTheDocument();
+  });
 });

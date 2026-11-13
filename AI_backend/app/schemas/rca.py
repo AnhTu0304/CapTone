@@ -17,6 +17,7 @@ Action = Literal[
     "ROLLBACK_DEPLOYMENT",
     "CLEANUP_STORAGE",
     "TEMPORARY_IP_BLOCK",
+    "DRAIN_NODE",
     "NO_ACTION",
 ]
 Severity = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -53,6 +54,16 @@ class HistoricalIncident(BaseModel):
                 "action_result requires action_result_source=POST_ACTION_VERIFICATION"
             )
         return self
+
+
+class WorkloadSLOContext(BaseModel):
+    """SLO and performance thresholds configured for a specific workload."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    latency_threshold_ms: float | None = Field(default=None, ge=0)
+    error_rate_threshold_pct: float | None = Field(default=None, ge=0)
+    min_sample_requests: int | None = Field(default=None, ge=0)
 
 
 class HealthCheckContext(BaseModel):
@@ -155,8 +166,11 @@ class ActionParameters(BaseModel):
     faulty_node_name: str | None = None
     recommended_destination_node: str | None = None
     destination_node_id: str | None = None
+    target_replicas: int | None = None
+    is_primary_database: bool | None = None
     consecutive_failures: int | None = None
     circuit_breaker_tripped: bool | None = None
+    blocked_actions: list[str] = Field(default_factory=list)
     manual_playbook: list[str] = Field(default_factory=list)
 
 
@@ -208,6 +222,8 @@ class RCARequest(BaseModel):
     previous_rca_root_cause: str | None = None
     action_history: ActionHistoryContext | None = None
     historical_incidents: list[HistoricalIncident] = Field(default_factory=list, max_length=100)
+    workload_slo: WorkloadSLOContext | None = None
+    slo: WorkloadSLOContext | None = None
 
     @model_validator(mode="after")
     def require_previous_action_verification(self):
@@ -230,12 +246,30 @@ class RCARequest(BaseModel):
         return self
 
 
+EvidenceStatus = Literal["CONFIRMED", "PROBABLE", "INSUFFICIENT_EVIDENCE", "CONFLICTING_EVIDENCE"]
+
+
+class RelatedRiskItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    risk_type: str
+    confidence: float = Field(ge=0, le=1)
+    description: str | None = None
+
+
 class RootCauseResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cause: str
     confidence: float = Field(ge=0, le=1)
     severity: Severity
+    evidence_status: EvidenceStatus = "INSUFFICIENT_EVIDENCE"
+    evidence_for: list[str] = Field(default_factory=list)
+    evidence_against: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    related_risks: list[RelatedRiskItem] = Field(default_factory=list)
+    symptoms: list[str] = Field(default_factory=list)
+    symptoms: list[str] = Field(default_factory=list)
 
 
 class RecommendationResult(BaseModel):
@@ -268,6 +302,12 @@ class RCAResponse(BaseModel):
     incident_id: str | None = None
     request_id: str | None = None
     engine: str = "Deterministic Multi-Agent SRE"
+    evidence_status: EvidenceStatus = "INSUFFICIENT_EVIDENCE"
+    evidence_for: list[str] = Field(default_factory=list)
+    evidence_against: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    related_risks: list[RelatedRiskItem] = Field(default_factory=list)
+    symptoms: list[str] = Field(default_factory=list)
 
 
 class LLMRCAResult(BaseModel):

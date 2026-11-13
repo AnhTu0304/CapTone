@@ -10,13 +10,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "services", "namespaces", "events", "nodes"]
     verbs: ["get", "list", "watch", "patch", "delete"]
-  # Workload metadata & remediation for Deployments and ReplicaSets
+  # Workload metadata & remediation for Deployments, StatefulSets, DaemonSets, and ReplicaSets
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["get", "list", "watch", "patch", "update"]
   # Horizontal scale remediation
   - apiGroups: ["apps"]
-    resources: ["deployments/scale"]
+    resources: ["deployments/scale", "statefulsets/scale"]
     verbs: ["get", "patch", "update"]
   # Kubernetes Metrics Server access
   - apiGroups: ["metrics.k8s.io"]

@@ -467,12 +467,13 @@ export class KubernetesEventModel {
   }
 
   /**
-   * Query Warning/Incident K8s events for RCA context (within active window)
+   * Query Warning/Incident K8s events for RCA context (within active window, optionally after recovery cutoff)
    */
   public static async findWarningEventsByService(
     serviceId: string,
     windowMinutes: number = 30,
-    limit: number = 20
+    limit: number = 20,
+    afterTimestamp?: Date | null
   ): Promise<
     Array<{
       event_type: string;
@@ -484,6 +485,13 @@ export class KubernetesEventModel {
       pod_name?: string;
     }>
   > {
+    const params: any[] = [serviceId, windowMinutes, limit];
+    let afterClause = '';
+    if (afterTimestamp instanceof Date && !isNaN(afterTimestamp.getTime())) {
+      afterClause = `AND GREATEST(COALESCE(last_seen_at, first_seen_at), first_seen_at) > $4`;
+      params.push(afterTimestamp);
+    }
+
     const query = `
       SELECT 
         event_type,
@@ -496,16 +504,46 @@ export class KubernetesEventModel {
       FROM kubernetes_events
       WHERE metadata->>'service_id' = $1
         AND (last_seen_at >= NOW() - ($2 || ' minutes')::interval OR first_seen_at >= NOW() - ($2 || ' minutes')::interval)
+        ${afterClause}
         AND (
           UPPER(event_type) IN ('WARNING', 'ERROR')
-          OR reason ~* '(OOM|BackOff|Failed|Unhealthy|Evicted|Killing|Crash)'
+          OR reason ~* '(OOM|BackOff|Failed|Unhealthy|Evicted|Crash)'
+          OR (
+            reason ~* 'Killing'
+            AND message ~* '(oom|error|fail|evict|unhealthy|crash|backoff)'
+          )
         )
       ORDER BY last_seen_at DESC
       LIMIT $3;
     `;
 
-    const res = await pool.query(query, [serviceId, windowMinutes, limit]);
+    const res = await pool.query(query, params);
     return res.rows;
+  }
+
+  /**
+   * Find latest explicit K8s recovery event timestamp (e.g. DeploymentRecovered) within window
+   */
+  public static async findLatestRecoveryTimeByService(
+    serviceId: string,
+    windowMinutes: number = 30
+  ): Promise<Date | null> {
+    try {
+      const res = await pool.query(
+        `SELECT MAX(COALESCE(last_seen_at, first_seen_at)) AS recovered_at
+         FROM kubernetes_events
+         WHERE metadata->>'service_id' = $1
+           AND UPPER(event_type) = 'NORMAL'
+           AND reason IN ('DeploymentRecovered', 'ScalingReplicaSet')
+           AND (reason = 'DeploymentRecovered' OR message ~* 'Scaled up replica set')
+           AND COALESCE(last_seen_at, first_seen_at) >= NOW() - ($2 || ' minutes')::interval;`,
+        [serviceId, windowMinutes]
+      );
+      const raw = res.rows[0]?.recovered_at;
+      return raw ? new Date(raw) : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

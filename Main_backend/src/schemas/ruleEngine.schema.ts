@@ -17,6 +17,8 @@ export const RuleEngineInputSchema = z.object({
   pod_status: z.string().optional().default('Running'),
   k8s_events: z.array(z.string()).optional().default([]),
   root_cause: z.string().optional(),
+  restart_delta: z.number().int().min(0).optional(),
+  active_pod_issue: z.boolean().optional(),
 });
 
 export type TelemetryMetrics = z.infer<typeof TelemetryMetricsSchema>;

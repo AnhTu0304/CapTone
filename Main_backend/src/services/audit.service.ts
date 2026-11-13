@@ -13,6 +13,7 @@ import {
 } from '../models/auditLog.model';
 
 const SENSITIVE_KEYS_REGEX = /password|token|secret|authorization|cookie|jwt|credential|private_key|api_?key/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface IAuditRequestContext {
   ip_address?: string | null;
@@ -147,15 +148,21 @@ export class AuditService {
         RETURNING *;
       `;
 
+      const isUuid = (val?: string | null): string | null => {
+        if (!val || typeof val !== 'string') return null;
+        const trimmed = val.trim();
+        return UUID_REGEX.test(trimmed) ? trimmed : null;
+      };
+
       const values = [
-        input.organization_id || null,
-        input.user_id || null,
+        isUuid(input.organization_id),
+        isUuid(input.user_id),
         input.actor_type || 'USER',
         input.action,
         input.resource_type || null,
-        input.resource_id || null,
+        isUuid(input.resource_id),
         input.target_type || null,
-        input.target_id || null,
+        isUuid(input.target_id),
         input.description || null,
         input.status || 'SUCCESS',
         input.reason_code || null,

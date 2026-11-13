@@ -352,7 +352,8 @@ export class UserController {
     try {
       const userId = (req as any).user?.id;
       const { id } = req.params;
-      const result = await UserService.markNotificationAsRead(userId, id);
+      const isRead = req.body?.is_read !== undefined ? Boolean(req.body.is_read) : true;
+      const result = await UserService.markNotificationAsRead(userId, id, isRead);
       return ApiResponse.success(res, 'Đánh dấu thông báo đã đọc thành công', result, 200);
     } catch (error) {
       next(error);

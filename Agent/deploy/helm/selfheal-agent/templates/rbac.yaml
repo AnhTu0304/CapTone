@@ -13,7 +13,7 @@ rules:
     verbs: ["get", "list", "watch"]
   # Workload metadata
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["get", "list", "watch"]
   {{- if .Values.config.enableHealingActions }}
   # Controlled Automated Remediation (when ENABLE_HEALING_ACTIONS is enabled)
@@ -21,10 +21,10 @@ rules:
     resources: ["pods"]
     verbs: ["patch", "delete"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["patch", "update"]
   - apiGroups: ["apps"]
-    resources: ["deployments/scale"]
+    resources: ["deployments/scale", "statefulsets/scale"]
     verbs: ["get", "patch", "update"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
@@ -64,7 +64,7 @@ rules:
     verbs: ["get", "list", "watch"]
   # Workload metadata
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["get", "list", "watch"]
   {{- if .Values.config.enableHealingActions }}
   # Controlled Automated Remediation (when ENABLE_HEALING_ACTIONS is enabled)
@@ -72,10 +72,10 @@ rules:
     resources: ["pods"]
     verbs: ["patch", "delete"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["patch", "update"]
   - apiGroups: ["apps"]
-    resources: ["deployments/scale"]
+    resources: ["deployments/scale", "statefulsets/scale"]
     verbs: ["get", "patch", "update"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]

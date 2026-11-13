@@ -87,7 +87,7 @@ export const AdminLayout = ({
         Chuyển đến nội dung chính
       </a>
       {/* 1. Desktop & Tablet Sidebar */}
-      <div className="admin-desktop-sidebar" style={{ display: 'flex', height: '100%' }}>
+      <div className="admin-desktop-sidebar" style={{ display: 'flex', height: '100%', position: 'relative', zIndex: 45 }}>
         <AdminSidebar
           currentPath={currentPath}
           onNavigate={onNavigate}
@@ -195,8 +195,6 @@ export const AdminLayout = ({
           currentPath={currentPath}
           onNavigate={onNavigate}
           breadcrumbItems={breadcrumbItems}
-          isCollapsed={isCollapsed}
-          onToggleCollapse={handleToggleCollapse}
           onToggleMobileDrawer={handleToggleMobileDrawer}
         />
 

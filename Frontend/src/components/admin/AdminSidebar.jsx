@@ -511,6 +511,52 @@ export const AdminSidebar = ({
         flexShrink: 0,
       }}
     >
+      {/* Floating Border Edge Toggle Button (Màu xanh, hình tròn đè lên đường viền giống Dashboard) */}
+      {onToggleCollapse && (
+        <button
+          type="button"
+          className="admin-sidebar-edge-toggle"
+          onClick={onToggleCollapse}
+          title={isCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          aria-label={isCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '-13px',
+            width: '26px',
+            height: '26px',
+            borderRadius: '50%',
+            backgroundColor: '#059669',
+            color: '#FFFFFF',
+            border: '2px solid #FFFFFF',
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 60,
+            transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease',
+            padding: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.15)';
+            e.currentTarget.style.backgroundColor = '#047857';
+            e.currentTarget.style.boxShadow = '0 3px 8px rgba(5, 150, 105, 0.35)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.backgroundColor = '#059669';
+            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.2)';
+          }}
+        >
+          {isCollapsed ? (
+            <ChevronRight size={15} strokeWidth={2.8} />
+          ) : (
+            <ChevronLeft size={15} strokeWidth={2.8} />
+          )}
+        </button>
+      )}
+
       {/* Brand / Logo Area */}
       <div
         style={{
@@ -785,62 +831,6 @@ export const AdminSidebar = ({
           </div>
         ))}
       </div>
-
-      {/* Sidebar Footer / Collapse Toggle */}
-      {onToggleCollapse && (
-        <div
-          style={{
-            padding: isCollapsed ? '12px 8px' : '12px 14px',
-            borderTop: '1px solid var(--dash-border)',
-            backgroundColor: 'var(--dash-bg-canvas)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: isCollapsed ? 'center' : 'space-between',
-          }}
-        >
-          {!isCollapsed && (
-            <span
-              style={{
-                fontSize: '0.6875rem',
-                color: 'var(--dash-text-muted)',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              THU GỌN SIDEBAR
-            </span>
-          )}
-
-          <button
-            type="button"
-            aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            onClick={onToggleCollapse}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: '#FFFFFF',
-              color: 'var(--dash-text-secondary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: 'var(--dash-shadow-xs)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#CBD5E1';
-              e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--dash-border)';
-              e.currentTarget.style.backgroundColor = '#FFFFFF';
-            }}
-          >
-            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
-        </div>
-      )}
     </aside>
   );
 };

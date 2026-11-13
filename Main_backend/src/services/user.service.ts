@@ -599,7 +599,7 @@ export class UserService {
         const limitIndex = pIndex++;
         const offsetIndex = pIndex++;
         const dataRes = await pool.query(
-            'SELECT id, notification_type, title, message, severity, is_read, created_at, read_at ' +
+            'SELECT id, notification_type, title, message, severity, is_read, created_at, read_at, incident_id, organization_id, related_resource_type, related_resource_id ' +
             'FROM notifications ' +
             'WHERE ' + whereSql + ' ' +
             'ORDER BY created_at DESC ' +
@@ -625,6 +625,16 @@ export class UserService {
                 severity: r.severity || 'INFO',
                 read: Boolean(r.is_read),
                 is_read: Boolean(r.is_read),
+                unread: !Boolean(r.is_read),
+                desc: r.message,
+                time: timestamp,
+                incidentId: r.incident_id || null,
+                organizationId: r.organization_id || null,
+                relatedResourceType: r.related_resource_type || null,
+                relatedResourceId: r.related_resource_id || null,
+                link: r.incident_id ? `/dashboard/incidents?incident=${r.incident_id}` : null,
+                actionPath: r.incident_id ? `/dashboard/incidents?incident=${r.incident_id}` : null,
+                actionText: r.incident_id ? 'Xem Sự Cố' : null,
                 createdAt: r.created_at,
                 timestamp,
             };
@@ -633,9 +643,9 @@ export class UserService {
         return { items, total, unread_count, page, limit };
     }
 
-    public static async markNotificationAsRead(userId: string, notifId: string): Promise<any> {
+    public static async markNotificationAsRead(userId: string, notifId: string, isRead: boolean = true): Promise<any> {
         const res = await pool.query(
-            'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *',
+            isRead ? 'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING *' : 'UPDATE notifications SET is_read = FALSE, read_at = NULL WHERE id = $1 AND user_id = $2 RETURNING *',
             [notifId, userId]
         );
         return res.rows[0] || null;

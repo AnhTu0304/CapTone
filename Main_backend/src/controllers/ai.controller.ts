@@ -10,6 +10,7 @@ import {
   RcaModel,
   RecommendationModel,
   OrganizationMemberModel,
+  WorkloadModel,
 } from '../models';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 
@@ -26,6 +27,8 @@ const ACTION_CODE_MAP: Record<string, string> = {
   'No Action': 'NO_ACTION',
   RESTART_POD: 'RESTART_POD',
   REPLACE_POD: 'REPLACE_POD',
+  'Drain Node': 'DRAIN_NODE',
+  DRAIN_NODE: 'DRAIN_NODE',
   SCALE_REPLICAS: 'SCALE_REPLICAS',
   ROLLBACK_DEPLOYMENT: 'ROLLBACK_DEPLOYMENT',
   CLEANUP_STORAGE: 'CLEANUP_STORAGE',
@@ -637,25 +640,66 @@ export class AiController {
         actionTypeId = actRes.rows[0]?.id || 'd0000000-0000-0000-0000-000000000001';
       }
 
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const targetType = incident?.target_type || 'WORKLOAD';
-      let targetName = '';
-      if (incident?.target_id) {
-        const wlRes = await pool.query('SELECT name FROM workloads WHERE id = $1 LIMIT 1;', [incident.target_id]);
-        targetName = wlRes.rows[0]?.name || incident.target_id;
-      }
+      const rawTitleTarget = rec.incident_title?.includes(' on ')
+        ? rec.incident_title.split(' on ')[1]?.trim()
+        : (rec.incident_title?.includes(' trên ') ? rec.incident_title.split(' trên ')[1]?.trim() : '');
+      const rawLookupKey =
+        incident?.workload_name ||
+        incident?.target_name ||
+        (incident?.target_id && !uuidRegex.test(String(incident.target_id)) ? incident.target_id : '') ||
+        rawTitleTarget ||
+        (rec.target_id && !uuidRegex.test(String(rec.target_id)) ? rec.target_id : '') ||
+        '';
+      const resolvedTarget = await WorkloadModel.resolveK8sTarget(rawLookupKey, incident?.cluster_id || null);
+      const targetName = resolvedTarget.targetName || rawLookupKey || 'unknown-service';
+      const validTargetWorkloadId =
+        resolvedTarget.workloadId && uuidRegex.test(resolvedTarget.workloadId)
+          ? resolvedTarget.workloadId
+          : (incident?.target_id && uuidRegex.test(String(incident.target_id)) ? String(incident.target_id) : null);
 
       // 2. Insert into healing_actions
+      const isNoAction =
+        String(rec.recommendation || '').toUpperCase().includes('NO_ACTION') ||
+        String(rec.recommendation || '').toUpperCase() === 'NO ACTION';
+      const initialExecStatus = isNoAction ? 'SUCCEEDED' : 'RUNNING';
+
+      // Concurrency Lock: Prevent simultaneous RUNNING actions on the same target (Resolves DEF-04 concurrency bug: 2 actions RUNNING at 01:41:35)
+      if (!isNoAction) {
+        const runningCheck = await pool.query(
+          `SELECT id, action_type_code, execution_status, created_at 
+           FROM healing_actions 
+           WHERE execution_status IN ('RUNNING', 'PENDING')
+             AND (
+               (target_name IS NOT NULL AND target_name = $1)
+               OR (incident_id IS NOT NULL AND incident_id = $2)
+             )
+           LIMIT 1;`,
+          [targetName, rec.incident_id]
+        );
+        if (runningCheck.rows.length > 0) {
+          const activeAction = runningCheck.rows[0];
+          return res.status(409).json({
+            success: false,
+            message: `Mục tiêu '${targetName}' hiện đang có hành động tự phục hồi '${activeAction.action_type_code || 'REMEDIATION'}' ở trạng thái ${activeAction.execution_status}. Không thể chạy đồng thời 2 hành động. Vui lòng chờ hành động trước hoàn tất hoặc bị hủy.`,
+            data: { running_action_id: activeAction.id },
+          });
+        }
+      }
+
       const healingAction = await RecommendationModel.createHealingAction({
         incident_id: rec.incident_id,
         recommendation_id: rec.id,
         environment_id: environmentId,
         action_type_id: actionTypeId,
         target_type: targetType,
+        target_id: validTargetWorkloadId,
         target_name: targetName,
         risk_level: rec.risk_level || 'LOW',
         execution_mode: 'MANUAL',
         approval_status: 'APPROVED',
-        execution_status: 'SUCCEEDED',
+        execution_status: initialExecStatus,
         requested_by: user?.id,
         executed_by: user?.id,
         result: {
@@ -671,36 +715,21 @@ export class AiController {
         },
       });
 
-      // 3. Mark recommendation as APPLIED
+      // 3. Mark recommendation as APPLIED (incident stays OPEN until post-action telemetry verification confirms recovery)
       const updatedRec = await RecommendationModel.updateStatus(id, 'APPLIED');
 
-      // 4. Mark associated incident as RESOLVED
-      if (rec.incident_id) {
-        await IncidentModel.updateStatus(rec.incident_id, 'RESOLVED');
-      }
-
-      // 5. Resolve actual namespace from workload
+      // 5. Resolve actual namespace from workload / incident
       let targetNamespace = 'default';
-      try {
-        const wlRes = await pool.query(
-          `SELECT n.name as namespace_name 
-           FROM workloads w 
-           LEFT JOIN namespaces n ON n.id = w.namespace_id 
-           WHERE w.name = $1 
-           LIMIT 1`,
-          [targetName]
-        );
-        if (wlRes.rows.length > 0 && wlRes.rows[0].namespace_name) {
-          targetNamespace = wlRes.rows[0].namespace_name;
-        } else if (targetName === 'selfheal-test-app') {
-          targetNamespace = 'test-lab';
-        }
-      } catch {
-        if (targetName === 'selfheal-test-app') targetNamespace = 'test-lab';
+      if (resolvedTarget.namespace && resolvedTarget.namespace !== 'default') {
+        targetNamespace = resolvedTarget.namespace;
+      } else if (incident?.namespace) {
+        targetNamespace = incident.namespace;
+      } else if (resolvedTarget.namespace) {
+        targetNamespace = resolvedTarget.namespace;
       }
 
       // 6. Dispatch action to connected K8s Agent for real cluster remediation
-      const targetPod = rec.target_id || (rec.incident_title?.includes(' on ') ? rec.incident_title.split(' on ')[1]?.trim() : undefined);
+      const targetPod = incident?.actual_pod_name || rec.target_id || rawTitleTarget || undefined;
       const actionType = ACTION_CODE_MAP[rec.recommendation] || (rec.recommendation === 'Restart Pod' ? 'RESTART_POD' : rec.recommendation);
 
       // Extract parameters & playbook from RCA analysis_result if available
@@ -736,11 +765,13 @@ export class AiController {
         );
       }
 
-      dispatchHealingActionToAgent({
+      const dispatchRes = await dispatchHealingActionToAgent({
         action_id: healingAction.id,
         action_type: actionType,
         target_name: targetName,
         namespace: targetNamespace,
+        cluster_id: incident?.cluster_id || undefined,
+        environment_id: environmentId,
         params: {
           ...rcaParams,
           ...(req.body?.params || {}),
@@ -748,7 +779,36 @@ export class AiController {
           pod_name: targetPod || req.body?.pod_name,
           pod_id: targetPod || req.body?.pod_id,
         },
-      }).catch((err) => console.warn('[AiController] Failed to dispatch action to agent:', err));
+      });
+
+      if (!dispatchRes.dispatched) {
+        await pool.query(
+          `UPDATE healing_actions 
+           SET execution_status = 'FAILED', 
+               completed_at = NOW(), 
+               error_message = 'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
+               result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Không có Agent K8s trực tuyến"'::jsonb) 
+           WHERE id = $1`,
+          [healingAction.id]
+        );
+      } else {
+        // Fallback safety timeout: nếu K8s Agent không phản hồi sau 60 giây, đánh dấu FAILED tránh kẹt RUNNING
+        setTimeout(async () => {
+          try {
+            await pool.query(
+              `UPDATE healing_actions 
+               SET execution_status = 'FAILED', 
+                   completed_at = COALESCE(completed_at, NOW()),
+                   error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
+                   result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Agent execution timeout after 60s"'::jsonb) 
+               WHERE id = $1 AND execution_status = 'RUNNING'`,
+              [healingAction.id]
+            );
+          } catch (e) {
+            // ignore
+          }
+        }, 60000);
+      }
 
       return ApiResponse.success(
         res,

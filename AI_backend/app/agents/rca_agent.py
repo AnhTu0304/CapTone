@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from app.agents.historical_incident_agent import HistoricalContext, normalize_cause
+from app.rca.cause_evaluator import CauseEvaluator
+from app.rca.evidence_collector import EvidenceCollector
+from app.rca.evidence_validator import EvidenceValidator
+from app.rca.severity_evaluator import SeverityEvaluator
 from app.schemas.kubernetes import KubernetesAnalysisResult, KubernetesData
 from app.schemas.logs import LogAnalysisResult
-from app.schemas.metrics import MetricsAnalysisResult
+from app.schemas.metrics import MetricPoint, MetricsAnalysisResult
 from app.schemas.prediction import PredictionResponse
-from app.schemas.rca import ActionHistoryContext, RootCauseResult
+from app.schemas.rca import ActionHistoryContext, RCARequest, RootCauseResult
 
 
 @dataclass
@@ -22,6 +25,17 @@ class RCAConclusion:
 
 
 class RootCauseAnalysisAgent:
+    """Orchestrator for Evidence-Based Root Cause Analysis (RCA).
+
+    Executes a 6-stage pipeline:
+    Stage 1: Input Validation & Request Normalization
+    Stage 2: Structured Evidence Collection (Metrics, Logs, Kubernetes Events, Pod Terminations, Node State)
+    Stage 3: Evidence Validation & Contradiction Detection
+    Stage 4: Evidence-Based Cause Evaluation (Eliminates arbitrary GRU linear score inflation)
+    Stage 5: Independent Severity Evaluation (Service availability & SLO impact, not action failures)
+    Stage 6: Structured SRE RCA Output Generation
+    """
+
     CAUSE_LABELS = {
         "memory_exhaustion": "Container memory exhausted",
         "storage_exhaustion": "Storage capacity exhausted",
@@ -35,8 +49,11 @@ class RootCauseAnalysisAgent:
         "insufficient_replicas": "Insufficient available replicas",
         "scheduling_failure": "Kubernetes scheduling failure",
         "underutilized": "Workload underutilized (scale down opportunity)",
+        "probe_configuration_error": "Probe configuration error",
+        "network_degradation": "Network degradation",
         "unknown": "UNKNOWN",
     }
+
     CAUSE_LABELS_VI = {
         "memory_exhaustion": "Cạn kiệt bộ nhớ container (OOM)",
         "storage_exhaustion": "Cạn kiệt dung lượng lưu trữ",
@@ -50,8 +67,11 @@ class RootCauseAnalysisAgent:
         "insufficient_replicas": "Không đủ số lượng Pod replica",
         "scheduling_failure": "Lỗi lập lịch điều phối Kubernetes",
         "underutilized": "Tài nguyên dư thừa (Có thể thu hẹp quy mô)",
+        "probe_configuration_error": "Lỗi cấu hình kiểm tra probe",
+        "network_degradation": "Suy giảm kết nối mạng",
         "unknown": "CHƯA XÁC ĐỊNH",
     }
+
     RISK_CAUSES = {
         "CPU_OVERLOAD": "cpu_saturation",
         "OOM": "memory_exhaustion",
@@ -61,6 +81,12 @@ class RootCauseAnalysisAgent:
         "TRAFFIC_OVERLOAD": "traffic_overload",
         "SCALE_DOWN_CANDIDATE": "underutilized",
     }
+
+    def __init__(self) -> None:
+        self.collector = EvidenceCollector()
+        self.validator = EvidenceValidator()
+        self.cause_evaluator = CauseEvaluator()
+        self.severity_evaluator = SeverityEvaluator()
 
     def analyze(
         self,
@@ -74,195 +100,221 @@ class RootCauseAnalysisAgent:
         previous_action_result: str | None = None,
         previous_rca_root_cause: str | None = None,
         action_history: ActionHistoryContext | None = None,
+        payload: RCARequest | None = None,
     ) -> RCAConclusion:
         historical = historical or HistoricalContext()
-        scores: dict[str, float] = {}
-        evidence_by_cause: dict[str, list[str]] = {}
 
-        def add(cause: str, score: float, evidence: str) -> None:
-            scores[cause] = scores.get(cause, 0.0) + score
-            evidence_by_cause.setdefault(cause, []).append(evidence)
+        # ========================================================
+        # STAGE 1: INPUT VALIDATION & REQUEST NORMALIZATION
+        # ========================================================
+        effective_payload = payload
+        if effective_payload is None:
+            # Reconstruct lightweight request adapter for collection and validation
+            parsed_cpu = 0.0
+            parsed_ram = 0.0
+            parsed_disk = 0.0
+            parsed_latency = 0.0
+            parsed_req_rate = 0.0
+            parsed_5xx = 0.0
 
-        for cause in metrics.suspected_causes:
-            matching = [item for item in metrics.findings if self._finding_matches(cause, item)]
-            add(cause, 0.30, matching[0] if matching else f"Metrics indicate {cause.replace('_', ' ')}")
-        for cause in logs.suspected_causes:
-            matching = self._matching_log(cause, logs.important_logs)
-            add(cause, 0.35, matching or f"Application logs indicate {cause.replace('_', ' ')}")
-        for cause in kubernetes.suspected_causes:
-            matching = [item for item in kubernetes.findings if self._finding_matches(cause, item)]
-            add(cause, 0.30, matching[0] if matching else f"Kubernetes events indicate {cause.replace('_', ' ')}")
+            for f in metrics.findings:
+                f_lower = f.lower()
+                if "cpu" in f_lower and "%" in f:
+                    try:
+                        parsed_cpu = float(f.split("(")[1].split("%")[0])
+                    except Exception:
+                        parsed_cpu = 95.0
+                if "ram" in f_lower and "%" in f:
+                    try:
+                        parsed_ram = float(f.split("(")[1].split("%")[0])
+                    except Exception:
+                        parsed_ram = 95.0
+                if "độ trễ" in f_lower or "latency" in f_lower:
+                    try:
+                        parsed_latency = float(f.split("(")[1].split("ms")[0].split()[0])
+                    except Exception:
+                        parsed_latency = 700.0
+                if "lưu lượng" in f_lower or "request" in f_lower:
+                    try:
+                        parsed_req_rate = float(f.split("(")[1].split(")")[0])
+                    except Exception:
+                        parsed_req_rate = 1000.0
+                if "5xx" in f_lower:
+                    try:
+                        parsed_5xx = float(f.split("(")[1].split("%")[0])
+                    except Exception:
+                        parsed_5xx = 10.0
 
-        if kubernetes.exit_code_137_detected:
-            add("memory_exhaustion", 0.50, "Container terminated with exitCode 137 (OOM-Killer SIGKILL)")
+            effective_payload = RCARequest(
+                service_id=kubernetes_raw.workload_name or "workload",
+                pod_id=kubernetes.target_pod_id,
+                suspected_pod_name=kubernetes.target_pod_name,
+                cluster_id=kubernetes_raw.cluster_id,
+                namespace=kubernetes_raw.namespace,
+                metrics=MetricPoint(
+                    cpu=parsed_cpu,
+                    ram=parsed_ram,
+                    disk=parsed_disk,
+                    latency=parsed_latency,
+                    request_rate=parsed_req_rate,
+                    http_5xx_rate=parsed_5xx,
+                    pod_restart_count=kubernetes_raw.restart_count,
+                    replica_count=kubernetes_raw.available_replicas or 1,
+                ),
+                logs=logs.important_logs,
+                kubernetes=kubernetes_raw,
+                action_history=action_history,
+                previous_action=previous_action,
+                previous_action_result=previous_action_result,
+                previous_rca_root_cause=previous_rca_root_cause,
+            )
 
-        if prediction:
-            for risk in prediction.detected_risks:
-                cause = self.RISK_CAUSES[risk.risk_type]
-                add(
-                    cause,
-                    0.40 * risk.confidence,
-                    f"GRU predicted {risk.risk_type} ({risk.confidence:.1%})",
-                )
-
-        # A recent deployment plus application failures is stronger than either
-        # signal alone. But only match explicit rollout/update events, not the generic K8s word 'Deployment'
-        deployment_text = " ".join(kubernetes_raw.events).lower()
-        has_real_rollout = bool(
-            re.search(r'\b(rollout|rollingupdate|image updated|new replicaset|revision changed|deploymentrollout)\b', deployment_text)
-            or ('scaling down replica set' in deployment_text and 'scaling up' in deployment_text)
+        # ========================================================
+        # STAGE 2: STRUCTURED EVIDENCE COLLECTION
+        # ========================================================
+        evidences = self.collector.collect(
+            effective_payload,
+            metrics_result=metrics,
+            log_result=logs,
+            kubernetes_result=kubernetes,
+            kubernetes_raw=kubernetes_raw,
         )
-        already_rolled_back = bool(
-            previous_action in {'ROLLBACK_DEPLOYMENT', 'Rollback Deployment'}
-            or (action_history and any(
-                (getattr(h, 'action', '') in {'ROLLBACK_DEPLOYMENT', 'Rollback Deployment'})
-                for h in getattr(action_history, 'recent_actions', [])
-            ))
-        )
-        if has_real_rollout and not already_rolled_back and (
-            "application_failure" in scores or "unstable_pod" in scores
-        ):
-            add("deployment_failure", 0.55, "Failures appeared alongside a deployment/rollout event")
 
-        # History can strengthen a cause only when current evidence already
-        # supports that cause. Confirmed diagnoses carry more weight than
-        # unconfirmed/predicted diagnoses.
+        # ========================================================
+        # STAGE 3: EVIDENCE VALIDATION & CONTRADICTION ENGINE
+        # ========================================================
+        incident_context = {
+            "target_resource": f"pod/{kubernetes.target_pod_name or effective_payload.pod_id or 'workload'}",
+            "target_uid": kubernetes.target_pod_id or effective_payload.pod_id,
+            "cluster_id": kubernetes_raw.cluster_id or effective_payload.cluster_id,
+            "has_metrics": bool(effective_payload.metrics),
+            "has_logs": bool(effective_payload.logs),
+            "has_events": bool(kubernetes_raw.events),
+            "gru_predictions": [
+                {"risk_type": r.risk_type, "confidence": r.confidence}
+                for r in (prediction.detected_risks if prediction else [])
+            ],
+        }
+
+        # If previous action was REPLACE_POD, link historical pod UIDs
+        if action_history and action_history.history:
+            historical_uids = [
+                item.target_id for item in action_history.history
+                if item.target_id and item.target_id != (kubernetes.target_pod_id or effective_payload.pod_id)
+            ]
+            incident_context["historical_pod_uids"] = historical_uids
+
+        validation_result = self.validator.validate(evidences, incident_context)
+
+        # ========================================================
+        # STAGE 4: CAUSE EVALUATION (EVIDENCE-BASED, NO GRU SCORING)
+        # ========================================================
+        cause_eval = self.cause_evaluator.evaluate(
+            validation_result=validation_result,
+            prediction=prediction,
+            kubernetes_analysis=kubernetes,
+            kubernetes_raw=kubernetes_raw,
+            payload=effective_payload,
+        )
+
+        # ========================================================
+        # STAGE 5: INDEPENDENT SEVERITY EVALUATION
+        # ========================================================
+        effective_slo = getattr(effective_payload, "workload_slo", None) or getattr(effective_payload, "slo", None)
+        severity = self.severity_evaluator.evaluate(
+            valid_evidences=validation_result.valid_evidences,
+            kubernetes_raw=kubernetes_raw,
+            kubernetes_analysis=kubernetes,
+            metrics=effective_payload.metrics,
+            cause_code=cause_eval.cause_code,
+            is_primary_database=kubernetes.is_primary_database,
+            workload_slo=effective_slo,
+        )
+
+        # ========================================================
+        # STAGE 6: STRUCTURED SRE OUTPUT GENERATION
+        # ========================================================
+        root_cause_result = RootCauseResult(
+            cause=cause_eval.cause_label,
+            confidence=round(cause_eval.confidence, 4),
+            severity=severity,
+            evidence_status=cause_eval.evidence_status,
+            evidence_for=cause_eval.evidence_for,
+            evidence_against=cause_eval.evidence_against,
+            missing_evidence=cause_eval.missing_evidence,
+            related_risks=cause_eval.related_risks,
+            symptoms=cause_eval.symptoms,
+        )
+
+        # Compile flat evidence strings for backward compatibility
+        final_evidence_list: list[str] = []
+        if cause_eval.cause_code == "unknown" and not cause_eval.evidence_for:
+            final_evidence_list = ["insufficient_evidence"]
+        else:
+            final_evidence_list = list(dict.fromkeys(cause_eval.evidence_for))
+            if not final_evidence_list:
+                final_evidence_list = [e.description for e in validation_result.valid_evidences[:5]]
+
+        # If there are matching prediction risks for this cause, include them as supporting signal
+        if prediction and prediction.detected_risks:
+            for r in prediction.detected_risks:
+                if self.RISK_CAUSES.get(r.risk_type) == cause_eval.cause_code:
+                    pred_ev = f"GRU predicted {r.risk_type} ({r.confidence:.1%})"
+                    if pred_ev not in final_evidence_list:
+                        final_evidence_list.append(pred_ev)
+
+        # Append previous failure evidence context if present
+        if action_history and action_history.consecutive_failures > 0:
+            final_evidence_list.append(
+                f"Action history recorded {action_history.consecutive_failures} consecutive failure(s) "
+                f"(Lịch sử ghi nhận {action_history.consecutive_failures} lần thất bại liên tiếp, "
+                f"circuit_breaker_tripped={action_history.circuit_breaker_tripped or action_history.consecutive_failures >= 2})"
+            )
+        elif previous_action and previous_action_result in {"FAILED", "PARTIAL"}:
+            final_evidence_list.append(
+                f"Previous {previous_action} action result was {previous_action_result} "
+                f"(Hành động {previous_action} trước đó có kết quả: {previous_action_result})"
+            )
+
+        # Include historical incidents references as supporting context for backward compatibility
         for incident in historical.incidents:
-            source = "predicted"
-            historical_cause = normalize_cause(incident.predicted_root_cause)
-            weight = 0.05
-            if incident.root_cause:
-                source = "recorded"
-                historical_cause = normalize_cause(incident.root_cause)
-                weight = 0.10
-            if incident.confirmed_root_cause:
-                source = "confirmed"
-                historical_cause = normalize_cause(incident.confirmed_root_cause)
-                weight = 0.15
-            if historical_cause not in scores:
-                continue
+            historical_cause = normalize_cause(incident.confirmed_root_cause or incident.root_cause or incident.predicted_root_cause)
+            source = "confirmed" if incident.confirmed_root_cause else ("recorded" if incident.root_cause else "predicted")
             detail = (
                 f"Similar incident {incident.incident_id} had {source} root cause "
                 f"{incident.confirmed_root_cause or incident.root_cause or incident.predicted_root_cause}"
             )
             if incident.executed_action and incident.action_result:
                 detail += f"; {incident.executed_action} result was {incident.action_result}"
-            add(historical_cause, weight, detail)
+            if detail not in final_evidence_list:
+                final_evidence_list.append(detail)
 
-        previous_failure_evidence = None
-        if action_history and action_history.consecutive_failures > 0:
-            previous_failure_evidence = (
-                f"Action history recorded {action_history.consecutive_failures} consecutive failure(s) "
-                f"(Lịch sử ghi nhận {action_history.consecutive_failures} lần thất bại liên tiếp, "
-                f"circuit_breaker_tripped={action_history.circuit_breaker_tripped or action_history.consecutive_failures >= 2})"
-            )
-        elif previous_action and previous_action_result in {"FAILED", "PARTIAL"}:
-            previous_failure_evidence = (
-                f"Previous {previous_action} action result was {previous_action_result} "
-                f"(Hành động {previous_action} trước đó có kết quả: {previous_action_result})"
-            )
-
-        if not scores:
-            return RCAConclusion(
-                result=RootCauseResult(cause=self.CAUSE_LABELS["unknown"], confidence=0.30, severity="LOW"),
-                evidence=["insufficient_evidence"],
-                cause_code="unknown",
-                explanation=(
-                    "Các chỉ số viễn trắc, log, trạng thái Kubernetes và mô hình GRU hiện tại "
-                    "chưa cung cấp đủ bằng chứng để xác định nguyên nhân an toàn."
-                ),
-                historical_context_used=False,
-                similar_incident_ids=[],
-            )
-
-        cause_code = max(scores, key=scores.get)
-        raw_score = scores[cause_code]
-        confidence = min(0.99, 0.45 + raw_score / 2.0)
-        evidence = list(dict.fromkeys(evidence_by_cause[cause_code]))
-        if previous_failure_evidence:
-            evidence.append(previous_failure_evidence)
-        severity = self._severity(cause_code, confidence, prediction, kubernetes_raw, action_history, kubernetes)
-        similar_ids = historical.similar_incident_ids
-        cause_label_vi = self.CAUSE_LABELS_VI.get(cause_code, self.CAUSE_LABELS.get(cause_code, cause_code))
+        # Compose comprehensive explanation
         explanation_parts = [
-            f"Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: {cause_label_vi} (mức độ {severity}, độ tin cậy {round(confidence * 100)}%)."
+            f"Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: {cause_eval.cause_label_vi} "
+            f"(Trạng thái xác minh: {cause_eval.evidence_status}, mức độ nghiêm trọng: {severity}, độ tin cậy: {round(cause_eval.confidence * 100)}%)."
         ]
-        if evidence:
-            top_ev = "; ".join(str(e).rstrip(".") for e in evidence[:3])
-            explanation_parts.append(f"Các tín hiệu xác thực ghi nhận trực tiếp: {top_ev}.")
-        if previous_failure_evidence:
-            explanation_parts.append(
-                f"{previous_failure_evidence}, do đó quy trình chẩn đoán và hành động đã được đánh giá lại an toàn."
-            )
+        if cause_eval.evidence_for:
+            top_for = "; ".join(e.rstrip(".") for e in cause_eval.evidence_for[:3])
+            explanation_parts.append(f"Tín hiệu xác thực ghi nhận trực tiếp: {top_for}.")
+        if cause_eval.evidence_against:
+            top_against = "; ".join(a.rstrip(".") for a in cause_eval.evidence_against[:2])
+            explanation_parts.append(f"Tín hiệu đối chứng/phản bác: {top_against}.")
         if kubernetes.is_primary_database:
             explanation_parts.append(
                 "Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu."
             )
-        if similar_ids:
+        if historical.similar_incident_ids:
             explanation_parts.append(
-                "Các sự cố tương đồng " + ", ".join(similar_ids)
-                + " được sử dụng làm bằng chứng đối chiếu xác thực bổ trợ."
+                "Các sự cố tương đồng " + ", ".join(historical.similar_incident_ids)
+                + " được sử dụng làm thông tin đối chiếu bổ trợ."
             )
+
         return RCAConclusion(
-            result=RootCauseResult(
-                cause=self.CAUSE_LABELS.get(cause_code, cause_code.replace("_", " ").title()),
-                confidence=round(confidence, 4),
-                severity=severity,
-            ),
-            evidence=evidence,
-            cause_code=cause_code,
+            result=root_cause_result,
+            evidence=final_evidence_list,
+            cause_code=cause_eval.cause_code,
             explanation=" ".join(explanation_parts),
-            historical_context_used=bool(similar_ids),
-            similar_incident_ids=similar_ids,
+            historical_context_used=bool(historical.similar_incident_ids),
+            similar_incident_ids=historical.similar_incident_ids,
         )
-
-    @staticmethod
-    def _finding_matches(cause: str, finding: str) -> bool:
-        words = {
-            "memory_exhaustion": ("ram", "memory", "oom"),
-            "storage_exhaustion": ("disk", "storage"),
-            "cpu_saturation": ("cpu",),
-            "traffic_overload": ("request rate", "traffic"),
-            "unstable_pod": ("restart", "probe", "crash"),
-            "application_failure": ("5xx", "application"),
-            "service_degradation": ("latency", "timeout"),
-            "insufficient_replicas": ("replica",),
-        }.get(cause, tuple(cause.split("_")))
-        lowered = finding.lower()
-        return any(word in lowered for word in words)
-
-    @staticmethod
-    def _matching_log(cause: str, logs: list[str]) -> str | None:
-        needles = {
-            "memory_exhaustion": ("oom", "memory"),
-            "storage_exhaustion": ("disk", "space left"),
-            "dependency_failure": ("connection", "dependency"),
-            "unstable_pod": ("crash", "probe", "fatal"),
-            "service_degradation": ("timeout",),
-        }.get(cause, tuple(cause.split("_")))
-        return next((line for line in logs if any(word in line.lower() for word in needles)), None)
-
-    @staticmethod
-    def _severity(
-        cause: str,
-        confidence: float,
-        prediction,
-        kubernetes: KubernetesData,
-        action_history: ActionHistoryContext | None = None,
-        kubernetes_analysis: KubernetesAnalysisResult | None = None,
-    ):
-        if action_history and (action_history.consecutive_failures >= 2 or action_history.circuit_breaker_tripped):
-            return "CRITICAL"
-        if kubernetes_analysis and kubernetes_analysis.exit_code_137_detected and kubernetes_analysis.is_primary_database:
-            return "CRITICAL"
-        if cause == "deployment_failure" or kubernetes.available_replicas == 0:
-            return "CRITICAL"
-        if confidence >= 0.78 or cause in {
-            "memory_exhaustion", "storage_exhaustion", "unstable_pod"
-        }:
-            return "HIGH"
-        if prediction and any(
-            risk.confidence >= 0.90 for risk in prediction.detected_risks
-        ):
-            return "HIGH"
-        return "MEDIUM"

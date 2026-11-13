@@ -86,6 +86,9 @@ async def analyze_root_cause(
         if not payload.kubernetes.namespace and payload.namespace:
             update_dict["namespace"] = payload.namespace
 
+        if not payload.kubernetes.restart_count and payload.metrics and payload.metrics.pod_restart_count:
+            update_dict["restart_count"] = int(payload.metrics.pod_restart_count)
+
         effective_pod_name = payload.suspected_pod_name or payload.pod_id
         if not payload.kubernetes.all_pods and effective_pod_name:
             from app.schemas.kubernetes import PodInfo
@@ -95,7 +98,7 @@ async def analyze_root_cause(
                     pod_id=payload.pod_id or effective_pod_name,
                     status=payload.kubernetes.pod_status or "Running",
                     ready=payload.kubernetes.pod_status == "Running",
-                    restart_count=payload.kubernetes.restart_count,
+                    restart_count=update_dict.get("restart_count", payload.kubernetes.restart_count),
                 )
             ]
 
@@ -119,6 +122,7 @@ async def analyze_root_cause(
             payload.previous_action_result,
             payload.previous_rca_root_cause,
             payload.action_history,
+            payload=payload,
         )
         recommendation = RecommendationAgent().recommend(
             conclusion,
@@ -130,6 +134,7 @@ async def analyze_root_cause(
             kubernetes,
             payload.security,
             payload.security_policy,
+            previous_rca_root_cause=payload.previous_rca_root_cause,
         )
 
         if openai_rca_service is not None:
@@ -159,6 +164,12 @@ async def analyze_root_cause(
                     incident_id=payload.incident_id,
                     request_id=payload.request_id,
                     engine="OpenAI GPT-4o-mini",
+                    evidence_status=llm_result.root_cause.evidence_status,
+                    evidence_for=llm_result.root_cause.evidence_for,
+                    evidence_against=llm_result.root_cause.evidence_against,
+                    missing_evidence=llm_result.root_cause.missing_evidence,
+                    related_risks=llm_result.root_cause.related_risks,
+                    symptoms=llm_result.root_cause.symptoms,
                 )
             except Exception as exc:
                 # Availability of an external model must not make incident analysis unavailable.
@@ -181,6 +192,12 @@ async def analyze_root_cause(
             incident_id=payload.incident_id,
             request_id=payload.request_id,
             engine="Deterministic Multi-Agent SRE",
+            evidence_status=conclusion.result.evidence_status,
+            evidence_for=conclusion.result.evidence_for,
+            evidence_against=conclusion.result.evidence_against,
+            missing_evidence=conclusion.result.missing_evidence,
+            related_risks=conclusion.result.related_risks,
+            symptoms=conclusion.result.symptoms,
         )
     except Exception:
         record_ai_rca(provider_label, "error", time.perf_counter() - rca_started)

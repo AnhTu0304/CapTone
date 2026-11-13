@@ -29,6 +29,7 @@ export const TopHeader = () => {
     notifications,
     unreadNotifsCount,
     markAllNotificationsRead,
+    toggleNotificationRead,
     isMobileNavOpen,
     setIsMobileNavOpen,
     onNavigate,
@@ -639,12 +640,19 @@ export const TopHeader = () => {
                     key={n.id}
                     onClick={() => {
                       setIsNotifPopoverOpen(false);
-                      if (onNavigate && n.link) onNavigate(n.link);
+                      if (!n.read && toggleNotificationRead) toggleNotificationRead(n.id, true);
+                      const dest = n.link || n.actionPath;
+                      if (onNavigate && dest) onNavigate(dest);
                     }}
                     style={{
                       padding: '12px 16px',
                       borderBottom: '1px solid var(--dash-border)',
-                      backgroundColor: n.unread ? 'var(--dash-mint-50)' : 'transparent',
+                      backgroundColor: n.unread
+                        ? n.severity === 'CRITICAL'
+                          ? '#FFF1F2'
+                          : 'var(--dash-mint-50)'
+                        : 'transparent',
+                      borderLeft: n.unread && n.severity === 'CRITICAL' ? '3px solid #DC2626' : '3px solid transparent',
                       cursor: 'pointer',
                       transition: 'background-color 0.15s ease',
                     }}

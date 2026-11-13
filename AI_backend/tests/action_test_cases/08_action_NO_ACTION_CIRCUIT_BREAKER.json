@@ -4,7 +4,7 @@
   "scenario_title": "Ngắt mạch an toàn Circuit Breaker & Human-in-the-Loop",
   "file_name": "08_action_NO_ACTION_CIRCUIT_BREAKER.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-05T18:17:58.862794+00:00",
+  "tested_at": "2026-11-13T09:30:41.377062+00:00",
   "description": "Sự cố MongoDB Replica Set OOM SIGKILL 137, Pod giữ vai trò PRIMARY, đã thử tự động cứu chữa 2 lần thất bại (consecutive_failures: 2). Kích hoạt Circuit Breaker chuyển quyền can thiệp thủ công (NO_ACTION, CRITICAL) kèm manual_playbook 3 bước failover rs.stepDown(60).",
   "input_payload": {
     "request_id": "req-20261026-circuit-breaker-008",
@@ -81,20 +81,32 @@
       }
     },
     "root_cause": {
-      "cause": "Cạn kiệt bộ nhớ container (OOM)",
-      "confidence": 0.99,
-      "severity": "CRITICAL"
+      "cause": "Container memory exhausted",
+      "confidence": 0.95,
+      "severity": "CRITICAL",
+      "evidence_status": "CONFIRMED",
+      "evidence_for": [
+        "Container trên Pod 'mongodb-0' bị Linux Kernel OOM-Killer tiêu diệt (OOMKilled, exitCode: 137)"
+      ],
+      "evidence_against": [],
+      "missing_evidence": [],
+      "related_risks": [
+        {
+          "risk_type": "OOM",
+          "confidence": 0.94,
+          "description": "Mô hình học sâu GRU cảnh báo nguy cơ OOM (94.0%)"
+        }
+      ],
+      "symptoms": []
     },
     "evidence": [
-      "Mức sử dụng RAM ở ngưỡng nguy hiểm (98.7%)",
-      "Tiến trình trên Pod 'mongodb-0' bị tiêu diệt: exitCode 137 (OOMKilled)",
-      "Container terminated with exitCode 137 (OOM-Killer SIGKILL)",
+      "Container trên Pod 'mongodb-0' bị Linux Kernel OOM-Killer tiêu diệt (OOMKilled, exitCode: 137)",
       "GRU predicted OOM (94.0%)",
       "Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True)"
     ],
     "recommendation": {
       "action": "NO_ACTION",
-      "reason": "Phát hiện lặp sự cố liên tiếp (2 lần thử restart/replace trước đó đều thất bại). Kích hoạt Circuit Breaker chuyển quyền điều khiển cho kỹ sư vận hành (Human-in-the-Loop) nhằm tránh crash loop và nguy cơ ảnh hưởng toàn cụm.",
+      "reason": "Đã thử các hành động tự khắc phục trước đó nhưng sự cố vẫn tiếp diễn (Cụm hiện chỉ có 1 Node 'minikube', không có Node dự phòng an toàn). Kích hoạt Cầu dao an toàn (Circuit Breaker - NO_ACTION) để tránh lặp vô hạn và chuyển sang quy trình kiểm tra thủ công.",
       "priority": "CRITICAL",
       "target_type": "POD",
       "target_name": "mongodb-0",
@@ -107,8 +119,14 @@
         "faulty_node_name": null,
         "recommended_destination_node": null,
         "destination_node_id": null,
+        "target_replicas": null,
+        "is_primary_database": true,
         "consecutive_failures": 2,
         "circuit_breaker_tripped": true,
+        "blocked_actions": [
+          "REPLACE_POD",
+          "RESTART_POD"
+        ],
         "manual_playbook": [
           "1. Failover an toàn: Chuyển quyền Primary sang Pod khác bằng lệnh 'rs.stepDown(60)' trên MongoDB Shell.",
           "2. Tăng cấu hình cgroup: Cập nhật StatefulSet với resources.limits.memory: 2Gi để tương thích với WiredTiger cache 512MB + query overhead.",
@@ -116,7 +134,7 @@
         ]
       }
     },
-    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Cạn kiệt bộ nhớ container (OOM) (mức độ CRITICAL, độ tin cậy 99%). Các tín hiệu xác thực ghi nhận trực tiếp: Mức sử dụng RAM ở ngưỡng nguy hiểm (98.7%); Tiến trình trên Pod 'mongodb-0' bị tiêu diệt: exitCode 137 (OOMKilled); Container terminated with exitCode 137 (OOM-Killer SIGKILL). Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True), do đó quy trình chẩn đoán và hành động đã được đánh giá lại an toàn. Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu.",
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Cạn kiệt bộ nhớ container (OOM) (Trạng thái xác minh: CONFIRMED, mức độ nghiêm trọng: CRITICAL, độ tin cậy: 95%). Tín hiệu xác thực ghi nhận trực tiếp: Container trên Pod 'mongodb-0' bị Linux Kernel OOM-Killer tiêu diệt (OOMKilled, exitCode: 137). Workload đang giữ vai trò PRIMARY trong Replica Set; các hành động tự động nguy cơ cao bị khóa để bảo toàn dữ liệu.",
     "historical_context_used": false,
     "similar_incident_ids": [],
     "workload_id": "wl-7788-99aa-bbcc-ddeeff001122",
@@ -124,6 +142,20 @@
     "cluster_id": "9ea1db42-7524-4238-8716-315cbe0d0b39",
     "incident_id": "inc-20261026-circuit-breaker-008",
     "request_id": "req-20261026-circuit-breaker-008",
-    "engine": "Deterministic Multi-Agent SRE"
+    "engine": "Deterministic Multi-Agent SRE",
+    "evidence_status": "CONFIRMED",
+    "evidence_for": [
+      "Container trên Pod 'mongodb-0' bị Linux Kernel OOM-Killer tiêu diệt (OOMKilled, exitCode: 137)"
+    ],
+    "evidence_against": [],
+    "missing_evidence": [],
+    "related_risks": [
+      {
+        "risk_type": "OOM",
+        "confidence": 0.94,
+        "description": "Mô hình học sâu GRU cảnh báo nguy cơ OOM (94.0%)"
+      }
+    ],
+    "symptoms": []
   }
 }

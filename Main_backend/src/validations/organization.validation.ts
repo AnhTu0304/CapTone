@@ -103,3 +103,56 @@ export const updateOrgStatusSchema = z.object({
     reason: z.string().trim().max(500, 'Lý do thay đổi trạng thái không vượt quá 500 ký tự').optional(),
   }),
 });
+
+/**
+ * Schema kiểm tra ID tổ chức trên URL Params (:id hoặc :orgId) cho API Alert Settings
+ */
+export const orgAlertSettingsParamSchema = z.object({
+  params: z
+    .object({
+      id: z.string().trim().regex(uuidRegex, 'Định dạng ID tổ chức không hợp lệ (yêu cầu UUID)').optional(),
+      orgId: z.string().trim().regex(uuidRegex, 'Định dạng ID tổ chức không hợp lệ (yêu cầu UUID)').optional(),
+    })
+    .refine((p) => Boolean(p.id || p.orgId), {
+      message: 'Vui lòng cung cấp ID tổ chức',
+    }),
+});
+
+/**
+ * Schema cập nhật cấu hình cảnh báo khẩn cấp tổ chức
+ * PUT /api/v1/organizations/:id/alert-settings
+ */
+export const updateOrgAlertSettingsSchema = z.object({
+  body: z.object({
+    critical_email_enabled: z.boolean().optional(),
+    notify_on_no_action: z.boolean().optional(),
+    notify_on_healing_failed: z.boolean().optional(),
+    extra_emails: z
+      .union([
+        z.array(z.string().trim().email('Email bổ sung không hợp lệ')),
+        z.string().trim(),
+      ])
+      .optional(),
+    cooldown_minutes: z.coerce
+      .number()
+      .int()
+      .min(1, 'Thời gian chống spam tối thiểu là 1 phút')
+      .max(1440, 'Thời gian chống spam tối đa là 1440 phút (24 giờ)')
+      .optional(),
+    slack_webhook_url: z.string().trim().max(1000).nullable().optional().or(z.literal('')),
+    slack_channel: z.string().trim().max(100).nullable().optional().or(z.literal('')),
+    pagerduty_key: z.string().trim().max(255).nullable().optional().or(z.literal('')),
+  }),
+});
+
+/**
+ * Schema gửi email test cảnh báo khẩn cấp
+ * POST /api/v1/organizations/:id/alert-settings/test-email
+ */
+export const sendTestAlertEmailSchema = z.object({
+  body: z
+    .object({
+      to_email: z.string().trim().email('Email nhận thử nghiệm không hợp lệ').optional().or(z.literal('')),
+    })
+    .optional(),
+});

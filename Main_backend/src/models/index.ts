@@ -18,6 +18,7 @@ export * from './organization.model';
 export * from './organizationProfile.model';
 export * from './organizationRole.model';
 export * from './organizationMember.model';
+export * from './organizationAlertSettings.model';
 export * from './healingAction.model';
 export * from './aiModelRegistry.model';
 export * from './alertRule.model';

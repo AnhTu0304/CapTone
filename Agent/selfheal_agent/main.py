@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime, timezone
 import logging
+import re
 import signal
 import sys
 import time
@@ -180,6 +181,10 @@ class AgentService:
         """Handle incoming command envelopes from Main Backend."""
         if not isinstance(message, ExecuteActionPayload):
             return
+        result_msg = await asyncio.to_thread(self._execute_action_sync, message)
+        await self.ws_client.send(result_msg)
+
+    def _execute_action_sync(self, message: ExecuteActionPayload) -> ActionResultMessage:
 
         cmd = message.data
         action_id = cmd.action_id
@@ -198,8 +203,64 @@ class AgentService:
             },
             carrier=cmd_params if isinstance(cmd_params, dict) else None,
         ):
-            # Auto-resolve actual namespace and workload kind (Deployment vs StatefulSet) across cluster
+            # Build ordered candidate controller names (handle pod hash/ordinal suffixes & Helm release aliases)
+            candidate_names: list[str] = [target_name]
+            rs_pod_match = re.match(r"^(.+)-[a-f0-9]{6,10}-[a-z0-9]{4,6}$", target_name)
+            if rs_pod_match and rs_pod_match.group(1) not in candidate_names:
+                candidate_names.append(rs_pod_match.group(1))
+            sts_pod_match = re.match(r"^(.+)-\d+$", target_name)
+            if sts_pod_match and sts_pod_match.group(1) not in candidate_names:
+                candidate_names.append(sts_pod_match.group(1))
+
+            def _labels_match(labels: Any, cand: str) -> bool:
+                if not isinstance(labels, dict):
+                    return False
+                for key in ("app", "app.kubernetes.io/name", "app.kubernetes.io/instance", "k8s-app"):
+                    if labels.get(key) == cand:
+                        return True
+                return False
+
+            def _match_k8s_controllers(items: Any, kind_name: str):
+                best_score = -1
+                best_item = None
+                for item in (items or []):
+                    meta = getattr(item, "metadata", None)
+                    spec = getattr(item, "spec", None)
+                    item_name = getattr(meta, "name", "") or ""
+                    item_ns = getattr(meta, "namespace", "") or "default"
+                    if not item_name:
+                        continue
+                    meta_labels = getattr(meta, "labels", None) or {}
+                    sel = getattr(spec, "selector", None)
+                    sel_labels = getattr(sel, "match_labels", None) or {}
+
+                    tier = 0
+                    for idx, cand in enumerate(candidate_names):
+                        exact_bonus = 10 if idx == 0 else 0
+                        if item_name == cand:
+                            tier = max(tier, 300 + exact_bonus)
+                        elif _labels_match(sel_labels, cand) or _labels_match(meta_labels, cand):
+                            tier = max(tier, 200 + exact_bonus)
+                        elif len(cand) >= 4 and (item_name.endswith(f"-{cand}") or item_name.startswith(f"{cand}-")):
+                            tier = max(tier, 100 + exact_bonus)
+
+                    if tier == 0:
+                        continue
+
+                    ns_score = 50 if item_ns == namespace else (20 if item_ns != "default" else 5)
+                    score = tier + ns_score
+                    if score > best_score:
+                        best_score = score
+                        best_item = item
+                return best_item
+
+            # Auto-resolve actual namespace and workload kind (Deployment / StatefulSet / DaemonSet / Pod) across cluster
             is_statefulset = False
+            is_daemonset = False
+            is_bare_pod = False
+            bare_pod_owner_kind: Optional[str] = None
+            resolved_pod_name: Optional[str] = None
+
             if self.apps_v1:
                 found_workload = False
                 try:
@@ -212,18 +273,20 @@ class AgentService:
                         t0 = time.perf_counter()
                         all_deps = self.apps_v1.list_deployment_for_all_namespaces()
                         record_k8s_api_call("deployments", "list", "success", time.perf_counter() - t0)
-                        for dep in all_deps.items:
-                            if dep.metadata and dep.metadata.name == target_name:
-                                actual_ns = dep.metadata.namespace
-                                logger.info(
-                                    "Auto-resolved Deployment namespace for '%s': '%s' -> '%s'",
-                                    target_name,
-                                    namespace,
-                                    actual_ns,
-                                )
-                                namespace = actual_ns
-                                found_workload = True
-                                break
+                        matched_dep = _match_k8s_controllers(getattr(all_deps, "items", None), "Deployment")
+                        if matched_dep and matched_dep.metadata:
+                            actual_name = matched_dep.metadata.name
+                            actual_ns = matched_dep.metadata.namespace or namespace
+                            logger.info(
+                                "Auto-resolved Deployment '%s' (ns='%s') -> '%s' (ns='%s')",
+                                target_name,
+                                namespace,
+                                actual_name,
+                                actual_ns,
+                            )
+                            target_name = actual_name
+                            namespace = actual_ns
+                            found_workload = True
                     except Exception as scan_err:
                         logger.debug("Failed scanning deployments for %s: %s", target_name, scan_err)
 
@@ -239,32 +302,148 @@ class AgentService:
                             t0 = time.perf_counter()
                             all_sts = self.apps_v1.list_stateful_set_for_all_namespaces()
                             record_k8s_api_call("statefulsets", "list", "success", time.perf_counter() - t0)
-                            for sts in all_sts.items:
-                                if sts.metadata and sts.metadata.name == target_name:
-                                    actual_ns = sts.metadata.namespace
-                                    logger.info(
-                                        "Auto-resolved StatefulSet namespace for '%s': '%s' -> '%s'",
-                                        target_name,
-                                        namespace,
-                                        actual_ns,
-                                    )
-                                    namespace = actual_ns
-                                    is_statefulset = True
-                                    found_workload = True
-                                    break
+                            matched_sts = _match_k8s_controllers(getattr(all_sts, "items", None), "StatefulSet")
+                            if matched_sts and matched_sts.metadata:
+                                actual_name = matched_sts.metadata.name
+                                actual_ns = matched_sts.metadata.namespace or namespace
+                                logger.info(
+                                    "Auto-resolved StatefulSet '%s' (ns='%s') -> '%s' (ns='%s')",
+                                    target_name,
+                                    namespace,
+                                    actual_name,
+                                    actual_ns,
+                                )
+                                target_name = actual_name
+                                namespace = actual_ns
+                                is_statefulset = True
+                                found_workload = True
                         except Exception as sts_err:
                             logger.debug("Failed scanning statefulsets for %s: %s", target_name, sts_err)
 
-            workload_kind_label = "statefulset" if is_statefulset else "deployment"
+                if not found_workload:
+                    try:
+                        t0 = time.perf_counter()
+                        self.apps_v1.read_namespaced_daemon_set(name=target_name, namespace=namespace)
+                        record_k8s_api_call("daemonsets", "read", "success", time.perf_counter() - t0)
+                        is_daemonset = True
+                        found_workload = True
+                    except Exception:
+                        try:
+                            t0 = time.perf_counter()
+                            all_ds = self.apps_v1.list_daemon_set_for_all_namespaces()
+                            record_k8s_api_call("daemonsets", "list", "success", time.perf_counter() - t0)
+                            matched_ds = _match_k8s_controllers(getattr(all_ds, "items", None), "DaemonSet")
+                            if matched_ds and matched_ds.metadata:
+                                actual_name = matched_ds.metadata.name
+                                actual_ns = matched_ds.metadata.namespace or namespace
+                                logger.info(
+                                    "Auto-resolved DaemonSet '%s' (ns='%s') -> '%s' (ns='%s')",
+                                    target_name,
+                                    namespace,
+                                    actual_name,
+                                    actual_ns,
+                                )
+                                target_name = actual_name
+                                namespace = actual_ns
+                                is_daemonset = True
+                                found_workload = True
+                        except Exception as ds_err:
+                            logger.debug("Failed scanning daemonsets for %s: %s", target_name, ds_err)
+
+                if not found_workload and self.core_v1:
+                    try:
+                        t0 = time.perf_counter()
+                        all_pods = self.core_v1.list_pod_for_all_namespaces()
+                        record_k8s_api_call("pods", "list", "success", time.perf_counter() - t0)
+                        specific_pod = (cmd.params or {}).get("pod_name") or (cmd.params or {}).get("pod_id")
+                        best_pod = None
+                        best_pod_score = -1
+                        for pod in (getattr(all_pods, "items", None) or []):
+                            p_meta = getattr(pod, "metadata", None)
+                            p_name = getattr(p_meta, "name", "") or ""
+                            p_ns = getattr(p_meta, "namespace", "") or "default"
+                            p_labels = getattr(p_meta, "labels", None) or {}
+                            if not p_name:
+                                continue
+                            if getattr(p_meta, "deletion_timestamp", None):
+                                continue
+                            tier = 0
+                            if specific_pod and p_name == specific_pod:
+                                tier = 400
+                            else:
+                                for cand in candidate_names:
+                                    if p_name == cand:
+                                        tier = max(tier, 300)
+                                    elif _labels_match(p_labels, cand):
+                                        tier = max(tier, 200)
+                                    elif len(cand) >= 4 and (p_name.startswith(f"{cand}-") or f"-{cand}-" in p_name):
+                                        tier = max(tier, 100)
+                            if tier == 0:
+                                continue
+                            ns_score = 50 if p_ns == namespace else (20 if p_ns != "default" else 5)
+                            score = tier + ns_score
+                            if score > best_pod_score:
+                                best_pod_score = score
+                                best_pod = pod
+
+                        if best_pod and best_pod.metadata:
+                            p_name = best_pod.metadata.name
+                            p_ns = best_pod.metadata.namespace or namespace
+                            resolved_pod_name = p_name
+                            namespace = p_ns
+                            owners = getattr(best_pod.metadata, "owner_references", None) or []
+                            owner_kind = getattr(owners[0], "kind", None) if owners else None
+                            owner_name = getattr(owners[0], "name", None) if owners else None
+                            if owner_kind == "StatefulSet" and owner_name:
+                                target_name = owner_name
+                                is_statefulset = True
+                                found_workload = True
+                            elif owner_kind == "DaemonSet" and owner_name:
+                                target_name = owner_name
+                                is_daemonset = True
+                                found_workload = True
+                            elif owner_kind == "ReplicaSet" and owner_name:
+                                try:
+                                    rs_obj = self.apps_v1.read_namespaced_replica_set(name=owner_name, namespace=p_ns)
+                                    rs_owners = getattr(rs_obj.metadata, "owner_references", None) or []
+                                    dep_owner = next((o for o in rs_owners if getattr(o, "kind", "") == "Deployment"), None)
+                                    target_name = dep_owner.name if dep_owner else re.sub(r"-[a-f0-9]{6,10}$", "", owner_name)
+                                    found_workload = True
+                                except Exception:
+                                    target_name = re.sub(r"-[a-f0-9]{6,10}$", "", owner_name)
+                                    found_workload = True
+                            else:
+                                is_bare_pod = True
+                                bare_pod_owner_kind = owner_kind
+                                target_name = p_name
+                                found_workload = True
+                    except Exception as pod_scan_err:
+                        logger.debug("Failed pod fallback scan for %s: %s", target_name, pod_scan_err)
+
+            if is_statefulset:
+                workload_kind_label = "statefulset"
+            elif is_daemonset:
+                workload_kind_label = "daemonset"
+            elif is_bare_pod:
+                workload_kind_label = "static_pod" if bare_pod_owner_kind == "Node" else "pod"
+            else:
+                workload_kind_label = "deployment"
 
             def _patch_workload(body: dict[str, Any]) -> None:
                 if not self.apps_v1:
                     return
-                res_kind = "statefulsets" if is_statefulset else "deployments"
+                if is_bare_pod:
+                    raise ValueError(
+                        f"Workload '{target_name}' in namespace '{namespace}' is a standalone Pod "
+                        "without a Deployment/StatefulSet/DaemonSet controller and cannot be rolling-patched."
+                    )
+                res_kind = "statefulsets" if is_statefulset else ("daemonsets" if is_daemonset else "deployments")
                 t0 = time.perf_counter()
                 try:
                     if is_statefulset:
                         self.apps_v1.patch_namespaced_stateful_set(name=target_name, namespace=namespace, body=body)
+                    elif is_daemonset:
+                        self.apps_v1.patch_namespaced_daemon_set(name=target_name, namespace=namespace, body=body)
                     else:
                         self.apps_v1.patch_namespaced_deployment(name=target_name, namespace=namespace, body=body)
                     record_k8s_api_call(res_kind, "patch", "success", time.perf_counter() - t0)
@@ -276,6 +455,10 @@ class AgentService:
             def _scale_workload(replicas: int) -> None:
                 if not self.apps_v1:
                     return
+                if is_daemonset or is_bare_pod:
+                    raise ValueError(
+                        f"Cannot scale {workload_kind_label} '{target_name}' in namespace '{namespace}' horizontally."
+                    )
                 scale_body = {"spec": {"replicas": replicas}}
                 res_kind = "statefulsets" if is_statefulset else "deployments"
                 t0 = time.perf_counter()
@@ -308,9 +491,15 @@ class AgentService:
                 "executed_at": datetime.now(timezone.utc).isoformat(),
             }
             msg_str = ""
-            start_t = asyncio.get_event_loop().time()
+            start_t = time.perf_counter()
 
             try:
+                protected_namespaces = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system"}
+                if namespace in protected_namespaces and action_type not in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
+                    raise ValueError(
+                        f"Safety Guard Blocked: Namespace '{namespace}' is a protected Kubernetes system namespace and cannot be modified automatically."
+                    )
+
                 if action_type in ["RESTART_POD", "ROLLOUT_RESTART", "RESTART_DEPLOYMENT", "RESTART POD", "RESTART DEPLOYMENT"]:
                     if self.apps_v1:
                         now_str = datetime.now(timezone.utc).isoformat()
@@ -345,13 +534,25 @@ class AgentService:
                             specific_pod_name = (cmd.params or {}).get("pod_name") or (cmd.params or {}).get("pod_id")
                             
                             candidate_pods = []
+                            if is_bare_pod and bare_pod_owner_kind is None:
+                                raise ValueError(
+                                    f"Standalone pod '{resolved_pod_name or target_name}' in namespace '{namespace}' "
+                                    "has no controller (Deployment/StatefulSet/DaemonSet) to recreate it automatically."
+                                )
                             for pod in pod_list.items:
                                 p_name = pod.metadata.name if pod.metadata else ""
+                                p_labels = getattr(pod.metadata, "labels", None) or {} if pod.metadata else {}
                                 phase = getattr(pod.status, "phase", "Running") if pod.status else "Running"
                                 # Skip completed one-off Job pods (e.g. mongodb-rs-init)
                                 if phase == "Succeeded" or "-init-" in p_name:
                                     continue
-                                if p_name == target_name or p_name.startswith(f"{target_name}-"):
+                                name_matched = (
+                                    p_name == target_name
+                                    or p_name.startswith(f"{target_name}-")
+                                    or (resolved_pod_name is not None and p_name == resolved_pod_name)
+                                    or any(p_name == c or p_name.startswith(f"{c}-") or _labels_match(p_labels, c) for c in candidate_names)
+                                )
+                                if name_matched:
                                     score = 0
                                     if phase != "Running":
                                         score += 100
@@ -403,13 +604,28 @@ class AgentService:
                         logger.info("ℹ️ %s", msg_str)
 
                 elif action_type in ["SCALE_REPLICAS", "SCALE_UP", "SCALE_DOWN", "SCALE_IN", "SCALE REPLICAS"]:
-                    default_rep = 1 if ("DOWN" in action_type or "IN" in action_type) else 2
-                    new_replicas = int((cmd.params or {}).get("replicas", default_rep))
+                    is_scale_down = ("DOWN" in action_type or "IN" in action_type)
+                    explicit_rep = (cmd.params or {}).get("target_replicas") or (cmd.params or {}).get("replicas")
+                    if explicit_rep is not None:
+                        new_replicas = max(1, min(10, int(explicit_rep)))
+                    elif self.apps_v1 and not is_daemonset and not is_bare_pod:
+                        try:
+                            if is_statefulset:
+                                cur_obj = self.apps_v1.read_namespaced_stateful_set(name=target_name, namespace=namespace)
+                            else:
+                                cur_obj = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
+                            cur_rep = int(getattr(getattr(cur_obj, "spec", None), "replicas", None) or 1)
+                            new_replicas = max(1, cur_rep - 1) if is_scale_down else min(5, max(2, cur_rep + 1))
+                        except Exception:
+                            new_replicas = 1 if is_scale_down else 2
+                    else:
+                        new_replicas = 1 if is_scale_down else 2
+
                     if self.apps_v1:
                         _scale_workload(new_replicas)
                         details["strategy"] = "horizontal_scaling"
                         details["replicas"] = new_replicas
-                        msg_str = f"Deployment/{target_name} scaled successfully to {new_replicas} replicas in '{namespace}'"
+                        msg_str = f"{workload_kind_label}/{target_name} scaled successfully to {new_replicas} replicas in '{namespace}'"
                         logger.info("✅ %s", msg_str)
                     else:
                         msg_str = f"Offline/Dev mode: Scaled {target_name} to {new_replicas} replicas"
@@ -505,11 +721,70 @@ class AgentService:
 
                 elif action_type in ["DRAIN_NODE", "DRAIN NODE"]:
                     details["strategy"] = "safe_node_workload_reschedule"
-                    if self.apps_v1:
+                    faulty_node = (cmd.params or {}).get("faulty_node_name") or (cmd.params or {}).get("target_node")
+                    dest_node = (cmd.params or {}).get("recommended_destination_node")
+                    cordoned_node = None
+                    evicted_pods = []
+                    single_node_guard = False
+
+                    if self.core_v1:
+                        try:
+                            pod_list = self.core_v1.list_namespaced_pod(namespace=namespace)
+                            matching_pods = [
+                                p for p in (getattr(pod_list, "items", None) or [])
+                                if getattr(getattr(p, "metadata", None), "name", "").startswith(target_name)
+                                or (getattr(getattr(p, "metadata", None), "labels", None) or {}).get("app") == target_name
+                            ]
+                            if not faulty_node and matching_pods:
+                                faulty_node = getattr(getattr(matching_pods[0], "spec", None), "node_name", None)
+
+                            t0 = time.perf_counter()
+                            node_list = self.core_v1.list_node()
+                            record_k8s_api_call("nodes", "list", "success", time.perf_counter() - t0)
+                            ready_schedulable_nodes = []
+                            for n_item in (getattr(node_list, "items", None) or []):
+                                n_name = getattr(getattr(n_item, "metadata", None), "name", "") or ""
+                                n_unsched = bool(getattr(getattr(n_item, "spec", None), "unschedulable", False))
+                                n_conds = getattr(getattr(n_item, "status", None), "conditions", None) or []
+                                is_ready = any(getattr(c, "type", "") == "Ready" and getattr(c, "status", "") == "True" for c in n_conds)
+                                if is_ready and not n_unsched:
+                                    ready_schedulable_nodes.append(n_name)
+
+                            if len(ready_schedulable_nodes) <= 1:
+                                single_node_guard = True
+                                details["single_node_guard"] = True
+                            elif faulty_node and any(n != faulty_node for n in ready_schedulable_nodes):
+                                if not dest_node:
+                                    dest_node = next((n for n in ready_schedulable_nodes if n != faulty_node), None)
+                                t_cordon = time.perf_counter()
+                                self.core_v1.patch_node(name=faulty_node, body={"spec": {"unschedulable": True}})
+                                record_k8s_api_call("nodes", "patch", "success", time.perf_counter() - t_cordon)
+                                cordoned_node = faulty_node
+                                details["cordoned_node"] = faulty_node
+                                if dest_node:
+                                    details["recommended_destination_node"] = dest_node
+
+                                for mp in matching_pods:
+                                    mp_name = getattr(getattr(mp, "metadata", None), "name", "")
+                                    mp_node = getattr(getattr(mp, "spec", None), "node_name", "")
+                                    if mp_name and mp_node == faulty_node:
+                                        self.core_v1.delete_namespaced_pod(name=mp_name, namespace=namespace)
+                                        evicted_pods.append(mp_name)
+                                if evicted_pods:
+                                    details["evicted_pods"] = evicted_pods
+                        except Exception as n_err:
+                            logger.warning("Node cordon check warning during DRAIN_NODE: %s", n_err)
+
+                    if self.apps_v1 and not evicted_pods:
                         now_str = datetime.now(timezone.utc).isoformat()
                         patch_body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": now_str, "selfheal.io/node-rescheduled": "true"}}}}}
                         _patch_workload(patch_body)
-                    msg_str = f"Rescheduled pods safely for {target_name} in '{namespace}' to isolate degraded node resources"
+                    if cordoned_node:
+                        msg_str = f"Cordoned degraded node '{cordoned_node}' and rescheduled pods ({', '.join(evicted_pods) if evicted_pods else target_name}) for {workload_kind_label}/{target_name} in '{namespace}' to healthy node '{dest_node or 'available'}'"
+                    elif single_node_guard:
+                        msg_str = f"Single-node cluster guard: skipped node cordon on sole node and recreated pods for {workload_kind_label}/{target_name} in '{namespace}'"
+                    else:
+                        msg_str = f"Rescheduled pods safely for {target_name} in '{namespace}' to isolate degraded node resources"
                     logger.info("✅ %s", msg_str)
 
                 elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
@@ -589,17 +864,18 @@ class AgentService:
                             logger.info("🛡️ %s", msg_str)
 
                             # Schedule background TTL auto-unblock
+                            import threading
                             ttl_sec = int((cmd.params or {}).get("ttl_seconds", 0)) or (int(duration_minutes) * 60)
-                            async def _auto_unblock(pol_name=policy_name, pol_ns=target_ns, delay=ttl_sec):
+                            def _auto_unblock_sync(pol_name=policy_name, pol_ns=target_ns):
                                 try:
-                                    await asyncio.sleep(delay)
                                     if getattr(self, "networking_v1", None):
                                         self.networking_v1.delete_namespaced_network_policy(name=pol_name, namespace=pol_ns)
                                         logger.info("⏰ [Auto-TTL] Successfully removed temporary NetworkPolicy '%s' in namespace '%s'", pol_name, pol_ns)
                                 except Exception as unblock_err:
                                     logger.warning("[Auto-TTL] NetworkPolicy '%s' cleanup status: %s", pol_name, unblock_err)
-                            
-                            asyncio.create_task(_auto_unblock())
+                            t_timer = threading.Timer(ttl_sec, _auto_unblock_sync)
+                            t_timer.daemon = True
+                            t_timer.start()
 
                         except Exception as net_err:
                             logger.error("❌ Failed to deploy NetworkPolicy '%s': %s", policy_name, net_err)
@@ -646,18 +922,23 @@ class AgentService:
                     msg_str = f"Action '{action_type}' processed successfully on {target_name}"
                     logger.info("✅ %s", msg_str)
 
-                elapsed_sec = max(0.001, asyncio.get_event_loop().time() - start_t)
+                elapsed_sec = max(0.001, time.perf_counter() - start_t)
                 duration_ms = int(elapsed_sec * 1000)
                 details["duration_ms"] = max(100, duration_ms)
 
             except Exception as exc:
-                elapsed_sec = max(0.001, asyncio.get_event_loop().time() - start_t)
+                elapsed_sec = max(0.001, time.perf_counter() - start_t)
                 logger.error("❌ Action execution failed on %s: %s", target_name, exc)
                 record_processing_error("remediation")
                 status = "FAILED"
                 msg_str = f"Failed to execute {action_type} on {target_name}: {exc}"
                 duration_ms = max(100, int(elapsed_sec * 1000))
-                details = {"error": str(exc)}
+                details = {
+                    "error": str(exc),
+                    "target": target_name,
+                    "namespace": namespace,
+                    "workload_kind": workload_kind_label,
+                }
 
             record_remediation_execution(
                 action_type=action_type or "UNKNOWN",
@@ -666,16 +947,13 @@ class AgentService:
                 duration_seconds=max(0.001, duration_ms / 1000.0),
             )
 
-            # Transmit execution result back to Main Backend
-            await self.ws_client.send(
-                ActionResultMessage(
-                    data=ActionResultData(
-                        action_id=action_id,
-                        status=status,
-                        message=msg_str,
-                        duration_ms=max(100, duration_ms),
-                        details=details,
-                    )
+            return ActionResultMessage(
+                data=ActionResultData(
+                    action_id=action_id,
+                    status=status,
+                    message=msg_str,
+                    duration_ms=max(100, duration_ms),
+                    details=details,
                 )
             )
 

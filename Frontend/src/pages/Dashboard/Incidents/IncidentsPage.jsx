@@ -19,7 +19,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  Activity
 } from 'lucide-react';
 
 const INITIAL_INCIDENTS = [];
@@ -77,6 +78,7 @@ export const translateIncidentTitle = (rawTitle) => {
   title = title.replace(/\[(Cảnh báo AI|AI Alert|Alert|Cảnh báo)\]\s*/gi, '').trim();
 
   const causeTranslations = [
+    { en: /\bUNKNOWN\b/gi, vi: 'Chưa xác định nguyên nhân' },
     { en: /Unstable application pod/gi, vi: 'Pod ứng dụng bất ổn định' },
     { en: /Container memory exhausted/gi, vi: 'Cạn kiệt bộ nhớ container (OOM)' },
     { en: /Storage capacity exhausted/gi, vi: 'Cạn kiệt dung lượng lưu trữ' },
@@ -122,6 +124,7 @@ const VALID_RISKS = new Set([
   'HTTP_5XX_SPIKE',
   'TRAFFIC_OVERLOAD',
   'UNSTABLE_POD',
+  'POD_INSTABILITY',
   'SCALE_DOWN_CANDIDATE',
 ]);
 
@@ -147,7 +150,7 @@ const cleanServiceName = (raw) => {
     return lower;
   }
   // Loại bỏ các câu văn mô tả dài hoặc chứa khoảng trắng
-  if (/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,40}$/.test(s)) {
+  if (/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,80}$/.test(s)) {
     // Không nhận chuỗi UUID làm tên dịch vụ hiển thị
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
       return null;
@@ -230,17 +233,67 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const hasPendingApproval = item.has_pending_approval !== undefined
     ? Boolean(item.has_pending_approval)
     : Boolean(item.pending_approval_id || item.healing_approval_status === 'PENDING' || item.status === 'AWAITING_APPROVAL');
+  const isCriticalNoAction = isNoAction && (
+    String(item.severity || '').toUpperCase() === 'CRITICAL' ||
+    String(rcaParsed?.recommendation?.priority || '').toUpperCase() === 'CRITICAL' ||
+    Boolean(rcaParsed?.recommendation?.action_parameters?.circuit_breaker_tripped)
+  );
+
+  const nowMs = Date.now();
+  const healingStartedMs = item.healing_started_at ? new Date(item.healing_started_at).getTime() : 0;
+  const healingCompletedMs = item.healing_completed_at ? new Date(item.healing_completed_at).getTime() : 0;
+  const isRecentlyRunning = (item.healing_status === 'IN_PROGRESS' || item.healing_status === 'RUNNING') && healingStartedMs > 0 && (nowMs - healingStartedMs < 60000);
+  const isRecentlyVerifying = item.healing_status === 'SUCCEEDED' && !isResolved && (item.healing_verification_result === null || item.healing_verification_result === undefined) && healingCompletedMs > 0 && (nowMs - healingCompletedMs < 90000);
+
+  const failedCount = Number(item.failed_actions_count || 0);
+  const succeededCount = Number(item.succeeded_actions_count || 0);
+
+  const isHealingFailed =
+    item.healing_status === 'FAILED' ||
+    item.healing_verification_result === false ||
+    failedCount > 0;
+
+  const isHealingSucceeded =
+    succeededCount > 0 ||
+    (item.healing_status === 'SUCCEEDED' && item.healing_verification_result === true);
+
+  const hasNoActions = failedCount === 0 && succeededCount === 0 && !item.healing_action_id;
+
   let statusLabel = 'Đang theo dõi';
-  if (isResolved || item.healing_status === 'SUCCEEDED') {
-    statusLabel = 'Đã khắc phục hoàn tất';
+  if (isResolved) {
+    if (isHealingFailed && !isHealingSucceeded) {
+      statusLabel = 'Đã đóng (Can thiệp thủ công)';
+    } else if (isHealingSucceeded) {
+      statusLabel = 'Đã khắc phục hoàn tất';
+    } else if (hasNoActions || isNoAction) {
+      statusLabel = 'Tự ổn định (Telemetry bình thường)';
+    } else {
+      statusLabel = 'Đã khắc phục hoàn tất';
+    }
   } else if (hasPendingApproval) {
     statusLabel = 'Chờ phê duyệt HITL';
-  } else if (item.healing_status === 'IN_PROGRESS' || isRecovering) {
+  } else if (isCriticalNoAction) {
+    statusLabel = 'Cảnh báo khẩn (Cần kiểm tra - NO_ACTION)';
+  } else if (item.healing_verification_result === false) {
+    statusLabel = 'Hậu kiểm thất bại (Chưa phục hồi)';
+  } else if (isHealingFailed && !isHealingSucceeded) {
+    statusLabel = 'Tự khắc phục thất bại (Chưa phục hồi)';
+  } else if (isRecentlyVerifying) {
+    statusLabel = 'Đang tự phục hồi (Đang xác minh)';
+  } else if (item.healing_status === 'SUCCEEDED') {
+    statusLabel = 'Hậu kiểm thất bại (Chưa phục hồi)';
+  } else if (isRecentlyRunning) {
     statusLabel = 'Đang tự phục hồi';
+  } else if (item.healing_status === 'IN_PROGRESS' || item.healing_status === 'RUNNING') {
+    statusLabel = 'Tự khắc phục thất bại (Timeout >60s)';
   } else if (item.healing_status === 'FAILED') {
     statusLabel = 'Tự khắc phục thất bại';
+  } else if (item.status === 'INVESTIGATING') {
+    statusLabel = 'Đang điều tra';
   } else if (item.status === 'OPEN') {
-    statusLabel = isNoAction ? 'Tự động an toàn (NO_ACTION)' : 'Đang xử lý / Giám sát';
+    statusLabel = isNoAction
+      ? 'Tự động an toàn (NO_ACTION)'
+      : 'Đang xử lý / Giám sát';
   } else if (item.status) {
     statusLabel = item.status;
   }
@@ -270,6 +323,16 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     }));
   }
 
+  const occurrenceCount = Number(item.occurrence_count || 1);
+  const lastOccurredAt = item.last_occurred_at || item.detected_at || item.created_at;
+  const healingErrorMessage = item.healing_error_message || item.healing_result_error || null;
+  let failureHint = null;
+  if (!isResolved && item.healing_status === 'FAILED' && healingErrorMessage) {
+    failureHint = `Lỗi thực thi: ${healingErrorMessage}`;
+  } else if (!isResolved && isNoAction && String(item.severity || '').toUpperCase() === 'CRITICAL' && recReason) {
+    failureHint = String(recReason);
+  }
+
   return {
     id: shortId,
     rawId: item.id,
@@ -286,8 +349,12 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     workloadType: item.workload_type || null,
     severity: (item.severity || 'HIGH').toUpperCase(),
     status: statusLabel,
-    time: formatRelativeTime(item.detected_at || item.created_at),
-    detectedAt: item.detected_at || item.created_at,
+    occurrenceCount,
+    lastOccurredAt,
+    healingErrorMessage,
+    failureHint,
+    time: formatRelativeTime(lastOccurredAt),
+    detectedAt: lastOccurredAt,
     impact: item.description || `Ảnh hưởng hiệu năng dịch vụ ${serviceName}`,
     rootCause: item.root_cause_description || item.description || null,
     rootCauseType: item.root_cause_type || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Bất thường dịch vụ'),
@@ -389,6 +456,60 @@ export const IncidentsPage = ({ onNavigate }) => {
   const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
   const [activeModalIncident, setActiveModalIncident] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deepLinkIncidentId, setDeepLinkIncidentId] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('incident');
+    } catch {
+      return null;
+    }
+  });
+  const handledDeepLinkRef = useRef(null);
+
+  useEffect(() => {
+    const syncDeepLinkFromUrl = () => {
+      try {
+        const incParam = new URLSearchParams(window.location.search).get('incident');
+        if (incParam) {
+          handledDeepLinkRef.current = null;
+          setDeepLinkIncidentId(incParam);
+        }
+      } catch {}
+    };
+    window.addEventListener('popstate', syncDeepLinkFromUrl);
+    window.addEventListener('selfheal:urlchange', syncDeepLinkFromUrl);
+    return () => {
+      window.removeEventListener('popstate', syncDeepLinkFromUrl);
+      window.removeEventListener('selfheal:urlchange', syncDeepLinkFromUrl);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!deepLinkIncidentId || handledDeepLinkRef.current === deepLinkIncidentId) return;
+
+    const matched = incidents.find(
+      (i) => i.rawId === deepLinkIncidentId || i.id === deepLinkIncidentId
+    );
+    if (matched) {
+      handledDeepLinkRef.current = deepLinkIncidentId;
+      setActiveModalIncident(matched);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await aiService.getIncidentDetail(deepLinkIncidentId);
+        if (!cancelled && detail && (detail.id || detail.rawId)) {
+          handledDeepLinkRef.current = deepLinkIncidentId;
+          setActiveModalIncident(mapBackendIncidentToUI(detail, registeredWorkloads));
+        }
+      } catch {}
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkIncidentId, incidents, registeredWorkloads]);
 
   // Tải danh sách cụm K8s và Workloads đã đăng ký trong tổ chức
   useEffect(() => {
@@ -416,8 +537,8 @@ export const IncidentsPage = ({ onNavigate }) => {
   }, [currentOrg?.id]);
 
   // Tải dữ liệu thật từ Main Backend API
-  const fetchIncidents = useCallback(async () => {
-    setIsLoading(true);
+  const fetchIncidents = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const activeOrgId = currentOrg?.id;
 
@@ -436,17 +557,23 @@ export const IncidentsPage = ({ onNavigate }) => {
       setIncidents(items.map((it) => mapBackendIncidentToUI(it, registeredWorkloads)));
       setIsUsingLiveDb(true);
     } catch (err) {
-      console.warn('[IncidentsPage] Không thể kết nối API sự cố:', err.message);
-      setIncidents([]);
-      setIsUsingLiveDb(false);
+      if (!silent) {
+        console.warn('[IncidentsPage] Không thể kết nối API sự cố:', err.message);
+        setIncidents([]);
+        setIsUsingLiveDb(false);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
       setIsRefreshing(false);
     }
   }, [currentOrg?.id, selectedCluster, selectedStatus, selectedSeverity, searchQuery]);
 
   useEffect(() => {
-    fetchIncidents();
+    fetchIncidents(false);
+    const intervalId = setInterval(() => {
+      fetchIncidents(true);
+    }, 15000);
+    return () => clearInterval(intervalId);
   }, [fetchIncidents]);
 
   const handleRefresh = () => {
@@ -650,8 +777,8 @@ export const IncidentsPage = ({ onNavigate }) => {
 
     const total = list.length;
     const critical = list.filter((i) => i.severity === 'CRITICAL' || i.severity === 'HIGH').length;
-    const recovering = list.filter((i) => i.status.includes('phục hồi') || i.status.includes('duyệt')).length;
-    const resolved = list.filter((i) => i.status.includes('hoàn tất') || i.status.includes('an toàn')).length;
+    const recovering = list.filter((i) => (i.status === 'Đang tự phục hồi' || i.status === 'Đang tự phục hồi (Đang xác minh)' || i.status.includes('duyệt'))).length;
+    const resolved = list.filter((i) => i.status.includes('hoàn tất') || i.status.includes('Đã đóng') || i.status.includes('Tự ổn định') || (i.status.includes('an toàn') && i.severity !== 'CRITICAL')).length;
     return { total, critical, recovering, resolved };
   }, [incidents, selectedCluster, checkTimeMatch]);
 
@@ -661,10 +788,21 @@ export const IncidentsPage = ({ onNavigate }) => {
       const matchSeverity = selectedSeverity === 'all' || inc.severity === selectedSeverity;
       const matchStatus =
         selectedStatus === 'all' ||
-        (selectedStatus === 'RECOVERING' && inc.status.includes('phục hồi')) ||
+        (selectedStatus === 'OPEN' && (!inc.status.includes('khắc phục') && !inc.status.includes('hoàn tất') && !inc.status.includes('Đã đóng') && !inc.status.includes('Tự ổn định'))) ||
+        (selectedStatus === 'RECOVERING' &&
+          (inc.status.includes('phục hồi') ||
+            inc.status.includes('xác minh') ||
+            inc.status.includes('Đang xử lý') ||
+            inc.status.includes('Giám sát'))) ||
         (selectedStatus === 'HITL' && inc.status.includes('duyệt')) ||
-        (selectedStatus === 'NO_ACTION' && (inc.status.includes('NO_ACTION') || inc.status.includes('an toàn'))) ||
-        (selectedStatus === 'RESOLVED' && inc.status.includes('hoàn tất'));
+        (selectedStatus === 'NO_ACTION' &&
+          (inc.status.includes('NO_ACTION') ||
+            inc.status.includes('an toàn') ||
+            inc.status.includes('Cảnh báo') ||
+            inc.status.includes('Cần kiểm tra'))) ||
+        (selectedStatus === 'FAILED' &&
+          (inc.status.includes('thất bại') || inc.healingStatus === 'FAILED' || inc.status.includes('Chưa phục hồi') || inc.status.includes('Thủ công'))) ||
+        (selectedStatus === 'RESOLVED' && (inc.status.includes('khắc phục') || inc.status.includes('hoàn tất') || inc.status.includes('Đã đóng') || inc.status.includes('Tự ổn định')));
       const matchService = selectedService === 'all' || inc.service === selectedService;
       const matchSearch =
         !searchQuery.trim() ||
@@ -1265,9 +1403,11 @@ export const IncidentsPage = ({ onNavigate }) => {
               }}
             >
               <option value="all">Tất cả trạng thái</option>
-              <option value="RECOVERING">Đang tự phục hồi</option>
+              <option value="OPEN">Chưa khắc phục (Tất cả đang mở)</option>
+              <option value="RECOVERING">Đang xử lý / Giám sát</option>
               <option value="HITL">Chờ phê duyệt HITL</option>
-              <option value="NO_ACTION">Tự động an toàn (NO_ACTION)</option>
+              <option value="NO_ACTION">Cần kiểm tra / Ngắt mạch (NO_ACTION)</option>
+              <option value="FAILED">Tự khắc phục thất bại</option>
               <option value="RESOLVED">Đã khắc phục hoàn tất</option>
             </select>
           </div>
@@ -1357,13 +1497,13 @@ export const IncidentsPage = ({ onNavigate }) => {
                 <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '170px' }}>
                   DỊCH VỤ / NODE
                 </th>
-                <th style={{ padding: '14px 18px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '380px', maxWidth: '420px' }}>
+                <th style={{ padding: '14px 18px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '380px' }}>
                   TIÊU ĐỀ SỰ CỐ TỔNG QUAN
                 </th>
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '150px' }}>
+                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '180px' }}>
                   TRẠNG THÁI
                 </th>
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '150px', textAlign: 'right' }}>
+                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '130px', textAlign: 'right' }}>
                   THAO TÁC
                 </th>
               </tr>
@@ -1406,9 +1546,12 @@ export const IncidentsPage = ({ onNavigate }) => {
                   const isMed = item.severity === 'MEDIUM';
 
                   const isDone = item.status.includes('hoàn tất');
-                  const isSafeNoAction = item.status.includes('NO_ACTION') || item.status.includes('an toàn');
+                  const isAutoStabilized = item.status.includes('Tự ổn định');
+                  const isClosedManual = item.status.includes('Can thiệp thủ công') || item.status.includes('Đã đóng');
+                  const isUrgentNoAction = item.status.includes('Cần kiểm tra');
+                  const isSafeNoAction = !isUrgentNoAction && (item.status.includes('NO_ACTION') || item.status.includes('an toàn'));
                   const isWait = item.status.includes('duyệt');
-                  const isFailed = item.status.includes('thất bại');
+                  const isFailed = item.status.includes('thất bại') || item.status.includes('Chưa phục hồi');
 
                   return (
                     <tr
@@ -1428,17 +1571,35 @@ export const IncidentsPage = ({ onNavigate }) => {
                       }}
                     >
                       <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
-                        <span
-                          style={{
-                            backgroundColor: '#F1F5F9',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            border: '1px solid #E2E8F0',
-                            fontSize: '0.75rem',
-                          }}
-                        >
-                          {item.id}
-                        </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                          <span
+                            style={{
+                              backgroundColor: '#F1F5F9',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #E2E8F0',
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            {item.id}
+                          </span>
+                          {item.occurrenceCount > 1 && (
+                            <span
+                              title={`Sự cố lặp lại ${item.occurrenceCount} lần`}
+                              style={{
+                                backgroundColor: '#FEF3C7',
+                                color: '#B45309',
+                                border: '1px solid #FDE68A',
+                                padding: '2px 6px',
+                                borderRadius: '6px',
+                                fontSize: '0.6875rem',
+                                fontWeight: 800,
+                              }}
+                            >
+                              x{item.occurrenceCount}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
@@ -1496,9 +1657,24 @@ export const IncidentsPage = ({ onNavigate }) => {
                         >
                           {translateIncidentTitle(item.title)}
                         </div>
+                        {item.failureHint && (
+                          <div
+                            title={item.failureHint}
+                            style={{
+                              marginTop: '3px',
+                              fontSize: '0.72rem',
+                              color: item.healingStatus === 'FAILED' ? '#B91C1C' : '#64748B',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {item.failureHint}
+                          </div>
+                        )}
                       </td>
 
-                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                         {isWait && onNavigate ? (
                           <button
                             type="button"
@@ -1509,9 +1685,9 @@ export const IncidentsPage = ({ onNavigate }) => {
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '5px',
+                              gap: '6px',
                               padding: '4px 10px',
-                              borderRadius: '12px',
+                              borderRadius: '20px',
                               fontSize: '0.75rem',
                               fontWeight: 700,
                               backgroundColor: '#FEF3C7',
@@ -1520,7 +1696,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                               cursor: 'pointer',
                               transition: 'all 0.15s ease',
                             }}
-                            title="Chuyển ngay tới Cổng Phê Duyệt HITL để kiểm tra và duyệt"
+                            title="Chuyển ngay tới Cổng Phê Duyệt HITL"
                           >
                             <Clock size={13} />
                             <span>Chờ phê duyệt HITL &rarr;</span>
@@ -1530,18 +1706,24 @@ export const IncidentsPage = ({ onNavigate }) => {
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '5px',
-                              padding: '4px 9px',
-                              borderRadius: '12px',
+                              gap: '6px',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
                               fontSize: '0.75rem',
                               fontWeight: 700,
-                              backgroundColor: isDone ? '#DCFCE7' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : isFailed ? '#FEE2E2' : '#EFF6FF',
-                              color: isDone ? '#15803D' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : isFailed ? '#DC2626' : '#1D4ED8',
-                              border: `1px solid ${isDone ? '#86EFAC' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : isFailed ? '#FCA5A5' : '#BFDBFE'}`,
+                              backgroundColor: isDone ? '#DCFCE7' : isAutoStabilized ? '#EFF6FF' : isClosedManual ? '#F1F5F9' : isUrgentNoAction ? '#FEF2F2' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : isFailed ? '#FEE2E2' : '#EFF6FF',
+                              color: isDone ? '#15803D' : isAutoStabilized ? '#1D4ED8' : isClosedManual ? '#475569' : isUrgentNoAction ? '#DC2626' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : isFailed ? '#DC2626' : '#1D4ED8',
+                              border: `1px solid ${isDone ? '#86EFAC' : isAutoStabilized ? '#BFDBFE' : isClosedManual ? '#CBD5E1' : isUrgentNoAction ? '#FECACA' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : isFailed ? '#FCA5A5' : '#BFDBFE'}`,
                             }}
                           >
                             {isDone ? (
                               <CheckCircle2 size={13} />
+                            ) : isAutoStabilized ? (
+                              <Activity size={13} />
+                            ) : isClosedManual ? (
+                              <ShieldCheck size={13} />
+                            ) : isUrgentNoAction ? (
+                              <AlertTriangle size={13} />
                             ) : isSafeNoAction ? (
                               <ShieldCheck size={13} />
                             ) : isWait ? (
@@ -1569,8 +1751,8 @@ export const IncidentsPage = ({ onNavigate }) => {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '5px',
-                              padding: '6px 14px',
-                              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                              padding: '5px 10px',
+                              backgroundColor: '#059669',
                               color: '#FFFFFF',
                               fontSize: '0.75rem',
                               fontWeight: 700,
@@ -1815,7 +1997,17 @@ export const IncidentsPage = ({ onNavigate }) => {
       {activeModalIncident && (
         <RootCauseModal
           incident={activeModalIncident}
-          onClose={() => setActiveModalIncident(null)}
+          onClose={() => {
+            setActiveModalIncident(null);
+            handledDeepLinkRef.current = null;
+            setDeepLinkIncidentId(null);
+            if (typeof window !== 'undefined' && window.location.search.includes('incident=')) {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('incident');
+              const cleanSearch = url.searchParams.toString();
+              window.history.replaceState({}, '', `${url.pathname}${cleanSearch ? `?${cleanSearch}` : ''}`);
+            }
+          }}
           onResolve={handleResolveIncident}
           onNavigate={onNavigate}
         />

@@ -393,6 +393,298 @@ export class EmailService {
   /**
    * Gửi email thông báo yêu cầu phê duyệt hành động tự phục hồi (HITL) kèm nút 1-Click Approve
    */
+  private static escapeHtml(raw?: string | null): string {
+    if (!raw) return '';
+    return String(raw)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private static describeCriticalStage(stage?: string): string {
+    switch ((stage || '').toUpperCase()) {
+      case 'NO_ACTION':
+        return 'AI đề xuất NO_ACTION / Cầu dao an toàn (Circuit Breaker) đang ngắt — Hệ thống KHÔNG tự động khởi động lại hay thay đổi hạ tầng, yêu cầu kỹ sư kiểm tra ngay.';
+      case 'NO_POLICY':
+        return 'Chưa có Chính sách tự phục hồi (Healing Policy) khớp với hành động đề xuất — Sự cố đang ở trạng thái MỞ và chờ can thiệp.';
+      case 'POLICY_DISABLED':
+        return 'Chính sách tự phục hồi đang tắt (Audit / Dry-Run Mode) — Hệ thống chỉ chẩn đoán và yêu cầu kỹ sư xử lý trực tiếp.';
+      case 'HITL_PENDING':
+        return 'Hành động tự phục hồi đang chờ phê duyệt con người (HITL Approval Gate).';
+      case 'HEALING_FAILED':
+        return 'Quá trình tự phục hồi tự động bị thất bại hoặc không có Kubernetes Agent trực tuyến để nhận lệnh.';
+      default:
+        return 'Phát hiện sự cố mức độ KHẨN CẤP cần đội ngũ SRE / DevOps kiểm tra ngay lập tức.';
+    }
+  }
+
+  /**
+   * Dựng Subject + HTML Email Cảnh báo Sự cố Khẩn cấp (CRITICAL)
+   */
+  public static buildCriticalIncidentEmailContent(payload: {
+    toEmail: string;
+    recipientName: string;
+    recipientRole?: string;
+    incidentId: string;
+    incidentCode?: string;
+    title: string;
+    severity: string;
+    serviceName: string;
+    podName?: string | null;
+    nodeName?: string | null;
+    namespace?: string | null;
+    clusterName?: string | null;
+    organizationName?: string | null;
+    rootCauseType?: string | null;
+    rootCauseDescription?: string | null;
+    confidenceScore?: number | null;
+    recommendationAction?: string | null;
+    recommendationReason?: string | null;
+    reasonStage: string;
+    failureMessage?: string | null;
+    occurrenceCount?: number | null;
+    detectedAt?: Date | string | null;
+  }): { subject: string; html: string; dashboardUrl: string; incidentCode: string } {
+    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const incidentCode = payload.incidentCode || `INC-${String(payload.incidentId).slice(0, 8).toUpperCase()}`;
+    const dashboardUrl = `${clientUrl}/dashboard/incidents?incident=${encodeURIComponent(payload.incidentId)}`;
+    const stageDesc = this.describeCriticalStage(payload.reasonStage);
+    const sevUpper = (payload.severity || 'CRITICAL').toUpperCase();
+    const occCount = Number(payload.occurrenceCount || 1);
+    const occSuffix = occCount > 1 ? ` (x${occCount} lần)` : '';
+    const confidenceLabel =
+      payload.confidenceScore !== null && payload.confidenceScore !== undefined
+        ? `${Math.round(Number(payload.confidenceScore) <= 1 ? Number(payload.confidenceScore) * 100 : Number(payload.confidenceScore))}%`
+        : 'N/A';
+
+    const subject = `🚨 [KHẨN CẤP - ${incidentCode}]${occSuffix} ${payload.title || 'Sự cố nghiêm trọng'} trên ${payload.serviceName} (${payload.clusterName || 'K8s'})`;
+
+    const detectedTime = payload.detectedAt
+      ? new Date(payload.detectedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false })
+      : new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+
+    const html = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Cảnh Báo Khẩn Cấp - ${this.escapeHtml(incidentCode)}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #fef2f2; margin: 0; padding: 0; color: #1e293b; }
+        .wrapper { max-width: 660px; margin: 28px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 30px -5px rgba(185, 28, 28, 0.18); border: 1px solid #fecaca; }
+        .header { background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%); padding: 26px 28px; color: #ffffff; }
+        .header-tag { display: inline-block; background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.45); color: #ffffff; font-size: 11px; font-weight: 800; text-transform: uppercase; padding: 4px 10px; border-radius: 9999px; letter-spacing: 0.6px; margin-bottom: 10px; }
+        .header h1 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.3; }
+        .header p { margin: 6px 0 0 0; font-size: 13px; color: #fee2e2; }
+        .content { padding: 26px 28px; }
+        .urgent-banner { background-color: #fff1f2; border: 1px solid #fda4af; border-left: 5px solid #e11d48; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: #9f1239; line-height: 1.5; }
+        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-size: 13px; }
+        .info-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+        .info-table td.label { width: 34%; color: #64748b; font-weight: 600; }
+        .info-table td.value { width: 66%; color: #0f172a; font-weight: 600; }
+        .badge-crit { display: inline-block; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 800; }
+        .rca-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 22px; font-size: 13px; color: #334155; line-height: 1.55; }
+        .cta-box { text-align: center; margin: 26px 0 18px; }
+        .btn-urgent { display: inline-block; background: #dc2626; color: #ffffff !important; font-weight: 800; font-size: 14px; padding: 13px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35); }
+        .footer { background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <div class="wrapper">
+        <div class="header">
+          <div class="header-tag">🚨 CẢNH BÁO KHẨN CẤP (URGENT INCIDENT ALERT)</div>
+          <h1>[${this.escapeHtml(incidentCode)}] ${this.escapeHtml(payload.title || 'Sự cố nghiêm trọng hệ thống')}</h1>
+          <p>Tổ chức: <strong>${this.escapeHtml(payload.organizationName || 'SME Organization')}</strong> &bull; Thời điểm: <strong>${this.escapeHtml(detectedTime)} (GMT+7)</strong></p>
+        </div>
+
+        <div class="content">
+          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>${payload.recipientRole ? ` (${this.escapeHtml(payload.recipientRole)})` : ''},</p>
+
+          <div class="urgent-banner">
+            <strong>Yêu cầu xử lý ngay (${this.escapeHtml(payload.reasonStage)}):</strong><br/>
+            ${this.escapeHtml(stageDesc)}
+            ${payload.failureMessage ? `<br/><br/><strong>Chi tiết lỗi:</strong> <code>${this.escapeHtml(payload.failureMessage)}</code>` : ''}
+          </div>
+
+          <table class="info-table">
+            <tr>
+              <td class="label">🆔 Mã sự cố</td>
+              <td class="value"><code>${this.escapeHtml(incidentCode)}</code> <span class="badge-crit">${this.escapeHtml(sevUpper)}</span>${occCount > 1 ? ` <span class="badge-crit">Lặp lại x${occCount}</span>` : ''}</td>
+            </tr>
+            <tr>
+              <td class="label">📦 Dịch vụ bị ảnh hưởng</td>
+              <td class="value" style="color: #dc2626; font-weight: 800;">${this.escapeHtml(payload.serviceName)}</td>
+            </tr>
+            <tr>
+              <td class="label">☸️ Cụm / Namespace / Pod / Node</td>
+              <td class="value">
+                Cụm: <strong>${this.escapeHtml(payload.clusterName || 'Chưa xác định')}</strong>
+                ${payload.namespace ? ` &bull; Namespace: <code>${this.escapeHtml(payload.namespace)}</code>` : ''}
+                ${payload.podName ? `<br/>Pod: <code>${this.escapeHtml(payload.podName)}</code>` : ''}
+                ${payload.nodeName ? ` &bull; Node: <code>${this.escapeHtml(payload.nodeName)}</code>` : ''}
+              </td>
+            </tr>
+            <tr>
+              <td class="label">🔬 Nguyên nhân gốc (RCA)</td>
+              <td class="value">${this.escapeHtml(payload.rootCauseType || payload.title)} (Độ tin cậy AI: <strong>${this.escapeHtml(confidenceLabel)}</strong>)</td>
+            </tr>
+            <tr>
+              <td class="label">🛡️ Trạng thái tự phục hồi</td>
+              <td class="value"><code>${this.escapeHtml(payload.recommendationAction || 'NO_ACTION')}</code> &mdash; Cần kỹ sư xác minh &amp; can thiệp</td>
+            </tr>
+          </table>
+
+          ${(payload.rootCauseDescription || (payload.recommendationReason && (!payload.failureMessage || payload.recommendationReason !== payload.failureMessage))) ? `
+          <div class="rca-box">
+            <strong>📋 Tóm tắt phân tích AI &amp; Khuyến nghị:</strong><br/>
+            ${payload.rootCauseDescription ? `<div style="margin-top:6px;">${this.escapeHtml(payload.rootCauseDescription)}</div>` : ''}
+            ${(payload.recommendationReason && (!payload.failureMessage || payload.recommendationReason !== payload.failureMessage)) ? `<div style="margin-top:8px; color:#b91c1c;"><strong>Hướng dẫn can thiệp:</strong> ${this.escapeHtml(payload.recommendationReason)}</div>` : ''}
+            ${Array.isArray((payload as any).manualPlaybook) && (payload as any).manualPlaybook.length > 0 ? `<div style="margin-top:10px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534;"><strong>🛠️ Phương pháp xử lý thủ công đề xuất (Manual Playbook 3 bước):</strong><ul style="margin:6px 0 0 18px; padding:0;">${((payload as any).manualPlaybook as string[]).map((st) => `<li style="margin-bottom:4px;">${this.escapeHtml(st)}</li>`).join('')}</ul></div>` : ''}
+          </div>` : ''}
+
+          <div class="cta-box">
+            <a href="${dashboardUrl}" class="btn-urgent" target="_blank">
+              🔍 Mở Bảng Điều Khiển &amp; Xem Chi Tiết Sự Cố (${this.escapeHtml(incidentCode)})
+            </a>
+          </div>
+
+          <p style="font-size: 12px; color: #64748b; text-align: center; margin-bottom: 0;">
+            Link trực tiếp: <a href="${dashboardUrl}" style="color: #dc2626;">${this.escapeHtml(dashboardUrl)}</a>
+          </p>
+        </div>
+
+        <div class="footer">
+          <p style="margin: 0 0 4px 0;">Email khẩn cấp từ <strong>CapTone AI Self-Healing SRE Platform</strong>.</p>
+          <p style="margin: 0;">Hệ thống áp dụng kiểm soát chống spam cảnh báo tự động (Cooldown) và phân quyền nhận tin cho SME_OWNER, DEVOPS &amp; danh sách tùy chỉnh.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    return { subject, html, dashboardUrl, incidentCode };
+  }
+
+  /**
+   * Gửi email cảnh báo khẩn cấp sự cố CRITICAL cho kỹ sư / danh sách cảnh báo
+   */
+  public static async sendCriticalIncidentAlertEmail(payload: {
+    toEmail: string;
+    recipientName: string;
+    recipientRole?: string;
+    incidentId: string;
+    incidentCode?: string;
+    title: string;
+    severity: string;
+    serviceName: string;
+    podName?: string | null;
+    nodeName?: string | null;
+    namespace?: string | null;
+    clusterName?: string | null;
+    organizationName?: string | null;
+    rootCauseType?: string | null;
+    rootCauseDescription?: string | null;
+    confidenceScore?: number | null;
+    recommendationAction?: string | null;
+    recommendationReason?: string | null;
+    reasonStage: string;
+    failureMessage?: string | null;
+    occurrenceCount?: number | null;
+    detectedAt?: Date | string | null;
+  }): Promise<boolean> {
+    const transporter = this.getTransporter();
+    const { subject, html, dashboardUrl, incidentCode } = this.buildCriticalIncidentEmailContent(payload);
+
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log(`🚨 [EMAIL SERVICE - DEV MODE] CẢNH BÁO KHẨN CẤP ${incidentCode}`);
+      console.log(`➡️  Người nhận: ${payload.recipientName} (${payload.recipientRole || 'CUSTOM'}) <${payload.toEmail}>`);
+      console.log(`🏢  Tổ chức: ${payload.organizationName || 'N/A'} | Cụm: ${payload.clusterName || 'N/A'}`);
+      console.log(`📦  Dịch vụ: ${payload.serviceName} | Mức độ: ${payload.severity} | Giai đoạn: ${payload.reasonStage}`);
+      console.log(`🌐  Deep-link: ${dashboardUrl}`);
+      console.log('============================================================\n');
+      return true;
+    }
+
+    try {
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
+        to: payload.toEmail,
+        subject,
+        html,
+      });
+      console.log(`✅ [EMAIL CRITICAL] Đã gửi email khẩn cấp [${incidentCode}] tới <${payload.toEmail}>`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL CRITICAL ERROR] Gửi cảnh báo [${incidentCode}] tới ${payload.toEmail} thất bại:`, (error as Error).message);
+      return false;
+    }
+  }
+
+  /**
+   * Gửi email thử nghiệm kiểm tra cấu hình kênh nhận cảnh báo khẩn cấp
+   */
+  public static async sendTestAlertEmail(payload: {
+    toEmail: string;
+    recipientName?: string;
+    organizationName?: string;
+    triggeredByEmail?: string;
+  }): Promise<boolean> {
+    const transporter = this.getTransporter();
+    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const settingsUrl = `${clientUrl}/dashboard/settings`;
+    const orgLabel = payload.organizationName || 'Tổ chức SME';
+
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log('🧪 [EMAIL SERVICE - DEV MODE] EMAIL KIỂM TRA CẢNH BÁO KHẨN CẤP');
+      console.log(`➡️  Gửi tới: ${payload.toEmail}`);
+      console.log(`🏢  Tổ chức: ${orgLabel} | Người kích hoạt: ${payload.triggeredByEmail || 'Admin'}`);
+      console.log('============================================================\n');
+      return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head><meta charset="UTF-8"><title>Kiểm tra cấu hình Email cảnh báo</title></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background:#f8fafc; padding:24px; color:#0f172a;">
+      <div style="max-width:600px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#065f46,#059669); padding:22px 24px; color:#ffffff;">
+          <h2 style="margin:0; font-size:18px;">✅ Kiểm Tra Kênh Email Cảnh Báo Khẩn Cấp</h2>
+          <p style="margin:6px 0 0; font-size:13px; color:#d1fae5;">Tổ chức: ${this.escapeHtml(orgLabel)}</p>
+        </div>
+        <div style="padding:24px; font-size:14px; line-height:1.6;">
+          <p>Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>,</p>
+          <p>Đây là email kiểm tra kết nối SMTP được kích hoạt bởi <strong>${this.escapeHtml(payload.triggeredByEmail || 'Quản trị viên')}</strong> cho tổ chức <strong>${this.escapeHtml(orgLabel)}</strong>.</p>
+          <p>Khi hệ thống AI Self-Heal phát hiện sự cố mức <strong>KHẨN CẤP (CRITICAL)</strong> mà chưa thể tự phục hồi (ví dụ <code>NO_ACTION</code>, Cầu dao ngắt mạch hoặc tự sửa lỗi thất bại), thông báo chi tiết sẽ được gửi ngay tới địa chỉ email này.</p>
+          <div style="margin:22px 0; text-align:center;">
+            <a href="${settingsUrl}" style="display:inline-block; background:#059669; color:#ffffff; padding:11px 22px; border-radius:8px; text-decoration:none; font-weight:700;">Quản Lý Cấu Hình Cảnh Báo</a>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
+        to: payload.toEmail,
+        subject: `🧪 [CapTone] Email kiểm tra kênh cảnh báo khẩn cấp - ${orgLabel}`,
+        html: htmlContent,
+      });
+      console.log(`✅ [EMAIL TEST] Đã gửi email kiểm tra cảnh báo tới <${payload.toEmail}>`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL TEST ERROR] Gửi email kiểm tra tới ${payload.toEmail} thất bại:`, (error as Error).message);
+      return false;
+    }
+  }
+
   public static async sendHitlApprovalNotification(payload: {
     toEmail: string;
     recipientName: string;

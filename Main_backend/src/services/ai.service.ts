@@ -150,6 +150,7 @@ const METRIC_UNITS: Record<keyof GRUMetricPoint, string> = {
 const ACTION_NAME_MAP: Record<string, string> = {
   RESTART_POD: 'Restart Pod',
   REPLACE_POD: 'Replace Pod',
+  DRAIN_NODE: 'Drain Node',
   RESTART_DEPLOYMENT: 'Restart Deployment',
   SCALE_REPLICAS: 'Scale Replicas',
   SCALE_UP: 'Scale Replicas',
@@ -170,6 +171,91 @@ const PRIORITY_INT_MAP: Record<string, number> = {
   MEDIUM: 3,
   LOW: 4,
 };
+
+const CAUSE_TO_INCIDENT_TYPE: Record<string, string> = {
+  'Container memory exhausted': 'OOM',
+  'Storage capacity exhausted': 'DISK_FULL',
+  'CPU saturation': 'CPU_OVERLOAD',
+  'Traffic overload': 'TRAFFIC_OVERLOAD',
+  'Unstable application pod': 'UNSTABLE_POD',
+  'Deployment failure': 'DEPLOYMENT_FAILURE',
+  'Upstream dependency failure': 'DEPENDENCY_FAILURE',
+  'Application errors': 'HTTP_5XX_SPIKE',
+  'Service performance degradation': 'HIGH_LATENCY',
+  'Insufficient available replicas': 'INSUFFICIENT_REPLICAS',
+  'Kubernetes scheduling failure': 'SCHEDULING_FAILURE',
+  'Workload underutilized (scale down opportunity)': 'SCALE_DOWN_CANDIDATE',
+};
+
+function buildSpecificIncidentTitle(
+  cause: string,
+  serviceId: string,
+  incidentType: string,
+  metrics: {
+    cpu?: number;
+    ram?: number;
+    disk?: number;
+    latency?: number;
+    request_rate?: number;
+    http_5xx_rate?: number;
+    pod_restart_count?: number;
+  },
+  evidence: string[] = []
+): string {
+  const evText = evidence.join(' ');
+  const normType = String(incidentType || '').toUpperCase();
+
+  if (normType === 'OOM' || cause === 'Container memory exhausted') {
+    const isOom137 = /137|OOMKilled/i.test(evText);
+    const ram = Math.round(Number(metrics?.ram || 0));
+    const detail = isOom137 ? 'OOMKilled exitCode 137' : `RAM ${ram}%`;
+    return `Tràn bộ nhớ RAM (${detail}) on ${serviceId}`;
+  }
+  if (normType === 'DISK_FULL' || cause === 'Storage capacity exhausted') {
+    const disk = Math.round(Number(metrics?.disk || 0));
+    return `Cạn kiệt dung lượng ổ đĩa (${disk}%) on ${serviceId}`;
+  }
+  if (normType === 'CPU_OVERLOAD' || cause === 'CPU saturation') {
+    const cpu = Math.round(Number(metrics?.cpu || 0));
+    const lat = Math.round(Number(metrics?.latency || 0));
+    return lat >= 300
+      ? `Bão hòa tài nguyên CPU (${cpu}%, Latency ${lat}ms) on ${serviceId}`
+      : `Bão hòa tài nguyên CPU (${cpu}%) on ${serviceId}`;
+  }
+  if (normType === 'HIGH_LATENCY' || cause === 'Service performance degradation') {
+    const lat = Math.round(Number(metrics?.latency || 0));
+    return `Độ trễ phản hồi tăng cao (${lat}ms) on ${serviceId}`;
+  }
+  if (normType === 'HTTP_5XX_SPIKE' || cause === 'Application errors') {
+    const rate = Number(metrics?.http_5xx_rate || 0).toFixed(1);
+    return `Đột biến lỗi ứng dụng HTTP 5xx (${rate}%) on ${serviceId}`;
+  }
+  if (normType === 'TRAFFIC_OVERLOAD' || cause === 'Traffic overload') {
+    const reqRate = Math.round(Number(metrics?.request_rate || 0));
+    return `Quá tải lưu lượng truy cập (${reqRate} req/s) on ${serviceId}`;
+  }
+  if (normType === 'UNSTABLE_POD' || cause === 'Unstable application pod') {
+    if (/CrashLoopBackOff/i.test(evText)) {
+      return `Pod bị kẹt vòng lặp CrashLoopBackOff on ${serviceId}`;
+    }
+    if (/ImagePullBackOff|ErrImagePull/i.test(evText)) {
+      return `Lỗi tải Container Image (ImagePullBackOff) on ${serviceId}`;
+    }
+    if (/Readiness probe/i.test(evText)) {
+      return `Pod lỗi Readiness Probe (không sẵn sàng) on ${serviceId}`;
+    }
+    if (/Liveness probe/i.test(evText)) {
+      return `Pod lỗi Liveness Probe (khởi động lại) on ${serviceId}`;
+    }
+    const restarts = Number(metrics?.pod_restart_count || 0);
+    if (restarts > 0) {
+      return `Pod khởi động lại liên tục (${restarts} lần) on ${serviceId}`;
+    }
+    return `Pod ứng dụng bất ổn định on ${serviceId}`;
+  }
+
+  return `${cause} on ${serviceId}`;
+}
 
 export class AiService {
   /**
@@ -338,7 +424,8 @@ export class AiService {
       if (!workloadId) {
         let namespaceId: string | null = null;
         try {
-          const nsRes = await client.query(
+          // Run optional read-only lookup on pool so any schema/lookup quirk never aborts the outer TX (25P02)
+          const nsRes = await pool.query(
             `SELECT p.namespace_id FROM pods p 
              WHERE (p.labels->>'app' = $1 OR p.name LIKE $2) AND p.namespace_id IS NOT NULL 
              LIMIT 1`,
@@ -347,7 +434,7 @@ export class AiService {
           if (nsRes.rows.length > 0 && nsRes.rows[0].namespace_id) {
             namespaceId = nsRes.rows[0].namespace_id;
           } else {
-            const fallbackNs = await client.query(
+            const fallbackNs = await pool.query(
               `SELECT id FROM namespaces WHERE (cluster_id::text = $1 OR cluster_id IN (SELECT id FROM clusters WHERE name = $1 OR id::text = $1) OR $1::text IS NULL) AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`,
               [clusterId]
             );
@@ -449,14 +536,98 @@ export class AiService {
       input.previous_action_result_source || null;
     let prevRcaRootCause: string | null = input.previous_rca_root_cause || null;
 
+    let resolvedTarget: { workloadId: string | null; targetName: string; namespace: string; workloadType: string } | null = null;
+    try {
+      resolvedTarget = await WorkloadModel.resolveK8sTarget(input.service_id, input.cluster_id);
+    } catch {}
+    const targetAliasesLower = Array.from(
+      new Set([input.service_id, resolvedTarget?.targetName].filter(Boolean).map((s) => String(s).toLowerCase()))
+    );
+    const resolvedWorkloadId: string | null = input.workload_id || resolvedTarget?.workloadId || null;
+
     if (!prevAction || !prevActionResult) {
       try {
-        let targetWorkloadId: string | null = input.workload_id || null;
-        if (!targetWorkloadId) {
-          const wl = await WorkloadModel.findByName(input.service_id);
-          if (wl) {
-            targetWorkloadId = wl.id;
-          }
+        // Post-Action Verification Failure Check:
+        // If a K8s command finished >= 20s ago (execution_status = 'SUCCEEDED') on an still-OPEN incident
+        // and no successful recovery_verification exists yet, the fact that RCA is triggered again means
+        // the Pod/service did NOT recover. Record verification_result = false and mark the action FAILED
+        // so the 3-tier escalation ladder (RESTART_POD -> REPLACE_POD -> DRAIN_NODE / NO_ACTION) advances.
+        const unverifiedActRes = await pool.query(
+          `SELECT h.id, act.code AS action_code, h.target_name, h.completed_at
+           FROM healing_actions h
+           LEFT JOIN healing_action_types act ON act.id = h.action_type_id
+           WHERE h.execution_status = 'SUCCEEDED'
+             AND h.completed_at IS NOT NULL
+             AND h.completed_at <= NOW() - interval '20 seconds'
+             AND h.completed_at >= NOW() - interval '60 minutes'
+             AND (
+               LOWER(COALESCE(h.target_name, '')) = ANY($1)
+               OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR LOWER(COALESCE(h.target_name, '')) = LOWER($2)))
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM recovery_verifications rv
+               WHERE rv.healing_action_id = h.id
+             )
+             AND h.completed_at > COALESCE((
+               SELECT MAX(inc.resolved_at)
+               FROM incidents inc
+               WHERE inc.status = 'RESOLVED'
+                 AND inc.resolved_at IS NOT NULL
+                 AND inc.resolved_at >= NOW() - interval '60 minutes'
+                 AND (LOWER(COALESCE(inc.target_name, '')) = ANY($1) OR ($2::text IS NOT NULL AND inc.target_id::text = $2))
+             ), '1970-01-01'::timestamptz)
+           ORDER BY h.completed_at DESC
+           LIMIT 5;`,
+          [targetAliasesLower, resolvedWorkloadId]
+        );
+        for (const unv of unverifiedActRes.rows) {
+          const metricParts: string[] = [];
+          const latVal = Number((input.metrics as any).latency ?? 0);
+          const err5xxVal = Number((input.metrics as any).http_5xx_rate ?? 0);
+          const diskVal = Number((input.metrics as any).disk ?? 0);
+          const cpuVal = Number(input.metrics.cpu ?? 0);
+          const ramVal = Number(input.metrics.ram ?? 0);
+          const restartCount = Number(input.metrics.pod_restart_count ?? 0);
+
+          if (latVal >= 300) metricParts.push(`Độ trễ: ${Math.round(latVal)}ms`);
+          if (err5xxVal > 0) metricParts.push(`Lỗi HTTP 5xx: ${err5xxVal}%`);
+          if (diskVal >= 80) metricParts.push(`Disk: ${diskVal}%`);
+          if (cpuVal >= 80) metricParts.push(`CPU quá tải: ${cpuVal}%`);
+          if (ramVal >= 90) metricParts.push(`RAM cạn kiệt: ${ramVal}%`);
+          if (restartCount > 0) metricParts.push(`Restart: ${restartCount} lần`);
+
+          const telemetrySnapshot = `CPU: ${cpuVal}%, RAM: ${ramVal}%, Restart: ${restartCount}`;
+          const reasonStr = metricParts.length > 0
+            ? `vẫn còn bất thường (${metricParts.join(', ')}; ${telemetrySnapshot})`
+            : `chưa ổn định hoàn toàn theo chu kỳ kiểm tra (${telemetrySnapshot})`;
+
+          const failMsg = `Hậu kiểm thất bại (Post-Action Verification Failed): Sau khi chạy ${unv.action_code || 'lệnh K8s'}, dịch vụ ${input.service_id} ${reasonStr}.`;
+          const actCompletedAt = unv.completed_at ? new Date(unv.completed_at) : null;
+          const actualFailDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
+          await pool.query(
+            `INSERT INTO recovery_verifications (
+               healing_action_id, verification_type, status_before, status_after,
+               verification_result, verification_details, verified_at, duration_ms
+             ) VALUES (
+               $1, 'K8S_POST_HEALING_PROBE', $2::jsonb, $3::jsonb,
+               false, $4::jsonb, NOW(), $5
+             );`,
+            [
+              unv.id,
+              JSON.stringify({ health: 'DEGRADED' }),
+              JSON.stringify({ health: 'STILL_DEGRADED', metrics: input.metrics }),
+              JSON.stringify({ status: 'VERIFICATION_FAILED', message: failMsg, elapsed_since_completion_ms: actualFailDurationMs }),
+              actualFailDurationMs,
+            ]
+          ).catch(() => {});
+          await pool.query(
+            `UPDATE healing_actions
+             SET error_message = $2,
+                 result = jsonb_set(COALESCE(result, '{}'::jsonb), '{verification_status}', '"FAILED"'::jsonb)
+             WHERE id = $1;`,
+            [unv.id, failMsg]
+          ).catch(() => {});
+          console.log(`⚠️ [PostActionVerification] Action ${unv.id} (${unv.action_code}) on '${input.service_id}' FAILED post-action verification. Escalating in Re-RCA...`);
         }
 
         const prevActionQuery = `
@@ -464,21 +635,37 @@ export class AiService {
             h.execution_status,
             act.code AS action_code,
             act.name AS action_name,
-            rca.root_cause_type
+            rca.root_cause_type,
+            rv.verification_result
           FROM healing_actions h
           LEFT JOIN healing_action_types act ON act.id = h.action_type_id
           LEFT JOIN ai_recommendations rec ON rec.id = h.recommendation_id
           LEFT JOIN rca_analyses rca ON rca.id = rec.rca_analysis_id
+          LEFT JOIN LATERAL (
+            SELECT verification_result
+            FROM recovery_verifications rv_inner
+            WHERE rv_inner.healing_action_id = h.id
+            ORDER BY rv_inner.verified_at DESC
+            LIMIT 1
+          ) rv ON true
           WHERE h.execution_status IN ('SUCCEEDED', 'FAILED')
+            AND COALESCE(h.completed_at, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
             AND (
-              h.target_name ILIKE $1 
-              OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR h.target_name = $2))
+              LOWER(COALESCE(h.target_name, '')) = ANY($1)
+              OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR LOWER(COALESCE(h.target_name, '')) = LOWER($2)))
             )
+            AND COALESCE(h.completed_at, h.started_at, h.created_at) > COALESCE((
+              SELECT MAX(inc.resolved_at)
+              FROM incidents inc
+              WHERE inc.status = 'RESOLVED'
+                AND inc.resolved_at IS NOT NULL
+                AND inc.resolved_at >= NOW() - interval '60 minutes'
+                AND (LOWER(COALESCE(inc.target_name, '')) = ANY($1) OR ($2::text IS NOT NULL AND inc.target_id::text = $2))
+            ), '1970-01-01'::timestamptz)
           ORDER BY h.completed_at DESC NULLS LAST, h.started_at DESC NULLS LAST, h.created_at DESC
           LIMIT 1;
         `;
-        const searchPattern = `%${input.service_id}%`;
-        const historyRes = await pool.query(prevActionQuery, [searchPattern, targetWorkloadId]);
+        const historyRes = await pool.query(prevActionQuery, [targetAliasesLower, resolvedWorkloadId]);
 
         if (historyRes.rows.length > 0) {
           const row = historyRes.rows[0];
@@ -487,8 +674,8 @@ export class AiService {
           if (mappedCode === 'BLOCK_IP_TEMP') mappedCode = 'TEMPORARY_IP_BLOCK';
 
           let mappedStatus: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'UNKNOWN' | null = null;
-          if (row.execution_status === 'SUCCEEDED') mappedStatus = 'SUCCESS';
-          else if (row.execution_status === 'FAILED') mappedStatus = 'FAILED';
+          if (row.execution_status === 'FAILED' || row.verification_result === false) mappedStatus = 'FAILED';
+          else if (row.execution_status === 'SUCCEEDED' && row.verification_result !== false) mappedStatus = 'SUCCESS';
 
           if (mappedCode && mappedStatus) {
             prevAction = mappedCode;
@@ -504,7 +691,7 @@ export class AiService {
       }
     }
 
-    // Resolve action_history context (anti-loop & circuit breaker) if not passed
+    // Resolve action_history context (anti-loop & circuit breaker, scoped 60m + auto-reset after RESOLVED)
     let actionHistory = input.action_history || null;
     if (!actionHistory) {
       try {
@@ -518,28 +705,59 @@ export class AiService {
              h.started_at,
              h.completed_at,
              h.execution_status,
+             rv.verification_result,
              h.error_message AS error_details,
              h.result AS verification_details
            FROM healing_actions h
            LEFT JOIN healing_action_types act ON act.id = h.action_type_id
-           WHERE (h.target_name ILIKE $1 OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR h.target_name = $2)))
+           LEFT JOIN LATERAL (
+             SELECT verification_result
+             FROM recovery_verifications rv_inner
+             WHERE rv_inner.healing_action_id = h.id
+             ORDER BY rv_inner.verified_at DESC
+             LIMIT 1
+           ) rv ON true
+           WHERE COALESCE(h.completed_at, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
+             AND (
+               LOWER(COALESCE(h.target_name, '')) = ANY($1)
+               OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR LOWER(COALESCE(h.target_name, '')) = LOWER($2)))
+             )
+             AND COALESCE(h.completed_at, h.started_at, h.created_at) > COALESCE((
+               SELECT MAX(inc.resolved_at)
+               FROM incidents inc
+               WHERE inc.status = 'RESOLVED'
+                 AND inc.resolved_at IS NOT NULL
+                 AND inc.resolved_at >= NOW() - interval '60 minutes'
+                 AND (LOWER(COALESCE(inc.target_name, '')) = ANY($1) OR ($2::text IS NOT NULL AND inc.target_id::text = $2))
+             ), '1970-01-01'::timestamptz)
            ORDER BY h.completed_at DESC NULLS LAST, h.started_at DESC NULLS LAST, h.created_at DESC
            LIMIT 10;`,
-          [`%${input.service_id}%`, input.workload_id || null]
+          [targetAliasesLower, resolvedWorkloadId]
         );
 
         if (actRes.rows.length > 0) {
           let consecutiveFailures = 0;
           for (const r of actRes.rows) {
-            if (r.execution_status === 'FAILED') {
+            const isPendingRecon =
+              (typeof r.verification_details === 'object' && r.verification_details?.reconciliation_status === 'PENDING_RECONCILIATION') ||
+              (typeof r.error_details === 'string' && r.error_details.includes('PENDING_RECONCILIATION'));
+
+            // Audit 3: Do not increment consecutive_failures for actions still awaiting reconciliation
+            if (isPendingRecon) {
+              continue;
+            }
+
+            const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
+            if (isFailed) {
               consecutiveFailures++;
-            } else if (r.execution_status === 'SUCCEEDED') {
+            } else if (r.execution_status === 'SUCCEEDED' && r.verification_result !== false) {
               break;
             }
           }
           const blockedActions: string[] = [];
-          for (const r of actRes.rows) {
-            if (r.execution_status === 'FAILED' && r.action_code) {
+          for (const r of [...actRes.rows].reverse()) {
+            const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
+            if (isFailed && r.action_code) {
               if (!blockedActions.includes(r.action_code)) {
                 blockedActions.push(r.action_code);
               }
@@ -548,7 +766,7 @@ export class AiService {
           actionHistory = {
             total_actions_recorded: actRes.rows.length,
             consecutive_failures: consecutiveFailures,
-            circuit_breaker_tripped: consecutiveFailures >= 2,
+            circuit_breaker_tripped: consecutiveFailures >= 3,
             blocked_actions: blockedActions,
             history: actRes.rows.map((r: any) => ({
               action_id: r.action_id,
@@ -557,7 +775,10 @@ export class AiService {
               target_name: r.target_name,
               target_id: r.target_id,
               executed_at: r.started_at || r.completed_at,
-              result: r.execution_status === 'SUCCEEDED' ? 'SUCCESS' : (r.execution_status === 'FAILED' ? 'FAILED' : 'PARTIAL'),
+              result: (r.execution_status === 'FAILED' || r.verification_result === false)
+                ? 'FAILED'
+                : (r.execution_status === 'SUCCEEDED' ? 'SUCCESS' : 'PARTIAL'),
+              execution_status: r.execution_status,
               verification_result: typeof r.verification_details === 'object' && r.verification_details !== null
                 ? JSON.stringify(r.verification_details)
                 : (r.verification_details ? String(r.verification_details) : null),
@@ -574,8 +795,6 @@ export class AiService {
 
     const rcaPayload: Record<string, any> = {
       service_id: input.service_id,
-      risk_type: input.risk_type,
-      confidence: input.confidence,
       pod_id: input.pod_id,
       metrics: {
         cpu: Number(input.metrics.cpu),
@@ -591,6 +810,11 @@ export class AiService {
       kubernetes_events: input.kubernetes_events,
     };
 
+    if (input.risk_type !== undefined && input.risk_type !== null && input.confidence !== undefined && input.confidence !== null) {
+      rcaPayload.risk_type = input.risk_type;
+      rcaPayload.confidence = input.confidence;
+    }
+    if ((input as any).rule_engine) rcaPayload.rule_engine = (input as any).rule_engine;
     if (input.request_id) rcaPayload.request_id = input.request_id;
     if (input.incident_id) rcaPayload.incident_id = input.incident_id;
     if (input.cluster_id) rcaPayload.cluster_id = input.cluster_id;
@@ -613,11 +837,12 @@ export class AiService {
         const podRes = await pool.query(
           `SELECT p.name FROM pods p 
            LEFT JOIN workloads w ON w.id = p.workload_id 
-           WHERE (w.name = $1 OR p.name LIKE $2 OR p.labels->>'app' = $1)
-             AND p.deleted_at IS NULL 
-           ORDER BY p.restart_count DESC, p.created_at DESC 
+           WHERE (w.name = $1 OR p.labels->>'app' = $1 OR p.labels->>'app.kubernetes.io/name' = $1 OR p.name LIKE $2)
+             AND p.deleted_at IS NULL
+             AND ($3::text IS NULL OR p.cluster_id::text = $3 OR p.cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $3 OR cluster_uid = $3 OR name = $3))
+           ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC 
            LIMIT 1`,
-          [input.service_id, `${input.service_id}%`]
+          [input.service_id, `${input.service_id}-%`, input.cluster_id || null]
         );
         if (podRes.rows.length > 0 && podRes.rows[0].name) {
           rcaPayload.pod_id = podRes.rows[0].name;
@@ -727,9 +952,14 @@ export class AiService {
       }
 
       if (!workloadId) {
-        const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
-        if (workload) {
-          workloadId = workload.id;
+        const resolvedWl = await WorkloadModel.resolveK8sTarget(input.service_id, clusterId, client);
+        if (resolvedWl.workloadId) {
+          workloadId = resolvedWl.workloadId;
+        } else {
+          const workload = await WorkloadModel.findByName(input.service_id, client, clusterId);
+          if (workload) {
+            workloadId = workload.id;
+          }
         }
       }
 
@@ -751,10 +981,25 @@ export class AiService {
         throw new ApiError(500, 'Cannot resolve organization_id or environment_id for incident creation');
       }
 
-      // 3. Delegate incident creation to IncidentModel (with deduplication)
-      const incidentTitle = `${aiResponse.root_cause.cause} on ${input.service_id}`;
-      const incidentSeverity = aiResponse.root_cause.severity || 'HIGH';
-      const incidentType = input.risk_type || aiResponse.root_cause.cause || 'AI_ALERT';
+      // 3. Delegate incident creation to IncidentModel (with strict 24h per-service deduplication & occurrence counter)
+      const incidentType =
+        input.risk_type ||
+        CAUSE_TO_INCIDENT_TYPE[aiResponse.root_cause.cause] ||
+        aiResponse.root_cause.cause ||
+        'AI_ALERT';
+      const incidentTitle = buildSpecificIncidentTitle(
+        aiResponse.root_cause.cause,
+        input.service_id,
+        incidentType,
+        input.metrics,
+        aiResponse.evidence
+      );
+      const incidentSeverity =
+        aiResponse.recommendation?.action === 'NO_ACTION' &&
+        (String(aiResponse.recommendation?.priority || '').toUpperCase() === 'CRITICAL' ||
+          Boolean((aiResponse.recommendation as any)?.action_parameters?.circuit_breaker_tripped))
+          ? 'CRITICAL'
+          : aiResponse.root_cause.severity || 'HIGH';
       const targetType = aiResponse.target?.type || 'WORKLOAD';
 
       let incidentId: string;
@@ -765,12 +1010,33 @@ export class AiService {
         environmentId,
         workloadId,
         incidentType,
-        15
+        1440,
+        input.service_id
       );
 
       if (existingIncident) {
         incidentId = existingIncident.id;
         incidentCreatedAt = new Date(existingIncident.created_at).toISOString();
+
+        const sevRank: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+        const curSevUpper = String(existingIncident.severity || 'HIGH').toUpperCase();
+        const newSevUpper = String(incidentSeverity || 'HIGH').toUpperCase();
+        const nextSeverity =
+          (sevRank[newSevUpper] || 0) >= (sevRank[curSevUpper] || 0) ? newSevUpper : curSevUpper;
+
+        await client.query(
+          `UPDATE incidents
+           SET occurrence_count = COALESCE(occurrence_count, 1) + 1,
+               last_occurred_at = NOW(),
+               detected_at = NOW(),
+               target_name = COALESCE(target_name, $2),
+               severity = $3,
+               title = $4,
+               description = $5,
+               updated_at = NOW()
+           WHERE id = $1;`,
+          [incidentId, input.service_id, nextSeverity, incidentTitle, aiResponse.explanation]
+        );
 
         // Check if identical recommendation is already proposed for this incident
         const existingRecs = await RecommendationModel.findByIncidentId(incidentId);
@@ -779,6 +1045,40 @@ export class AiService {
         );
 
         if (duplicateRec) {
+          if (
+            aiResponse.recommendation.reason &&
+            duplicateRec.reasoning !== aiResponse.recommendation.reason
+          ) {
+            await client.query(
+              `UPDATE ai_recommendations
+               SET reasoning = $2,
+                   risk_level = $3,
+                   priority = $4
+               WHERE id = $1;`,
+              [
+                duplicateRec.id,
+                aiResponse.recommendation.reason,
+                aiResponse.recommendation.priority || 'HIGH',
+                PRIORITY_INT_MAP[aiResponse.recommendation.priority] || 2,
+              ]
+            );
+          }
+          if (duplicateRec.rca_analysis_id) {
+            await client.query(
+              `UPDATE rca_analyses
+               SET root_cause_type = $2,
+                   root_cause_description = $3,
+                   analysis_result = $4,
+                   analyzed_at = NOW()
+               WHERE id = $1;`,
+              [
+                duplicateRec.rca_analysis_id,
+                aiResponse.root_cause.cause,
+                aiResponse.explanation,
+                JSON.stringify(aiResponse),
+              ]
+            ).catch(() => {});
+          }
           await client.query('COMMIT');
           return {
             incident_id: incidentId,
@@ -806,6 +1106,7 @@ export class AiService {
           source_type: 'AI_PREDICTION',
           target_type: targetType,
           target_id: workloadId,
+          target_name: input.service_id,
           incident_type: incidentType,
           title: incidentTitle,
           description: aiResponse.explanation,

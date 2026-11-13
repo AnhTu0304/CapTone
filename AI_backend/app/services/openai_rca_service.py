@@ -11,6 +11,7 @@ from app.schemas.kubernetes import KubernetesAnalysisResult
 from app.schemas.logs import LogAnalysisResult
 from app.schemas.metrics import MetricsAnalysisResult
 from app.schemas.prediction import PredictionResponse
+from app.agents.recommendation_agent import _extract_latest_failure_detail
 from app.schemas.rca import LLMRCAResult, RCARequest, RecommendationResult
 
 
@@ -147,20 +148,51 @@ class OpenAIRCAService:
             if previous_failure_evidence not in result.evidence:
                 result.evidence.append(previous_failure_evidence)
 
-        # Circuit Breaker & Blocked Actions Enforcement
-        if payload.action_history:
+        blocked_set = set(payload.action_history.blocked_actions) if payload.action_history else set()
+        consecutive_failures = payload.action_history.consecutive_failures if payload.action_history else 0
+        prev_act_norm = (payload.previous_action or "").upper().strip().replace(" ", "_")
+
+        # Bậc thang Cấp 2: Nếu RESTART_POD thất bại (consecutive_failures < 2) -> Leo thang lên REPLACE_POD
+        if (
+            (prev_act_norm in {"RESTART_POD", "RESTART_DEPLOYMENT"} and payload.previous_action_result in {"FAILED", "PARTIAL"})
+            or (consecutive_failures == 1 and "RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
+        ) and "REPLACE_POD" not in blocked_set and consecutive_failures < 2:
+            if result.recommendation.action in {"RESTART_POD", "RESTART_DEPLOYMENT", "NO_ACTION"}:
+                result.recommendation.action = "REPLACE_POD"
+                result.recommendation.reason = (
+                    f"Hành động {payload.previous_action or 'RESTART_POD'} ở Cấp 1 có kết quả hậu kiểm là {payload.previous_action_result or 'FAILED'}; "
+                    "hệ thống phân tích RCA lại trên dữ liệu mới và leo thang lên Cấp 2: REPLACE_POD (xóa đích danh Pod lỗi để tạo container mới tinh)."
+                )
+
+        # Bậc thang Cấp 3: Circuit Breaker & Node Recovery Enforcement
+        if payload.action_history or (prev_act_norm == "REPLACE_POD" and payload.previous_action_result in {"FAILED", "PARTIAL"}):
             ah = payload.action_history
-            if ah.consecutive_failures >= 2 or ah.circuit_breaker_tripped:
+            latest_err = _extract_latest_failure_detail(ah)
+            detail_suffix = f" Lỗi gần nhất: {latest_err}." if latest_err else ""
+            if (
+                fallback_recommendation is not None
+                and fallback_recommendation.action == "DRAIN_NODE"
+                and not (ah and ah.circuit_breaker_tripped)
+            ):
+                result.recommendation.action = "DRAIN_NODE"
+                result.recommendation.reason = fallback_recommendation.reason
+            elif (ah and (ah.consecutive_failures >= 2 or ah.circuit_breaker_tripped)) or (
+                prev_act_norm == "REPLACE_POD" and payload.previous_action_result in {"FAILED", "PARTIAL"}
+            ):
                 result.recommendation.action = "NO_ACTION"
                 result.recommendation.priority = "CRITICAL"
-                result.recommendation.reason = (
-                    f"Phát hiện lặp sự cố liên tiếp ({ah.consecutive_failures} lần thử trước đó đều thất bại). "
-                    "Kích hoạt Circuit Breaker chuyển quyền điều khiển cho kỹ sư vận hành (Human-in-the-Loop)."
-                )
-            elif result.recommendation.action in set(ah.blocked_actions):
+                if fallback_recommendation is not None and fallback_recommendation.action == "NO_ACTION":
+                    result.recommendation.reason = fallback_recommendation.reason
+                else:
+                    result.recommendation.reason = (
+                        f"Phát hiện lặp sự cố liên tiếp ({max(consecutive_failures, 2)} lần thử trước đó đều thất bại). "
+                        f"Kích hoạt Circuit Breaker chuyển quyền điều khiển cho kỹ sư vận hành (Human-in-the-Loop).{detail_suffix}"
+                    )
+            elif result.recommendation.action in blocked_set:
+                blocked_name = result.recommendation.action
                 result.recommendation.action = "NO_ACTION"
                 result.recommendation.reason = (
-                    f"Hành động '{result.recommendation.action}' nằm trong danh sách blocked_actions do lịch sử thất bại gần đây."
+                    f"Hành động '{blocked_name}' nằm trong danh sách blocked_actions do lịch sử thất bại gần đây.{detail_suffix}"
                 )
 
         action = result.recommendation.action
@@ -243,5 +275,10 @@ class OpenAIRCAService:
                 rec.target_node = fb.target_node
             if not rec.action_parameters and fb.action_parameters:
                 rec.action_parameters = fb.action_parameters
+            elif rec.action_parameters and fb.action_parameters:
+                if not rec.action_parameters.manual_playbook and fb.action_parameters.manual_playbook:
+                    rec.action_parameters.manual_playbook = fb.action_parameters.manual_playbook
+                if rec.action_parameters.target_replicas is None and fb.action_parameters.target_replicas is not None:
+                    rec.action_parameters.target_replicas = fb.action_parameters.target_replicas
 
         return result

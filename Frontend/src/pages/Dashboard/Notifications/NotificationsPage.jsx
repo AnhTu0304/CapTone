@@ -298,7 +298,12 @@ export const NotificationsPage = () => {
                   style={{
                     padding: '20px 24px',
                     borderBottom: '1px solid var(--dash-border)',
-                    backgroundColor: isRead ? '#FFFFFF' : 'rgba(5, 150, 105, 0.03)',
+                    backgroundColor: isRead
+                      ? '#FFFFFF'
+                      : n.severity === 'CRITICAL'
+                      ? 'rgba(220, 38, 38, 0.05)'
+                      : 'rgba(5, 150, 105, 0.03)',
+                    borderLeft: !isRead && n.severity === 'CRITICAL' ? '4px solid #DC2626' : '4px solid transparent',
                     display: 'flex',
                     alignItems: 'flex-start',
                     justifyContent: 'space-between',
@@ -421,7 +426,10 @@ export const NotificationsPage = () => {
                     {(n.actionPath || n.link) && (
                       <button
                         type="button"
-                        onClick={() => onNavigate && onNavigate(n.actionPath || n.link)}
+                        onClick={() => {
+                          if (!isRead) toggleNotificationRead(n.id, true);
+                          if (onNavigate) onNavigate(n.actionPath || n.link);
+                        }}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',

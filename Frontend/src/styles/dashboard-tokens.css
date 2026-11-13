@@ -315,10 +315,6 @@ a:focus-visible,
     display: none !important;
   }
 
-  .admin-desktop-toggle {
-    display: none !important;
-  }
-
   .admin-mobile-toggle {
     display: inline-flex !important;
   }

@@ -18,6 +18,7 @@ RCA_RESPONSE_FIELDS = {
     "service_id", "prediction", "root_cause", "evidence", "recommendation",
     "explanation", "historical_context_used", "similar_incident_ids",
     "workload_id", "namespace", "cluster_id", "incident_id", "request_id",
+    "engine", "evidence_status", "evidence_for", "evidence_against", "missing_evidence", "related_risks", "symptoms",
 }
 
 

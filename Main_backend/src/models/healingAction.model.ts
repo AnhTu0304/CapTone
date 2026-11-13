@@ -49,11 +49,21 @@ export class HealingActionModel {
   } = {}): Promise<{ items: any[]; total: number }> {
     const limit = filters.limit ?? 50;
     const offset = filters.offset ?? 0;
-    // Tự động hoàn tất các tác vụ bị treo RUNNING quá 45 giây để tránh kẹt trạng thái
+    // Đánh dấu các tác vụ RUNNING quá 60 giây là TIMEOUT và yêu cầu đối soát (PENDING_RECONCILIATION)
+    // Tuyệt đối không tự ý gán SUCCEEDED giả mạo khi chưa có xác nhận từ K8s Agent.
     try {
-      await pool.query(
-        "UPDATE healing_actions SET execution_status = 'SUCCEEDED', completed_at = COALESCE(started_at + INTERVAL '2 seconds', NOW()), result = jsonb_set(COALESCE(result, '{}'::jsonb), '{message}', '\"Tác vụ tự phục hồi đã thực thi và hoàn tất thành công trên cụm Kubernetes.\"'::jsonb) WHERE execution_status = 'RUNNING' AND started_at < NOW() - INTERVAL '45 seconds'"
-      );
+      await pool.query(`
+        UPDATE healing_actions 
+        SET execution_status = 'FAILED',
+            completed_at = NOW(),
+            error_message = 'Lệnh thực thi tự phục hồi bị timeout (> 60s); cần đối soát trạng thái thực tế (PENDING_RECONCILIATION)',
+            result = jsonb_set(
+              jsonb_set(COALESCE(result, '{}'::jsonb), '{reconciliation_status}', '"PENDING_RECONCILIATION"'::jsonb),
+              '{timeout}', 'true'::jsonb
+            )
+        WHERE execution_status = 'RUNNING' 
+          AND started_at < NOW() - INTERVAL '60 seconds'
+      `);
     } catch {}
 
     const conditions: string[] = ["h.execution_status = 'RUNNING' AND h.approval_status IN ('APPROVED', 'NOT_REQUIRED')"];
@@ -158,7 +168,7 @@ export class HealingActionModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id::text OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN organizations org ON org.id = env.organization_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
@@ -313,7 +323,7 @@ export class HealingActionModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id::text OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN organizations org ON org.id = env.organization_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
@@ -419,7 +429,7 @@ export class HealingActionModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id::text OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN organizations org ON org.id = env.organization_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
@@ -455,7 +465,10 @@ export class HealingActionModel {
 
     const executionMode = (data.execution_mode === 'AUTO' || data.execution_mode === 'AUTONOMOUS') ? 'AUTO' : 'MANUAL';
     const isHighRisk = riskLevel === 'HIGH' || riskLevel === 'CRITICAL';
-    const needsApproval = isHighRisk || (data as any).requires_approval === true || (data as any).approval_status === 'PENDING';
+    const needsApproval =
+      typeof (data as any).requires_approval === 'boolean'
+        ? (data as any).requires_approval
+        : (executionMode !== 'AUTO' && isHighRisk) || (data as any).approval_status === 'PENDING';
     const approvalStatus = needsApproval ? 'PENDING' : 'NOT_REQUIRED';
     const executionStatus = needsApproval ? 'PENDING' : (executionMode === 'AUTO' ? 'RUNNING' : 'PENDING');
 
@@ -609,15 +622,8 @@ export class HealingActionModel {
       ]
     );
 
-    // Auto resolve the incident if linked
-    if (action.incident_id) {
-      await pool.query(
-        `UPDATE incidents 
-         SET status = 'RESOLVED', resolved_at = NOW() 
-         WHERE id = $1 AND status != 'RESOLVED';`,
-        [action.incident_id]
-      );
-    }
+    // Do not prematurely mark incident RESOLVED here.
+    // Incident is only marked RESOLVED once RecoveryVerificationService confirms verified health.
 
     return {
       action: updateRes.rows[0],
@@ -976,7 +982,32 @@ export class HealingActionModel {
     `;
 
     const res = await pool.query(query, values);
-    return res.rows[0] || null;
+    const updatedPolicy = res.rows[0] || null;
+    if (updatedPolicy && updatedPolicy.requires_approval === false) {
+      await pool.query(
+        `UPDATE approvals ap
+         SET status = 'REJECTED',
+             decided_at = NOW(),
+             reason = 'Chính sách đã chuyển sang chế độ Tự Động Chạy (không yêu cầu phê duyệt HITL).'
+         FROM healing_actions ha
+         WHERE ap.healing_action_id = ha.id
+           AND ha.policy_id = $1
+           AND ap.status = 'PENDING';`,
+        [id]
+      );
+      await pool.query(
+        `UPDATE healing_actions
+         SET approval_status = 'NOT_REQUIRED'::approval_status,
+             execution_status = 'CANCELLED'::execution_status,
+             completed_at = NOW(),
+             error_message = 'Chính sách đã chuyển sang chế độ Tự Động Chạy.'
+         WHERE policy_id = $1
+           AND execution_status = 'PENDING'
+           AND approval_status = 'PENDING';`,
+        [id]
+      );
+    }
+    return updatedPolicy;
   }
 
   /**
@@ -1114,6 +1145,9 @@ export class HealingActionModel {
     if (filters.status && filters.status.toUpperCase() !== 'ALL') {
       conditions.push(`ap.status = $${idx++}::approval_status`);
       values.push(filters.status.toUpperCase());
+      if (filters.status.toUpperCase() === 'PENDING') {
+        conditions.push(`COALESCE(p.requires_approval, true) = true`);
+      }
     }
 
     if (filters.search && filters.search.trim()) {
@@ -1138,6 +1172,7 @@ export class HealingActionModel {
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN incidents i ON i.id = h.incident_id
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+      LEFT JOIN healing_policies p ON p.id = h.policy_id
       LEFT JOIN ai_recommendations rec ON rec.id = h.recommendation_id
       ${whereClause};
     `;
@@ -1186,7 +1221,7 @@ export class HealingActionModel {
       LEFT JOIN rca_analyses rca ON rca.id = rec.rca_analysis_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
       LEFT JOIN environments env ON env.id = h.environment_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id::text OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN users u_req ON u_req.id = ap.requested_by
       LEFT JOIN users u_app ON u_app.id = ap.approved_by
       ${whereClause}
@@ -1223,29 +1258,28 @@ export class HealingActionModel {
           [action.recommendation_id]
         );
       }
-      if (action.incident_id || action.target_name) {
+      if (action.incident_id || action.target_name || action.target_id) {
         await pool.query(
           `UPDATE ai_recommendations r
            SET status = 'APPLIED'
            FROM incidents i
            WHERE r.incident_id = i.id
-             AND (r.incident_id = $1 OR i.target_id = $2 OR i.title LIKE '%' || $2 || '%')
-             AND r.status = 'PROPOSED';`,
-          [action.incident_id, action.target_name]
-        );
-      }
-      if (action.incident_id || action.target_name) {
-        await pool.query(
-          `UPDATE incidents
-           SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
-           WHERE status != 'RESOLVED'
              AND (
-               id = $1
-               OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
-             );`,
-          [action.incident_id || null, action.target_name || null]
+               ($1::uuid IS NOT NULL AND r.incident_id = $1::uuid)
+               OR ($2::text IS NOT NULL AND (
+                 i.target_id = $2
+                 OR LOWER(COALESCE(i.target_name, '')) = LOWER($2)
+                 OR i.title ILIKE '% on ' || $2
+                 OR i.title ILIKE '% trên ' || $2
+               ))
+               OR ($3::text IS NOT NULL AND i.target_id = $3)
+             )
+             AND r.status = 'PROPOSED';`,
+          [action.incident_id || null, action.target_name || null, action.target_id ? String(action.target_id) : null]
         );
       }
+      // Note: Approving an action grants execution permission, but does NOT resolve the incident.
+      // The incident remains in its lifecycle until RecoveryVerificationService confirms success.
     }
 
     return action || null;
@@ -1274,18 +1308,8 @@ export class HealingActionModel {
         [action.recommendation_id]
       );
     }
-    if (action && (action.incident_id || action.target_name)) {
-      await pool.query(
-        `UPDATE incidents
-         SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
-         WHERE status != 'RESOLVED'
-           AND (
-             id = $1
-             OR ($2::text IS NOT NULL AND (target_id = $2 OR title ILIKE '%' || $2 || '%'))
-           );`,
-        [action.incident_id || null, action.target_name || null]
-      );
-    }
+    // Note: Rejecting an automated action cancels that action, but does NOT mark the incident RESOLVED.
+    // The incident remains OPEN for manual SRE intervention.
 
     return action || null;
   }

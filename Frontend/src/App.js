@@ -22,6 +22,7 @@ function App() {
 
   const handleNavigate = (path) => {
     window.history.pushState({}, '', path);
+    window.dispatchEvent(new CustomEvent('selfheal:urlchange', { detail: { path } }));
     setCurrentPath(path);
     window.scrollTo({ top: 0, behavior: 'instant' });
 

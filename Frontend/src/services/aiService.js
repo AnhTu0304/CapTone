@@ -316,4 +316,43 @@ export const aiService = {
   },
 };
 
+aiService.getOrgAlertSettings = async function (orgId) {
+  if (!orgId || String(orgId).startsWith('sandbox-') || orgId === 'org-empty') return null;
+  try {
+    const res = await request(`/organizations/${orgId}/alert-settings`);
+    return res?.data || res || null;
+  } catch (err) {
+    console.warn('[aiService] getOrgAlertSettings error:', err.message);
+    return null;
+  }
+};
+
+aiService.updateOrgAlertSettings = async function (orgId, payload) {
+  if (!orgId) throw new Error('Organization ID is required');
+  try {
+    const res = await request(`/organizations/${orgId}/alert-settings`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    return res?.data || res;
+  } catch (err) {
+    console.error('[aiService] updateOrgAlertSettings error:', err.message);
+    throw err;
+  }
+};
+
+aiService.sendOrgTestAlertEmail = async function (orgId, toEmail) {
+  if (!orgId) throw new Error('Organization ID is required');
+  try {
+    const res = await request(`/organizations/${orgId}/alert-settings/test-email`, {
+      method: 'POST',
+      body: JSON.stringify(toEmail ? { to_email: toEmail } : {}),
+    });
+    return res;
+  } catch (err) {
+    console.error('[aiService] sendOrgTestAlertEmail error:', err.message);
+    throw err;
+  }
+};
+
 export default aiService;

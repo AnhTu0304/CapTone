@@ -4,7 +4,7 @@
   "scenario_title": "Thay thế và tái tạo mới Pod (Replace Pod)",
   "file_name": "02_action_REPLACE_POD.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-05T18:17:58.664739+00:00",
+  "tested_at": "2026-11-13T09:30:40.620501+00:00",
   "description": "Pod bị CrashLoopBackOff liên tục với restart_count cao (4 lần >= 3). RCA đề xuất REPLACE_POD để Kubernetes hủy và tái tạo lại Pod hoàn toàn sạch.",
   "input_payload": {
     "request_id": "req-20261026-replace-pod-002",
@@ -43,13 +43,22 @@
     "service_id": "order-service",
     "prediction": null,
     "root_cause": {
-      "cause": "Pod ứng dụng bất ổn định / CrashLoop",
-      "confidence": 0.775,
-      "severity": "HIGH"
+      "cause": "Unstable application pod",
+      "confidence": 0.8,
+      "severity": "HIGH",
+      "evidence_status": "PROBABLE",
+      "evidence_for": [
+        "Pod 'order-service-67fb989c4-k98xz' khởi động lại nhiều lần (4 lần)",
+        "Pod rơi vào vòng lặp sập liên tục (CrashLoopBackOff): 'Pod is in CrashLoopBackOff'"
+      ],
+      "evidence_against": [],
+      "missing_evidence": [],
+      "related_risks": [],
+      "symptoms": []
     },
     "evidence": [
-      "FATAL CrashLoopBackOff: back-off 5m0s restarting failed container",
-      "Pod bị rơi vào vòng lặp sập liên tục (CrashLoopBackOff)"
+      "Pod 'order-service-67fb989c4-k98xz' khởi động lại nhiều lần (4 lần)",
+      "Pod rơi vào vòng lặp sập liên tục (CrashLoopBackOff): 'Pod is in CrashLoopBackOff'"
     ],
     "recommendation": {
       "action": "REPLACE_POD",
@@ -66,12 +75,15 @@
         "faulty_node_name": null,
         "recommended_destination_node": null,
         "destination_node_id": null,
+        "target_replicas": null,
+        "is_primary_database": false,
         "consecutive_failures": 0,
         "circuit_breaker_tripped": false,
+        "blocked_actions": [],
         "manual_playbook": []
       }
     },
-    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Pod ứng dụng bất ổn định / CrashLoop (mức độ HIGH, độ tin cậy 77%). Các tín hiệu xác thực ghi nhận trực tiếp: FATAL CrashLoopBackOff: back-off 5m0s restarting failed container; Pod bị rơi vào vòng lặp sập liên tục (CrashLoopBackOff).",
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Pod ứng dụng bất ổn định / CrashLoop (Trạng thái xác minh: PROBABLE, mức độ nghiêm trọng: HIGH, độ tin cậy: 80%). Tín hiệu xác thực ghi nhận trực tiếp: Pod 'order-service-67fb989c4-k98xz' khởi động lại nhiều lần (4 lần); Pod rơi vào vòng lặp sập liên tục (CrashLoopBackOff): 'Pod is in CrashLoopBackOff'.",
     "historical_context_used": false,
     "similar_incident_ids": [],
     "workload_id": "wl-order-svc-002",
@@ -79,6 +91,15 @@
     "cluster_id": "cluster-prod-asia-01",
     "incident_id": "inc-20261026-replace-pod-002",
     "request_id": "req-20261026-replace-pod-002",
-    "engine": "Deterministic Multi-Agent SRE"
+    "engine": "Deterministic Multi-Agent SRE",
+    "evidence_status": "PROBABLE",
+    "evidence_for": [
+      "Pod 'order-service-67fb989c4-k98xz' khởi động lại nhiều lần (4 lần)",
+      "Pod rơi vào vòng lặp sập liên tục (CrashLoopBackOff): 'Pod is in CrashLoopBackOff'"
+    ],
+    "evidence_against": [],
+    "missing_evidence": [],
+    "related_risks": [],
+    "symptoms": []
   }
 }

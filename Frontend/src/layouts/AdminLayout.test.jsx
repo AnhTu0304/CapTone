@@ -32,10 +32,15 @@ describe('Admin Application Shell Suite', () => {
       expect(screen.queryByText(/APPLICATION SHELL SẴN SÀNG/i)).not.toBeInTheDocument();
     });
 
-    test('toggles sidebar collapsed state via desktop header button', () => {
-      render(<AdminLayout currentPath="/admin" />);
+    test('toggles sidebar collapsed state via floating sidebar edge button and removes old toggles', () => {
+      const { container } = render(<AdminLayout currentPath="/admin" />);
+
+      expect(container.querySelector('.admin-desktop-toggle')).toBeNull();
+      expect(screen.queryByText(/THU GỌN SIDEBAR/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Thu gọn sidebar/i)).not.toBeInTheDocument();
 
       const toggleButton = screen.getByLabelText(/Thu gọn thanh điều hướng/i);
+      expect(toggleButton).toHaveClass('admin-sidebar-edge-toggle');
       expect(toggleButton).toBeInTheDocument();
 
       // Click to collapse

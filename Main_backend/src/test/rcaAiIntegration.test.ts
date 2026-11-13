@@ -224,7 +224,7 @@ async function runComprehensiveFlowTests() {
   // Chèn 12 điểm viễn trắc mẫu cho service test
   for (let i = 0; i < 12; i++) {
     await MetricModel.create({
-      agent_id: 'agent-e2e-01',
+      agent_id: '00000000-0000-0000-0000-000000000010',
       cluster_id: rcaResult.cluster_id || null,
       service_id: 'payment-service-e2e',
       pod_id: 'payment-service-e2e-0',
