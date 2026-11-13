@@ -26,14 +26,12 @@ describe('ResourcesMegaMenu Component (Greptile 3x2 Mega Menu Alignment)', () =>
     expect(screen.getByText(/Tìm hiểu về sứ mệnh, kiến trúc tự phục hồi/i)).toBeInTheDocument();
   });
 
-  it('renders social media badges for GitHub and LinkedIn', () => {
+  it('renders external link for social media community item', () => {
     render(<ResourcesMegaMenu isOpen={true} onClose={jest.fn()} />);
 
-    const githubLink = screen.getByTitle('GitHub');
-    const linkedinLink = screen.getByTitle('LinkedIn');
-
-    expect(githubLink).toHaveAttribute('href', 'https://github.com/phamthaisang1710/captone');
-    expect(linkedinLink).toHaveAttribute('href', 'https://linkedin.com');
+    const socialLink = screen.getByText('Mạng Xã Hội & Cộng Đồng').closest('a');
+    expect(socialLink).toHaveAttribute('href', 'https://github.com/phamthaisang1710/captone');
+    expect(socialLink).toHaveAttribute('target', '_blank');
   });
 
   it('triggers onNavigate and onClose when an internal link is clicked', () => {
