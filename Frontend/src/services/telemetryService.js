@@ -759,11 +759,11 @@ export const telemetryService = {
         const protocol = isSecure ? 'wss:' : 'ws:';
         // Connect to port 5000 if running locally on port 3000, else window.location.host
         let host = window.location.host;
-        if (window.location.port === '3000' || window.location.port === '3001') {
+        if (window.location.port === '3000' || window.location.port === '3001' || window.location.port === '3005') {
           const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? '127.0.0.1'
             : window.location.hostname;
-          host = `${targetHost}:5000`;
+          host = `${targetHost}:5005`;
         }
         const token =
           getAuthToken() ||

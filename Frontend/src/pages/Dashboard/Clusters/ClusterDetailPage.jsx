@@ -352,8 +352,8 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     }
     const { protocol, hostname, port } = window.location;
     const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
-      return `${wsProto}//${hostname}:5000/api/v1/agent/connect`;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '8090') {
+      return `${wsProto}//${hostname}:5005/api/v1/agent/connect`;
     }
     return `${wsProto}//${window.location.host}/api/v1/agent/connect`;
   };
@@ -364,7 +364,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
     }
     const { protocol, hostname, port } = window.location;
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '8090') {
       return `${protocol}//${hostname}`;
     }
     return window.location.origin;
