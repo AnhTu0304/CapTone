@@ -268,7 +268,7 @@ export class AdminDashboardModel {
         COALESCE(c.name, 'Cụm k8s') as cluster_name
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id)
+      LEFT JOIN clusters c ON (c.id = i.cluster_id OR c.name = i.cluster_id::text)
       WHERE i.severity = 'CRITICAL' AND i.status NOT IN ('RESOLVED', 'IGNORED')
       ORDER BY i.detected_at DESC
       LIMIT $1;

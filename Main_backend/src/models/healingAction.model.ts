@@ -158,7 +158,7 @@ export class HealingActionModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id = i.cluster_id OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN organizations org ON org.id = env.organization_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
@@ -313,7 +313,7 @@ export class HealingActionModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id = i.cluster_id OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN organizations org ON org.id = env.organization_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
@@ -419,7 +419,7 @@ export class HealingActionModel {
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id = i.cluster_id OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN environments env ON env.id = h.environment_id
       LEFT JOIN organizations org ON org.id = env.organization_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
@@ -1181,7 +1181,7 @@ export class HealingActionModel {
       LEFT JOIN rca_analyses rca ON rca.id = rec.rca_analysis_id
       LEFT JOIN healing_policies p ON p.id = h.policy_id
       LEFT JOIN environments env ON env.id = h.environment_id
-      LEFT JOIN clusters cl ON (cl.id::text = i.cluster_id OR cl.name = i.cluster_id OR cl.cluster_uid = i.cluster_id)
+      LEFT JOIN clusters cl ON (cl.id = i.cluster_id OR cl.name = i.cluster_id::text OR cl.cluster_uid = i.cluster_id::text)
       LEFT JOIN users u_req ON u_req.id = ap.requested_by
       LEFT JOIN users u_app ON u_app.id = ap.approved_by
       ${whereClause}
@@ -1224,7 +1224,7 @@ export class HealingActionModel {
            SET status = 'APPLIED'
            FROM incidents i
            WHERE r.incident_id = i.id
-             AND (r.incident_id = $1 OR i.target_id = $2 OR i.title LIKE '%' || $2 || '%')
+             AND (r.incident_id = $1 OR i.target_id::text = $2 OR i.title LIKE '%' || $2 || '%')
              AND r.status = 'PROPOSED';`,
           [action.incident_id, action.target_name]
         );

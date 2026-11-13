@@ -81,7 +81,7 @@ export class IncidentModel {
       SELECT id, status, created_at
       FROM incidents
       WHERE environment_id = $1
-        AND ($2::text IS NULL OR target_id = $2::text OR target_id IS NULL)
+        AND ($2::text IS NULL OR target_id::text = $2::text OR target_id IS NULL)
         AND incident_type = $3
         AND status IN ('OPEN', 'INVESTIGATING')
         AND created_at >= NOW() - ($4 || ' minutes')::interval
@@ -128,7 +128,7 @@ export class IncidentModel {
         values.push(validIds);
         idx++;
       } else {
-        conditions.push(`i.cluster_id = $${idx}`);
+        conditions.push(`i.cluster_id::text = $${idx}`);
         values.push(params.cluster_id);
         idx++;
       }
@@ -188,7 +188,7 @@ export class IncidentModel {
         i.target_type,
         i.target_id,
         w.name AS workload_name,
-        COALESCE(w.name, ha.target_name, i.target_id) AS service_name,
+        COALESCE(w.name, ha.target_name, i.target_id::text) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -224,8 +224,8 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-      LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
+      LEFT JOIN clusters c ON (c.id = i.cluster_id OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
+      LEFT JOIN workloads w ON (w.id = i.target_id OR w.name = i.target_id::text)
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
       LEFT JOIN LATERAL (
         SELECT nd.name
@@ -287,7 +287,7 @@ export class IncidentModel {
         i.target_type,
         i.target_id,
         w.name AS workload_name,
-        COALESCE(w.name, i.target_id) AS service_name,
+        COALESCE(w.name, i.target_id::text) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -317,8 +317,8 @@ export class IncidentModel {
       FROM incidents i
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
-      LEFT JOIN clusters c ON (c.id::text = i.cluster_id OR c.name = i.cluster_id OR c.cluster_uid = i.cluster_id)
-      LEFT JOIN workloads w ON (w.id::text = i.target_id OR w.name = i.target_id)
+      LEFT JOIN clusters c ON (c.id = i.cluster_id OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
+      LEFT JOIN workloads w ON (w.id = i.target_id OR w.name = i.target_id::text)
       LEFT JOIN namespaces ns ON ns.id = w.namespace_id
       LEFT JOIN LATERAL (
         SELECT nd.name

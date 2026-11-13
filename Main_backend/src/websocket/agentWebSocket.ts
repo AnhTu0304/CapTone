@@ -494,7 +494,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                      SET status = 'APPLIED'
                      FROM incidents i
                      WHERE r.incident_id = i.id
-                       AND (r.incident_id = $1 OR ($2::text IS NOT NULL AND (i.target_id = $2 OR i.title ILIKE '%' || $2 || '%')))
+                       AND (r.incident_id = $1 OR ($2::text IS NOT NULL AND (i.target_id::text = $2 OR i.title ILIKE '%' || $2 || '%')))
                        AND r.status = 'PROPOSED';`,
                     [row?.incident_id || null, row?.target_name || null]
                   );
