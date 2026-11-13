@@ -9,19 +9,19 @@ import {
 } from 'lucide-react';
 import './ResourcesMegaMenu.css';
 
-export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate }) => {
+export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
   if (!isOpen) return null;
 
   const handleItemClick = (e, path, isExternal = false) => {
     if (isExternal) return;
     e.preventDefault();
-    onClose();
     if (onNavigate) {
       onNavigate(path);
     } else {
       window.history.pushState({}, '', path);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
+    onClose();
   };
 
   const menuItems = [
@@ -77,6 +77,7 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate }) => {
 
   return (
     <div
+      ref={menuRef}
       className="resources-mega-menu-overlay"
       id="resources-mega-menu"
       role="region"

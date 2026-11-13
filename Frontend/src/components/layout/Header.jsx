@@ -14,6 +14,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [resourcesMenuOpen, setResourcesMenuOpen] = useState(false);
   const resourcesMenuRef = useRef(null);
+  const megaMenuDropdownRef = useRef(null);
   const [currentLang, setCurrentLang] = useState('VI');
 
   const userDropdownRef = useRef(null);
@@ -29,7 +30,12 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
       if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
         setLangDropdownOpen(false);
       }
-      if (resourcesMenuRef.current && !resourcesMenuRef.current.contains(e.target)) {
+      if (
+        resourcesMenuRef.current &&
+        !resourcesMenuRef.current.contains(e.target) &&
+        (!megaMenuDropdownRef.current || !megaMenuDropdownRef.current.contains(e.target)) &&
+        (!e.target.closest || !e.target.closest('#resources-mega-menu'))
+      ) {
         setResourcesMenuOpen(false);
       }
     };
@@ -467,6 +473,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
             isOpen={resourcesMenuOpen}
             onClose={() => setResourcesMenuOpen(false)}
             onNavigate={onNavigate}
+            menuRef={megaMenuDropdownRef}
           />
         </header>
       </div>

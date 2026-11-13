@@ -103,4 +103,20 @@ describe('Header Component (Greptile CAD Alignment with Symmetrical Center Nav)'
 
     expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
+
+  it('navigates to /contact when clicking Liên Hệ Tư Vấn in ResourcesMegaMenu without premature mousedown dismissal', () => {
+    const mockNavigate = jest.fn();
+    render(<Header onNavigate={mockNavigate} />);
+
+    const docsBtn = screen.getByRole('button', { name: /TÀI LIỆU/i });
+    fireEvent.click(docsBtn);
+    expect(screen.getByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).toBeInTheDocument();
+
+    const contactLink = screen.getByText('Liên Hệ Tư Vấn');
+    fireEvent.mouseDown(contactLink);
+    expect(screen.getByRole('region', { name: /Menu Tài nguyên SelfHeal/i })).toBeInTheDocument();
+
+    fireEvent.click(contactLink);
+    expect(mockNavigate).toHaveBeenCalledWith('/contact');
+  });
 });
