@@ -71,7 +71,7 @@ export class HealingActionModel {
     }
 
     if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
-      conditions.push(`i.cluster_id IN (
+      conditions.push(`i.cluster_id::text IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
@@ -197,7 +197,7 @@ export class HealingActionModel {
     }
 
     if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
-      conditions.push(`i.cluster_id IN (
+      conditions.push(`i.cluster_id::text IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
@@ -1103,7 +1103,7 @@ export class HealingActionModel {
     }
 
     if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
-      conditions.push(`i.cluster_id IN (
+      conditions.push(`i.cluster_id::text IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
@@ -1299,7 +1299,7 @@ export class HealingActionModel {
     }
 
     if (clusterId && clusterId !== 'ALL') {
-      conditions.push(`i.cluster_id IN (
+      conditions.push(`i.cluster_id::text IN (
         SELECT id::text FROM clusters 
         WHERE id::text = $${idx} OR name = $${idx} OR cluster_uid = $${idx}
       )`);
