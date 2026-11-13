@@ -141,7 +141,7 @@ jobs:
       - name: Execute PostgreSQL SQL Migrations
         run: npm run migrate:users
 
-      - name: Run Integration Test Suite (RBAC, Agent Auth, Rule Engine)
+      - name: Run Backend Test Suite (Incident & Report Models)
         run: npm run test:ci
 
   # ============================================================================
