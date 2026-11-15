@@ -1,3 +1,4 @@
+import Logo from '../../components/common/Logo';
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -129,34 +130,7 @@ export const LoginPage = ({ onNavigate }) => {
     >
       {/* Top Center: Isometric Mint Cube Logo matching reference image */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-        <svg width="52" height="52" viewBox="0 0 120 120" fill="none" aria-label="SelfHeal Cube Logo">
-          <defs>
-            <linearGradient id="cubeGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#28E99F" />
-              <stop offset="100%" stopColor="#1fd48f" />
-            </linearGradient>
-            <linearGradient id="cubeGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#22c788" />
-              <stop offset="100%" stopColor="#28E99F" />
-            </linearGradient>
-            <linearGradient id="cubeGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#1bb87c" />
-              <stop offset="100%" stopColor="#148e5f" />
-            </linearGradient>
-          </defs>
-          <g transform="translate(60, 60)">
-            {/* Top-Left Quadrant */}
-            <path d="M 0 -48 L -42 -8 L -22 12 L 0 -8 Z" fill="url(#cubeGrad1)" stroke="#148e5f" strokeWidth="1" />
-            {/* Top-Right Quadrant */}
-            <path d="M 0 -48 L 42 -8 L 22 12 L 0 -8 Z" fill="url(#cubeGrad2)" stroke="#148e5f" strokeWidth="1" />
-            {/* Bottom-Left Quadrant */}
-            <path d="M -42 -8 L 0 34 L 0 12 L -22 -10 Z" fill="url(#cubeGrad2)" stroke="#148e5f" strokeWidth="1" />
-            {/* Bottom-Right Quadrant */}
-            <path d="M 42 -8 L 0 34 L 0 12 L 22 -10 Z" fill="url(#cubeGrad3)" stroke="#148e5f" strokeWidth="1" />
-            {/* Inner Core Accent */}
-            <circle cx="0" cy="-8" r="4" fill="#FFFFFF" opacity="0.9" />
-          </g>
-        </svg>
+        <Logo size={52} showText={false} />
       </div>
 
       {/* Title & Switch to Signup */}

@@ -1,0 +1,290 @@
+/* Two-tier Layout: Hero Banner + Canvas Grid Sheet for About Page */
+.about-page-root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-canvas, #EEEEEE);
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  color: #2A2A2A;
+  box-sizing: border-box;
+}
+
+/* ================= TOP HERO SECTION ================= */
+.about-top-hero {
+  padding: 72px 24px 56px 24px;
+  text-align: center;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.about-hero-title {
+  font-family: Anybody, "Anybody Fallback", sans-serif;
+  color: rgb(42, 42, 42);
+  font-size: clamp(2.75rem, 6vw, 4.5rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  margin: 0 0 18px 0;
+}
+
+.about-hero-subtitle {
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  font-size: clamp(1.0625rem, 2vw, 1.25rem);
+  color: #555368;
+  line-height: 1.6;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ================= LOWER SHEET SECTION WITH CANVAS ================= */
+.about-sheet-section {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--color-canvas, #EEEEEE);
+  background-image: 
+    linear-gradient(to right, rgba(61, 59, 79, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(61, 59, 79, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  border-top: 1px solid rgba(61, 59, 79, 0.12);
+  box-shadow: 0 -3px 18px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.about-sheet-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ================= CONTENT OVERLAY ================= */
+.about-content-container {
+  position: relative;
+  z-index: 2;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 64px 32px 108px 32px;
+}
+
+/* ================= SECTION BLOCKS ================= */
+.about-section {
+  margin-bottom: 56px;
+  padding-bottom: 48px;
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.18);
+  will-change: transform, opacity;
+}
+
+.about-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 40px;
+  padding-bottom: 0;
+}
+
+.about-headline {
+  font-family: Anybody, "Anybody Fallback", sans-serif;
+  color: rgb(42, 42, 42);
+  font-size: 1.85rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0 0 16px 0;
+  line-height: 1.25;
+}
+
+.about-description {
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: #3D3B4F;
+  font-weight: 500;
+  margin: 0 0 20px 0;
+}
+
+.about-body-text {
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: #333333;
+  margin: 0 0 16px 0;
+}
+
+.about-body-text strong {
+  color: rgb(42, 42, 42);
+  font-weight: 600;
+}
+
+/* ================= FINAL CTA NOTEBOOK SECTION ================= */
+.about-section--cta {
+  border-bottom: none;
+  margin-bottom: 24px;
+  padding-bottom: 0;
+  background: transparent;
+}
+
+.about-notebook-card {
+  position: relative;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.about-notebook-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.about-notebook-content {
+  position: relative;
+  z-index: 2;
+  padding: 60px 40px 48px 40px;
+  text-align: center;
+}
+
+.about-cta-headline {
+  font-family: Anybody, "Anybody Fallback", sans-serif;
+  color: rgb(42, 42, 42);
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 14px 0;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.about-cta-desc {
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: #555368;
+  max-width: 620px;
+  margin: 0 auto 32px auto;
+}
+
+/* ================= CTA BUTTONS (PROJECT SIGNATURE POLYGON STYLE) ================= */
+.about-cta-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.06));
+}
+
+.about-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 24px 0 28px;
+  background-color: #3D3B4F;
+  color: #FFFFFF;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  border: none;
+  clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 50%, 100% 100%, 12px 100%, 0% 50%);
+  box-shadow: none;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.about-cta-group:hover .about-btn-primary {
+  transform: translateX(-4px);
+}
+
+.about-btn-primary:hover {
+  background-color: #2F2D3D;
+  filter: brightness(1.1);
+}
+
+/* Button 2: Secondary Button (Transparent Background + Chevron Outline Border matching background) */
+.about-btn-secondary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 28px 0 24px;
+  background-color: rgba(61, 59, 79, 0.35);
+  color: #2A2A2A;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  border: none;
+  clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
+  box-shadow: none;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
+  will-change: transform;
+}
+
+.about-btn-secondary::before {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  background-color: var(--bg-canvas, #EEEEEE);
+  clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
+  z-index: 1;
+  transition: background-color 0.15s ease;
+}
+
+.about-btn-secondary span,
+.about-btn-secondary svg {
+  position: relative;
+  z-index: 2;
+  color: #2A2A2A;
+}
+
+.about-cta-group:hover .about-btn-secondary {
+  transform: translateX(4px);
+}
+
+.about-btn-secondary:hover {
+  background-color: #3D3B4F;
+  filter: brightness(1.05);
+}
+
+.about-btn-secondary:hover::before {
+  background-color: #E2E2E6;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 768px) {
+  .about-top-hero {
+    padding: 56px 20px 44px 20px;
+  }
+
+  .about-hero-title {
+    font-size: 2.25rem;
+  }
+
+  .about-content-container {
+    padding: 40px 20px 80px 20px;
+  }
+
+  .about-headline {
+    font-size: 1.5rem;
+  }
+
+  .about-notebook-content {
+    padding: 48px 20px 36px 20px;
+  }
+}

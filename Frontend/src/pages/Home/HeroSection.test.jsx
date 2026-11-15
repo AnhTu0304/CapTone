@@ -33,6 +33,7 @@ describe('HeroSection CTA Buttons', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('/guide');
   });
+
   it('renders seamless headline with Anybody font, slate text, and hero-fade-up animation classes', () => {
     render(<HeroSection />);
     const heading = screen.getByRole('heading', { level: 1 });
@@ -51,10 +52,25 @@ describe('HeroSection CTA Buttons', () => {
     expect(desc).toBeInTheDocument();
     expect(desc).toHaveClass('hero-description');
   });
+
   it('renders "onboard with your agent" monospace sublink', () => {
     render(<HeroSection />);
     const sublink = screen.getByRole('link', { name: /onboard with your agent/i });
     expect(sublink).toBeInTheDocument();
     expect(sublink).toHaveClass('hero-sublink');
+  });
+
+  it('renders SocialProofSection above agent-bridge-section and below hero-section', () => {
+    const { container } = render(<HeroSection />);
+    const heroEl = container.querySelector('.hero-section');
+    const socialProofEl = screen.getByTestId('social-proof-section');
+    const agentBridgeEl = screen.getByTestId('agent-bridge-section');
+
+    expect(heroEl).toBeInTheDocument();
+    expect(socialProofEl).toBeInTheDocument();
+    expect(agentBridgeEl).toBeInTheDocument();
+
+    expect(heroEl.compareDocumentPosition(socialProofEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(socialProofEl.compareDocumentPosition(agentBridgeEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

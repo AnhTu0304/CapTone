@@ -4,7 +4,7 @@ import {
   Scale,
   Mail,
   ShieldCheck,
-  Share2,
+  Lock,
   Info
 } from 'lucide-react';
 import './ResourcesMegaMenu.css';
@@ -50,20 +50,20 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
       isExternal: false,
     },
     {
-      id: 'privacy',
-      title: 'Bảo Mật & Quyền Riêng Tư',
-      description: 'Bảo vệ dữ liệu hạ tầng và an toàn thông tin doanh nghiệp.',
+      id: 'security',
+      title: 'Bảo Mật Hệ Thống',
+      description: 'Kiến trúc an ninh đa tầng, kiểm soát truy cập và bảo vệ hạ tầng K8s.',
       icon: ShieldCheck,
-      route: '/privacy',
+      route: '/security',
       isExternal: false,
     },
     {
-      id: 'social',
-      title: 'Mạng Xã Hội & Cộng Đồng',
-      description: 'Theo dõi SelfHeal và kết nối cộng đồng kỹ sư trên GitHub & LinkedIn.',
-      icon: Share2,
-      route: 'https://github.com/phamthaisang1710/captone',
-      isExternal: true,
+      id: 'privacy',
+      title: 'Chính Sách Bảo Mật',
+      description: 'Quy định thu thập, xử lý và bảo vệ dữ liệu cá nhân & thông tin doanh nghiệp.',
+      icon: Lock,
+      route: '/privacy',
+      isExternal: false,
     },
     {
       id: 'about',
@@ -106,8 +106,8 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
                 ) : (
                   <a
                     href={item.route}
-                    onClick={(e) => handleItemClick(e, item.route)}
                     className="resources-mega-link"
+                    onClick={(e) => handleItemClick(e, item.route, false)}
                   >
                     <IconComponent size={19} strokeWidth={1.75} className="resources-item-icon" />
                     <div className="resources-item-text">

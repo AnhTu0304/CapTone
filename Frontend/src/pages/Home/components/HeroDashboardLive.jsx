@@ -1,3 +1,4 @@
+import Logo from '../../../components/common/Logo';
 import React, { useState } from 'react';
 import {
   Activity,
@@ -76,26 +77,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
         {/* Left: Brand + Context */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {/* Logo Mark */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '26px',
-                height: '26px',
-                borderRadius: '6px',
-                backgroundColor: '#ECFDF5',
-                border: '1.5px solid #059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#059669',
-              }}
-            >
-              <ShieldCheck size={16} strokeWidth={2.4} />
-            </div>
-            <span style={{ fontWeight: 800, fontSize: '0.9375rem', color: '#0F172A', letterSpacing: '-0.02em' }}>
-              Self<span style={{ color: '#059669' }}>Heal</span>
-            </span>
-          </div>
+          <Logo size={24} />
 
           <div style={{ height: '16px', width: '1px', backgroundColor: '#E2E8F0' }} />
 

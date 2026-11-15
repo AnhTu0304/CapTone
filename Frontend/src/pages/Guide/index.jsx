@@ -6,6 +6,7 @@ import { Bookmark, Compass } from 'lucide-react';
 import SectionTitleCanvas from './components/SectionTitleCanvas';
 import CodeBlock from '../../components/common/CodeBlock';
 import AlertCard from '../../components/common/AlertCard';
+import NotebookNoticeCard from './components/NotebookNoticeCard';
 import Breadcrumb from '../../components/common/Breadcrumb';
 import useScrollSpy from '../../hooks/useScrollSpy';
 import './GuidePage.css';
@@ -112,7 +113,8 @@ export const GuidePage = () => {
 
       // Center notebook spine crease / soft fold line between Left Nav and Right Content
       if (width > 1024) {
-        const layoutMaxW = Math.min(1360, width - 64);
+        const padX = width > 1024 ? 84 : 56;
+        const layoutMaxW = Math.min(1360, Math.max(0, width - padX * 2));
         const layoutLeft = (width - layoutMaxW) / 2;
         const foldX = layoutLeft + 310 + 24; // in the gap between nav and content
 
@@ -237,14 +239,14 @@ export const GuidePage = () => {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 16px',
-              backgroundColor: '#FFFFFF',
+              backgroundColor: 'rgba(61, 59, 79, 0.05)',
               border: '1px solid rgba(61, 59, 79, 0.25)',
               fontSize: '0.8125rem',
               fontWeight: 700,
               fontFamily: 'var(--font-mono)',
               color: 'var(--color-primary)',
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              boxShadow: 'none',
             }}
           >
             <span>Mục lục sổ tay ({guideSections.length} chương)</span>
@@ -255,7 +257,7 @@ export const GuidePage = () => {
             <div
               style={{
                 marginTop: '8px',
-                backgroundColor: '#FFFFFF',
+                backgroundColor: '#EEEEEE',
                 border: '1px solid rgba(61, 59, 79, 0.2)',
                 padding: '12px',
                 display: 'flex',
@@ -380,13 +382,13 @@ export const GuidePage = () => {
                   <li>Kết nối mạng chiều ra (outbound) tới <code>api.selfheal.infra</code> qua cổng 443.</li>
                 </ul>
               </div>
-              <div className="open-notebook-postit">
-                <div className="notebook-washi-tape" aria-hidden="true" />
-                <div className="notebook-postit-heading">Lưu ý: Không yêu cầu mở cổng Inbound</div>
-                <p className="notebook-postit-body">
-                  SelfHeal agent vận hành hoàn toàn thông qua luồng WebSocket TLS chiều ra. Bạn tuyệt đối không cần mở bất kỳ cổng tường lửa nào hoặc công khai các endpoint ingress ra bên ngoài.
-                </p>
-              </div>
+              <NotebookNoticeCard
+                type="warning"
+                important={true}
+                title="Lưu ý: Không yêu cầu mở cổng Inbound"
+              >
+                SelfHeal agent vận hành hoàn toàn thông qua luồng WebSocket TLS chiều ra. Bạn tuyệt đối không cần mở bất kỳ cổng tường lửa nào hoặc công khai các endpoint ingress ra bên ngoài.
+              </NotebookNoticeCard>
             </section>
 
             {/* CHAPTER 02 */}
@@ -409,9 +411,12 @@ export const GuidePage = () => {
                   <strong>Thiết lập Vùng dữ liệu Tuân thủ:</strong> Chọn khu vực lưu trữ dữ liệu theo quy định (EU, US-East hoặc AP-Southeast).
                 </li>
               </ol>
-              <AlertCard type="tip" title="Kiểm soát truy cập dựa trên vai trò (RBAC)">
+              <NotebookNoticeCard
+                type="tip"
+                title="Kiểm soát truy cập dựa trên vai trò (RBAC)"
+              >
                 Tổ chức hỗ trợ các vai trò định sẵn: <em>Owner</em> (Chủ sở hữu), <em>SRE Operator</em> (Có quyền phê duyệt khắc phục sự cố), và <em>Auditor</em> (Chỉ đọc nhật ký kiểm toán).
-              </AlertCard>
+              </NotebookNoticeCard>
             </section>
 
             {/* CHAPTER 03 */}
@@ -459,13 +464,14 @@ export const GuidePage = () => {
                 title="Cài đặt qua Helm v3"
                 code={`# 1. Thêm kho lưu trữ SelfHeal Helm\nhelm repo add selfheal https://charts.selfheal.infra\nhelm repo update\n\n# 2. Triển khai agent với token cluster\nhelm install selfheal-agent selfheal/k8s-agent \\\n  --namespace selfheal-system \\\n  --create-namespace \\\n  --set clusterToken="sh_live_89f02c91a7e4b" \\\n  --set clusterName="k8s-prod-us-east-1"`}
               />
-              <div className="open-notebook-postit" style={{ marginTop: '20px' }}>
-                <div className="notebook-washi-tape" aria-hidden="true" />
-                <div className="notebook-postit-heading">Phạm vi Phân quyền RBAC Tối Thiểu</div>
-                <p className="notebook-postit-body">
-                  Agent chỉ áp dụng ClusterRole có phạm vi giới hạn quyền ghi nghiêm ngặt vào các nhóm API được định nghĩa trước (Pods, Deployments, ReplicaSets). Agent tuyệt đối không có quyền truy cập vào Secrets hay các ConfigMap chứa dữ liệu nhạy cảm.
-                </p>
-              </div>
+              <NotebookNoticeCard
+                type="warning"
+                important={true}
+                title="Phạm vi Phân quyền RBAC Tối Thiểu"
+                style={{ marginTop: '20px' }}
+              >
+                Agent chỉ áp dụng ClusterRole có phạm vi giới hạn quyền ghi nghiêm ngặt vào các nhóm API được định nghĩa trước (Pods, Deployments, ReplicaSets). Agent tuyệt đối không có quyền truy cập vào Secrets hay các ConfigMap chứa dữ liệu nhạy cảm.
+              </NotebookNoticeCard>
             </section>
 
             {/* CHAPTER 06 */}
@@ -546,9 +552,12 @@ export const GuidePage = () => {
               <p className="guide-content-desc">
                 Khi một hành động yêu cầu phê duyệt từ con người, thông báo tương tác sẽ được gửi ngay tới kỹ sư chỉ định qua Web UI và webhook Slack/Teams. Kỹ sư có thể xem xét toàn bộ diff, bấm Phê duyệt, Từ chối hoặc Tinh chỉnh kế hoạch chỉ với một cú nhấp chuột xác thực.
               </p>
-              <AlertCard type="tip" title="Rào chắn Phê duyệt Kép">
+              <NotebookNoticeCard
+                type="tip"
+                title="Rào chắn Phê duyệt Kép"
+              >
                 Đối với cơ sở dữ liệu môi trường Production hoặc cổng Ingress Gateway cấp 1, bạn có thể thiết lập <em>Phê duyệt kép (Dual Operator Sign-Off)</em> yêu cầu hai kỹ sư độc lập cùng xác nhận trước khi thực thi.
-              </AlertCard>
+              </NotebookNoticeCard>
             </section>
 
             {/* CHAPTER 11 */}

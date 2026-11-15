@@ -134,6 +134,11 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+.public-layout--no-gutters .blueprint-gutter-left,
+.public-layout--no-gutters .blueprint-gutter-right {
+  display: none !important;
+}
+
 /* Containers (Greptile max 1400px with technical dashed border guide) */
 .container-custom {
   width: 100%;

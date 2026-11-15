@@ -1,0 +1,90 @@
+.notebook-notice-card {
+  position: relative;
+  margin: 28px 0;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.notebook-notice-canvas {
+  position: absolute;
+  top: -14px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 22px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.notebook-notice-content {
+  position: relative;
+  z-index: 2;
+  padding: 38px 24px 20px 24px;
+}
+
+.notebook-notice-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.notebook-notice-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notebook-notice-title {
+  font-family: "Anybody", "Anybody Fallback", sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.notebook-notice-title--warning {
+  color: #92400E;
+}
+
+.notebook-notice-title--tip {
+  color: #065F46;
+}
+
+.notebook-notice-title--info {
+  color: #1E3A8A;
+}
+
+.notebook-notice-body {
+  font-family: "DM Sans", "DM Sans Fallback", sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: #37352F;
+  margin: 0;
+}
+
+.notebook-notice-body--warning {
+  color: #5B2B0A;
+}
+
+.notebook-notice-body--tip {
+  color: #1C4436;
+}
+
+.notebook-notice-body--info {
+  color: #1E3A8A;
+}
+
+.notebook-notice-body strong {
+  font-weight: 600;
+}
+
+.notebook-notice-body em {
+  font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .notebook-notice-content {
+    padding: 36px 16px 18px 16px;
+  }
+}

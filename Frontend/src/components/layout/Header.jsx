@@ -124,8 +124,13 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
               onClick={(e) => handleLinkClick(e, '/')}
               className="header-logo-link"
               aria-label="SelfHeal Homepage"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
             >
-              <Logo size={isScrolled ? 24 : 26} />
+              <Logo size={isScrolled ? 34 : 40} showText={false} />
             </a>
           </div>
 

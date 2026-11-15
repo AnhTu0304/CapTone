@@ -35,6 +35,9 @@ import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSett
 import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
 import { AdminAccountSettingsPage } from '../pages/Admin/Settings/AdminAccountSettingsPage';
 import PersonalPortalPage from '../pages/Personal';
+import SecurityPracticesPage from '../pages/SecurityPractices';
+import PrivacyPage from '../pages/Privacy';
+import TermsPage from '../pages/Terms';
 import ForbiddenPage from '../pages/Error/ForbiddenPage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
@@ -45,6 +48,8 @@ export const ROUTES = {
   CONTACT: '/contact',
   TERMS: '/terms',
   PRIVACY: '/privacy',
+  SECURITY_PRACTICES: '/security',
+  SECURITY_PRACTICES_ALIAS: '/security-practices',
   DASHBOARD: '/dashboard',
   PORTAL: '/portal',
   PORTAL_DASHBOARD: '/portal/dashboard',
@@ -416,38 +421,28 @@ export const RouteRenderer = ({
       );
 
     case ROUTES.TERMS:
+    case '/terms':
       return (
         <PublicLayout currentPath={ROUTES.TERMS} onNavigate={onNavigate}>
-          <div style={{ maxWidth: '840px', margin: '48px auto', padding: '0 24px', fontFamily: 'var(--font-body)' }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '2.25rem', color: '#242132', marginBottom: '16px' }}>Điều Khoản & Điều Kiện</h1>
-            <p style={{ color: '#555368', lineHeight: '1.6', fontSize: '1rem', marginBottom: '24px' }}>
-              Chào mừng bạn đến với nền tảng SelfHeal. Khi truy cập và sử dụng dịch vụ của chúng tôi, bạn đồng ý tuân thủ các điều khoản dịch vụ và chính sách bảo mật hạ tầng Kubernetes được quy định tại đây.
-            </p>
-            <div style={{ background: '#FFFFFF', border: '1px solid rgba(61, 59, 79, 0.15)', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h2 style={{ fontSize: '1.25rem', color: '#242132', margin: 0 }}>1. Quyền sử dụng dịch vụ</h2>
-              <p style={{ color: '#555368', margin: 0, lineHeight: '1.5' }}>SelfHeal cung cấp các tác tử tự phục hồi hạ tầng cho doanh nghiệp. Khách hàng cam kết sử dụng dịch vụ đúng mục đích và không can thiệp trái phép vào hệ thống.</p>
-              <h2 style={{ fontSize: '1.25rem', color: '#242132', margin: 0 }}>2. Bảo mật thông tin & Hạ tầng</h2>
-              <p style={{ color: '#555368', margin: 0, lineHeight: '1.5' }}>Mọi cấu hình cluster, log và telemetry gửi về hệ thống đều được mã hóa theo tiêu chuẩn TLS 1.3 và lưu trữ an toàn.</p>
-            </div>
-          </div>
+          <TermsPage onNavigate={onNavigate} />
         </PublicLayout>
       );
 
     case ROUTES.PRIVACY:
+    case '/privacy':
       return (
         <PublicLayout currentPath={ROUTES.PRIVACY} onNavigate={onNavigate}>
-          <div style={{ maxWidth: '840px', margin: '48px auto', padding: '0 24px', fontFamily: 'var(--font-body)' }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '2.25rem', color: '#242132', marginBottom: '16px' }}>Bảo Mật & Quyền Riêng Tư</h1>
-            <p style={{ color: '#555368', lineHeight: '1.6', fontSize: '1rem', marginBottom: '24px' }}>
-              Chính sách bảo mật của SelfHeal cam kết bảo vệ toàn vẹn dữ liệu hạ tầng, quyền riêng tư người dùng và nhật ký audit của cụm máy chủ.
-            </p>
-            <div style={{ background: '#FFFFFF', border: '1px solid rgba(61, 59, 79, 0.15)', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h2 style={{ fontSize: '1.25rem', color: '#242132', margin: 0 }}>1. Thu thập dữ liệu Telemetry</h2>
-              <p style={{ color: '#555368', margin: 0, lineHeight: '1.5' }}>Tác tử eBPF và K8s Agent chỉ thu thập số liệu metrics và log sự cố hệ thống cần thiết cho việc phân tích nguyên nhân gốc (RCA), không thu thập dữ liệu nội dung nhạy cảm của khách hàng.</p>
-              <h2 style={{ fontSize: '1.25rem', color: '#242132', margin: 0 }}>2. Lưu trữ và kiểm soát truy cập (RBAC)</h2>
-              <p style={{ color: '#555368', margin: 0, lineHeight: '1.5' }}>Dữ liệu được phân vùng đa người thuê (Multi-tenant), phân quyền nghiêm ngặt theo các vai trò Owner, DevOps và Viewer.</p>
-            </div>
-          </div>
+          <PrivacyPage onNavigate={onNavigate} />
+        </PublicLayout>
+      );
+
+    case ROUTES.SECURITY_PRACTICES:
+    case ROUTES.SECURITY_PRACTICES_ALIAS:
+    case '/security':
+    case '/security-practices':
+      return (
+        <PublicLayout currentPath={ROUTES.SECURITY_PRACTICES} onNavigate={onNavigate}>
+          <SecurityPracticesPage onNavigate={onNavigate} />
         </PublicLayout>
       );
 

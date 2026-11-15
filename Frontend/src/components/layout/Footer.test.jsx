@@ -45,6 +45,7 @@ describe('Footer (Greptile CAD Blueprint Alignment - 4 Columns)', () => {
     expect(screen.getByText('LIÊN HỆ')).toBeInTheDocument();
     expect(screen.getByText('CÂU HỎI THƯỜNG GẶP')).toBeInTheDocument();
     expect(screen.getByText('GỬI PHẢN HỒI')).toBeInTheDocument();
+    expect(screen.getByText('BẢO MẬT HỆ THỐNG')).toBeInTheDocument();
     expect(screen.getByText('CHÍNH SÁCH BẢO MẬT')).toBeInTheDocument();
     expect(screen.getByText('ĐIỀU KHOẢN DỊCH VỤ')).toBeInTheDocument();
     expect(screen.getByText('BÁO CÁO SỰ CỐ')).toBeInTheDocument();
@@ -66,6 +67,16 @@ describe('Footer (Greptile CAD Blueprint Alignment - 4 Columns)', () => {
     fireEvent.click(docsLink);
 
     expect(mockNavigate).toHaveBeenCalledWith('/docs');
+
+    const privacyLink = screen.getByText('CHÍNH SÁCH BẢO MẬT');
+    fireEvent.click(privacyLink);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/privacy');
+
+    const securityLink = screen.getByText('BẢO MẬT HỆ THỐNG');
+    fireEvent.click(securityLink);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/security');
   });
 
   it('renders official social media buttons with correct labels and links', () => {

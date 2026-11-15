@@ -55,11 +55,15 @@
   width: 100%;
   min-height: 100vh;
   background-color: var(--color-canvas, #EEEEEE);
+  background-image:
+    linear-gradient(to right, rgba(61, 59, 79, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(61, 59, 79, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
   border-top: 1px solid rgba(61, 59, 79, 0.12);
   box-shadow: 0 -3px 18px rgba(0, 0, 0, 0.04);
-  padding: 44px 32px 108px 32px;
+  padding: 48px 84px 108px 84px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .guide-sheet-canvas {
@@ -81,23 +85,26 @@
   margin: 0 auto;
   display: flex;
   gap: 48px;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 /* ================= 4. LEFT PAGE (STICKY INDEX NAVIGATION) ================= */
 .notebook-left-nav-col {
   width: 310px;
   flex-shrink: 0;
+  align-self: stretch;
+  position: relative;
 }
 
 .notebook-left-nav-card {
   position: sticky;
   top: 96px;
-  background-color: #FFFFFF;
-  border: 1px solid rgba(61, 59, 79, 0.18);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  padding: 24px 18px;
-  border-radius: 2px;
+  z-index: 10;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 8px 16px 24px 0;
+  border-radius: 0;
 }
 
 /* Left Page Technical Stamp */
@@ -124,7 +131,7 @@
 
 /* Reading Progress Bar */
 .notebook-progress-box {
-  background-color: rgba(61, 59, 79, 0.05);
+  background-color: rgba(61, 59, 79, 0.04);
   padding: 8px 12px;
   border: 1px dashed rgba(61, 59, 79, 0.2);
   margin-bottom: 18px;
@@ -176,7 +183,7 @@
   font-size: 0.8125rem;
   color: #555368;
   transition: all 0.15s ease;
-  border-radius: 0px;
+  border-radius: 2px;
   width: 100%;
 }
 
@@ -186,12 +193,12 @@
 }
 
 .notebook-chapter-tab.active {
-  background-color: #FAFAFB;
-  border: 1px solid rgba(61, 59, 79, 0.25);
+  background-color: rgba(61, 59, 79, 0.08);
+  border: 1px solid rgba(61, 59, 79, 0.2);
   border-left: 4px solid var(--color-accent, #28E99F);
   color: var(--color-primary, #3D3B4F);
   font-weight: 700;
-  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
   transform: translateX(4px);
 }
 
@@ -229,11 +236,11 @@
 .notebook-right-content-col {
   flex: 1;
   min-width: 0;
-  background-color: #FFFFFF;
-  border: 1px solid rgba(61, 59, 79, 0.18);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-  padding: 40px 48px 64px 44px;
-  border-radius: 2px;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 8px 0 64px 8px;
+  border-radius: 0;
   position: relative;
 }
 
@@ -241,9 +248,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px dashed rgba(61, 59, 79, 0.2);
-  margin-bottom: 36px;
+  margin-bottom: 32px;
   font-family: var(--font-mono, monospace);
   font-size: 0.6875rem;
   color: #6B7280;
@@ -316,8 +323,8 @@
 
 /* Prerequisite box */
 .open-notebook-prereq {
-  background-color: #F9FAFB;
-  border: 1px dashed rgba(61, 59, 79, 0.25);
+  background-color: rgba(61, 59, 79, 0.04);
+  border: 1px dashed rgba(61, 59, 79, 0.22);
   padding: 18px 22px;
   margin-bottom: 20px;
 }
@@ -361,6 +368,12 @@
   }
 
   .guide-sheet-section {
-    padding: 24px 14px 64px 14px;
+    padding: 24px 56px 64px 56px;
+  }
+}
+
+@media (max-width: 640px) {
+  .guide-sheet-section {
+    padding: 24px 16px 64px 16px;
   }
 }

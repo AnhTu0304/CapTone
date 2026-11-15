@@ -1,3 +1,4 @@
+import Logo from '../../components/common/Logo';
 import React, { useState } from 'react';
 import { ArrowRight, ArrowLeft, Mail, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 
@@ -63,29 +64,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
     >
       {/* Top Center: Isometric Mint Cube Logo matching Login Page */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-        <svg width="52" height="52" viewBox="0 0 120 120" fill="none" aria-label="SelfHeal Cube Logo">
-          <defs>
-            <linearGradient id="fpCubeGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#28E99F" />
-              <stop offset="100%" stopColor="#1fd48f" />
-            </linearGradient>
-            <linearGradient id="fpCubeGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#22c788" />
-              <stop offset="100%" stopColor="#28E99F" />
-            </linearGradient>
-            <linearGradient id="fpCubeGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#1bb87c" />
-              <stop offset="100%" stopColor="#148e5f" />
-            </linearGradient>
-          </defs>
-          <g transform="translate(60, 60)">
-            <path d="M 0 -48 L -42 -8 L -22 12 L 0 -8 Z" fill="url(#fpCubeGrad1)" stroke="#148e5f" strokeWidth="1" />
-            <path d="M 0 -48 L 42 -8 L 22 12 L 0 -8 Z" fill="url(#fpCubeGrad2)" stroke="#148e5f" strokeWidth="1" />
-            <path d="M -42 -8 L 0 34 L 0 12 L -22 -10 Z" fill="url(#fpCubeGrad2)" stroke="#148e5f" strokeWidth="1" />
-            <path d="M 42 -8 L 0 34 L 0 12 L 22 -10 Z" fill="url(#fpCubeGrad3)" stroke="#148e5f" strokeWidth="1" />
-            <circle cx="0" cy="-8" r="4" fill="#FFFFFF" opacity="0.9" />
-          </g>
-        </svg>
+        <Logo size={52} showText={false} />
       </div>
 
       {sent ? (

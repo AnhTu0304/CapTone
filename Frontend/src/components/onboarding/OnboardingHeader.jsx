@@ -75,7 +75,7 @@ export const OnboardingHeader = ({ onNavigate }) => {
           style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
           aria-label="SelfHeal Homepage"
         >
-          <Logo size={24} />
+          <Logo size={36} showText={false} />
         </a>
 
         <div

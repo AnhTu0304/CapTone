@@ -10,7 +10,7 @@ import ConnectClusterSection from './components/ConnectClusterSection';
 export const HomePage = ({ onNavigate }) => {
   return (
     <div className="home-page">
-      {/* 1. HERO SECTION + [ AGENT ] BRIDGE BANNER */}
+      {/* 1. HERO SECTION (INCL. HERO CANVAS, SOCIAL PROOF & AGENT BRIDGE BANNER) */}
       <div id="overview">
         <HeroSectionSlot onNavigate={onNavigate} />
       </div>

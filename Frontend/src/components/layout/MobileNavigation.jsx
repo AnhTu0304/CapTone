@@ -51,7 +51,7 @@ export const MobileNavigation = ({
             onNavigate('/');
           }}
         >
-          <Logo size={26} />
+          <Logo size={36} showText={false} />
         </a>
         <button
           type="button"

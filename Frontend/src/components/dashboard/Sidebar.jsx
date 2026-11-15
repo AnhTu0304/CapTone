@@ -1,4 +1,5 @@
 import React from 'react';
+import logoPng from '../../assets/Logo-transparent.png';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -290,22 +291,18 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
             cursor: 'pointer',
           }}
         >
-          <div
+          <img
+            src={logoPng}
+            width={32}
+            height={32}
+            alt="SelfHeal Logo"
             style={{
               width: '32px',
               height: '32px',
-              backgroundColor: 'var(--dash-primary)',
-              borderRadius: 'var(--dash-radius-md)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
+              objectFit: 'contain',
               flexShrink: 0,
-              boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
             }}
-          >
-            <ShieldCheck size={18} strokeWidth={2.4} />
-          </div>
+          />
           {!isSidebarCollapsed && (
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.9375rem', color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>

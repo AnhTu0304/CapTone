@@ -1,4 +1,5 @@
 import React from 'react';
+import logoPng from '../../assets/Logo-transparent.png';
 import './Footer.css';
 
 export const Footer = ({ onNavigate }) => {
@@ -75,23 +76,15 @@ export const Footer = ({ onNavigate }) => {
               <line x1="12" y1="264" x2="268" y2="264" strokeDasharray="2 2" />
             </g>
 
-            {/* 2. Geometric Isometric Mint Emblem */}
-            <g id="logo-emblem" transform="translate(140, 118)">
-              {/* Top-Left Quadrant */}
-              <polygon points="0,-72 -68,-4 -36,28 0,-8" fill="#28E99F" />
-              {/* Top-Right Quadrant */}
-              <polygon points="0,-72 68,-4 36,28 0,-8" fill="#20D48F" />
-              {/* Bottom-Left Quadrant */}
-              <polygon points="-68,-4 0,64 0,28 -36,-8" fill="#20D48F" />
-              {/* Bottom-Right Quadrant */}
-              <polygon points="68,-4 0,64 0,28 36,-8" fill="#18B87A" />
-
-              {/* Center Floating Core Healing Polygon */}
-              <polygon
-                points="0,-16 16,0 0,16 -16,0"
-                fill="#EDEDF0"
-                stroke="#28E99F"
-                strokeWidth="2.5"
+            {/* 2. Official Brand Logo Emblem */}
+            <g id="logo-emblem">
+              <image
+                href={logoPng}
+                x="80"
+                y="58"
+                width="120"
+                height="120"
+                preserveAspectRatio="xMidYMid meet"
               />
             </g>
 
@@ -177,10 +170,13 @@ export const Footer = ({ onNavigate }) => {
             <a href="/portal/help" onClick={(e) => handleLinkClick(e, '/portal/help')} className="footer-link">
               GỬI PHẢN HỒI
             </a>
-            <a href="/docs" onClick={(e) => handleLinkClick(e, '/docs')} className="footer-link">
+            <a href="/security" onClick={(e) => handleLinkClick(e, '/security')} className="footer-link">
+              BẢO MẬT HỆ THỐNG
+            </a>
+            <a href="/privacy" onClick={(e) => handleLinkClick(e, '/privacy')} className="footer-link">
               CHÍNH SÁCH BẢO MẬT
             </a>
-            <a href="/docs" onClick={(e) => handleLinkClick(e, '/docs')} className="footer-link">
+            <a href="/terms" onClick={(e) => handleLinkClick(e, '/terms')} className="footer-link">
               ĐIỀU KHOẢN DỊCH VỤ
             </a>
             <a

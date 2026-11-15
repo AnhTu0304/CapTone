@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import ChickenMascot from '../../components/mascot/ChickenMascot';
+import SocialProofSection from './components/SocialProofSection';
 import FeatureStrip from './components/FeatureStrip';
 import './HeroSection.css';
 
@@ -70,6 +71,9 @@ export const HeroSection = ({ onNavigate }) => {
           </div>
         </div>
       </section>
+
+      {/* ================= SOCIAL PROOF & PLATFORM OVERVIEW (4 CORE TOOLS + QUOTE) ================= */}
+      <SocialProofSection onNavigate={onNavigate} />
 
       {/* ================= SUB-HERO AGENT BRIDGE BANNER ================= */}
       <FeatureStrip onNavigate={onNavigate} />
