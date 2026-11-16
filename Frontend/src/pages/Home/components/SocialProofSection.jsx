@@ -84,6 +84,8 @@ export const SocialProofSection = ({ onNavigate }) => {
           <blockquote className="sp-quote-text">
             &ldquo;SelfHeal là nền tảng AI tự hành giám sát và dự báo sớm nguy cơ hạ tầng với sự kiểm soát minh bạch của con người.&rdquo;
           </blockquote>
+
+
           {/* Nút hành động cắt góc (Chamfered Hexagonal Button) */}
           <div className="sp-action-wrapper">
             <a

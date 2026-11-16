@@ -534,7 +534,7 @@ export const FeaturesPage = ({ onNavigate }) => {
                   <button
                     type="button"
                     className="features-btn-primary"
-                    onClick={() => onNavigate && onNavigate('/get-started')}
+                    onClick={() => onNavigate && onNavigate('/login')}
                     data-testid="features-cta-explore-btn"
                     title="Khám phá SelfHeal"
                   >

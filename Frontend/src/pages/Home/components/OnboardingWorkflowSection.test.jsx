@@ -13,7 +13,7 @@ describe('OnboardingWorkflowSection (4-Step CAD Workflow)', () => {
     const ctaBtn = screen.getByRole('link', { name: /Bắt đầu ngay/i });
     expect(ctaBtn).toBeInTheDocument();
     fireEvent.click(ctaBtn);
-    expect(mockNavigate).toHaveBeenCalledWith('/get-started');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
   test('renders neon lime divider badge', () => {

@@ -453,7 +453,7 @@ export const AboutPage = ({ onNavigate }) => {
                   <button
                     type="button"
                     className="about-btn-primary"
-                    onClick={() => handleNavigate('/get-started')}
+                    onClick={() => handleNavigate('/login')}
                     data-testid="about-cta-explore-btn"
                     title="Khám phá SelfHeal"
                   >

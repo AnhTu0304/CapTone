@@ -4,16 +4,13 @@ import GuidePage from '../pages/Guide';
 import FeaturesPage from '../pages/Features';
 import AboutPage from '../pages/About';
 import ContactPage from '../pages/Contact';
-import DocsPage from '../pages/Docs';
 import LoginPage from '../pages/Login';
 import RegisterPage from '../pages/Register';
 import ForgotPasswordPage from '../pages/ForgotPassword';
 import ResetPasswordPage from '../pages/ResetPassword';
-import GetStartedPage from '../pages/GetStarted';
 import OnboardingPage from '../pages/Onboarding';
 import DashboardPage from '../pages/Dashboard';
 import PublicLayout from '../layouts/PublicLayout';
-import DocsLayout from '../layouts/DocsLayout';
 import AuthLayout from '../layouts/AuthLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import OverviewPage from '../pages/Admin/Overview';
@@ -41,7 +38,6 @@ import TermsPage from '../pages/Terms';
 import ForbiddenPage from '../pages/Error/ForbiddenPage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
-import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
   HOME: '/',
@@ -111,11 +107,9 @@ export const ROUTES = {
   FORBIDDEN: '/403',
 };
 
-export const RouteRenderer = ({ 
-  currentPath = '/', 
-  onNavigate, 
-  activeDocId = 'overview', 
-  onSelectDoc 
+export const RouteRenderer = ({
+  currentPath = '/',
+  onNavigate,
 }) => {
   // Normalize path
   const path = currentPath.toLowerCase().split('?')[0].split('#')[0] || '/';
@@ -339,6 +333,7 @@ export const RouteRenderer = ({
 
   switch (path) {
     case ROUTES.LOGIN:
+    case ROUTES.GET_STARTED:
       return (
         <AuthLayout onNavigate={onNavigate}>
           <LoginPage onNavigate={onNavigate} />
@@ -367,31 +362,6 @@ export const RouteRenderer = ({
       );
 
     case ROUTES.DOCS:
-      return (
-        <DocsLayout
-          currentPath={ROUTES.DOCS}
-          activeDocId={activeDocId}
-          onSelectDoc={onSelectDoc}
-          onNavigate={onNavigate}
-          tocComponent={
-            <TableOfContents
-              title="On this page"
-              items={[
-                { id: 'overview-intro', title: 'Introduction', level: 2 },
-                { id: 'specifications', title: 'Specifications', level: 2 },
-                { id: 'implementation', title: 'Implementation', level: 2 },
-              ]}
-              onItemClick={(id) => {
-                const el = document.getElementById(id);
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
-          }
-        >
-          <DocsPage activeDocId={activeDocId} onSelectDoc={onSelectDoc} />
-        </DocsLayout>
-      );
-
     case ROUTES.GUIDE:
       return (
         <PublicLayout currentPath={ROUTES.GUIDE} onNavigate={onNavigate}>
@@ -443,13 +413,6 @@ export const RouteRenderer = ({
       return (
         <PublicLayout currentPath={ROUTES.SECURITY_PRACTICES} onNavigate={onNavigate}>
           <SecurityPracticesPage onNavigate={onNavigate} />
-        </PublicLayout>
-      );
-
-    case ROUTES.GET_STARTED:
-      return (
-        <PublicLayout currentPath={ROUTES.GET_STARTED} onNavigate={onNavigate}>
-          <GetStartedPage onNavigate={onNavigate} />
         </PublicLayout>
       );
 

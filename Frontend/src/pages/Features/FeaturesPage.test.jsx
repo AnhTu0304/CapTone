@@ -67,27 +67,27 @@ describe('FeaturesPage Component (MAPE-K Lifecycle & Two-Tier Canvas Architectur
     render(<FeaturesPage />);
 
     expect(screen.getByTestId('features-section-detect')).toBeInTheDocument();
-    expect(screen.getByText(/CHẶNG 01 \/\/ DETECT/i)).toBeInTheDocument();
+    expect(screen.getByText(/CHẶNG 01 \/\/ Phát Hiện/i)).toBeInTheDocument();
     expect(screen.getByText(/Quét Radar Hạ Tầng & Thu Thập Telemetry Tức Thì/i)).toBeInTheDocument();
 
     expect(screen.getByTestId('features-section-predict')).toBeInTheDocument();
-    expect(screen.getByText(/CHẶNG 02 \/\/ PREDICT/i)).toBeInTheDocument();
+    expect(screen.getByText(/CHẶNG 02 \/\/ Dự Đoán/i)).toBeInTheDocument();
     expect(screen.getByText(/Dự Báo Suy Thoái Sớm 15–30 Phút Bằng Mạng Nơ-ron GRU/i)).toBeInTheDocument();
 
     expect(screen.getByTestId('features-section-diagnose')).toBeInTheDocument();
-    expect(screen.getByText(/CHẶNG 03 \/\/ DIAGNOSE/i)).toBeInTheDocument();
+    expect(screen.getByText(/CHẶNG 03 \/\/ Chuẩn Đoán/i)).toBeInTheDocument();
     expect(screen.getByText(/Tự Động Phân Tích Nguyên Nhân Gốc Rễ Đa Chiều \(RCA\)/i)).toBeInTheDocument();
 
     expect(screen.getByTestId('features-section-verify')).toBeInTheDocument();
-    expect(screen.getByText(/CHẶNG 04 \/\/ VERIFY/i)).toBeInTheDocument();
+    expect(screen.getByText(/CHẶNG 04 \/\/ Xác Minh/i)).toBeInTheDocument();
     expect(screen.getByText(/Xem Trước Kubernetes YAML Diff & Phê Duyệt An Toàn \(HITL\)/i)).toBeInTheDocument();
 
     expect(screen.getByTestId('features-section-recover')).toBeInTheDocument();
-    expect(screen.getByText(/CHẶNG 05 \/\/ RECOVER/i)).toBeInTheDocument();
+    expect(screen.getByText(/CHẶNG 05 \/\/ Hồi Phục/i)).toBeInTheDocument();
     expect(screen.getByText(/Khôi Phục Tự Hành Dưới 2 Giây Không Gián Đoạn Dịch Vụ/i)).toBeInTheDocument();
 
     expect(screen.getByTestId('features-section-audit')).toBeInTheDocument();
-    expect(screen.getByText(/CHẶNG 06 \/\/ AUDIT/i)).toBeInTheDocument();
+    expect(screen.getByText(/CHẶNG 06 \/\/ Bảo Vệ & Kiểm Toán/i)).toBeInTheDocument();
     expect(screen.getByText(/Bảo Mật Cụm Đạt Chuẩn & Nhật Ký Kiểm Toán Bất Biến/i)).toBeInTheDocument();
   });
 
@@ -129,7 +129,7 @@ describe('FeaturesPage Component (MAPE-K Lifecycle & Two-Tier Canvas Architectur
 
     const exploreBtn = screen.getByTestId('features-cta-explore-btn');
     fireEvent.click(exploreBtn);
-    expect(mockNavigate).toHaveBeenCalledWith('/get-started');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
 
     const contactBtn = screen.getByTestId('features-cta-contact-btn');
     fireEvent.click(contactBtn);

@@ -88,10 +88,10 @@ export const RBACNotice = ({ className = '', onNavigate }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ color: 'var(--text-muted)' }}>Đọc tài liệu kiến trúc bảo mật tại</span>
             <a
-              href="/docs"
+              href="/guide"
               onClick={(e) => {
                 e.preventDefault();
-                if (onNavigate) onNavigate('/docs');
+                if (onNavigate) onNavigate('/guide');
               }}
               style={{
                 color: '#059669',

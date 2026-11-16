@@ -140,7 +140,7 @@ export const CTASection = ({
         </p>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
           <a
-            href="/get-started"
+            href="/login"
             onClick={(e) => {
               if (onPrimaryClick) {
                 e.preventDefault();

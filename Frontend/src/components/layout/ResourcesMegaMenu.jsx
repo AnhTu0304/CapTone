@@ -30,7 +30,7 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
       title: 'Tài Liệu Hướng Dẫn',
       description: 'Hướng dẫn cài đặt, cấu hình tác tử và tài liệu nền tảng.',
       icon: BookOpen,
-      route: '/docs',
+      route: '/guide',
       isExternal: false,
     },
     {

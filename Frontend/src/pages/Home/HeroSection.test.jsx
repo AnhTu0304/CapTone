@@ -14,14 +14,14 @@ describe('HeroSection CTA Buttons', () => {
     expect(secondaryBtn).toHaveClass('hero-btn-secondary');
   });
 
-  it('triggers onNavigate with /get-started when "Bắt đầu ngay" is clicked', () => {
+  it('triggers onNavigate with /login when "Bắt đầu ngay" is clicked', () => {
     const mockNavigate = jest.fn();
     render(<HeroSection onNavigate={mockNavigate} />);
 
     const primaryBtn = screen.getByRole('link', { name: /Bắt đầu ngay/i });
     fireEvent.click(primaryBtn);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/get-started');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
   it('triggers onNavigate with /guide when "Xem hướng dẫn" is clicked', () => {

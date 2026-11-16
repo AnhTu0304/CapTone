@@ -32,8 +32,8 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
           </div>
 
           <a
-            href="/get-started"
-            onClick={(e) => handleNav(e, '/get-started')}
+            href="/login"
+            onClick={(e) => handleNav(e, '/login')}
             className="ows-header-btn"
           >
             <span>Bắt đầu ngay</span>

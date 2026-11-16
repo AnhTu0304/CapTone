@@ -48,8 +48,8 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
               </a>
 
               <a
-                href="/get-started"
-                onClick={(e) => handleNav(e, '/get-started')}
+                href="/login"
+                onClick={(e) => handleNav(e, '/login')}
                 className="ccs-btn-right"
               >
                 <span>Bắt đầu ngay</span>

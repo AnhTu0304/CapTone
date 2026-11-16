@@ -17,7 +17,7 @@ describe('ConnectClusterSection (Greptile Dark Navy Final CTA with HealBot Masco
     const startBtn = screen.getByRole('link', { name: /Bắt đầu ngay/i });
     expect(startBtn).toBeInTheDocument();
     fireEvent.click(startBtn);
-    expect(mockNavigate).toHaveBeenCalledWith('/get-started');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
   test('renders HealBot pixel mascot animation stage inside wrapper', () => {

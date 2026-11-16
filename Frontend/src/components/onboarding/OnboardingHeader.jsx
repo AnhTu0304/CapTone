@@ -124,8 +124,8 @@ export const OnboardingHeader = ({ onNavigate }) => {
         </a>
 
         <a
-          href="/docs"
-          onClick={(e) => handleLink(e, '/docs')}
+          href="/guide"
+          onClick={(e) => handleLink(e, '/guide')}
           style={{
             display: 'inline-flex',
             alignItems: 'center',

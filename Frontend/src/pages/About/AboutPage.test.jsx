@@ -125,7 +125,7 @@ describe('AboutPage (Two-Tier Layout: Top Hero + Canvas Grid Sheet & 8 Sections)
     expect(exploreBtn).toBeInTheDocument();
     expect(exploreBtn).toHaveClass('about-btn-primary');
     fireEvent.click(exploreBtn);
-    expect(mockNavigate).toHaveBeenCalledWith('/get-started');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
 
     const contactBtn = screen.getByTestId('about-cta-contact-btn');
     expect(contactBtn).toBeInTheDocument();

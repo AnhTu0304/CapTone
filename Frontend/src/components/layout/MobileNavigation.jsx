@@ -109,7 +109,7 @@ export const MobileNavigation = ({
                 {docsExpanded && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 0 16px 12px' }}>
                     {[
-                      { label: 'Tài liệu hướng dẫn', path: '/docs', icon: BookOpen },
+                      { label: 'Tài liệu hướng dẫn', path: '/guide', icon: BookOpen },
                       { label: 'Điều khoản & Điều kiện', path: '/terms', icon: Scale },
                       { label: 'Liên hệ tư vấn', path: '/contact', icon: Mail },
                       { label: 'Bảo mật & Quyền riêng tư', path: '/privacy', icon: ShieldCheck },

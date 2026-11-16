@@ -66,7 +66,7 @@ describe('Footer (Greptile CAD Blueprint Alignment - 4 Columns)', () => {
     const docsLink = screen.getByText('TÀI LIỆU HƯỚNG DẪN');
     fireEvent.click(docsLink);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/docs');
+    expect(mockNavigate).toHaveBeenCalledWith('/guide');
 
     const privacyLink = screen.getByText('CHÍNH SÁCH BẢO MẬT');
     fireEvent.click(privacyLink);

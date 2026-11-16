@@ -33,8 +33,8 @@ export const HeroSection = ({ onNavigate }) => {
 
               <div className="hero-cta-group">
                 <a
-                  href="/get-started"
-                  onClick={(e) => handleLinkClick(e, '/get-started')}
+                  href="/login"
+                  onClick={(e) => handleLinkClick(e, '/login')}
                   className="hero-btn-primary"
                   title="Bắt đầu ngay"
                 >

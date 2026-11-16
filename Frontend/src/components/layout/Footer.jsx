@@ -139,10 +139,10 @@ export const Footer = ({ onNavigate }) => {
         <nav className="footer-col-nav footer-col-resources" aria-label="Tài nguyên">
           <span className="footer-col-title">TÀI NGUYÊN</span>
           <div className="footer-links-group">
-            <a href="/docs" onClick={(e) => handleLinkClick(e, '/docs')} className="footer-link">
+            <a href="/guide" onClick={(e) => handleLinkClick(e, '/guide')} className="footer-link">
               TÀI LIỆU HƯỚNG DẪN
             </a>
-            <a href="/get-started" onClick={(e) => handleLinkClick(e, '/get-started')} className="footer-link">
+            <a href="/login" onClick={(e) => handleLinkClick(e, '/login')} className="footer-link">
               BẮT ĐẦU NGAY
             </a>
             <a href="/onboarding/verify-agent" onClick={(e) => handleLinkClick(e, '/onboarding/verify-agent')} className="footer-link">
