@@ -173,8 +173,19 @@ class RecommendationAgent:
             action = "TEMPORARY_IP_BLOCK"
             reason = f"Phát hiện bất thường bảo mật từ IP nguồn {security.source_ip}; tạm thời chặn IP để bảo vệ dịch vụ"
         elif cause == "deployment_failure":
-            action = "ROLLBACK_DEPLOYMENT"
-            reason = "Sự cố có tương quan trực tiếp với bản triển khai vừa cập nhật; đề xuất rollback phiên bản"
+            has_prev_version = bool(
+                kubernetes
+                and kubernetes.deployment
+                and getattr(kubernetes.deployment, "previous_version", None)
+                and getattr(kubernetes.deployment, "version", None)
+                and kubernetes.deployment.previous_version != kubernetes.deployment.version
+            )
+            if has_prev_version:
+                action = "ROLLBACK_DEPLOYMENT"
+                reason = f"Sự cố có tương quan trực tiếp với bản triển khai vừa cập nhật ({kubernetes.deployment.version}); đề xuất hoàn nguyên về phiên bản ổn định trước đó ({kubernetes.deployment.previous_version})"
+            else:
+                action = "REPLACE_POD"
+                reason = "Phát hiện lỗi triển khai (Deployment Failure) nhưng không tìm thấy phiên bản ổn định trước đó để Rollback; đề xuất tạo mới lại Pod (REPLACE_POD) để thử lại quá trình khởi tạo."
         elif cause == "storage_exhaustion":
             action = "CLEANUP_STORAGE"
             reason = "Dung lượng ổ đĩa đã cạn kiệt hoặc sắp chạm ngưỡng tới hạn; cần dọn dẹp lưu trữ"

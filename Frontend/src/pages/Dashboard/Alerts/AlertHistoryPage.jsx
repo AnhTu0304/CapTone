@@ -384,12 +384,26 @@ export const AlertHistoryPage = ({ onNavigate }) => {
           gap: '16px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <History size={26} color="var(--dash-primary, #059669)" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <History size={20} color="#059669" />
+          </div>
+          <div>
             <h1
               style={{
-                fontSize: '1.5rem',
+                fontSize: '1.45rem',
                 fontWeight: 800,
                 color: 'var(--dash-text-primary)',
                 margin: 0,
@@ -398,10 +412,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
             >
               Lịch Sử Cảnh Báo & Nhật Ký Kiểm Toán (Alert History)
             </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Tra cứu, lọc đa chiều, theo dõi thời lượng, phân công người phụ trách và kiểm toán xử lý toàn bộ sự kiện cảnh báo
+            </p>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Tra cứu, lọc đa chiều, theo dõi thời lượng, phân công người phụ trách và kiểm toán xử lý toàn bộ sự kiện cảnh báo
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

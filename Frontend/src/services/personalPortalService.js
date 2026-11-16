@@ -442,7 +442,9 @@ export const personalPortalService = {
     }
 
     if (activitiesRes.status === 'fulfilled') {
-      recentActivities = (activitiesRes.value || []).slice(0, 5);
+      const actData = activitiesRes.value;
+      const actItems = Array.isArray(actData) ? actData : (actData?.items || []);
+      recentActivities = actItems.slice(0, 5);
     } else {
       recentActivities = this.getActivityHistory().slice(0, 5);
     }
@@ -540,7 +542,7 @@ export const personalPortalService = {
       slug: (slug || name).trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
       status: 'ACTIVE',
       role: 'SME_OWNER',
-      roleTitle: 'Chủ Doanh Nghiệp (Owner)',
+      roleTitle: 'SME OWNER',
       joinedAt: formatVnDate(new Date()),
       clustersCount: 0,
       membersCount: 1,
@@ -580,12 +582,11 @@ export const personalPortalService = {
         const orgName = inv.organization?.name || inv.organization_name || 'Tổ chức';
         const roleCode = inv.role?.code || inv.invitedRole || 'DEVOPS';
         const roleTitle =
-          inv.role?.name ||
           (roleCode === 'SME_OWNER'
-            ? 'Chủ Doanh Nghiệp (Owner)'
+            ? 'SME OWNER'
             : roleCode === 'DEVOPS'
-            ? 'Kỹ Sư DevOps / SRE'
-            : 'Người Quan Sát (Viewer)');
+            ? 'DEVOPS'
+            : 'VIEWER');
 
         return {
           id: inv.id,
@@ -624,10 +625,10 @@ export const personalPortalService = {
         const roleCode = org.role_in_org || 'SME_OWNER';
         const roleTitle =
           roleCode === 'SME_OWNER'
-            ? 'Chủ Doanh Nghiệp (Owner)'
+            ? 'SME OWNER'
             : roleCode === 'DEVOPS'
-            ? 'Kỹ Sư Vận Hành Hạ Tầng (DevOps)'
-            : 'Người Giám Sát (Viewer)';
+            ? 'DEVOPS'
+            : 'VIEWER';
 
         return {
           id: org.id,
@@ -1058,13 +1059,23 @@ export const personalPortalService = {
       const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
       const response = await request(`/users/me/activities${queryStr}`);
       if (response && response.success) {
-        const items = response.data?.items || (Array.isArray(response.data) ? response.data : []);
+        const raw = response.data;
+        const items = raw?.items || (Array.isArray(raw) ? raw : []);
+        const total = typeof raw?.total === 'number' ? raw.total : items.length;
+        const page = typeof raw?.page === 'number' ? raw.page : Number(params.page || 1);
+        const limit = typeof raw?.limit === 'number' ? raw.limit : Number(params.limit || items.length);
+
         if (!params.category || params.category === 'ALL') {
           if (!params.search) {
             localStorage.setItem(STORAGE_ACTIVITIES_KEY, JSON.stringify(items));
           }
         }
-        return items;
+        return {
+          items,
+          total,
+          page,
+          limit,
+        };
       }
       return this.getActivityHistory();
     } catch (err) {

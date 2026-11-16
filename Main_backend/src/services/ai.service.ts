@@ -1063,6 +1063,12 @@ export class AiService {
               ]
             );
           }
+          if (validPredictionId) {
+            await client.query(
+              `UPDATE incidents SET prediction_id = $2 WHERE id = $1 AND prediction_id IS NULL;`,
+              [incidentId, validPredictionId]
+            ).catch(() => {});
+          }
           if (duplicateRec.rca_analysis_id) {
             await client.query(
               `UPDATE rca_analyses

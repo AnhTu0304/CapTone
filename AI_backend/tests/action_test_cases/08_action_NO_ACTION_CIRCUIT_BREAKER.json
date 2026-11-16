@@ -4,7 +4,7 @@
   "scenario_title": "Ngắt mạch an toàn Circuit Breaker & Human-in-the-Loop",
   "file_name": "08_action_NO_ACTION_CIRCUIT_BREAKER.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-13T09:30:41.377062+00:00",
+  "tested_at": "2026-11-16T20:38:12.418741+00:00",
   "description": "Sự cố MongoDB Replica Set OOM SIGKILL 137, Pod giữ vai trò PRIMARY, đã thử tự động cứu chữa 2 lần thất bại (consecutive_failures: 2). Kích hoạt Circuit Breaker chuyển quyền can thiệp thủ công (NO_ACTION, CRITICAL) kèm manual_playbook 3 bước failover rs.stepDown(60).",
   "input_payload": {
     "request_id": "req-20261026-circuit-breaker-008",
@@ -94,14 +94,14 @@
         {
           "risk_type": "OOM",
           "confidence": 0.94,
-          "description": "Mô hình học sâu GRU cảnh báo nguy cơ OOM (94.0%)"
+          "description": "Mô hình học sâu AI cảnh báo nguy cơ OOM (94.0%)"
         }
       ],
       "symptoms": []
     },
     "evidence": [
       "Container trên Pod 'mongodb-0' bị Linux Kernel OOM-Killer tiêu diệt (OOMKilled, exitCode: 137)",
-      "GRU predicted OOM (94.0%)",
+      "AI predicted OOM (94.0%)",
       "Action history recorded 2 consecutive failure(s) (Lịch sử ghi nhận 2 lần thất bại liên tiếp, circuit_breaker_tripped=True)"
     ],
     "recommendation": {
@@ -153,7 +153,7 @@
       {
         "risk_type": "OOM",
         "confidence": 0.94,
-        "description": "Mô hình học sâu GRU cảnh báo nguy cơ OOM (94.0%)"
+        "description": "Mô hình học sâu AI cảnh báo nguy cơ OOM (94.0%)"
       }
     ],
     "symptoms": []

@@ -4,7 +4,7 @@
   "scenario_title": "Khởi động lại Pod đơn lẻ (Restart Pod)",
   "file_name": "01_action_RESTART_POD.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-13T09:30:40.563667+00:00",
+  "tested_at": "2026-11-16T20:38:12.259569+00:00",
   "description": "Pod bị lỗi Readiness probe thất bại nhẹ, restart_count thấp (1 lần < 3). RCA đề xuất RESTART_POD để khởi động lại container bị treo.",
   "input_payload": {
     "request_id": "req-20261026-restart-pod-001",

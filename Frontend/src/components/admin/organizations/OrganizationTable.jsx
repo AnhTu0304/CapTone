@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, Radio, Users, Ban, CheckCircle2 } from 'lucide-react';
+import { ArrowUpRight, Radio, Users, Ban, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import OrganizationStatusBadge from './OrganizationStatusBadge';
 
 const getAgentHealthStyle = (health) => {
@@ -21,7 +21,15 @@ export const OrganizationTable = ({
   onSelectOrganization,
   onToggleStatus,
   isLoading = false,
+  totalCount,
+  page = 1,
+  pageSize = 10,
+  onPageChange,
+  onPageSizeChange,
 }) => {
+  const total = typeof totalCount === 'number' ? totalCount : organizations.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   const handleSelect = (org) => {
     if (onSelectOrganization) {
       onSelectOrganization(org);
@@ -265,6 +273,136 @@ export const OrganizationTable = ({
           })}
         </tbody>
       </table>
+
+      {/* Pagination Footer */}
+      {onPageChange && (
+        <div
+          style={{
+            padding: '12px 20px',
+            borderTop: '1px solid var(--dash-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            backgroundColor: '#FAFAFA',
+            fontSize: '0.8125rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--dash-text-muted)' }}>Hiển thị:</span>
+            {onPageSizeChange && (
+              <select
+                aria-label="Số doanh nghiệp mỗi trang"
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  backgroundColor: '#FFFFFF',
+                  color: 'var(--dash-text-primary)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value={10}>10 doanh nghiệp</option>
+                <option value={20}>20 doanh nghiệp</option>
+                <option value={50}>50 doanh nghiệp</option>
+              </select>
+            )}
+            <span style={{ color: 'var(--dash-text-secondary)', marginLeft: '4px' }}>
+              Hiển thị{' '}
+              <strong style={{ color: 'var(--dash-text-primary)' }}>
+                {total > 0 ? (page - 1) * pageSize + 1 : 0} - {Math.min(page * pageSize, total)}
+              </strong>{' '}
+              trên tổng số <strong style={{ color: 'var(--dash-text-primary)' }}>{total}</strong> doanh nghiệp
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+              aria-label="Trang trước"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 10px',
+                borderRadius: 'var(--dash-radius-sm)',
+                border: '1px solid var(--dash-border)',
+                backgroundColor: page <= 1 ? '#F1F5F9' : '#FFFFFF',
+                color: page <= 1 ? '#94A3B8' : 'var(--dash-text-primary)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLeft size={14} />
+              <span>Trước</span>
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .map((p, idx, arr) => {
+                const prev = arr[idx - 1];
+                return (
+                  <React.Fragment key={p}>
+                    {prev && p - prev > 1 && (
+                      <span style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.75rem' }}>...</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(p)}
+                      aria-label={`Trang ${p}`}
+                      style={{
+                        minWidth: '28px',
+                        height: '28px',
+                        padding: '0 6px',
+                        borderRadius: 'var(--dash-radius-sm)',
+                        border: '1px solid var(--dash-border)',
+                        backgroundColor: page === p ? 'var(--dash-primary)' : '#FFFFFF',
+                        color: page === p ? '#FFFFFF' : 'var(--dash-text-secondary)',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {p}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+              aria-label="Trang tiếp theo"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 10px',
+                borderRadius: 'var(--dash-radius-sm)',
+                border: '1px solid var(--dash-border)',
+                backgroundColor: page >= totalPages ? '#F1F5F9' : '#FFFFFF',
+                color: page >= totalPages ? '#94A3B8' : 'var(--dash-text-primary)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <span>Tiếp</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

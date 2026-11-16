@@ -449,10 +449,10 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Công Ty Của Tôi — Truy Cập Nhanh
+                Công Ty Của Tôi
               </h3>
               <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Danh sách các tổ chức bạn đang nắm giữ vai trò và quyền truy cập
+                Danh sách các tổ chức bạn đang nắm giữ vai trò
               </p>
             </div>
             <button
@@ -622,24 +622,30 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                             padding: '1px 8px',
                             borderRadius: '9999px',
                             backgroundColor:
-                              company.role === 'SME_OWNER'
+                              company.role === 'SME_OWNER' || String(company.roleTitle || '').toUpperCase().includes('OWNER')
                                 ? '#ECFDF5'
                                 : company.role === 'DEVOPS'
                                 ? '#EFF6FF'
                                 : '#F1F5F9',
                             color:
-                              company.role === 'SME_OWNER'
+                              company.role === 'SME_OWNER' || String(company.roleTitle || '').toUpperCase().includes('OWNER')
                                 ? '#065F46'
                                 : company.role === 'DEVOPS'
                                 ? '#1E40AF'
                                 : '#475569',
                           }}
                         >
-                          {company.roleTitle || 'Thành viên'}
+                          {(() => {
+                            const r = String(company.role || company.roleTitle || '').toUpperCase();
+                            if (r.includes('OWNER') || r.includes('CHỦ')) return 'SME OWNER';
+                            if (r.includes('DEVOPS') || r.includes('KỸ SƯ')) return 'DEVOPS';
+                            if (r.includes('VIEWER') || r.includes('GIÁM SÁT') || r.includes('QUAN SÁT')) return 'VIEWER';
+                            return company.role || 'SME OWNER';
+                          })()}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px' }}>
-                        {company.clustersCount || 0} Cụm K8s • {company.activeWorkloads || 0} Workloads • Truy cập {company.lastAccessedAt || 'Gần đây'}
+                        {company.clustersCount || 0} Cụm K8s • {company.activeWorkloads || 0} Workloads
                       </div>
                     </div>
                   </div>

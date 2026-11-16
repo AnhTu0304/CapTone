@@ -685,6 +685,89 @@ export class EmailService {
     }
   }
 
+  /**
+   * Gửi email thông báo phát sóng toàn mạng từ Quản trị viên
+   */
+  public static async sendBroadcastEmail(payload: {
+    toEmail: string;
+    recipientName?: string;
+    broadcastCode: string;
+    title: string;
+    content: string;
+    priority: string;
+    senderName?: string;
+  }): Promise<boolean> {
+    const transporter = this.getTransporter();
+    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const dashboardUrl = `${clientUrl}/dashboard`;
+
+    let priorityColor = '#0284c7'; // INFO
+    let priorityBg = 'linear-gradient(135deg, #0369a1, #0284c7)';
+    let priorityBadge = 'THÔNG BÁO HỆ THỐNG';
+
+    if (payload.priority === 'CRITICAL') {
+      priorityColor = '#dc2626';
+      priorityBg = 'linear-gradient(135deg, #991b1b, #dc2626)';
+      priorityBadge = 'CẢNH BÁO KHẨN CẤP';
+    } else if (payload.priority === 'WARNING') {
+      priorityColor = '#d97706';
+      priorityBg = 'linear-gradient(135deg, #b45309, #f59e0b)';
+      priorityBadge = 'CẢNH BÁO BẢO TRÌ';
+    }
+
+    if (!transporter) {
+      console.log('\n============================================================');
+      console.log(`📢 [EMAIL BROADCAST - DEV MODE] [${payload.broadcastCode}] ${payload.title}`);
+      console.log(`➡️  Gửi tới: ${payload.toEmail}`);
+      console.log(`⚠️  Mức độ: ${payload.priority} | Người gửi: ${payload.senderName || 'Super Admin'}`);
+      console.log('============================================================\n');
+      return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head><meta charset="UTF-8"><title>${this.escapeHtml(payload.title)}</title></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background:#f8fafc; padding:24px; color:#0f172a;">
+      <div style="max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div style="background:${priorityBg}; padding:24px; color:#ffffff;">
+          <div style="display:inline-block; font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,0.2); letter-spacing:0.05em; text-transform:uppercase;">
+            ${priorityBadge} • ${payload.broadcastCode}
+          </div>
+          <h2 style="margin:12px 0 0; font-size:20px; font-weight:800; line-height:1.4;">${this.escapeHtml(payload.title)}</h2>
+        </div>
+        <div style="padding:28px 24px; font-size:14px; line-height:1.7;">
+          <p>Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>,</p>
+          <p>Ban Quản Trị Hệ Thống Nền Tảng Self-Healing vừa phát sóng một thông báo mới tới bạn:</p>
+          <div style="margin:20px 0; padding:16px 20px; background:#f8fafc; border-left:4px solid ${priorityColor}; border-radius:6px; font-size:14px; color:#334155; white-space:pre-wrap;">${this.escapeHtml(payload.content)}</div>
+          <div style="margin:28px 0 16px; text-align:center;">
+            <a href="${dashboardUrl}" style="display:inline-block; background:${priorityColor}; color:#ffffff; padding:12px 28px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">Mở Bàn Điều Khiển Nền Tảng</a>
+          </div>
+          <hr style="border:none; border-top:1px solid #e2e8f0; margin:24px 0 16px;" />
+          <p style="font-size:12px; color:#64748b; margin:0; text-align:center;">
+            Thông báo này được gửi tự động từ Trung Tâm Phát Thông Báo Toàn Mạng CapTone Self-Healing.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    try {
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
+        to: payload.toEmail,
+        subject: `📢 [CapTone] ${payload.title}`,
+        html: htmlContent,
+      });
+      console.log(`✅ [EMAIL BROADCAST] Đã gửi thông báo [${payload.broadcastCode}] tới <${payload.toEmail}>`);
+      return true;
+    } catch (err: any) {
+      console.error(`❌ [EMAIL BROADCAST] Lỗi khi gửi email tới <${payload.toEmail}>:`, err?.message || err);
+      return false;
+    }
+  }
+
   public static async sendHitlApprovalNotification(payload: {
     toEmail: string;
     recipientName: string;

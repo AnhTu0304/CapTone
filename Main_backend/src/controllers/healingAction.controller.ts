@@ -192,12 +192,15 @@ export class HealingActionController {
       const search = req.query.search as string | undefined;
       const is_active = req.query.is_active !== undefined ? req.query.is_active === 'true' : undefined;
 
-      const policies = await HealingActionService.getPolicies({
-        organization_id,
-        environment_id,
-        is_active,
-        search,
-      });
+      const policies = await HealingActionService.getPolicies(
+        {
+          organization_id,
+          environment_id,
+          is_active,
+          search,
+        },
+        user
+      );
 
       return ApiResponse.success(res, 'Lấy danh sách chính sách tự phục hồi thành công', policies, 200);
     } catch (error) {

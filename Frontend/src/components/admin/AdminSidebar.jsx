@@ -346,8 +346,6 @@ export const ADMIN_NAV_GROUPS = [
         label: 'Sự Cố & Cảnh Báo',
         path: '/admin/alerts',
         icon: AlertTriangle,
-        badge: 'Cảnh báo',
-        badgeColor: '#EF4444',
       },
     ],
   },
@@ -496,6 +494,7 @@ export const AdminSidebar = ({
 
   return (
     <aside
+      className="admin-sidebar"
       aria-label="Thanh điều hướng bên Admin"
       style={{
         width: isCollapsed ? '72px' : '260px',
@@ -511,6 +510,20 @@ export const AdminSidebar = ({
         flexShrink: 0,
       }}
     >
+      {/* Ẩn hoàn toàn thanh cuộn scrollbar trên mọi trình duyệt */}
+      <style>{`
+        .admin-sidebar-nav::-webkit-scrollbar,
+        .admin-sidebar::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+        .admin-sidebar-nav,
+        .admin-sidebar {
+          -ms-overflow-style: none !important;
+          scrollbar-width: none !important;
+        }
+      `}</style>
       {/* Floating Border Edge Toggle Button (Màu xanh, hình tròn đè lên đường viền giống Dashboard) */}
       {onToggleCollapse && (
         <button
@@ -626,10 +639,13 @@ export const AdminSidebar = ({
 
       {/* Nav List / Grouped Navigation */}
       <div
+        className="admin-sidebar-nav"
         style={{
           flex: 1,
           overflowY: 'auto',
           overflowX: 'hidden',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
           padding: isCollapsed ? '12px 8px' : '16px 12px',
           display: 'flex',
           flexDirection: 'column',

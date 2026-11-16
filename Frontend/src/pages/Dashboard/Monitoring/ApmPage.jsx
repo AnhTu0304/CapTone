@@ -272,17 +272,18 @@ export const ApmPage = ({ onNavigate }) => {
         }}
       >
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
                 backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '1px solid #A7F3D0',
+                flexShrink: 0,
               }}
             >
               <Zap size={20} color="#059669" />
@@ -290,7 +291,7 @@ export const ApmPage = ({ onNavigate }) => {
             <div>
               <h1
                 style={{
-                  fontSize: '1.5rem',
+                  fontSize: '1.45rem',
                   fontWeight: 800,
                   color: 'var(--dash-text-primary, #0F172A)',
                   letterSpacing: '-0.02em',

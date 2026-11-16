@@ -1359,22 +1359,21 @@ export const AuditLogsPage = () => {
     <div className="dashboard-audit-logs-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* 1. Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.08)',
             }}
           >
-            <ScrollText size={22} color="#059669" />
+            <ScrollText size={20} color="#059669" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>

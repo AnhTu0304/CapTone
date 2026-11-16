@@ -134,6 +134,7 @@ export interface IAuditLogFilter {
   action?: string;
   status?: string;
   role?: string;
+  actor_type?: string;
   resource_type?: string;
   resource_id?: string;
   request_id?: string;

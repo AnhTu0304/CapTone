@@ -250,7 +250,7 @@ export const PersonalSidebar = ({
                 fontWeight: 700,
               }}
             >
-              Không Gian Cá Nhân
+              Trung Tâm Điều Khiển
             </div>
           </div>
         )}

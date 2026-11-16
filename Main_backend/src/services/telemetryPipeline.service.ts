@@ -121,7 +121,7 @@ export class TelemetryPipelineService {
               status: 'ready_for_gru',
               points: displayPoints,
               latest_point: displayPoints[displayPoints.length - 1] || null,
-              message: `Đã gom đủ 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...`,
+              message: `Đã gom đủ 12 điểm mới tinh (12/12)! Đang chuyển sang mô hình AI dự đoán...`,
             },
           });
         }
@@ -141,24 +141,24 @@ export class TelemetryPipelineService {
           target: 12,
           active_step: currentStep,
           percent: Math.round((count / 12) * 100),
-          status: count >= 12 ? 'ready_for_gru' : 'accumulating',
+          status: count >= 12 ? 'ready_for_ai' : 'accumulating',
           points: displayPoints,
           latest_point: displayPoints[displayPoints.length - 1] || null,
           message:
             count >= 12
-              ? `Đã gom đủ 12 điểm mới tinh (12/12)! Đang chuyển sang GRU AI dự đoán...`
-              : `Đang gom 12 điểm mới: [${count}/12 điểm] (${count * 5}s / 60s)... Chờ đủ 12 điểm mới rồi mới gửi vào GRU.`,
+              ? `Đã gom đủ 12 điểm mới tinh (12/12)! Đang chuyển sang mô hình AI dự đoán...`
+              : `Đang gom 12 điểm mới: [${count}/12 điểm] (${count * 5}s / 60s)... Chờ đủ 12 điểm mới rồi mới gửi vào mô hình AI.`,
         },
       });
 
-      // NẾU CHƯA ĐỦ 12 ĐIỂM MỚI: CHỜ TIẾP, TUYỆT ĐỐI CHƯA GỬI VÀO GRU!
+      // NẾU CHƯA ĐỦ 12 ĐIỂM MỚI: CHỜ TIẾP, TUYỆT ĐỐI CHƯA GỬI VÀO MÔ HÌNH AI!
       if (count < 12) {
-        console.log(`⏳ [TelemetryPipeline] '${serviceId}': Đang gom [${count}/12 điểm mới]. Chưa đủ 12 điểm nên chưa gửi vào GRU...`);
+        console.log(`⏳ [TelemetryPipeline] '${serviceId}': Đang gom [${count}/12 điểm mới]. Chưa đủ 12 điểm nên chưa gửi vào mô hình AI...`);
         return;
       }
 
       // ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12):
-      // 1. Cập nhật mốc chốt chặn NGAY LẬP TỨC để lô tiếp theo [1/12] gom song song không phải đợi GRU/RCA!
+      // 1. Cập nhật mốc chốt chặn NGAY LẬP TỨC để lô tiếp theo [1/12] gom song song không phải đợi AI/RCA!
       this.lastEvaluatedBucketTimestamp[serviceId] = freshBatch.latestTimeBucket || new Date();
       delete this.urgentReasonByService[serviceId];
 
@@ -166,7 +166,7 @@ export class TelemetryPipelineService {
       const displayPointsSnapshot = [...displayPoints];
       const batchClusterId = freshBatch.clusterId;
 
-      console.log(`🎯 [TelemetryPipeline] '${serviceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Đẩy bất đồng bộ sang GRU & tiếp tục gom lô mới ngay lập tức...`);
+      console.log(`🎯 [TelemetryPipeline] '${serviceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Đẩy bất đồng bộ sang mô hình AI & tiếp tục gom lô mới ngay lập tức...`);
 
       // 2. Chạy GRU và RCA hoàn toàn bất đồng bộ (non-blocking) ở background để không khóa isProcessingService[serviceId]
       (async () => {
@@ -623,9 +623,21 @@ export class TelemetryPipelineService {
         ['REPLACE_POD', 'DRAIN_NODE'].includes(String(policy.action_code || recAction).toUpperCase()) &&
         Boolean((rca.recommendation?.action_parameters as any)?.is_primary_database);
 
-      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold, or StatefulSet Primary DB)
-      if (!isAuto || Boolean(policy.requires_approval)) {
-        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' requires HITL approval (Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
+      // Rào chắn an toàn bất biến (SRE Safety Invariant):
+      // ROLLBACK_DEPLOYMENT và DRAIN_NODE là hành động rủi ro cao/khẩn cấp, can thiệp phiên bản phát hành/hạ tầng cụm.
+      // BẮT BUỘC gửi về Cổng Phê Duyệt HITL (Human-In-The-Loop) để con người phê duyệt, NGHIÊM CẤM tự động thi hành (Autonomous Execution).
+      const rawAction = String(policy.action_code || recAction || '').toUpperCase().replace(/[\s-]+/g, '_');
+      const isMandatoryHitlAction = [
+        'ROLLBACK_DEPLOYMENT',
+        'ROLLBACK',
+        'ROLLBACK_DEPLOY',
+        'DRAIN_NODE',
+        'DRAIN'
+      ].includes(rawAction);
+
+      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold, or StatefulSet Primary DB, or Mandatory HITL action)
+      if (!isAuto || Boolean(policy.requires_approval) || isStatefulPrimaryDestructive || isMandatoryHitlAction) {
+        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' action '${policy.action_code || recAction}' requires HITL approval (Mandatory HITL: ${isMandatoryHitlAction}, Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
         recordRemediationAction(policy.action_code || 'RESTART_POD', 'hitl_pending');
 
         const hitlActInsert = await pool.query(
@@ -666,7 +678,9 @@ export class TelemetryPipelineService {
         );
         const pendingActionId = hitlActInsert.rows[0]?.id;
         if (pendingActionId) {
-          const hitlReason = confidence < threshold
+          const hitlReason = isMandatoryHitlAction
+            ? `Hành động ${policy.action_name} (${policy.action_code}) có mức độ rủi ro cao (${effectiveRisk}), can thiệp trực tiếp vào phiên bản phát hành/hạ tầng nên BẮT BUỘC phải qua Cổng Phê Duyệt (HITL) có con người xác nhận, nghiêm cấm AI tự động thi hành.`
+            : confidence < threshold
             ? `Độ tin cậy chẩn đoán AI (${(confidence * 100).toFixed(0)}%) thấp hơn ngưỡng tự động (${(threshold * 100).toFixed(0)}%) của chính sách ${policy.policy_name}, kích hoạt rào chắn an toàn HITL.`
             : `Chính sách ${policy.policy_name} (Mức rủi ro: ${effectiveRisk}) yêu cầu phê duyệt con người (HITL) trước khi thực thi ${policy.action_name} trên dịch vụ ${canonicalTargetName}.`;
 
@@ -800,6 +814,29 @@ export class TelemetryPipelineService {
       }).catch((err) => {
         console.warn('[TelemetryPipelineService] Ghi audit log autonomous trigger thất bại:', err);
       });
+
+      // Rào chắn bảo vệ tầng cuối cùng (Fail-safe Hard Guard):
+      // Ngăn chặn tuyệt đối việc phát lệnh tự động đối với các hành động rủi ro cao (Rollback, Drain Node).
+      const candidateAction = String(policy.action_code || recAction || '').toUpperCase().replace(/[\s-]+/g, '_');
+      if (['ROLLBACK_DEPLOYMENT', 'ROLLBACK', 'ROLLBACK_DEPLOY', 'DRAIN_NODE', 'DRAIN'].includes(candidateAction)) {
+        console.warn(`🛑 [SafetyGuard] CHẶN ĐỨNG THỰC THI TỰ ĐỘNG: Hành động '${policy.action_code || candidateAction}' bắt buộc 100% phải qua Cổng Phê Duyệt HITL của con người! Huỷ lệnh Autonomous dispatch.`);
+        await pool.query(
+          `UPDATE healing_actions 
+           SET execution_status = 'CANCELLED',
+               result = $1::jsonb,
+               completed_at = NOW()
+           WHERE id = $2;`,
+          [
+            JSON.stringify({
+              status: 'BLOCKED_BY_SAFETY_GUARD',
+              reason: `Hành động ${policy.action_code || candidateAction} là hành động rủi ro cao, bắt buộc phải duyệt qua Cổng HITL (Human-In-The-Loop) của kỹ sư. Không cho phép tự động thi hành.`,
+              timestamp: new Date().toISOString(),
+            }),
+            actionId,
+          ]
+        );
+        return;
+      }
 
       // Broadcast real-time execution trigger to UI
       broadcastTelemetryToUi({

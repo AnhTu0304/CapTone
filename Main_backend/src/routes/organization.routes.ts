@@ -177,12 +177,11 @@ router.delete(
 
 /**
  * [GET] /api/v1/organizations/:id/members - Lấy danh sách thành viên trong tổ chức
- * Bảo vệ: Chỉ thành viên tổ chức hoặc SUPER_ADMIN mới được xem
+ * Bảo vệ: Thành viên tổ chức hoặc Admin hệ thống (SUPER_ADMIN, ADMIN) được xử lý tại Service
  */
 router.get(
   '/:id/members',
   validate(memberQuerySchema),
-  requireOrgMember,
   OrganizationMemberController.getMembers
 );
 

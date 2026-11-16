@@ -10,6 +10,7 @@ import {
   Clock,
   Shield,
   UserCheck,
+  UserPlus,
   RefreshCw,
   AlertTriangle,
   X,
@@ -27,6 +28,7 @@ import {
 import { useAuth } from '../../../context/AuthContext';
 import adminUsersService from '../../../services/adminUsersService';
 import { getAuditLogs } from '../../../services/adminAuditLogsService';
+import { AdminTablePagination } from '../../../components/admin/common';
 
 /**
  * Ma trận phân quyền chi tiết cho toàn bộ các vai trò (Role Permissions Matrix)
@@ -154,9 +156,6 @@ export const resolveUserOrg = (u) => {
   if (Array.isArray(u.system_roles) && u.system_roles.includes('SUPER_ADMIN')) {
     return 'Toàn Hệ Thống (Platform Root)';
   }
-  if (Array.isArray(u.system_roles) && (u.system_roles.includes('ADMIN') || u.system_roles.includes('SYSTEM_ADMIN'))) {
-    return 'Platform Operations';
-  }
   if (Array.isArray(u.organization_roles) && u.organization_roles.length > 0) {
     if (u.organization_roles.length === 1) {
       return u.organization_roles[0].organization_name || 'Doanh nghiệp liên kết';
@@ -164,6 +163,9 @@ export const resolveUserOrg = (u) => {
     const ownerOrg = u.organization_roles.find((r) => (r.role_code || r.role_name) === 'SME_OWNER');
     const primaryName = (ownerOrg || u.organization_roles[0]).organization_name || 'Doanh nghiệp liên kết';
     return primaryName + ' (+' + (u.organization_roles.length - 1) + ' khác)';
+  }
+  if (Array.isArray(u.system_roles) && (u.system_roles.includes('ADMIN') || u.system_roles.includes('SYSTEM_ADMIN'))) {
+    return 'Platform Operations';
   }
   return u.org || 'Chưa liên kết tổ chức';
 };
@@ -180,7 +182,7 @@ export const AdminRolesPage = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
 
@@ -219,6 +221,18 @@ export const AdminRolesPage = () => {
   const [activityError, setActivityError] = useState(null);
   const [copiedId, setCopiedId] = useState(false);
 
+  // Modal 3: Cấp quyền quản trị mới (Tìm theo Email)
+  const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
+  const [grantSearchEmail, setGrantSearchEmail] = useState('');
+  const [isGrantSearching, setIsGrantSearching] = useState(false);
+  const [grantSearchResults, setGrantSearchResults] = useState([]);
+  const [grantSearchError, setGrantSearchError] = useState(null);
+  const [grantTargetUser, setGrantTargetUser] = useState(null);
+  const [grantTargetRole, setGrantTargetRole] = useState('ADMIN');
+  const [grantReason, setGrantReason] = useState('');
+  const [isGrantSubmitting, setIsGrantSubmitting] = useState(false);
+  const [grantSubmitError, setGrantSubmitError] = useState(null);
+
   // Toast notification
   const [toastMessage, setToastMessage] = useState('');
 
@@ -228,18 +242,34 @@ export const AdminRolesPage = () => {
   };
 
   /**
-   * Tải danh sách người dùng thực tế từ API
+   * Tải danh sách người dùng quản trị thực tế từ API (SUPER_ADMIN và ADMIN)
    */
   const fetchUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     setUserError(null);
     try {
-      const res = await adminUsersService.getUsers({
-        page,
-        limit: pageSize,
-        search: debouncedSearch.trim() || undefined,
-        role: selectedRoleFilter !== 'ALL' ? selectedRoleFilter : undefined,
-      });
+      // Khi chọn ALL, yêu cầu backend trả về các tài khoản quản trị hệ thống ADMINS
+      const roleParam = selectedRoleFilter !== 'ALL' ? selectedRoleFilter : 'ADMINS';
+      let res;
+      try {
+        res = await adminUsersService.getUsers({
+          page,
+          limit: pageSize,
+          search: debouncedSearch.trim() || undefined,
+          role: roleParam,
+        });
+      } catch (apiErr) {
+        // Fallback tự động nếu backend phiên bản cũ chưa chấp nhận 'ADMINS'
+        if (roleParam === 'ADMINS') {
+          res = await adminUsersService.getUsers({
+            page,
+            limit: pageSize,
+            search: debouncedSearch.trim() || undefined,
+          });
+        } else {
+          throw apiErr;
+        }
+      }
 
       const rawItems = res?.items || (Array.isArray(res) ? res : []);
       const pagination = res?.pagination || {};
@@ -257,9 +287,14 @@ export const AdminRolesPage = () => {
         raw: u,
       }));
 
-      setUsers(mapped);
+      // Luôn đảm bảo chỉ giữ các tài khoản quản trị (SUPER_ADMIN hoặc ADMIN)
+      const adminOnly = mapped.filter(
+        (u) => u.currentRole === 'SUPER_ADMIN' || u.currentRole === 'ADMIN'
+      );
+
+      setUsers(adminOnly);
       setTotalPages(pagination.totalPages || 1);
-      setTotalUsers(pagination.total || mapped.length);
+      setTotalUsers(pagination.total || adminOnly.length);
     } catch (err) {
       console.error('[AdminRolesPage] Lỗi lấy danh sách người dùng:', err);
       setUserError(err.message || 'Không thể tải danh sách người dùng từ hệ thống');
@@ -391,9 +426,78 @@ export const AdminRolesPage = () => {
     }
   };
 
+  // Xử lý tìm kiếm người dùng theo Email để cấp quyền quản trị
+  const handleSearchGrantEmail = async (e) => {
+    if (e) e.preventDefault();
+    const query = grantSearchEmail.trim();
+    if (!query) {
+      setGrantSearchError('Vui lòng nhập địa chỉ email người dùng cần tìm.');
+      return;
+    }
+    setIsGrantSearching(true);
+    setGrantSearchError(null);
+    setGrantSearchResults([]);
+    setGrantTargetUser(null);
+    try {
+      const res = await adminUsersService.getUsers({
+        search: query,
+        limit: 10,
+      });
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      const mapped = items.map((u) => ({
+        id: u.id,
+        name: u.full_name || u.name || 'Người dùng',
+        email: u.email,
+        currentRole: resolveUserRole(u),
+        org: resolveUserOrg(u),
+        status: u.status || 'ACTIVE',
+        raw: u,
+      }));
+      if (mapped.length === 0) {
+        setGrantSearchError(`Không tìm thấy tài khoản người dùng nào khớp với email "${query}".`);
+      } else {
+        setGrantSearchResults(mapped);
+      }
+    } catch (err) {
+      setGrantSearchError(err.message || 'Lỗi khi tìm kiếm người dùng');
+    } finally {
+      setIsGrantSearching(false);
+    }
+  };
+
+  // Xác nhận cấp quyền quản trị cho người dùng được chọn
+  const handleConfirmGrantRole = async (e) => {
+    if (e) e.preventDefault();
+    if (!grantTargetUser) return;
+    if (!grantReason.trim()) {
+      setGrantSubmitError('Vui lòng nhập căn cứ / lý do cấp quyền quản trị (bắt buộc theo kiểm toán).');
+      return;
+    }
+    setIsGrantSubmitting(true);
+    setGrantSubmitError(null);
+    try {
+      await adminUsersService.assignRole(grantTargetUser.id, grantTargetRole, grantReason.trim());
+      showToast(`Đã cấp vai trò [${grantTargetRole}] cho [${grantTargetUser.email}] thành công!`);
+      setIsGrantModalOpen(false);
+      setGrantTargetUser(null);
+      setGrantSearchEmail('');
+      setGrantSearchResults([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error('[AdminRolesPage] Lỗi cấp quyền quản trị:', err);
+      setGrantSubmitError(err.message || 'Không thể cấp quyền quản trị cho người dùng');
+    } finally {
+      setIsGrantSubmitting(false);
+    }
+  };
+
   // Lọc người dùng kết hợp đa chiều: vai trò + từ khóa tìm kiếm (tên, email, công ty, mã người dùng)
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
+      // Chỉ hiển thị tài khoản có quyền quản trị SUPER_ADMIN hoặc ADMIN
+      const isPlatformAdmin = u.currentRole === 'SUPER_ADMIN' || u.currentRole === 'ADMIN';
+      if (!isPlatformAdmin) return false;
+
       const matchRole = selectedRoleFilter === 'ALL' || u.currentRole === selectedRoleFilter;
       if (!matchRole) return false;
       if (!search.trim()) return true;
@@ -420,9 +524,25 @@ export const AdminRolesPage = () => {
       }}
     >
       {/* 1. Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
+            }}
+          >
+            <ShieldCheck size={24} />
+          </div>
+          <div>
             <h1
               style={{
                 fontSize: '1.5rem',
@@ -432,32 +552,18 @@ export const AdminRolesPage = () => {
                 margin: 0,
               }}
             >
-              Cấp Quyền & Ma Trận Phân Cấp RBAC (Role Assignment)
+              Cấp Quyền & Ma Trận Phân Cấp RBAC
             </h1>
-            <span
+            <p
               style={{
-                padding: '2px 8px',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                color: '#DC2626',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                border: '1px solid rgba(220, 38, 38, 0.25)',
+                fontSize: '0.8125rem',
+                color: 'var(--dash-text-secondary)',
+                margin: '4px 0 0 0',
               }}
             >
-              SUPER ADMIN ONLY
-            </span>
+              Quản trị quyền hạn cấp cao: Thăng cấp, hạ cấp và phân bổ vai trò hệ thống cho tất cả người dùng nền tảng.
+            </p>
           </div>
-          <p
-            style={{
-              fontSize: '0.8125rem',
-              color: 'var(--dash-text-secondary)',
-              marginTop: '4px',
-              margin: '4px 0 0 0',
-            }}
-          >
-            Quản trị quyền hạn cấp cao: Thăng cấp, hạ cấp và phân bổ vai trò hệ thống cho tất cả người dùng nền tảng.
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -524,22 +630,9 @@ export const AdminRolesPage = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <KeyRound size={17} color="#059669" />
             <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Nguyên Tắc Kế Thừa Phân Cấp Vai Trò (Role Hierarchy)
+              Nguyên Tắc Kế Thừa Phân Cấp Vai Trò
             </h3>
           </div>
-          <span
-            style={{
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              color: '#059669',
-              backgroundColor: '#ECFDF5',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              border: '1px solid #A7F3D0',
-            }}
-          >
-            RBAC Full System
-          </span>
         </div>
         <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '0 0 14px 0', lineHeight: 1.5 }}>
           Hệ thống áp dụng mô hình phân cấp nghiêm ngặt. Vai trò cấp cao tự động kế thừa 100% tất cả các quyền hạn của các cấp thấp hơn:
@@ -699,14 +792,45 @@ export const AdminRolesPage = () => {
           >
             <div>
               <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Danh Sách Phân Quyền Người Dùng Trực Tiếp
+                Danh Sách Quản Trị Viên Nền Tảng (SUPER_ADMIN & ADMIN)
               </h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '2px 0 0 0' }}>
-                Chọn &quot;Thay đổi vai trò&quot; để mở quy trình xác thực nâng/hạ cấp an toàn
+                Chỉ hiển thị các tài khoản đã được cấp quyền quản trị. Nhấn &quot;+ Cấp Quyền Quản Trị&quot; để bổ nhiệm tài khoản mới.
               </p>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsGrantModalOpen(true);
+                  setGrantSearchEmail('');
+                  setGrantSearchResults([]);
+                  setGrantSearchError(null);
+                  setGrantTargetUser(null);
+                  setGrantTargetRole('ADMIN');
+                  setGrantReason('');
+                  setGrantSubmitError(null);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--dash-primary)',
+                  color: '#FFFFFF',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                }}
+              >
+                <UserPlus size={15} />
+                <span>+ Cấp Quyền Quản Trị</span>
+              </button>
+
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Search
                   size={14}
@@ -768,7 +892,6 @@ export const AdminRolesPage = () => {
                 <option value="ALL">Tất cả vai trò</option>
                 <option value="SUPER_ADMIN">SUPER_ADMIN</option>
                 <option value="ADMIN">ADMIN</option>
-                <option value="USER">USER</option>
               </select>
 
               {(search.trim() || selectedRoleFilter !== 'ALL') && (
@@ -996,55 +1119,20 @@ export const AdminRolesPage = () => {
               </table>
 
               {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div
-                  style={{
-                    padding: '12px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    color: 'var(--dash-text-muted)',
-                  }}
-                >
-                  <div>
-                    Trang {page} / {totalPages} (Tổng cộng {totalUsers} người dùng)
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      disabled={page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--dash-border)',
-                        backgroundColor: '#FFFFFF',
-                        cursor: page <= 1 ? 'not-allowed' : 'pointer',
-                        opacity: page <= 1 ? 0.5 : 1,
-                      }}
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={page >= totalPages}
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--dash-border)',
-                        backgroundColor: '#FFFFFF',
-                        cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-                        opacity: page >= totalPages ? 0.5 : 1,
-                      }}
-                    >
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-                </div>
-              )}
+              <AdminTablePagination
+                page={page}
+                pageSize={pageSize}
+                total={totalUsers}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                itemLabel="người dùng"
+                pageSizeOptions={[10, 20, 50]}
+                isLoading={isLoadingUsers}
+              />
             </div>
           )}
         </div>
@@ -2026,6 +2114,416 @@ export const AdminRolesPage = () => {
                 Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Cấp quyền quản trị mới (Tìm theo Email) */}
+      {isGrantModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Cấp quyền quản trị nền tảng"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '14px',
+              maxWidth: '560px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #A7F3D0',
+                  }}
+                >
+                  <UserPlus size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
+                    Cấp Quyền Quản Trị Nền Tảng
+                  </h3>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '2px 0 0 0' }}>
+                    Tìm kiếm tài khoản theo Email để bổ nhiệm quyền Quản Trị Viên (ADMIN hoặc SUPER_ADMIN)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGrantModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--dash-text-muted)', padding: '4px' }}
+                aria-label="Đóng cửa sổ cấp quyền"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Error in modal */}
+            {grantSubmitError && (
+              <div
+                style={{
+                  marginBottom: '14px',
+                  padding: '12px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '8px',
+                  color: '#991B1B',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.5,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                }}
+              >
+                <AlertTriangle size={16} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{grantSubmitError}</span>
+              </div>
+            )}
+
+            {/* Step 1: Search Form */}
+            {!grantTargetUser ? (
+              <div>
+                <form onSubmit={handleSearchGrantEmail} style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
+                    Điền Email người dùng cần tìm:
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="VD: user@example.com hoặc tên tài khoản..."
+                      value={grantSearchEmail}
+                      onChange={(e) => setGrantSearchEmail(e.target.value)}
+                      autoFocus
+                      style={{
+                        flex: 1,
+                        padding: '9px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--dash-border)',
+                        fontSize: '0.8125rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isGrantSearching || !grantSearchEmail.trim()}
+                      style={{
+                        padding: '9px 18px',
+                        borderRadius: '8px',
+                        backgroundColor: isGrantSearching || !grantSearchEmail.trim() ? '#94A3B8' : 'var(--dash-primary)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        cursor: isGrantSearching || !grantSearchEmail.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isGrantSearching ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          <span>Đang tìm...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Search size={14} />
+                          <span>Tìm kiếm</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Search Error Message */}
+                {grantSearchError && (
+                  <div
+                    style={{
+                      padding: '12px',
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '8px',
+                      color: '#DC2626',
+                      fontSize: '0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <AlertTriangle size={15} />
+                    <span>{grantSearchError}</span>
+                  </div>
+                )}
+
+                {/* Search Results List */}
+                {grantSearchResults.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', marginBottom: '8px' }}>
+                      KẾT QUẢ TÌM THẤY ({grantSearchResults.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {grantSearchResults.map((u) => (
+                        <div
+                          key={u.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--dash-border)',
+                            backgroundColor: '#F8FAFC',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>
+                              {u.name}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                              {u.email}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                              <span
+                                style={{
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: getRoleBadgeStyle(u.currentRole).bg,
+                                  color: getRoleBadgeStyle(u.currentRole).color,
+                                  border: `1px solid ${getRoleBadgeStyle(u.currentRole).border}`,
+                                }}
+                              >
+                                {u.currentRole}
+                              </span>
+                              <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                                {u.org}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            aria-label={`Cấp quyền cho ${u.name}`}
+                            onClick={() => {
+                              setGrantTargetUser(u);
+                              setGrantTargetRole('ADMIN');
+                              setGrantReason('');
+                              setGrantSubmitError(null);
+                            }}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '6px',
+                              backgroundColor: '#ECFDF5',
+                              border: '1px solid #A7F3D0',
+                              color: '#059669',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <ShieldCheck size={14} />
+                            <span>Cấp Quyền</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Step 2: Grant Role Form */
+              <div>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: '#F0FDF4',
+                    border: '1px solid #BBF7D0',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>
+                    Tài khoản được chọn cấp quyền
+                  </div>
+                  <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
+                    {grantTargetUser.name}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                    {grantTargetUser.email}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', marginTop: '4px', color: 'var(--dash-text-muted)' }}>
+                    Vai trò hiện tại:{' '}
+                    <strong style={{ color: getRoleBadgeStyle(grantTargetUser.currentRole).color }}>
+                      {grantTargetUser.currentRole}
+                    </strong>
+                  </div>
+                </div>
+
+                {grantTargetRole === 'SUPER_ADMIN' && (
+                  <div
+                    style={{
+                      marginBottom: '16px',
+                      padding: '12px',
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FDE68A',
+                      borderRadius: '8px',
+                      color: '#92400E',
+                      fontSize: '0.75rem',
+                      lineHeight: 1.5,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '8px',
+                    }}
+                  >
+                    <ShieldAlert size={16} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <strong>Cảnh báo an ninh cấp cao:</strong> Bạn đang thăng cấp tài khoản này lên SUPER_ADMIN với toàn quyền kiểm soát hệ thống.
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
+                    Chọn vai trò quản trị cần cấp:
+                  </label>
+                  <select
+                    value={grantTargetRole}
+                    onChange={(e) => setGrantTargetRole(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <option value="ADMIN">ADMIN (Quản trị Vận Hành Nền Tảng)</option>
+                    <option value="SUPER_ADMIN">SUPER_ADMIN (Quản trị Tối Cao Nền Tảng)</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
+                    Lý do / Căn cứ cấp quyền (Bắt buộc theo chuẩn kiểm toán):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={grantReason}
+                    onChange={(e) => setGrantReason(e.target.value)}
+                    placeholder="Nhập căn cứ nghiệp vụ bổ nhiệm quyền quản trị..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      fontSize: '0.8125rem',
+                      boxSizing: 'border-box',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setGrantTargetUser(null)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--dash-border)',
+                      backgroundColor: '#FFFFFF',
+                      fontSize: '0.8125rem',
+                      color: 'var(--dash-text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Quay lại tìm kiếm
+                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      disabled={isGrantSubmitting}
+                      onClick={() => setIsGrantModalOpen(false)}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--dash-border)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.8125rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isGrantSubmitting || !grantReason.trim()}
+                      onClick={handleConfirmGrantRole}
+                      style={{
+                        padding: '8px 18px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: isGrantSubmitting || !grantReason.trim() ? '#94A3B8' : 'var(--dash-primary)',
+                        color: '#FFFFFF',
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        cursor: isGrantSubmitting || !grantReason.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      {isGrantSubmitting ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          <span>Đang xử lý...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck size={14} />
+                          <span>Xác Nhận Cấp Quyền</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

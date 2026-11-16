@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, ShieldAlert, User, Info, CheckCircle2, Clock } from 'lucide-react';
+import { User, Info, CheckCircle2, Clock } from 'lucide-react';
 
 export const OrganizationMembers = ({ members = [], isLoading = false }) => {
   if (isLoading) {
@@ -87,7 +87,6 @@ export const OrganizationMembers = ({ members = [], isLoading = false }) => {
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Thành Viên</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Vai Trò SME</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Phạm Vi Quyền Hạn</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Xác Thực 2FA</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Hoạt Động Gần Nhất</th>
                 <th style={{ padding: '12px 16px', fontWeight: 700 }}>Trạng Thái</th>
               </tr>
@@ -159,36 +158,6 @@ export const OrganizationMembers = ({ members = [], isLoading = false }) => {
                       {member.scopeNote || 'Phạm vi tổ chức'}
                     </td>
 
-                    {/* 2FA Status */}
-                    <td style={{ padding: '12px 16px' }}>
-                      {member.twoFactorEnabled ? (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            color: '#059669',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                          }}
-                        >
-                          <ShieldCheck size={14} /> Bật
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            color: '#DC2626',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                          }}
-                        >
-                          <ShieldAlert size={14} /> Tắt
-                        </span>
-                      )}
-                    </td>
 
                     {/* Last Active */}
                     <td style={{ padding: '12px 16px', color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>

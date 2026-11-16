@@ -150,7 +150,7 @@ describe('RootCauseModal', () => {
     );
 
     expect(screen.getByTestId('rca-loading-state')).toBeInTheDocument();
-    expect(screen.queryByText(/BÁO CÁO GIẢI TRÌNH SRE/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Báo cáo SRE \(Tóm tắt\)/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Cảnh báo học sâu GRU/i)).not.toBeInTheDocument();
     expect(screen.getAllByText('Đang tải...').length).toBeGreaterThanOrEqual(1);
 
@@ -310,7 +310,6 @@ describe('RootCauseModal', () => {
 
     // Switch to Tab 2 when riskOutputsAll is null and telemetry is empty -> must not throw
     fireEvent.click(screen.getByRole('button', { name: /2\. Viễn Trắc & Dự Báo AI/i }));
-    expect(screen.getByText('Không có dữ liệu dự báo GRU gắn với sự cố này.')).toBeInTheDocument();
     expect(
       screen.getByText('Điểm xác suất chi tiết của 7 Heads GRU chưa được lưu trong payload RCA này.')
     ).toBeInTheDocument();

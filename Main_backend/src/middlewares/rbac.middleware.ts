@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../utils/apiError';
 import { SystemRoleService } from '../services/systemRole.service';
 import { AuditService } from '../services/audit.service';
+import { pool } from '../config/database';
 
 /**
  * Mở rộng vai trò kế thừa (Role inheritance / expansion)
@@ -89,18 +90,54 @@ export const requireRoles = (...allowedRoles: string[]) => {
       }
 
       // 2. Dự phòng: Kiểm tra trực tiếp trong Database
-      const rolesThatSatisfyAllowed: string[] = ['SUPER_ADMIN', ...normalizedAllowed];
-      if (normalizedAllowed.includes('DEVOPS')) {
-        rolesThatSatisfyAllowed.push('ADMIN', 'SYSTEM_ADMIN');
-      }
+      // 2.1. Kiểm tra vai trò hệ thống toàn cục (System Roles)
+      const systemRolesThatSatisfy: string[] = ['SUPER_ADMIN'];
+      if (normalizedAllowed.includes('ADMIN')) systemRolesThatSatisfy.push('ADMIN');
+      if (normalizedAllowed.includes('DEVOPS')) systemRolesThatSatisfy.push('ADMIN', 'SYSTEM_ADMIN');
       if (normalizedAllowed.includes('VIEWER') || normalizedAllowed.includes('USER')) {
-        rolesThatSatisfyAllowed.push('DEVOPS', 'ADMIN', 'SYSTEM_ADMIN', 'SME_OWNER', 'USER', 'VIEWER');
+        systemRolesThatSatisfy.push('ADMIN', 'SYSTEM_ADMIN', 'USER');
       }
 
-      const isExplicitlyViewerOnly = rawTokenRoles.length > 0 && rawTokenRoles.every((r) => r === 'VIEWER' || r === 'USER') && !normalizedAllowed.includes('VIEWER') && !normalizedAllowed.includes('USER');
-      const hasDbMatch = isExplicitlyViewerOnly ? false : await SystemRoleService.hasAnyRole(user.id, rolesThatSatisfyAllowed);
-      if (hasDbMatch) {
+      const hasSystemDbMatch = await SystemRoleService.hasAnyRole(user.id, systemRolesThatSatisfy);
+      if (hasSystemDbMatch) {
         return next();
+      }
+
+      // 2.2. Kiểm tra vai trò tổ chức (Organization Roles: DEVOPS, SME_OWNER, VIEWER)
+      // Cho phép thành viên tổ chức thực hiện các quyền hạn tương ứng với vai trò trong Tenant
+      const orgRolesAllowed = normalizedAllowed.filter((r) => ['DEVOPS', 'SME_OWNER', 'VIEWER', 'ADMIN'].includes(r));
+      if (orgRolesAllowed.length > 0) {
+        const targetOrgId =
+          (req.headers['x-organization-id'] as string) ||
+          (req.query.organization_id as string) ||
+          req.body?.organization_id ||
+          user.organization_id;
+
+        let orgRoleQuery = `
+          SELECT r.code, r.name 
+          FROM organization_members om 
+          JOIN organization_roles r ON om.role_id = r.id 
+          WHERE om.user_id = $1 AND om.status = 'ACTIVE'
+        `;
+        const orgQueryParams: any[] = [user.id];
+        if (targetOrgId && targetOrgId !== 'all') {
+          orgRoleQuery += ` AND om.organization_id = $2`;
+          orgQueryParams.push(targetOrgId);
+        }
+
+        const orgMemberRes = await pool.query(orgRoleQuery, orgQueryParams);
+        if (orgMemberRes.rows.length > 0) {
+          const userOrgRoles = orgMemberRes.rows.flatMap((row: any) => [
+            String(row.code || '').trim().toUpperCase(),
+            String(row.name || '').trim().toUpperCase().replace(/\s+/g, '_'),
+          ]).filter(Boolean);
+
+          const expandedOrgRoles = expandRoles(userOrgRoles);
+          const hasOrgMatch = expandedOrgRoles.some((r) => normalizedAllowed.includes(r));
+          if (hasOrgMatch) {
+            return next();
+          }
+        }
       }
 
       // 3. Nếu không có vai trò hợp lệ -> Trả về lỗi 403 Forbidden

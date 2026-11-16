@@ -21,6 +21,14 @@ auditRoutes.get(
   AuditController.verifyPlatformAuditLogs
 );
 
+// User Activity Stats: SUPER_ADMIN, ADMIN
+auditRoutes.get(
+  '/activity-stats',
+  authenticateToken,
+  requireRoles('SUPER_ADMIN', 'ADMIN'),
+  AuditController.getUserActivityStats
+);
+
 // Platform Stats: SUPER_ADMIN, ADMIN
 auditRoutes.get(
   '/stats',

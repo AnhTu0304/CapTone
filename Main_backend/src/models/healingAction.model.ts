@@ -7,6 +7,7 @@ export interface IHealingActionFilter {
   offset?: number;
   cluster_id?: string;
   organization_id?: string;
+  allowed_org_ids?: string[];
   risk_level?: string;
   execution_mode?: string;
   execution_status?: string;
@@ -77,6 +78,14 @@ export class HealingActionModel {
         p.organization_id = $${idx}
       )`);
       values.push(filters.organization_id);
+      idx++;
+    } else if ((filters as any).allowed_org_ids && (filters as any).allowed_org_ids.length > 0) {
+      conditions.push(`(
+        env.organization_id = ANY($${idx}::uuid[]) OR 
+        i.organization_id = ANY($${idx}::uuid[]) OR 
+        p.organization_id = ANY($${idx}::uuid[])
+      )`);
+      values.push((filters as any).allowed_org_ids);
       idx++;
     }
 
@@ -177,6 +186,7 @@ export class HealingActionModel {
       ${whereClause}
       ORDER BY 
         CASE WHEN h.execution_status = 'RUNNING' THEN 1 WHEN h.execution_status = 'PENDING' THEN 2 ELSE 3 END,
+        COALESCE(h.completed_at, h.started_at, h.created_at) DESC,
         h.created_at DESC
       LIMIT $${idx++} OFFSET $${idx++};
     `;
@@ -203,6 +213,14 @@ export class HealingActionModel {
         p.organization_id = $${idx}
       )`);
       values.push(filters.organization_id);
+      idx++;
+    } else if ((filters as any).allowed_org_ids && (filters as any).allowed_org_ids.length > 0) {
+      conditions.push(`(
+        env.organization_id = ANY($${idx}::uuid[]) OR 
+        i.organization_id = ANY($${idx}::uuid[]) OR 
+        p.organization_id = ANY($${idx}::uuid[])
+      )`);
+      values.push((filters as any).allowed_org_ids);
       idx++;
     }
 
@@ -330,7 +348,7 @@ export class HealingActionModel {
       LEFT JOIN users u_req ON u_req.id = h.requested_by
       LEFT JOIN users u_exec ON u_exec.id = h.executed_by
       ${whereClause}
-      ORDER BY h.created_at DESC
+      ORDER BY COALESCE(h.completed_at, h.started_at, h.created_at) DESC, h.created_at DESC
       LIMIT $${idx++} OFFSET $${idx++};
     `;
 
@@ -830,6 +848,9 @@ export class HealingActionModel {
     if (filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
       conditions.push(`p.organization_id = $${idx++}`);
       values.push(filters.organization_id);
+    } else if ((filters as any).allowed_org_ids && (filters as any).allowed_org_ids.length > 0) {
+      conditions.push(`(p.organization_id = ANY($${idx++}::uuid[]) OR p.organization_id IS NULL)`);
+      values.push((filters as any).allowed_org_ids);
     }
 
     if (filters.environment_id && filters.environment_id !== 'ALL') {
@@ -1131,6 +1152,9 @@ export class HealingActionModel {
     if (filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL' && !filters.organization_id.startsWith('sandbox-')) {
       conditions.push(`env.organization_id = $${idx++}`);
       values.push(filters.organization_id);
+    } else if ((filters as any).allowed_org_ids && (filters as any).allowed_org_ids.length > 0) {
+      conditions.push(`env.organization_id = ANY($${idx++}::uuid[])`);
+      values.push((filters as any).allowed_org_ids);
     }
 
     if (filters.cluster_id && filters.cluster_id.toUpperCase() !== 'ALL') {
@@ -1145,9 +1169,6 @@ export class HealingActionModel {
     if (filters.status && filters.status.toUpperCase() !== 'ALL') {
       conditions.push(`ap.status = $${idx++}::approval_status`);
       values.push(filters.status.toUpperCase());
-      if (filters.status.toUpperCase() === 'PENDING') {
-        conditions.push(`COALESCE(p.requires_approval, true) = true`);
-      }
     }
 
     if (filters.search && filters.search.trim()) {

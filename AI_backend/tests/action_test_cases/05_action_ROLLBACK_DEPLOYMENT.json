@@ -4,7 +4,7 @@
   "scenario_title": "Thu hồi phiên bản lỗi về bản cũ ổn định (Rollback Deployment)",
   "file_name": "05_action_ROLLBACK_DEPLOYMENT.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-13T09:30:41.014547+00:00",
+  "tested_at": "2026-11-16T20:38:12.340505+00:00",
   "description": "Sự cố sập phát sinh ngay sau đợt cập nhật phiên bản mới (v1.8.2 lên v1.9.0) kèm Deployment failure events. RCA đề xuất ROLLBACK_DEPLOYMENT về phiên bản ổn định trước đó.",
   "input_payload": {
     "request_id": "req-20261026-rollback-005",
@@ -71,7 +71,7 @@
     ],
     "recommendation": {
       "action": "ROLLBACK_DEPLOYMENT",
-      "reason": "Sự cố có tương quan trực tiếp với bản triển khai vừa cập nhật; đề xuất rollback phiên bản",
+      "reason": "Sự cố có tương quan trực tiếp với bản triển khai vừa cập nhật (notification-v1.9.0); đề xuất hoàn nguyên về phiên bản ổn định trước đó (notification-v1.8.2)",
       "priority": "HIGH",
       "target_type": "DEPLOYMENT",
       "target_name": "notification-service",

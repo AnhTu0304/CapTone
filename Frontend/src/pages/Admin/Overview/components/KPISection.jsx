@@ -12,11 +12,14 @@ import {
 import WidgetContainer from '../../../../components/admin/WidgetContainer';
 
 export const KPISection = ({ kpiData, status, errorMessage, onRetry, onNavigate }) => {
+  // Đảm bảo không bao giờ để khoảng trống rỗng nếu dữ liệu đang tải
+  const effectiveStatus = !kpiData ? (status === 'ready' ? 'loading' : status) : status;
+
   return (
     <WidgetContainer
-      title="Chỉ Số Hoạt Động Cốt Lõi Nền Tảng (Core Platform Pillars)"
+      title="Chỉ Số Hoạt Động Cốt Lõi Nền Tảng"
       subtitle="Theo dõi tình trạng hoạt động tổng thể của toàn bộ nền tảng SelfAI: Company, User, Agent và Cluster"
-      status={status}
+      status={effectiveStatus}
       errorMessage={errorMessage}
       onRetry={onRetry}
       style={{ padding: '20px' }}

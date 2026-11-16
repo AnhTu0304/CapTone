@@ -837,20 +837,35 @@ export const ReportsPage = () => {
           gap: '14px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <BarChart3 size={22} color="var(--dash-primary)" />
-            <h1
-              style={{
-                fontSize: '1.5rem',
-                fontWeight: 800,
-                color: 'var(--dash-text-primary)',
-                letterSpacing: '-0.02em',
-                margin: 0,
-              }}
-            >
-              Báo Cáo SLA & Vận Hành Doanh Nghiệp
-            </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <BarChart3 size={20} color="#2563EB" />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h1
+                style={{
+                  fontSize: '1.45rem',
+                  fontWeight: 800,
+                  color: 'var(--dash-text-primary)',
+                  letterSpacing: '-0.02em',
+                  margin: 0,
+                }}
+              >
+                Báo Cáo SLA & Vận Hành Doanh Nghiệp
+              </h1>
             {currentOrg?.name && (
               <span
                 style={{
@@ -915,6 +930,7 @@ export const ReportsPage = () => {
             Đánh giá cam kết SLA, cơ cấu sự cố, người/AI thực thi Action và nguyên nhân thành công hay thất bại
           </p>
         </div>
+      </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button

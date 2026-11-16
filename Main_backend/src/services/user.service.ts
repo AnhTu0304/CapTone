@@ -224,6 +224,12 @@ export class UserService {
                     JOIN system_roles sr ON usr.system_role_id = sr.id 
                     WHERE usr.user_id = users.id AND sr.name = 'SUPER_ADMIN'
                 )`);
+            } else if (roleUpper === 'ADMINS' || roleUpper === 'SYSTEM_ADMINS' || roleUpper === 'PLATFORM_ADMINS') {
+                conditions.push(`EXISTS (
+                    SELECT 1 FROM user_system_roles usr 
+                    JOIN system_roles sr ON usr.system_role_id = sr.id 
+                    WHERE usr.user_id = users.id AND sr.name IN ('SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN')
+                )`);
             } else if (roleUpper === 'SME_OWNER') {
                 conditions.push(`EXISTS (
                     SELECT 1 FROM organization_members om 
@@ -575,22 +581,22 @@ export class UserService {
             `, [userId]);
         }
 
-        const conditions: string[] = ['user_id = $1'];
+        const conditions: string[] = ['n.user_id = $1'];
         const params: any[] = [userId];
         let pIndex = 2;
 
         if (query.type && query.type !== 'ALL') {
-            conditions.push('notification_type = $' + pIndex);
+            conditions.push('n.notification_type = $' + pIndex);
             params.push(query.type.toUpperCase());
             pIndex++;
         }
 
         if (query.unreadOnly) {
-            conditions.push('is_read = FALSE');
+            conditions.push('n.is_read = FALSE');
         }
 
         const whereSql = conditions.join(' AND ');
-        const countRes = await pool.query<{ total: number }>('SELECT COUNT(*)::int AS total FROM notifications WHERE ' + whereSql, params);
+        const countRes = await pool.query<{ total: number }>('SELECT COUNT(*)::int AS total FROM notifications n WHERE ' + whereSql, params);
         const total = countRes.rows[0]?.total || 0;
 
         const unreadRes = await pool.query<{ unread: number }>('SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = $1 AND is_read = FALSE', [userId]);
@@ -599,10 +605,15 @@ export class UserService {
         const limitIndex = pIndex++;
         const offsetIndex = pIndex++;
         const dataRes = await pool.query(
-            'SELECT id, notification_type, title, message, severity, is_read, created_at, read_at, incident_id, organization_id, related_resource_type, related_resource_id ' +
-            'FROM notifications ' +
+            'SELECT n.id, n.notification_type, n.title, n.message, n.severity, n.is_read, n.created_at, n.read_at, n.incident_id, n.organization_id, n.related_resource_type, n.related_resource_id, ' +
+            'o.name AS organization_name, c.name AS cluster_name, c.provider AS cluster_provider, e.name AS environment_name, i.target_name AS service_name ' +
+            'FROM notifications n ' +
+            'LEFT JOIN organizations o ON n.organization_id = o.id ' +
+            'LEFT JOIN incidents i ON n.incident_id = i.id ' +
+            'LEFT JOIN environments e ON i.environment_id = e.id ' +
+            'LEFT JOIN clusters c ON (i.cluster_id::text = c.id::text) ' +
             'WHERE ' + whereSql + ' ' +
-            'ORDER BY created_at DESC ' +
+            'ORDER BY n.created_at DESC ' +
             'LIMIT $' + limitIndex + ' OFFSET $' + offsetIndex,
             [...params, limit, offset]
         );
@@ -630,6 +641,11 @@ export class UserService {
                 time: timestamp,
                 incidentId: r.incident_id || null,
                 organizationId: r.organization_id || null,
+                organizationName: r.organization_name || null,
+                clusterName: r.cluster_name || null,
+                clusterProvider: r.cluster_provider || null,
+                environmentName: r.environment_name || null,
+                serviceName: r.service_name || null,
                 relatedResourceType: r.related_resource_type || null,
                 relatedResourceId: r.related_resource_id || null,
                 link: r.incident_id ? `/dashboard/incidents?incident=${r.incident_id}` : null,

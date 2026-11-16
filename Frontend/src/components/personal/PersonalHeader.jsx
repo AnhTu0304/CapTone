@@ -27,7 +27,7 @@ export const PersonalHeader = ({
     if (currentPath.includes('/notifications')) return 'Trung Tâm Thông Báo';
     if (currentPath.includes('/activity')) return 'Lịch Sử Hoạt Động';
     if (currentPath.includes('/help')) return 'Trợ Giúp & Hỗ Trợ (Help & Support)';
-    return 'Bảng Điều Khiển Cá Nhân';
+    return 'Bảng Điều Khiển';
   };
 
   return (
@@ -94,7 +94,7 @@ export const PersonalHeader = ({
         {/* Breadcrumb Info */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748B' }}>
-            <span>Không Gian Cá Nhân</span>
+            <span>Trung Tâm Điều Khiển</span>
             <span>/</span>
             <span style={{ color: '#059669', fontWeight: 600 }}>{getPageTitle()}</span>
           </div>

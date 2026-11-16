@@ -673,12 +673,26 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
           gap: '16px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <ShieldAlert size={26} color="#DC2626" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <ShieldAlert size={20} color="#DC2626" />
+          </div>
+          <div>
             <h1
               style={{
-                fontSize: '1.5rem',
+                fontSize: '1.45rem',
                 fontWeight: 800,
                 color: 'var(--dash-text-primary)',
                 margin: 0,
@@ -687,10 +701,10 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
             >
               Trung Tâm Cảnh Báo & Cấu Hình Ngưỡng (Alert Management)
             </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Giám sát sự kiện vượt ngưỡng Hạ tầng (CPU, RAM, Disk), Kubernetes & APM theo thời gian thực
+            </p>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Giám sát sự kiện vượt ngưỡng Hạ tầng (CPU, RAM, Disk), Kubernetes & APM theo thời gian thực
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

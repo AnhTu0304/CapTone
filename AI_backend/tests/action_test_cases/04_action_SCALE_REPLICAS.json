@@ -4,7 +4,7 @@
   "scenario_title": "Tăng cường quy mô bản sao Workload (Scale Replicas)",
   "file_name": "04_action_SCALE_REPLICAS.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-13T09:30:40.851817+00:00",
+  "tested_at": "2026-11-16T20:38:12.321994+00:00",
   "description": "Đỉnh tải giao dịch cao bất thường đẩy CPU lên 96.5% và số bản sao khả dụng thấp hơn yêu cầu. RCA đề xuất SCALE_REPLICAS tăng thêm pods để phân tải.",
   "input_payload": {
     "request_id": "req-20261026-scale-replicas-004",
@@ -81,14 +81,14 @@
         {
           "risk_type": "CPU_OVERLOAD",
           "confidence": 0.94,
-          "description": "Mô hình học sâu GRU cảnh báo nguy cơ CPU_OVERLOAD (94.0%)"
+          "description": "Mô hình học sâu AI cảnh báo nguy cơ CPU_OVERLOAD (94.0%)"
         }
       ],
       "symptoms": []
     },
     "evidence": [
       "Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%)",
-      "GRU predicted CPU_OVERLOAD (94.0%)"
+      "AI predicted CPU_OVERLOAD (94.0%)"
     ],
     "recommendation": {
       "action": "SCALE_REPLICAS",
@@ -134,7 +134,7 @@
       {
         "risk_type": "CPU_OVERLOAD",
         "confidence": 0.94,
-        "description": "Mô hình học sâu GRU cảnh báo nguy cơ CPU_OVERLOAD (94.0%)"
+        "description": "Mô hình học sâu AI cảnh báo nguy cơ CPU_OVERLOAD (94.0%)"
       }
     ],
     "symptoms": []

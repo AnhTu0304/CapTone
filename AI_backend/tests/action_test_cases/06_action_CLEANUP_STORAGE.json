@@ -4,7 +4,7 @@
   "scenario_title": "Dọn dẹp dung lượng ổ đĩa / PVC (Cleanup Storage)",
   "file_name": "06_action_CLEANUP_STORAGE.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-13T09:30:41.166606+00:00",
+  "tested_at": "2026-11-16T20:38:12.367245+00:00",
   "description": "Ổ đĩa hoặc PersistentVolumeClaim đạt ngưỡng cạn kiệt nghiêm trọng (98.5%), không thể ghi file log. RCA đề xuất CLEANUP_STORAGE dọn dẹp dung lượng.",
   "input_payload": {
     "request_id": "req-20261026-cleanup-storage-006",

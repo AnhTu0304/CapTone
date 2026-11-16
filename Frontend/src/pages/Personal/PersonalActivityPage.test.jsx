@@ -77,7 +77,7 @@ describe('PersonalActivityPage Suite (/personal/activity) - Real Database Audit 
     });
 
     expect(
-      screen.getByText('Activity History — Lịch Sử Hoạt Động Cá Nhân')
+      screen.getByText('Lịch Sử Hoạt Động Cá Nhân')
     ).toBeInTheDocument();
     expect(screen.getByText(/Nhật ký kiểm toán toàn diện/i)).toBeInTheDocument();
     expect(screen.getByText('Làm mới')).toBeInTheDocument();

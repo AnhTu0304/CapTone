@@ -7,7 +7,6 @@ import {
   Radio,
   CheckCircle2,
   RefreshCw,
-  ShieldCheck,
   ArrowUpRight,
 } from 'lucide-react';
 import { getPlatformMonitoringData } from '../../../services/adminMonitoringService';
@@ -107,37 +106,19 @@ export const AdminMonitoringPage = ({ onNavigate }) => {
       {/* 1. Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#ECFDF5',
-                color: '#065F46',
-                border: '1px solid #A7F3D0',
-                fontWeight: 700,
-                fontSize: '0.6875rem',
-              }}
-            >
-              <ShieldCheck size={12} /> Cấp Độ Quản Trị Hệ Thống (Platform Super Admin)
-            </span>
-          </div>
           <h1
             style={{
               fontSize: '1.5rem',
               fontWeight: 800,
               color: 'var(--dash-text-primary)',
-              margin: '8px 0 4px 0',
+              margin: '0 0 4px 0',
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
             }}
           >
             <Activity size={26} style={{ color: '#059669' }} />
-            Giám Sát Hệ Thống & Vi Dịch Vụ Cốt Lõi (System Monitoring)
+            Giám Sát Hệ Thống & Vi Dịch Vụ Cốt Lõi
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
             Theo dõi trực tiếp sức khỏe Main Backend, AI Backend, Database Multi-tenant và Redis Cache.

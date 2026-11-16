@@ -90,10 +90,12 @@ export class IncidentModel {
     let idx = 5;
 
     if (targetName && targetName.trim().length > 0) {
-      // Khi đã có tên target cụ thể (service/pod), tìm sự cố đang mở của chính service/pod đó (bất kể loại symptom OOM/5XX)
+      // Khi đã có tên target cụ thể (service/pod), tìm sự cố đang mở của chính service/pod đó
+      // Ghi chú: Phải tham chiếu $3::text để Postgres xác định rõ kiểu dữ liệu tham số khi dùng PREPARE/wire protocol
+      conditions.push('($3::text IS NULL OR incident_type = $3::text OR $3::text = $3::text)');
       conditions.push(`(
-        (LOWER(COALESCE(target_name, '')) = LOWER($${idx}::text) OR ($2::text IS NOT NULL AND target_id::text = $2::text))
-        OR (incident_type = $3)
+        LOWER(COALESCE(target_name, '')) = LOWER($${idx}::text)
+        OR ($2::text IS NOT NULL AND target_id::text = $2::text)
       )`);
       params.push(targetName.trim());
     } else {
@@ -122,6 +124,7 @@ export class IncidentModel {
     severity?: string;
     cluster_id?: string;
     organization_id?: string;
+    allowed_org_ids?: string[];
     search?: string;
   }): Promise<{ items: any[]; total: number }> {
     const limit = params.limit ?? 50;
@@ -133,6 +136,10 @@ export class IncidentModel {
     if (params.organization_id && params.organization_id !== 'all' && !params.organization_id.startsWith('sandbox-') && params.organization_id !== 'org-acme') {
       conditions.push(`(i.organization_id = $${idx} OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id = $${idx}))`);
       values.push(params.organization_id);
+      idx++;
+    } else if (params.allowed_org_ids && params.allowed_org_ids.length > 0) {
+      conditions.push(`(i.organization_id = ANY($${idx}::uuid[]) OR EXISTS (SELECT 1 FROM environments env WHERE env.id = i.environment_id AND env.organization_id = ANY($${idx}::uuid[])))`);
+      values.push(params.allowed_org_ids);
       idx++;
     }
 
@@ -222,7 +229,7 @@ export class IncidentModel {
         e.name AS environment_name,
         i.cluster_id,
         c.name AS cluster_name,
-        i.prediction_id,
+        COALESCE(i.prediction_id, pred.id) AS prediction_id,
         i.source_type,
         i.target_type,
         i.target_id,
@@ -242,6 +249,7 @@ export class IncidentModel {
         pred.prediction_type,
         pred.confidence_score AS prediction_confidence,
         pred.risk_score AS prediction_risk_score,
+        NULL AS prediction_risk_outputs,
         r.id AS rca_id,
         r.root_cause_type,
         r.root_cause_description,
@@ -314,7 +322,14 @@ export class IncidentModel {
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
-      LEFT JOIN ai_predictions pred ON pred.id = i.prediction_id
+      LEFT JOIN LATERAL (
+        SELECT p.*
+        FROM ai_predictions p
+        WHERE (p.id = i.prediction_id)
+           OR (i.prediction_id IS NULL AND p.workload_id::text = i.target_id::text AND p.predicted_at BETWEEN i.detected_at - INTERVAL '15 minutes' AND i.detected_at + INTERVAL '5 minutes')
+        ORDER BY (p.id = i.prediction_id) DESC, ABS(EXTRACT(EPOCH FROM (p.predicted_at - i.detected_at))) ASC
+        LIMIT 1
+      ) pred ON true
       LEFT JOIN LATERAL (
         SELECT w.id, w.name, w.namespace_id, w.workload_type, w.kubernetes_uid
         FROM workloads w
@@ -430,7 +445,7 @@ export class IncidentModel {
         e.name AS environment_name,
         i.cluster_id,
         c.name AS cluster_name,
-        i.prediction_id,
+        COALESCE(i.prediction_id, pred.id) AS prediction_id,
         i.source_type,
         i.target_type,
         i.target_id,
@@ -450,6 +465,7 @@ export class IncidentModel {
         pred.prediction_type,
         pred.confidence_score AS prediction_confidence,
         pred.risk_score AS prediction_risk_score,
+        NULL AS prediction_risk_outputs,
         r.id AS rca_id,
         r.root_cause_type,
         r.root_cause_description,
@@ -516,7 +532,14 @@ export class IncidentModel {
       LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
-      LEFT JOIN ai_predictions pred ON pred.id = i.prediction_id
+      LEFT JOIN LATERAL (
+        SELECT p.*
+        FROM ai_predictions p
+        WHERE (p.id = i.prediction_id)
+           OR (i.prediction_id IS NULL AND p.workload_id::text = i.target_id::text AND p.predicted_at BETWEEN i.detected_at - INTERVAL '15 minutes' AND i.detected_at + INTERVAL '5 minutes')
+        ORDER BY (p.id = i.prediction_id) DESC, ABS(EXTRACT(EPOCH FROM (p.predicted_at - i.detected_at))) ASC
+        LIMIT 1
+      ) pred ON true
       LEFT JOIN LATERAL (
         SELECT w.id, w.name, w.namespace_id, w.workload_type, w.kubernetes_uid
         FROM workloads w
@@ -655,7 +678,9 @@ export class IncidentModel {
              ha2.created_at,
              rv.verification_result,
              rv.verified_at,
-             COALESCE(rv.verification_details->>'message', ha2.result->>'message') AS verification_message
+             COALESCE(rv.verification_details->>'message', ha2.result->>'message') AS verification_message,
+             ha2.result AS result,
+             rv.verification_details AS verification_details
            FROM healing_actions ha2
            LEFT JOIN healing_action_types hat2 ON hat2.id = ha2.action_type_id
            LEFT JOIN LATERAL (

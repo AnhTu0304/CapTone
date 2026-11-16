@@ -27,7 +27,7 @@ export class ClusterController {
       if (!isSuper) {
         return next(new ApiError(403, 'Từ chối truy cập: Quyền hạn dành riêng cho Quản trị viên hệ thống'));
       }
-      const clusters = await ClusterService.getAllClusters(user?.id);
+      const clusters = await ClusterService.getAllClusters();
       return ApiResponse.success(res, 'Lấy danh sách cụm Kubernetes hệ thống thành công', clusters, 200);
     } catch (error) {
       next(error);

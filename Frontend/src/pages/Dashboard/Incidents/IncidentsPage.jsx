@@ -3,6 +3,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { aiService } from '../../../services/aiService';
 import { clusterService } from '../../../services/clusterService';
 import RootCauseModal from './RootCauseModal';
+import { translateIncidentTitle, translateSeverity } from './incidentUtils';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -71,49 +72,7 @@ const parseConfidence = (val) => {
 };
 
 // Helper chuyển ngữ tiêu đề sự cố và mức độ sang tiếng Việt
-export const translateIncidentTitle = (rawTitle) => {
-  if (!rawTitle) return '';
-  let title = String(rawTitle);
-
-  title = title.replace(/\[(Cảnh báo AI|AI Alert|Alert|Cảnh báo)\]\s*/gi, '').trim();
-
-  const causeTranslations = [
-    { en: /\bUNKNOWN\b/gi, vi: 'Chưa xác định nguyên nhân' },
-    { en: /Unstable application pod/gi, vi: 'Pod ứng dụng bất ổn định' },
-    { en: /Container memory exhausted/gi, vi: 'Cạn kiệt bộ nhớ container (OOM)' },
-    { en: /Storage capacity exhausted/gi, vi: 'Cạn kiệt dung lượng lưu trữ' },
-    { en: /CPU saturation/gi, vi: 'Bão hòa tài nguyên CPU' },
-    { en: /Traffic overload/gi, vi: 'Quá tải lưu lượng truy cập' },
-    { en: /Deployment failure/gi, vi: 'Lỗi triển khai phiên bản mới' },
-    { en: /Upstream dependency failure/gi, vi: 'Lỗi dịch vụ phụ thuộc thượng nguồn' },
-    { en: /Application errors/gi, vi: 'Lỗi ứng dụng nội bộ (5xx)' },
-    { en: /Service performance degradation/gi, vi: 'Suy giảm hiệu năng dịch vụ' },
-    { en: /Insufficient available replicas/gi, vi: 'Không đủ số lượng Pod replica' },
-    { en: /Kubernetes scheduling failure/gi, vi: 'Lỗi lập lịch điều phối Kubernetes' },
-    { en: /Workload underutilized/gi, vi: 'Tài nguyên làm việc dư thừa' },
-    { en: /High latency detected/gi, vi: 'Độ trễ phản hồi tăng cao' },
-    { en: /Memory leak detected/gi, vi: 'Phát hiện rò rỉ bộ nhớ' },
-    { en: /Pod crash loop back-off/gi, vi: 'Pod bị kẹt vòng lặp CrashLoopBackOff' },
-    { en: /OOMKilled/gi, vi: 'Tiến trình bị hủy do tràn RAM (OOMKilled)' },
-  ];
-
-  for (const { en, vi } of causeTranslations) {
-    title = title.replace(en, vi);
-  }
-
-  title = title.replace(/\s+on\s+/gi, ' trên ');
-  return title;
-};
-
-export const translateSeverity = (sev) => {
-  if (!sev) return 'TRUNG BÌNH';
-  const s = String(sev).toUpperCase();
-  if (s === 'CRITICAL') return 'KHẨN CẤP';
-  if (s === 'HIGH') return 'CAO';
-  if (s === 'MEDIUM') return 'TRUNG BÌNH';
-  if (s === 'LOW') return 'THẤP';
-  return s;
-};
+export { translateIncidentTitle, translateSeverity };
 
 // Danh sách trắng cho phép loại rủi ro dự báo hợp lệ (ngăn chặn việc lấy tên hành động thay cho rủi ro)
 const VALID_RISKS = new Set([
@@ -378,7 +337,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
 
 export const IncidentsPage = ({ onNavigate }) => {
   const { currentOrg, currentEnv, envList, setCurrentEnv, refreshActiveIncidents } = useDashboard();
-  const [selectedCluster, setSelectedCluster] = useState(() => currentEnv?.cluster || 'all'); // 'all' | clusterId
+  const [selectedCluster, setSelectedCluster] = useState(() => currentEnv?.cluster || currentEnv?.clusterId || 'all'); // 'all' | clusterId
 
   // Tự động đồng bộ bộ lọc khi người dùng chuyển Cụm K8s trên Header Top Navbar
   useEffect(() => {
@@ -543,7 +502,7 @@ export const IncidentsPage = ({ onNavigate }) => {
       const activeOrgId = currentOrg?.id;
 
       const params = {
-        limit: 250,
+        limit: 80,
         cluster_id: selectedCluster === 'all' ? undefined : selectedCluster,
         organization_id: activeOrgId,
         status: selectedStatus,
@@ -806,10 +765,10 @@ export const IncidentsPage = ({ onNavigate }) => {
       const matchService = selectedService === 'all' || inc.service === selectedService;
       const matchSearch =
         !searchQuery.trim() ||
-        inc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inc.service.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inc.rootCause.toLowerCase().includes(searchQuery.toLowerCase());
+        Boolean(inc.id && inc.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        Boolean(inc.title && inc.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        Boolean(inc.service && inc.service.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        Boolean(inc.rootCause && inc.rootCause.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchCluster =
         selectedCluster === 'all' ||
@@ -848,19 +807,21 @@ export const IncidentsPage = ({ onNavigate }) => {
         }}
       >
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              <AlertTriangle size={20} color="var(--dash-primary)" />
+              <AlertTriangle size={20} color="#059669" />
             </div>
             <div>
               <h1
@@ -917,7 +878,7 @@ export const IncidentsPage = ({ onNavigate }) => {
             <Layers size={18} color="#6366F1" />
           </div>
           <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)' }}>
-            {stats.total.toLocaleString()}
+            {isLoading && incidents.length === 0 ? '...' : stats.total.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span
@@ -953,7 +914,7 @@ export const IncidentsPage = ({ onNavigate }) => {
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {stats.critical.toLocaleString()}
+            {isLoading && incidents.length === 0 ? '...' : stats.critical.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: stats.critical > 0 ? '#DC2626' : 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span
@@ -986,7 +947,7 @@ export const IncidentsPage = ({ onNavigate }) => {
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {stats.recovering.toLocaleString()}
+            {isLoading && incidents.length === 0 ? '...' : stats.recovering.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span
@@ -1019,7 +980,7 @@ export const IncidentsPage = ({ onNavigate }) => {
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {stats.resolved.toLocaleString()}
+            {isLoading && incidents.length === 0 ? '...' : stats.resolved.toLocaleString()}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#10B981', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <CheckCircle2 size={13} />
@@ -1462,7 +1423,16 @@ export const IncidentsPage = ({ onNavigate }) => {
         </div>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-          Hiển thị <strong>{totalFiltered > 0 ? startIndex + 1 : 0} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố
+          {isLoading && incidents.length === 0 ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <RefreshCw size={12} className="animate-spin" color="var(--dash-primary)" />
+              <span>Đang đồng bộ danh sách sự cố...</span>
+            </span>
+          ) : (
+            <>
+              Hiển thị <strong>{totalFiltered > 0 ? startIndex + 1 : 0} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố
+            </>
+          )}
         </div>
       </div>
 

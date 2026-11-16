@@ -108,7 +108,7 @@ export class KubernetesEventModel {
     if (!namespaceId && metadata.namespace && event.cluster_id) {
       try {
         const nsRes = await pool.query(
-          `SELECT id FROM namespaces WHERE name = $1 AND (cluster_id::text = $2 OR cluster_id IN (SELECT id FROM clusters WHERE name = $2 OR id::text = $2)) LIMIT 1`,
+          `SELECT id FROM namespaces WHERE name = $1 AND (cluster_id::text = $2 OR cluster_id::text IN (SELECT id::text FROM clusters WHERE name = $2 OR id::text = $2)) LIMIT 1`,
           [metadata.namespace, event.cluster_id]
         );
         if (nsRes.rows.length > 0) {
@@ -294,12 +294,12 @@ export class KubernetesEventModel {
       params.push(options.endTime);
     }
 
-    // Filter by Cluster ID (UUID or Name) - Note: kubernetes_events.cluster_id is character varying(255)
+    // Filter by Cluster ID (UUID or Name) - Note: kubernetes_events.cluster_id is character varying(255) in some schemas, UUID in others
     if (options.clusterId && options.clusterId.toUpperCase() !== 'ALL') {
       const cId = options.clusterId.trim();
       conditions.push(`(
         e.cluster_id::text = $${paramIdx}
-        OR e.cluster_id IN (SELECT c.id FROM clusters c WHERE c.id::text = $${paramIdx} OR c.name ILIKE $${paramIdx})
+        OR e.cluster_id::text IN (SELECT c.id::text FROM clusters c WHERE c.id::text = $${paramIdx} OR c.name ILIKE $${paramIdx})
         OR e.metadata->>'cluster_name' ILIKE $${paramIdx}
       )`);
       params.push(cId);
@@ -309,10 +309,10 @@ export class KubernetesEventModel {
     // Multi-tenant organization isolation scope [S4][PB18] 4.2
     if (Array.isArray(options.allowedOrgIds) && options.allowedOrgIds.length > 0) {
       conditions.push(`(
-        e.cluster_id IN (
-          SELECT c.id FROM clusters c
+        e.cluster_id::text IN (
+          SELECT c.id::text FROM clusters c
           JOIN environments env ON c.environment_id = env.id
-          WHERE env.organization_id = ANY($${paramIdx}::uuid[])
+          WHERE env.organization_id::text = ANY($${paramIdx}::text[])
         )
         OR (e.metadata->>'organization_id') = ANY($${paramIdx}::text[])
         OR (e.metadata->>'org_id') = ANY($${paramIdx}::text[])
@@ -423,14 +423,14 @@ export class KubernetesEventModel {
         env.name AS environment_name,
         env.organization_id
       FROM kubernetes_events e
-      LEFT JOIN clusters c ON (e.cluster_id = c.id OR e.cluster_id::text = c.name)
+      LEFT JOIN clusters c ON (e.cluster_id::text = c.id::text OR e.cluster_id::text = c.name)
       LEFT JOIN environments env ON c.environment_id = env.id
       WHERE e.id = $1
     `;
 
     if (allowedOrgIds && allowedOrgIds.length > 0) {
       params.push(allowedOrgIds);
-      query += ` AND (env.organization_id = ANY($2::uuid[]) OR e.cluster_id IS NULL)`;
+      query += ` AND (env.organization_id::text = ANY($2::text[]) OR e.cluster_id IS NULL)`;
     }
 
     query += ` LIMIT 1;`;
@@ -560,7 +560,7 @@ export class KubernetesEventModel {
         `UPDATE pods
          SET status = $1, updated_at = NOW()
          WHERE (name = $2 OR kubernetes_uid = $3)
-           AND (cluster_id::text = $4 OR cluster_id IN (SELECT id FROM clusters WHERE name = $4 OR id::text = $4))`,
+           AND (cluster_id::text = $4 OR cluster_id::text IN (SELECT id::text FROM clusters WHERE name = $4 OR id::text = $4))`,
         [status, podName, kubernetesUid, clusterId]
       );
     } catch {

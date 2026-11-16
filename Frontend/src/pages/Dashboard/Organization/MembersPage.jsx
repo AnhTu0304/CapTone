@@ -243,16 +243,30 @@ export const MembersPage = () => {
     <div className="dashboard-members-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* 1. Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Users size={22} color="var(--dash-primary)" />
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Users size={20} color="#2563EB" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Thành Viên & Ma Trận Phân Quyền
             </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Phân quyền chặt chẽ theo nguyên tắc tối thiểu (Least Privilege) cho SME Owner, DevOps và Viewer
+            </p>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Phân quyền chặt chẽ theo nguyên tắc tối thiểu (Least Privilege) cho SME Owner, DevOps và Viewer
-          </p>
         </div>
 
         {canManageMembers ? (

@@ -369,7 +369,15 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                   <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
                       <span style={{ color: '#64748B' }}>Vai trò của bạn:</span>
-                      <strong style={{ color: '#0F172A' }}>{company.roleTitle}</strong>
+                      <strong style={{ color: '#0F172A' }}>
+                        {(() => {
+                          const r = String(company.role || company.roleTitle || '').toUpperCase();
+                          if (r.includes('OWNER') || r.includes('CHỦ')) return 'SME OWNER';
+                          if (r.includes('DEVOPS') || r.includes('KỸ SƯ')) return 'DEVOPS';
+                          if (r.includes('VIEWER') || r.includes('GIÁM SÁT') || r.includes('QUAN SÁT')) return 'VIEWER';
+                          return company.role || 'SME OWNER';
+                        })()}
+                      </strong>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>

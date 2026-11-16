@@ -45,6 +45,9 @@ const renderWithProviders = (ui) => {
 describe('Admin Users Page & Service Suite', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    if (adminUsersService.getUserStats) {
+      adminUsersService.getUserStats.mockResolvedValue({ total: 2, active: 1, verified: 1 });
+    }
   });
 
   describe('Service Layer Interface', () => {

@@ -36,8 +36,8 @@ describe('PersonalHeader Component - Remove "Về Dashboard" Button Suite', () =
   test('TC02: Breadcrumb và tiêu đề trang vẫn hiển thị đầy đủ và chính xác', () => {
     render(<PersonalHeader currentPath="/portal" />);
 
-    expect(screen.getByText('Không Gian Cá Nhân')).toBeInTheDocument();
-    expect(screen.getAllByText('Bảng Điều Khiển Cá Nhân').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Trung Tâm Điều Khiển')).toBeInTheDocument();
+    expect(screen.getAllByText('Bảng Điều Khiển').length).toBeGreaterThanOrEqual(1);
 
     // Kiểm tra trang con khác: ví dụ /portal/companies
     render(<PersonalHeader currentPath="/portal/companies" />);

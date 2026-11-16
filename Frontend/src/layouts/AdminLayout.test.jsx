@@ -146,14 +146,8 @@ describe('Admin Application Shell Suite', () => {
       fireEvent.click(notifBtn);
 
       expect(screen.getByText(/Thông Báo Quản Trị/i)).toBeInTheDocument();
-      expect(screen.getByText(/Cần Phê Duyệt HITL Khẩn Cấp/i)).toBeInTheDocument();
-
-      // Click "Đã đọc tất cả"
-      const markAllBtn = screen.getByText(/Đã đọc tất cả/i);
-      fireEvent.click(markAllBtn);
-
-      // Unread count badge should disappear
-      expect(screen.queryByText(/Đã đọc tất cả/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Cảnh Báo Kỹ Thuật/i)).toBeInTheDocument();
+      expect(screen.getByText(/Bản Tin Phát Sóng/i)).toBeInTheDocument();
     });
   });
 

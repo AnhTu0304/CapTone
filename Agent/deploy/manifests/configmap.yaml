@@ -6,16 +6,16 @@ metadata:
   labels:
     app.kubernetes.io/name: selfheal-agent
 data:
-  AGENT_SERVER_URL: "wss://backend.captone.local/api/v1/agent/connect"
-  AGENT_UID: "selfheal-agent-cluster-01"
-  CLUSTER_ID: ""
-  ENVIRONMENT_ID: ""
+  AGENT_SERVER_URL: "ws://host.minikube.internal:5005/api/v1/agent/connect"
+  AGENT_UID: "selfheal-agent-default"
+  CLUSTER_ID: "fcb1a025-48f0-40bf-b9ea-c61af3448084"
+  ENVIRONMENT_ID: "e0000000-0000-0000-0000-000000000001"
   METRICS_INTERVAL_MS: "5000"
   LOG_COLLECTION_INTERVAL_MS: "5000"
   K8S_NAMESPACE: "default"
-  MONITOR_ALL_NAMESPACES: "false"
+  MONITOR_ALL_NAMESPACES: "true"
   LOG_LEVEL: "INFO"
-  ENABLE_HEALING_ACTIONS: "false"
+  ENABLE_HEALING_ACTIONS: "true"
   HEALTH_PORT: "8080"
   OTEL_ENABLED: "true"
   OTEL_SERVICE_NAME: "selfheal-k8s-agent"

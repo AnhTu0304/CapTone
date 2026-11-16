@@ -169,16 +169,30 @@ export const OrganizationPage = () => {
     <div className="dashboard-organization-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* 1. Header & Nút Sửa thông tin */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Building2 size={24} color="var(--dash-primary)" />
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Thông Tin Tổ Chức
-            </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Building2 size={20} color="#059669" />
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Quản lý thông tin định danh doanh nghiệp, tên miền và thông tin liên hệ của tổ chức
-          </p>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+              Thông Tin Tổ Chức & Doanh Nghiệp
+            </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Quản lý thông tin định danh doanh nghiệp, tên miền và thông tin liên hệ của tổ chức
+            </p>
+          </div>
         </div>
 
         {/* Nút Sửa thông tin (Mở cửa sổ nhỏ) */}

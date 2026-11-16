@@ -14,13 +14,9 @@ import {
   ChevronRight,
   X,
   UserCheck,
-  Plus,
-  KeyRound,
-  LogOut,
-  Copy,
 } from 'lucide-react';
 import { adminUsersService } from '../../../services/adminUsersService';
-import { AdminErrorState } from '../../../components/admin/common';
+import { AdminErrorState, AdminTablePagination } from '../../../components/admin/common';
 import { useToast } from '../../../context/ToastContext';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -58,17 +54,11 @@ const formatVnDate = (dateInput) => {
 };
 
 /**
- * Làm sạch và chuẩn hóa tên hiển thị (sửa lỗi font tiếng Việt ??? từ DB cũ)
+ * Chuẩn hóa tên hiển thị người dùng
  */
 const cleanFullName = (name) => {
   if (!name) return 'Chưa đặt tên';
-  if (name.includes('???') || name.includes('??')) {
-    return name
-      .replace(/Qu\?+n\s*Tr\?+\s*Vi\?+n\s*V\?+n\s*H\?+nh/gi, 'Quản Trị Viên Vận Hành')
-      .replace(/Qu\?+n\s*Tr\?+/gi, 'Quản Trị Viên')
-      .replace(/\?+/g, '');
-  }
-  return name;
+  return String(name).trim();
 };
 
 /**
@@ -102,6 +92,13 @@ export const AdminUsersPage = () => {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Thống kê người dùng toàn hệ thống (Dữ liệu thật từ CSDL)
+  const [userStats, setUserStats] = useState({
+    total: 0,
+    active: 0,
+    verified: 0,
+  });
 
   // State xem chi tiết & Drawer
   const [selectedUser, setSelectedUser] = useState(null);
@@ -150,6 +147,24 @@ export const AdminUsersPage = () => {
           total: data.pagination.total ?? 0,
           totalPages: data.pagination.totalPages ?? 1,
         }));
+      }
+
+      // Đồng bộ số liệu thống kê tổng thể người dùng
+      if (typeof adminUsersService.getUserStats === 'function') {
+        try {
+          const statsPromise = adminUsersService.getUserStats();
+          if (statsPromise && typeof statsPromise.then === 'function') {
+            statsPromise
+              .then((st) => {
+                if (st && (st.total > 0 || st.active > 0)) {
+                  setUserStats(st);
+                }
+              })
+              .catch(() => {});
+          }
+        } catch {
+          // Bỏ qua lỗi thống kê nếu service bị gián đoạn
+        }
       }
     } catch (err) {
       if (err.status === 403) {
@@ -294,77 +309,6 @@ export const AdminUsersPage = () => {
     }
   };
 
-  // Tạo tài khoản người dùng mới
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-    role: 'SME_OWNER',
-    company: 'Acme Infrastructure Corp',
-  });
-
-  const handleCreateUser = (e) => {
-    e.preventDefault();
-    if (!createForm.full_name.trim() || !createForm.email.trim()) {
-      toastError('Vui lòng điền đầy đủ họ tên và email.', 'Thiếu Thông Tin');
-      return;
-    }
-
-    const newUser = {
-      id: `usr-${Date.now().toString(36)}`,
-      full_name: createForm.full_name.trim(),
-      email: createForm.email.trim(),
-      status: 'ACTIVE',
-      company_name: createForm.company,
-      system_roles: [createForm.role],
-      created_at: new Date().toISOString(),
-      last_login_at: null,
-      email_verified_at: new Date().toISOString(),
-    };
-
-    setUsers((prev) => [newUser, ...prev]);
-    setIsCreateModalOpen(false);
-    setCreateForm({
-      full_name: '',
-      email: '',
-      password: '',
-      role: 'SME_OWNER',
-      company: 'Acme Infrastructure Corp',
-    });
-    toastSuccess(`Đã tạo tài khoản "${newUser.email}" thành công!`, 'Tạo Thành Công');
-  };
-
-  // Đặt lại mật khẩu (Reset password)
-  const [resetTargetUser, setResetTargetUser] = useState(null);
-  const [tempPassword, setTempPassword] = useState('');
-
-  const handleOpenResetPassword = (target) => {
-    const generated = `SelfAI@${Math.floor(1000 + Math.random() * 9000)}!`;
-    setTempPassword(generated);
-    setResetTargetUser(target);
-  };
-
-  const handleConfirmResetPassword = () => {
-    toastSuccess(
-      `Mật khẩu tạm thời cho "${resetTargetUser.email}": ${tempPassword}`,
-      'Đặt Lại Mật Khẩu Thành Công'
-    );
-    setResetTargetUser(null);
-  };
-
-  // Thu hồi phiên đăng nhập (Revoke active sessions)
-  const [revokeTargetUser, setRevokeTargetUser] = useState(null);
-
-  const handleRevokeSession = () => {
-    if (!revokeTargetUser) return;
-    toastSuccess(
-      `Đã thu hồi phiên đăng nhập của "${revokeTargetUser.email}". Người dùng bắt buộc phải đăng nhập lại!`,
-      'Thu Hồi Phiên Thành Công'
-    );
-    setRevokeTargetUser(null);
-  };
-
   // Badge hiển thị trạng thái tài khoản
   const renderStatusBadge = (status) => {
     const s = (status || 'ACTIVE').toUpperCase();
@@ -479,68 +423,48 @@ export const AdminUsersPage = () => {
           gap: '16px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
-                backgroundColor: '#ECFDF5',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--dash-primary)',
-              }}
-            >
-              <Users size={20} />
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
+            }}
+          >
+            <Users size={24} />
+          </div>
+          <div>
             <h1
               style={{
                 fontSize: '1.5rem',
                 fontWeight: 800,
                 color: 'var(--dash-text-primary)',
-                margin: 0,
                 letterSpacing: '-0.02em',
+                margin: 0,
               }}
             >
               Quản Lý Danh Sách Người Dùng & Phân Quyền
             </h1>
+            <p
+              style={{
+                fontSize: '0.8125rem',
+                color: 'var(--dash-text-secondary)',
+                margin: '4px 0 0 0',
+              }}
+            >
+              Giám sát tài khoản định danh, vai trò quản trị hệ thống RBAC và kiểm tra trạng thái xác thực email từ cơ sở dữ liệu.
+            </p>
           </div>
-          <p
-            style={{
-              fontSize: '0.875rem',
-              color: 'var(--dash-text-secondary)',
-              margin: '6px 0 0 46px',
-            }}
-          >
-            Giám sát tài khoản định danh, vai trò quản trị hệ thống RBAC và kiểm tra trạng thái xác thực email từ cơ sở dữ liệu.
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              backgroundColor: '#059669',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
-              color: '#FFFFFF',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
-            }}
-          >
-            <Plus size={15} />
-            <span>Tạo Tài Khoản Mới</span>
-          </button>
-
           {/* Action: Làm mới */}
           <button
             type="button"
@@ -590,7 +514,7 @@ export const AdminUsersPage = () => {
             TỔNG SỐ NGƯỜI DÙNG
           </div>
           <div style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
-            {pagination.total}
+            {userStats.total || pagination.total}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px' }}>
             Tất cả tài khoản trong hệ thống
@@ -607,10 +531,10 @@ export const AdminUsersPage = () => {
           }}
         >
           <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginBottom: '6px' }}>
-            ĐANG HOẠT ĐỘNG (TRANG NÀY)
+            ĐANG HOẠT ĐỘNG (ACTIVE)
           </div>
           <div style={{ fontSize: '1.625rem', fontWeight: 800, color: '#059669' }}>
-            {activeCount}
+            {userStats.active || activeCount}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px' }}>
             Tài khoản trạng thái ACTIVE
@@ -630,7 +554,7 @@ export const AdminUsersPage = () => {
             ĐÃ XÁC THỰC EMAIL
           </div>
           <div style={{ fontSize: '1.625rem', fontWeight: 800, color: '#2563EB' }}>
-            {verifiedCount}
+            {userStats.verified || verifiedCount}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px' }}>
             Email bảo mật đã kiểm chứng
@@ -1124,54 +1048,6 @@ export const AdminUsersPage = () => {
                             <span>Chi tiết</span>
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenResetPassword(item)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              border: '1px solid #BFDBFE',
-                              backgroundColor: '#EFF6FF',
-                              color: '#1D4ED8',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                              flexShrink: 0,
-                            }}
-                            title="Đặt lại mật khẩu bảo mật"
-                          >
-                            <KeyRound size={12} />
-                            <span>Đổi MK</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setRevokeTargetUser(item)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              border: '1px solid #FDE68A',
-                              backgroundColor: '#FFFBEB',
-                              color: '#B45309',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                              flexShrink: 0,
-                            }}
-                            title="Thu hồi phiên đăng nhập khi phát hiện rủi ro"
-                          >
-                            <LogOut size={12} />
-                            <span>Thu Hồi Phiên</span>
-                          </button>
-
                           {(() => {
                             const { canChange, reason } = checkStatusChangeEligibility(item);
                             const isSuspended = item.status === 'SUSPENDED';
@@ -1213,75 +1089,17 @@ export const AdminUsersPage = () => {
           </div>
 
           {/* Pagination Controls */}
-          <div
-            style={{
-              padding: '14px 20px',
-              borderTop: '1px solid var(--dash-border)',
-              backgroundColor: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px',
-            }}
-          >
-            <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-              Hiển thị{' '}
-              <strong>
-                {pagination.total > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0} -{' '}
-                {Math.min(pagination.page * pagination.limit, pagination.total)}
-              </strong>{' '}
-              trong tổng số <strong>{pagination.total}</strong> người dùng
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setPagination((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-                disabled={pagination.page <= 1 || isLoading}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--dash-border)',
-                  backgroundColor: '#FFFFFF',
-                  color: pagination.page <= 1 ? 'var(--dash-text-muted)' : 'var(--dash-text-primary)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: pagination.page <= 1 ? 'not-allowed' : 'pointer',
-                }}
-              >
-                <ChevronLeft size={14} /> Trước
-              </button>
-
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', padding: '0 6px' }}>
-                Trang {pagination.page} / {pagination.totalPages || 1}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setPagination((prev) => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-                disabled={pagination.page >= pagination.totalPages || isLoading}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--dash-border)',
-                  backgroundColor: '#FFFFFF',
-                  color: pagination.page >= pagination.totalPages ? 'var(--dash-text-muted)' : 'var(--dash-text-primary)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: pagination.page >= pagination.totalPages ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Sau <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
+          <AdminTablePagination
+            page={pagination.page}
+            pageSize={pagination.limit}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            onPageChange={(newPage) => setPagination((prev) => ({ ...prev, page: newPage }))}
+            onPageSizeChange={(newLimit) => setPagination((prev) => ({ ...prev, limit: newLimit, page: 1 }))}
+            itemLabel="người dùng"
+            pageSizeOptions={[10, 20, 50]}
+            isLoading={isLoading}
+          />
         </div>
       )}
 
@@ -1857,379 +1675,6 @@ export const AdminUsersPage = () => {
         </div>
       )}
 
-      {/* Modal 1: Tạo Tài Khoản Mới */}
-      {isCreateModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              maxWidth: '500px',
-              width: '100%',
-              padding: '24px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Users size={20} color="#059669" />
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Tạo Tài Khoản Người Dùng Mới
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Họ và Tên *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Hoàng Minh Đức"
-                  value={createForm.full_name}
-                  onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Địa Chỉ Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="duc.hoang@company.com"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Vai Trò Hệ Thống (System Role)
-                </label>
-                <select
-                  value={createForm.role}
-                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  <option value="SUPER_ADMIN">SUPER_ADMIN (Toàn quyền hệ thống)</option>
-                  <option value="SYSTEM_ADMIN">SYSTEM_ADMIN (Quản trị vận hành)</option>
-                  <option value="SME_OWNER">SME_OWNER (Chủ doanh nghiệp)</option>
-                  <option value="DEVOPS">DEVOPS (Kỹ sư vận hành cụm)</option>
-                  <option value="VIEWER">VIEWER (Chỉ xem)</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Doanh Nghiệp Trực Thuộc (Company)
-                </label>
-                <select
-                  value={createForm.company}
-                  onChange={(e) => setCreateForm({ ...createForm, company: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  <option value="Acme Infrastructure Corp">Acme Infrastructure Corp</option>
-                  <option value="FinFlow Pay Platform">FinFlow Pay Platform</option>
-                  <option value="Nexus Logistics AI">Nexus Logistics AI</option>
-                  <option value="Viettel SME Cloud">Viettel SME Cloud</option>
-                  <option value="FPT Digital Smart Retail">FPT Digital Smart Retail</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    backgroundColor: '#FFFFFF',
-                    color: 'var(--dash-text-primary)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Hủy Bỏ
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#059669',
-                    color: '#FFFFFF',
-                    fontSize: '0.8125rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Tạo Người Dùng
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal 2: Đặt Lại Mật Khẩu (Reset Password) */}
-      {resetTargetUser && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              maxWidth: '460px',
-              width: '100%',
-              padding: '24px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <KeyRound size={20} color="#2563EB" />
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Đặt Lại Mật Khẩu An Toàn
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setResetTargetUser(null)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              Hệ thống đã tự động tạo chuỗi mật khẩu ngẫu nhiên đạt tiêu chuẩn bảo mật cho tài khoản{' '}
-              <strong style={{ color: '#0F172A' }}>{resetTargetUser.email}</strong>:
-            </p>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                backgroundColor: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                marginBottom: '18px',
-              }}
-            >
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 800, color: '#1D4ED8' }}>
-                {tempPassword}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(tempPassword);
-                  toastSuccess('Đã sao chép mật khẩu tạm thời!');
-                }}
-                title="Sao chép mật khẩu"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #BFDBFE',
-                  color: '#1D4ED8',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <Copy size={13} />
-                <span>Sao Chép</span>
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setResetTargetUser(null)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--dash-border)',
-                  backgroundColor: '#FFFFFF',
-                  color: 'var(--dash-text-primary)',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Hủy Bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmResetPassword}
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: '#2563EB',
-                  color: '#FFFFFF',
-                  fontSize: '0.8125rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                Xác Nhận Đặt Lại
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal 3: Thu Hồi Phiên Đăng Nhập (Revoke Sessions) */}
-      {revokeTargetUser && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              maxWidth: '460px',
-              width: '100%',
-              padding: '24px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <LogOut size={20} color="#D97706" />
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Thu Hồi Phiên Đăng Nhập
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRevokeTargetUser(null)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              Bạn có chắc chắn muốn hủy tất cả các phiên làm việc và Token đăng nhập của người dùng{' '}
-              <strong style={{ color: '#0F172A' }}>{revokeTargetUser.email}</strong>? Người dùng này sẽ bị đăng xuất khỏi toàn bộ thiết bị ngay lập tức.
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setRevokeTargetUser(null)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--dash-border)',
-                  backgroundColor: '#FFFFFF',
-                  color: 'var(--dash-text-primary)',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Hủy Bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleRevokeSession}
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: '#D97706',
-                  color: '#FFFFFF',
-                  fontSize: '0.8125rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                Thu Hồi Ngay
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

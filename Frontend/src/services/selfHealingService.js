@@ -180,6 +180,7 @@ export const selfHealingService = {
       if (params.status && params.status !== 'all') search.append('status', params.status);
       if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
       if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      if (params.search) search.append('search', params.search);
 
       const qs = search.toString();
       const res = await request(`/healing/approvals${qs ? `?${qs}` : ''}`);
@@ -231,6 +232,7 @@ export const selfHealingService = {
       const search = new URLSearchParams();
       if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
       if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      if (params.search) search.append('search', params.search);
 
       const qs = search.toString();
       const res = await request(`/healing/analytics${qs ? `?${qs}` : ''}`);

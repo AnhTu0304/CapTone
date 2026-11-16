@@ -13,6 +13,42 @@ import { request } from './apiClient';
 
 export const adminUsersService = {
   /**
+   * Lấy số liệu thống kê tổng thể người dùng từ hệ thống (Dữ liệu thật 100%)
+   * @returns {Promise<{ total: number, active: number, verified: number }>}
+   */
+  async getUserStats() {
+    try {
+      const [statsRes, allUsersRes] = await Promise.allSettled([
+        request('/admin/dashboard/stats'),
+        request('/users?limit=100'),
+      ]);
+
+      let total = 0;
+      let active = 0;
+      let verified = 0;
+
+      if (statsRes.status === 'fulfilled' && statsRes.value?.data?.users) {
+        total = statsRes.value.data.users.total ?? 0;
+        active = statsRes.value.data.users.active ?? 0;
+      }
+
+      if (allUsersRes.status === 'fulfilled' && allUsersRes.value?.data) {
+        const items = allUsersRes.value.data.items || [];
+        total = allUsersRes.value.data.pagination?.total || items.length || total;
+        if (!active) {
+          active = items.filter((u) => u.status === 'ACTIVE').length;
+        }
+        verified = items.filter((u) => u.email_verified_at).length;
+      }
+
+      return { total, active, verified };
+    } catch (err) {
+      console.warn('[adminUsersService] getUserStats error:', err?.message);
+      return { total: 0, active: 0, verified: 0 };
+    }
+  },
+
+  /**
    * Lấy danh sách người dùng hệ thống có phân trang và bộ lọc
    * @param {Object} [params]
    * @param {number} [params.page=1]

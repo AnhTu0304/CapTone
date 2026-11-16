@@ -20,7 +20,8 @@ import {
   Server,
   Zap,
   Filter,
-  BarChart2
+  BarChart2,
+  AlertTriangle
 } from 'lucide-react';
 
 const CANONICAL_ACTION_TYPES = [
@@ -143,43 +144,214 @@ export const ActionHistoryPage = ({ onNavigate }) => {
     return `${days} ngày trước`;
   };
 
+const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName = 'Tự phục hồi', resolvedNs = 'default') => {
+  if (!rawMsg) return `Đã thực thi ${actionFriendlyName} trên dịch vụ "${targetName}"`;
+
+  let text = String(rawMsg).trim();
+
+  // 1. RBAC 403 Forbidden
+  const rbacMatch = text.match(
+    /User\??\s*"([^"\\]+)\??"\s+cannot\s+(\w+)\s+resource\s+\??"([^"\\]+)\??"(?:\s+in API group\s+\??"([^"\\]*)\??")?(?:\s+in the namespace\s+\??"([^"\\]+)\??")?/i
+  ) || text.match(
+    /User\s+"([^"]+)"\s+cannot\s+(\w+)\s+resource\s+"([^"]+)"(?:\s+in API group\s+"([^"]*)")?(?:\s+in the namespace\s+"([^"]+)")?/i
+  );
+  if (rbacMatch || text.includes('(403)') || text.includes('Forbidden')) {
+    const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
+    const verb = rbacMatch ? rbacMatch[2] : 'patch';
+    const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
+    const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : resolvedNs;
+    return `Thực thi ${actionFriendlyName} trên "${targetName}" thất bại [Lỗi 403 Forbidden]: ServiceAccount "${saUser}" thiếu quyền "${verb}" tài nguyên "${resource}" tại namespace "${targetNs}"`;
+  }
+
+  // 2. HTTP response headers dump
+  if (text.includes('HTTPHeaderDict') || text.includes('HTTP response headers:')) {
+    text = text.split('HTTP response headers:')[0].trim();
+  }
+
+  // 3. Scaling: "deployment/sme-order-service scaled (scale_up) successfully from 5 to 5 replicas in 'default'"
+  const scaleMatch = text.match(
+    /(?:[a-z0-9_-]+\/)?([a-z0-9_-]+)\s+scaled\s+\((scale_up|scale_down)\)\s+successfully\s+from\s+(\w+)\s+to\s+(\d+)\s+replicas(?:\s+in\s+'([^']+)')?/i
+  );
+  if (scaleMatch) {
+    const sTarget = scaleMatch[1] || targetName;
+    const sDir = scaleMatch[2].toLowerCase() === 'scale_up' ? 'mở rộng' : 'thu hẹp';
+    const sFrom = scaleMatch[3];
+    const sTo = scaleMatch[4];
+    const sNs = scaleMatch[5] || resolvedNs;
+    const fromText = sFrom === 'unknown' ? 'số lượng hiện tại' : sFrom;
+    return `Đã điều chỉnh quy mô (${sDir}) thành công cho Deployment "${sTarget}" từ ${fromText} lên ${sTo} bản sao trong namespace "${sNs}".`;
+  }
+
+  // 4. Scale skipped at minimum
+  const scaleMinMatch = text.match(
+    /Workload\s+(?:[a-z0-9_-]+\/)?([a-z0-9_-]+)\s+currently at minimum\s+(\d+)\s+replica(?:\s+in\s+'([^']+)')?,\s+scale down skipped safely/i
+  );
+  if (scaleMinMatch) {
+    const sTarget = scaleMinMatch[1] || targetName;
+    const sNs = scaleMinMatch[3] || resolvedNs;
+    return `Dịch vụ "${sTarget}" hiện đang ở mức tối thiểu 1 bản sao trong namespace "${sNs}", đã bỏ qua thu hẹp để bảo toàn tính sẵn sàng.`;
+  }
+
+  // 5. Rolling restart
+  const restartMatch = text.match(
+    /Zero-downtime rolling restart patched successfully on (?:[a-z0-9_-]+\/)?([a-z0-9_-]+)(?:\s+in namespace\s+'([^']+)')?/i
+  );
+  if (restartMatch) {
+    const rTarget = restartMatch[1] || targetName;
+    const rNs = restartMatch[2] || resolvedNs;
+    return `Đã khởi động lại Pod (Rolling Restart) không gián đoạn cho dịch vụ "${rTarget}" tại namespace "${rNs}".`;
+  }
+
+  // 6. Terminate & replace pod
+  const replacePodMatch = text.match(
+    /Specific unhealthy pod '([^']+)' terminated and successfully replaced by ReplicaSet(?:\s+in\s+'([^']+)')?/i
+  );
+  if (replacePodMatch) {
+    const pName = replacePodMatch[1];
+    const pNs = replacePodMatch[2] || resolvedNs;
+    return `Đã chấm điểm, cô lập và xóa Pod lỗi "${pName}"; ReplicaSet tại namespace "${pNs}" đã tự động khởi tạo Pod mới thay thế thành công.`;
+  }
+
+  // 7. Replaced pod via rolling restart
+  const replaceRollingMatch = text.match(
+    /Replaced pod via rolling restart on (?:[a-z0-9_-]+\/)?([a-z0-9_-]+)(?:\s+in\s+'([^']+)')?/i
+  );
+  if (replaceRollingMatch) {
+    const rTarget = replaceRollingMatch[1] || targetName;
+    const rNs = replaceRollingMatch[2] || resolvedNs;
+    return `Đã thay thế Pod qua cơ chế rolling restart trên dịch vụ "${rTarget}" tại namespace "${rNs}".`;
+  }
+
+  // 8. Rollback
+  const rollbackMatch = text.match(
+    /True Rollback executed:\s*Restored Deployment '([^']+)' from Revision (\d+) back to Revision (\d+)(?:[^\n\r]*)(?:\s+in\s+'([^']+)')?/i
+  );
+  if (rollbackMatch) {
+    const rbTarget = rollbackMatch[1] || targetName;
+    const fromRev = rollbackMatch[2];
+    const toRev = rollbackMatch[3];
+    const rbNs = rollbackMatch[4] || resolvedNs;
+    return `Đã hoàn nguyên (Rollback) thành công Deployment "${rbTarget}" từ bản Revision ${fromRev} về bản Revision ${toRev} trong namespace "${rbNs}".`;
+  }
+
+  // 9. Storage cleanup
+  const storageMatch = text.match(
+    /Ephemeral disk cleanup and emptyDir reclamation executed successfully on ([^' ]+)(?:\s+in\s+'([^']+)')?/i
+  );
+  if (storageMatch) {
+    const sTarget = storageMatch[1] || targetName;
+    const sNs = storageMatch[2] || resolvedNs;
+    return `Đã dọn dẹp bộ nhớ tạm và thu hồi ổ đĩa trống (emptyDir) thành công cho dịch vụ "${sTarget}" tại namespace "${sNs}".`;
+  }
+
+  // 10. Limits adjusted
+  const limitsMatch = text.match(
+    /Adjusted CPU\/RAM resource limits and applied rolling update on (?:[a-z0-9_-]+\/)?([a-z0-9_-]+)(?:\s+in\s+'([^']+)')?/i
+  );
+  if (limitsMatch) {
+    const lTarget = limitsMatch[1] || targetName;
+    const lNs = limitsMatch[2] || resolvedNs;
+    return `Đã điều chỉnh định mức CPU/RAM và cập nhật rolling update cho dịch vụ "${lTarget}" tại namespace "${lNs}".`;
+  }
+
+  // 11. Node cordon
+  const cordonMatch = text.match(
+    /Cordoned degraded node '([^']+)' and rescheduled pods(?:[^\n\r]*)to healthy node '([^']+)'/i
+  );
+  if (cordonMatch) {
+    const cNode = cordonMatch[1];
+    const hNode = cordonMatch[2];
+    return `Đã khóa lập lịch Node suy biến "${cNode}" và di tản Pod an toàn sang Node ổn định "${hNode}".`;
+  }
+
+  // 12. Single-node guard
+  if (text.includes('Single-node cluster guard')) {
+    return `Bảo vệ cụm đơn node: Bỏ qua khóa Node và khởi tạo lại Pod an toàn trên dịch vụ "${targetName}".`;
+  }
+
+  // 13. NetworkPolicy block IP
+  const netBlockMatch = text.match(
+    /NetworkPolicy '([^']+)' (?:deployed|updated) successfully:\s*IP '([^']+)' blocked from accessing ([^' ]+)(?:\s+in namespace\s+'([^']+)')?/i
+  );
+  if (netBlockMatch) {
+    const npPolicy = netBlockMatch[1];
+    const npIp = netBlockMatch[2];
+    const npTarget = netBlockMatch[3] || targetName;
+    const npNs = netBlockMatch[4] || resolvedNs;
+    return `Đã áp dụng chính sách mạng "${npPolicy}": Chặn IP "${npIp}" truy cập vào dịch vụ "${npTarget}" tại namespace "${npNs}".`;
+  }
+
+  // 14. NetworkPolicy unblock
+  const netUnblockMatch = text.match(
+    /NetworkPolicy '([^']+)' removed:\s*IP '([^']+)' unblocked successfully(?:\s+in namespace\s+'([^']+)')?/i
+  );
+  if (netUnblockMatch) {
+    const npIp = netUnblockMatch[2];
+    const npNs = netUnblockMatch[3] || resolvedNs;
+    return `Đã gỡ bỏ chính sách NetworkPolicy: Mở chặn IP "${npIp}" truy cập dịch vụ tại namespace "${npNs}".`;
+  }
+
+  // 15. NO_ACTION telemetry verified
+  if (text.includes('Zero-downtime preserved') || text.includes('NO_ACTION applied')) {
+    return `Giám sát an toàn: Viễn trắc ghi nhận dịch vụ "${targetName}" ổn định, giữ nguyên trạng thái an toàn.`;
+  }
+
+  // 16. Self-healing mitigate action
+  if (text.includes('Self-healing mitigate action')) {
+    return `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}".`;
+  }
+
+  // Clean English verification tag if present
+  text = text.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':');
+  text = text.replace(/Post-Action Verification Failed:?\s*/gi, '');
+
+  return text;
+};
+
   const mapBackendActionToUI = useCallback((item) => {
     const shortId = item.id && item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : (item.id || 'N/A');
-    const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
-    const mttrSec = item.elapsed_seconds ? `${item.elapsed_seconds}s` : `${(durMs / 1000).toFixed(1)}s`;
+
+    let computedDurationMs = 0;
+    if (item.started_at && item.completed_at) {
+      const s = new Date(item.started_at).getTime();
+      const e = new Date(item.completed_at).getTime();
+      if (!isNaN(s) && !isNaN(e) && e >= s) {
+        computedDurationMs = e - s;
+      }
+    }
+    if (!computedDurationMs) {
+      computedDurationMs = item.result?.duration_ms || item.attempts?.[0]?.duration_ms || (item.elapsed_seconds ? Math.round(item.elapsed_seconds * 1000) : 0);
+    }
+    const mttrSec = computedDurationMs > 0
+      ? `${(computedDurationMs / 1000).toFixed(1)}s`
+      : (item.execution_status === 'RUNNING' ? 'Đang chạy' : (item.execution_status === 'PENDING' ? 'Đang chờ' : '0.1s'));
 
     // Strip WORKLOAD/ or any other prefix from target name
     const rawTarget = item.target_name || item.target_id || 'Chưa xác định';
     const targetName = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
 
+    const resolvedNs = item.result?.details?.namespace ||
+      item.result?.namespace ||
+      item.namespace ||
+      (item.result?.message?.match(/namespace "([^"]+)"/)?.[1]) ||
+      (item.error_message?.match(/namespace "([^"]+)"/)?.[1]) ||
+      'default';
+
     const rawActionCode = item.action_type_code || item.action_type_name || 'Tự phục hồi';
     let actionFriendlyName = rawActionCode;
     const upperCode = String(rawActionCode).toUpperCase();
-    if (upperCode.includes('SCALE')) actionFriendlyName = 'Scale Replicas';
+    if (upperCode.includes('DRAIN')) actionFriendlyName = 'Di tản & Cô lập Node (Drain Node)';
+    else if (upperCode.includes('CORDON')) actionFriendlyName = 'Khóa lập lịch Node (Cordon Node)';
+    else if (upperCode.includes('SCALE')) actionFriendlyName = 'Điều chỉnh số lượng bản sao Pod';
     else if (upperCode.includes('RESTART')) actionFriendlyName = 'Khởi động lại Pod';
-    else if (upperCode.includes('ROLLBACK')) actionFriendlyName = 'Rollback Deployment';
+    else if (upperCode.includes('REPLACE')) actionFriendlyName = 'Thay thế Pod';
+    else if (upperCode.includes('ROLLBACK')) actionFriendlyName = 'Khôi phục bản phát hành trước';
     else if (upperCode.includes('CLEANUP')) actionFriendlyName = 'Dọn dẹp tài nguyên';
+    else if (upperCode.includes('BLOCK')) actionFriendlyName = 'Chặn IP bất thường';
     else if (upperCode.includes('NO_ACTION')) actionFriendlyName = 'Giám sát an toàn';
 
     const rawMsg = String(item.result?.message || item.error_message || '');
-    let title = rawMsg || `Thực thi ${actionFriendlyName} trên ${targetName}`;
-    const rbacMatch = rawMsg.match(
-      /User\?\s*"([^"\\]+)\?"\s+cannot\s+(\w+)\s+resource\s+\?"([^"\\]+)\?"(?:\s+in API group\s+\?"([^"\\]*)\?")?(?:\s+in the namespace\s+\?"([^"\\]+)\?")?/i
-    );
-    if (rbacMatch || rawMsg.includes('(403)') || rawMsg.includes('Forbidden')) {
-      const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
-      const verb = rbacMatch ? rbacMatch[2] : 'patch';
-      const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
-      const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : (item.namespace || 'default');
-      title = `Thực thi ${actionFriendlyName} trên "${targetName}" thất bại [Lỗi 403 Forbidden]: ServiceAccount "${saUser}" thiếu quyền "${verb}" tài nguyên "${resource}" tại namespace "${targetNs}"`;
-    } else if (rawMsg.includes('Self-healing mitigate action')) {
-      title =
-        upperCode === 'NO_ACTION'
-          ? `Giám sát an toàn: "${targetName}" ổn định trong ngưỡng an toàn`
-          : `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
-    } else if (rawMsg.includes('HTTPHeaderDict')) {
-      title = rawMsg.split('HTTP response headers:')[0].trim();
-    }
+    let title = translateActionMessageToVi(rawMsg, targetName, actionFriendlyName, resolvedNs);
     const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
 
     const isWaitingApproval =
@@ -196,7 +368,6 @@ export const ActionHistoryPage = ({ onNavigate }) => {
     let effectiveStatus = item.execution_status || 'SUCCEEDED';
 
     if (isWaitingApproval) {
-      // Yêu cầu người dùng: Xóa (PENDING) và xóa chữ 'Đang chờ phê duyệt' bị lặp lại
       resultText = 'Chờ duyệt HITL';
       verified = '';
       effectiveMttr = 'Đang chờ';
@@ -219,12 +390,25 @@ export const ActionHistoryPage = ({ onNavigate }) => {
       effectiveMttr = '-';
       effectiveStatus = 'CANCELLED';
     } else if (item.execution_status === 'SUCCEEDED') {
-      resultText = 'Thành công (100%)';
-      const rawVer = item.verification?.verification_type || '';
-      verified = rawVer === 'K8S_POST_HEALING_PROBE' ? 'Đã xác thực K8s Probe' : (rawVer || 'Đã xác thực an toàn');
-      effectiveStatus = 'SUCCEEDED';
-      if (title.toLowerCase().includes('chờ phê duyệt')) {
-        title = `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
+      const hasVerificationFailed =
+        item.verification?.verification_result === false ||
+        String(item.error_message || '').toLowerCase().includes('hậu kiểm thất bại') ||
+        String(item.result?.message || '').toLowerCase().includes('hậu kiểm thất bại');
+
+      if (hasVerificationFailed) {
+        resultText = 'Hậu kiểm vi phạm';
+        verified = item.verification?.verification_type === 'K8S_POST_HEALING_PROBE'
+          ? 'Probe K8s phát hiện bất thường'
+          : 'Hậu kiểm SLO chưa đạt';
+        effectiveStatus = 'VERIFICATION_FAILED';
+      } else {
+        resultText = 'Thành công (100%)';
+        const rawVer = item.verification?.verification_type || '';
+        verified = rawVer === 'K8S_POST_HEALING_PROBE' ? 'Đã xác thực K8s Probe' : (rawVer || 'Đã xác thực an toàn');
+        effectiveStatus = 'SUCCEEDED';
+        if (title.toLowerCase().includes('chờ phê duyệt')) {
+          title = `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
+        }
       }
     }
 
@@ -234,20 +418,24 @@ export const ActionHistoryPage = ({ onNavigate }) => {
     title = title.replace(/\s{2,}/g, ' ').trim();
     if (!title.endsWith('.')) title += '.';
 
+    const cleanErr = item.error_message
+      ? item.error_message.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':').replace(/Post-Action Verification Failed:?\s*/gi, '').replace(/\s{2,}/g, ' ').trim()
+      : null;
+
     return {
       id: shortId,
       rawId: item.id,
       title,
-      target: targetName, // Xóa WORKLOAD/, chỉ hiển thị tên dịch vụ/target sạch
+      target: targetName,
       targetName,
-      namespace: item.namespace || 'default',
+      namespace: resolvedNs,
       policy: policyName,
       mttr: effectiveMttr,
       result: resultText,
       timestamp: formatRelativeTime(item.completed_at || item.created_at),
       verifiedBy: verified,
       status: effectiveStatus,
-      errorMessage: item.error_message || null,
+      errorMessage: cleanErr,
       rawItem: item,
     };
   }, []);
@@ -410,6 +598,10 @@ export const ActionHistoryPage = ({ onNavigate }) => {
       }
 
       return true;
+    }).sort((a, b) => {
+      const timeA = new Date(a.rawItem?.completed_at || a.rawItem?.started_at || a.rawItem?.created_at || 0).getTime();
+      const timeB = new Date(b.rawItem?.completed_at || b.rawItem?.started_at || b.rawItem?.created_at || 0).getTime();
+      return timeB - timeA;
     });
   }, [
     actions,
@@ -598,16 +790,30 @@ export const ActionHistoryPage = ({ onNavigate }) => {
     <div className="dashboard-action-history-page" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <History size={22} color="var(--dash-primary)" />
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <History size={20} color="#059669" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Lịch Sử Tự Phục Hồi & Báo Cáo Hiệu Quả MTTR
             </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Theo dõi toàn diện nhật ký thực thi, đối soát thời gian phục hồi MTTR và cam kết chất lượng dịch vụ (SLA)
+            </p>
           </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Theo dõi toàn diện nhật ký thực thi, đối soát thời gian phục hồi MTTR và cam kết chất lượng dịch vụ (SLA)
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1153,9 +1359,11 @@ export const ActionHistoryPage = ({ onNavigate }) => {
                   const isCancelled = rec.status === 'CANCELLED';
                   const isFailed = rec.status === 'FAILED';
                   const isPending = rec.status === 'PENDING' || (rec.result && rec.result.includes('Chờ duyệt'));
+                  const isVerificationFailed = rec.status === 'VERIFICATION_FAILED';
 
                   let statusColor = '#059669';
                   if (isPending || isCancelled) statusColor = '#D97706';
+                  if (isVerificationFailed) statusColor = '#D97706';
                   if (isFailed) statusColor = '#DC2626';
 
                   return (
@@ -1196,6 +1404,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: statusColor, fontWeight: 600 }}>
                             {isPending && <Clock size={13} color="#D97706" />}
+                            {isVerificationFailed && <AlertTriangle size={13} color="#D97706" />}
                             {isSucceeded && <CheckCircle2 size={13} />}
                             {isCancelled && <XCircle size={13} />}
                             {isFailed && <AlertCircle size={13} />}

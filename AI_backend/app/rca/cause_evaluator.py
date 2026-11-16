@@ -96,7 +96,7 @@ class CauseEvaluator:
                 related_risks.append(RelatedRiskItem(
                     risk_type=r.risk_type,
                     confidence=r.confidence,
-                    description=f"Mô hình học sâu GRU cảnh báo nguy cơ {r.risk_type} ({r.confidence:.1%})",
+                    description=f"Mô hình học sâu AI cảnh báo nguy cơ {r.risk_type} ({r.confidence:.1%})",
                 ))
 
         # Collect observed symptoms (Probe Timeout, Probe Failures, etc.)
@@ -197,9 +197,9 @@ class CauseEvaluator:
         if has_failed_sched:
             for_items = [e.description for e in valid_evs if e.evidence_type == EvidenceType.FAILED_SCHEDULING]
             return CauseEvaluationResult(
-                cause_code="deployment_failure",
-                cause_label=self.CAUSE_LABELS["deployment_failure"],
-                cause_label_vi=self.CAUSE_LABELS_VI["deployment_failure"],
+                cause_code="scheduling_failure",
+                cause_label=self.CAUSE_LABELS["scheduling_failure"],
+                cause_label_vi=self.CAUSE_LABELS_VI["scheduling_failure"],
                 evidence_status="CONFIRMED",
                 confidence=0.92,
                 evidence_for=for_items,
@@ -207,7 +207,7 @@ class CauseEvaluator:
                 missing_evidence=[],
                 related_risks=related_risks,
                 symptoms=symptoms,
-                explanation="Kubernetes Scheduler không thể xếp lịch cho Pod (FailedScheduling) do không đủ tài nguyên khả dụng trên cụm.",
+                explanation="Kubernetes Scheduler không thể xếp lịch cho Pod (FailedScheduling) do không đủ tài nguyên khả dụng hoặc ràng buộc Node trên cụm.",
             )
 
         has_deploy_event = any(
@@ -517,6 +517,57 @@ class CauseEvaluator:
                 related_risks=related_risks,
                 symptoms=symptoms,
                 explanation="Dịch vụ bị suy giảm hiệu năng xử lý (độ trễ phản hồi tăng cao).",
+            )
+
+        # ----------------------------------------------------
+        # 7.1. EVALUATE: UNDERUTILIZED / SCALE DOWN CANDIDATE
+        # ----------------------------------------------------
+        has_scale_down_prediction = bool(
+            prediction
+            and prediction.detected_risks
+            and any(r.risk_type == "SCALE_DOWN_CANDIDATE" for r in prediction.detected_risks)
+        )
+        cur_replicas = getattr(getattr(kubernetes_raw, "deployment", None), "desired_replicas", None) or getattr(getattr(kubernetes_raw, "deployment", None), "replicas", None)
+
+        cpu_val = getattr(payload.metrics, "cpu", None) if (payload and payload.metrics) else None
+        ram_val = (getattr(payload.metrics, "ram", None) or getattr(payload.metrics, "memory", None)) if (payload and payload.metrics) else None
+        err_val = getattr(payload.metrics, "http_5xx_rate", None) if (payload and payload.metrics) else None
+
+        is_metrics_idle = (
+            (cpu_val is None or cpu_val < 35.0)
+            and (ram_val is None or ram_val < 60.0)
+            and (err_val is None or err_val < 1.0)
+        )
+
+        has_any_critical_fault = (
+            has_oom_killed or has_high_ram or has_oom_log
+            or has_image_pull or has_failed_sched
+            or has_crash_log or has_5xx or has_crashloop or has_restarts
+            or has_high_cpu or has_high_req_rate or has_high_latency
+        )
+
+        if not has_any_critical_fault and (has_scale_down_prediction or is_metrics_idle) and cur_replicas is not None and cur_replicas >= 2:
+            scale_down_evs = []
+            if has_scale_down_prediction:
+                scale_down_evs.append("Mô hình AI 7-Heads dự báo cơ hội thu hẹp Pod dư thừa (SCALE_DOWN_CANDIDATE)")
+            if cpu_val is not None:
+                scale_down_evs.append(f"Mức sử dụng CPU rất thấp ({cpu_val:.1f}%), dưới ngưỡng hoạt động định mức")
+            if ram_val is not None:
+                scale_down_evs.append(f"Mức sử dụng RAM an toàn ({ram_val:.1f}%)")
+            scale_down_evs.append(f"Số lượng bản sao hiện tại ({cur_replicas} replicas) vượt nhu cầu tải thực tế")
+
+            return CauseEvaluationResult(
+                cause_code="underutilized",
+                cause_label=self.CAUSE_LABELS["underutilized"],
+                cause_label_vi=self.CAUSE_LABELS_VI["underutilized"],
+                evidence_status="CONFIRMED" if has_scale_down_prediction else "PROBABLE",
+                confidence=0.88 if has_scale_down_prediction else 0.72,
+                evidence_for=scale_down_evs,
+                evidence_against=[],
+                missing_evidence=[],
+                related_risks=related_risks,
+                symptoms=symptoms,
+                explanation=f"Dịch vụ đang hoạt động ổn định ở mức tải thấp với {cur_replicas} replicas; có thể thu hẹp quy mô (Scale Down) để tối ưu hóa tài nguyên cụm.",
             )
 
         # ----------------------------------------------------

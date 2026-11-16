@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bell,
   Send,
   AlertTriangle,
-  Info,
   CheckCircle2,
   Trash2,
-  Eye,
   Megaphone,
   Radio,
-  Clock,
   ShieldAlert,
-  UserCheck,
   Building2,
-  Layers,
+  RefreshCw,
+  Mail,
 } from 'lucide-react';
+import {
+  fetchAdminBroadcasts,
+  createAdminBroadcast,
+  deleteAdminBroadcast,
+} from '../../../services/adminBroadcastService';
 
 export const AdminBroadcastPage = () => {
   const [title, setTitle] = useState('');
@@ -22,95 +24,109 @@ export const AdminBroadcastPage = () => {
   const [priority, setPriority] = useState('INFO'); // 'INFO' | 'WARNING' | 'CRITICAL'
   const [audience, setAudience] = useState('ALL'); // 'ALL' | 'OWNERS' | 'DEVOPS'
   const [showStickyBanner, setShowStickyBanner] = useState(true);
+  const [sendEmail, setSendEmail] = useState(false);
 
-  // Broadcasts list state
-  const [broadcasts, setBroadcasts] = useState([
-    {
-      id: 'BC-2026-09',
-      title: 'Thông báo cập nhật thuật toán AI Model v2.4.1 (ONNX Runtime)',
-      content: 'Hệ thống đã triển khai phiên bản mô hình phát hiện dị thường mới với độ trễ suy luận chỉ 1.2ms và giảm 82% tỷ lệ báo động nhầm.',
-      priority: 'INFO',
-      audience: 'Tất cả người dùng',
-      status: 'Đang hiển thị',
-      date: '21/10/2026 22:00',
-      views: 1240,
-    },
-    {
-      id: 'BC-2026-08',
-      title: 'Bảo trì hạ tầng cơ sở dữ liệu định kỳ Quý 4',
-      content: 'Hệ thống sẽ tiến hành bảo trì tối ưu hóa cơ sở dữ liệu PostgreSQL trong 15 phút vào 02:00 Chủ Nhật ngày 25/10/2026.',
-      priority: 'WARNING',
-      audience: 'Chủ Doanh nghiệp & DevOps',
-      status: 'Đã lên lịch',
-      date: '19/10/2026 14:30',
-      views: 890,
-    },
-    {
-      id: 'BC-2026-07',
-      title: 'Cảnh báo an ninh: Đã kích hoạt cơ chế mã hóa kiểm toán SHA-256',
-      content: 'Toàn bộ thao tác phân quyền và tự phục hồi từ nay được bảo vệ bằng chữ ký số bất khả xâm phạm.',
-      priority: 'INFO',
-      audience: 'Tất cả người dùng',
-      status: 'Đã kết thúc',
-      date: '10/10/2026 09:00',
-      views: 2450,
-    },
-  ]);
-
-  // Hộp thư Cảnh báo Hệ thống dành cho Super Admin
-  const [systemAlerts, setSystemAlerts] = useState([
-    {
-      id: 'ALT-101',
-      title: 'Tổ chức mới đăng ký tài khoản cần phê duyệt hạn mức',
-      source: 'FinFlow Pay Platform',
-      time: '10 phút trước',
-      type: 'ORG',
-      unread: true,
-    },
-    {
-      id: 'ALT-102',
-      title: 'Mô hình Pod Failure Predictor đạt ngưỡng an toàn drift score 5.2%',
-      source: 'AI Governance Engine',
-      time: '1 giờ trước',
-      type: 'AI',
-      unread: true,
-    },
-    {
-      id: 'ALT-103',
-      title: 'Phát hiện 5 lần đăng nhập thất bại liên tiếp từ IP lạ (Đã tự động khóa tạm thời)',
-      source: 'Security Firewall',
-      time: '3 giờ trước',
-      type: 'SECURITY',
-      unread: false,
-    },
-  ]);
+  // Broadcasts list & alerts state from PostgreSQL
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [systemAlerts, setSystemAlerts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSendBroadcast = (e) => {
+  // Nạp dữ liệu từ PostgreSQL qua Backend API
+  const loadData = useCallback(async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
+    else setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const data = await fetchAdminBroadcasts();
+      if (Array.isArray(data?.broadcasts)) {
+        setBroadcasts(data.broadcasts);
+      }
+      if (Array.isArray(data?.systemAlerts)) {
+        setSystemAlerts(data.systemAlerts);
+      }
+    } catch (err) {
+      console.warn('[AdminBroadcastPage] Lỗi tải dữ liệu thông báo toàn mạng:', err);
+      setErrorMessage(err.message || 'Không thể nạp dữ liệu thông báo từ máy chủ.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Xử lý gửi thông báo mới
+  const handleSendBroadcast = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    const trimmedTitle = title.trim();
+    const trimmedContent = content.trim();
 
-    const newBroadcast = {
-      id: `BC-2026-${String(broadcasts.length + 10).padStart(2, '0')}`,
-      title: title.trim(),
-      content: content.trim(),
-      priority,
-      audience: audience === 'ALL' ? 'Tất cả người dùng' : (audience === 'OWNERS' ? 'Chủ Doanh nghiệp' : 'Kỹ sư DevOps'),
-      status: 'Đang hiển thị',
-      date: 'Vừa xong',
-      views: 1,
-    };
+    if (!trimmedTitle || trimmedTitle.length < 3) {
+      setErrorMessage('Tiêu đề thông báo phải có ít nhất 3 ký tự.');
+      return;
+    }
 
-    setBroadcasts([newBroadcast, ...broadcasts]);
-    setTitle('');
-    setContent('');
-    setFeedbackMessage('Đã phát sóng thông báo toàn mạng thành công!');
-    setTimeout(() => setFeedbackMessage(''), 4000);
+    if (!trimmedContent || trimmedContent.length < 5) {
+      setErrorMessage('Nội dung thông báo phải có ít nhất 5 ký tự.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedbackMessage('');
+    setErrorMessage('');
+
+    try {
+      const newBroadcast = await createAdminBroadcast({
+        title: trimmedTitle,
+        content: trimmedContent,
+        priority,
+        audience,
+        showStickyBanner,
+        sendEmail,
+      });
+
+      setBroadcasts((prev) => [newBroadcast, ...prev]);
+      setTitle('');
+      setContent('');
+      setFeedbackMessage(
+        sendEmail || priority === 'CRITICAL'
+          ? 'Đã phát sóng thông báo toàn mạng và kích hoạt tiến trình gửi email tới người dùng thành công!'
+          : 'Đã phát sóng thông báo toàn mạng và gửi vào hộp thư người dùng thành công!'
+      );
+      setTimeout(() => setFeedbackMessage(''), 5000);
+    } catch (err) {
+      let msg = err.message || 'Lỗi khi phát sóng thông báo vào hệ thống cơ sở dữ liệu.';
+      if (typeof msg === 'string' && msg.trim().startsWith('[') && msg.includes('"message"')) {
+        try {
+          const parsed = JSON.parse(msg);
+          if (Array.isArray(parsed) && parsed[0]?.message) {
+            msg = parsed[0].message;
+          }
+        } catch {}
+      }
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteBroadcast = (id) => {
-    setBroadcasts(broadcasts.filter((b) => b.id !== id));
+  // Xử lý gỡ bỏ thông báo
+  const handleDeleteBroadcast = async (id) => {
+    try {
+      await deleteAdminBroadcast(id);
+      setBroadcasts((prev) => prev.filter((b) => b.id !== id));
+      setFeedbackMessage('Đã gỡ bỏ thông báo toàn mạng thành công!');
+      setTimeout(() => setFeedbackMessage(''), 4000);
+    } catch (err) {
+      setErrorMessage(err.message || 'Không thể gỡ bỏ thông báo này.');
+    }
   };
 
   return (
@@ -125,10 +141,34 @@ export const AdminBroadcastPage = () => {
         paddingBottom: '48px',
       }}
     >
-      {/* 1. Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {/* 1. Page Header Chuẩn Hóa Với Logo Gradient */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
+            }}
+          >
+            <Bell size={24} />
+          </div>
+          <div>
             <h1
               style={{
                 fontSize: '1.5rem',
@@ -138,35 +178,52 @@ export const AdminBroadcastPage = () => {
                 margin: 0,
               }}
             >
-              Trung Tâm Phát Thông Báo Toàn Mạng (System Broadcast)
+              Trung Tâm Phát Thông Báo Toàn Mạng
             </h1>
-            <span
+            <p
               style={{
-                padding: '2px 8px',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(5, 150, 105, 0.1)',
-                color: '#059669',
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                border: '1px solid rgba(5, 150, 105, 0.25)',
+                fontSize: '0.8125rem',
+                color: 'var(--dash-text-secondary)',
+                margin: '4px 0 0 0',
               }}
             >
-              SUPER ADMIN
-            </span>
+              Soạn và ghim thông báo bảo trì, tin tức nâng cấp AI hoặc cảnh báo an ninh cho toàn thể người dùng nền tảng.
+            </p>
           </div>
-          <p
+        </div>
+
+        {/* Nút Làm Mới */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={isRefreshing || isLoading}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 16px',
+              backgroundColor: isRefreshing ? '#94A3B8' : '#FFFFFF',
+              color: 'var(--dash-text-primary)',
+              borderRadius: '9px',
+              border: '1px solid var(--dash-border)',
               fontSize: '0.8125rem',
-              color: 'var(--dash-text-secondary)',
-              marginTop: '4px',
-              margin: '4px 0 0 0',
+              fontWeight: 600,
+              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: 'var(--dash-shadow-xs)',
             }}
           >
-            Soạn và ghim thông báo bảo trì, tin tức nâng cấp AI hoặc cảnh báo an ninh cho toàn thể người dùng nền tảng.
-          </p>
+            <RefreshCw
+              size={13}
+              style={{ animation: isRefreshing || isLoading ? 'spin 1s linear infinite' : 'none' }}
+            />
+            <span>{isRefreshing ? 'Đang Nạp...' : 'Làm Mới'}</span>
+          </button>
         </div>
       </div>
 
+      {/* Thông Báo Thành Công */}
       {feedbackMessage && (
         <div
           style={{
@@ -187,7 +244,28 @@ export const AdminBroadcastPage = () => {
         </div>
       )}
 
-      {/* 2. Main Grid: Form on Left + System Alerts on Right */}
+      {/* Thông Báo Lỗi */}
+      {errorMessage && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#991B1B',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <AlertTriangle size={16} color="#DC2626" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* 2. Main Grid: Form Soạn Thảo (Trái) + Cảnh Báo Hệ Thống (Phải) */}
       <div
         style={{
           display: 'grid',
@@ -195,7 +273,7 @@ export const AdminBroadcastPage = () => {
           gap: '24px',
         }}
       >
-        {/* Compose Form Card */}
+        {/* Form Soạn Thông Báo */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -214,12 +292,21 @@ export const AdminBroadcastPage = () => {
 
           <form onSubmit={handleSendBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Tiêu đề thông báo *
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                  marginBottom: '6px',
+                }}
+              >
+                Tiêu đề thông báo * <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--dash-text-muted)' }}>(tối thiểu 3 ký tự)</span>
               </label>
               <input
                 type="text"
                 required
+                minLength={3}
                 placeholder="VD: Nâng cấp mô hình AI v2.4 hoặc Lịch bảo trì cụm..."
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -236,13 +323,22 @@ export const AdminBroadcastPage = () => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Nội dung chi tiết *
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--dash-text-primary)',
+                  marginBottom: '6px',
+                }}
+              >
+                Nội dung chi tiết * <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--dash-text-muted)' }}>(tối thiểu 5 ký tự)</span>
               </label>
               <textarea
                 required
+                minLength={5}
                 rows={4}
-                placeholder="Nhập nội dung thông báo gửi tới các khách hàng và người dùng..."
+                placeholder="Nhập nội dung thông báo gửi tới các khách hàng và người dùng (ít nhất 5 ký tự)..."
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 style={{
@@ -260,7 +356,15 @@ export const AdminBroadcastPage = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)', marginBottom: '4px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: 'var(--dash-text-muted)',
+                    marginBottom: '4px',
+                  }}
+                >
                   Mức độ ưu tiên
                 </label>
                 <select
@@ -283,7 +387,15 @@ export const AdminBroadcastPage = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)', marginBottom: '4px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: 'var(--dash-text-muted)',
+                    marginBottom: '4px',
+                  }}
+                >
                   Đối tượng tiếp nhận
                 </label>
                 <select
@@ -306,21 +418,52 @@ export const AdminBroadcastPage = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-              <input
-                type="checkbox"
-                id="stickyBannerCheck"
-                checked={showStickyBanner}
-                onChange={(e) => setShowStickyBanner(e.target.checked)}
-                style={{ cursor: 'pointer' }}
-              />
-              <label htmlFor="stickyBannerCheck" style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', cursor: 'pointer' }}>
-                Ghim thanh thông báo nổi (Banner) trên đầu màn hình của người dùng
-              </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="stickyBannerCheck"
+                  checked={showStickyBanner}
+                  onChange={(e) => setShowStickyBanner(e.target.checked)}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--dash-primary)' }}
+                />
+                <label
+                  htmlFor="stickyBannerCheck"
+                  style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', cursor: 'pointer' }}
+                >
+                  Ghim thanh thông báo nổi (Banner) trên đầu màn hình của người dùng
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="sendEmailCheck"
+                  checked={sendEmail}
+                  onChange={(e) => setSendEmail(e.target.checked)}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#059669' }}
+                />
+                <label
+                  htmlFor="sendEmailCheck"
+                  style={{
+                    fontSize: '0.8125rem',
+                    color: sendEmail ? '#065F46' : 'var(--dash-text-primary)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Mail size={15} color={sendEmail ? '#059669' : '#64748B'} />
+                  <span>Đồng thời gửi email thông báo này tới hòm thư người dùng (SMTP Gmail)</span>
+                </label>
+              </div>
             </div>
 
             <button
               type="submit"
+              disabled={isSubmitting}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -329,21 +472,22 @@ export const AdminBroadcastPage = () => {
                 padding: '11px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: '#059669',
+                backgroundColor: isSubmitting ? '#94A3B8' : '#059669',
                 color: '#FFFFFF',
                 fontSize: '0.875rem',
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 marginTop: '6px',
+                transition: 'background-color 0.15s ease',
               }}
             >
               <Send size={15} />
-              <span>Phát Thông Báo Toàn Mạng Ngay</span>
+              <span>{isSubmitting ? 'Đang Phát Sóng...' : 'Phát Thông Báo Toàn Mạng Ngay'}</span>
             </button>
           </form>
         </div>
 
-        {/* System Alerts Inbox for Super Admin */}
+        {/* Hộp Thư Cảnh Báo An Ninh & Mô Hình AI */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -391,8 +535,19 @@ export const AdminBroadcastPage = () => {
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
                     {alert.title}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                    <span>Nguồn: <strong>{alert.source}</strong></span>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '4px',
+                      fontSize: '0.6875rem',
+                      color: 'var(--dash-text-muted)',
+                    }}
+                  >
+                    <span>
+                      Nguồn: <strong>{alert.source}</strong>
+                    </span>
                     <span>&bull;</span>
                     <span>{alert.time}</span>
                   </div>
@@ -413,7 +568,14 @@ export const AdminBroadcastPage = () => {
             ))}
           </div>
 
-          <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px dashed var(--dash-border)', textAlign: 'center' }}>
+          <div
+            style={{
+              marginTop: '16px',
+              paddingTop: '12px',
+              borderTop: '1px dashed var(--dash-border)',
+              textAlign: 'center',
+            }}
+          >
             <button
               type="button"
               onClick={() => {
@@ -434,7 +596,7 @@ export const AdminBroadcastPage = () => {
         </div>
       </div>
 
-      {/* 3. Broadcasts History Table */}
+      {/* 3. Bảng Lịch Sử Thông Báo Đã Phát Sóng Từ PostgreSQL */}
       <div
         style={{
           backgroundColor: '#FFFFFF',
@@ -449,14 +611,20 @@ export const AdminBroadcastPage = () => {
             Lịch Sử Thông Báo Đã Phát Sóng ({broadcasts.length})
           </h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', margin: '2px 0 0 0' }}>
-            Quản lý và gỡ bỏ các thông báo đã gửi cho toàn thể hệ thống
+            Dữ liệu thời gian thực được đồng bộ trực tiếp từ cơ sở dữ liệu PostgreSQL
           </p>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
-              <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)' }}>
+              <tr
+                style={{
+                  backgroundColor: 'var(--dash-bg-canvas)',
+                  borderBottom: '1px solid var(--dash-border)',
+                  color: 'var(--dash-text-muted)',
+                }}
+              >
                 <th style={{ padding: '12px 20px', fontWeight: 600 }}>TIÊU ĐỀ THÔNG BÁO</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>MỨC ĐỘ</th>
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>ĐỐI TƯỢNG</th>
@@ -467,107 +635,143 @@ export const AdminBroadcastPage = () => {
               </tr>
             </thead>
             <tbody>
-              {broadcasts.map((b) => (
-                <tr
-                  key={b.id}
-                  style={{
-                    borderBottom: '1px solid var(--dash-border)',
-                    transition: 'background-color 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <td style={{ padding: '14px 20px' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{b.title}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
-                      {b.content.slice(0, 80)}...
-                    </div>
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '0.6875rem',
-                        fontWeight: 700,
-                        backgroundColor:
-                          b.priority === 'CRITICAL'
-                            ? '#FEF2F2'
-                            : b.priority === 'WARNING'
-                            ? '#FEFCE8'
-                            : '#EFF6FF',
-                        color:
-                          b.priority === 'CRITICAL'
-                            ? '#DC2626'
-                            : b.priority === 'WARNING'
-                            ? '#D97706'
-                            : '#1D4ED8',
-                        border: `1px solid ${
-                          b.priority === 'CRITICAL'
-                            ? '#FECACA'
-                            : b.priority === 'WARNING'
-                            ? '#FDE68A'
-                            : '#BFDBFE'
-                        }`,
-                      }}
-                    >
-                      {b.priority}
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontWeight: 500 }}>
-                    {b.audience}
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: b.status === 'Đang hiển thị' ? '#059669' : 'var(--dash-text-muted)',
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          backgroundColor: b.status === 'Đang hiển thị' ? '#059669' : '#94A3B8',
-                        }}
-                      />
-                      {b.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                    {b.date}
-                  </td>
-                  <td style={{ padding: '14px 16px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {b.views} views
-                  </td>
-                  <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteBroadcast(b.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        padding: '6px',
-                        cursor: 'pointer',
-                        color: '#DC2626',
-                        borderRadius: '6px',
-                      }}
-                      title="Gỡ bỏ thông báo này"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+              {isLoading && broadcasts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                    Đang nạp dữ liệu thông báo từ máy chủ...
                   </td>
                 </tr>
-              ))}
+              ) : broadcasts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                    Chưa có thông báo toàn mạng nào được phát sóng.
+                  </td>
+                </tr>
+              ) : (
+                broadcasts.map((b) => (
+                  <tr
+                    key={b.id}
+                    style={{
+                      borderBottom: '1px solid var(--dash-border)',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <td style={{ padding: '14px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '0.6875rem',
+                            fontFamily: 'var(--font-mono)',
+                            color: '#059669',
+                            backgroundColor: 'rgba(5, 150, 105, 0.08)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {b.broadcast_code || 'BC'}
+                        </span>
+                        <span style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{b.title}</span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '4px' }}>
+                        {b.content?.slice(0, 90)}...
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          backgroundColor:
+                            b.priority === 'CRITICAL'
+                              ? '#FEF2F2'
+                              : b.priority === 'WARNING'
+                              ? '#FEFCE8'
+                              : '#EFF6FF',
+                          color:
+                            b.priority === 'CRITICAL'
+                              ? '#DC2626'
+                              : b.priority === 'WARNING'
+                              ? '#D97706'
+                              : '#1D4ED8',
+                          border: `1px solid ${
+                            b.priority === 'CRITICAL'
+                              ? '#FECACA'
+                              : b.priority === 'WARNING'
+                              ? '#FDE68A'
+                              : '#BFDBFE'
+                          }`,
+                        }}
+                      >
+                        {b.priority}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px', color: 'var(--dash-text-secondary)', fontWeight: 500 }}>
+                      {b.audience}
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: b.status === 'Đang hiển thị' ? '#059669' : 'var(--dash-text-muted)',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            backgroundColor: b.status === 'Đang hiển thị' ? '#059669' : '#94A3B8',
+                          }}
+                        />
+                        {b.status}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        padding: '14px 16px',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.75rem',
+                        color: 'var(--dash-text-muted)',
+                      }}
+                    >
+                      {b.formatted_date || b.created_at || 'Vừa xong'}
+                    </td>
+                    <td style={{ padding: '14px 16px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                      {b.views_count ?? b.views ?? 0} lượt
+                    </td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBroadcast(b.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: '6px',
+                          cursor: 'pointer',
+                          color: '#DC2626',
+                          borderRadius: '6px',
+                        }}
+                        title="Gỡ bỏ thông báo này khỏi hệ thống"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

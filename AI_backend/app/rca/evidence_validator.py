@@ -209,7 +209,7 @@ class EvidenceValidator:
             issues.append(ValidationIssue(
                 issue_type="PREDICTIVE_RISK_NOTE",
                 evidence_item=None,
-                reason=f"Mô hình học sâu GRU cảnh báo rủi ro OOM ({gru_oom.get('confidence', 0):.1%}); viễn trắc thời điểm hiện tại ghi nhận RAM an toàn",
+                reason=f"Mô hình học sâu AI cảnh báo rủi ro OOM ({gru_oom.get('confidence', 0):.1%}); viễn trắc thời điểm hiện tại ghi nhận RAM an toàn",
             ))
 
         # Rule C: CPU usage normal (< 70%) while Latency is high (>= 650ms)

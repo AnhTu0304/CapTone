@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { 
   BrainCircuit,
-  Sparkles, 
   Cpu, 
   RefreshCw,
   Scale
@@ -77,7 +76,7 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
       case 'overview':
       default:
         return {
-          title: 'Tổng Quan Động Cơ AI & Tự Động Hóa (AI Platform Overview)',
+          title: 'Tổng Quan Động Cơ AI & Tự Động Hóa',
           desc: 'Giám sát nhịp đập hoạt động của toàn bộ động cơ trí tuệ nhân tạo, lưu lượng suy luận và khối lượng phân tích RCA.',
           icon: BrainCircuit,
         };
@@ -99,19 +98,15 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
         paddingBottom: '40px',
       }}
     >
-      {/* 1. Top Page Header Banner */}
+      {/* 1. Top Page Header Banner (Không viền bên ngoài) */}
       <div
         style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          borderRadius: '16px',
-          padding: '20px 24px',
-          boxShadow: 'var(--dash-shadow-xs)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '16px',
+          padding: '4px 0',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -144,40 +139,6 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
               >
                 {meta.title}
               </h1>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '3px 10px',
-                  borderRadius: '9999px',
-                  backgroundColor: '#ECFDF5',
-                  color: '#059669',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  border: '1px solid #A7F3D0',
-                }}
-              >
-                <Sparkles size={12} color="#059669" />
-                eBPF + AI Engine
-              </span>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '3px 10px',
-                  borderRadius: '9999px',
-                  backgroundColor: '#EFF6FF',
-                  color: '#1D4ED8',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  border: '1px solid #BFDBFE',
-                }}
-              >
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
-                Độ trễ: 1.2ms
-              </span>
             </div>
             <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
               {meta.desc}

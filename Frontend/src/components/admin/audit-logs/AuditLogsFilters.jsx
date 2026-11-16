@@ -8,6 +8,7 @@ import { Search, RotateCcw, X, Filter } from 'lucide-react';
  */
 export const AuditLogsFilters = ({
   filters,
+  clusters = [],
   onFilterChange,
   onResetFilters,
   onRemoveFilterChip,
@@ -19,7 +20,7 @@ export const AuditLogsFilters = ({
     actorType = 'ALL',
     action = 'ALL',
     resourceType = 'ALL',
-    organization = 'ALL',
+    cluster = 'ALL',
     status = 'ALL',
   } = filters;
 
@@ -46,8 +47,8 @@ export const AuditLogsFilters = ({
   if (resourceType !== 'ALL') {
     activeChips.push({ key: 'resourceType', label: `Tài nguyên: ${resourceType}` });
   }
-  if (organization !== 'ALL') {
-    activeChips.push({ key: 'organization', label: `Tổ chức: ${organization}` });
+  if (cluster !== 'ALL') {
+    activeChips.push({ key: 'cluster', label: `Cụm K8s: ${cluster}` });
   }
   if (status !== 'ALL') {
     activeChips.push({ key: 'status', label: `Trạng thái: ${status}` });
@@ -203,18 +204,18 @@ export const AuditLogsFilters = ({
         >
           <option value="ALL">Tất cả tài nguyên (Resource)</option>
           <option value="Deployment">Deployment</option>
+          <option value="Pod">Pod</option>
           <option value="Node">Node</option>
           <option value="Policy">Policy</option>
-          <option value="Organization">Organization</option>
           <option value="Cluster">Cluster</option>
           <option value="Secret">Secret</option>
         </select>
 
-        {/* 5. Organization Filter */}
+        {/* 5. Cluster Filter */}
         <select
-          aria-label="Lọc theo tổ chức"
-          value={organization}
-          onChange={(e) => onFilterChange('organization', e.target.value)}
+          aria-label="Lọc theo cụm K8s"
+          value={cluster}
+          onChange={(e) => onFilterChange('cluster', e.target.value)}
           style={{
             padding: '8px 10px',
             borderRadius: '8px',
@@ -226,12 +227,23 @@ export const AuditLogsFilters = ({
             cursor: 'pointer',
           }}
         >
-          <option value="ALL">Tất cả tổ chức (Organization)</option>
-          <option value="FinTech Global">FinTech Global</option>
-          <option value="Retail Corp">Retail Corp</option>
-          <option value="LogiChain Logistics">LogiChain Logistics</option>
-          <option value="TechCorp Solutions">TechCorp Solutions</option>
-          <option value="Global Platform">Global Platform</option>
+          <option value="ALL">Tất cả cụm K8s (Cluster)</option>
+          {clusters.length > 0 ? (
+            clusters.map((c) => {
+              const val = c.name || c.id;
+              return (
+                <option key={c.id || val} value={val}>
+                  {c.name || val}
+                </option>
+              );
+            })
+          ) : (
+            <>
+              <option value="fyuyu">fyuyu</option>
+              <option value="cluster-k8s-sme-01">cluster-k8s-sme-01</option>
+              <option value="minikube">minikube</option>
+            </>
+          )}
         </select>
 
         {/* 6. Status Filter */}
@@ -348,6 +360,7 @@ export const AuditLogsFilters = ({
 
 AuditLogsFilters.propTypes = {
   filters: PropTypes.object.isRequired,
+  clusters: PropTypes.array,
   onFilterChange: PropTypes.func.isRequired,
   onResetFilters: PropTypes.func.isRequired,
   onRemoveFilterChip: PropTypes.func.isRequired,

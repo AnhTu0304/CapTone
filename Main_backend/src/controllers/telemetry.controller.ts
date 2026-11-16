@@ -550,7 +550,7 @@ export class TelemetryController {
           `SELECT c.id FROM clusters c
            JOIN environments env ON c.environment_id = env.id
            WHERE (c.id::text = $1 OR c.name = $1)
-             AND env.organization_id = ANY($2::uuid[])`,
+             AND env.organization_id::text = ANY($2::text[])`,
           [cluster_id, allowedOrgIds]
         );
 
@@ -634,7 +634,7 @@ export class TelemetryController {
           `SELECT c.id FROM clusters c
            JOIN environments env ON c.environment_id = env.id
            WHERE (c.id::text = $1 OR c.name = $1)
-             AND env.organization_id = ANY($2::uuid[])`,
+             AND env.organization_id::text = ANY($2::text[])`,
           [cluster_id, allowedOrgIds]
         );
 
@@ -756,7 +756,7 @@ export class TelemetryController {
           `SELECT c.id FROM clusters c
            JOIN environments env ON c.environment_id = env.id
            WHERE (c.id::text = $1 OR c.name = $1)
-             AND env.organization_id = ANY($2::uuid[])`,
+             AND env.organization_id::text = ANY($2::text[])`,
           [effectiveClusterId, allowedOrgIds]
         );
 

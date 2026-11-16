@@ -75,7 +75,21 @@ export const userQuerySchema = z.object({
     email: z.string().trim().optional(),
     id: z.string().trim().optional(),
     status: z.enum(['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
-    role: z.enum(['SUPER_ADMIN', 'ADMIN', 'SME_OWNER', 'DEVOPS', 'VIEWER', 'ALL']).optional(),
+    role: z
+      .enum([
+        'SUPER_ADMIN',
+        'ADMIN',
+        'ADMINS',
+        'SYSTEM_ADMIN',
+        'SYSTEM_ADMINS',
+        'PLATFORM_ADMINS',
+        'SME_OWNER',
+        'DEVOPS',
+        'VIEWER',
+        'USER',
+        'ALL',
+      ])
+      .optional(),
     sort_by: z.enum(['created_at', 'full_name', 'email', 'last_login_at']).optional(),
     order: z.enum(['ASC', 'DESC', 'asc', 'desc']).optional(),
   }),

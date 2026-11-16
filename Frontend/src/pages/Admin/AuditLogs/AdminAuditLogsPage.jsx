@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { 
   ShieldAlert, 
-  Lock, 
   RefreshCw, 
   CheckCircle2, 
   FileSpreadsheet, 
@@ -13,6 +12,7 @@ import {
   getAuditLogs, 
   getAuditSummaryKPIs 
 } from '../../../services/adminAuditLogsService';
+import { getInfrastructureClusters } from '../../../services/adminInfrastructureService';
 
 import AuditLogsFilters from '../../../components/admin/audit-logs/AuditLogsFilters';
 import AuditLogsTable from '../../../components/admin/audit-logs/AuditLogsTable';
@@ -44,6 +44,9 @@ export const AdminAuditLogsPage = ({ onNavigate }) => {
   // Sorting state
   const [sorting, setSorting] = useState({ field: 'timestamp', direction: 'desc' });
 
+  // Dynamic cluster options from DB
+  const [clusters, setClusters] = useState([]);
+
   // Filters state
   const [filters, setFilters] = useState({
     search: '',
@@ -52,9 +55,29 @@ export const AdminAuditLogsPage = ({ onNavigate }) => {
     actorType: 'ALL',
     action: 'ALL',
     resourceType: 'ALL',
-    organization: 'ALL',
+    cluster: 'ALL',
     status: 'ALL',
   });
+
+  // Load dynamic clusters from infrastructure service for filter dropdown
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMetadata = async () => {
+      try {
+        const clusterRes = await getInfrastructureClusters();
+        if (isMounted && Array.isArray(clusterRes)) {
+          setClusters(clusterRes);
+        }
+      } catch (err) {
+        console.warn('Không thể nạp danh sách cụm K8s:', err);
+      }
+    };
+
+    fetchMetadata();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const debouncedSearch = useDebounce(filters.search, 300);
 
@@ -116,7 +139,7 @@ export const AdminAuditLogsPage = ({ onNavigate }) => {
       actorType: 'ALL',
       action: 'ALL',
       resourceType: 'ALL',
-      organization: 'ALL',
+      cluster: 'ALL',
       status: 'ALL',
     });
     setPage(1);
@@ -164,35 +187,19 @@ export const AdminAuditLogsPage = ({ onNavigate }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1
                 style={{
-                  fontSize: '1.5rem',
+                  fontSize: '1.375rem',
                   fontWeight: 800,
                   color: 'var(--dash-text-primary)',
                   letterSpacing: '-0.02em',
                   margin: 0,
                 }}
               >
-                Nhật Ký Kiểm Toán SHA-256 (Audit Logs)
+                Nhật Ký Kiểm Toán SHA-256
               </h1>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  fontSize: '0.6875rem',
-                  fontWeight: 700,
-                  backgroundColor: '#ECFDF5',
-                  color: '#065F46',
-                  border: '1px solid #A7F3D0',
-                }}
-              >
-                <Lock size={11} /> Append-Only Immutable Ledger
-              </span>
             </div>
 
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-              Lưu trữ tập trung mọi can thiệp từ quản trị viên, động cơ AI MAPE-K và tác tử eBPF. Dữ liệu được ký số SHA-256 bất biến, không thể sửa đổi từ giao diện.
+            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+              Lưu trữ can thiệp từ quản trị viên, động cơ AI MAPE-K và tác tử eBPF. Dữ liệu ký số SHA-256 bất biến, không thể sửa đổi từ giao diện.
             </p>
           </div>
         </div>
@@ -347,6 +354,7 @@ export const AdminAuditLogsPage = ({ onNavigate }) => {
       {/* Filters Bar with Filter Chips */}
       <AuditLogsFilters
         filters={filters}
+        clusters={clusters}
         onFilterChange={handleFilterChange}
         onResetFilters={handleResetFilters}
         onRemoveFilterChip={handleRemoveFilterChip}

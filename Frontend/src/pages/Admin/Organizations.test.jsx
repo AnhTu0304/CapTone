@@ -248,20 +248,9 @@ describe('Platform Admin Organizations Service & Components', () => {
       });
     });
 
-    test('create modal contains required fields and no service selector', async () => {
+    test('does not render create company button as per requirements', () => {
       render(<OrganizationsListPage onNavigate={jest.fn()} />);
-
-      const createBtn = screen.getByRole('button', { name: /Tạo Company Mới/i });
-      fireEvent.click(createBtn);
-
-      await waitFor(() => {
-        expect(screen.getByText('Đăng Ký / Tạo Company Mới')).toBeInTheDocument();
-      });
-
-      expect(screen.getByPlaceholderText(/Ví dụ: VNG Cloud Technology/i)).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/admin@vngcloud.vn/i)).toBeInTheDocument();
-      // No service selector in create modal
-      expect(screen.queryByText(/Gói Dịch Vụ Thuê Bao/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Tạo Company Mới/i })).not.toBeInTheDocument();
     });
   });
 

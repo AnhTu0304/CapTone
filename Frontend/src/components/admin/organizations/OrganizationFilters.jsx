@@ -82,7 +82,6 @@ export const OrganizationFilters = ({
           >
             <option value="ALL">Mọi Trạng Thái</option>
             <option value="ACTIVE">Đang Hoạt Động</option>
-            <option value="TRIAL">Dùng Thử Nghiệm</option>
             <option value="SUSPENDED">Đang Tạm Dừng</option>
           </select>
         </div>

@@ -344,7 +344,7 @@ describe('Platform Admin AI Module', () => {
       });
 
       // Switch tab
-      const modelsTab = screen.getByText('Mô Hình Học Máy');
+      const modelsTab = screen.getByText(/Mô Hình Học Máy/);
       fireEvent.click(modelsTab);
       expect(mockNavigate).toHaveBeenCalledWith('/admin/ai/models');
     });

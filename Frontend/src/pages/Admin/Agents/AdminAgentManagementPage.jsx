@@ -23,130 +23,31 @@ import {
 } from 'lucide-react';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { agentService } from '../../../services/agentService';
-
-// Mock danh sách Agents toàn hệ thống
-const INITIAL_AGENTS = [
-  {
-    id: 'agent-acme-01',
-    nodeName: 'worker-node-us-east-01',
-    companyId: 'org-acme-01',
-    companyName: 'Acme Infrastructure Corp',
-    clusterName: 'acme-production-us-east',
-    version: 'v2.4.1-ebpf',
-    kernelVersion: '5.15.0-89-generic',
-    status: 'ONLINE',
-    heartbeat: '5 giây trước',
-    latency: '1.0ms',
-    telemetryStatus: 'NORMAL',
-    tokenExpires: '28 ngày',
-    tokenMasked: 'selfai_agent_live_948f2a...88e1',
-    podCount: 24,
-  },
-  {
-    id: 'agent-acme-02',
-    nodeName: 'worker-node-us-east-02',
-    companyId: 'org-acme-01',
-    companyName: 'Acme Infrastructure Corp',
-    clusterName: 'acme-production-us-east',
-    version: 'v2.4.1-ebpf',
-    kernelVersion: '5.15.0-89-generic',
-    status: 'ONLINE',
-    heartbeat: '8 giây trước',
-    latency: '1.2ms',
-    telemetryStatus: 'NORMAL',
-    tokenExpires: '28 ngày',
-    tokenMasked: 'selfai_agent_live_382c1b...29b7',
-    podCount: 18,
-  },
-  {
-    id: 'agent-finflow-01',
-    nodeName: 'finflow-k8s-master-01',
-    companyId: 'org-finflow-02',
-    companyName: 'FinFlow Pay Platform',
-    clusterName: 'finflow-prod-hcm',
-    version: 'v2.4.0-ebpf',
-    kernelVersion: '5.19.0-42-generic',
-    status: 'DEGRADED',
-    heartbeat: '48 giây trước',
-    latency: '8.4ms',
-    telemetryStatus: 'ANOMALY_SLOW',
-    tokenExpires: '12 ngày',
-    tokenMasked: 'selfai_agent_live_190a4e...71c0',
-    podCount: 32,
-  },
-  {
-    id: 'agent-finflow-02',
-    nodeName: 'finflow-k8s-worker-01',
-    companyId: 'org-finflow-02',
-    companyName: 'FinFlow Pay Platform',
-    clusterName: 'finflow-prod-hcm',
-    version: 'v2.4.0-ebpf',
-    kernelVersion: '5.19.0-42-generic',
-    status: 'ONLINE',
-    heartbeat: '12 giây trước',
-    latency: '1.5ms',
-    telemetryStatus: 'NORMAL',
-    tokenExpires: '12 ngày',
-    tokenMasked: 'selfai_agent_live_449d01...99f4',
-    podCount: 22,
-  },
-  {
-    id: 'agent-nexus-01',
-    nodeName: 'nexus-logistics-node-a',
-    companyId: 'org-nexus-03',
-    companyName: 'Nexus Logistics AI',
-    clusterName: 'nexus-cluster-sg',
-    version: 'v2.4.1-ebpf',
-    kernelVersion: '6.1.0-18-amd64',
-    status: 'ONLINE',
-    heartbeat: '4 giây trước',
-    latency: '0.9ms',
-    telemetryStatus: 'NORMAL',
-    tokenExpires: '45 ngày',
-    tokenMasked: 'selfai_agent_live_773f8a...33a2',
-    podCount: 14,
-  },
-  {
-    id: 'agent-viettel-01',
-    nodeName: 'vt-cloud-worker-03',
-    companyId: 'org-viettel-04',
-    companyName: 'Viettel SME Cloud',
-    clusterName: 'viettel-k8s-hn-01',
-    version: 'v2.3.9-ebpf',
-    kernelVersion: '5.10.0-23-cloud',
-    status: 'OFFLINE',
-    heartbeat: '14 phút trước',
-    latency: 'N/A',
-    telemetryStatus: 'NO_DATA',
-    tokenExpires: 'Hết hạn',
-    tokenMasked: 'selfai_agent_live_551e22...1109',
-    podCount: 0,
-  },
-  {
-    id: 'agent-fpt-01',
-    nodeName: 'fpt-edge-node-01',
-    companyId: 'org-fpt-05',
-    companyName: 'FPT Digital Smart Retail',
-    clusterName: 'fpt-retail-edge-cluster',
-    version: 'v2.4.1-ebpf',
-    kernelVersion: '5.15.0-89-generic',
-    status: 'ONLINE',
-    heartbeat: '6 giây trước',
-    latency: '1.1ms',
-    telemetryStatus: 'NORMAL',
-    tokenExpires: '60 ngày',
-    tokenMasked: 'selfai_agent_live_883a99...45bc',
-    podCount: 19,
-  },
-];
+import { getOrganizations } from '../../../services/adminOrganizationsService';
+import { AdminTablePagination } from '../../../components/admin/common/AdminTablePagination';
 
 export const AdminAgentManagementPage = ({ onNavigate }) => {
-  const [agents, setAgents] = useState(INITIAL_AGENTS);
+  const [agents, setAgents] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [companyFilter, setCompanyFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalAgentsCount, setTotalAgentsCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [companies, setCompanies] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Thống kê toàn hệ thống
+  const [stats, setStats] = useState({
+    total: 0,
+    online: 0,
+    degraded: 0,
+    offline: 0,
+    healthyPct: 100,
+  });
 
   // Modal Xoay vòng Token / Thu hồi Token
   const [tokenModal, setTokenModal] = useState({ open: false, type: '', agent: null });
@@ -164,12 +65,63 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
     setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
-  const fetchRealAgents = useCallback(async (notify = false) => {
-    setIsRefreshing(true);
-    try {
-      const res = await agentService.getAllAgentsAdmin({ limit: 100 });
-      if (res && Array.isArray(res.items) && res.items.length > 0) {
-        const mapped = res.items.map((a) => {
+  // Tải danh sách công ty từ CSDL để đưa vào bộ lọc
+  useEffect(() => {
+    let isMounted = true;
+    const loadCompanies = async () => {
+      try {
+        const orgs = await getOrganizations({ limit: 100 });
+        if (isMounted && Array.isArray(orgs) && orgs.length > 0) {
+          setCompanies(orgs.map((o) => ({ id: o.id, name: o.name })));
+        }
+      } catch {
+        // Fallback ngầm
+      }
+    };
+    loadCompanies();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Đồng bộ danh sách công ty (kết hợp với agents nếu orgs chưa kịp tải)
+  const uniqueCompanies = useMemo(() => {
+    if (companies.length > 0) return companies;
+    const map = new Map();
+    agents.forEach((a) => {
+      if (a.companyId && a.companyName) {
+        map.set(a.companyId, a.companyName);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [companies, agents]);
+
+  // Tải dữ liệu tác tử từ CSDL Backend (100% dữ liệu thật, hỗ trợ phân trang & lọc)
+  const fetchRealAgents = useCallback(
+    async (notify = false) => {
+      setIsRefreshing(true);
+      setIsLoading(true);
+      try {
+        const params = {
+          page,
+          limit: pageSize,
+        };
+        if (debouncedSearch && debouncedSearch.trim()) {
+          params.search = debouncedSearch.trim();
+        }
+        if (statusFilter !== 'ALL') {
+          params.status = statusFilter;
+        }
+        if (companyFilter !== 'ALL') {
+          params.organizationId = companyFilter;
+        }
+
+        const res = await agentService.getAllAgentsAdmin(params);
+        const rawItems = res?.items || (Array.isArray(res) ? res : []);
+        const total = typeof res?.total === 'number' ? res.total : rawItems.length;
+        const calculatedTotalPages = res?.totalPages || Math.max(1, Math.ceil(total / pageSize));
+
+        const mapped = rawItems.map((a) => {
           const rawStatus = (a.status || 'OFFLINE').toUpperCase();
           const uiStatus =
             rawStatus === 'ONLINE'
@@ -217,69 +169,80 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
             podCount: activeTokensCount,
           };
         });
+
         setAgents(mapped);
+        setTotalAgentsCount(total);
+        setTotalPages(calculatedTotalPages);
+
         if (notify) {
-          showToast(`Đã đồng bộ dữ liệu thực tế của ${mapped.length} tác tử viễn trắc!`);
+          showToast(`Đã đồng bộ dữ liệu thực tế của ${total} tác tử viễn trắc!`);
         }
-      } else if (notify) {
-        showToast('Đã làm mới dữ liệu nhịp tim và trạng thái tác tử viễn trắc!');
+      } catch (err) {
+        console.warn('[AdminAgentManagementPage] Lỗi tải danh sách Agent:', err);
+      } finally {
+        setIsRefreshing(false);
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.warn('[AdminAgentManagementPage] Lỗi tải danh sách Agent:', err);
-    } finally {
-      setIsRefreshing(false);
+    },
+    [page, pageSize, debouncedSearch, statusFilter, companyFilter, showToast]
+  );
+
+  // Tải thống kê KPI tổng quan trên toàn mạng
+  const fetchGlobalStats = useCallback(async () => {
+    try {
+      const res = await agentService.getAllAgentsAdmin({ limit: 100 });
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      if (items.length > 0) {
+        let online = 0;
+        let degraded = 0;
+        let offline = 0;
+        items.forEach((a) => {
+          const st = (a.status || 'OFFLINE').toUpperCase();
+          if (st === 'ONLINE') online++;
+          else if (st === 'PENDING' || st === 'DEGRADED') degraded++;
+          else offline++;
+        });
+        const total = typeof res?.total === 'number' ? res.total : items.length;
+        setStats({
+          total,
+          online,
+          degraded,
+          offline,
+          healthyPct: total > 0 ? Math.round((online / total) * 100) : 100,
+        });
+      }
+    } catch {
+      // Bỏ qua lỗi thống kê ngầm
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     fetchRealAgents(false);
   }, [fetchRealAgents]);
 
-  // Danh sách công ty duy nhất
-  const uniqueCompanies = useMemo(() => {
-    const map = new Map();
-    agents.forEach((a) => {
-      map.set(a.companyId, a.companyName);
-    });
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [agents]);
+  useEffect(() => {
+    fetchGlobalStats();
+  }, [fetchGlobalStats]);
 
-  // Lọc agents
-  const filteredAgents = useMemo(() => {
-    return agents.filter((item) => {
-      const matchSearch =
-        !debouncedSearch ||
-        item.nodeName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        item.companyName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        item.clusterName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        item.version.toLowerCase().includes(debouncedSearch.toLowerCase());
-      const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
-      const matchCompany = companyFilter === 'ALL' || item.companyId === companyFilter;
-      return matchSearch && matchStatus && matchCompany;
-    });
-  }, [agents, debouncedSearch, statusFilter, companyFilter]);
+  // Khi tìm kiếm hoặc đổi bộ lọc, reset về trang 1
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setPage(1);
+  };
 
-  // Thống kê
-  const stats = useMemo(() => {
-    let online = 0;
-    let degraded = 0;
-    let offline = 0;
-    agents.forEach((a) => {
-      if (a.status === 'ONLINE') online++;
-      else if (a.status === 'DEGRADED') degraded++;
-      else if (a.status === 'OFFLINE') offline++;
-    });
-    return {
-      total: agents.length,
-      online,
-      degraded,
-      offline,
-      healthyPct: Math.round((online / (agents.length || 1)) * 100),
-    };
-  }, [agents]);
+  const handleStatusFilterChange = (e) => {
+    setStatusFilter(e.target.value);
+    setPage(1);
+  };
+
+  const handleCompanyFilterChange = (e) => {
+    setCompanyFilter(e.target.value);
+    setPage(1);
+  };
 
   const handleRefresh = () => {
     fetchRealAgents(true);
+    fetchGlobalStats();
   };
 
   const handleOpenTokenModal = (agent, actionType) => {
@@ -377,42 +340,39 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
     >
       {/* 1. Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#ECFDF5',
-                color: '#065F46',
-                border: '1px solid #A7F3D0',
-                fontWeight: 700,
-                fontSize: '0.6875rem',
-              }}
-            >
-              <ShieldCheck size={12} /> Cấp Độ Quản Trị Hệ Thống (Platform Super Admin)
-            </span>
-          </div>
-          <h1
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
             style={{
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              color: 'var(--dash-text-primary)',
-              margin: '8px 0 4px 0',
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
             }}
           >
-            <Bot size={26} style={{ color: '#059669' }} />
-            Quản Lý Tác Tử Toàn Hệ Thống (Agent Management)
-          </h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
-            Giám sát vòng đời, trạng thái nhịp tim (Heartbeat), xoay vòng Token bảo mật và kênh truyền viễn trắc eBPF của tất cả Agent trên mọi công ty.
-          </p>
+            <Bot size={24} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: 800,
+                color: 'var(--dash-text-primary)',
+                letterSpacing: '-0.02em',
+                margin: 0,
+              }}
+            >
+              Quản Lý Tác Tử Toàn Hệ Thống
+            </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
+              Giám sát vòng đời, trạng thái nhịp tim (Heartbeat), xoay vòng Token bảo mật và kênh truyền viễn trắc eBPF của tất cả Agent trên mọi công ty.
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -505,37 +465,6 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* 2. Architecture Notice Alert */}
-      <div
-        style={{
-          padding: '14px 18px',
-          borderRadius: '12px',
-          backgroundColor: '#F8FAFC',
-          border: '1px solid #E2E8F0',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '12px',
-        }}
-      >
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            backgroundColor: '#E2E8F0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            color: '#334155',
-          }}
-        >
-          <Zap size={16} />
-        </div>
-        <div style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.5 }}>
-          <strong style={{ color: '#0F172A' }}>Phân biệt phạm vi quản trị:</strong> Super Admin quản lý việc cấp phát mã xác thực (Agent Token), trạng thái kết nối nhịp tim và luồng truyền dữ liệu viễn trắc cấp nền tảng. Các thao tác điều khiển ứng dụng Kubernetes cụ thể (Pod restart, Scale) do chính kỹ sư DevOps của từng công ty điều hành tại Dashboard riêng.
-        </div>
-      </div>
 
       {/* 3. KPI Statistics Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
@@ -632,67 +561,6 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* 4. Connection Pipeline Health */}
-      <div
-        style={{
-          padding: '18px 20px',
-          borderRadius: '12px',
-          backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          boxShadow: 'var(--dash-shadow-xs)',
-        }}
-      >
-        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '14px' }}>
-          Đường Ống Kết Nối Viễn Trắc Toàn Mạng (Agent Connection Pipeline)
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '160px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFDF5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Bot size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>128 eBPF Probes</div>
-              <div style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600 }}>Tác tử thu thập Kernel</div>
-            </div>
-          </div>
-
-          <ChevronRight size={18} color="#94A3B8" />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '160px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Radio size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>Ingestion Gateway</div>
-              <div style={{ fontSize: '0.6875rem', color: '#2563EB', fontWeight: 600 }}>Cổng tiếp nhận gRPC</div>
-            </div>
-          </div>
-
-          <ChevronRight size={18} color="#94A3B8" />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '160px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#F0FDF4', color: '#15803D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Activity size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>Main Backend (Node.js)</div>
-              <div style={{ fontSize: '0.6875rem', color: '#15803D', fontWeight: 600 }}>Port 5000 - Khỏe mạnh</div>
-            </div>
-          </div>
-
-          <ChevronRight size={18} color="#94A3B8" />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '160px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#FAF5FF', color: '#7E22CE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Zap size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>AI Engine (FastAPI)</div>
-              <div style={{ fontSize: '0.6875rem', color: '#7E22CE', fontWeight: 600 }}>Port 8000 - p50 1.2ms</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* 5. Filters Bar */}
       <div
@@ -717,7 +585,7 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
               type="text"
               placeholder="Tìm Node, công ty, cụm cluster, phiên bản..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               style={{
                 width: '100%',
                 padding: '7px 12px 7px 32px',
@@ -733,7 +601,7 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
           {/* Status Filter */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={handleStatusFilterChange}
             style={{
               padding: '7px 12px',
               borderRadius: '8px',
@@ -753,7 +621,7 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
           {/* Company Filter */}
           <select
             value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
+            onChange={handleCompanyFilterChange}
             style={{
               padding: '7px 12px',
               borderRadius: '8px',
@@ -774,7 +642,7 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
         </div>
 
         <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-muted)' }}>
-          Hiển thị <strong>{filteredAgents.length}</strong> / {agents.length} tác tử
+          Hiển thị <strong>{agents.length}</strong> trên tổng số <strong>{totalAgentsCount}</strong> tác tử
         </div>
       </div>
 
@@ -801,7 +669,22 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredAgents.map((agent) => (
+            {isLoading && agents.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ padding: '36px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                  <RefreshCw size={24} className="spin-icon" style={{ margin: '0 auto 8px auto', display: 'block', color: '#059669' }} />
+                  <span>Đang tải danh sách tác tử viễn trắc từ cơ sở dữ liệu...</span>
+                </td>
+              </tr>
+            ) : agents.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ padding: '36px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                  <Bot size={28} style={{ margin: '0 auto 8px auto', display: 'block', color: '#94A3B8' }} />
+                  <span style={{ fontWeight: 600 }}>Không tìm thấy tác tử viễn trắc nào phù hợp với bộ lọc hiện tại.</span>
+                </td>
+              </tr>
+            ) : (
+              agents.map((agent) => (
               <tr
                 key={agent.id}
                 style={{
@@ -1025,9 +908,26 @@ export const AdminAgentManagementPage = ({ onNavigate }) => {
                   </div>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
+
+        {/* Phân Trang Bảng Tác Tử Chuẩn Đồng Bộ */}
+        <AdminTablePagination
+          page={page}
+          pageSize={pageSize}
+          total={totalAgentsCount}
+          totalPages={totalPages}
+          onPageChange={(newPage) => setPage(newPage)}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setPage(1);
+          }}
+          itemLabel="tác tử"
+          pageSizeOptions={[5, 10, 20, 50]}
+          isLoading={isLoading || isRefreshing}
+        />
       </div>
 
       {/* 7. Modal Xoay Vòng / Thu Hồi Token */}

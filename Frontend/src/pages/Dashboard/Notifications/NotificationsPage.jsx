@@ -95,32 +95,48 @@ export const NotificationsPage = () => {
     <div className="dashboard-notifications-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Bell size={22} color="var(--dash-primary)" />
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Trung Tâm Thông Báo & Điều Phối Cảnh Báo
-            </h1>
-            {unreadCount > 0 && (
-              <span
-                data-testid="header-unread-badge"
-                style={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 800,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--dash-radius-full)',
-                  backgroundColor: '#FFF1F2',
-                  color: '#E11D48',
-                  border: '1px solid #FDA4AF',
-                }}
-              >
-                {unreadCount} chưa đọc
-              </span>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Bell size={20} color="#059669" />
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Quản trị kênh truyền thông báo, cảnh báo khẩn cấp và các yêu cầu can thiệp HITL
-          </p>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+                Trung Tâm Thông Báo & Điều Phối Cảnh Báo
+              </h1>
+              {unreadCount > 0 && (
+                <span
+                  data-testid="header-unread-badge"
+                  style={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 'var(--dash-radius-full)',
+                    backgroundColor: '#FFF1F2',
+                    color: '#E11D48',
+                    border: '1px solid #FDA4AF',
+                  }}
+                >
+                  {unreadCount} chưa đọc
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Quản trị kênh truyền thông báo, cảnh báo khẩn cấp và các yêu cầu can thiệp HITL
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -390,7 +406,7 @@ export const NotificationsPage = () => {
                           margin: '0 0 4px 0',
                         }}
                       >
-                        {n.title}
+                        {(n.title || '').replace(/\[INC-[A-Za-z0-9_-]+\]\s*/gi, '').trim()}
                       </h4>
 
                       {/* Message Body */}

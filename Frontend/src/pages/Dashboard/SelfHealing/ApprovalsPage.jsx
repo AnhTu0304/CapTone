@@ -7,6 +7,7 @@ import { useToast } from '../../../context/ToastContext';
 import { selfHealingService } from '../../../services/selfHealingService';
 import telemetryService from '../../../services/telemetryService';
 import RootCauseModal from '../Incidents/RootCauseModal';
+import { translateIncidentTitle } from '../Incidents/incidentUtils';
 import {
   CheckCircle2,
   FileCode,
@@ -70,14 +71,48 @@ export const ApprovalsPage = () => {
     const rawTarget = item.target_name || item.target_id || 'k8s-workload';
     const targetName = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
 
-    const rawActionCode = item.action_code || item.action_name || 'REPLACE_POD';
-    const upperCode = String(rawActionCode).toUpperCase();
+    const rawActionCode = item.action_code || item.action_type_code || item.action_name || item.action_type_name || '';
+    const searchCode = (String(rawActionCode) + ' ' + String(item.policy_name || '') + ' ' + String(item.ai_reasoning || '')).toUpperCase();
+    
     let actionFriendlyName = 'Tự phục hồi dịch vụ';
-    if (upperCode.includes('SCALE')) actionFriendlyName = 'Scale Replicas';
-    else if (upperCode.includes('RESTART')) actionFriendlyName = 'Restart Pod';
-    else if (upperCode.includes('ROLLBACK')) actionFriendlyName = 'Rollback Deployment';
-    else if (upperCode.includes('CLEANUP')) actionFriendlyName = 'Cleanup Storage';
-    else if (upperCode.includes('NO_ACTION')) actionFriendlyName = 'No Action';
+    let actionCategory = 'POD';
+
+    if (searchCode.includes('DRAIN')) {
+      actionFriendlyName = 'Di tản & Cô lập Node (Drain Node)';
+      actionCategory = 'NODE';
+    } else if (searchCode.includes('CORDON')) {
+      actionFriendlyName = 'Khóa lập lịch Node (Cordon Node)';
+      actionCategory = 'NODE';
+    } else if (searchCode.includes('ROLLBACK')) {
+      actionFriendlyName = 'Hoàn nguyên (Rollback Deployment)';
+      actionCategory = 'DEPLOYMENT';
+    } else if (searchCode.includes('SCALE')) {
+      actionFriendlyName = 'Mở rộng bản sao (Scale Replicas)';
+      actionCategory = 'WORKLOAD';
+    } else if (searchCode.includes('RESTART_DEPLOYMENT') || (searchCode.includes('RESTART') && searchCode.includes('DEPLOYMENT'))) {
+      actionFriendlyName = 'Khởi động lại Deployment';
+      actionCategory = 'DEPLOYMENT';
+    } else if (searchCode.includes('RESTART')) {
+      actionFriendlyName = 'Khởi động lại Pod (Restart Pod)';
+      actionCategory = 'POD';
+    } else if (searchCode.includes('REPLACE')) {
+      actionFriendlyName = 'Thay thế Pod (Replace Pod)';
+      actionCategory = 'POD';
+    } else if (searchCode.includes('ADJUST') || searchCode.includes('LIMIT')) {
+      actionFriendlyName = 'Điều chỉnh tài nguyên (Adjust Limits)';
+      actionCategory = 'WORKLOAD';
+    } else if (searchCode.includes('CLEANUP') || searchCode.includes('TEMP')) {
+      actionFriendlyName = 'Dọn dẹp lưu trữ (Cleanup Storage)';
+      actionCategory = 'STORAGE';
+    } else if (searchCode.includes('BLOCK')) {
+      actionFriendlyName = 'Chặn IP bất thường (Block IP)';
+      actionCategory = 'SECURITY';
+    } else if (searchCode.includes('NO_ACTION')) {
+      actionFriendlyName = 'Không can thiệp (No Action)';
+      actionCategory = 'POD';
+    } else if (item.action_name) {
+      actionFriendlyName = item.action_name;
+    }
 
     const rootCause = item.root_cause_type || (item.incident_title ? item.incident_title.replace(/^\[.*?\]\s*/, '') : 'Chưa xác định nguyên nhân gốc rễ');
     const confidence = item.confidence_score !== null && item.confidence_score !== undefined
@@ -94,8 +129,7 @@ export const ApprovalsPage = () => {
     const policyName = item.policy_name || 'POL-SAFETY-DEFAULT';
 
     const rawTitle = item.incident_title || `${actionFriendlyName} trên ${targetName}`;
-    let cleanTitle = rawTitle.replace(/^\[.*?\]\s*/i, '');
-    cleanTitle = cleanTitle.replace(/\s+on\s+/i, ' trên ');
+    let cleanTitle = translateIncidentTitle(rawTitle);
     if (!cleanTitle.toLowerCase().startsWith('sự cố') && !cleanTitle.toLowerCase().startsWith('lỗi')) {
       cleanTitle = `Sự cố: ${cleanTitle}`;
     }
@@ -115,6 +149,7 @@ export const ApprovalsPage = () => {
       actionCode: rawActionCode,
       actionName: actionFriendlyName,
       actionFriendlyName,
+      actionCategory,
       cleanTitle,
       title: cleanTitle,
       targetName,
@@ -447,16 +482,30 @@ export const ApprovalsPage = () => {
     <div className="dashboard-approvals-page" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle2 size={22} color="var(--dash-primary)" />
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Cổng Phê Duyệt Của Con Người
-            </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#EDE9FE',
+              border: '1px solid #DDD6FE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <CheckCircle2 size={20} color="#7C3AED" />
           </div>
-<p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '3px', margin: 0 }}>
-            Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
-          </p>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+              Cổng Phê Duyệt Của Con Người (HITL)
+            </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -645,14 +694,14 @@ export const ApprovalsPage = () => {
                           gap: '6px',
                           padding: '4px 10px',
                           borderRadius: '6px',
-                          backgroundColor: '#EEF2FF',
-                          color: '#4338CA',
-                          border: '1px solid #C7D2FE',
+                          backgroundColor: req.actionCategory === 'NODE' ? '#FEF2F2' : req.actionCategory === 'DEPLOYMENT' ? '#FFFBEB' : '#EEF2FF',
+                          color: req.actionCategory === 'NODE' ? '#DC2626' : req.actionCategory === 'DEPLOYMENT' ? '#B45309' : '#4338CA',
+                          border: `1px solid ${req.actionCategory === 'NODE' ? '#FECACA' : req.actionCategory === 'DEPLOYMENT' ? '#FDE68A' : '#C7D2FE'}`,
                           fontWeight: 700,
                           fontSize: '0.78125rem',
                         }}
                       >
-                        <Zap size={14} color="#4F46E5" />
+                        <Zap size={14} color={req.actionCategory === 'NODE' ? '#DC2626' : req.actionCategory === 'DEPLOYMENT' ? '#B45309' : '#4F46E5'} />
                         <span>{req.actionFriendlyName || req.actionName}</span>
                       </span>
 

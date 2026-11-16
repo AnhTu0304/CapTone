@@ -3,8 +3,11 @@
  * Kết nối luồng Onboarding 5 bước với Main Backend API (Node.js/Express trên cổng 5000)
  */
 
-const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api/v1';
-const API_BASE_URL = rawApiUrl.replace('//localhost:5000', '//127.0.0.1:5000');
+const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
+const API_BASE_URL = rawApiUrl
+  .replace('//localhost:5000', '//127.0.0.1:5005')
+  .replace('//localhost:5005', '//127.0.0.1:5005')
+  .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
 
 const getAuthToken = () => {
   try {

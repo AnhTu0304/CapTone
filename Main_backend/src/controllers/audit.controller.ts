@@ -24,6 +24,7 @@ export class AuditController {
         action: req.query.action as string,
         status: req.query.status as string,
         role: req.query.role as string,
+        actor_type: req.query.actor_type as string,
         resource_type: req.query.resource_type as string,
         resource_id: req.query.resource_id as string,
         request_id: req.query.request_id as string,
@@ -68,6 +69,7 @@ export class AuditController {
         action: req.query.action as string,
         status: req.query.status as string,
         role: req.query.role as string,
+        actor_type: req.query.actor_type as string,
         resource_type: req.query.resource_type as string,
         resource_id: req.query.resource_id as string,
         request_id: req.query.request_id as string,
@@ -158,6 +160,23 @@ export class AuditController {
       const orgId = (req.query.organization_id as string) || null;
       const stats = await AuditService.getStatsByOrganization(orgId);
       return ApiResponse.success(res, 'Lấy thống kê kiểm toán hệ thống thành công', stats, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [GET] /api/v1/audit-logs/activity-stats
+   * Thống kê hoạt động người dùng và cảnh báo bảo mật dành cho Admin User Activity
+   */
+  public static async getUserActivityStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const filter = {
+        start_date: req.query.start_date as string,
+        end_date: req.query.end_date as string,
+      };
+      const stats = await AuditService.getUserActivityStats(filter);
+      return ApiResponse.success(res, 'Lấy thống kê hoạt động người dùng thành công', stats, 200);
     } catch (error) {
       next(error);
     }

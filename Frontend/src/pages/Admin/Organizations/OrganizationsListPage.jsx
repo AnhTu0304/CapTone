@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Building2, RefreshCw, CheckCircle2, Clock, AlertTriangle, ShieldCheck, Plus, X, Save } from 'lucide-react';
-import { getOrganizations, createOrganization, updateOrganizationStatus } from '../../../services/adminOrganizationsService';
+import { Building2, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { getOrganizations, updateOrganizationStatus } from '../../../services/adminOrganizationsService';
 import OrganizationTable from '../../../components/admin/organizations/OrganizationTable';
 import OrganizationFilters from '../../../components/admin/organizations/OrganizationFilters';
 import { useDebounce } from '../../../hooks/useDebounce';
@@ -14,17 +14,16 @@ export const OrganizationsListPage = ({ onNavigate }) => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Modal Đăng Ký / Tạo Company mới
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    name: '',
-    slug: '',
-    domain: '',
-    contactEmail: '',
-    clustersLimit: 3,
-  });
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Reset về trang 1 khi thay đổi từ khóa tìm kiếm hoặc trạng thái
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -77,50 +76,24 @@ export const OrganizationsListPage = ({ onNavigate }) => {
     }
   };
 
-  const handleCreateCompanySubmit = async (e) => {
-    e.preventDefault();
-    if (!createForm.name.trim() || !createForm.contactEmail.trim()) {
-      alert('Vui lòng điền tên công ty và email liên hệ.');
-      return;
-    }
-
-    try {
-      const newOrg = await createOrganization({
-        name: createForm.name.trim(),
-        slug: createForm.slug.trim() || undefined,
-        domain: createForm.domain.trim() || undefined,
-        contactEmail: createForm.contactEmail.trim(),
-        clustersLimit: Number(createForm.clustersLimit) || 3,
-      });
-
-      setOrganizations((prev) => [newOrg, ...prev]);
-      setIsCreateModalOpen(false);
-      setCreateForm({
-        name: '',
-        slug: '',
-        domain: '',
-        contactEmail: '',
-        clustersLimit: 3,
-      });
-      showToast(`Đã tạo thành công doanh nghiệp mới "${newOrg.name}"!`);
-    } catch (err) {
-      console.error('Lỗi khi tạo doanh nghiệp mới:', err);
-      alert(err.message || 'Lỗi khi tạo doanh nghiệp mới. Vui lòng thử lại.');
-    }
-  };
-
-  const { activeCount, trialCount, suspendedCount } = useMemo(() => {
+  const { activeCount, suspendedCount } = useMemo(() => {
     let active = 0;
-    let trial = 0;
     let suspended = 0;
     for (let i = 0; i < organizations.length; i++) {
       const s = organizations[i].status;
       if (s === 'ACTIVE') active++;
-      else if (s === 'TRIAL') trial++;
       else if (s === 'SUSPENDED') suspended++;
     }
-    return { activeCount: active, trialCount: trial, suspendedCount: suspended };
+    return { activeCount: active, suspendedCount: suspended };
   }, [organizations]);
+
+  const total = organizations.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedOrganizations = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return organizations.slice(start, start + pageSize);
+  }, [organizations, currentPage, pageSize]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -134,67 +107,42 @@ export const OrganizationsListPage = ({ onNavigate }) => {
           gap: '16px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#ECFDF5',
-                color: '#065F46',
-                border: '1px solid #A7F3D0',
-                fontWeight: 700,
-                fontSize: '0.6875rem',
-              }}
-            >
-              <ShieldCheck size={12} /> Cấp Độ Quản Trị Hệ Thống (Platform Super Admin)
-            </span>
-          </div>
-          <h1
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
             style={{
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              color: 'var(--dash-text-primary)',
-              margin: '8px 0 4px 0',
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
             }}
           >
-            <Building2 size={26} style={{ color: '#059669' }} />
-            Quản Lý Doanh Nghiệp (Organizations)
-          </h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
-            Quản lý tập trung toàn bộ doanh nghiệp đăng ký sử dụng SelfAI, kích hoạt/tạm ngưng, theo dõi thành viên, tác tử và cụm máy chủ.
-          </p>
+            <Building2 size={24} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: 800,
+                color: 'var(--dash-text-primary)',
+                letterSpacing: '-0.02em',
+                margin: 0,
+              }}
+            >
+              Quản Lý Doanh Nghiệp
+            </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
+              Quản lý tập trung toàn bộ doanh nghiệp đăng ký sử dụng SelfAI, kích hoạt/tạm ngưng, theo dõi thành viên, tác tử và cụm máy chủ.
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: '#059669',
-              color: '#FFFFFF',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
-            }}
-          >
-            <Plus size={16} />
-            <span>Tạo Company Mới</span>
-          </button>
-
           <button
             type="button"
             onClick={fetchOrganizationsData}
@@ -287,23 +235,6 @@ export const OrganizationsListPage = ({ onNavigate }) => {
             padding: '16px',
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
-            border: '1px solid #FDE68A',
-            boxShadow: 'var(--dash-shadow-xs)',
-          }}
-        >
-          <div style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Clock size={13} /> DÙNG THỬ (TRIAL)
-          </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#D97706', marginTop: '4px' }}>
-            {trialCount}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: '16px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
             border: '1px solid #FECACA',
             boxShadow: 'var(--dash-shadow-xs)',
           }}
@@ -338,193 +269,19 @@ export const OrganizationsListPage = ({ onNavigate }) => {
 
       {/* Organizations Table */}
       <OrganizationTable
-        organizations={organizations}
+        organizations={paginatedOrganizations}
         isLoading={isLoading}
         onSelectOrganization={handleSelectOrg}
         onToggleStatus={handleToggleOrgStatus}
+        totalCount={total}
+        page={currentPage}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
       />
-
-      {/* Modal Tạo Company Mới - No service selector */}
-      {isCreateModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '14px',
-              maxWidth: '520px',
-              width: '100%',
-              padding: '24px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Building2 size={20} color="#059669" />
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Đăng Ký / Tạo Company Mới
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateCompanySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Tên Doanh Nghiệp (Company Name) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: VNG Cloud Technology"
-                  value={createForm.name}
-                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Mã Slug / Định Danh
-                </label>
-                <input
-                  type="text"
-                  placeholder="vngcloud (để trống tự tạo)"
-                  value={createForm.slug}
-                  onChange={(e) => setCreateForm({ ...createForm, slug: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                    fontFamily: 'var(--font-mono)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Tên Miền Doanh Nghiệp (Domain)
-                </label>
-                <input
-                  type="text"
-                  placeholder="vngcloud.vn"
-                  value={createForm.domain}
-                  onChange={(e) => setCreateForm({ ...createForm, domain: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Email Kỹ Thuật / Quản Trị Viên Đại Diện *
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="admin@vngcloud.vn"
-                  value={createForm.contactEmail}
-                  onChange={(e) => setCreateForm({ ...createForm, contactEmail: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Hạn Mức Cụm K8s Cho Phép
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={createForm.clustersLimit}
-                  onChange={(e) => setCreateForm({ ...createForm, clustersLimit: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.8125rem',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dash-border)',
-                    backgroundColor: '#FFFFFF',
-                    color: 'var(--dash-text-primary)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Hủy Bỏ
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: '#059669',
-                    color: '#FFFFFF',
-                    fontSize: '0.8125rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Save size={14} />
-                  <span>Tạo Công Ty</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

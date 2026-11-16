@@ -19,7 +19,7 @@ export const AIOverviewSection = ({ aiData, status, errorMessage, onRetry }) => 
 
   return (
     <WidgetContainer
-      title="Động Cơ Trí Tuệ Nhân Tạo & Suy Diễn (AI Engine)"
+      title="Động Cơ Trí Tuệ Nhân Tạo & Suy Diễn"
       subtitle="Thông số kỹ thuật mô hình đang hoạt động (Production Active) từ cơ sở dữ liệu"
       status={status}
       errorMessage={errorMessage}

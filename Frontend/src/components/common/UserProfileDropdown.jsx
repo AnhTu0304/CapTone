@@ -210,7 +210,7 @@ export const UserProfileDropdown = ({
     const list = [
       {
         id: 'switch_to_portal',
-        label: 'Không Gian Cá Nhân',
+        label: 'Trung Tâm Điều Khiển',
         icon: User,
         path: '/portal',
       },

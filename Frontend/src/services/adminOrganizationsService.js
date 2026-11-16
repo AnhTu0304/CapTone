@@ -596,11 +596,11 @@ export const getOrganizationMembers = async (id) => {
         };
       });
     }
-    return MOCK_MEMBERS[id] || MOCK_MEMBERS['org-acme-01'];
+    return MOCK_MEMBERS[id] || (id === 'org-acme-01' ? MOCK_MEMBERS['org-acme-01'] : []);
   };
 
   const fetchFromMock = async () => {
-    return MOCK_MEMBERS[id] || MOCK_MEMBERS['org-acme-01'];
+    return MOCK_MEMBERS[id] || (id === 'org-acme-01' ? MOCK_MEMBERS['org-acme-01'] : []);
   };
 
   return executeWithFallback(fetchFromApi, fetchFromMock);
@@ -613,28 +613,71 @@ export const getOrganizationMembers = async (id) => {
  */
 export const getOrganizationEnvironments = async (id) => {
   const fetchFromApi = async () => {
-    const res = await request(`/organizations/${id}/environments`);
-    const rawItems = res?.data?.environments || res?.data?.items || (Array.isArray(res?.data) ? res.data : null);
-    if (rawItems && rawItems.length > 0) {
-      return rawItems.map((env) => ({
-        id: env.id,
-        name:
-          env.name === 'DEVELOPMENT' || env.environment_type === 'DEVELOPMENT'
-            ? 'Development (Phát Triển)'
-            : env.name === 'STAGING' || env.environment_type === 'STAGING'
-            ? 'Staging (Kiểm Thử)'
-            : env.name,
-        clusterId: env.cluster_id || env.clusterId || env.code || 'Chưa gán cụm',
-        status: env.status || 'HEALTHY',
-        workloadsCount: env.workloads_count ?? env.workloadsCount ?? 0,
-        autoHealingMode: env.auto_healing_mode || env.autoHealingMode || 'AUTOMATIC',
-      }));
-    }
-    return MOCK_ENVIRONMENTS[id] || MOCK_ENVIRONMENTS['org-acme-01'];
+    try {
+      const res = await request(`/organizations/${id}/environments`);
+      const rawItems = res?.data?.environments || res?.data?.items || (Array.isArray(res?.data) ? res.data : null);
+      if (rawItems && rawItems.length > 0) {
+        return rawItems.map((env) => ({
+          id: env.id,
+          name:
+            env.name === 'DEVELOPMENT' || env.environment_type === 'DEVELOPMENT'
+              ? 'Development (Phát Triển)'
+              : env.name === 'STAGING' || env.environment_type === 'STAGING'
+              ? 'Staging (Kiểm Thử)'
+              : env.name === 'PRODUCTION' || env.environment_type === 'PRODUCTION'
+              ? 'Production (Sản Xuất)'
+              : env.name,
+          clusterId: env.cluster_id || env.clusterId || env.code || 'Chưa gán cụm',
+          status: env.status || 'HEALTHY',
+          workloadsCount: env.workloads_count ?? env.workloadsCount ?? 0,
+          autoHealingMode: env.auto_healing_mode || env.autoHealingMode || 'AUTOMATIC',
+        }));
+      }
+    } catch (_) {}
+
+    // Fallback: Lấy danh sách cụm Kubernetes thuộc tổ chức để tổng hợp môi trường thực tế
+    try {
+      const clustersRes = await request('/clusters');
+      const allClusters = Array.isArray(clustersRes?.data)
+        ? clustersRes.data
+        : (clustersRes?.data?.items || []);
+      const orgClusters = allClusters.filter((c) => c.organization_id === id);
+      if (orgClusters.length > 0) {
+        const envMap = new Map();
+        orgClusters.forEach((c) => {
+          const envId = c.environment_id || `env-${c.id}`;
+          if (!envMap.has(envId)) {
+            const envType = (c.environment_type || '').toUpperCase();
+            const envName =
+              envType === 'DEVELOPMENT'
+                ? 'Development (Phát Triển)'
+                : envType === 'STAGING'
+                ? 'Staging (Kiểm Thử)'
+                : envType === 'PRODUCTION'
+                ? 'Production (Sản Xuất)'
+                : c.environment_name || 'Production (Sản Xuất)';
+
+            envMap.set(envId, {
+              id: envId,
+              name: envName,
+              clusterId: c.name || c.id,
+              status: c.status === 'CONNECTED' ? 'HEALTHY' : 'WARNING',
+              workloadsCount: c.pods_count ?? 0,
+              autoHealingMode: 'AUTOMATIC',
+            });
+          }
+        });
+        if (envMap.size > 0) {
+          return Array.from(envMap.values());
+        }
+      }
+    } catch (_) {}
+
+    return MOCK_ENVIRONMENTS[id] || (id === 'org-acme-01' ? MOCK_ENVIRONMENTS['org-acme-01'] : []);
   };
 
   const fetchFromMock = async () => {
-    return MOCK_ENVIRONMENTS[id] || MOCK_ENVIRONMENTS['org-acme-01'];
+    return MOCK_ENVIRONMENTS[id] || (id === 'org-acme-01' ? MOCK_ENVIRONMENTS['org-acme-01'] : []);
   };
 
   return executeWithFallback(fetchFromApi, fetchFromMock);
@@ -646,36 +689,53 @@ export const getOrganizationEnvironments = async (id) => {
  * @returns {Promise<OrganizationCluster[]>}
  */
 export const getOrganizationClusters = async (id) => {
-  const fetchFromApi = async () => {
-    const res = await request(`/organizations/${id}/clusters`);
-    const rawItems = Array.isArray(res?.data) ? res.data : (res?.data?.items || res?.data?.clusters || null);
-    if (rawItems && rawItems.length > 0) {
-      return rawItems.map((cls) => {
-        let status = 'READY';
-        if (cls.status === 'CONNECTED' || cls.status === 'READY') {
-          status = 'READY';
-        } else if (cls.status === 'DEGRADED' || cls.agent_status === 'DEGRADED') {
-          status = 'DEGRADED';
-        } else if (cls.status === 'DISCONNECTED' || cls.status === 'ERROR' || cls.agent_status === 'OFFLINE') {
-          status = 'DISCONNECTED';
-        }
-        return {
-          id: cls.id,
-          name: cls.name,
-          version: cls.kubernetes_version || cls.k8s_version || cls.version || 'v1.30.2',
-          region: cls.provider ? `${cls.provider} (Local DC)` : (cls.region || 'ap-southeast-1 (Local DC)'),
-          nodesCount: cls.nodes_count ?? cls.nodesCount ?? 2,
-          podsCount: cls.pods_count ?? cls.podsCount ?? 0,
-          agentLatency: cls.agent_latency || cls.agentLatency || '1.5ms',
-          status,
-        };
-      });
+  const mapCluster = (cls) => {
+    let status = 'READY';
+    if (cls.status === 'CONNECTED' || cls.status === 'READY') {
+      status = 'READY';
+    } else if (cls.status === 'DEGRADED' || cls.agent_status === 'DEGRADED') {
+      status = 'DEGRADED';
+    } else if (cls.status === 'DISCONNECTED' || cls.status === 'ERROR' || cls.agent_status === 'OFFLINE') {
+      status = 'DISCONNECTED';
     }
-    return MOCK_CLUSTERS[id] || MOCK_CLUSTERS['org-acme-01'];
+    return {
+      id: cls.id,
+      name: cls.name,
+      version: cls.kubernetes_version || cls.k8s_version || cls.version || 'v1.30.2',
+      region: cls.provider ? `${cls.provider} (Local DC)` : (cls.region || 'ap-southeast-1 (Local DC)'),
+      nodesCount: cls.nodes_count ?? cls.nodesCount ?? 1,
+      podsCount: cls.pods_count ?? cls.podsCount ?? 0,
+      agentLatency: cls.agent_latency || cls.agentLatency || '1.5ms',
+      status,
+    };
+  };
+
+  const fetchFromApi = async () => {
+    try {
+      const res = await request(`/organizations/${id}/clusters`);
+      const rawItems = Array.isArray(res?.data) ? res.data : (res?.data?.items || res?.data?.clusters || null);
+      if (rawItems && rawItems.length > 0) {
+        return rawItems.map(mapCluster);
+      }
+    } catch (_) {}
+
+    // Fallback: Lấy danh sách cụm hệ thống lọc theo organization_id
+    try {
+      const clustersRes = await request('/clusters');
+      const allClusters = Array.isArray(clustersRes?.data)
+        ? clustersRes.data
+        : (clustersRes?.data?.items || []);
+      const orgClusters = allClusters.filter((c) => c.organization_id === id);
+      if (orgClusters.length > 0) {
+        return orgClusters.map(mapCluster);
+      }
+    } catch (_) {}
+
+    return MOCK_CLUSTERS[id] || (id === 'org-acme-01' ? MOCK_CLUSTERS['org-acme-01'] : []);
   };
 
   const fetchFromMock = async () => {
-    return MOCK_CLUSTERS[id] || MOCK_CLUSTERS['org-acme-01'];
+    return MOCK_CLUSTERS[id] || (id === 'org-acme-01' ? MOCK_CLUSTERS['org-acme-01'] : []);
   };
 
   return executeWithFallback(fetchFromApi, fetchFromMock);
@@ -688,26 +748,51 @@ export const getOrganizationClusters = async (id) => {
  */
 export const getOrganizationAgents = async (id) => {
   const fetchFromApi = async () => {
-    const res = await request(`/organizations/${id}/agents`);
-    const rawItems = res?.data?.items || res?.data?.agents || (Array.isArray(res?.data) ? res.data : null);
-    if (rawItems && rawItems.length > 0) {
-      return rawItems.map((ag) => ({
-        id: ag.id,
-        node: ag.node_name || ag.node || ag.name || 'worker-node',
-        clusterId: ag.cluster_name || ag.cluster_id || ag.clusterId || 'k8s-cluster',
-        version: ag.version || 'v1.4.2',
-        kernel: ag.kernel_version || ag.kernel || '5.15.0-generic',
-        status: ag.status || 'ONLINE',
-        heartbeat: ag.last_seen_at || ag.last_heartbeat_at
-          ? new Date(ag.last_seen_at || ag.last_heartbeat_at).toLocaleTimeString('vi-VN')
-          : (ag.heartbeat || 'Gần đây'),
-      }));
-    }
-    return MOCK_AGENTS[id] || MOCK_AGENTS['org-acme-01'];
+    try {
+      const res = await request(`/organizations/${id}/agents`);
+      const rawItems = res?.data?.items || res?.data?.agents || (Array.isArray(res?.data) ? res.data : null);
+      if (rawItems && rawItems.length > 0) {
+        return rawItems.map((ag) => ({
+          id: ag.id,
+          node: ag.node_name || ag.node || ag.name || 'worker-node',
+          clusterId: ag.cluster_name || ag.cluster_id || ag.clusterId || 'k8s-cluster',
+          version: ag.version || 'v1.4.2',
+          kernel: ag.kernel_version || ag.kernel || '5.15.0-generic',
+          status: ag.status || 'ONLINE',
+          heartbeat: ag.last_seen_at || ag.last_heartbeat_at
+            ? new Date(ag.last_seen_at || ag.last_heartbeat_at).toLocaleTimeString('vi-VN')
+            : (ag.heartbeat || 'Gần đây'),
+        }));
+      }
+    } catch (_) {}
+
+    // Fallback: Kiểm tra thông tin tác tử từ cụm
+    try {
+      const clustersRes = await request('/clusters');
+      const allClusters = Array.isArray(clustersRes?.data)
+        ? clustersRes.data
+        : (clustersRes?.data?.items || []);
+      const orgClustersWithAgents = allClusters.filter((c) => c.organization_id === id && (c.agent_id || c.agent_name));
+      if (orgClustersWithAgents.length > 0) {
+        return orgClustersWithAgents.map((c) => ({
+          id: c.agent_id || `agent-${c.id}`,
+          node: c.agent_name || `${c.name}-agent`,
+          clusterId: c.name || c.id,
+          version: 'v1.4.2',
+          kernel: '5.15.0-generic',
+          status: c.agent_status === 'ONLINE' ? 'ONLINE' : c.agent_status === 'PENDING' ? 'DEGRADED' : 'OFFLINE',
+          heartbeat: c.last_heartbeat_at
+            ? new Date(c.last_heartbeat_at).toLocaleTimeString('vi-VN')
+            : 'Gần đây',
+        }));
+      }
+    } catch (_) {}
+
+    return MOCK_AGENTS[id] || (id === 'org-acme-01' ? MOCK_AGENTS['org-acme-01'] : []);
   };
 
   const fetchFromMock = async () => {
-    return MOCK_AGENTS[id] || MOCK_AGENTS['org-acme-01'];
+    return MOCK_AGENTS[id] || (id === 'org-acme-01' ? MOCK_AGENTS['org-acme-01'] : []);
   };
 
   return executeWithFallback(fetchFromApi, fetchFromMock);
@@ -720,31 +805,34 @@ export const getOrganizationAgents = async (id) => {
  */
 export const getOrganizationIncidents = async (id) => {
   const fetchFromApi = async () => {
-    const res = await request(`/ai/incidents?organization_id=${id}`);
-    const rawItems = res?.data?.items || res?.data?.incidents || (Array.isArray(res?.data) ? res.data : null);
-    if (rawItems && rawItems.length > 0) {
-      return rawItems.map((inc) => {
-        let mttr = '1.5s';
-        if (inc.resolved_at && inc.created_at) {
-          const diffMs = Math.max(0, new Date(inc.resolved_at).getTime() - new Date(inc.created_at).getTime());
-          mttr = diffMs < 1000 ? `${diffMs}ms` : `${(diffMs / 1000).toFixed(1)}s`;
-        }
-        return {
-          id: inc.id,
-          severity: inc.severity || 'MAJOR',
-          service: inc.title || inc.service || inc.service_name || inc.cluster_name || 'k8s-service',
-          rootCause: inc.root_cause_description || inc.root_cause || inc.description || 'Đang phân tích',
-          mttr,
-          status: inc.status === 'OPEN' ? 'INVESTIGATING' : (inc.status || 'RESOLVED'),
-          timestamp: inc.created_at ? new Date(inc.created_at).toLocaleString('vi-VN') : (inc.timestamp || 'Gần đây'),
-        };
-      });
-    }
-    return MOCK_INCIDENTS[id] || MOCK_INCIDENTS['org-acme-01'];
+    try {
+      const res = await request(`/ai/incidents?organization_id=${id}`);
+      const rawItems = res?.data?.items || res?.data?.incidents || (Array.isArray(res?.data) ? res.data : null);
+      if (rawItems && rawItems.length > 0) {
+        return rawItems.map((inc) => {
+          let mttr = '1.5s';
+          if (inc.resolved_at && inc.created_at) {
+            const diffMs = Math.max(0, new Date(inc.resolved_at).getTime() - new Date(inc.created_at).getTime());
+            mttr = diffMs < 1000 ? `${diffMs}ms` : `${(diffMs / 1000).toFixed(1)}s`;
+          }
+          return {
+            id: inc.id,
+            severity: inc.severity || 'MAJOR',
+            service: inc.title || inc.service || inc.service_name || inc.cluster_name || 'k8s-service',
+            rootCause: inc.root_cause_description || inc.root_cause || inc.description || 'Đang phân tích',
+            mttr,
+            status: inc.status === 'OPEN' ? 'INVESTIGATING' : (inc.status || 'RESOLVED'),
+            timestamp: inc.created_at ? new Date(inc.created_at).toLocaleString('vi-VN') : (inc.timestamp || 'Gần đây'),
+          };
+        });
+      }
+    } catch (_) {}
+
+    return MOCK_INCIDENTS[id] || (id === 'org-acme-01' ? MOCK_INCIDENTS['org-acme-01'] : []);
   };
 
   const fetchFromMock = async () => {
-    return MOCK_INCIDENTS[id] || MOCK_INCIDENTS['org-acme-01'];
+    return MOCK_INCIDENTS[id] || (id === 'org-acme-01' ? MOCK_INCIDENTS['org-acme-01'] : []);
   };
 
   return executeWithFallback(fetchFromApi, fetchFromMock);
@@ -756,29 +844,43 @@ export const getOrganizationIncidents = async (id) => {
  * @returns {Promise<OrganizationAuditItem[]>}
  */
 export const getOrganizationAuditActivity = async (id) => {
+  const mapAuditItem = (aud) => ({
+    id: aud.id,
+    actor: aud.user_name || aud.user?.full_name || aud.actor || 'Quản Trị Viên',
+    actorRole: aud.actor_type === 'USER' ? 'Platform Super Admin' : (aud.actorRole || 'System Automation'),
+    action: aud.description || aud.action || 'Thao tác cấu hình',
+    target: aud.target_type
+      ? `${aud.target_type}/${aud.target_id || ''}`
+      : aud.resource_type
+      ? `${aud.resource_type}/${aud.resource_id || ''}`
+      : (aud.target || 'Hệ thống'),
+    time: aud.created_at ? new Date(aud.created_at).toLocaleString('vi-VN') : (aud.time || 'Gần đây'),
+    hash: aud.metadata?.hash || aud.hash || aud.signature || `sha256:${String(aud.id || 'verified').slice(0, 10)}...`,
+  });
+
   const fetchFromApi = async () => {
-    const res = await request(`/organizations/${id}/audit-logs`);
-    const rawItems = res?.data?.items || res?.data?.data || (Array.isArray(res?.data) ? res.data : null);
-    if (rawItems && rawItems.length > 0) {
-      return rawItems.map((aud) => ({
-        id: aud.id,
-        actor: aud.user_name || aud.user?.full_name || aud.actor || 'Quản Trị Viên',
-        actorRole: aud.actor_type === 'USER' ? 'Platform Super Admin' : (aud.actorRole || 'System Automation'),
-        action: aud.description || aud.action || 'Thao tác cấu hình',
-        target: aud.target_type
-          ? `${aud.target_type}/${aud.target_id || ''}`
-          : aud.resource_type
-          ? `${aud.resource_type}/${aud.resource_id || ''}`
-          : (aud.target || 'Hệ thống'),
-        time: aud.created_at ? new Date(aud.created_at).toLocaleString('vi-VN') : (aud.time || 'Gần đây'),
-        hash: aud.metadata?.hash || aud.hash || aud.signature || `sha256:${String(aud.id || 'verified').slice(0, 10)}...`,
-      }));
-    }
-    return MOCK_AUDIT_ACTIVITY[id] || MOCK_AUDIT_ACTIVITY['org-acme-01'];
+    try {
+      const res = await request(`/organizations/${id}/audit-logs`);
+      const rawItems = res?.data?.items || res?.data?.data || (Array.isArray(res?.data) ? res.data : null);
+      if (rawItems && rawItems.length > 0) {
+        return rawItems.map(mapAuditItem);
+      }
+    } catch (_) {}
+
+    // Fallback: Lấy nhật ký hệ thống lọc theo organization_id
+    try {
+      const res = await request(`/audit-logs?organization_id=${id}`);
+      const rawItems = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : null);
+      if (rawItems && rawItems.length > 0) {
+        return rawItems.map(mapAuditItem);
+      }
+    } catch (_) {}
+
+    return MOCK_AUDIT_ACTIVITY[id] || (id === 'org-acme-01' ? MOCK_AUDIT_ACTIVITY['org-acme-01'] : []);
   };
 
   const fetchFromMock = async () => {
-    return MOCK_AUDIT_ACTIVITY[id] || MOCK_AUDIT_ACTIVITY['org-acme-01'];
+    return MOCK_AUDIT_ACTIVITY[id] || (id === 'org-acme-01' ? MOCK_AUDIT_ACTIVITY['org-acme-01'] : []);
   };
 
   return executeWithFallback(fetchFromApi, fetchFromMock);

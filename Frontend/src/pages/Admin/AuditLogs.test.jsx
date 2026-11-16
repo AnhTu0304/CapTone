@@ -35,8 +35,8 @@ describe('Platform Admin Audit Logs Module', () => {
       expect(log).toHaveProperty('resourceType');
       // 6. Resource ID
       expect(log).toHaveProperty('resourceId');
-      // 7. Organization
-      expect(log).toHaveProperty('organization');
+      // 7. Cluster
+      expect(log).toHaveProperty('cluster');
       // 8. Status
       expect(log).toHaveProperty('status');
       // 9. IP Address
@@ -88,6 +88,7 @@ describe('Platform Admin Audit Logs Module', () => {
       expect(mapped.actor).toBe('Nguyễn Văn A (a.nguyen@aegisai.vn)');
       expect(mapped.actorType).toBe('SYSTEM_AI');
       expect(mapped.status).toBe('BLOCKED');
+      expect(mapped.cluster).toBe('FinTech Hub');
       expect(mapped.organization).toBe('FinTech Hub');
     });
   });
@@ -135,8 +136,7 @@ describe('Platform Admin Audit Logs Module', () => {
           actorType: 'USER',
           action: 'HITL_APPROVAL_GRANTED',
           resourceType: 'Deployment',
-          resourceId: 'Deployment/order-processor',
-          organization: 'FinTech Global',
+          cluster: 'fyuyu',
           status: 'SUCCESS',
           ipAddress: '113.161.72.45',
         },
@@ -156,14 +156,13 @@ describe('Platform Admin Audit Logs Module', () => {
         />
       );
 
-      // Check all 9 columns
+      // Check table columns
       expect(screen.getByText(/Thời Gian \(Timestamp\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Tác Nhân \(Actor\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Loại Tác Nhân \(Actor Type\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Hành Động \(Action\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Loại Tài Nguyên \(Resource Type\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/Định Danh \(Resource ID\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/Tổ Chức \(Organization\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/Cụm K8s \(Cluster\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Trạng Thái \(Status\)/i)).toBeInTheDocument();
       expect(screen.getByText(/Địa Chỉ IP \(IP Address\)/i)).toBeInTheDocument();
 
@@ -171,8 +170,7 @@ describe('Platform Admin Audit Logs Module', () => {
       expect(screen.getByText('30/09/2026 16:00:00')).toBeInTheDocument();
       expect(screen.getByText('Lê Minh Quân')).toBeInTheDocument();
       expect(screen.getByText('HITL_APPROVAL_GRANTED')).toBeInTheDocument();
-      expect(screen.getByText('Deployment/order-processor')).toBeInTheDocument();
-      expect(screen.getByText('FinTech Global')).toBeInTheDocument();
+      expect(screen.getByText('fyuyu')).toBeInTheDocument();
       expect(screen.getByText('113.161.72.45')).toBeInTheDocument();
 
       // Click on row to trigger onSelectLog
@@ -196,7 +194,7 @@ describe('Platform Admin Audit Logs Module', () => {
         actorType: 'SYSTEM_AI',
         action: 'K8S_LIMIT_PATCH',
         resourceType: 'Deployment',
-        organization: 'Retail Corp',
+        cluster: 'k8s-retail-cluster',
         status: 'SUCCESS',
       };
 
@@ -215,14 +213,14 @@ describe('Platform Admin Audit Logs Module', () => {
       expect(screen.getByLabelText(/Lọc theo loại tác nhân/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Lọc theo hành động/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Lọc theo loại tài nguyên/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Lọc theo tổ chức/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Lọc theo cụm K8s/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Lọc theo trạng thái/i)).toBeInTheDocument();
 
       // Check filter chips
       expect(screen.getByText(/Từ khóa: "order-processor"/i)).toBeInTheDocument();
       expect(screen.getByText(/Thời gian: 24 giờ qua/i)).toBeInTheDocument();
       expect(screen.getByText(/Loại tác nhân: SYSTEM_AI/i)).toBeInTheDocument();
-      expect(screen.getByText(/Tổ chức: Retail Corp/i)).toBeInTheDocument();
+      expect(screen.getByText(/Cụm K8s: k8s-retail-cluster/i)).toBeInTheDocument();
 
       // Test chip removal
       const removeChipBtn = screen.getByLabelText(/Xóa bộ lọc search/i);

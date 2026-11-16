@@ -335,11 +335,43 @@ export class AuditService {
       }
     }
 
+    if (filter.actor_type && String(filter.actor_type).trim() !== '' && String(filter.actor_type).trim() !== 'ALL') {
+      const at = String(filter.actor_type).trim().toUpperCase();
+      if (at === 'USER_ACTIVITY' || at === 'USER_AUTH') {
+        conditions.push(`(
+          a.action IN (
+            'AUTH_LOGIN_SUCCESS',
+            'AUTH_LOGIN_FAILURE',
+            'AUTH_LOGOUT',
+            'TOKEN_ROTATED',
+            'MEMBER_ROLE_CHANGED',
+            'SYSTEM_ROLE_ASSIGNED',
+            'USER_PROFILE_UPDATED',
+            'PROFILE_UPDATE',
+            'PASSWORD_RESET',
+            'PASSWORD_CHANGED',
+            'LOCK_USER',
+            'UNLOCK_USER',
+            'REVOKE_SESSION',
+            'ROLE_CHANGE',
+            'SUSPICIOUS_LOGIN'
+          ) OR a.action LIKE 'AUTH_%'
+        )`);
+      } else if (at === 'USER') {
+        conditions.push(`(a.actor_type = 'USER' OR a.user_id IS NOT NULL)`);
+      } else {
+        conditions.push(`a.actor_type = $${paramIndex++}`);
+        values.push(at);
+      }
+    }
+
     if (filter.role && filter.role !== 'ALL') {
       if (filter.role === 'AGENT' || filter.role === 'K8S_AGENT') {
         conditions.push(`a.actor_type = 'AGENT'`);
       } else if (filter.role === 'SYSTEM_AI') {
         conditions.push(`a.actor_type = 'SYSTEM'`);
+      } else if (filter.role === 'USER') {
+        conditions.push(`(a.actor_type = 'USER' OR a.user_id IS NOT NULL)`);
       } else if (filter.role === 'SME_OWNER') {
         conditions.push(`a.actor_type = 'USER' AND (mem_role.member_role = 'SME_OWNER' OR sys_role.sys_role = 'SUPER_ADMIN')`);
       } else if (filter.role === 'DEVOPS') {
@@ -789,6 +821,68 @@ export class AuditService {
         verifiedIntegrity: '100% (SHA-256 Validated)',
       },
       days,
+    };
+  }
+
+  /**
+   * Lấy thống kê hoạt động người dùng và cảnh báo bảo mật dành cho Admin User Activity
+   */
+  public static async getUserActivityStats(filter?: { start_date?: string; end_date?: string }): Promise<{
+    totalLogins: number;
+    successLogins: number;
+    failedLogins: number;
+    todayLogins: number;
+    todaySuccessLogins: number;
+    activeUsersCount: number;
+    totalActiveUsers: number;
+    securityAlerts: number;
+    adminActions: number;
+  }> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (filter?.start_date) {
+      conditions.push(`a.created_at >= $${paramIndex++}`);
+      values.push(filter.start_date);
+    }
+    if (filter?.end_date) {
+      conditions.push(`a.created_at <= $${paramIndex++}`);
+      values.push(filter.end_date);
+    }
+
+    const hasDateFilter = conditions.length > 0;
+    const whereClause = hasDateFilter ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const userStatsSql = `
+      SELECT
+        COUNT(*) FILTER (WHERE a.action LIKE 'AUTH_LOGIN%')::int AS total_logins,
+        COUNT(*) FILTER (WHERE a.action = 'AUTH_LOGIN_SUCCESS')::int AS success_logins,
+        COUNT(*) FILTER (WHERE a.action = 'AUTH_LOGIN_FAILURE')::int AS failed_logins,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.action LIKE 'AUTH_LOGIN%')::int AS today_logins,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.action = 'AUTH_LOGIN_SUCCESS')::int AS today_success_logins,
+        ${hasDateFilter
+          ? `COUNT(DISTINCT a.user_id) FILTER (WHERE a.user_id IS NOT NULL)::int AS active_users_count,`
+          : `(SELECT COUNT(*)::int FROM users WHERE status = 'ACTIVE') AS active_users_count,`
+        }
+        (SELECT COUNT(*)::int FROM users WHERE status = 'ACTIVE') AS total_active_users,
+        COUNT(*) FILTER (WHERE a.action = 'AUTH_LOGIN_FAILURE' OR a.action = 'SUSPICIOUS_LOGIN' OR a.action = 'LOCK_USER')::int AS security_alerts,
+        COUNT(*) FILTER (WHERE a.action IN ('MEMBER_ROLE_CHANGED', 'SYSTEM_ROLE_ASSIGNED', 'ROLE_CHANGE', 'TOKEN_ROTATED', 'LOCK_USER', 'UNLOCK_USER', 'PASSWORD_RESET'))::int AS admin_actions
+      FROM audit_logs a
+      ${whereClause};
+    `;
+    const res = await pool.query(userStatsSql, values);
+    const row = res.rows[0] || {};
+    return {
+      totalLogins: row.total_logins || 0,
+      successLogins: row.success_logins || 0,
+      failedLogins: row.failed_logins || 0,
+      todayLogins: row.today_logins || 0,
+      todaySuccessLogins: row.today_success_logins || 0,
+      activeUsersCount: row.active_users_count || 0,
+      totalActiveUsers: row.total_active_users || 0,
+      securityAlerts: row.security_alerts || 0,
+      adminActions: row.admin_actions || 0,
     };
   }
 }

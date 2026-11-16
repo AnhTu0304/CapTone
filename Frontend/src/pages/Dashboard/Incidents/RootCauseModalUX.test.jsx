@@ -226,7 +226,7 @@ describe('RootCauseModal UX Information Density Optimization', () => {
 
     // Header label disclaimer
     expect(
-      screen.getByText('Dự báo từ mô hình GRU — Không phải bằng chứng RCA hoặc lệnh thực thi')
+      screen.getByText('Dự báo rủi ro sớm từ AI — Không phải bằng chứng RCA hoặc lệnh thực thi')
     ).toBeInTheDocument();
 
     // Vietnamese name and technical sub-badge
@@ -255,7 +255,7 @@ describe('RootCauseModal UX Information Density Optimization', () => {
     });
 
     // 1. Report Header
-    expect(screen.getByText('BÁO CÁO GIẢI TRÌNH SRE (SRE INCIDENT REPORT)')).toBeInTheDocument();
+    expect(screen.getByText('Báo cáo SRE (Tóm tắt)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sao chép giải trình/i })).toBeInTheDocument();
 
     // 2. Bullet 1: Incident detected - never falsely claims APPLICATION_OVERLOAD
@@ -264,7 +264,7 @@ describe('RootCauseModal UX Information Density Optimization', () => {
     expect(screen.queryByText(/APPLICATION_OVERLOAD/i)).not.toBeInTheDocument();
 
     // 3. Bullet 2: AI prediction - uses "Xu hướng có thể giảm replica", never "DƯ THỪA TÀI NGUYÊN"
-    expect(screen.getByText(/• Cảnh báo học sâu GRU: Nguy cơ "Xu hướng có thể giảm replica"/)).toBeInTheDocument();
+    expect(screen.getByText(/• Cảnh báo rủi ro sớm từ AI: Nguy cơ "Xu hướng có thể giảm replica"/)).toBeInTheDocument();
     expect(screen.queryByText('DƯ THỪA TÀI NGUYÊN')).not.toBeInTheDocument();
 
     // 4. Bullet 3: Validated Evidence

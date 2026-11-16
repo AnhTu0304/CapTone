@@ -1,5 +1,5 @@
 # ============================================================================
-# Production Docker Compose (Pulls pre-built images from GitHub Container Registry)
+# Production Docker Compose (Pulls pre-built images from Docker Hub)
 # Sử dụng trên VPS / Production:
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d --remove-orphans
@@ -41,7 +41,7 @@ services:
       - captone-network
 
   main-backend:
-    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/main-backend:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:main-backend
     container_name: captone-main-backend
     restart: unless-stopped
     depends_on:
@@ -89,14 +89,13 @@ services:
       - captone-network
 
   ai-backend:
-    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/ai-backend:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:ai-backend
     container_name: captone-ai-backend
     restart: unless-stopped
-    env_file:
-      - path: ./AI_backend/.env
-        required: false
     environment:
       PORT: 8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: selfheal-ai-service
       OTEL_SERVICE_VERSION: "1.0.0"
@@ -112,7 +111,7 @@ services:
       - captone-network
 
   selfheal-frontend:
-    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/frontend:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:frontend
     container_name: selfheal_platform_web
     restart: always
     environment:
@@ -127,15 +126,15 @@ services:
       - captone-network
 
   installer-service:
-    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/installer-service:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:installer-service
     container_name: captone-installer-service
     restart: unless-stopped
     environment:
       PORT: 8100
       HOST: 0.0.0.0
       APP_ENV: production
-      AGENT_VERSION: ${IMAGE_TAG:-1.0.0}
-      DOCKER_IMAGE: "${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/agent:${IMAGE_TAG:-latest}"
+      AGENT_VERSION: "1.0.0"
+      DOCKER_IMAGE: "${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:agent"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
       interval: 30s
@@ -146,7 +145,7 @@ services:
       - captone-network
 
   nginx-proxy:
-    image: ${GHCR_PREFIX:-ghcr.io/anhtu0304/captone}/nginx-proxy:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:nginx-proxy
     container_name: captone-reverse-proxy
     restart: unless-stopped
     depends_on:

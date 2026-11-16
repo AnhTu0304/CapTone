@@ -4,13 +4,13 @@ import {
   ArrowUpDown, 
   ArrowUp, 
   ArrowDown, 
-  ChevronLeft, 
-  ChevronRight, 
   Eye, 
-  Database
+  Database,
+  Server
 } from 'lucide-react';
 import ActorTypeBadge from './ActorTypeBadge';
 import AuditStatusBadge from './AuditStatusBadge';
+import { AdminTablePagination } from '../common';
 
 /**
  * AuditLogsTable Component
@@ -159,14 +159,9 @@ export const AuditLogsTable = ({
                 Loại Tài Nguyên (Resource Type)
               </th>
 
-              {/* 6. Resource ID */}
-              <th style={{ minWidth: '180px', padding: '12px 14px', fontWeight: 700 }}>
-                Định Danh (Resource ID)
-              </th>
-
-              {/* 7. Organization */}
+              {/* 6. Cluster */}
               <th
-                onClick={() => handleHeaderClick('organization')}
+                onClick={() => handleHeaderClick('cluster')}
                 style={{
                   minWidth: '150px',
                   padding: '12px 14px',
@@ -175,12 +170,12 @@ export const AuditLogsTable = ({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>Tổ Chức (Organization)</span>
-                  {renderSortIcon('organization')}
+                  <span>Cụm K8s (Cluster)</span>
+                  {renderSortIcon('cluster')}
                 </div>
               </th>
 
-              {/* 8. Status */}
+              {/* 7. Status */}
               <th
                 onClick={() => handleHeaderClick('status')}
                 style={{
@@ -196,7 +191,7 @@ export const AuditLogsTable = ({
                 </div>
               </th>
 
-              {/* 9. IP Address */}
+              {/* 8. IP Address */}
               <th style={{ minWidth: '140px', padding: '12px 14px', fontWeight: 700 }}>
                 Địa Chỉ IP (IP Address)
               </th>
@@ -211,13 +206,13 @@ export const AuditLogsTable = ({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={10} style={{ padding: '36px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                <td colSpan={9} style={{ padding: '36px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                   Đang đồng bộ nhật ký kiểm toán bất biến SHA-256...
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ padding: '40px', textAlign: 'center' }}>
+                <td colSpan={9} style={{ padding: '40px', textAlign: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--dash-text-muted)' }}>
                     <Database size={28} />
                     <span style={{ fontWeight: 600 }}>Không tìm thấy bản ghi kiểm toán nào phù hợp với bộ lọc</span>
@@ -280,22 +275,32 @@ export const AuditLogsTable = ({
                     </span>
                   </td>
 
-                  {/* 6. Resource ID */}
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-primary)' }}>
-                    {log.resourceId}
-                  </td>
-
-                  {/* 7. Organization */}
+                  {/* 6. Cluster */}
                   <td style={{ padding: '12px 14px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                    {log.organization}
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid var(--dash-border)',
+                        fontSize: '0.75rem',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    >
+                      <Server size={12} color="#059669" />
+                      {log.cluster || 'minikube'}
+                    </span>
                   </td>
 
-                  {/* 8. Status */}
+                  {/* 7. Status */}
                   <td style={{ padding: '12px 14px' }}>
                     <AuditStatusBadge status={log.status} />
                   </td>
 
-                  {/* 9. IP Address */}
+                  {/* 8. IP Address */}
                   <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
                     {log.ipAddress}
                   </td>
@@ -324,97 +329,18 @@ export const AuditLogsTable = ({
         </table>
       </div>
 
-      {/* Pagination Footer */}
-      <div
-        style={{
-          padding: '12px 20px',
-          borderTop: '1px solid var(--dash-border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          backgroundColor: '#F8FAFC',
-          fontSize: '0.8125rem',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: 'var(--dash-text-muted)' }}>Hiển thị:</span>
-          <select
-            aria-label="Số bản ghi mỗi trang"
-            value={pageSize}
-            onChange={(e) => onPageSizeChange && onPageSizeChange(Number(e.target.value))}
-            style={{
-              padding: '4px 8px',
-              borderRadius: '6px',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: '#FFFFFF',
-              color: 'var(--dash-text-primary)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value={10}>10 bản ghi</option>
-            <option value={25}>25 bản ghi</option>
-            <option value={50}>50 bản ghi</option>
-          </select>
-          <span style={{ color: 'var(--dash-text-muted)', marginLeft: '6px' }}>
-            Tổng số: <strong>{total}</strong> bản ghi
-          </span>
-        </div>
-
-        {/* Page Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: 'var(--dash-text-muted)' }}>
-            Trang <strong>{page}</strong> / {totalPages}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => onPageChange && onPageChange(page - 1)}
-              aria-label="Trang trước"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '30px',
-                height: '30px',
-                borderRadius: '6px',
-                border: '1px solid var(--dash-border)',
-                backgroundColor: '#FFFFFF',
-                color: page <= 1 ? '#CBD5E1' : 'var(--dash-text-primary)',
-                cursor: page <= 1 ? 'not-allowed' : 'pointer',
-              }}
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => onPageChange && onPageChange(page + 1)}
-              aria-label="Trang tiếp theo"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '30px',
-                height: '30px',
-                borderRadius: '6px',
-                border: '1px solid var(--dash-border)',
-                backgroundColor: '#FFFFFF',
-                color: page >= totalPages ? '#CBD5E1' : 'var(--dash-text-primary)',
-                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
-              }}
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Pagination Controls */}
+      <AdminTablePagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        itemLabel="bản ghi"
+        pageSizeOptions={[10, 25, 50]}
+        isLoading={loading}
+      />
     </div>
   );
 };

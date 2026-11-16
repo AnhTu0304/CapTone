@@ -47,14 +47,14 @@ export class AiController {
   private static isUserSuperAdmin(user: any): boolean {
     if (!user) return false;
     const r = String(user.role || '').toUpperCase();
-    if (r === 'SUPER_ADMIN' || r === 'ADMIN' || r === 'SYSTEM_ADMIN') return true;
+    if (r === 'SUPER_ADMIN' || r === 'SYSTEM_ADMIN' || r === 'ADMIN') return true;
     if (Array.isArray(user.roles)) {
-      if (user.roles.some((x: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(x).toUpperCase()))) {
+      if (user.roles.some((x: string) => ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(String(x).toUpperCase()))) {
         return true;
       }
     }
     if (Array.isArray(user.systemRoles)) {
-      if (user.systemRoles.some((x: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(x).toUpperCase()))) {
+      if (user.systemRoles.some((x: string) => ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(String(x).toUpperCase()))) {
         return true;
       }
     }
@@ -65,23 +65,42 @@ export class AiController {
    * Helper: Check if user belongs to requested organization and if cluster belongs to that organization
    */
   private static async validateUserOrgAndCluster(user: any, orgId?: string, clusterId?: string): Promise<string | null> {
-    const effectiveOrgId = (orgId && orgId !== 'all') ? orgId : user?.organization_id;
-    if (!effectiveOrgId) {
-      return null;
+    const isSuper = AiController.isUserSuperAdmin(user);
+
+    let allowedOrgIds: string[] = [];
+    if (!isSuper && user?.id) {
+      const res = await pool.query(
+        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+        [user.id]
+      );
+      allowedOrgIds = res.rows.map((r: any) => r.organization_id);
+      if (user.organization_id && !allowedOrgIds.includes(user.organization_id)) {
+        allowedOrgIds.push(user.organization_id);
+      }
+      if (allowedOrgIds.length === 0) {
+        throw new ApiError(403, 'Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+      }
     }
-    if (user?.id) {
-      const membership = await OrganizationMemberModel.findByOrgAndUser(effectiveOrgId, user.id);
-      if (!membership || membership.status !== 'ACTIVE') {
+
+    let effectiveOrgId = (orgId && orgId !== 'all') ? orgId : user?.organization_id;
+    if (!effectiveOrgId && !isSuper) {
+      effectiveOrgId = allowedOrgIds[0];
+    }
+
+    if (!isSuper && effectiveOrgId) {
+      if (!allowedOrgIds.includes(effectiveOrgId)) {
         throw new ApiError(403, 'Bạn không thuộc tổ chức được yêu cầu (User does not belong to the requested organization)');
       }
     }
-    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
+
+    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all' && effectiveOrgId) {
       const belongs = await IncidentModel.validateClusterBelongsToOrg(clusterId, effectiveOrgId);
-      if (!belongs) {
+      if (!belongs && !isSuper) {
         throw new ApiError(404, 'Cụm Kubernetes không thuộc tổ chức này (Cluster does not belong to the requested organization)');
       }
     }
-    return effectiveOrgId;
+
+    return effectiveOrgId || null;
   }
 
   /**
@@ -91,6 +110,9 @@ export class AiController {
     const incident = await IncidentModel.findById(incidentId);
     if (!incident) {
       throw new ApiError(404, 'Sự cố không tồn tại (Incident not found)');
+    }
+    if (AiController.isUserSuperAdmin(user)) {
+      return incident;
     }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
     if (orgId && user?.id) {
@@ -107,6 +129,9 @@ export class AiController {
    */
   private static async validateIncidentManageAccess(user: any, incidentId: string): Promise<any> {
     const incident = await this.validateIncidentAccess(user, incidentId);
+    if (AiController.isUserSuperAdmin(user)) {
+      return incident;
+    }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
     if (orgId && user?.id) {
       const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
@@ -267,6 +292,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Retrieved predictions list', result, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -290,6 +316,7 @@ export class AiController {
       const stats = await AiPredictionModel.getPredictionStats(cluster_id, workload, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved prediction statistics', stats, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -331,6 +358,7 @@ export class AiController {
       const workloads = result.rows.map((r: any) => r.name);
       return ApiResponse.success(res, 'Retrieved cluster workloads', workloads, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -360,6 +388,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Retrieved prediction details', prediction, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -395,6 +424,7 @@ export class AiController {
         200
       );
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -431,6 +461,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Retrieved incidents list', result, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -449,6 +480,7 @@ export class AiController {
       const incident = await AiController.validateIncidentAccess(user, id);
       return ApiResponse.success(res, 'Retrieved incident details', incident, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -478,6 +510,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Updated incident status successfully', updated, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -503,6 +536,7 @@ export class AiController {
         200
       );
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -528,6 +562,7 @@ export class AiController {
         200
       );
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -551,6 +586,7 @@ export class AiController {
       const result = await RecommendationModel.getRecent(limit, cluster_id, undefined, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved recommendations list', result, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -592,6 +628,7 @@ export class AiController {
       const actions = await RecommendationModel.getHealingActions(limit, cluster_id, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved executed healing actions', actions, 200);
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }
@@ -820,6 +857,7 @@ export class AiController {
         200
       );
     } catch (error) {
+      console.error('[getPredictions ERROR]', error);
       if (error instanceof ApiError) {
         return ApiResponse.error(res, error.message, error.statusCode);
       }

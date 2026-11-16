@@ -445,7 +445,7 @@ def test_case_9_failed_scheduling_insufficient_memory(agent, metrics_agent, log_
         payload=payload,
     )
 
-    assert conclusion.cause_code == "deployment_failure"
+    assert conclusion.cause_code == "scheduling_failure"
     assert conclusion.cause_code != "memory_exhaustion"
 
 

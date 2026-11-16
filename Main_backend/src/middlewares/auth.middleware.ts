@@ -112,9 +112,29 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
     // Đồng bộ trạng thái thực tế và danh sách vai trò hoạt động mới nhất từ CSDL vào request
     decoded.status = dbUser.status as any;
-    const tokenExplicitlyViewer = Array.isArray(decoded.roles) && decoded.roles.length > 0 && decoded.roles.every((r: string) => ['VIEWER', 'USER'].includes(String(r).trim().toUpperCase()));
-    if (!tokenExplicitlyViewer && Array.isArray(dbUser.roles) && dbUser.roles.length > 0) {
-      decoded.roles = dbUser.roles;
+    
+    // Nếu token có chứa các vai trò hệ thống (SUPER_ADMIN, SYSTEM_ADMIN, ADMIN), 
+    // bắt buộc phải tồn tại trong CSDL (user_system_roles) để chống stale token sau khi bị thu hồi
+    const dbSystemRoles = Array.isArray(dbUser.roles)
+      ? dbUser.roles.map((r: string) => String(r).trim().toUpperCase())
+      : [];
+    
+    if (Array.isArray(decoded.roles)) {
+      const SYSTEM_ROLE_NAMES = ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'];
+      decoded.roles = decoded.roles.filter((r: string) => {
+        const upper = String(r).trim().toUpperCase();
+        if (SYSTEM_ROLE_NAMES.includes(upper)) {
+          return dbSystemRoles.includes(upper);
+        }
+        return true;
+      });
+      for (const sr of dbSystemRoles) {
+        if (!decoded.roles.includes(sr)) {
+          decoded.roles.push(sr);
+        }
+      }
+    } else {
+      decoded.roles = dbSystemRoles;
     }
   } catch (dbError) {
     if (dbError instanceof ApiError) {

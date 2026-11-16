@@ -180,7 +180,7 @@ export const PersonalProfilePage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div>
         <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-          My Profile — Hồ Sơ Cá Nhân
+          Hồ Sơ Cá Nhân
         </h2>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
           Xem và điều chỉnh thông tin định danh người dùng, hình ảnh đại diện và vai trò thành viên.

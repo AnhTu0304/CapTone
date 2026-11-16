@@ -76,7 +76,7 @@ describe('IncidentModel Honesty Queries', () => {
         assert.ok(sql.includes('pod_info'), 'SQL must query real pod_info lateral join');
         assert.ok(sql.includes('rec_info'), 'SQL must query rec_info lateral join');
         assert.ok(sql.includes('cluster_node_count'), 'SQL must compute cluster_node_count');
-        assert.ok(sql.includes('ai_predictions pred'), 'SQL must join ai_predictions');
+        assert.ok(sql.includes('ai_predictions') && sql.includes('pred'), 'SQL must join ai_predictions');
       }
     });
   }

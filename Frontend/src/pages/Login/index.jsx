@@ -49,7 +49,7 @@ export const LoginPage = ({ onNavigate }) => {
       handleRedirect();
     } catch (err) {
       if (err.message === 'Failed to fetch' || err.message?.toLowerCase().includes('fetch')) {
-        setError('Không thể kết nối đến máy chủ Backend (Port 5000). Vui lòng thử lại.');
+        setError('Không thể kết nối đến máy chủ Backend (Port 5005). Vui lòng kiểm tra lại dịch vụ Backend.');
       } else {
         setError(err.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
       }

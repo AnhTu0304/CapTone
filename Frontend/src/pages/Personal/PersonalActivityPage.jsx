@@ -13,6 +13,7 @@ import {
   Server,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
+import { AdminTablePagination } from '../../components/admin/common';
 
 export const formatActivityDescription = (desc, fallbackTitle) => {
   if (!desc) return fallbackTitle || "";
@@ -48,16 +49,10 @@ export const PersonalActivityPage = () => {
         page,
         limit,
       });
-      if (Array.isArray(data)) {
-        setActivities(data);
-        setTotalItems(typeof data.total === 'number' ? data.total : data.length);
-      } else if (data?.items) {
-        setActivities(data.items);
-        setTotalItems(typeof data.total === 'number' ? data.total : data.items.length);
-      } else {
-        setActivities([]);
-        setTotalItems(0);
-      }
+      const items = Array.isArray(data) ? data : (data?.items || []);
+      const total = typeof data?.total === 'number' ? data.total : (typeof items.total === 'number' ? items.total : items.length);
+      setActivities(items);
+      setTotalItems(total);
     } catch (err) {
       console.error('Error fetching activities:', err);
     } finally {
@@ -130,7 +125,7 @@ export const PersonalActivityPage = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-            Activity History — Lịch Sử Hoạt Động Cá Nhân
+            Lịch Sử Hoạt Động Cá Nhân
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
             Nhật ký kiểm toán toàn diện ghi nhận các thao tác đăng nhập, đổi bảo mật, xoay vòng Token và cụm K8s của bạn.
@@ -366,99 +361,22 @@ export const PersonalActivityPage = () => {
 
         {/* Pagination Bar */}
         {filtered.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px',
-              padding: '14px 16px',
-              borderTop: '1px solid #F1F5F9',
-              fontSize: '0.8125rem',
-              color: '#334155',
+          <AdminTablePagination
+            page={currentPage}
+            pageSize={pageSize}
+            total={totalItems}
+            totalPages={totalPages}
+            onPageChange={(newPage) => {
+              setCurrentPage(newPage);
             }}
-          >
-            {/* Cụm trái: Hiển thị mỗi trang */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Hiển thị mỗi trang:</span>
-              <select
-                aria-label="Hiển thị mỗi trang"
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#0F172A',
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  outline: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
-
-            {/* Cụm phải: Số trang và nút Trước / Sau */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span>
-                Trang {currentPage} trên tổng {totalPages}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1 || isLoading}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: '#FFFFFF',
-                    color: currentPage <= 1 || isLoading ? '#94A3B8' : '#0F172A',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    cursor: currentPage <= 1 || isLoading ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  &lsaquo; Trước
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages || isLoading}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: '#FFFFFF',
-                    color: currentPage >= totalPages || isLoading ? '#94A3B8' : '#0F172A',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    cursor: currentPage >= totalPages || isLoading ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  Sau &rsaquo;
-                </button>
-              </div>
-            </div>
-          </div>
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="hoạt động"
+            pageSizeOptions={[5, 10, 25, 50]}
+            isLoading={isLoading}
+          />
         )}
 
         {isLoading && filtered.length === 0 && (

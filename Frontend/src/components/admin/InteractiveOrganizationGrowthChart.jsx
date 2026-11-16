@@ -30,7 +30,7 @@ import {
 export const InteractiveOrganizationGrowthChart = ({
   kpiData = {},
   statistics = {},
-  title = 'Biến thiên Tăng Trưởng Toàn Nền Tảng (Platform Growth Dynamics)',
+  title = 'Biến thiên Tăng Trưởng Toàn Nền Tảng',
   subtitle = 'Thống kê viễn trắc đa chiều: Doanh nghiệp, Người dùng, Tác tử eBPF và Cụm K8s theo thời gian',
   className = '',
   height = 280,
@@ -356,7 +356,7 @@ export const InteractiveOrganizationGrowthChart = ({
                   margin: '2px 0 0 0',
                 }}
               >
-                {subtitle} &bull; <strong style={{ color: '#059669' }}>{dataset.periodLabel}</strong>
+                {subtitle}
               </p>
             </div>
           </div>

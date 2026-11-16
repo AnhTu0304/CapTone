@@ -1141,7 +1141,7 @@ export const NodeMetricsChartsPanel = ({
             )}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            Khả dụng: {formatBytes(summary.ram.availableBytes)} &bull; Đỉnh: {formatPercent(summary.ram.maxPercent, 1)}
+            Còn trống: {formatBytes(summary.ram.availableBytes)} &bull; Đỉnh: {formatPercent(summary.ram.maxPercent, 1)}
           </div>
         </div>
 
@@ -1180,7 +1180,7 @@ export const NodeMetricsChartsPanel = ({
             )}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            Trống: {formatBytes(summary.disk.availableBytes)} &bull; Đỉnh: {formatPercent(summary.disk.maxPercent, 1)}
+            Còn trống: {formatBytes(summary.disk.availableBytes)} &bull; Đỉnh: {formatPercent(summary.disk.maxPercent, 1)}
           </div>
         </div>
 
@@ -1197,7 +1197,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              BĂNG THÔNG MẠNG (RX / TX RATE)
+              TỐC ĐỘ TRUYỀN TẢI MẠNG
             </span>
             <Wifi size={16} color="#0891B2" />
           </div>
@@ -1210,7 +1210,7 @@ export const NodeMetricsChartsPanel = ({
                 color: '#0891B2',
               }}
             >
-              &darr; {hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'}
+              &darr; Nhận: {hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'}
             </span>
             <span
               style={{
@@ -1220,11 +1220,11 @@ export const NodeMetricsChartsPanel = ({
                 color: '#EA580C',
               }}
             >
-              &uarr; {hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'}
+              &uarr; Gửi: {hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'}
             </span>
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            Tích lũy: RX {formatBytes(summary.network.totalRxBytes)} &bull; TX {formatBytes(summary.network.totalTxBytes)}
+            Tổng nhận: {formatBytes(summary.network.totalRxBytes)} &bull; Tổng gửi: {formatBytes(summary.network.totalTxBytes)}
           </div>
         </div>
       </div>
@@ -1322,11 +1322,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Cpu size={16} color="#059669" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    CPU Utilization (%)
+                    Mức Sử Dụng CPU (%)
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Tỷ lệ sử dụng CPU toàn máy chủ (0–100%)
+                  Tỷ lệ tải của chip xử lý CPU trên máy chủ (0–100%)
                 </span>
               </div>
               {activeSample && (
@@ -1373,11 +1373,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Database size={16} color="#2563EB" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    RAM Usage (% &amp; Dung lượng thực)
+                    Mức Sử Dụng Bộ Nhớ RAM (%)
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Bộ nhớ vật lý đã dùng và khả dụng trên Node
+                  Dung lượng RAM đang chạy và còn trống trên máy chủ
                 </span>
               </div>
               {activeSample && (
@@ -1386,7 +1386,7 @@ export const NodeMetricsChartsPanel = ({
                     {formatPercent(activeSample.ram_usage_percent, 1)} ({formatBytes(activeSample.ram_used_bytes)} / {formatBytes(activeSample.ram_total_bytes)})
                   </div>
                   <div style={{ color: '#94A3B8', fontSize: '0.6875rem' }}>
-                    Khả dụng: {formatBytes(activeSample.ram_available_bytes)}
+                    Còn trống: {formatBytes(activeSample.ram_available_bytes)}
                   </div>
                 </div>
               )}
@@ -1424,11 +1424,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <HardDrive size={16} color="#7C3AED" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    Disk Usage (%) {selectedMount !== 'ALL' ? `[${selectedMount}]` : ''}
+                    Dung Lượng Ổ Đĩa (%) {selectedMount !== 'ALL' ? `[${selectedMount}]` : ''}
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Mức chiếm dụng ổ cứng theo phân vùng (không cộng dồn %)
+                  Không gian lưu trữ đã dùng và còn trống trên ổ đĩa
                 </span>
               </div>
               {activeSample && (
@@ -1437,7 +1437,7 @@ export const NodeMetricsChartsPanel = ({
                     {formatPercent(activeSample.disk_usage_percent, 1)} ({formatBytes(activeSample.disk_used_bytes)} / {formatBytes(activeSample.disk_total_bytes)})
                   </div>
                   <div style={{ color: '#94A3B8', fontSize: '0.6875rem' }}>
-                    Trống: {formatBytes(activeSample.disk_available_bytes)}
+                    Còn trống: {formatBytes(activeSample.disk_available_bytes)}
                   </div>
                 </div>
               )}
@@ -1475,11 +1475,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Wifi size={16} color="#0891B2" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    Network I/O Throughput (RX / TX Rate)
+                    Tốc Độ Mạng (Tải Về &amp; Tải Lên)
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Tốc độ truyền nhận mỗi giây theo thời gian
+                  Lưu lượng dữ liệu mạng truyền nhận mỗi giây
                 </span>
               </div>
 
@@ -1515,7 +1515,7 @@ export const NodeMetricsChartsPanel = ({
                       backgroundColor: showNetRx ? '#0891B2' : '#CBD5E1',
                     }}
                   />
-                  <span>&darr; RX ({hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'})</span>
+                  <span>&darr; Tải về (RX): {hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'}</span>
                 </button>
                 <button
                   type="button"
@@ -1543,7 +1543,7 @@ export const NodeMetricsChartsPanel = ({
                       backgroundColor: showNetTx ? '#EA580C' : '#CBD5E1',
                     }}
                   />
-                  <span>&uarr; TX ({hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'})</span>
+                  <span>&uarr; Tải lên (TX): {hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'}</span>
                 </button>
               </div>
             </div>

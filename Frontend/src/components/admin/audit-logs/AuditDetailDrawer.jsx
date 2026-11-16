@@ -202,17 +202,23 @@ export const AuditDetailDrawer = ({ log, onClose }) => {
             </div>
 
             <div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TÀI NGUYÊN MỤC TIÊU</div>
-              <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
-                {log.resourceId}
+              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>CỤM K8S (CLUSTER)</div>
+              <div style={{ fontWeight: 700, color: '#059669', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                {log.cluster || 'fyuyu'}
               </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Loại: {log.resourceType}</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
+                IP: {log.ipAddress}
+              </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TỔ CHỨC (TENANT)</div>
-              <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '2px' }}>{log.organization}</div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>IP: {log.ipAddress}</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 600 }}>TÀI NGUYÊN (RESOURCE)</div>
+              <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                {log.resourceType}
+              </div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
+                Trạng thái: {log.status}
+              </div>
             </div>
           </div>
 

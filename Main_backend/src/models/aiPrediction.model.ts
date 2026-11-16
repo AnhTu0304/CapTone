@@ -343,7 +343,7 @@ export class AiPredictionModel {
     }
 
     if (params.cluster_id && params.cluster_id !== 'ALL') {
-      conditions.push(`p.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
+      conditions.push(`p.cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx})`);
       values.push(params.cluster_id);
       idx++;
     }
@@ -410,7 +410,7 @@ export class AiPredictionModel {
 
       LEFT JOIN environments e ON e.id = p.environment_id
 
-      LEFT JOIN clusters c ON (c.id::text = p.cluster_id OR c.name = p.cluster_id OR c.cluster_uid = p.cluster_id)
+      LEFT JOIN clusters c ON (c.id::text = p.cluster_id::text OR c.name = p.cluster_id::text OR c.cluster_uid = p.cluster_id::text)
 
       LEFT JOIN workloads w ON w.id = p.workload_id
 
@@ -492,7 +492,7 @@ export class AiPredictionModel {
 
       LEFT JOIN environments e ON e.id = p.environment_id
 
-      LEFT JOIN clusters c ON (c.id::text = p.cluster_id OR c.name = p.cluster_id OR c.cluster_uid = p.cluster_id)
+      LEFT JOIN clusters c ON (c.id::text = p.cluster_id::text OR c.name = p.cluster_id::text OR c.cluster_uid = p.cluster_id::text)
 
       LEFT JOIN workloads w ON w.id = p.workload_id
 

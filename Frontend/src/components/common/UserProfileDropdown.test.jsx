@@ -228,7 +228,7 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
 
     // Mở lại và bấm điều hướng
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByText('Không Gian Cá Nhân'));
+    fireEvent.click(screen.getByText('Trung Tâm Điều Khiển'));
     expect(mockNavigate).toHaveBeenCalledWith('/portal');
 
     // Mở lại và bấm Đăng xuất

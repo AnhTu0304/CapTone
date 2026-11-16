@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { aiService } from '../../../services/aiService';
+import { translateIncidentTitle, ACTION_DISPLAY_NAMES_VI, translateActionMessageToVi } from './incidentUtils';
 import {
   X,
   GitBranch,
@@ -29,26 +30,34 @@ import {
   XCircle,
 } from 'lucide-react';
 
-const ACTION_DISPLAY_NAMES = {
-  SCALE_REPLICAS: 'Scale Replicas',
-  RESTART_POD: 'Restart Pod',
-  REPLACE_POD: 'Replace Pod',
-  DRAIN_NODE: 'Drain Node',
-  RESTART_DEPLOYMENT: 'Restart Deployment',
-  ROLLBACK_DEPLOYMENT: 'Rollback Deployment',
-  CLEANUP_STORAGE: 'Cleanup Storage',
-  TEMPORARY_IP_BLOCK: 'Temporary IP Block',
-};
+const ACTION_DISPLAY_NAMES = ACTION_DISPLAY_NAMES_VI;
 
-const getTimelineShortReason = (reason, code) => {
+const getTimelineShortReason = (reason, code, isVerifiedSuccess = false, replicaCount = null) => {
+  if (isVerifiedSuccess) {
+    if (code === 'SCALE_REPLICAS' || code === 'SCALE_UP' || code === 'SCALE_DOWN') {
+      return replicaCount ? `Đã điều chỉnh lên ${replicaCount} Pods ổn định.` : 'Đã tăng số lượng Pod ổn định.';
+    }
+    if (code === 'RESTART_POD' || code === 'RESTART_DEPLOYMENT') return 'Đã khởi động lại và ổn định.';
+    if (code === 'REPLACE_POD') return 'Đã thay thế Pod mới và ổn định.';
+    return 'Dịch vụ đã phục hồi ổn định.';
+  }
   if (!reason) return 'Thao tác không thành công.';
   const r = String(reason).toLowerCase();
   if (r.includes('daemonset') || r.includes('cannot scale')) return 'Không thể scale DaemonSet.';
   if (r.includes('agent không phản hồi') || r.includes('agent chưa phản hồi') || r.includes('quá thời gian chờ') || r.includes('timeout')) return 'Agent không phản hồi.';
-  if (r.includes('chưa giải quyết triệt để') || r.includes('vẫn lỗi') || r.includes('hậu kiểm') || r.includes('sau hành động')) return 'Kiểm tra sau hành động vẫn lỗi.';
+  if (r.includes('hậu kiểm thất bại') || r.includes('chưa giải quyết triệt để') || r.includes('vẫn lỗi') || r.includes('sau hành động') || r.includes('vẫn còn bất thường')) return 'Kiểm tra sau hành động vẫn lỗi.';
+  if (r.includes('hậu kiểm thành công') || r.includes('ổn định hoàn toàn') || r.includes('đã phục hồi')) {
+    return replicaCount ? `Phục hồi ổn định (${replicaCount} Pods).` : 'Phục hồi ổn định hoàn toàn.';
+  }
   if (r.includes('1 node') || r.includes('chỉ có 1 node') || r.includes('không có node dự phòng') || r.includes('single-node')) return 'Cụm chỉ có 1 Node.';
   if (r.includes('oom') || r.includes('cạn kiệt') || r.includes('ram')) return 'Container bị tràn RAM (OOM).';
   if (r.includes('crashloop') || r.includes('sập')) return 'Pod bị CrashLoopBackOff.';
+  if (r.includes('scaled') || r.includes('quy mô') || r.includes('mở rộng') || r.includes('thu hẹp') || r.includes('scale')) {
+    return replicaCount ? `Đã điều chỉnh lên ${replicaCount} Pods.` : 'Đã điều chỉnh số lượng bản sao Pod.';
+  }
+  if (r.includes('restart') || r.includes('khởi động lại')) return 'Đã khởi động lại Pod.';
+  if (r.includes('replace') || r.includes('thay thế')) return 'Đã thay thế Pod mới.';
+  if (r.includes('drain') || r.includes('di tản') || r.includes('di dời')) return 'Đã di dời Pod khỏi Node.';
   return reason.length > 50 ? `${reason.substring(0, 48)}...` : reason;
 };
 
@@ -143,7 +152,9 @@ const SRE_DICTIONARY_VI = {
   'RESTART_POD': 'KHỞI ĐỘNG LẠI POD',
   'REPLACE_POD': 'THAY THẾ POD (REPLACE)',
   'DRAIN_NODE': 'DI DỜI POD KHỎI NODE LỖI (DRAIN_NODE)',
-  'SCALE_REPLICAS': 'MỞ RỘNG POD REPLICAS',
+  'SCALE_REPLICAS': 'TĂNG BẢN SAO POD (SCALE REPLICAS)',
+  'SCALE_UP': 'MỞ RỘNG BẢN SAO POD (SCALE UP)',
+  'SCALE_DOWN': 'THU HẸP BẢN SAO POD (SCALE DOWN)',
   'ROLLBACK_DEPLOYMENT': 'ROLLBACK DEPLOYMENT',
   'CLEANUP_STORAGE': 'DỌN DẸP LƯU TRỮ',
   'RESTART_DEPLOYMENT': 'ROLLING RESTART DEPLOYMENT',
@@ -619,9 +630,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const incidentTitle = useMemo(() => {
     const rawTitle = incidentDetail?.title || incident?.title || '';
     if (!rawTitle) return '';
-    let t = rawTitle.replace(/\s+on\s+/i, ' trên ');
-    t = t.replace(/\bUNKNOWN\b/gi, 'Chưa xác định nguyên nhân');
-    return t;
+    return translateIncidentTitle(rawTitle);
   }, [incidentDetail?.title, incident?.title]);
 
   const rawConfidence =
@@ -705,7 +714,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     }
     return [];
   }, [gruPrediction, incidentDetail]);
-  const riskOutputsAll = gruPrediction?.risk_outputs || incidentDetail?.risk_outputs || null;
+  const riskOutputsAll = useMemo(() => {
+    let outputs = incidentDetail?.prediction_risk_outputs || incidentDetail?.risk_outputs;
+    if (typeof outputs === 'string') {
+      try {
+        outputs = JSON.parse(outputs);
+      } catch (e) {
+        outputs = null;
+      }
+    }
+    if (outputs && typeof outputs === 'object' && Object.keys(outputs).length > 0) {
+      return outputs;
+    }
+    return gruPrediction?.risk_outputs || null;
+  }, [incidentDetail, gruPrediction]);
 
   // ========================================================
   // 2.1 TRÍCH XUẤT CẤU TRÚC BẰNG CHỨNG XÁC THỰC (EVIDENCE PIPELINE)
@@ -862,6 +884,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       const svcName = matchTarget ? matchTarget[1] : (serviceDisplayName || 'dịch vụ');
       return `Lỗi kết nối Kubernetes API Server (10.96.0.1:443): Connection refused. Không thể gửi lệnh điều phối tới ${svcName} do API Server cụm bị sập hoặc đang khởi động lại.`;
     }
+    // Dịch các thông báo hành động từ K8s Agent (scaling, restart, rollback, replace pod...) sang tiếng Việt
+    str = translateActionMessageToVi(str, serviceDisplayName, 'Tự phục hồi', namespaceName || 'default');
     // Bỏ các từ tiếng Anh kỹ thuật lặp
     str = str.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':');
     str = str.replace(/Hậu kiểm thất bại:\s*/gi, '');
@@ -1030,7 +1054,36 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         const rawReason = cleanExecutionError(
           item.error_message || item.verification_message || (isStaleRunning ? 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.' : null)
         );
-        const metrics = extractDevOpsMetrics(rawReason);
+
+        // Trích xuất số lượng bản sao Pod (Replicas) nếu có từ DB hoặc thông điệp
+        const replicaCount =
+          item.verification_details?.metrics?.replica_count ??
+          item.result?.details?.target_replicas ??
+          item.result?.details?.replicas ??
+          item.result?.replicas ??
+          (() => {
+            const raw = String(item.verification_message || item.error_message || item.result?.message || rawReason || '');
+            const m = raw.match(/(?:to|lên|thành|đạt|từ \d+ đến|từ \d+ tới)\s*(\d+)\s*(?:replicas|bản sao|pod)/i) ||
+                      raw.match(/from \d+ to (\d+)/i) ||
+                      raw.match(/(\d+)\s*(?:replicas|bản sao|pod)/i);
+            return m ? parseInt(m[1], 10) : null;
+          })();
+
+        const metrics = item.verification_details?.metrics
+          ? {
+              cpu: item.verification_details.metrics.cpu ?? null,
+              ram: item.verification_details.metrics.ram ?? null,
+              restart: item.verification_details.metrics.pod_restart_count ?? null,
+              latency: item.verification_details.metrics.latency ?? null,
+              http5xx: item.verification_details.metrics.http5xx_rate ?? null,
+              replica_count: item.verification_details.metrics.replica_count ?? replicaCount,
+            }
+          : extractDevOpsMetrics(rawReason);
+
+        if (metrics && replicaCount && !metrics.replica_count) {
+          metrics.replica_count = replicaCount;
+        }
+
         const conciseVerdict = getDevOpsVerdict(metrics, isVerifiedSuccess, isFailed, rawReason);
 
         return {
@@ -1041,6 +1094,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           isVerifiedSuccess,
           isVerifying,
           timeStr,
+          replicaCount,
           verificationLabel: isFailed
             ? (isStaleRunning ? 'Xác minh: Thất bại (Timeout >60s)' : 'Xác minh: Thất bại')
             : isVerifiedSuccess
@@ -1475,7 +1529,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       );
     } else if (predictedRiskVi) {
       lines.push(
-        `• Cảnh báo học sâu GRU: Nguy cơ "${predictedRiskVi}" vượt ngưỡng an toàn.`
+        `• Cảnh báo rủi ro sớm từ AI: Nguy cơ "${predictedRiskVi}" vượt ngưỡng an toàn.`
       );
     }
 
@@ -1527,8 +1581,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         `• Trạng thái hiện tại: Đã thực thi "${recActionVi}" (Bậc ${lastStep.stepIndex}), hệ thống đang thu thập 12 điểm viễn trắc tiếp theo để hậu kiểm độ ổn định.`
       );
     } else {
+      const rollbackDetail = recAction === 'ROLLBACK_DEPLOYMENT'
+        ? ' (quay về bản phát hành ổn định liền trước / revision trước đó)'
+        : '';
       lines.push(
-        `• Phương án tự khắc phục tiếp theo: Đề xuất thực thi hành động "${recActionVi}" (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi}) để nhanh chóng đưa dịch vụ trở về trạng thái ổn định theo chuẩn MAPE-K.`
+        `• Phương án tự khắc phục tiếp theo: Đề xuất thực thi hành động "${recActionVi}"${rollbackDetail} (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi}) để nhanh chóng đưa dịch vụ trở về trạng thái ổn định theo chuẩn MAPE-K.`
       );
     }
 
@@ -1574,15 +1631,29 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // Danh sách dòng thời gian Lịch sử tự phục hồi (Timeline Data) - Phản ánh chính xác từ dữ liệu thực tế
   const timelineList = useMemo(() => {
     if (previousActionSteps.length > 0) {
-      return previousActionSteps.map((st) => ({
-        stepIndex: st.stepIndex,
-        actionName: ACTION_DISPLAY_NAMES[st.code] || st.labelVi || st.code,
-        statusBadge: getTimelineStatusBadge(st),
-        shortReason: getTimelineShortReason(st.reason, st.code),
-        timeStr: st.timeStr || '--:--:--',
-        metrics: st.metrics,
-        rawReason: st.reason,
-      }));
+      return previousActionSteps.map((st) => {
+        let actionName = ACTION_DISPLAY_NAMES[st.code] || st.labelVi || st.code;
+        if (st.code === 'SCALE_REPLICAS' || st.code === 'SCALE_UP') {
+          actionName = st.replicaCount
+            ? `Tăng số lượng bản sao Pod (Lên ${st.replicaCount} Pods)`
+            : 'Tăng số lượng bản sao Pod';
+        } else if (st.code === 'SCALE_DOWN') {
+          actionName = st.replicaCount
+            ? `Thu hẹp bản sao Pod (Về ${st.replicaCount} Pods)`
+            : 'Thu hẹp bản sao Pod';
+        }
+        return {
+          stepIndex: st.stepIndex,
+          code: st.code,
+          actionName,
+          statusBadge: getTimelineStatusBadge(st),
+          shortReason: getTimelineShortReason(st.reason, st.code, st.isVerifiedSuccess, st.replicaCount),
+          timeStr: st.timeStr || '--:--:--',
+          metrics: st.metrics,
+          rawReason: st.reason,
+          replicaCount: st.replicaCount,
+        };
+      });
     }
     return [];
   }, [previousActionSteps]);
@@ -1613,7 +1684,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       }
       return `SelfAI ghi nhận dấu hiệu bất thường trên dịch vụ ${serviceDisplayName}. Hiện chưa đủ bằng chứng xác thực để kết luận nguyên nhân gốc rễ và tạm thời dừng hành động tự động để đảm bảo an toàn.`;
     }
-    return `SelfAI xác định nguyên nhân gốc rễ của sự cố trên dịch vụ ${serviceDisplayName} là "${rootCauseTypeVi}". Đề xuất phương án xử lý: ${recActionVi}.`;
+    const rollbackDetail = recAction === 'ROLLBACK_DEPLOYMENT'
+      ? ' (quay về bản phát hành ổn định liền trước)'
+      : '';
+    return `SelfAI xác định nguyên nhân gốc rễ của sự cố trên dịch vụ ${serviceDisplayName} là "${rootCauseTypeVi}". Đề xuất phương án xử lý: ${recActionVi}${rollbackDetail}.`;
   }, [groupedSymptoms, symptomsList, evidenceStatus, isUnknown, serviceDisplayName, rootCauseTypeVi, recActionVi]);
 
     if (!incident) return null;
@@ -1861,7 +1935,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           >
             <Activity size={13} color="#7E22CE" />
             <span>
-              Dự báo GRU <strong>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : 'Chưa đánh giá'}</strong>
+              Dự báo rủi ro AI <strong>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : 'Chưa đánh giá'}</strong>
             </span>
           </div>
         </div>
@@ -2511,18 +2585,45 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           {isTimelineExpanded && (
                             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {timelineList.map((st, idx) => (
-                                <div key={idx} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 10px', fontSize: '0.71875rem' }}>
-                                  <div style={{ fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
-                                    Bước {st.stepIndex}: {st.actionName} — {st.statusBadge.label}
+                                <div key={idx} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '8px 10px', fontSize: '0.71875rem' }}>
+                                  <div style={{ fontWeight: 700, color: '#334155', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span>Bước {st.stepIndex}: {st.actionName} — {st.statusBadge.label}</span>
+                                    {st.replicaCount && (
+                                      <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE', fontSize: '0.6875rem', fontWeight: 800 }}>
+                                        ☸️ {st.replicaCount} Pods
+                                      </span>
+                                    )}
                                   </div>
                                   <div style={{ color: '#64748B', lineHeight: 1.35 }}>
                                     {st.rawReason}
                                   </div>
-                                  {st.metrics && (
-                                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                                      {st.metrics.ram !== null && <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>RAM: {st.metrics.ram}%</span>}
-                                      {st.metrics.cpu !== null && <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>CPU: {st.metrics.cpu}%</span>}
-                                      {st.metrics.restart !== null && <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>Restart: {st.metrics.restart} lần</span>}
+                                  {(st.metrics || st.replicaCount) && (
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                                      {st.replicaCount && (
+                                        <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '3px', border: '1px solid #BFDBFE', fontWeight: 700 }}>
+                                          ☸️ Số Pod: {st.replicaCount} Pods
+                                        </span>
+                                      )}
+                                      {st.metrics?.ram !== null && st.metrics?.ram !== undefined && (
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                          RAM: {st.metrics.ram}%
+                                        </span>
+                                      )}
+                                      {st.metrics?.cpu !== null && st.metrics?.cpu !== undefined && (
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                          CPU: {st.metrics.cpu}%
+                                        </span>
+                                      )}
+                                      {st.metrics?.restart !== null && st.metrics?.restart !== undefined && (
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                          Restart: {st.metrics.restart} lần
+                                        </span>
+                                      )}
+                                      {st.metrics?.latency !== null && st.metrics?.latency !== undefined && (
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                          Độ trễ: {st.metrics.latency}ms
+                                        </span>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -2636,7 +2737,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     {predictedRisk && (
                       <div style={{ width: '100%', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #DCFCE7', textAlign: 'left', fontSize: '0.6875rem' }}>
                         <div style={{ color: '#6B21A8', fontWeight: 700, fontSize: '0.65625rem', marginBottom: '2px' }}>
-                          Dự báo từ mô hình GRU — Không phải bằng chứng RCA hoặc lệnh thực thi
+                          Dự báo rủi ro sớm từ AI — Không phải bằng chứng RCA hoặc lệnh thực thi
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7E22CE' }}>
                           <span style={{ fontWeight: 700 }}>{GRU_RISK_NAMES_VI[predictedRisk] || predictedRiskVi}</span>
@@ -2778,9 +2879,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <span style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B' }}>
                       Báo cáo SRE (Tóm tắt)
                     </span>
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#166534', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
-                      BÁO CÁO GIẢI TRÌNH SRE (SRE INCIDENT REPORT)
-                    </span>
                   </div>
                   <button
                     type="button"
@@ -2850,7 +2948,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 >
                   <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#6D28D9', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Activity size={16} color="#7C3AED" />
-                    <span>KẾT QUẢ DỰ BÁO TỪ MÔ HÌNH HỌC SÂU GRU (7 HEADS ARCHITECTURE)</span>
+                    <span>KẾT QUẢ DỰ BÁO TỪ MÔ HÌNH HỌC SÂU AI (7 HEADS ARCHITECTURE)</span>
                   </div>
                   <span style={{ fontSize: '0.6875rem', color: '#5B21B6', fontWeight: 600, backgroundColor: '#EDE9FE', padding: '2px 8px', borderRadius: '4px' }}>
                     Ngưỡng phân loại chuẩn: {(primaryThreshold * 100).toFixed(0)}%
@@ -2858,76 +2956,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 </div>
 
                 <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {/* Tóm tắt các rủi ro vượt ngưỡng */}
-                  <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                      Rủi ro vượt ngưỡng kích hoạt (Detected Risks):
-                    </div>
-                    {detectedRisksList.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {detectedRisksList.map((r, i) => {
-                          const riskConf = parseConfidence(r.confidence);
-                          return (
-                            <div
-                              key={i}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '6px 12px',
-                                backgroundColor: '#FEF2F2',
-                                color: '#B91C1C',
-                                border: '1px solid #FECACA',
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                fontSize: '0.75rem',
-                              }}
-                            >
-                              <AlertTriangle size={13} color="#DC2626" />
-                              <span>{HEAD_NAMES_VI[r.risk_type] || r.risk_type}</span>
-                              {riskConf !== null && (
-                                <span style={{ backgroundColor: '#DC2626', color: '#FFFFFF', padding: '1px 6px', borderRadius: '3px', fontSize: '0.6875rem' }}>
-                                  {riskConf}%
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (gruPrediction || incidentDetail?.prediction_id) ? (
-                      <div
-                        style={{
-                          padding: '10px 14px',
-                          backgroundColor: '#F0FDF4',
-                          border: '1px solid #BBF7D0',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}
-                      >
-                        <CheckCircle2 size={16} color="#15803D" />
-                        <span style={{ fontSize: '0.78125rem', color: '#166534', fontWeight: 600 }}>
-                          Không có rủi ro viễn trắc nào vượt ngưỡng. Toàn bộ các chỉ số tài nguyên được giám sát đều trong giới hạn an toàn.
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '10px 14px',
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #E2E8F0',
-                          borderRadius: '8px',
-                          fontSize: '0.78125rem',
-                          color: '#64748B',
-                          fontWeight: 500,
-                        }}
-                      >
-                        Không có dữ liệu dự báo GRU gắn với sự cố này.
-                      </div>
-                    )}
-                  </div>
-
                   {/* BẢNG 7 HEADS VỚI PROGRESS BAR */}
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>

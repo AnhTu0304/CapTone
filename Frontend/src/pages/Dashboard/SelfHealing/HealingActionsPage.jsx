@@ -21,21 +21,26 @@ import {
 } from 'lucide-react';
 
 const ACTION_LABELS_VI = {
-  RESTART_POD: 'Restart Pod',
-  REPLACE_POD: 'Replace Pod',
-  SCALE_REPLICAS: 'Scale Replicas',
-  SCALE_UP: 'Scale Up',
-  SCALE_DOWN: 'Scale Down',
-  ROLLBACK_DEPLOYMENT: 'Rollback Deployment',
-  CLEANUP_STORAGE: 'Cleanup Storage',
-  CLEANUP_TEMP_FILES: 'Cleanup Temp Files',
-  TEMPORARY_IP_BLOCK: 'Chặn tạm thời IP tấn công (TEMPORARY_IP_BLOCK)',
-  BLOCK_IP_TEMP: 'Chặn tạm thời IP tấn công (BLOCK_IP_TEMP)',
-  NO_ACTION: 'Giám sát an toàn (NO_ACTION)',
+  RESTART_POD: 'Khởi động lại Pod',
+  REPLACE_POD: 'Thay thế Pod',
+  SCALE_REPLICAS: 'Điều chỉnh số lượng bản sao Pod',
+  SCALE_UP: 'Mở rộng bản sao Pod',
+  SCALE_DOWN: 'Thu hẹp bản sao Pod',
+  ROLLBACK_DEPLOYMENT: 'Khôi phục bản phát hành trước',
+  CLEANUP_STORAGE: 'Dọn dẹp lưu trữ',
+  CLEANUP_TEMP_FILES: 'Dọn dẹp tệp tạm',
+  TEMPORARY_IP_BLOCK: 'Chặn tạm thời IP tấn công',
+  BLOCK_IP_TEMP: 'Chặn tạm thời IP tấn công',
+  NO_ACTION: 'Giám sát an toàn',
 };
 
 const formatHealingActionDetails = (item, actionCode, targetName) => {
-  const ns = item.namespace || 'default';
+  const ns = item.result?.details?.namespace ||
+    item.result?.namespace ||
+    item.namespace ||
+    (item.result?.message?.match(/namespace "([^"]+)"/)?.[1]) ||
+    (item.error_message?.match(/namespace "([^"]+)"/)?.[1]) ||
+    'default';
   const rawMsg = String(item.result?.message || item.error_message || '');
   const actionVi = ACTION_LABELS_VI[actionCode] || actionCode || 'Tự phục hồi';
 
@@ -90,9 +95,14 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
         detail: `K8s Agent đã thực thi khởi động lại Pod của dịch vụ "${targetName}" tại namespace "${ns}" để giải phóng tài nguyên bị treo.`,
       };
     }
+    const cleanDetail = String(rawMsg || '')
+      .replace(/\s*\(Post-Action Verification Failed\):?/gi, ':')
+      .replace(/Post-Action Verification Failed:?\s*/gi, '')
+      .trim();
+
     return {
       title: `Đã thực thi thành công ${ACTION_LABELS_VI[code] || code} trên dịch vụ "${targetName}"`,
-      detail: rawMsg && !rawMsg.includes('Self-healing mitigate action') ? rawMsg : `Đã hoàn tất lệnh tự phục hồi trên "${targetName}" (namespace "${ns}").`,
+      detail: cleanDetail && !cleanDetail.includes('Self-healing mitigate action') ? cleanDetail : `Đã hoàn tất lệnh tự phục hồi trên "${targetName}" (namespace "${ns}").`,
     };
   }
 
@@ -157,10 +167,20 @@ export const HealingActionsPage = ({ onNavigate }) => {
       stage = 'THẤT BẠI (FAILED)';
     }
 
-    const durMs = item.attempts && item.attempts[0]?.duration_ms ? item.attempts[0].duration_ms : 1500;
-    const elapsedSec = item.elapsed_seconds !== undefined && item.elapsed_seconds !== null
-      ? `${item.elapsed_seconds}s`
-      : `${(durMs / 1000).toFixed(1)}s`;
+    let computedDurationMs = 0;
+    if (item.started_at && item.completed_at) {
+      const s = new Date(item.started_at).getTime();
+      const e = new Date(item.completed_at).getTime();
+      if (!isNaN(s) && !isNaN(e) && e >= s) {
+        computedDurationMs = e - s;
+      }
+    }
+    if (!computedDurationMs) {
+      computedDurationMs = item.result?.duration_ms || item.attempts?.[0]?.duration_ms || (item.elapsed_seconds ? Math.round(item.elapsed_seconds * 1000) : 0);
+    }
+    const elapsedSec = computedDurationMs > 0
+      ? `${(computedDurationMs / 1000).toFixed(1)}s`
+      : (item.elapsed_seconds !== undefined && item.elapsed_seconds !== null ? `${item.elapsed_seconds}s` : '0.1s');
 
     const targetName = item.target_name || item.target_id || 'Chưa xác định';
     const actionTypeCode = item.action_type_code || item.action_type_name || 'RESTART_POD';
@@ -168,6 +188,13 @@ export const HealingActionsPage = ({ onNavigate }) => {
     const orgName = item.organization_name || currentOrg?.name || 'Tổ chức hiện tại';
     const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
     const formattedInfo = formatHealingActionDetails(item, actionTypeCode, targetName);
+
+    const resolvedNs = item.result?.details?.namespace ||
+      item.result?.namespace ||
+      item.namespace ||
+      (item.result?.message?.match(/namespace "([^"]+)"/)?.[1]) ||
+      (item.error_message?.match(/namespace "([^"]+)"/)?.[1]) ||
+      'default';
 
     return {
       id: shortId,
@@ -177,7 +204,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
       service: targetName,
       clusterName,
       orgName,
-      namespace: item.namespace || 'default',
+      namespace: resolvedNs,
       stage,
       progress,
       elapsed: elapsedSec,
@@ -289,7 +316,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
         const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
           ? '127.0.0.1'
           : window.location.hostname;
-        host = `${targetHost}:5000`;
+        host = `${targetHost}:5005`;
       }
       const token =
         localStorage.getItem('selfheal_auth_token') ||
@@ -392,16 +419,30 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Zap size={22} color="var(--dash-primary)" />
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Zap size={20} color="#059669" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Hành Động Tự Phục Hồi Đang Thực Thi (Active & In-Flight)
             </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Giám sát tiến trình điều phối tự phục hồi MAPE-K và các can thiệp thời gian thực trên cụm máy chủ
+            </p>
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-            Giám sát tiến trình điều phối tự phục hồi MAPE-K và các can thiệp thời gian thực trên cụm máy chủ
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

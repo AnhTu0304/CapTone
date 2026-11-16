@@ -136,6 +136,17 @@ export const PoliciesPage = () => {
     'POL-RESTART-CRASHED-POD': 'Tự động khởi động lại Pod bị treo hoặc crash liveness probe',
   };
 
+  const isMandatoryHitlPolicy = useCallback((p) => {
+    const code = String(p?.code || p?.name || '').toUpperCase();
+    const action = String(p?.action || (p?.actions && p.actions[0]?.action_code) || '').toUpperCase();
+    return (
+      code.includes('ROLLBACK') ||
+      code.includes('DRAIN') ||
+      action.includes('ROLLBACK') ||
+      action.includes('DRAIN')
+    );
+  }, []);
+
   const mapBackendPolicyToUI = useCallback((p) => {
     const actionNames = p.actions && p.actions.length > 0
       ? p.actions.map((a) => a.action_name || a.action_code).join(', ')
@@ -148,6 +159,8 @@ export const PoliciesPage = () => {
       displayName = KNOWN_POLICY_TITLES[p.name] || p.name;
     }
 
+    const isMandatory = isMandatoryHitlPolicy(p);
+
     return {
       id: p.id,
       code: p.name,
@@ -158,12 +171,12 @@ export const PoliciesPage = () => {
       condition: `Trigger: ${p.trigger_type} (Ngưỡng tin cậy >= ${Math.round(Number(p.confidence_threshold || 0.85) * 100)}%)`,
       action: actionNames,
       riskLevel: p.risk_level || 'LOW',
-      hitlRequired: p.requires_approval ?? false,
+      hitlRequired: isMandatory ? true : (p.requires_approval ?? false),
       enabled: p.is_active ?? true,
       cooldown: p.cooldown_seconds || 300,
       maxRetries: p.max_retries || 2,
     };
-  }, [currentEnv?.cluster]);
+  }, [currentEnv?.cluster, isMandatoryHitlPolicy]);
 
   const fetchPolicies = useCallback(async () => {
     setIsLoading(true);
@@ -190,12 +203,13 @@ export const PoliciesPage = () => {
       }
 
       const clusterPolicies = basePolicies.map((p) => {
+        const isMandatory = isMandatoryHitlPolicy(p);
         if (savedClusterMap && (savedClusterMap[p.id] !== undefined || savedClusterMap[p.code] !== undefined)) {
           const override = savedClusterMap[p.id] ?? savedClusterMap[p.code];
           return {
             ...p,
             enabled: override.enabled !== undefined ? override.enabled : p.enabled,
-            hitlRequired: override.hitlRequired !== undefined ? override.hitlRequired : p.hitlRequired,
+            hitlRequired: isMandatory ? true : (override.hitlRequired !== undefined ? override.hitlRequired : p.hitlRequired),
           };
         }
         // If no explicit settings saved yet for this cluster:
@@ -204,7 +218,7 @@ export const PoliciesPage = () => {
         return {
           ...p,
           enabled: isClusterOnline ? (p.enabled ?? true) : false,
-          hitlRequired: isClusterOnline ? (p.hitlRequired ?? false) : true,
+          hitlRequired: isMandatory ? true : (isClusterOnline ? (p.hitlRequired ?? false) : true),
         };
       });
 
@@ -246,15 +260,16 @@ export const PoliciesPage = () => {
     setSaveSuccess(false);
 
     const updatedList = policies.map((p) => {
+      const isMandatory = isMandatoryHitlPolicy(p);
       const risk = String(p.riskLevel || 'LOW').toUpperCase();
       const isHighRisk = risk === 'HIGH' || risk === 'CRITICAL';
       if (mode === 'AUTONOMOUS') {
-        return { ...p, enabled: true, hitlRequired: false };
+        return { ...p, enabled: true, hitlRequired: isMandatory ? true : false };
       }
       if (mode === 'AUDIT') {
         return { ...p, enabled: false, hitlRequired: true };
       }
-      return { ...p, enabled: true, hitlRequired: isHighRisk };
+      return { ...p, enabled: true, hitlRequired: isMandatory ? true : isHighRisk };
     });
 
     setPolicies(updatedList);
@@ -333,6 +348,10 @@ export const PoliciesPage = () => {
     }
     const target = policies.find((p) => p.id === id);
     if (!target) return;
+    if (isMandatoryHitlPolicy(target)) {
+      toastWarning('Chính sách Rollback Deployment và Drain Node can thiệp trực tiếp phiên bản phát hành/hạ tầng cụm. Đây là rào chắn an toàn bất biến, bắt buộc 100% phải qua Cổng Phê Duyệt HITL!', 'Khóa An Toàn Bất Biến');
+      return;
+    }
     const newHitl = !target.hitlRequired;
     const updatedList = policies.map((p) => (p.id === id ? { ...p, hitlRequired: newHitl } : p));
     setPolicies(updatedList);
@@ -474,15 +493,30 @@ export const PoliciesPage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <ShieldCheck size={20} color="#059669" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Ma Trận Chính Sách Tự Phục Hồi
             </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+              Quản lý chính sách tự động và cơ chế bảo vệ an toàn MAPE-K
+            </p>
           </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Quản lý chính sách tự động và an toàn MAPE-K
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1252,29 +1286,38 @@ export const PoliciesPage = () => {
                     </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
-                      <button
-                        onClick={() => handleToggleHitl(p.id)}
-                        disabled={!canManagePolicies}
-                        className="dash-btn"
-                        style={{
-                          padding: '4px 10px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          borderRadius: 'var(--dash-radius-full)',
-                          backgroundColor: p.hitlRequired ? '#eff6ff' : 'var(--dash-bg-subtle)',
-                          color: p.hitlRequired ? '#2563eb' : 'var(--dash-text-secondary)',
-                          border: `1px solid ${p.hitlRequired ? '#bfdbfe' : 'var(--dash-border-subtle)'}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
-                          opacity: !canManagePolicies ? 0.6 : 1,
-                        }}
-                        title={!canManagePolicies ? 'Chỉ SME Owner và DevOps mới có quyền cấu hình HITL' : undefined}
-                      >
-                        {p.hitlRequired ? <Lock size={12} /> : null}
-                        {p.hitlRequired ? 'Bắt Buộc Duyệt' : 'Tự Động Chạy'}
-                      </button>
+                      {(() => {
+                        const isMandatory = isMandatoryHitlPolicy(p);
+                        return (
+                          <button
+                            onClick={() => handleToggleHitl(p.id)}
+                            disabled={!canManagePolicies || isMandatory}
+                            className="dash-btn"
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              borderRadius: 'var(--dash-radius-full)',
+                              backgroundColor: p.hitlRequired ? '#eff6ff' : 'var(--dash-bg-subtle)',
+                              color: p.hitlRequired ? '#2563eb' : 'var(--dash-text-secondary)',
+                              border: `1px solid ${p.hitlRequired ? '#bfdbfe' : 'var(--dash-border-subtle)'}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: !canManagePolicies || isMandatory ? 'not-allowed' : 'pointer',
+                              opacity: !canManagePolicies ? 0.6 : 1,
+                            }}
+                            title={
+                              isMandatory
+                                ? 'Rào chắn an toàn bất biến: Hành động Rollback/Drain Node bắt buộc 100% phải qua Cổng Phê Duyệt HITL, không thể cấu hình tự động chạy.'
+                                : (!canManagePolicies ? 'Chỉ SME Owner và DevOps mới có quyền cấu hình HITL' : undefined)
+                            }
+                          >
+                            {p.hitlRequired ? <Lock size={12} /> : null}
+                            {p.hitlRequired ? (isMandatory ? 'Bắt Buộc Duyệt (Khóa)' : 'Bắt Buộc Duyệt') : 'Tự Động Chạy'}
+                          </button>
+                        );
+                      })()}
                     </td>
 
                     <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>

@@ -4,7 +4,7 @@
   "scenario_title": "Khởi động lại toàn bộ Deployment (Restart Deployment)",
   "file_name": "03_action_RESTART_DEPLOYMENT.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-13T09:30:40.718437+00:00",
+  "tested_at": "2026-11-16T20:38:12.302176+00:00",
   "description": "Lỗi ứng dụng cấp hệ thống (Application errors / deadlock) xảy ra diện rộng trên toàn bộ Replicas của Deployment mà không có Pod crash riêng lẻ (restart_count: 0, HTTP 5xx: 15%). RCA đề xuất RESTART_DEPLOYMENT thực hiện rolling restart an toàn.",
   "input_payload": {
     "request_id": "req-20261026-restart-depl-003",

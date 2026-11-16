@@ -1,15 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import { ApiError } from '../utils/apiError';
 import { ApiResponse } from '../utils/apiResponse';
 import { config } from '../config/env';
 
 export const errorHandler = (
-  err: Error | ApiError,
+  err: Error | ApiError | ZodError,
   req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next: NextFunction
 ) => {
+  if (err instanceof ZodError) {
+    const primaryMessage = err.issues[0]?.message || 'Dữ liệu đầu vào không hợp lệ';
+    const details = err.issues.map((issue) => ({
+      field: issue.path.join('.'),
+      message: issue.message,
+    }));
+    return ApiResponse.error(res, primaryMessage, 400, { details });
+  }
+
   const statusCode =
     err instanceof ApiError
       ? err.statusCode

@@ -13,8 +13,11 @@
 
 import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
 
-const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api/v1';
-export const API_BASE_URL = rawApiUrl.replace('//localhost:5000', '//127.0.0.1:5000');
+const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
+export const API_BASE_URL = rawApiUrl
+  .replace('//localhost:5000', '//127.0.0.1:5005')
+  .replace('//localhost:5005', '//127.0.0.1:5005')
+  .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
 
 let currentActiveOrgId = null;
 let currentSwitchAbortController = null;
@@ -162,7 +165,17 @@ export const request = async (endpoint, options = {}) => {
     } catch {
       errorData = { message: response.statusText };
     }
-    const error = new Error(errorData.message || `Lỗi yêu cầu máy chủ: ${response.status}`);
+    let errorMsg = errorData.message || `Lỗi yêu cầu máy chủ: ${response.status}`;
+    // Tự động chuẩn hóa nếu backend trả về Zod raw issues string
+    if (typeof errorMsg === 'string' && errorMsg.trim().startsWith('[') && errorMsg.includes('"message"')) {
+      try {
+        const parsed = JSON.parse(errorMsg);
+        if (Array.isArray(parsed) && parsed[0]?.message) {
+          errorMsg = parsed[0].message;
+        }
+      } catch {}
+    }
+    const error = new Error(errorMsg);
     error.status = response.status;
     error.data = errorData;
     throw error;

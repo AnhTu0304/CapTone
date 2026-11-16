@@ -349,7 +349,7 @@ export class CriticalIncidentNotificationService {
       incident.node_name ||
       null;
 
-    const notifTitle = `🚨 [${incidentCode}] Khẩn cấp trên ${serviceName}`;
+    const notifTitle = `🚨 Khẩn cấp trên ${serviceName}`;
     const stageShort =
       options.reasonStage === 'NO_ACTION'
         ? 'Cầu dao ngắt / NO_ACTION (cần kỹ sư kiểm tra)'

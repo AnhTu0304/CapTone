@@ -259,7 +259,7 @@ class RootCauseAnalysisAgent:
         if prediction and prediction.detected_risks:
             for r in prediction.detected_risks:
                 if self.RISK_CAUSES.get(r.risk_type) == cause_eval.cause_code:
-                    pred_ev = f"GRU predicted {r.risk_type} ({r.confidence:.1%})"
+                    pred_ev = f"AI predicted {r.risk_type} ({r.confidence:.1%})"
                     if pred_ev not in final_evidence_list:
                         final_evidence_list.append(pred_ev)
 

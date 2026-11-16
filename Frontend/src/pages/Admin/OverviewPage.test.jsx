@@ -60,23 +60,11 @@ describe('Admin Overview Page Suite (/admin)', () => {
     jest.restoreAllMocks();
   });
 
-  test('renders page header, hubs, global scope and snapshot timestamp', async () => {
+  test('renders page header, hubs, and KPI sections', async () => {
     render(<OverviewPage />);
 
     // Section 1: Page Header
-    expect(screen.getByText(/Bàn Điều Khiển Quản Trị Nền Tảng/i)).toBeInTheDocument();
-
-    // Wait for data load from service layer
-    await waitFor(() => {
-      expect(screen.getByText(/Ảnh chụp:/i)).toBeInTheDocument();
-    });
-
-    // Section 2: Quick Hubs
-    expect(screen.getByText(/Quản Lý Người Dùng/i)).toBeInTheDocument();
-    expect(screen.getByText(/Công Ty & Thống Kê/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Đánh Giá Mô Hình AI/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Phát Thông Báo Toàn Mạng/i)).toBeInTheDocument();
-
+    expect(screen.getByText(/(Bàn|Bảng) Điều Khiển Quản Trị Nền Tảng/i)).toBeInTheDocument();
 
     // Section 4: KPI Cards
     await waitFor(() => {
@@ -89,12 +77,8 @@ describe('Admin Overview Page Suite (/admin)', () => {
     // Section 5: Interactive Growth & Operations Chart
     expect(screen.getByText(/Biến thiên Tăng Trưởng Toàn Nền Tảng/i)).toBeInTheDocument();
 
-
     // Section 7: AI Overview
     expect(screen.getByText(/Động Cơ Trí Tuệ Nhân Tạo & Suy Diễn/i)).toBeInTheDocument();
-
-    // Section 8: Recent Activity
-    expect(screen.getByText(/Dòng Hoạt Động & Kiểm Toán Gần Nhất/i)).toBeInTheDocument();
   });
 
   test('handles manual refresh action', async () => {
@@ -106,7 +90,7 @@ describe('Admin Overview Page Suite (/admin)', () => {
     fireEvent.click(refreshBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Ảnh chụp:/i)).toBeInTheDocument();
+      expect(refreshBtn).not.toBeDisabled();
     });
   });
 

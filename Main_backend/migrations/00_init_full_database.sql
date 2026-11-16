@@ -1,10 +1,11 @@
 -- ====================================================================
--- SelfHeal Platform - MASTER FULL DATABASE MIGRATION (39 TABLES)
+-- SelfHeal Platform - MASTER FULL DATABASE MIGRATION (44 TABLES)
 -- File: 00_init_full_database.sql
--- Mô tả: File khởi tạo toàn bộ CSDL 39 bảng chuẩn Enterprise:
---       Tiện ích pgcrypto, 12 kiểu ENUM, 39 Bảng, Sequences, Ràng buộc,
---       Chỉ mục (Indexes) và Dữ liệu mẫu (Seed Data) đầy đủ.
--- Phiên bản: 2.0 (Complete 39-Table Enterprise Architecture)
+-- Mô tả: File khởi tạo toàn bộ CSDL 44 bảng chuẩn Enterprise:
+--       Tiện ích pgcrypto, 12 kiểu ENUM, 44 Bảng vật lý chuẩn Enterprise,
+--       Sequences, Ràng buộc, Chỉ mục hiệu năng cao (Composite Indexes),
+--       6 Stored Procedures AI/GRU/RCA và Dữ liệu mẫu (Seed Data) đầy đủ.
+-- Phiên bản: 3.0 (Complete 44-Table Enterprise Architecture)
 -- Cơ sở dữ liệu: PostgreSQL 14+ (captone_db / aiselfheal)
 -- ====================================================================
 
@@ -48,39 +49,39 @@ BEGIN
         CREATE TYPE incident_status AS ENUM ('OPEN', 'INVESTIGATING', 'MITIGATING', 'RESOLVED', 'FAILED', 'IGNORED');
     END IF;
 
-    -- 7. Mức độ rủi ro hành động
+    -- 7. Trạng thái thực thi tự phục hồi
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'execution_status') THEN
+        CREATE TYPE execution_status AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED');
+    END IF;
+
+    -- 8. Trạng thái phê duyệt hành động phục hồi
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'approval_status') THEN
+        CREATE TYPE approval_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED');
+    END IF;
+
+    -- 9. Mức độ rủi ro của hành động tự phục hồi
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'risk_level') THEN
         CREATE TYPE risk_level AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
     END IF;
 
-    -- 8. Chế độ thực thi tự chữa lành
+    -- 10. Chế độ thực thi tự phục hồi
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'execution_mode') THEN
-        CREATE TYPE execution_mode AS ENUM ('MANUAL', 'AUTO');
-    END IF;
-
-    -- 9. Trạng thái phê duyệt hành động
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'approval_status') THEN
-        CREATE TYPE approval_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'NOT_REQUIRED', 'EXPIRED');
-    END IF;
-
-    -- 10. Trạng thái thực thi hành động
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'execution_status') THEN
-        CREATE TYPE execution_status AS ENUM ('PENDING', 'QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED');
+        CREATE TYPE execution_mode AS ENUM ('AUTOMATIC', 'MANUAL', 'SEMI_AUTOMATIC');
     END IF;
 
     -- 11. Loại môi trường
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'environment_type') THEN
-        CREATE TYPE environment_type AS ENUM ('DEVELOPMENT', 'STAGING', 'TESTING', 'PRODUCTION');
+        CREATE TYPE environment_type AS ENUM ('DEVELOPMENT', 'STAGING', 'PRODUCTION', 'DR');
     END IF;
 
     -- 12. Trạng thái môi trường
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'environment_status') THEN
-        CREATE TYPE environment_status AS ENUM ('ACTIVE', 'INACTIVE', 'DISCONNECTED');
+        CREATE TYPE environment_status AS ENUM ('ACTIVE', 'INACTIVE', 'MAINTENANCE');
     END IF;
 END $$;
 
 -- ====================================================================
--- PHẦN 3: BẢNG QUẢN LÝ NGƯỜI DÙNG & XÁC THỰC (5 BẢNG)
+-- PHẦN 3: BẢNG QUẢN LÝ NGƯỜI DÙNG, BẢO MẬT & XÁC THỰC (6 BẢNG)
 -- ====================================================================
 
 -- 1. Bảng `users`: Tài khoản người dùng
@@ -116,7 +117,6 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
 
@@ -134,7 +134,21 @@ CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user ON email_verificat
 CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_hash ON email_verification_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_expires ON email_verification_tokens(expires_at);
 
--- 4. Bảng `system_roles`: Vai trò quản trị cấp nền tảng
+-- 4. Bảng `user_two_factor`: Xác thực bảo mật hai lớp TOTP (2FA)
+CREATE TABLE IF NOT EXISTS user_two_factor (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    secret_key TEXT NOT NULL,
+    is_enabled BOOLEAN DEFAULT FALSE,
+    backup_codes JSONB DEFAULT '[]'::jsonb,
+    confirmed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_two_factor_user_id ON user_two_factor(user_id);
+
+-- 5. Bảng `system_roles`: Vai trò quản trị cấp nền tảng
 CREATE TABLE IF NOT EXISTS system_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(50) UNIQUE NOT NULL,
@@ -143,7 +157,7 @@ CREATE TABLE IF NOT EXISTS system_roles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. Bảng `user_system_roles`: Phân quyền vai trò hệ thống cho người dùng
+-- 6. Bảng `user_system_roles`: Phân quyền vai trò hệ thống cho người dùng
 CREATE TABLE IF NOT EXISTS user_system_roles (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     system_role_id UUID NOT NULL REFERENCES system_roles(id) ON DELETE CASCADE,
@@ -156,10 +170,10 @@ CREATE INDEX IF NOT EXISTS idx_user_system_roles_user ON user_system_roles(user_
 CREATE INDEX IF NOT EXISTS idx_user_system_roles_role ON user_system_roles(system_role_id);
 
 -- ====================================================================
--- PHẦN 4: TỔ CHỨC, HỒ SƠ, VAI TRÒ & THÀNH VIÊN (4 BẢNG)
+-- PHẦN 4: TỔ CHỨC, HỒ SƠ, VAI TRÒ, THÀNH VIÊN & LỜI MỜI (6 BẢNG)
 -- ====================================================================
 
--- 6. Bảng `roles`: Vai trò cấp tổ chức
+-- 7. Bảng `organization_roles`: Vai trò cấp tổ chức
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'roles' AND table_type = 'BASE TABLE') THEN
@@ -182,7 +196,7 @@ CREATE TABLE IF NOT EXISTS organization_roles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 7. Bảng `organizations`: Danh mục các doanh nghiệp / tổ chức
+-- 8. Bảng `organizations`: Danh mục các doanh nghiệp / tổ chức
 CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -199,7 +213,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);
 CREATE INDEX IF NOT EXISTS idx_organizations_status ON organizations(status);
 
--- 8. Bảng `organization_profiles`: Hồ sơ thông tin chi tiết của tổ chức
+-- 9. Bảng `organization_profiles`: Hồ sơ thông tin chi tiết của tổ chức
 CREATE TABLE IF NOT EXISTS organization_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID UNIQUE NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -215,7 +229,7 @@ CREATE TABLE IF NOT EXISTS organization_profiles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 9. Bảng `organization_members`: Thành viên và phân quyền trong tổ chức
+-- 10. Bảng `organization_members`: Thành viên và phân quyền trong tổ chức
 CREATE TABLE IF NOT EXISTS organization_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -232,11 +246,48 @@ CREATE TABLE IF NOT EXISTS organization_members (
 CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(organization_id);
 
+-- 11. Bảng `organization_invitations`: Quản lý vòng đời lời mời tham gia tổ chức
+CREATE TABLE IF NOT EXISTS organization_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    role_id UUID NOT NULL REFERENCES organization_roles(id) ON DELETE RESTRICT,
+    invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    expires_at TIMESTAMPTZ NOT NULL,
+    accepted_at TIMESTAMPTZ,
+    accepted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_invitations_org ON organization_invitations(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_invitations_email ON organization_invitations(LOWER(email));
+CREATE INDEX IF NOT EXISTS idx_org_invitations_token_hash ON organization_invitations(token_hash);
+CREATE INDEX IF NOT EXISTS idx_org_invitations_status ON organization_invitations(status);
+
+-- 12. Bảng `organization_alert_settings`: Cấu hình cảnh báo khẩn cấp cho từng tổ chức
+CREATE TABLE IF NOT EXISTS organization_alert_settings (
+    organization_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    critical_email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    notify_on_no_action BOOLEAN NOT NULL DEFAULT TRUE,
+    notify_on_healing_failed BOOLEAN NOT NULL DEFAULT TRUE,
+    extra_emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+    cooldown_minutes INTEGER NOT NULL DEFAULT 15 CHECK (cooldown_minutes BETWEEN 1 AND 1440),
+    slack_webhook_url TEXT,
+    slack_channel VARCHAR(100),
+    pagerduty_key TEXT,
+    updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ====================================================================
--- PHẦN 5: NHẬT KÝ KIỂM TOÁN (AUDIT) & THÔNG BÁO (2 BẢNG)
+-- PHẦN 5: NHẬT KÝ KIỂM TOÁN (AUDIT), THÔNG BÁO & PHÁT SÓNG (3 BẢNG)
 -- ====================================================================
 
--- 10. Bảng `audit_logs`: Nhật ký kiểm toán bảo mật và tác vụ quản trị
+-- 13. Bảng `audit_logs`: Nhật ký kiểm toán bảo mật và tác vụ quản trị
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGSERIAL PRIMARY KEY,
     organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
@@ -253,14 +304,21 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     after_data JSONB,
     metadata JSONB DEFAULT '{}'::JSONB,
     ip_address INET,
+    reason_code VARCHAR(100),
+    request_id VARCHAR(100),
+    user_agent TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_org_time ON audit_logs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_status ON audit_logs(status);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_request_id ON audit_logs(request_id) WHERE request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org_created ON audit_logs(organization_id, created_at DESC);
 
--- 11. Bảng `notifications`: Quản lý thông báo người dùng và cảnh báo sự cố
+-- 14. Bảng `notifications`: Quản lý thông báo người dùng và cảnh báo sự cố
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -279,12 +337,32 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_org ON notifications(organization_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_incident ON notifications(incident_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
+
+-- 15. Bảng `system_broadcasts`: Bảng lưu trữ các thông báo toàn mạng do Admin phát sóng
+CREATE TABLE IF NOT EXISTS system_broadcasts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    broadcast_code VARCHAR(50) NOT NULL UNIQUE,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    priority VARCHAR(30) NOT NULL DEFAULT 'INFO',
+    audience VARCHAR(50) NOT NULL DEFAULT 'ALL',
+    status VARCHAR(50) NOT NULL DEFAULT 'Đang hiển thị',
+    show_sticky_banner BOOLEAN DEFAULT TRUE,
+    views_count INT DEFAULT 0,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_broadcasts_created ON system_broadcasts(created_at DESC);
 
 -- ====================================================================
 -- PHẦN 6: HẠ TẦNG KUBERNETES & WORKLOADS (8 BẢNG)
 -- ====================================================================
 
--- 12. Bảng `environments`: Các môi trường vận hành (Production, Staging...)
+-- 16. Bảng `environments`: Các môi trường vận hành (Production, Staging...)
 CREATE TABLE IF NOT EXISTS environments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -301,7 +379,7 @@ CREATE TABLE IF NOT EXISTS environments (
 
 CREATE INDEX IF NOT EXISTS idx_environments_org ON environments(organization_id);
 
--- 13. Bảng `clusters`: Cụm Kubernetes quản lý
+-- 17. Bảng `clusters`: Cụm Kubernetes quản lý
 CREATE TABLE IF NOT EXISTS clusters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     environment_id UUID NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
@@ -319,7 +397,7 @@ CREATE TABLE IF NOT EXISTS clusters (
 
 CREATE INDEX IF NOT EXISTS idx_clusters_env ON clusters(environment_id);
 
--- 14. Bảng `nodes`: Các node máy chủ vật lý / ảo hóa trong cụm K8s
+-- 18. Bảng `nodes`: Các node máy chủ vật lý / ảo hóa trong cụm K8s
 CREATE TABLE IF NOT EXISTS nodes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
@@ -332,13 +410,16 @@ CREATE TABLE IF NOT EXISTS nodes (
     kubelet_version VARCHAR(100),
     labels JSONB DEFAULT '{}'::JSONB,
     roles JSONB DEFAULT '[]'::JSONB,
+    conditions JSONB DEFAULT '{}'::JSONB,
+    allocatable JSONB DEFAULT '{}'::JSONB,
+    observed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_nodes_cluster ON nodes(cluster_id);
 
--- 15. Bảng `namespaces`: Không gian tên phân tách logic trong cụm K8s
+-- 19. Bảng `namespaces`: Không gian tên phân tách logic trong cụm K8s
 CREATE TABLE IF NOT EXISTS namespaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
@@ -353,16 +434,26 @@ CREATE TABLE IF NOT EXISTS namespaces (
 
 CREATE INDEX IF NOT EXISTS idx_namespaces_cluster ON namespaces(cluster_id);
 
--- 16. Bảng `workloads`: Dịch vụ, Microservices hoặc Deployments cấp cao
+-- 20. Bảng `workloads`: Dịch vụ, Microservices hoặc Deployments cấp cao
 CREATE TABLE IF NOT EXISTS workloads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
     cluster_id VARCHAR(255),
     namespace_id UUID REFERENCES namespaces(id) ON DELETE SET NULL,
     kubernetes_uid VARCHAR(255),
-    name VARCHAR(255) NOT NULL,
     workload_type VARCHAR(50) DEFAULT 'Deployment',
     status VARCHAR(30) DEFAULT 'UNKNOWN',
     labels JSONB DEFAULT '{}'::JSONB,
+    desired_replicas INT,
+    ready_replicas INT,
+    available_replicas INT,
+    updated_replicas INT,
+    unavailable_replicas INT,
+    generation BIGINT,
+    observed_generation BIGINT,
+    conditions JSONB DEFAULT '{}'::JSONB,
+    rollout_status VARCHAR(50),
+    observed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
@@ -370,7 +461,7 @@ CREATE TABLE IF NOT EXISTS workloads (
 
 CREATE INDEX IF NOT EXISTS idx_workloads_name ON workloads(name);
 
--- 17. Bảng `services`: Dịch vụ K8s Service định tuyến mạng
+-- 21. Bảng `services`: Dịch vụ K8s Service định tuyến mạng
 CREATE TABLE IF NOT EXISTS services (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
@@ -387,7 +478,7 @@ CREATE TABLE IF NOT EXISTS services (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 18. Bảng `deployments`: Trạng thái bản sao và chiến lược triển khai K8s
+-- 22. Bảng `deployments`: Trạng thái bản sao và chiến lược triển khai K8s
 CREATE TABLE IF NOT EXISTS deployments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workload_id UUID NOT NULL REFERENCES workloads(id) ON DELETE CASCADE,
@@ -400,7 +491,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 19. Bảng `pods`: Danh mục các Pods chi tiết đang chạy trong cụm
+-- 23. Bảng `pods`: Danh mục các Pods chi tiết đang chạy trong cụm
 CREATE TABLE IF NOT EXISTS pods (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cluster_id UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
@@ -414,6 +505,8 @@ CREATE TABLE IF NOT EXISTS pods (
     restart_count INT DEFAULT 0 CHECK (restart_count >= 0),
     image TEXT,
     labels JSONB DEFAULT '{}'::JSONB,
+    containers JSONB DEFAULT '[]'::JSONB,
+    observed_at TIMESTAMPTZ,
     started_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -424,10 +517,10 @@ CREATE INDEX IF NOT EXISTS idx_pods_namespace ON pods(namespace_id);
 CREATE INDEX IF NOT EXISTS idx_pods_workload ON pods(workload_id);
 
 -- ====================================================================
--- PHẦN 7: KUBERNETES AGENT, TOKENS & TELEMETRY STREAM (6 BẢNG)
+-- PHẦN 7: KUBERNETES AGENT, TOKENS & TELEMETRY STREAM (7 BẢNG)
 -- ====================================================================
 
--- 20. Bảng `agents`: Kubernetes Agent giám sát
+-- 24. Bảng `agents`: Kubernetes Agent giám sát
 CREATE TABLE IF NOT EXISTS agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -446,7 +539,7 @@ CREATE TABLE IF NOT EXISTS agents (
 CREATE INDEX IF NOT EXISTS idx_agents_uid ON agents(agent_uid);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
 
--- 21. Bảng `agent_tokens`: Token xác thực kết nối WebSocket bảo mật
+-- 25. Bảng `agent_tokens`: Token xác thực kết nối WebSocket bảo mật
 CREATE TABLE IF NOT EXISTS agent_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -462,7 +555,7 @@ CREATE TABLE IF NOT EXISTS agent_tokens (
 CREATE INDEX IF NOT EXISTS idx_agent_tokens_hash ON agent_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_agent_tokens_agent ON agent_tokens(agent_id);
 
--- 22. Bảng `agent_heartbeats`: Lịch sử nhịp tim kiểm tra tính khả dụng
+-- 26. Bảng `agent_heartbeats`: Lịch sử nhịp tim kiểm tra tính khả dụng
 CREATE TABLE IF NOT EXISTS agent_heartbeats (
     id BIGSERIAL PRIMARY KEY,
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -475,7 +568,7 @@ CREATE TABLE IF NOT EXISTS agent_heartbeats (
 
 CREATE INDEX IF NOT EXISTS idx_agent_heartbeats_agent ON agent_heartbeats(agent_id, reported_at DESC);
 
--- 23. Bảng `agent_metrics`: Dữ liệu đo đạc tài nguyên thời gian thực (CPU, RAM, Disk, Latency...)
+-- 27. Bảng `agent_metrics`: Dữ liệu đo đạc tài nguyên thời gian thực (CPU, RAM, Disk, Latency...)
 CREATE TABLE IF NOT EXISTS agent_metrics (
     id BIGSERIAL PRIMARY KEY,
     agent_id VARCHAR(100) NOT NULL,
@@ -491,13 +584,29 @@ CREATE TABLE IF NOT EXISTS agent_metrics (
     pod_restart_count INT NOT NULL DEFAULT 0,
     replica_count INT NOT NULL DEFAULT 1,
     collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    environment_id UUID REFERENCES environments(id) ON DELETE SET NULL,
+    batch_id VARCHAR(100),
+    sample_id VARCHAR(100)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_dedup
+    ON agent_metrics(agent_id, service_id, pod_id, collected_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_metrics_sample_id
+    ON agent_metrics(sample_id)
+    WHERE sample_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_agent_metrics_service_collected ON agent_metrics(service_id, collected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_metrics_collected_at ON agent_metrics(collected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_time ON agent_metrics(organization_id, collected_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_metrics_org_service_time ON agent_metrics(organization_id, service_id, collected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_metrics_service_pod_time ON agent_metrics(service_id, pod_id, collected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_time ON agent_metrics(cluster_id, collected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_metrics_batch_id ON agent_metrics(batch_id) WHERE batch_id IS NOT NULL;
 
--- 23b. Bảng `node_metrics`: Dữ liệu tài nguyên cấp Host/Node (CPU, RAM, Disk, Network I/O)
+-- 28. Bảng `node_metrics`: Dữ liệu tài nguyên cấp Host/Node (CPU, RAM, Disk, Network I/O)
 CREATE TABLE IF NOT EXISTS node_metrics (
     id BIGSERIAL PRIMARY KEY,
     agent_id VARCHAR(100) NOT NULL,
@@ -532,7 +641,7 @@ CREATE INDEX IF NOT EXISTS idx_node_metrics_node_time ON node_metrics(node_name,
 CREATE INDEX IF NOT EXISTS idx_node_metrics_cluster_time ON node_metrics(cluster_id, collected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_node_metrics_collected_at ON node_metrics(collected_at DESC);
 
--- 24. Bảng `logs`: Nhật ký vận hành từ Pods và Services
+-- 29. Bảng `logs`: Nhật ký vận hành từ Pods và Services
 CREATE TABLE IF NOT EXISTS logs (
     id BIGSERIAL PRIMARY KEY,
     cluster_id VARCHAR(255),
@@ -551,7 +660,7 @@ CREATE TABLE IF NOT EXISTS logs (
 CREATE INDEX IF NOT EXISTS idx_logs_service_occurred ON logs(service_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);
 
--- 25. Bảng `kubernetes_events`: Sự kiện cảnh báo từ Control Plane K8s
+-- 30. Bảng `kubernetes_events`: Sự kiện cảnh báo từ Control Plane K8s
 CREATE TABLE IF NOT EXISTS kubernetes_events (
     id BIGSERIAL PRIMARY KEY,
     cluster_id VARCHAR(255),
@@ -566,8 +675,30 @@ CREATE TABLE IF NOT EXISTS kubernetes_events (
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     count INT DEFAULT 1,
     metadata JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    event_uid VARCHAR(255),
+    dedup_hash VARCHAR(64),
+    reporting_controller VARCHAR(100),
+    action VARCHAR(100),
+    observed_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_k8s_events_cluster_dedup
+    ON kubernetes_events(cluster_id, dedup_hash);
+
+CREATE INDEX IF NOT EXISTS idx_k8s_events_cluster_event_uid
+    ON kubernetes_events(cluster_id, event_uid)
+    WHERE event_uid IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_k8s_events_cluster_type_time
+    ON kubernetes_events(cluster_id, event_type, last_seen_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_k8s_events_cluster_ns_time
+    ON kubernetes_events(cluster_id, namespace_id, last_seen_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_k8s_events_cluster_last_seen
+    ON kubernetes_events(cluster_id, last_seen_at DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_k8s_events_resource ON kubernetes_events(resource_uid, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_k8s_events_reason ON kubernetes_events(reason);
@@ -576,7 +707,7 @@ CREATE INDEX IF NOT EXISTS idx_k8s_events_reason ON kubernetes_events(reason);
 -- PHẦN 8: AI MODELS, DỰ ĐOÁN (GRU), SỰ CỐ & RCA (6 BẢNG)
 -- ====================================================================
 
--- 26. Bảng `ai_models`: Đăng ký phiên bản mô hình AI (GRU / RCA)
+-- 31. Bảng `ai_models`: Đăng ký phiên bản mô hình AI (GRU / RCA)
 CREATE TABLE IF NOT EXISTS ai_models (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -590,7 +721,7 @@ CREATE TABLE IF NOT EXISTS ai_models (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 27. Bảng `ai_predictions`: Kết quả dự đoán rủi ro bất thường từ mạng nơ-ron GRU
+-- 32. Bảng `ai_predictions`: Kết quả dự đoán rủi ro bất thường từ mạng nơ-ron GRU
 CREATE TABLE IF NOT EXISTS ai_predictions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     model_id UUID NOT NULL REFERENCES ai_models(id) ON DELETE RESTRICT,
@@ -606,14 +737,15 @@ CREATE TABLE IF NOT EXISTS ai_predictions (
     expires_at TIMESTAMPTZ,
     actual_outcome VARCHAR(100),
     evaluated_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    risk_outputs JSONB
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_predictions_model ON ai_predictions(model_id);
 CREATE INDEX IF NOT EXISTS idx_ai_predictions_status ON ai_predictions(status);
 CREATE INDEX IF NOT EXISTS idx_ai_predictions_predicted_at ON ai_predictions(predicted_at DESC);
 
--- 28. Bảng `prediction_inputs`: Chi tiết chuỗi thời gian đầu vào phục vụ mô hình GRU
+-- 33. Bảng `prediction_inputs`: Chi tiết chuỗi thời gian đầu vào phục vụ mô hình GRU
 CREATE TABLE IF NOT EXISTS prediction_inputs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     prediction_id UUID NOT NULL REFERENCES ai_predictions(id) ON DELETE CASCADE,
@@ -626,7 +758,7 @@ CREATE TABLE IF NOT EXISTS prediction_inputs (
 
 CREATE INDEX IF NOT EXISTS idx_prediction_inputs_pred ON prediction_inputs(prediction_id);
 
--- 29. Bảng `incidents`: Quản lý sự cố cần tự phục hồi
+-- 34. Bảng `incidents`: Quản lý sự cố cần tự phục hồi
 CREATE TABLE IF NOT EXISTS incidents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID,
@@ -637,7 +769,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     target_type VARCHAR(100) NOT NULL,
     target_id VARCHAR(255),
     incident_type VARCHAR(100) NOT NULL,
-    title VARCHAR(255) NOT NULL,
+    title TEXT NOT NULL,
     description TEXT,
     severity VARCHAR(50) NOT NULL,
     status VARCHAR(50) NOT NULL,
@@ -645,13 +777,19 @@ CREATE TABLE IF NOT EXISTS incidents (
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resolved_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    target_name VARCHAR(255),
+    occurrence_count INTEGER NOT NULL DEFAULT 1,
+    last_occurred_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
 CREATE INDEX IF NOT EXISTS idx_incidents_created ON incidents(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_incidents_detected_at ON incidents(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_incidents_cluster_detected ON incidents(cluster_id, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_incidents_dedup_lookup ON incidents (environment_id, incident_type, status, target_name, last_occurred_at DESC);
 
--- 30. Bảng `rca_analyses`: Phân tích nguyên nhân gốc rễ (Root Cause Analysis)
+-- 35. Bảng `rca_analyses`: Phân tích nguyên nhân gốc rễ (Root Cause Analysis)
 CREATE TABLE IF NOT EXISTS rca_analyses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -666,7 +804,7 @@ CREATE TABLE IF NOT EXISTS rca_analyses (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 31. Bảng `rca_evidences`: Bằng chứng củng cố kết luận nguyên nhân gốc
+-- 36. Bảng `rca_evidences`: Bằng chứng củng cố kết luận nguyên nhân gốc
 CREATE TABLE IF NOT EXISTS rca_evidences (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     rca_analysis_id UUID NOT NULL REFERENCES rca_analyses(id) ON DELETE CASCADE,
@@ -683,7 +821,7 @@ CREATE INDEX IF NOT EXISTS idx_rca_evidences_analysis ON rca_evidences(rca_analy
 -- PHẦN 9: ĐỘNG CƠ TỰ PHỤC HỒI (SELF-HEALING ENGINE) (8 BẢNG)
 -- ====================================================================
 
--- 32. Bảng `healing_action_types`: Danh mục các hành động tự khắc phục chuẩn
+-- 37. Bảng `healing_action_types`: Danh mục các hành động tự khắc phục chuẩn
 CREATE TABLE IF NOT EXISTS healing_action_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(50) UNIQUE NOT NULL,
@@ -697,7 +835,7 @@ CREATE TABLE IF NOT EXISTS healing_action_types (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 33. Bảng `ai_recommendations`: Các khuyến nghị hành động chữa lành từ AI
+-- 38. Bảng `ai_recommendations`: Các khuyến nghị hành động chữa lành từ AI
 CREATE TABLE IF NOT EXISTS ai_recommendations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -712,7 +850,7 @@ CREATE TABLE IF NOT EXISTS ai_recommendations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 34. Bảng `healing_policies`: Chính sách tự chữa lành và ngưỡng kiểm soát
+-- 39. Bảng `healing_policies`: Chính sách tự chữa lành và ngưỡng kiểm soát
 CREATE TABLE IF NOT EXISTS healing_policies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -734,7 +872,7 @@ CREATE TABLE IF NOT EXISTS healing_policies (
     deleted_at TIMESTAMPTZ
 );
 
--- 35. Bảng `policy_actions`: Liên kết giữa chính sách và hành động cụ thể
+-- 40. Bảng `policy_actions`: Liên kết giữa chính sách và hành động cụ thể
 CREATE TABLE IF NOT EXISTS policy_actions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     policy_id UUID NOT NULL REFERENCES healing_policies(id) ON DELETE CASCADE,
@@ -745,7 +883,7 @@ CREATE TABLE IF NOT EXISTS policy_actions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 36. Bảng `healing_actions`: Phiên thực thi hành động tự chữa lành cụ thể
+-- 41. Bảng `healing_actions`: Phiên thực thi hành động tự chữa lành cụ thể
 CREATE TABLE IF NOT EXISTS healing_actions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -772,7 +910,7 @@ CREATE TABLE IF NOT EXISTS healing_actions (
 
 CREATE INDEX IF NOT EXISTS idx_healing_actions_status ON healing_actions(execution_status);
 
--- 37. Bảng `approvals`: Quy trình phê duyệt hành động có rủi ro từ Admin/SME Owner
+-- 42. Bảng `approvals`: Quy trình phê duyệt hành động có rủi ro từ Admin/SME Owner
 CREATE TABLE IF NOT EXISTS approvals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     healing_action_id UUID NOT NULL REFERENCES healing_actions(id) ON DELETE CASCADE,
@@ -787,7 +925,7 @@ CREATE TABLE IF NOT EXISTS approvals (
 
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
 
--- 38. Bảng `execution_attempts`: Lịch sử các lần thử thực thi lệnh tự chữa lành
+-- 43. Bảng `execution_attempts`: Lịch sử các lần thử thực thi lệnh tự chữa lành
 CREATE TABLE IF NOT EXISTS execution_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     healing_action_id UUID NOT NULL REFERENCES healing_actions(id) ON DELETE CASCADE,
@@ -803,7 +941,7 @@ CREATE TABLE IF NOT EXISTS execution_attempts (
     duration_ms BIGINT
 );
 
--- 39. Bảng `recovery_verifications`: Xác minh và đánh giá mức độ thành công sau phục hồi
+-- 44. Bảng `recovery_verifications`: Xác minh và đánh giá mức độ thành công sau phục hồi
 CREATE TABLE IF NOT EXISTS recovery_verifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     healing_action_id UUID NOT NULL REFERENCES healing_actions(id) ON DELETE CASCADE,
@@ -816,65 +954,404 @@ CREATE TABLE IF NOT EXISTS recovery_verifications (
     duration_ms BIGINT
 );
 
--- ====================================================================
--- PHẦN 10: ĐỒNG BỘ CỘT NÂNG CAO CHO CÁC BẢNG ĐÃ TỒN TẠI (NẾU CÓ)
--- ====================================================================
-ALTER TABLE workloads
-    ADD COLUMN IF NOT EXISTS namespace_id UUID REFERENCES namespaces(id) ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS kubernetes_uid VARCHAR(255),
-    ADD COLUMN IF NOT EXISTS workload_type VARCHAR(50) DEFAULT 'Deployment',
-    ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'UNKNOWN',
-    ADD COLUMN IF NOT EXISTS labels JSONB DEFAULT '{}'::JSONB,
-    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- =====================================================================
+-- PHẦN 10: CHỈ MỤC COMPOSITE & STORED PROCEDURES AI/GRU/RCA
+-- =====================================================================
 
-ALTER TABLE clusters
-    ADD COLUMN IF NOT EXISTS cluster_uid VARCHAR(255),
-    ADD COLUMN IF NOT EXISTS endpoint TEXT,
-    ADD COLUMN IF NOT EXISTS kubernetes_version VARCHAR(50),
-    ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'CONNECTED',
-    ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- Dọn dẹp các view tương thích cũ (nếu có từ bản nâng cấp trước)
+DROP VIEW IF EXISTS roles;
+DROP VIEW IF EXISTS roles_organizations;
 
-ALTER TABLE environments
-    ADD COLUMN IF NOT EXISTS code VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS description TEXT,
-    ADD COLUMN IF NOT EXISTS environment_type environment_type DEFAULT 'PRODUCTION',
-    ADD COLUMN IF NOT EXISTS status environment_status DEFAULT 'ACTIVE',
-    ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- 2. Chỉ mục Composite B-Tree tăng tốc AI & Self-Healing
+CREATE INDEX IF NOT EXISTS idx_pred_inputs_pred_collected_metric
+  ON public.prediction_inputs (prediction_id, collected_at ASC, metric_name ASC);
 
-ALTER TABLE healing_action_types
-    ADD COLUMN IF NOT EXISTS code VARCHAR(50),
-    ADD COLUMN IF NOT EXISTS target_type VARCHAR(50) DEFAULT 'POD',
-    ADD COLUMN IF NOT EXISTS default_risk_level risk_level DEFAULT 'LOW',
-    ADD COLUMN IF NOT EXISTS requires_approval_by_default BOOLEAN DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE,
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS idx_ai_predictions_cluster_predicted
+  ON public.ai_predictions (cluster_id, predicted_at DESC);
 
-ALTER TABLE ai_models
-    ADD COLUMN IF NOT EXISTS model_type VARCHAR(100) DEFAULT 'GRU_RISK_CLASSIFICATION',
-    ADD COLUMN IF NOT EXISTS framework VARCHAR(50) DEFAULT 'PyTorch',
-    ADD COLUMN IF NOT EXISTS version VARCHAR(50) DEFAULT '1.0.0',
-    ADD COLUMN IF NOT EXISTS description TEXT,
-    ADD COLUMN IF NOT EXISTS training_dataset TEXT,
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS idx_ai_predictions_workload_predicted
+  ON public.ai_predictions (workload_id, predicted_at DESC);
 
-ALTER TABLE agents
-    ADD COLUMN IF NOT EXISTS version VARCHAR(50) DEFAULT '1.0.0',
-    ADD COLUMN IF NOT EXISTS installed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_ai_predictions_env_type_predicted
+  ON public.ai_predictions (environment_id, prediction_type, predicted_at DESC);
 
-ALTER TABLE agent_heartbeats
-    ADD COLUMN IF NOT EXISTS latency_ms INT DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_ai_recs_incident_priority
+  ON public.ai_recommendations (incident_id, priority ASC, created_at DESC);
 
-ALTER TABLE logs
-    ADD COLUMN IF NOT EXISTS namespace_id UUID REFERENCES namespaces(id) ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS pod_id UUID,
-    ADD COLUMN IF NOT EXISTS trace_id VARCHAR(255);
+CREATE INDEX IF NOT EXISTS idx_ai_recs_status_rec_created
+  ON public.ai_recommendations (recommendation, status, created_at DESC);
 
-ALTER TABLE kubernetes_events
-    ADD COLUMN IF NOT EXISTS namespace_id UUID REFERENCES namespaces(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_ai_recs_rca_prediction
+  ON public.ai_recommendations (rca_analysis_id, prediction_id);
+
+CREATE INDEX IF NOT EXISTS idx_healing_actions_status_created
+  ON public.healing_actions (execution_status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_healing_actions_incident_created
+  ON public.healing_actions (incident_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_incidents_org_cluster_created
+  ON public.incidents (organization_id, cluster_id, created_at DESC);
+
+-- 3. Stored Procedures / Functions AI/GRU/RCA
+
+-- (1) sp_get_gru_predictions_history
+CREATE OR REPLACE FUNCTION public.sp_get_gru_predictions_history(
+  p_cluster_id TEXT DEFAULT NULL,
+  p_org_id TEXT DEFAULT NULL,
+  p_status TEXT DEFAULT NULL,
+  p_prediction_type TEXT DEFAULT NULL,
+  p_limit INTEGER DEFAULT 20,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  model_id UUID,
+  model_name VARCHAR,
+  model_version VARCHAR,
+  environment_id UUID,
+  environment_name VARCHAR,
+  cluster_id VARCHAR,
+  cluster_name VARCHAR,
+  workload_id UUID,
+  workload_name VARCHAR,
+  prediction_type VARCHAR,
+  risk_score NUMERIC,
+  confidence_score NUMERIC,
+  prediction_horizon_minutes INTEGER,
+  status VARCHAR,
+  predicted_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
+  risk_outputs JSONB,
+  total_count BIGINT
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    p.id,
+    p.model_id,
+    m.name::VARCHAR AS model_name,
+    m.version::VARCHAR AS model_version,
+    p.environment_id,
+    e.name::VARCHAR AS environment_name,
+    p.cluster_id,
+    c.name::VARCHAR AS cluster_name,
+    p.workload_id,
+    w.name::VARCHAR AS workload_name,
+    p.prediction_type,
+    p.risk_score,
+    p.confidence_score,
+    p.prediction_horizon_minutes,
+    p.status,
+    p.predicted_at,
+    p.expires_at,
+    p.created_at,
+    p.risk_outputs,
+    COUNT(*) OVER() AS total_count
+  FROM public.ai_predictions p
+  LEFT JOIN public.ai_models m ON m.id = p.model_id
+  LEFT JOIN public.environments e ON e.id = p.environment_id
+  LEFT JOIN LATERAL (
+    SELECT cl.name
+    FROM public.clusters cl
+    WHERE cl.id::text = p.cluster_id OR cl.name = p.cluster_id OR cl.cluster_uid = p.cluster_id
+    LIMIT 1
+  ) c ON TRUE
+  LEFT JOIN public.workloads w ON w.id = p.workload_id
+  WHERE
+    (p_org_id IS NULL OR p_org_id = '' OR UPPER(p_org_id) = 'ALL' OR e.organization_id::text = p_org_id)
+    AND (p_status IS NULL OR p_status = '' OR p.status = p_status)
+    AND (p_prediction_type IS NULL OR p_prediction_type = '' OR p.prediction_type ILIKE ('%' || p_prediction_type || '%'))
+    AND (
+      p_cluster_id IS NULL OR p_cluster_id = '' OR UPPER(p_cluster_id) = 'ALL'
+      OR p.cluster_id IN (
+        SELECT cl2.id::text FROM public.clusters cl2
+        WHERE cl2.id::text = p_cluster_id OR cl2.cluster_uid = p_cluster_id OR cl2.name = p_cluster_id
+      )
+      OR p.cluster_id = p_cluster_id
+    )
+  ORDER BY p.predicted_at DESC
+  LIMIT COALESCE(p_limit, 20)
+  OFFSET COALESCE(p_offset, 0);
+END;
+$$;
+
+-- (2) sp_get_prediction_inputs_raw
+CREATE OR REPLACE FUNCTION public.sp_get_prediction_inputs_raw(
+  p_prediction_id UUID
+)
+RETURNS TABLE (
+  id UUID,
+  prediction_id UUID,
+  metric_name VARCHAR,
+  metric_value NUMERIC,
+  unit VARCHAR,
+  source VARCHAR,
+  collected_at TIMESTAMPTZ
+)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT
+    pi.id,
+    pi.prediction_id,
+    pi.metric_name,
+    pi.metric_value,
+    pi.unit,
+    pi.source,
+    pi.collected_at
+  FROM public.prediction_inputs pi
+  WHERE pi.prediction_id = p_prediction_id
+  ORDER BY pi.collected_at ASC, pi.metric_name ASC;
+$$;
+
+-- (3) sp_get_gru_12step_sequence
+CREATE OR REPLACE FUNCTION public.sp_get_gru_12step_sequence(
+  p_prediction_id UUID
+)
+RETURNS TABLE (
+  step_index BIGINT,
+  collected_at TIMESTAMPTZ,
+  cpu NUMERIC,
+  ram NUMERIC,
+  disk NUMERIC,
+  latency NUMERIC,
+  request_rate NUMERIC,
+  http_5xx_rate NUMERIC,
+  pod_restart_count NUMERIC,
+  replica_count NUMERIC
+)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT
+    ROW_NUMBER() OVER (ORDER BY pi.collected_at ASC) AS step_index,
+    pi.collected_at,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'cpu'), 0) AS cpu,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'ram'), 0) AS ram,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'disk'), 0) AS disk,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'latency'), 0) AS latency,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'request_rate'), 0) AS request_rate,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'http_5xx_rate'), 0) AS http_5xx_rate,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'pod_restart_count'), 0) AS pod_restart_count,
+    COALESCE(MAX(pi.metric_value) FILTER (WHERE pi.metric_name = 'replica_count'), 0) AS replica_count
+  FROM public.prediction_inputs pi
+  WHERE pi.prediction_id = p_prediction_id
+  GROUP BY pi.collected_at
+  ORDER BY pi.collected_at ASC;
+$$;
+
+-- (4) sp_get_ai_prediction_stats
+CREATE OR REPLACE FUNCTION public.sp_get_ai_prediction_stats(
+  p_cluster_id TEXT DEFAULT NULL,
+  p_workload TEXT DEFAULT NULL,
+  p_org_id TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+  v_total BIGINT := 0;
+  v_avg_conf NUMERIC := 0;
+  v_by_type JSONB := '{}'::JSONB;
+BEGIN
+  WITH filtered AS (
+    SELECT p.prediction_type, p.confidence_score
+    FROM public.ai_predictions p
+    LEFT JOIN public.environments e ON e.id = p.environment_id
+    WHERE
+      (p_org_id IS NULL OR p_org_id = '' OR UPPER(p_org_id) = 'ALL' OR e.organization_id::text = p_org_id)
+      AND (
+        p_cluster_id IS NULL OR p_cluster_id = '' OR UPPER(p_cluster_id) = 'ALL'
+        OR p.cluster_id IN (
+          SELECT cl.id::text FROM public.clusters cl
+          WHERE cl.id::text = p_cluster_id OR cl.cluster_uid = p_cluster_id OR cl.name = p_cluster_id
+        )
+        OR p.cluster_id = p_cluster_id
+      )
+      AND (
+        p_workload IS NULL OR p_workload = '' OR UPPER(p_workload) = 'ALL'
+        OR p.workload_id IN (SELECT w.id FROM public.workloads w WHERE w.name = p_workload)
+        OR p.workload_id::text = p_workload
+      )
+  ),
+  type_counts AS (
+    SELECT prediction_type, COUNT(*) AS cnt
+    FROM filtered
+    WHERE prediction_type IS NOT NULL
+    GROUP BY prediction_type
+  ),
+  summary AS (
+    SELECT COUNT(*) AS total_cnt, COALESCE(AVG(confidence_score), 0) AS avg_c
+    FROM filtered
+  )
+  SELECT
+    s.total_cnt,
+    s.avg_c,
+    COALESCE((SELECT jsonb_object_agg(tc.prediction_type, tc.cnt) FROM type_counts tc), '{}'::JSONB)
+  INTO v_total, v_avg_conf, v_by_type
+  FROM summary s;
+
+  RETURN jsonb_build_object(
+    'total', COALESCE(v_total, 0),
+    'by_type', COALESCE(v_by_type, '{}'::JSONB),
+    'avg_confidence', ROUND(COALESCE(v_avg_conf, 0)::numeric, 4)
+  );
+END;
+$$;
+
+-- (5) sp_get_ai_recommendations_paginated
+CREATE OR REPLACE FUNCTION public.sp_get_ai_recommendations_paginated(
+  p_limit INTEGER DEFAULT 20,
+  p_cluster_id TEXT DEFAULT NULL,
+  p_org_id TEXT DEFAULT NULL,
+  p_offset INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  incident_id UUID,
+  rca_analysis_id UUID,
+  prediction_id UUID,
+  action_type_id UUID,
+  action_code VARCHAR,
+  action_name VARCHAR,
+  recommendation TEXT,
+  reasoning TEXT,
+  risk_level VARCHAR,
+  priority INTEGER,
+  status VARCHAR,
+  created_at TIMESTAMPTZ,
+  cluster_id VARCHAR,
+  target_name TEXT,
+  target_id TEXT,
+  incident_title TEXT,
+  analysis_result TEXT,
+  action_parameters JSONB,
+  manual_playbook JSONB,
+  root_cause_type VARCHAR,
+  rca_confidence NUMERIC
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH ranked_recs AS (
+    SELECT
+      r.id,
+      r.incident_id,
+      r.rca_analysis_id,
+      r.prediction_id,
+      r.action_type_id,
+      h.code::VARCHAR AS action_code,
+      h.name::VARCHAR AS action_name,
+      r.recommendation,
+      r.reasoning,
+      r.risk_level,
+      r.priority,
+      r.status,
+      r.created_at,
+      i.cluster_id,
+      COALESCE(w.name, NULLIF(i.target_id::text, ''), '')::TEXT AS target_name,
+      COALESCE(w.name, NULLIF(i.target_id::text, ''), '')::TEXT AS target_id,
+      i.title::TEXT AS incident_title,
+      rca.analysis_result,
+      CASE
+        WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result <> ''
+        THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters')
+        ELSE NULL
+      END AS action_parameters,
+      CASE
+        WHEN rca.analysis_result IS NOT NULL AND rca.analysis_result <> ''
+        THEN (rca.analysis_result::jsonb->'recommendation'->'action_parameters'->'manual_playbook')
+        ELSE NULL
+      END AS manual_playbook,
+      rca.root_cause_type,
+      rca.confidence_score AS rca_confidence,
+      ROW_NUMBER() OVER (
+        PARTITION BY r.recommendation, r.status, COALESCE(w.name, i.target_id::text, '')
+        ORDER BY r.created_at DESC
+      ) AS rn
+    FROM public.ai_recommendations r
+    LEFT JOIN public.healing_action_types h ON h.id = r.action_type_id
+    LEFT JOIN public.incidents i ON r.incident_id = i.id
+    LEFT JOIN LATERAL (
+      SELECT wl.name
+      FROM public.workloads wl
+      WHERE wl.id::text = i.target_id OR wl.name = i.target_id
+      LIMIT 1
+    ) w ON TRUE
+    LEFT JOIN public.rca_analyses rca ON rca.id = r.rca_analysis_id
+    WHERE
+      (
+        p_org_id IS NULL OR p_org_id = '' OR UPPER(p_org_id) = 'ALL'
+        OR i.organization_id::text = p_org_id
+        OR EXISTS (
+          SELECT 1 FROM public.environments env
+          WHERE env.id = i.environment_id AND env.organization_id::text = p_org_id
+        )
+      )
+      AND (
+        p_cluster_id IS NULL OR p_cluster_id = '' OR UPPER(p_cluster_id) = 'ALL'
+        OR i.cluster_id IN (
+          SELECT cl.id::text FROM public.clusters cl
+          WHERE cl.id::text = p_cluster_id OR cl.cluster_uid = p_cluster_id OR cl.name = p_cluster_id
+        )
+        OR i.cluster_id = p_cluster_id
+      )
+  )
+  SELECT
+    rr.id,
+    rr.incident_id,
+    rr.rca_analysis_id,
+    rr.prediction_id,
+    rr.action_type_id,
+    rr.action_code,
+    rr.action_name,
+    rr.recommendation,
+    rr.reasoning,
+    rr.risk_level,
+    rr.priority,
+    rr.status,
+    rr.created_at,
+    rr.cluster_id,
+    rr.target_name,
+    rr.target_id,
+    rr.incident_title,
+    rr.analysis_result,
+    rr.action_parameters,
+    rr.manual_playbook,
+    rr.root_cause_type,
+    rr.rca_confidence
+  FROM ranked_recs rr
+  WHERE rr.rn <= 5
+  ORDER BY rr.created_at DESC
+  LIMIT COALESCE(p_limit, 20)
+  OFFSET COALESCE(p_offset, 0);
+END;
+$$;
+
+-- (6) sp_cleanup_old_prediction_inputs
+CREATE OR REPLACE PROCEDURE public.sp_cleanup_old_prediction_inputs(
+  p_keep_latest_predictions INTEGER DEFAULT 5000
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  DELETE FROM public.prediction_inputs pi
+  WHERE pi.prediction_id NOT IN (
+    SELECT p.id
+    FROM public.ai_predictions p
+    ORDER BY p.predicted_at DESC
+    LIMIT GREATEST(COALESCE(p_keep_latest_predictions, 5000), 500)
+  );
+END;
+$$;
 
 -- ====================================================================
 -- PHẦN 11: SEED DATA MẶC ĐỊNH & KHỞI TẠO NỀN TẢNG
@@ -991,7 +1468,12 @@ BEGIN
     END IF;
 END $$;
 
--- 7. Môi trường mặc định
+-- 7. Cấu hình cảnh báo tổ chức mặc định
+INSERT INTO organization_alert_settings (organization_id, critical_email_enabled, notify_on_no_action, notify_on_healing_failed)
+VALUES ('00000000-0000-0000-0000-000000000001', TRUE, TRUE, TRUE)
+ON CONFLICT (organization_id) DO NOTHING;
+
+-- 8. Môi trường mặc định
 INSERT INTO environments (id, organization_id, name, environment_type, code)
 VALUES (
     'e0000000-0000-0000-0000-000000000001',
@@ -1002,7 +1484,7 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- 8. Cụm K8s mặc định
+-- 9. Cụm K8s mặc định
 INSERT INTO clusters (id, environment_id, name, provider, cluster_uid)
 VALUES (
     'c0000000-0000-0000-0000-000000000001',
@@ -1013,7 +1495,7 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- 9. Namespace mặc định
+-- 10. Namespace mặc định
 INSERT INTO namespaces (id, cluster_id, name, status)
 VALUES (
     'b0000000-0000-0000-0000-000000000001',
@@ -1023,7 +1505,7 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- 10. Workload dịch vụ mẫu
+-- 11. Workload dịch vụ mẫu
 INSERT INTO workloads (id, name, cluster_id, namespace_id, workload_type)
 VALUES (
     'c0000000-0000-0000-0000-000000000001',
@@ -1034,7 +1516,7 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- 11. Đầy đủ 7 hành động tự phục hồi chuẩn (Healing Action Types)
+-- 12. Đầy đủ 7 hành động tự phục hồi chuẩn (Healing Action Types)
 INSERT INTO healing_action_types (id, code, name, description, target_type, default_risk_level, requires_approval_by_default, enabled)
 VALUES 
     ('d0000000-0000-0000-0000-000000000001', 'RESTART_POD', 'Restart Pod', 'Khởi động lại Pod bị lỗi hoặc treo tiến trình', 'POD', 'LOW', false, true),
@@ -1047,12 +1529,12 @@ VALUES
 ON CONFLICT (code) DO UPDATE 
 SET name = EXCLUDED.name, description = EXCLUDED.description, default_risk_level = EXCLUDED.default_risk_level;
 
--- 12. AI Model GRU phân loại rủi ro
+-- 13. AI Model GRU phân loại rủi ro
 INSERT INTO ai_models (id, name, model_type, status, framework, version)
 VALUES ('00000000-0000-0000-0000-000000000001', 'GRU_RISK_CLASSIFICATION', 'GRU_RISK_CLASSIFICATION', 'ACTIVE', 'PyTorch', '1.0.0')
 ON CONFLICT (id) DO NOTHING;
 
--- 13. K8s Agent mẫu cho doanh nghiệp
+-- 14. K8s Agent mẫu cho doanh nghiệp
 INSERT INTO agents (id, name, agent_uid, cluster_id, environment_id, status, last_seen_at)
 VALUES (
     'a0000000-0000-0000-0000-000000000001',
@@ -1066,7 +1548,7 @@ VALUES (
 ON CONFLICT (agent_uid) DO UPDATE
 SET status = 'ONLINE', last_seen_at = NOW();
 
--- 14. Token xác thực Agent
+-- 15. Token xác thực Agent
 INSERT INTO agent_tokens (id, agent_id, token_hash, token_prefix, expires_at, created_at)
 VALUES
     ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '7119ac14ceb8f5b908262a253c96011341843ca57f025e482cade4f859e05afc', 'aegis_agt_demo1', NOW() + INTERVAL '365 days', NOW()),
@@ -1075,6 +1557,41 @@ VALUES
     ('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', '879fb60445897373ff2ef309326af711eebb639d088f2e7a054a06a705c4840c', 'aegis_agt_demo4', NOW() + INTERVAL '365 days', NOW())
 ON CONFLICT (id) DO NOTHING;
 
+-- 16. Thông báo phát sóng toàn mạng mặc định (System Broadcasts)
+INSERT INTO system_broadcasts (broadcast_code, title, content, priority, audience, status, views_count, created_at)
+VALUES 
+(
+    'BC-2026-09',
+    'Thông báo cập nhật thuật toán AI Model v2.4.1 (ONNX Runtime)',
+    'Hệ thống đã triển khai phiên bản mô hình phát hiện dị thường mới với độ trễ suy luận chỉ 1.2ms và giảm 82% tỷ lệ báo động nhầm.',
+    'INFO',
+    'Tất cả người dùng',
+    'Đang hiển thị',
+    1240,
+    NOW() - INTERVAL '3 days'
+),
+(
+    'BC-2026-08',
+    'Bảo trì hạ tầng cơ sở dữ liệu định kỳ Quý 4',
+    'Hệ thống sẽ tiến hành bảo trì tối ưu hóa cơ sở dữ liệu PostgreSQL trong 15 phút vào 02:00 Chủ Nhật ngày 25/10/2026.',
+    'WARNING',
+    'Chủ Doanh nghiệp & DevOps',
+    'Đã lên lịch',
+    890,
+    NOW() - INTERVAL '5 days'
+),
+(
+    'BC-2026-07',
+    'Cảnh báo an ninh: Đã kích hoạt cơ chế mã hóa kiểm toán SHA-256',
+    'Toàn bộ thao tác phân quyền và tự phục hồi từ nay được bảo vệ bằng chữ ký số bất khả xâm phạm.',
+    'INFO',
+    'Tất cả người dùng',
+    'Đã kết thúc',
+    2450,
+    NOW() - INTERVAL '14 days'
+)
+ON CONFLICT (broadcast_code) DO NOTHING;
+
 -- ====================================================================
--- KẾT THÚC KHỞI TẠO TOÀN BỘ 39 BẢNG CƠ SỞ DỮ LIỆU CHUẨN
+-- KẾT THÚC KHỞI TẠO TOÀN BỘ 44 BẢNG CƠ SỞ DỮ LIỆU ENTERPRISE CHUẨN
 -- ====================================================================

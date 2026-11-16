@@ -418,9 +418,7 @@ const formatAiExplanation = (raw, rootCause) => {
   }
 
   if (raw.includes('most strongly supports CPU_OVERLOAD')) {
-
-    return 'Bằng chứng viễn trắc eBPF và mô hình AI GRU xác nhận mức tiêu thụ CPU bão hòa, có nguy cơ gây tắc nghẽn hàng đợi xử lý request.';
-
+    return 'Bằng chứng viễn trắc eBPF và mô hình AI xác nhận mức tiêu thụ CPU bão hòa, có nguy cơ gây tắc nghẽn hàng đợi xử lý request.';
   }
 
   if (raw.includes('most strongly supports OOM')) {
@@ -525,28 +523,17 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
 
 
-  if (text.includes('GRU predicted CPU_OVERLOAD')) {
-
+  if (text.includes('GRU predicted CPU_OVERLOAD') || text.includes('AI predicted CPU_OVERLOAD')) {
     const match = text.match(/\(([^)]+)\)/);
-
     const scoreStr = match ? match[1] : '90%';
-
     return {
-
-      title: 'Mô hình Deep Learning GRU cảnh báo quá tải CPU',
-
+      title: 'Mô hình Trí Tuệ Nhân Tạo AI cảnh báo quá tải CPU',
       badge: 'AI_DEEP_LEARNING',
-
       badgeColor: '#7C3AED',
-
       badgeBg: '#EDE9FE',
-
       importanceLabel: 'Dự báo chuỗi thời gian',
-
-      desc: `Mạng nơ-ron hồi quy GRU (Gated Recurrent Unit) phân tích 12 mốc chuỗi thời gian viễn trắc gần nhất và dự báo nguy cơ quá tải CPU đạt xác suất ${scoreStr}. Cần chủ động can thiệp phòng ngừa trước khi suy sụp dịch vụ.`,
-
+      desc: `Mô hình AI phân tích 12 mốc chuỗi thời gian viễn trắc gần nhất và dự báo nguy cơ quá tải CPU đạt xác suất ${scoreStr}. Cần chủ động can thiệp phòng ngừa trước khi suy sụp dịch vụ.`,
     };
-
   }
 
 
@@ -1844,7 +1831,7 @@ export const PredictionsPage = () => {
 
         type: 'success',
 
-        text: `Đã hoàn tất chu kỳ suy diễn On-Demand! Điểm rủi ro GRU: ${
+        text: `Đã hoàn tất chu kỳ suy diễn On-Demand! Điểm rủi ro AI: ${
 
           gruPred?.overall_risk_score !== undefined
 
@@ -3624,7 +3611,7 @@ export const PredictionsPage = () => {
               </h1>
 
               <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-                Phân loại rủi ro đa nhãn thời gian thực bằng mô hình GRU PyTorch
+                Phân loại rủi ro đa nhãn thời gian thực bằng mô hình AI
               </p>
 
             </div>
@@ -4107,7 +4094,7 @@ export const PredictionsPage = () => {
 
                     <div style={{ color: '#334155', fontSize: '0.78125rem' }}>
 
-                      <strong style={{ color: '#1E3A8A' }}>Cơ chế phân loại rủi ro GRU đa nhãn:</strong> Mô hình học máy của hệ thống phân tích chuỗi thời gian gồm đúng <strong style={{ color: '#1E3A8A' }}>12 bước quan sát viễn trắc (cửa sổ 60 giây)</strong> và tính toán độc lập xác suất cho 6 nguy cơ bão hòa: CPU, OOM, Disk Full, High Latency, 5xx Spikes, Traffic Overload.
+                      <strong style={{ color: '#1E3A8A' }}>Cơ chế phân loại rủi ro AI đa nhãn:</strong> Mô hình học máy của hệ thống phân tích chuỗi thời gian gồm đúng <strong style={{ color: '#1E3A8A' }}>12 bước quan sát viễn trắc (cửa sổ 60 giây)</strong> và tính toán độc lập xác suất cho 6 nguy cơ bão hòa: CPU, OOM, Disk Full, High Latency, 5xx Spikes, Traffic Overload.
 
                     </div>
 
@@ -4447,7 +4434,7 @@ export const PredictionsPage = () => {
 
               <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
 
-                {currentServiceBatchProgress?.message || 'Hệ thống đang tích lũy đủ 12 bước viễn trắc (60s) để suy luận GRU'}
+                {currentServiceBatchProgress?.message || 'Hệ thống đang tích lũy đủ 12 bước viễn trắc (60s) để suy luận AI'}
 
               </div>
 
@@ -4829,7 +4816,7 @@ export const PredictionsPage = () => {
 
                           >
 
-                            {currentStepLabel} ({activeSweepIdx === 0 ? 'Đủ 12 bước -> GRU' : 'Đầu gom mới'})
+                            {currentStepLabel} ({activeSweepIdx === 0 ? 'Đủ 12 bước -> AI' : 'Đầu gom mới'})
 
                           </text>
 

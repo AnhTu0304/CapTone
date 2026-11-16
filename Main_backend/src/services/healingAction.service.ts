@@ -18,28 +18,48 @@ export class HealingActionService {
     user: any,
     organizationId?: string,
     clusterId?: string
-  ): Promise<{ orgId?: string; clusterId?: string }> {
+  ): Promise<{ orgId?: string; clusterId?: string; allowedOrgIds?: string[] }> {
     if (!user || !user.id) {
       throw new ApiError(401, 'Yêu cầu đăng nhập trước khi truy cập tài nguyên');
     }
 
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: string) => r.trim().toUpperCase())
-      : [];
+    const systemRoles: string[] = [
+      ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+      ...(Array.isArray(user.roles) ? user.roles : []),
+      ...(user.role ? [user.role] : []),
+    ].map((r: string) => String(r).trim().toUpperCase());
+
     const isSystemAdmin =
-      userRoles.includes('SUPER_ADMIN') ||
-      userRoles.includes('SYSTEM_ADMIN') ||
-      userRoles.includes('ADMIN') ||
-      userRoles.includes('SME_OWNER') ||
-      userRoles.includes('DEVOPS');
+      systemRoles.includes('SUPER_ADMIN') ||
+      systemRoles.includes('SYSTEM_ADMIN');
+
+    let allowedOrgIds: string[] = [];
+    if (!isSystemAdmin) {
+      const memberRes = await pool.query(
+        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+        [user.id]
+      );
+      allowedOrgIds = memberRes.rows.map((r: any) => r.organization_id);
+      if (user.organization_id && !allowedOrgIds.includes(user.organization_id)) {
+        allowedOrgIds.push(user.organization_id);
+      }
+      if (allowedOrgIds.length === 0) {
+        throw new ApiError(
+          403,
+          'Từ chối truy cập: Tài khoản của bạn chưa thuộc tổ chức hoạt động nào'
+        );
+      }
+    }
 
     // Xác định tổ chức mục tiêu (cho phép truy cập cụm Lab mặc định 00000000-0000-0000-0000-000000000001)
-    const targetOrgId = organizationId || user.organization_id;
+    let targetOrgId = organizationId && organizationId.toUpperCase() !== 'ALL' ? organizationId : user.organization_id;
+    if (!targetOrgId && !isSystemAdmin) {
+      targetOrgId = allowedOrgIds[0];
+    }
     const isDefaultSharedOrg = targetOrgId === '00000000-0000-0000-0000-000000000001';
 
     if (!isSystemAdmin && targetOrgId && !isDefaultSharedOrg) {
-      const member = await OrganizationMemberModel.findByOrgAndUser(targetOrgId, user.id);
-      if (!member || member.status !== 'ACTIVE') {
+      if (!allowedOrgIds.includes(targetOrgId)) {
         throw new ApiError(
           403,
           'Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này'
@@ -58,7 +78,48 @@ export class HealingActionService {
       }
     }
 
-    return { orgId: targetOrgId, clusterId };
+    return { orgId: targetOrgId, clusterId, allowedOrgIds };
+  }
+
+  /**
+   * Kiểm tra quyền sở hữu chính sách tự phục hồi theo Tổ chức (Chống IDOR)
+   */
+  public static async validatePolicyOwnership(
+    policyOrgId: string | null | undefined,
+    user: any,
+    requiredMinRole: 'DEVOPS' | 'SME_OWNER' = 'DEVOPS'
+  ): Promise<void> {
+    if (!user || !user.id) {
+      throw new ApiError(401, 'Yêu cầu đăng nhập trước khi thao tác chính sách');
+    }
+
+    const systemRoles = [
+      ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+      ...(Array.isArray(user.roles) ? user.roles : []),
+      ...(user.role ? [user.role] : []),
+    ].map((r: string) => String(r).trim().toUpperCase());
+
+    if (systemRoles.includes('SUPER_ADMIN') || systemRoles.includes('SYSTEM_ADMIN')) {
+      return; // Platform admin
+    }
+
+    if (!policyOrgId) {
+      throw new ApiError(403, 'Từ chối truy cập: Không thể sửa đổi chính sách mẫu dùng chung toàn hệ thống');
+    }
+
+    const member = await OrganizationMemberModel.findByOrgAndUser(policyOrgId, user.id);
+    if (!member || member.status !== 'ACTIVE') {
+      throw new ApiError(403, 'Từ chối truy cập: Bạn không thuộc tổ chức sở hữu chính sách tự phục hồi này');
+    }
+
+    const roleCode = String(member.role_code || '').toUpperCase();
+    if (roleCode === 'VIEWER') {
+      throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được sửa đổi chính sách tự phục hồi');
+    }
+
+    if (requiredMinRole === 'SME_OWNER' && roleCode !== 'SME_OWNER' && roleCode !== 'ADMIN') {
+      throw new ApiError(403, 'Chỉ Chủ sở hữu tổ chức (SME_OWNER) mới có quyền xóa chính sách này');
+    }
   }
 
   /**
@@ -66,7 +127,13 @@ export class HealingActionService {
    */
   public static async getActions(filters: IHealingActionFilter = {}, user?: any) {
     if (user) {
-      await this.validateUserOrgAndCluster(user, filters.organization_id, filters.cluster_id);
+      const validation = await this.validateUserOrgAndCluster(user, filters.organization_id, filters.cluster_id);
+      if (!filters.organization_id || filters.organization_id.toUpperCase() === 'ALL') {
+        filters.organization_id = validation.orgId;
+      }
+      if (validation.allowedOrgIds && validation.allowedOrgIds.length > 0) {
+        filters.allowed_org_ids = validation.allowedOrgIds;
+      }
     }
     return await HealingActionModel.findManyActions(filters);
   }
@@ -75,11 +142,17 @@ export class HealingActionService {
    * 1b. Lấy danh sách hành động tự phục hồi đang chạy ngầm (RUNNING / PENDING)
    */
   public static async getRunningActions(
-    filters: { organization_id?: string; cluster_id?: string; search?: string; limit?: number; offset?: number } = {},
+    filters: { organization_id?: string; cluster_id?: string; search?: string; limit?: number; offset?: number; allowed_org_ids?: string[] } = {},
     user?: any
   ) {
     if (user) {
-      await this.validateUserOrgAndCluster(user, filters.organization_id, filters.cluster_id);
+      const validation = await this.validateUserOrgAndCluster(user, filters.organization_id, filters.cluster_id);
+      if (!filters.organization_id || filters.organization_id.toUpperCase() === 'ALL') {
+        filters.organization_id = validation.orgId;
+      }
+      if (validation.allowedOrgIds && validation.allowedOrgIds.length > 0) {
+        filters.allowed_org_ids = validation.allowedOrgIds;
+      }
     }
     return await HealingActionModel.findRunningActions(filters);
   }
@@ -154,13 +227,14 @@ export class HealingActionService {
     // Target Concurrency Lock: Prevent multiple actions running concurrently on the same target workload/incident
     if (action.target_name || action.incident_id) {
       const activeRunningCheck = await pool.query(
-        `SELECT id, action_type_code, execution_status, created_at 
-         FROM healing_actions 
-         WHERE id != $1 
-           AND execution_status IN ('RUNNING', 'PENDING')
+        `SELECT h.id, t.code AS action_type_code, h.execution_status, h.created_at 
+         FROM healing_actions h
+         LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+         WHERE h.id != $1 
+           AND h.execution_status IN ('RUNNING', 'PENDING')
            AND (
-             (target_name IS NOT NULL AND target_name = $2)
-             OR (incident_id IS NOT NULL AND incident_id = $3)
+             (h.target_name IS NOT NULL AND h.target_name = $2)
+             OR (h.incident_id IS NOT NULL AND h.incident_id = $3)
            )
          LIMIT 1;`,
         [actionId, action.target_name, action.incident_id]
@@ -176,7 +250,20 @@ export class HealingActionService {
 
     // Tenant & Cluster Access Validation
     if (user) {
-      await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const systemRoles = [
+        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+        ...(Array.isArray(user.roles) ? user.roles : []),
+        ...(user.role ? [user.role] : []),
+      ].map((r: string) => String(r).trim().toUpperCase());
+
+      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
+        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+        const roleCode = String(member?.role_code || '').toUpperCase();
+        if (roleCode === 'VIEWER') {
+          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được kích hoạt thực thi hành động tự phục hồi');
+        }
+      }
     }
 
     // Broadcast WebSocket event: started
@@ -363,7 +450,20 @@ export class HealingActionService {
 
     // Tenant & Cluster Access Validation
     if (user) {
-      await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const systemRoles = [
+        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+        ...(Array.isArray(user.roles) ? user.roles : []),
+        ...(user.role ? [user.role] : []),
+      ].map((r: string) => String(r).trim().toUpperCase());
+
+      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
+        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+        const roleCode = String(member?.role_code || '').toUpperCase();
+        if (roleCode === 'VIEWER') {
+          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được hủy bỏ hành động tự phục hồi');
+        }
+      }
     }
 
     const completedStatuses = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
@@ -486,7 +586,17 @@ export class HealingActionService {
     environment_id?: string;
     is_active?: boolean;
     search?: string;
-  } = {}) {
+    allowed_org_ids?: string[];
+  } = {}, user?: any) {
+    if (user) {
+      const validation = await this.validateUserOrgAndCluster(user, filters.organization_id);
+      if (!filters.organization_id || filters.organization_id.toUpperCase() === 'ALL') {
+        filters.organization_id = validation.orgId;
+      }
+      if (validation.allowedOrgIds && validation.allowedOrgIds.length > 0) {
+        filters.allowed_org_ids = validation.allowedOrgIds;
+      }
+    }
     return await HealingActionModel.findPolicies(filters);
   }
 
@@ -515,6 +625,13 @@ export class HealingActionService {
 
     const beforeRes = await pool.query('SELECT * FROM healing_policies WHERE id = $1', [id]);
     const beforePolicy = beforeRes.rows[0];
+    if (!beforePolicy) {
+      throw new ApiError(404, 'Không tìm thấy chính sách tự phục hồi để cập nhật');
+    }
+
+    if (user) {
+      await this.validatePolicyOwnership(beforePolicy.organization_id, user, 'DEVOPS');
+    }
 
     const updated = await HealingActionModel.updatePolicyConfig(id, data);
     if (!updated) {
@@ -581,6 +698,13 @@ export class HealingActionService {
 
     const beforeRes = await pool.query('SELECT * FROM healing_policies WHERE id = $1', [id]);
     const beforePolicy = beforeRes.rows[0];
+    if (!beforePolicy) {
+      throw new ApiError(404, 'Không tìm thấy chính sách tự phục hồi');
+    }
+
+    if (user) {
+      await this.validatePolicyOwnership(beforePolicy.organization_id, user, 'DEVOPS');
+    }
 
     const updated = await HealingActionModel.togglePolicyActive(id);
     if (!updated) {
@@ -684,6 +808,13 @@ export class HealingActionService {
     }
     const beforeRes = await pool.query('SELECT * FROM healing_policies WHERE id = $1', [id]);
     const beforePolicy = beforeRes.rows[0];
+    if (!beforePolicy) {
+      throw new ApiError(404, 'Không tìm thấy chính sách hoặc đã bị xóa');
+    }
+
+    if (user) {
+      await this.validatePolicyOwnership(beforePolicy.organization_id, user, 'SME_OWNER');
+    }
 
     const deleted = await HealingActionModel.deletePolicy(id);
     if (!deleted) {
@@ -730,11 +861,18 @@ export class HealingActionService {
       search?: string;
       limit?: number;
       offset?: number;
+      allowed_org_ids?: string[];
     } = {},
     user?: any
   ) {
     if (user) {
-      await this.validateUserOrgAndCluster(user, filters.organization_id, filters.cluster_id);
+      const validation = await this.validateUserOrgAndCluster(user, filters.organization_id, filters.cluster_id);
+      if (!filters.organization_id || filters.organization_id.toUpperCase() === 'ALL') {
+        filters.organization_id = validation.orgId;
+      }
+      if (validation.allowedOrgIds && validation.allowedOrgIds.length > 0) {
+        filters.allowed_org_ids = validation.allowedOrgIds;
+      }
     }
     return await HealingActionModel.findApprovals(filters);
   }
@@ -744,8 +882,24 @@ export class HealingActionService {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
     const action = await HealingActionModel.findActionById(actionId);
-    if (user && action) {
-      await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+    if (!action) {
+      throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể phê duyệt');
+    }
+    if (user) {
+      const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const systemRoles = [
+        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+        ...(Array.isArray(user.roles) ? user.roles : []),
+        ...(user.role ? [user.role] : []),
+      ].map((r: string) => String(r).trim().toUpperCase());
+
+      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
+        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+        const roleCode = String(member?.role_code || '').toUpperCase();
+        if (roleCode === 'VIEWER') {
+          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được phê duyệt hành động tự phục hồi');
+        }
+      }
     }
     const approved = await HealingActionModel.approveAction(actionId, approvedBy, reason);
     if (!approved) {
@@ -814,8 +968,24 @@ export class HealingActionService {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
     const action = await HealingActionModel.findActionById(actionId);
-    if (user && action) {
-      await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+    if (!action) {
+      throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể từ chối');
+    }
+    if (user) {
+      const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const systemRoles = [
+        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+        ...(Array.isArray(user.roles) ? user.roles : []),
+        ...(user.role ? [user.role] : []),
+      ].map((r: string) => String(r).trim().toUpperCase());
+
+      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
+        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+        const roleCode = String(member?.role_code || '').toUpperCase();
+        if (roleCode === 'VIEWER') {
+          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được từ chối hành động tự phục hồi');
+        }
+      }
     }
     const rejected = await HealingActionModel.rejectAction(actionId, rejectedBy, reason);
     if (!rejected) {
@@ -877,9 +1047,13 @@ export class HealingActionService {
    * 12. Self-Healing Analytics & MTTR
    */
   public static async getAnalytics(organizationId?: string, clusterId?: string, user?: any) {
+    let targetOrg = organizationId;
     if (user) {
-      await this.validateUserOrgAndCluster(user, organizationId, clusterId);
+      const validation = await this.validateUserOrgAndCluster(user, organizationId, clusterId);
+      if (!organizationId || organizationId.toUpperCase() === 'ALL') {
+        targetOrg = validation.orgId;
+      }
     }
-    return await HealingActionModel.getAnalytics(organizationId, clusterId);
+    return await HealingActionModel.getAnalytics(targetOrg, clusterId);
   }
 }

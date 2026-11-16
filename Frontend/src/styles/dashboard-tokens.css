@@ -352,14 +352,18 @@ a:focus-visible,
 /* Hide Sidebar Scrollbar */
 .dashboard-sidebar-nav::-webkit-scrollbar,
 .dashboard-sidebar::-webkit-scrollbar,
-.dashboard-desktop-sidebar::-webkit-scrollbar {
+.dashboard-desktop-sidebar::-webkit-scrollbar,
+.admin-sidebar-nav::-webkit-scrollbar,
+.admin-sidebar::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
 }
 .dashboard-sidebar-nav,
 .dashboard-sidebar,
-.dashboard-desktop-sidebar {
+.dashboard-desktop-sidebar,
+.admin-sidebar-nav,
+.admin-sidebar {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }

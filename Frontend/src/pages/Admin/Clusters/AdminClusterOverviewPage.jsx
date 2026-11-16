@@ -17,115 +17,32 @@ import {
 } from 'lucide-react';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { clusterService } from '../../../services/clusterService';
-
-const INITIAL_CLUSTERS = [
-  {
-    id: 'k8s-acme-prod-01',
-    name: 'acme-production-us-east',
-    companyId: 'org-acme-01',
-    companyName: 'Acme Infrastructure Corp',
-    environment: 'Production',
-    region: 'AWS us-east-1 (N. Virginia)',
-    k8sVersion: 'v1.30.2',
-    status: 'READY',
-    nodeCount: 16,
-    podCount: 142,
-    agentStatus: 'ONLINE',
-    agentVersion: 'v2.4.1-ebpf',
-    lastSync: '10 giây trước',
-  },
-  {
-    id: 'k8s-acme-stage-01',
-    name: 'acme-staging-us-east',
-    companyId: 'org-acme-01',
-    companyName: 'Acme Infrastructure Corp',
-    environment: 'Staging',
-    region: 'AWS us-east-1 (N. Virginia)',
-    k8sVersion: 'v1.30.1',
-    status: 'READY',
-    nodeCount: 6,
-    podCount: 48,
-    agentStatus: 'ONLINE',
-    agentVersion: 'v2.4.1-ebpf',
-    lastSync: '30 giây trước',
-  },
-  {
-    id: 'k8s-finflow-prod-01',
-    name: 'finflow-prod-hcm',
-    companyId: 'org-finflow-02',
-    companyName: 'FinFlow Pay Platform',
-    environment: 'Production',
-    region: 'VNPT IDC Ho Chi Minh',
-    k8sVersion: 'v1.29.4',
-    status: 'WARNING',
-    nodeCount: 12,
-    podCount: 96,
-    agentStatus: 'DEGRADED',
-    agentVersion: 'v2.4.0-ebpf',
-    lastSync: '1 phút trước',
-  },
-  {
-    id: 'k8s-nexus-sg-01',
-    name: 'nexus-cluster-sg',
-    companyId: 'org-nexus-03',
-    companyName: 'Nexus Logistics AI',
-    environment: 'Production',
-    region: 'GCP asia-southeast1 (Singapore)',
-    k8sVersion: 'v1.30.0',
-    status: 'READY',
-    nodeCount: 20,
-    podCount: 184,
-    agentStatus: 'ONLINE',
-    agentVersion: 'v2.4.1-ebpf',
-    lastSync: '15 giây trước',
-  },
-  {
-    id: 'k8s-viettel-hn-01',
-    name: 'viettel-k8s-hn-01',
-    companyId: 'org-viettel-04',
-    companyName: 'Viettel SME Cloud',
-    environment: 'Staging',
-    region: 'Viettel IDC Hoa Lac (Hanoi)',
-    k8sVersion: 'v1.28.8',
-    status: 'CRITICAL',
-    nodeCount: 8,
-    podCount: 62,
-    agentStatus: 'OFFLINE',
-    agentVersion: 'v2.3.9-ebpf',
-    lastSync: '14 phút trước',
-  },
-  {
-    id: 'k8s-fpt-retail-01',
-    name: 'fpt-retail-edge-cluster',
-    companyId: 'org-fpt-05',
-    companyName: 'FPT Digital Smart Retail',
-    environment: 'Production',
-    region: 'FPT Telecom IDC Da Nang',
-    k8sVersion: 'v1.30.2',
-    status: 'READY',
-    nodeCount: 10,
-    podCount: 78,
-    agentStatus: 'ONLINE',
-    agentVersion: 'v2.4.1-ebpf',
-    lastSync: '20 giây trước',
-  },
-];
+import { AdminTablePagination } from '../../../components/admin/common';
 
 export const AdminClusterOverviewPage = ({ onNavigate }) => {
-  const [clusters, setClusters] = useState(INITIAL_CLUSTERS);
+  const [clusters, setClusters] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [envFilter, setEnvFilter] = useState('ALL');
+  const [companyFilter, setCompanyFilter] = useState('ALL');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
   const debouncedSearch = useDebounce(search, 250);
 
+  // Reset trang về 1 khi từ khóa hoặc bộ lọc thay đổi
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, envFilter, companyFilter]);
+
   const fetchRealClusters = useCallback(async (showToast = false) => {
     setIsRefreshing(true);
     try {
       const data = await clusterService.getAllClusters();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         const mapped = data.map((c) => {
           const agStatus = (c.agent_status || 'PENDING').toUpperCase();
           const envRaw = (c.environment_type || c.environment_name || 'PRODUCTION').toUpperCase();
@@ -142,17 +59,18 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
               : 'CRITICAL';
           return {
             id: c.id,
-            name: c.name || 'k8s-cluster',
+            name: c.name || (c.id ? `Cụm ${c.id.slice(0, 8)}` : 'k8s-cluster'),
             companyId: c.organization_id || 'org-default',
-            companyName: c.organization_name || 'Tổ chức Hệ thống',
+            companyName: c.organization_name || 'Chưa gán tổ chức',
             environment,
-            region: c.provider ? `${c.provider} (${c.endpoint || 'Cluster API'})` : 'Kubernetes Cluster',
-            k8sVersion: c.kubernetes_version || 'v1.29.4',
+            region: c.provider || 'Kubernetes Cluster',
+            endpoint: c.endpoint || null,
+            k8sVersion: c.kubernetes_version || 'Chưa xác định',
             status,
             nodeCount: Number(c.nodes_count || 0),
             podCount: Number(c.pods_count || 0),
             agentStatus: agStatus,
-            agentVersion: c.agent_name || 'eBPF Daemon',
+            agentVersion: c.agent_name || 'sdas-ebpf-agent',
             lastSync: c.last_heartbeat_at
               ? new Date(c.last_heartbeat_at).toLocaleString('vi-VN')
               : 'Chưa đồng bộ',
@@ -163,20 +81,29 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
           setToastMessage(`Đã đồng bộ trạng thái telemetry thực tế từ ${mapped.length} cụm Kubernetes!`);
           setTimeout(() => setToastMessage(null), 3500);
         }
-      } else if (showToast) {
-        setToastMessage(`Đã đồng bộ trạng thái telemetry từ ${clusters.length} cụm Kubernetes!`);
-        setTimeout(() => setToastMessage(null), 3500);
       }
     } catch (err) {
       console.warn('[AdminClusterOverviewPage] Lỗi đồng bộ cụm K8s:', err);
     } finally {
       setIsRefreshing(false);
+      setIsLoading(false);
     }
-  }, [clusters.length]);
+  }, []);
 
   useEffect(() => {
     fetchRealClusters(false);
   }, [fetchRealClusters]);
+
+  // Danh sách công ty duy nhất có cụm K8s
+  const uniqueCompanies = useMemo(() => {
+    const map = new Map();
+    clusters.forEach((c) => {
+      if (c.companyId && c.companyName) {
+        map.set(c.companyId, c.companyName);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [clusters]);
 
   const filteredClusters = useMemo(() => {
     return clusters.filter((c) => {
@@ -188,9 +115,15 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
         c.k8sVersion.toLowerCase().includes(debouncedSearch.toLowerCase());
       const matchStatus = statusFilter === 'ALL' || c.status === statusFilter;
       const matchEnv = envFilter === 'ALL' || c.environment === envFilter;
-      return matchSearch && matchStatus && matchEnv;
+      const matchCompany = companyFilter === 'ALL' || c.companyId === companyFilter;
+      return matchSearch && matchStatus && matchEnv && matchCompany;
     });
-  }, [clusters, debouncedSearch, statusFilter, envFilter]);
+  }, [clusters, debouncedSearch, statusFilter, envFilter, companyFilter]);
+
+  const totalPages = Math.ceil(filteredClusters.length / pageSize) || 1;
+  const paginatedClusters = useMemo(() => {
+    return filteredClusters.slice((page - 1) * pageSize, page * pageSize);
+  }, [filteredClusters, page, pageSize]);
 
   const stats = useMemo(() => {
     let totalNodes = 0;
@@ -198,6 +131,9 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
     let ready = 0;
     let warning = 0;
     let critical = 0;
+    let onlineAgents = 0;
+    const orgsSet = new Set();
+    const providersSet = new Set();
 
     clusters.forEach((c) => {
       totalNodes += c.nodeCount;
@@ -205,6 +141,10 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
       if (c.status === 'READY') ready++;
       else if (c.status === 'WARNING') warning++;
       else if (c.status === 'CRITICAL') critical++;
+
+      if (c.agentStatus === 'ONLINE') onlineAgents++;
+      if (c.companyId) orgsSet.add(c.companyId);
+      if (c.region) providersSet.add(c.region);
     });
 
     return {
@@ -214,6 +154,11 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
       ready,
       warning,
       critical,
+      onlineAgents,
+      uniqueOrgsCount: orgsSet.size,
+      uniqueProvidersCount: providersSet.size,
+      healthyPct: clusters.length > 0 ? Math.round((ready / clusters.length) * 100) : 100,
+      agentOnlinePct: clusters.length > 0 ? Math.round((onlineAgents / clusters.length) * 100) : 100,
     };
   }, [clusters]);
 
@@ -235,42 +180,39 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
     >
       {/* 1. Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#ECFDF5',
-                color: '#065F46',
-                border: '1px solid #A7F3D0',
-                fontWeight: 700,
-                fontSize: '0.6875rem',
-              }}
-            >
-              <ShieldCheck size={12} /> Cấp Độ Quản Trị Hệ Thống (Platform Super Admin)
-            </span>
-          </div>
-          <h1
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
             style={{
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              color: 'var(--dash-text-primary)',
-              margin: '8px 0 4px 0',
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 10px rgba(5, 150, 105, 0.25)',
+              flexShrink: 0,
             }}
           >
-            <Layers size={26} style={{ color: '#059669' }} />
-            Tổng Quan Cụm Kubernetes Toàn Mạng (Cluster Overview)
-          </h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
-            Quản lý tập trung thông tin kết nối, phiên bản Kubernetes, số Node và tình trạng tác tử viễn trắc trên tất cả các cụm của doanh nghiệp.
-          </p>
+            <Layers size={24} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: 800,
+                color: 'var(--dash-text-primary)',
+                letterSpacing: '-0.02em',
+                margin: 0,
+              }}
+            >
+              Tổng Quan Cụm Kubernetes Toàn Mạng
+            </h1>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
+              Quản lý tập trung thông tin kết nối, phiên bản Kubernetes, số Node và tình trạng tác tử viễn trắc trên tất cả các cụm của doanh nghiệp.
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -340,7 +282,7 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
             {stats.totalClusters} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--dash-text-secondary)' }}>Clusters</span>
           </div>
           <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '6px' }}>
-            Phủ khắp 6 vùng đám mây
+            {stats.uniqueOrgsCount > 0 ? `Thuộc ${stats.uniqueOrgsCount} doanh nghiệp quản trị` : 'Đồng bộ từ CSDL thời gian thực'}
           </div>
         </div>
 
@@ -363,7 +305,7 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
             {stats.ready} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#166534' }}>Cụm</span>
           </div>
           <div style={{ fontSize: '0.75rem', color: '#15803D', fontWeight: 600, marginTop: '6px' }}>
-            Tác tử eBPF 100% Online
+            Tác tử eBPF: {stats.onlineAgents}/{clusters.length} Online ({stats.agentOnlinePct}%)
           </div>
         </div>
 
@@ -486,6 +428,28 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
             <option value="Staging">Staging</option>
             <option value="Development">Development</option>
           </select>
+
+          {/* Company Filter */}
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            style={{
+              padding: '7px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--dash-border)',
+              fontSize: '0.8125rem',
+              backgroundColor: '#FFFFFF',
+              color: 'var(--dash-text-primary)',
+              fontWeight: 600,
+            }}
+          >
+            <option value="ALL">Tất Cả Doanh Nghiệp ({uniqueCompanies.length})</option>
+            {uniqueCompanies.map((c) => (
+              <option key={c.id} value={c.id}>
+                Doanh nghiệp: {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-muted)' }}>
@@ -518,7 +482,22 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredClusters.map((cluster) => (
+            {isLoading ? (
+              <tr>
+                <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                  <RefreshCw size={24} className="spin-icon" style={{ margin: '0 auto 8px auto', display: 'block' }} />
+                  <div style={{ fontSize: '0.8125rem' }}>Đang nạp dữ liệu cụm Kubernetes từ máy chủ...</div>
+                </td>
+              </tr>
+            ) : paginatedClusters.length === 0 ? (
+              <tr>
+                <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                  <Server size={24} style={{ margin: '0 auto 8px auto', display: 'block', opacity: 0.5 }} />
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Không tìm thấy cụm Kubernetes nào</div>
+                </td>
+              </tr>
+            ) : (
+              paginatedClusters.map((cluster) => (
               <tr
                 key={cluster.id}
                 style={{
@@ -545,7 +524,12 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
                     </div>
                     <div>
                       <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>{cluster.name}</div>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{cluster.region}</div>
+                      <div
+                        style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}
+                        title={cluster.endpoint || undefined}
+                      >
+                        {cluster.region}
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -553,9 +537,6 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
                 {/* Company Name */}
                 <td style={{ padding: '14px 16px' }}>
                   <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>{cluster.companyName}</div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {cluster.companyId}
-                  </div>
                 </td>
 
                 {/* Environment */}
@@ -717,9 +698,25 @@ export const AdminClusterOverviewPage = ({ onNavigate }) => {
                   </button>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
+
+        <AdminTablePagination
+          page={page}
+          pageSize={pageSize}
+          total={filteredClusters.length}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setPage(1);
+          }}
+          itemLabel="cụm Kubernetes"
+          pageSizeOptions={[10, 20, 50]}
+          isLoading={isRefreshing || isLoading}
+        />
       </div>
     </div>
   );

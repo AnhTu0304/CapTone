@@ -26,6 +26,7 @@ import {
   HelpCircle,
   Server,
   ArrowRight,
+  LayoutDashboard,
 } from 'lucide-react';
 import InteractiveResourceChart from '../../../components/dashboard/InteractiveResourceChart';
 
@@ -91,6 +92,10 @@ export const OverviewPage = () => {
 
   // Realtime Telemetry & Live Cluster State
   const [telemetry, setTelemetry] = useState(null);
+  const telemetryRef = useRef(null);
+  useEffect(() => {
+    telemetryRef.current = telemetry;
+  }, [telemetry]);
   const [telemetrySequence, setTelemetrySequence] = useState([]);
   const telemetrySequenceRef = useRef([]);
   useEffect(() => {
@@ -115,6 +120,11 @@ export const OverviewPage = () => {
     clusterInfo?.status === 'HEALTHY' ||
     (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
   ), [currentEnv?.agentStatus, clusterInfo?.status, clusterInfo?.nodes]);
+
+  // Tính toán số liệu K8s Pods và Nodes THẬT
+  const rawPods = useMemo(() => clusterInfo?.pods || [], [clusterInfo?.pods]);
+  const nodeCount = clusterInfo?.nodes?.length || currentEnv?.nodes || 1;
+  const podCount = rawPods.length || currentEnv?.pods || 0;
 
   // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn với race-condition guard
   const loadClusterTrend = useCallback(async (range, isSilent = false) => {
@@ -292,7 +302,6 @@ export const OverviewPage = () => {
           }
           return next;
         });
-        if (Array.isArray(data.sequence) && data.sequence.length > 0) setTelemetrySequence(data.sequence);
         if (Array.isArray(data.incidents)) setActiveIncidents(data.incidents);
         if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
         if (data.timestamp) setLastDataTimestamp(new Date(data.timestamp).toLocaleTimeString());
@@ -310,9 +319,9 @@ export const OverviewPage = () => {
           if (data) {
             setIsDataStale(false);
             if (data.latest_point || data.latest_node_metric) {
+              if (telemetryRef.current?.cpu !== undefined) setPrevCpu(Number(telemetryRef.current.cpu));
+              if (telemetryRef.current?.ram !== undefined) setPrevRam(Number(telemetryRef.current.ram));
               setTelemetry((prev) => {
-                if (prev?.cpu !== undefined) setPrevCpu(Number(prev.cpu));
-                if (prev?.ram !== undefined) setPrevRam(Number(prev.ram));
                 const merged = { ...prev };
                 if (data.latest_point) {
                   merged.cpu = Number(data.latest_point.cpu ?? merged.cpu ?? 0);
@@ -334,7 +343,7 @@ export const OverviewPage = () => {
                 return merged;
               });
             }
-            // Cập nhật real-time sequence cho biểu đồ khi có live pulse hoặc initial state
+            // Cập nhật real-time sequence cho biểu đồ khi có live pulse hoặc initial state (chỉ dùng node metric chuẩn)
             if (chartTimeRangeRef.current === '15m' && data.latest_node_metric) {
               const nodeMetric = data.latest_node_metric;
               const nodeCpu = nodeMetric.cpu_usage_percent !== undefined ? Number(nodeMetric.cpu_usage_percent) : undefined;
@@ -356,7 +365,7 @@ export const OverviewPage = () => {
                   latency: 0,
                 };
                 if (!prevSeq || prevSeq.length === 0) {
-                  return Array.isArray(data.sequence) && data.sequence.length > 0 ? data.sequence : [newPoint];
+                  return [newPoint];
                 }
                 const lastPt = prevSeq[prevSeq.length - 1];
                 const lastPtMs = lastPt.time_bucket ? new Date(lastPt.time_bucket).getTime() : (lastPt.timestamp || 0);
@@ -376,8 +385,6 @@ export const OverviewPage = () => {
                 }
                 return [...prevSeq, newPoint];
               });
-            } else if (chartTimeRangeRef.current === '15m' && Array.isArray(data.sequence) && data.sequence.length > 0) {
-              setTelemetrySequence((prev) => (prev.length === 0 ? data.sequence : prev));
             }
             if (Array.isArray(data.incidents)) setActiveIncidents(data.incidents);
             if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
@@ -452,18 +459,17 @@ export const OverviewPage = () => {
           const podCpu = raw.cpu !== undefined ? Number(raw.cpu) : undefined;
           const podRam = raw.ram !== undefined ? Number(raw.ram) : undefined;
 
-          setTelemetry((prev) => {
-            if (prev?.cpu !== undefined) setPrevCpu(Number(prev.cpu));
-            if (prev?.ram !== undefined) setPrevRam(Number(prev.ram));
-            return {
-              ...prev,
-              cpu: podCpu !== undefined ? podCpu : prev?.cpu,
-              ram: podRam !== undefined ? podRam : prev?.ram,
-              latency: raw.latency !== undefined ? Number(raw.latency) : prev?.latency,
-              request_rate: raw.request_rate !== undefined ? Number(raw.request_rate) : prev?.request_rate,
-              http_5xx_rate: raw.http_5xx_rate !== undefined ? Number(raw.http_5xx_rate) : prev?.http_5xx_rate,
-            };
-          });
+          if (telemetryRef.current?.cpu !== undefined) setPrevCpu(Number(telemetryRef.current.cpu));
+          if (telemetryRef.current?.ram !== undefined) setPrevRam(Number(telemetryRef.current.ram));
+
+          setTelemetry((prev) => ({
+            ...prev,
+            cpu: podCpu !== undefined ? podCpu : prev?.cpu,
+            ram: podRam !== undefined ? podRam : prev?.ram,
+            latency: raw.latency !== undefined ? Number(raw.latency) : prev?.latency,
+            request_rate: raw.request_rate !== undefined ? Number(raw.request_rate) : prev?.request_rate,
+            http_5xx_rate: raw.http_5xx_rate !== undefined ? Number(raw.http_5xx_rate) : prev?.http_5xx_rate,
+          }));
           setLastDataTimestamp(new Date().toLocaleTimeString());
         } else if (payload.type === 'incident' && payload.data) {
           setActiveIncidents((prev) => [payload.data, ...prev.slice(0, 9)]);
@@ -489,12 +495,9 @@ export const OverviewPage = () => {
       isMounted = false;
       unsubscribe();
     };
-  }, [isClusterOnline, currentEnv?.id]);
+  }, [isClusterOnline, currentEnv?.id, activeClusterId]);
 
   // Tính toán số liệu phần cứng và K8s Inventory THẬT
-  const nodeCount = clusterInfo?.nodes?.length || currentEnv?.nodes || 1;
-  const rawPods = useMemo(() => clusterInfo?.pods || [], [clusterInfo?.pods]);
-  const podCount = rawPods.length || currentEnv?.pods || 0;
   const runningPodsCount = rawPods.length > 0
     ? rawPods.filter((p) => p.status === 'Running' || p.phase === 'Running').length
     : podCount;
@@ -618,7 +621,14 @@ export const OverviewPage = () => {
         ? new Date(pt.time_bucket)
         : new Date(Date.now() - (telemetrySequence.length - idx) * 5000);
 
-      const rawRamVal = Number(pt.node_ram_percent ?? pt.ram_usage_percent ?? pt.ram ?? 0);
+      // Ưu tiên tuyệt đối chỉ số tài nguyên Node Cụm máy chủ (eBPF)
+      const rawRamVal = Number(
+        pt.node_ram_percent !== undefined && pt.node_ram_percent !== null
+          ? pt.node_ram_percent
+          : (pt.ram_usage_percent !== undefined && pt.ram_usage_percent !== null
+              ? pt.ram_usage_percent
+              : pt.ram ?? 0)
+      );
       let ramPercent = 0;
       let rawRamMb = Number(pt.rawRamMb ?? 0);
 
@@ -627,14 +637,21 @@ export const OverviewPage = () => {
         rawRamMb = rawRamVal;
         ramPercent = Math.min(100, Math.max(0, Math.round(((rawRamMb / totalRamMb) * 100) * 100) / 100));
       } else {
-        // rawRamVal đã là phần trăm hợp lệ (ví dụ: 22.8% - 41.2%)
+        // rawRamVal đã là phần trăm hợp lệ (ví dụ: 22.8% - 59.3%)
         ramPercent = Math.min(100, Math.max(0, Math.round(rawRamVal * 100) / 100));
         if (!rawRamMb && ramPercent > 0) {
           rawRamMb = Math.round((ramPercent / 100) * totalRamMb);
         }
       }
 
-      const cpuPercent = Math.min(100, Math.max(0, Math.round((Number(pt.cpu_usage_percent ?? pt.cpu) || 0) * 100) / 100));
+      const rawCpuVal = Number(
+        pt.node_cpu_percent !== undefined && pt.node_cpu_percent !== null
+          ? pt.node_cpu_percent
+          : (pt.cpu_usage_percent !== undefined && pt.cpu_usage_percent !== null
+              ? pt.cpu_usage_percent
+              : pt.cpu ?? 0)
+      );
+      const cpuPercent = Math.min(100, Math.max(0, Math.round(rawCpuVal * 100) / 100));
 
       return {
         timestamp: t.getTime(),
@@ -663,13 +680,30 @@ export const OverviewPage = () => {
     return (
       <div className="dashboard-overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Tổng Quan Vận Hành Hạ Tầng
-            </h1>
-            <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', marginTop: '4px', margin: 0 }}>
-              Giám sát trạng thái vận hành và kết nối tác tử hạ tầng Kubernetes
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <LayoutDashboard size={20} color="#059669" />
+            </div>
+            <div>
+              <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+                Tổng Quan Vận Hành Hạ Tầng
+              </h1>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
+                Giám sát trạng thái vận hành và kết nối tác tử hạ tầng Kubernetes
+              </p>
+            </div>
           </div>
           <button
             onClick={() => {
@@ -814,14 +848,34 @@ export const OverviewPage = () => {
     <div className="dashboard-overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* 1. Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-            Tổng Quan Vận Hành Hạ Tầng
-          </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Clock size={12} /> Cập nhật gần nhất: {lastDataTimestamp || lastUpdated}
-            </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <LayoutDashboard size={20} color="#059669" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+              Tổng Quan Vận Hành Hạ Tầng
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
+                Giám sát thời gian thực sức khỏe máy chủ, cụm Kubernetes và tiến trình tự phục hồi
+              </p>
+              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                • <Clock size={12} /> Cập nhật gần nhất: {lastDataTimestamp || lastUpdated}
+              </span>
+            </div>
           </div>
         </div>
 

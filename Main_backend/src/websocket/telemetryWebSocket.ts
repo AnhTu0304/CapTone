@@ -29,12 +29,12 @@ function sanitizeSummaryForViewer(summary: any) {
   if (!summary) return summary;
   return {
     ...summary,
-    raw_metrics: summary.raw_metrics || [],
+    raw_metrics: [],
     logs: [],
     events: [],
-    incidents: summary.incidents || [],
-    recommendations: summary.recommendations || [],
-    predictions: summary.predictions || [],
+    incidents: [],
+    recommendations: [],
+    predictions: [],
   };
 }
 
@@ -68,8 +68,8 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
           dbUser = await UserModel.findAuthStatus(decoded.id);
         }
 
-        // Dev fallback when token is missing or expired in local browser storage
-        if (!dbUser && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_FALLBACK !== 'false')) {
+        // Dev fallback when token is missing or expired in local browser storage (strictly disabled in test and production)
+        if (!dbUser && process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK === 'true') {
           const fallbackUser =
             (await UserModel.findFullByEmail('phamthaisang1710@gmail.com')) ||
             (await UserModel.findFullByEmail('phamthais@gmail.com'));

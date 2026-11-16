@@ -31,15 +31,15 @@ const mockUsersData = {
     },
     {
       id: 'u-03',
-      full_name: 'Le Thi Owner',
+      full_name: 'Le Thi Admin',
       email: 'le@finflow.io',
-      system_roles: [],
+      system_roles: ['ADMIN'],
       organization_roles: [
         {
           organization_id: 'org-01',
           organization_name: 'FinFlow Pay',
-          role_code: 'SME_OWNER',
-          role_name: 'SME_OWNER',
+          role_code: 'ADMIN',
+          role_name: 'ADMIN',
         },
       ],
       status: 'ACTIVE',
@@ -103,7 +103,6 @@ describe('AdminRolesPage Component Suite', () => {
     });
 
     expect(screen.getByText(/Cấp Quyền & Ma Trận Phân Cấp RBAC/i)).toBeInTheDocument();
-    expect(screen.getByText('SUPER ADMIN ONLY')).toBeInTheDocument();
     expect(screen.getByText(/Nguyên Tắc Kế Thừa Phân Cấp Vai Trò/i)).toBeInTheDocument();
     expect(screen.getByText(/Gán Vai Trò Người Dùng/i)).toBeInTheDocument();
     expect(screen.getByText(/Ma Trận Quyền Hạn Chi Tiết/i)).toBeInTheDocument();
@@ -340,7 +339,7 @@ describe('AdminRolesPage Component Suite', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+      expect(screen.getByText('Le Thi Admin')).toBeInTheDocument();
     });
 
     const detailButtons = screen.getAllByText('Chi tiết');
@@ -395,14 +394,14 @@ describe('AdminRolesPage Component Suite', () => {
     await waitFor(() => {
       expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
       expect(screen.getByText('Tran Kiem Dinh')).toBeInTheDocument();
-      expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+      expect(screen.getByText('Le Thi Admin')).toBeInTheDocument();
     });
 
     const searchInput = screen.getByPlaceholderText('Tìm tên, email, công ty...');
     fireEvent.change(searchInput, { target: { value: 'FinFlow' } });
 
-    // Should filter table to only show Le Thi Owner (org: FinFlow Pay)
-    expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    // Should filter table to only show Le Thi Admin (org: FinFlow Pay)
+    expect(screen.getByText('Le Thi Admin')).toBeInTheDocument();
     expect(screen.queryByText('Nguyen Van Admin')).not.toBeInTheDocument();
     expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
   });
@@ -426,7 +425,7 @@ describe('AdminRolesPage Component Suite', () => {
       expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
     });
     expect(screen.queryByText('Tran Kiem Dinh')).not.toBeInTheDocument();
-    expect(screen.queryByText('Le Thi Owner')).not.toBeInTheDocument();
+    expect(screen.queryByText('Le Thi Admin')).not.toBeInTheDocument();
 
     // Verify adminUsersService.getUsers was called with role parameter
     expect(adminUsersService.getUsers).toHaveBeenCalledWith(
@@ -458,6 +457,76 @@ describe('AdminRolesPage Component Suite', () => {
     // All users restored
     expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
     expect(screen.getByText('Tran Kiem Dinh')).toBeInTheDocument();
-    expect(screen.getByText('Le Thi Owner')).toBeInTheDocument();
+    expect(screen.getByText('Le Thi Admin')).toBeInTheDocument();
+  });
+
+  test('16. Clicking "+ Cấp Quyền Quản Trị" opens email search modal and allows granting role', async () => {
+    adminUsersService.assignRole.mockResolvedValueOnce({ success: true });
+
+    render(
+      <AuthContext.Provider value={mockAuthValue}>
+        <AdminRolesPage />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Nguyen Van Admin')).toBeInTheDocument();
+    });
+
+    // Mock response for user search by email
+    adminUsersService.getUsers.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'u-99',
+          full_name: 'Pham New Admin',
+          email: 'newadmin@test.com',
+          system_roles: ['USER'],
+          organization_roles: [],
+          status: 'ACTIVE',
+        },
+      ],
+    });
+
+    // Click "+ Cấp Quyền Quản Trị" button
+    const grantBtn = screen.getByRole('button', { name: /\+ Cấp Quyền Quản Trị/i });
+    fireEvent.click(grantBtn);
+
+    // Modal should be visible
+    expect(screen.getByText('Cấp Quyền Quản Trị Nền Tảng')).toBeInTheDocument();
+
+    // Search user by email
+    const emailInput = screen.getByPlaceholderText(/user@example.com/i);
+    fireEvent.change(emailInput, { target: { value: 'newadmin@test.com' } });
+
+    const searchBtn = screen.getByRole('button', { name: /Tìm kiếm/i });
+    fireEvent.click(searchBtn);
+
+    // User should appear in search results with "Cấp Quyền" button
+    await waitFor(() => {
+      expect(screen.getByText('Pham New Admin')).toBeInTheDocument();
+    });
+
+    const selectUserBtn = screen.getByRole('button', { name: 'Cấp quyền cho Pham New Admin' });
+    fireEvent.click(selectUserBtn);
+
+    // Role grant form appears
+    expect(screen.getByText(/Tài khoản được chọn cấp quyền/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Nhập căn cứ nghiệp vụ/i)).toBeInTheDocument();
+
+    // Enter reason and submit
+    fireEvent.change(screen.getByPlaceholderText(/Nhập căn cứ nghiệp vụ/i), {
+      target: { value: 'Bổ nhiệm Admin hệ thống mới' },
+    });
+
+    const confirmBtn = screen.getByRole('button', { name: /Xác Nhận Cấp Quyền/i });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(adminUsersService.assignRole).toHaveBeenCalledWith(
+        'u-99',
+        'ADMIN',
+        'Bổ nhiệm Admin hệ thống mới'
+      );
+    });
   });
 });

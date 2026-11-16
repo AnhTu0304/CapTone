@@ -124,11 +124,15 @@ export const InteractiveResourceChart = ({
   const thresholdLineRef = useRef(null);
   const hasFittedRef = useRef(false);
   const prevRangeRef = useRef(timeRange);
+  const prevDataCountRef = useRef(0);
+  const prevLastTimeRef = useRef(null);
 
   useEffect(() => {
     if (timeRange !== prevRangeRef.current) {
       prevRangeRef.current = timeRange;
       hasFittedRef.current = false;
+      prevDataCountRef.current = 0;
+      prevLastTimeRef.current = null;
     }
   }, [timeRange]);
 
@@ -136,6 +140,8 @@ export const InteractiveResourceChart = ({
 
   const handleRangeClick = (rangeId) => {
     hasFittedRef.current = false;
+    prevDataCountRef.current = 0;
+    prevLastTimeRef.current = null;
     if (onTimeRangeChange) {
       onTimeRangeChange(rangeId);
     } else {
@@ -410,32 +416,51 @@ export const InteractiveResourceChart = ({
       }
     }
 
-    // Update Series data
-    if (cpuSeriesRef.current && typeof cpuSeriesRef.current.setData === 'function') {
-      cpuSeriesRef.current.setData(sanitizedCpuData);
-      cpuSeriesRef.current.applyOptions({
-        visible: showCpu,
-        autoscaleInfoProvider: scaleMode === 'standard'
-          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
-          : undefined,
-      });
-    }
+    // Update Series data: Incremental streaming update vs Full dataset reload
+    const cpuCount = sanitizedCpuData.length;
+    const ramCount = sanitizedRamData.length;
 
-    if (ramSeriesRef.current && typeof ramSeriesRef.current.setData === 'function') {
-      ramSeriesRef.current.setData(sanitizedRamData);
-      ramSeriesRef.current.applyOptions({
-        visible: showRam,
-        autoscaleInfoProvider: scaleMode === 'standard'
-          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
-          : undefined,
-      });
-    }
-
-    if (chart && typeof chart.timeScale === 'function') {
-      if (!hasFittedRef.current && (sanitizedCpuData.length > 0 || sanitizedRamData.length > 0)) {
-        chart.timeScale().fitContent();
-        hasFittedRef.current = true;
+    if (cpuCount === 0 && ramCount === 0) {
+      if (cpuSeriesRef.current && typeof cpuSeriesRef.current.setData === 'function') {
+        cpuSeriesRef.current.setData([]);
       }
+      if (ramSeriesRef.current && typeof ramSeriesRef.current.setData === 'function') {
+        ramSeriesRef.current.setData([]);
+      }
+      prevDataCountRef.current = 0;
+      prevLastTimeRef.current = null;
+    } else {
+      const curLastTime = cpuCount > 0 ? sanitizedCpuData[cpuCount - 1].time : (ramCount > 0 ? sanitizedRamData[ramCount - 1].time : null);
+      const isTailIncremental =
+        prevDataCountRef.current > 0 &&
+        prevLastTimeRef.current !== null &&
+        curLastTime !== null &&
+        curLastTime >= prevLastTimeRef.current &&
+        (cpuCount === prevDataCountRef.current || cpuCount === prevDataCountRef.current + 1);
+
+      if (isTailIncremental) {
+        // High-performance live stream update: single-point append/update without tearing or re-indexing canvas
+        if (cpuSeriesRef.current && typeof cpuSeriesRef.current.update === 'function' && cpuCount > 0) {
+          cpuSeriesRef.current.update(sanitizedCpuData[cpuCount - 1]);
+        }
+        if (ramSeriesRef.current && typeof ramSeriesRef.current.update === 'function' && ramCount > 0) {
+          ramSeriesRef.current.update(sanitizedRamData[ramCount - 1]);
+        }
+      } else {
+        // Full load: initial mount, time range change, or major sync
+        if (cpuSeriesRef.current && typeof cpuSeriesRef.current.setData === 'function') {
+          cpuSeriesRef.current.setData(sanitizedCpuData);
+        }
+        if (ramSeriesRef.current && typeof ramSeriesRef.current.setData === 'function') {
+          ramSeriesRef.current.setData(sanitizedRamData);
+        }
+        if (chart && typeof chart.timeScale === 'function' && !hasFittedRef.current) {
+          chart.timeScale().fitContent();
+          hasFittedRef.current = true;
+        }
+      }
+      prevDataCountRef.current = cpuCount;
+      prevLastTimeRef.current = curLastTime;
     }
 
     return () => {
@@ -456,6 +481,29 @@ export const InteractiveResourceChart = ({
     timeFormatter,
     valueFormatter,
   ]);
+
+  // Update series visibility & autoscale options when toggled
+  useEffect(() => {
+    if (cpuSeriesRef.current && typeof cpuSeriesRef.current.applyOptions === 'function') {
+      cpuSeriesRef.current.applyOptions({
+        visible: showCpu,
+        autoscaleInfoProvider: scaleMode === 'standard'
+          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+          : undefined,
+      });
+    }
+  }, [showCpu, scaleMode]);
+
+  useEffect(() => {
+    if (ramSeriesRef.current && typeof ramSeriesRef.current.applyOptions === 'function') {
+      ramSeriesRef.current.applyOptions({
+        visible: showRam,
+        autoscaleInfoProvider: scaleMode === 'standard'
+          ? () => ({ priceRange: { minValue: 0, maxValue: 100 } })
+          : undefined,
+      });
+    }
+  }, [showRam, scaleMode]);
 
   // Cleanup chart on component unmount
   useEffect(() => {

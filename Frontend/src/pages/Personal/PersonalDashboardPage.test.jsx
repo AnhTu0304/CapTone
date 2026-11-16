@@ -78,7 +78,7 @@ describe('PersonalDashboardPage Suite (/portal) - Real Database Synchronization'
         plan: 'Enterprise Cloud',
         status: 'ACTIVE',
         role: 'SME_OWNER',
-        roleTitle: 'Chủ Doanh Nghiệp (Owner)',
+        roleTitle: 'SME OWNER',
         joinedAt: '28/10/2026',
         clustersCount: 2,
         membersCount: 4,
@@ -111,7 +111,7 @@ describe('PersonalDashboardPage Suite (/portal) - Real Database Synchronization'
       expect(screen.getByText('TechCorp Vietnam Solutions')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Chủ Doanh Nghiệp (Owner)')).toBeInTheDocument();
+    expect(screen.getByText('SME OWNER')).toBeInTheDocument();
     expect(screen.getByText('Vào Workspace')).toBeInTheDocument();
 
     // Click "Vào Workspace" lưu thông tin vào localStorage và điều hướng

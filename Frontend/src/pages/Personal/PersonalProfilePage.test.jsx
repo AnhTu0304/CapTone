@@ -54,7 +54,7 @@ describe('PersonalProfilePage Suite (/portal/profile)', () => {
   test('renders My Profile heading, overview identity cards, and edit form', async () => {
     renderWithProviders(<PersonalProfilePage />);
 
-    expect(screen.getByText(/My Profile — Hồ Sơ Cá Nhân/i)).toBeInTheDocument();
+    expect(screen.getByText(/Hồ Sơ Cá Nhân/i)).toBeInTheDocument();
     expect(screen.getByText(/Thông Tin Định Danh & Liên Hệ/i)).toBeInTheDocument();
     expect(screen.getByText(/Trạng thái tài khoản:/i)).toBeInTheDocument();
     expect(screen.getByText(/KÍCH HOẠT \(ACTIVE\)/i)).toBeInTheDocument();
