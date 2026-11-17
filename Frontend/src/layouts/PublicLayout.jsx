@@ -3,9 +3,18 @@ import Header from '../components/layout/Header';
 import Footer from '../components/layout/Footer';
 
 export const PublicLayout = ({ children, currentPath = '/', onNavigate }) => {
+  const isFullBleedPage =
+    currentPath === '/security' ||
+    currentPath === '/security-practices' ||
+    currentPath === '/about' ||
+    currentPath === '/privacy' ||
+    currentPath === '/terms' ||
+    currentPath === '/guide' ||
+    currentPath === '/features';
+
   return (
     <div
-      className="public-layout blueprint-canvas-root"
+      className={`public-layout blueprint-canvas-root ${isFullBleedPage ? 'public-layout--no-gutters' : ''}`}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -15,9 +24,12 @@ export const PublicLayout = ({ children, currentPath = '/', onNavigate }) => {
         overflowX: 'clip',
       }}
     >
-      {/* Blueprint Gutter Overlays with Millimeter Grid (Screen width > 1400px) */}
-      <div className="blueprint-gutter-left" aria-hidden="true" />
-      <div className="blueprint-gutter-right" aria-hidden="true" />
+      {!isFullBleedPage && (
+        <>
+          <div className="blueprint-gutter-left" aria-hidden="true" />
+          <div className="blueprint-gutter-right" aria-hidden="true" />
+        </>
+      )}
 
       <Header currentPath={currentPath} onNavigate={onNavigate} />
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>

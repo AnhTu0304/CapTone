@@ -1,0 +1,161 @@
+/* ==========================================================================
+   HEALBOT ANIMATION — PIXEL ART MASCOT KUBERNETES GUARDIAN
+   PURE CHARACTER FRAME ON SECTION BACKGROUND (NO OUTER CARD / STRICT CONTAINMENT)
+   ========================================================================== */
+
+.healbot-stage {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  background: transparent;
+  box-sizing: border-box;
+  overflow: hidden; /* Strict containment: frame changes cannot widen container or section */
+}
+
+/* ================= PIXEL SPRITE FRAME ================= */
+.healbot-sprite-frame {
+  position: relative;
+  z-index: 5;
+  width: 260px;
+  height: 260px;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  background: transparent;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.healbot-pixel-img {
+  width: 100%;
+  height: 100%;
+  max-width: 260px;
+  max-height: 260px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  user-select: none;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.25s ease;
+}
+
+/* Animation State Keyframe Classes */
+.healbot-frame-egg_idle .healbot-pixel-img {
+  animation: healbot-egg-bounce 1.2s infinite ease-in-out;
+}
+
+@keyframes healbot-egg-bounce {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1.5deg);
+  }
+}
+
+.healbot-frame-egg_cracking .healbot-pixel-img {
+  animation: healbot-cracking-jitter 0.16s infinite ease-in-out;
+}
+
+@keyframes healbot-cracking-jitter {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-2px, 1px) rotate(-1.5deg);
+  }
+  75% {
+    transform: translate(2px, -1px) rotate(1.5deg);
+  }
+}
+
+.healbot-frame-chick_hatching .healbot-pixel-img {
+  animation: healbot-hatch-pop 1.4s ease-out;
+}
+
+@keyframes healbot-hatch-pop {
+  0% {
+    transform: scale(0.92) translateY(8px);
+  }
+  40% {
+    transform: scale(1.04) translateY(-8px);
+  }
+  70% {
+    transform: scale(0.98) translateY(2px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+.healbot-frame-guardian .healbot-pixel-img {
+  animation: healbot-guardian-idle 1.6s infinite ease-in-out;
+}
+
+@keyframes healbot-guardian-idle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.healbot-img-dissolve {
+  animation: healbot-dissolve 0.6s ease-in-out forwards;
+}
+
+@keyframes healbot-dissolve {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.8;
+    filter: brightness(1.3);
+  }
+  100% {
+    transform: scale(0.75);
+    opacity: 0;
+    filter: brightness(1.8);
+  }
+}
+
+/* ================= REDUCED MOTION ACCESSIBILITY ================= */
+@media (prefers-reduced-motion: reduce) {
+  .healbot-frame-egg_idle .healbot-pixel-img,
+  .healbot-frame-egg_cracking .healbot-pixel-img,
+  .healbot-frame-chick_hatching .healbot-pixel-img,
+  .healbot-frame-guardian .healbot-pixel-img,
+  .healbot-img-dissolve {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 640px) {
+  .healbot-stage {
+    max-width: 220px;
+  }
+
+  .healbot-sprite-frame {
+    width: 200px;
+    height: 200px;
+  }
+
+  .healbot-pixel-img {
+    max-width: 200px;
+    max-height: 200px;
+  }
+}

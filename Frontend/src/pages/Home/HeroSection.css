@@ -31,30 +31,109 @@
 }
 
 .hero-left-col {
-  max-width: 580px;
+  max-width: 660px;
+}
+
+:root {
+  --font-anybody: "Anybody", "Anybody Fallback", sans-serif;
+  --font-dm-sans: "DM Sans", "DM Sans Fallback", sans-serif;
+  --font-space-mono: "Space Mono", "Space Mono Fallback", monospace;
+}
+
+.font-dm-sans {
+  font-family: var(--font-dm-sans), sans-serif;
+}
+
+.font-space-mono {
+  font-family: var(--font-space-mono), monospace;
+}
+
+/* Base h1 typography spec requested by user */
+h1 {
+  letter-spacing: -0.04em;
+  font-family: var(--font-anybody), sans-serif !important;
+  font-size: 3.85rem;
+  font-weight: 600;
+  line-height: 1;
+  --font-anybody: "Anybody", "Anybody Fallback";
+}
+
+/* User-requested Greptile CAD Hero utility classes */
+.font-anybody {
+  font-family: var(--font-anybody), sans-serif;
+}
+
+.text-slate {
+  --tw-text-opacity: 1;
+  color: rgb(61 59 79 / var(--tw-text-opacity, 1));
+}
+
+.tracking-tight {
+  letter-spacing: -0.025em;
+}
+
+.leading-\[0\.9\] {
+  line-height: 0.9;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-6xl {
+  font-size: 3.75rem;
+  line-height: 1;
+}
+
+.animate-hero-fade-up {
+  animation: 0.7s ease-out both hero-fade-up;
+}
+
+@keyframes hero-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-title-break {
+  display: block;
 }
 
 .hero-heading {
-  font-family: var(--font-display);
-  font-size: clamp(2.75rem, 4.8vw, 4.25rem);
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.035em;
-  color: var(--color-ink);
-  margin-bottom: 24px;
+  --font-anybody: "Anybody", "Anybody Fallback";
+  font-family: var(--font-anybody), sans-serif !important;
+  font-size: 90px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: rgb(61 59 79 / var(--tw-text-opacity, 1));
+  max-width: 500px;
+  margin-bottom: 160px;
+  white-space: nowrap;
+  animation: 0.5s ease-out both hero-fade-up;
 }
 
 .hero-heading-accent {
-  color: var(--color-accent);
+  color: var(--color-accent, #28E99F);
   display: inline-block;
+  white-space: nowrap;
 }
 
 .hero-description {
-  font-family: var(--font-body);
-  font-size: 1.125rem;
+  font-family: var(--font-dm-sans);
+  font-size: 1.5rem;
+  font-weight: 400;
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 36px;
+  letter-spacing: -.02em;
+  margin-bottom: 15px;
+  animation: 0.5s ease-out both hero-fade-up;
 }
 
 .hero-cta-group {
@@ -62,7 +141,7 @@
   align-items: center;
   gap: 2px;
   flex-wrap: wrap;
-  margin-bottom: 42px;
+  margin-bottom: 20px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.06));
 }
 
@@ -75,9 +154,9 @@
   padding: 0 24px 0 28px;
   background-color: #3D3B4F;
   color: #FFFFFF;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.9375rem;
-  font-family: var(--font-display, 'Inter', sans-serif);
+  font-family: var(--font-dm-sans), sans-serif;
   border: none;
   clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 50%, 100% 100%, 12px 100%, 0% 50%);
   box-shadow: none;
@@ -87,6 +166,7 @@
   cursor: pointer;
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
   will-change: transform;
+  animation: 0.5s ease-out both hero-fade-up;
 }
 
 .hero-cta-group:hover .hero-btn-primary {
@@ -101,15 +181,15 @@
 .hero-btn-secondary {
   display: inline-flex;
   align-items: center;
-  justifyContent: center;
+  justify-content: center;
   gap: 10px;
   height: 48px;
   padding: 0 28px 0 24px;
   background-color: #28E99F;
   color: #000000;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.9375rem;
-  font-family: var(--font-display, 'Inter', sans-serif);
+  font-family: var(--font-dm-sans), sans-serif;
   border: none;
   clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0% 50%);
   box-shadow: none;
@@ -119,6 +199,7 @@
   cursor: pointer;
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, filter 0.15s ease;
   will-change: transform;
+  animation: 0.5s ease-out both hero-fade-up;
 }
 
 .hero-cta-group:hover .hero-btn-secondary {
@@ -155,6 +236,11 @@
     margin: 0 auto;
   }
 
+  .hero-heading {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .hero-cta-group {
     justify-content: center;
     margin-bottom: 16px;
@@ -176,8 +262,42 @@
     padding: 0 var(--space-4);
   }
 
+  .hero-heading {
+    font-size: clamp(2.25rem, 8vw, 42px);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    white-space: normal;
+    margin-bottom: 36px;
+  }
+
   .hero-right-col {
     min-height: auto;
     padding: 8px 0 0;
   }
+}
+
+.hero-sublink-wrapper {
+  margin-top: -24px;
+  margin-bottom: 36px;
+}
+
+.hero-sublink {
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #555368;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  letter-spacing: 0.02em;
+  transition: color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 25px;
+  animation: 0.5s ease-out both hero-fade-up;
+}
+
+.hero-sublink:hover {
+  color: #000000;
 }

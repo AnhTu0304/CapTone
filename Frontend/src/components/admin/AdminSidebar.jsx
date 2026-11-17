@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import logoPng from '../../assets/Logo-transparent.png';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
@@ -584,21 +585,18 @@ export const AdminSidebar = ({
           whiteSpace: 'nowrap',
         }}
       >
-        <div
+        <img
+          src={logoPng}
+          width={36}
+          height={36}
+          alt="SelfAI Admin Logo"
           style={{
             width: '36px',
             height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #065F46 0%, #059669 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            objectFit: 'contain',
             flexShrink: 0,
-            boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
           }}
-        >
-          <Shield size={20} color="#A7F3D0" />
-        </div>
+        />
 
         {!isCollapsed && (
           <div style={{ display: 'flex', flexDirection: 'column' }}>

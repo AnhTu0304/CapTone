@@ -14,14 +14,14 @@ describe('HeroSection CTA Buttons', () => {
     expect(secondaryBtn).toHaveClass('hero-btn-secondary');
   });
 
-  it('triggers onNavigate with /get-started when "Bắt đầu ngay" is clicked', () => {
+  it('triggers onNavigate with /login when "Bắt đầu ngay" is clicked', () => {
     const mockNavigate = jest.fn();
     render(<HeroSection onNavigate={mockNavigate} />);
 
     const primaryBtn = screen.getByRole('link', { name: /Bắt đầu ngay/i });
     fireEvent.click(primaryBtn);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/get-started');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
   it('triggers onNavigate with /guide when "Xem hướng dẫn" is clicked', () => {
@@ -32,5 +32,45 @@ describe('HeroSection CTA Buttons', () => {
     fireEvent.click(secondaryBtn);
 
     expect(mockNavigate).toHaveBeenCalledWith('/guide');
+  });
+
+  it('renders seamless headline with Anybody font, slate text, and hero-fade-up animation classes', () => {
+    render(<HeroSection />);
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading).toBeInTheDocument();
+    expect(heading).toHaveClass(
+      'hero-heading',
+      'font-anybody',
+      'text-slate',
+      'font-bold',
+      'tracking-tight',
+      'animate-hero-fade-up'
+    );
+    expect(heading).toHaveTextContent('AI Self Healing');
+
+    const desc = screen.getByText(/AI dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch vụ/i);
+    expect(desc).toBeInTheDocument();
+    expect(desc).toHaveClass('hero-description');
+  });
+
+  it('renders "onboard with your agent" monospace sublink', () => {
+    render(<HeroSection />);
+    const sublink = screen.getByRole('link', { name: /onboard with your agent/i });
+    expect(sublink).toBeInTheDocument();
+    expect(sublink).toHaveClass('hero-sublink');
+  });
+
+  it('renders SocialProofSection above agent-bridge-section and below hero-section', () => {
+    const { container } = render(<HeroSection />);
+    const heroEl = container.querySelector('.hero-section');
+    const socialProofEl = screen.getByTestId('social-proof-section');
+    const agentBridgeEl = screen.getByTestId('agent-bridge-section');
+
+    expect(heroEl).toBeInTheDocument();
+    expect(socialProofEl).toBeInTheDocument();
+    expect(agentBridgeEl).toBeInTheDocument();
+
+    expect(heroEl.compareDocumentPosition(socialProofEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(socialProofEl.compareDocumentPosition(agentBridgeEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

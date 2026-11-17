@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { agentService } from '../../../services/agentService';
+import AgentInstallerBanner from '../../../components/onboarding/AgentInstallerBanner';
 import {
   Radio,
   Plus,
@@ -130,9 +131,12 @@ export const AgentsPage = () => {
   // Hàm chuẩn hóa domain cho Agent Installer (tự động loại bỏ cổng dev 3000/3001 trên localhost để trỏ đúng Nginx Gateway cổng 80)
   const getInstallerOrigin = () => {
     if (typeof window === 'undefined') return 'http://localhost';
+    if (process.env.REACT_APP_INSTALLER_URL) {
+      return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
+    }
     const { protocol, hostname, port } = window.location;
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
-      return `${protocol}//${hostname}`;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '443') {
+      return `${protocol}//${hostname}:8100`;
     }
     return window.location.origin;
   };
@@ -629,6 +633,12 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
 
             {/* Modal Body */}
             <div style={{ padding: '20px' }}>
+              {/* Mascot Branding Banner */}
+              <AgentInstallerBanner
+                clusterName={currentEnv?.name || 'k8s-cluster'}
+                compact={true}
+              />
+
               {/* Tab Selector */}
               <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '12px', marginBottom: '16px' }}>
                 <button

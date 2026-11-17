@@ -25,11 +25,11 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
   test('1. Renders login form fields, brand heading, and Google login button', () => {
     renderWithAuth(<LoginPage />, { login: jest.fn() });
 
-    expect(screen.getByRole('heading', { name: /Log into your account/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Enter work email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Enter password/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Đăng nhập tài khoản/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Email công việc hoặc Tên tài khoản/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Mật khẩu/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Đăng nhập$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Đăng nhập với Google \/ Gmail/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Đăng nhập với Google/i })).toBeInTheDocument();
   });
 
   test('2. Redirects user WITHOUT organization directly to /portal (Tầng Cá Nhân) after login', async () => {
@@ -45,8 +45,8 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
 
     renderWithAuth(<LoginPage onNavigate={handleNavigate} />, { login: mockLogin });
 
-    fireEvent.change(screen.getByLabelText(/Enter work email/i), { target: { value: 'newuser@selfheal.com' } });
-    fireEvent.change(screen.getByLabelText(/Enter password/i), { target: { value: 'UserPassword123@' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc hoặc Tên tài khoản/i), { target: { value: 'newuser@selfheal.com' } });
+    fireEvent.change(screen.getByLabelText(/Mật khẩu/i), { target: { value: 'UserPassword123@' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
@@ -70,8 +70,8 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
 
     renderWithAuth(<LoginPage onNavigate={handleNavigate} />, { login: mockLogin });
 
-    fireEvent.change(screen.getByLabelText(/Enter work email/i), { target: { value: 'existinguser@selfheal.com' } });
-    fireEvent.change(screen.getByLabelText(/Enter password/i), { target: { value: 'UserPassword123@' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc hoặc Tên tài khoản/i), { target: { value: 'existinguser@selfheal.com' } });
+    fireEvent.change(screen.getByLabelText(/Mật khẩu/i), { target: { value: 'UserPassword123@' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
@@ -93,8 +93,8 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
 
     renderWithAuth(<LoginPage onNavigate={handleNavigate} />, { login: mockLogin });
 
-    fireEvent.change(screen.getByLabelText(/Enter work email/i), { target: { value: 'admin@selfheal.com' } });
-    fireEvent.change(screen.getByLabelText(/Enter password/i), { target: { value: 'AdminPassword123@' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc hoặc Tên tài khoản/i), { target: { value: 'admin@selfheal.com' } });
+    fireEvent.change(screen.getByLabelText(/Mật khẩu/i), { target: { value: 'AdminPassword123@' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
@@ -115,8 +115,8 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
 
     renderWithAuth(<LoginPage onNavigate={handleNavigate} />, { login: mockLogin });
 
-    fireEvent.change(screen.getByLabelText(/Enter work email/i), { target: { value: 'superadmin@selfheal.com' } });
-    fireEvent.change(screen.getByLabelText(/Enter password/i), { target: { value: 'AdminPassword123@' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc hoặc Tên tài khoản/i), { target: { value: 'superadmin@selfheal.com' } });
+    fireEvent.change(screen.getByLabelText(/Mật khẩu/i), { target: { value: 'AdminPassword123@' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
@@ -131,8 +131,8 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
 
     renderWithAuth(<LoginPage />, { login: mockLogin });
 
-    fireEvent.change(screen.getByLabelText(/Enter work email/i), { target: { value: 'invalid@selfheal.com' } });
-    fireEvent.change(screen.getByLabelText(/Enter password/i), { target: { value: 'WrongPass' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc hoặc Tên tài khoản/i), { target: { value: 'invalid@selfheal.com' } });
+    fireEvent.change(screen.getByLabelText(/Mật khẩu/i), { target: { value: 'WrongPass' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
@@ -175,7 +175,7 @@ describe('LoginPage Admin, User & Personal Portal Redirection Suite', () => {
       loginWithGoogle: mockLoginWithGoogle,
     });
 
-    const googleBtn = screen.getByRole('button', { name: /Đăng nhập với Google \/ Gmail/i });
+    const googleBtn = screen.getByRole('button', { name: /Đăng nhập với Google/i });
     expect(googleBtn).toBeInTheDocument();
 
     await act(async () => {

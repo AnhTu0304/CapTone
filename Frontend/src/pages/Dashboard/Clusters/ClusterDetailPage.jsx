@@ -363,6 +363,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     if (process.env.REACT_APP_INSTALLER_URL) {
       return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
     }
+    if (process.env.REACT_APP_INSTALLER_URL) {
+      return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
+    }
     const { protocol, hostname, port } = window.location;
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '8090') {
       return `${protocol}//${hostname}`;

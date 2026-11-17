@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Terminal } from 'lucide-react';
 import CopyButton from './CopyButton';
+import AgentInstallerBanner from './AgentInstallerBanner';
 
 export const InstallationCodeBlock = ({
   clusterName = 'k8s-prod-east-01',
@@ -16,9 +17,12 @@ export const InstallationCodeBlock = ({
 
   const getOrigin = () => {
     if (typeof window === 'undefined') return 'http://localhost';
+    if (process.env.REACT_APP_INSTALLER_URL) {
+      return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
+    }
     const { protocol, hostname, port } = window.location;
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80') {
-      return `${protocol}//${hostname}`;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '443') {
+      return `${protocol}//${hostname}:8100`;
     }
     return window.location.origin;
   };
@@ -186,6 +190,9 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </button>
         </div>
       </div>
+
+      {/* SelfHeal Agent Mascot Branding Banner */}
+      <AgentInstallerBanner clusterName={clusterName} compact={true} />
 
       {/* Terminal Output Window */}
       <div

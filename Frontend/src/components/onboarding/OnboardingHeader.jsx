@@ -75,7 +75,7 @@ export const OnboardingHeader = ({ onNavigate }) => {
           style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
           aria-label="SelfHeal Homepage"
         >
-          <Logo size={24} />
+          <Logo size={36} showText={false} />
         </a>
 
         <div
@@ -124,8 +124,8 @@ export const OnboardingHeader = ({ onNavigate }) => {
         </a>
 
         <a
-          href="/docs"
-          onClick={(e) => handleLink(e, '/docs')}
+          href="/guide"
+          onClick={(e) => handleLink(e, '/guide')}
           style={{
             display: 'inline-flex',
             alignItems: 'center',

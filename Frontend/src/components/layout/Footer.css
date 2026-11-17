@@ -54,10 +54,10 @@
   background-color: rgba(61, 59, 79, 0.015);
 }
 
-/* ================= COLUMN 1: LOGO CAD BLUEPRINT DRAFTING BOX ================= */
+/* ================= COLUMN 1: LOGO CAD BLUEPRINT DRAFTING BOX (~23%) ================= */
 .footer-col-logo {
-  flex: 0 0 280px;
-  max-width: 280px;
+  flex: 23 1 0%;
+  min-width: 0;
   display: flex;
   align-items: center;
   justifyContent: center;
@@ -72,14 +72,25 @@
   display: block;
 }
 
-/* ================= LINKS COLUMNS (COL 2, 3, 4, 5) ================= */
+/* ================= LINKS COLUMNS (COL 2: ~25%, COL 3: ~27%, COL 4: ~25%) ================= */
 .footer-col-nav {
-  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 32px 24px;
+}
+
+.footer-col-platform {
+  flex: 25 1 0%;
+}
+
+.footer-col-resources {
+  flex: 27 1 0%;
+}
+
+.footer-col-support {
+  flex: 25 1 0%;
 }
 
 .footer-col-title {
@@ -120,55 +131,6 @@
   outline: none;
 }
 
-/* Status Indicator */
-.footer-status-wrapper {
-  margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.footer-status-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono, 'Space Mono', monospace);
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #2B2938;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  width: fit-content;
-  transition: opacity 0.15s ease;
-}
-
-.footer-status-link:hover {
-  opacity: 0.75;
-}
-
-.footer-status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background-color: #28E99F;
-  display: inline-block;
-  box-shadow: 0 0 0 2px rgba(40, 233, 159, 0.35);
-  animation: pulse-dot 2.4s infinite ease-in-out;
-}
-
-@keyframes pulse-dot {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 2px rgba(40, 233, 159, 0.35);
-  }
-  50% {
-    transform: scale(1.15);
-    box-shadow: 0 0 0 4px rgba(40, 233, 159, 0.55);
-  }
-}
-
 /* Social Icons */
 .footer-social-wrapper {
   margin-top: 14px;
@@ -186,7 +148,7 @@
 .footer-social-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justifyContent: center;
   width: 28px;
   height: 28px;
   color: #555368;
@@ -250,14 +212,9 @@
   }
 
   .footer-col-nav {
+    flex: none;
+    max-width: 100%;
     border-bottom: 1px dashed rgba(61, 59, 79, 0.18);
     padding: 24px 20px;
-  }
-}
-
-@media (min-width: 640px) and (max-width: 1024px) {
-  .footer-grid-mobile {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
   }
 }

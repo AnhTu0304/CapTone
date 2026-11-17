@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import ChickenMascot from '../../components/mascot/ChickenMascot';
+import SocialProofSection from './components/SocialProofSection';
 import FeatureStrip from './components/FeatureStrip';
 import './HeroSection.css';
 
@@ -22,21 +23,18 @@ export const HeroSection = ({ onNavigate }) => {
           <div className="hero-grid-layout">
             {/* ================= LEFT COLUMN ================= */}
             <div className="hero-left-col">
-              <h1 className="hero-heading">
-                Quan sát. Dự đoán.{' '}
-                <span className="hero-heading-accent">Khôi phục.</span>
+              <h1 className="hero-heading font-anybody text-slate font-bold tracking-tight animate-hero-fade-up">
+                AI Self Healing
               </h1>
 
-              <p className="hero-description">
-                SelfHeal giúp các doanh nghiệp vừa và nhỏ giám sát môi trường
-                Kubernetes, dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch
-                vụ — với sự giám sát của con người khi cần thiết.
+              <p className="hero-description font-dm-sans">
+                AI dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch vụ — với sự giám sát của con người khi cần thiết.
               </p>
 
               <div className="hero-cta-group">
                 <a
-                  href="/get-started"
-                  onClick={(e) => handleLinkClick(e, '/get-started')}
+                  href="/login"
+                  onClick={(e) => handleLinkClick(e, '/login')}
                   className="hero-btn-primary"
                   title="Bắt đầu ngay"
                 >
@@ -54,6 +52,16 @@ export const HeroSection = ({ onNavigate }) => {
                   <span>Xem hướng dẫn</span>
                 </a>
               </div>
+
+              <div className="hero-sublink-wrapper">
+                <a
+                  href="/guide"
+                  onClick={(e) => handleLinkClick(e, '/guide')}
+                  className="hero-sublink"
+                >
+                  onboard with your agent &rarr;
+                </a>
+              </div>
             </div>
 
             {/* ================= RIGHT COLUMN (HALFTONE CHICKEN MASCOT) ================= */}
@@ -63,6 +71,9 @@ export const HeroSection = ({ onNavigate }) => {
           </div>
         </div>
       </section>
+
+      {/* ================= SOCIAL PROOF & PLATFORM OVERVIEW (4 CORE TOOLS + QUOTE) ================= */}
+      <SocialProofSection onNavigate={onNavigate} />
 
       {/* ================= SUB-HERO AGENT BRIDGE BANNER ================= */}
       <FeatureStrip onNavigate={onNavigate} />

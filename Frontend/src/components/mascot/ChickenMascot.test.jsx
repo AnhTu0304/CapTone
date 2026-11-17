@@ -49,7 +49,7 @@ describe('ChickenMascot (Method A Vector SVG + GSAP)', () => {
 
   test('renders inside HeroSection right column alongside Vietnamese headline, CTAs, and [ AGENT ] bridge section', () => {
     render(<HeroSection />);
-    expect(screen.getByText(/Quan sát\. Dự đoán\./i)).toBeInTheDocument();
+    expect(screen.getByText(/AI Self/i)).toBeInTheDocument();
     expect(screen.getByText(/Bắt đầu ngay/i)).toBeInTheDocument();
     expect(screen.getByText(/Xem hướng dẫn/i)).toBeInTheDocument();
     expect(screen.getByTestId('chicken-mascot-stage')).toBeInTheDocument();

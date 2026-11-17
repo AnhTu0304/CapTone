@@ -37,7 +37,7 @@ export const AuthLayout = ({ children, onNavigate }) => {
             style={{ display: 'inline-flex', alignItems: 'center' }}
             aria-label="SelfHeal Homepage"
           >
-            <Logo size={32} />
+            <Logo size={46} showText={false} />
           </a>
         </div>
 
@@ -77,7 +77,7 @@ export const AuthLayout = ({ children, onNavigate }) => {
           backgroundColor: '#FFFFFF',
         }}
       >
-        <div style={{ width: '100%', maxWidth: '440px' }}>
+        <div style={{ width: '100%', maxWidth: '380px' }}>
           {children}
         </div>
       </div>

@@ -3,16 +3,14 @@ import HomePage from '../pages/Home';
 import GuidePage from '../pages/Guide';
 import FeaturesPage from '../pages/Features';
 import AboutPage from '../pages/About';
-import DocsPage from '../pages/Docs';
+import ContactPage from '../pages/Contact';
 import LoginPage from '../pages/Login';
 import RegisterPage from '../pages/Register';
 import ForgotPasswordPage from '../pages/ForgotPassword';
 import ResetPasswordPage from '../pages/ResetPassword';
-import GetStartedPage from '../pages/GetStarted';
 import OnboardingPage from '../pages/Onboarding';
 import DashboardPage from '../pages/Dashboard';
 import PublicLayout from '../layouts/PublicLayout';
-import DocsLayout from '../layouts/DocsLayout';
 import AuthLayout from '../layouts/AuthLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import OverviewPage from '../pages/Admin/Overview';
@@ -34,13 +32,20 @@ import { AdminSystemSettingsPage } from '../pages/Admin/Settings/AdminSystemSett
 import { AdminUserActivityPage } from '../pages/Admin/Activity/AdminUserActivityPage';
 import { AdminAccountSettingsPage } from '../pages/Admin/Settings/AdminAccountSettingsPage';
 import PersonalPortalPage from '../pages/Personal';
+import SecurityPracticesPage from '../pages/SecurityPractices';
+import PrivacyPage from '../pages/Privacy';
+import TermsPage from '../pages/Terms';
 import ForbiddenPage from '../pages/Error/ForbiddenPage';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
-import TableOfContents from '../components/navigation/TableOfContents';
 
 export const ROUTES = {
   HOME: '/',
+  CONTACT: '/contact',
+  TERMS: '/terms',
+  PRIVACY: '/privacy',
+  SECURITY_PRACTICES: '/security',
+  SECURITY_PRACTICES_ALIAS: '/security-practices',
   DASHBOARD: '/dashboard',
   PORTAL: '/portal',
   PORTAL_DASHBOARD: '/portal/dashboard',
@@ -102,11 +107,9 @@ export const ROUTES = {
   FORBIDDEN: '/403',
 };
 
-export const RouteRenderer = ({ 
-  currentPath = '/', 
-  onNavigate, 
-  activeDocId = 'overview', 
-  onSelectDoc 
+export const RouteRenderer = ({
+  currentPath = '/',
+  onNavigate,
 }) => {
   // Normalize path
   const path = currentPath.toLowerCase().split('?')[0].split('#')[0] || '/';
@@ -333,6 +336,7 @@ export const RouteRenderer = ({
 
   switch (path) {
     case ROUTES.LOGIN:
+    case ROUTES.GET_STARTED:
       return (
         <AuthLayout onNavigate={onNavigate}>
           <LoginPage onNavigate={onNavigate} />
@@ -361,31 +365,6 @@ export const RouteRenderer = ({
       );
 
     case ROUTES.DOCS:
-      return (
-        <DocsLayout
-          currentPath={ROUTES.DOCS}
-          activeDocId={activeDocId}
-          onSelectDoc={onSelectDoc}
-          onNavigate={onNavigate}
-          tocComponent={
-            <TableOfContents
-              title="On this page"
-              items={[
-                { id: 'overview-intro', title: 'Introduction', level: 2 },
-                { id: 'specifications', title: 'Specifications', level: 2 },
-                { id: 'implementation', title: 'Implementation', level: 2 },
-              ]}
-              onItemClick={(id) => {
-                const el = document.getElementById(id);
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
-          }
-        >
-          <DocsPage activeDocId={activeDocId} onSelectDoc={onSelectDoc} />
-        </DocsLayout>
-      );
-
     case ROUTES.GUIDE:
       return (
         <PublicLayout currentPath={ROUTES.GUIDE} onNavigate={onNavigate}>
@@ -400,6 +379,13 @@ export const RouteRenderer = ({
         </PublicLayout>
       );
 
+    case ROUTES.CONTACT:
+      return (
+        <PublicLayout currentPath={ROUTES.CONTACT} onNavigate={onNavigate}>
+          <ContactPage onNavigate={onNavigate} />
+        </PublicLayout>
+      );
+
     case ROUTES.ABOUT:
       return (
         <PublicLayout currentPath={ROUTES.ABOUT} onNavigate={onNavigate}>
@@ -407,10 +393,29 @@ export const RouteRenderer = ({
         </PublicLayout>
       );
 
-    case ROUTES.GET_STARTED:
+    case ROUTES.TERMS:
+    case '/terms':
       return (
-        <PublicLayout currentPath={ROUTES.GET_STARTED} onNavigate={onNavigate}>
-          <GetStartedPage onNavigate={onNavigate} />
+        <PublicLayout currentPath={ROUTES.TERMS} onNavigate={onNavigate}>
+          <TermsPage onNavigate={onNavigate} />
+        </PublicLayout>
+      );
+
+    case ROUTES.PRIVACY:
+    case '/privacy':
+      return (
+        <PublicLayout currentPath={ROUTES.PRIVACY} onNavigate={onNavigate}>
+          <PrivacyPage onNavigate={onNavigate} />
+        </PublicLayout>
+      );
+
+    case ROUTES.SECURITY_PRACTICES:
+    case ROUTES.SECURITY_PRACTICES_ALIAS:
+    case '/security':
+    case '/security-practices':
+      return (
+        <PublicLayout currentPath={ROUTES.SECURITY_PRACTICES} onNavigate={onNavigate}>
+          <SecurityPracticesPage onNavigate={onNavigate} />
         </PublicLayout>
       );
 

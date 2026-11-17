@@ -15,8 +15,11 @@ param (
 $ErrorActionPreference = "Stop"
 
 Write-Host "==============================================================================" -ForegroundColor Cyan
-Write-Host "          S E L F H E A L   K U B E R N E T E S   A G E N T                   " -ForegroundColor Cyan
-Write-Host "      AI-Driven Proactive Self-Healing Infrastructure for SMEs                " -ForegroundColor Cyan
+Write-Host "   ,~.                                                                        " -ForegroundColor Red
+Write-Host "  (o.o)        S E L F H E A L   K U B E R N E T E S   A G E N T              " -ForegroundColor Cyan
+Write-Host " /| (v) |\     AI-Driven Proactive Self-Healing Infrastructure for SMEs       " -ForegroundColor Cyan
+Write-Host "   / \         Autonomous eBPF Telemetry & Anomaly Self-Recovery              " -ForegroundColor Green
+Write-Host "  /_/ \_\      Target Engine  : Native Manifests (kubectl) / Helm             " -ForegroundColor Gray
 Write-Host "==============================================================================" -ForegroundColor Cyan
 Write-Host ""
 

@@ -1,0 +1,49 @@
+.auth-link {
+  color: #3D3B4F;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(61, 59, 79, 0.45);
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.auth-link:hover {
+  color: #2563EB;
+  text-decoration-color: #2563EB;
+}
+
+.auth-link-subtle {
+  color: #3D3B4F;
+  text-decoration: none;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.auth-link-subtle:hover {
+  color: #2563EB;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-link-muted {
+  color: #4B5563;
+  text-decoration: none;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.auth-link-muted:hover {
+  color: #111827;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-link-legal {
+  color: #4B5563;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(75, 85, 99, 0.45);
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.auth-link-legal:hover {
+  color: #2563EB;
+  text-decoration-color: #2563EB;
+}

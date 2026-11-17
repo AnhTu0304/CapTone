@@ -1,0 +1,338 @@
+/* ==========================================================================
+   SELFHEAL SOCIAL PROOF & PLATFORM OVERVIEW (SUB-HERO SECTION)
+   Greptile-Inspired Full-Width 4 Core Tools Strip + Framed Overview Quote Card
+   ========================================================================== */
+
+.social-proof-section {
+  position: relative;
+  z-index: 25;
+  /* Elevated above blueprint-gutter-left/right (z-index: 20) for 100% full-width */
+  width: 100%;
+  background-color: var(--color-canvas, #EEEEEE);
+  padding: 0 0 68px 0;
+  box-sizing: border-box;
+  font-family: var(--font-body, "DM Sans", sans-serif);
+}
+
+/* ================= 1. HÀNG 4 LOGO CÔNG CỤ CỐT LÕI (FULL-WIDTH TOÀN MÀN HÌNH) ================= */
+.sp-tools-block {
+  position: relative;
+  z-index: 25;
+  /* Higher than gutters to guarantee unconstrained edge-to-edge spread */
+  width: 100%;
+  border-top: 1px dashed rgba(61, 59, 79, 0.22);
+  border-bottom: 1px dashed rgba(61, 59, 79, 0.22);
+  background-color: transparent;
+  margin-bottom: 56px;
+  box-sizing: border-box;
+}
+
+.sp-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.sp-tool-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  border-right: 1px dashed rgba(61, 59, 79, 0.22);
+  background-color: transparent;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+  will-change: transform, opacity;
+  box-sizing: border-box;
+  cursor: pointer;
+  height: 120px;
+}
+
+.sp-tool-cell:last-child {
+  border-right: none;
+}
+
+/* Hover state: Sáng lên như trong ảnh minh họa */
+.sp-tool-cell:hover {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.sp-tool-logo-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #4B5563;
+  transition: color 0.25s ease;
+  user-select: none;
+}
+
+/* Bình thường: để tối màu */
+.sp-tool-logo-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: grayscale(100%) opacity(0.65) brightness(0.6);
+  transition: filter 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sp-tool-name {
+  font-family: var(--font-display, "Space Grotesk", sans-serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #4B5563;
+  transition: color 0.25s ease;
+}
+
+/* Khi hover: Logo hiển thị màu sáng nguyên bản và text chuyển sang màu ngọc lục bảo */
+.sp-tool-cell:hover .sp-tool-logo-img {
+  filter: none;
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.sp-tool-cell:hover .sp-tool-name {
+  color: #059669;
+}
+
+/* ================= 2. KHUNG TRÍCH DẪN TỔNG QUAN DỰ ÁN (TRANSPARENT FRAME) ================= */
+.sp-inner-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px;
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.sp-overview-framed-card {
+  position: relative;
+  border: 1px dashed rgba(61, 59, 79, 0.28);
+  background: transparent;
+  padding: 44px 48px 36px 48px;
+  text-align: center;
+  box-shadow: none;
+}
+
+/* 4 Chốt định vị góc chữ thập CAD */
+.sp-corner-pin {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 400;
+  color: #059669;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.pin-top-left {
+  top: -7px;
+  left: -7px;
+}
+
+.pin-top-right {
+  top: -7px;
+  right: -7px;
+}
+
+.pin-bottom-left {
+  bottom: -7px;
+  left: -7px;
+}
+
+.pin-bottom-right {
+  bottom: -7px;
+  right: -7px;
+}
+
+/* Biểu tượng mở ngoặc kép kỹ thuật CAD */
+.sp-quote-glyph-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.sp-quote-glyph {
+  color: #3D3B4F;
+  opacity: 0.85;
+}
+
+/* Tiêu đề trích dẫn mô tả tổng quát dự án (Anybody Font) */
+.sp-quote-text {
+  margin: 0 auto 28px auto;
+  max-width: 900px;
+  font-family: var(--font-anybody, "Anybody", sans-serif);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.38;
+  letter-spacing: -0.03em;
+  color: rgba(61, 59, 79);
+}
+
+.sp-quote-highlight {
+  font-style: italic;
+  font-weight: 600;
+  color: #059669;
+  text-decoration: none;
+}
+
+/* Khối thông tin định danh hệ thống (Speaker info) */
+.sp-speaker-block {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 28px;
+  padding: 6px 16px;
+  background-color: transparent;
+  border: 1px dashed rgba(61, 59, 79, 0.22);
+  border-radius: 2px;
+}
+
+.sp-speaker-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background-color: transparent;
+  border: 1px solid rgba(5, 150, 105, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.sp-avatar-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.sp-speaker-info {
+  text-align: left;
+}
+
+.sp-speaker-role {
+  font-family: var(--font-mono, "Space Mono", monospace);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6B7280;
+  text-transform: uppercase;
+}
+
+.sp-speaker-name {
+  font-family: var(--font-mono, "Space Mono", monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1F2937;
+  letter-spacing: 0.04em;
+}
+
+/* Nút hành động vát góc (Chamfered Hexagonal Button) */
+.sp-action-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.sp-hex-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  background-color: #3D3B4F;
+  color: #FFFFFF;
+  font-family: var(--font-mono, "Space Mono", monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0% 50%);
+  transition: all 0.2s ease;
+  user-select: none;
+  cursor: pointer;
+  border: none;
+}
+
+.sp-hex-btn:hover {
+  background-color: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.25);
+  color: #FFFFFF;
+}
+
+.sp-hex-btn:active {
+  transform: translateY(0);
+}
+
+/* ================= RESPONSIVE ADAPTATIONS ================= */
+@media (max-width: 900px) {
+  .sp-tools-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sp-tool-cell:nth-child(2) {
+    border-right: none;
+  }
+
+  .sp-tool-cell:nth-child(-n+2) {
+    border-bottom: 1px dashed rgba(61, 59, 79, 0.22);
+  }
+
+  .sp-overview-framed-card {
+    padding: 32px 24px 28px 24px;
+  }
+
+  .sp-quote-text {
+    font-size: 1.25rem;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 600px) {
+  .sp-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sp-tool-cell {
+    border-right: none;
+    border-bottom: 1px dashed rgba(61, 59, 79, 0.22);
+    padding: 16px 14px;
+  }
+
+  .sp-tool-cell:last-child {
+    border-bottom: none;
+  }
+
+  .sp-tool-name {
+    font-size: 1rem;
+  }
+
+  .sp-quote-text {
+    font-size: 1.0625rem;
+  }
+
+  .sp-speaker-block {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .sp-speaker-info {
+    text-align: center;
+  }
+}
