@@ -1,6 +1,24 @@
-import Logo from '../../components/common/Logo';
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Check, Eye, EyeOff, Loader2, KeyRound, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  Eye,
+  EyeOff,
+  Loader2,
+  KeyRound,
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+} from 'lucide-react';
+import Logo from '../../components/common/Logo';
+import {
+  AUTH_HEADING_STYLE,
+  AUTH_INPUT_STYLE,
+  AUTH_LABEL_STYLE,
+  AUTH_PRIMARY_BTN_STYLE,
+  AuthLegalFooter,
+  GoogleAuthButton,
+} from '../../components/auth/AuthShared';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
 
@@ -19,7 +37,6 @@ export const RegisterPage = ({ onNavigate }) => {
   const [targetPath, setTargetPath] = useState('/portal');
   const [errors, setErrors] = useState({});
 
-  // OTP Verification States
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [otpError, setOtpError] = useState('');
@@ -29,7 +46,6 @@ export const RegisterPage = ({ onNavigate }) => {
   const [resendStatus, setResendStatus] = useState('');
   const otpInputsRef = useRef([]);
 
-  // Auto-focus ô nhập OTP đầu tiên khi chuyển sang màn hình OTP
   useEffect(() => {
     if (submitted) {
       const timer = setTimeout(() => {
@@ -39,7 +55,6 @@ export const RegisterPage = ({ onNavigate }) => {
     }
   }, [submitted]);
 
-  // Bộ đếm ngược thời gian gửi lại OTP (60s)
   useEffect(() => {
     if (!submitted || resendCooldown <= 0) return;
     const interval = setInterval(() => {
@@ -48,18 +63,17 @@ export const RegisterPage = ({ onNavigate }) => {
     return () => clearInterval(interval);
   }, [submitted, resendCooldown]);
 
-  // Password strength calculation
   const calculatePasswordStrength = (pass) => {
-    if (!pass) return { score: 0, label: 'None', color: '#D1D5DB' };
+    if (!pass) return { score: 0, label: '', color: '#D1D5DB' };
     let score = 0;
     if (pass.length >= 8) score += 1;
     if (/[0-9]/.test(pass)) score += 1;
     if (/[A-Z]/.test(pass)) score += 1;
     if (/[^A-Za-z0-9]/.test(pass)) score += 1;
 
-    if (score <= 1) return { score: 1, label: 'Weak', color: '#EF4444' };
-    if (score === 2 || score === 3) return { score: 2, label: 'Medium', color: '#F59E0B' };
-    return { score: 3, label: 'Strong', color: '#10B981' };
+    if (score <= 1) return { score: 1, label: 'Mật khẩu yếu', color: '#EF4444' };
+    if (score === 2 || score === 3) return { score: 2, label: 'Mật khẩu trung bình', color: '#F59E0B' };
+    return { score: 3, label: 'Mật khẩu mạnh', color: '#10B981' };
   };
 
   const strength = calculatePasswordStrength(password);
@@ -67,33 +81,33 @@ export const RegisterPage = ({ onNavigate }) => {
   const validate = () => {
     const errs = {};
     if (!fullName.trim()) {
-      errs.fullName = 'Full name is required';
+      errs.fullName = 'Vui lòng nhập họ và tên';
     } else if (fullName.trim().length < 2) {
-      errs.fullName = 'Full name must be at least 2 characters';
+      errs.fullName = 'Họ và tên phải có ít nhất 2 ký tự';
     }
 
     if (!email.trim()) {
-      errs.email = 'Work email is required';
+      errs.email = 'Vui lòng nhập email công việc';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errs.email = 'Please enter a valid email address';
+      errs.email = 'Vui lòng nhập địa chỉ email hợp lệ';
     }
 
     if (!password) {
-      errs.password = 'Password is required';
+      errs.password = 'Vui lòng nhập mật khẩu';
     } else if (password.length < 8) {
-      errs.password = 'Password must be at least 8 characters';
+      errs.password = 'Mật khẩu phải có ít nhất 8 ký tự';
     } else if (strength.score < 2) {
-      errs.password = 'Password is too weak. Add numbers or uppercase letters.';
+      errs.password = 'Mật khẩu quá yếu. Vui lòng thêm chữ số hoặc chữ in hoa.';
     }
 
     if (!confirmPassword) {
-      errs.confirmPassword = 'Confirmation password is required';
+      errs.confirmPassword = 'Vui lòng xác nhận mật khẩu';
     } else if (password !== confirmPassword) {
-      errs.confirmPassword = 'Passwords do not match';
+      errs.confirmPassword = 'Mật khẩu xác nhận không khớp';
     }
 
     if (!agreedToTerms) {
-      errs.terms = 'You must agree to the Terms of Service and Privacy Policy';
+      errs.terms = 'Bạn cần đồng ý với Điều khoản dịch vụ và Chính sách bảo mật';
     }
 
     setErrors(errs);
@@ -129,9 +143,10 @@ export const RegisterPage = ({ onNavigate }) => {
 
   const handleGoogleSignUp = () => {
     setErrors({});
-    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com';
+    const clientId =
+      process.env.REACT_APP_GOOGLE_CLIENT_ID ||
+      '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com';
 
-    // Đảm bảo truy cập bằng localhost thay vì 127.0.0.1 (Google OAuth console chỉ cấp phép http://localhost:3000)
     if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
       window.location.hostname = 'localhost';
       return;
@@ -149,7 +164,9 @@ export const RegisterPage = ({ onNavigate }) => {
         } else if (attempts >= 15) {
           clearInterval(interval);
           setLoading(false);
-          setErrors({ submit: 'Không thể kết nối dịch vụ Google. Vui lòng tắt trình chặn quảng cáo nếu có và tải lại trang.' });
+          setErrors({
+            submit: 'Không thể kết nối dịch vụ Google. Vui lòng tắt trình chặn quảng cáo nếu có và tải lại trang.',
+          });
         }
       }, 200);
       return;
@@ -175,28 +192,8 @@ export const RegisterPage = ({ onNavigate }) => {
           setLoading(true);
           try {
             const authFn = loginWithGoogle || register;
-            const user = await authFn(response.access_token);
-
-            // Kiểm tra điều hướng: admin -> /admin, đã có org -> /dashboard, chưa có org -> /onboarding/organization
-            const rawSysRoles = (user?.system_roles || []).map((r) =>
-              typeof r === 'object' && r !== null ? r.name || r.role_name : r
-            ).map((r) => String(r).toUpperCase());
-
-            const isPlatformAdmin =
-              rawSysRoles.includes('SUPER_ADMIN') ||
-              rawSysRoles.includes('ADMIN') ||
-              rawSysRoles.includes('SYSTEM_ADMIN');
-
-            // Đăng ký thành công điều hướng về Tầng Cá Nhân (/portal) cho mọi tài khoản kể cả Admin
-            const destPath = '/portal';
-
-            // Google OAuth tài khoản đã tự động xác thực email, điều hướng trực tiếp
-            if (onNavigate) {
-              onNavigate(destPath);
-            } else {
-              window.history.pushState({}, '', destPath);
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }
+            await authFn(response.access_token);
+            handleLink(null, '/portal');
           } catch (err) {
             setErrors({ submit: err.message || 'Đăng ký Google không thành công. Vui lòng thử lại.' });
           } finally {
@@ -207,7 +204,10 @@ export const RegisterPage = ({ onNavigate }) => {
           setLoading(false);
           if (err?.type === 'popup_closed') return;
           if (err?.type === 'popup_blocked_by_browser') {
-            setErrors({ submit: 'Trình duyệt đã chặn cửa sổ đăng nhập Google. Vui lòng nhấn vào biểu tượng ổ khóa/popup trên thanh địa chỉ để cho phép popup và thử lại.' });
+            setErrors({
+              submit:
+                'Trình duyệt đã chặn cửa sổ đăng nhập Google. Vui lòng nhấn vào biểu tượng ổ khóa trên thanh địa chỉ để cho phép popup và thử lại.',
+            });
             return;
           }
           setErrors({ submit: err?.message || 'Không thể mở cửa sổ Google. Vui lòng kiểm tra chặn popup trên trình duyệt.' });
@@ -230,13 +230,11 @@ export const RegisterPage = ({ onNavigate }) => {
     }
   };
 
-  // Xử lý thay đổi từng ô ký tự OTP
   const handleOtpChange = (index, e) => {
     const rawVal = e.target.value;
     setOtpError('');
     setResendStatus('');
 
-    // Xử lý nếu người dùng dán hoặc autofill chuỗi nhiều số vào 1 ô
     const cleanDigits = rawVal.replace(/\D/g, '');
     if (cleanDigits.length > 1) {
       const newOtp = [...otp];
@@ -259,12 +257,10 @@ export const RegisterPage = ({ onNavigate }) => {
     newOtp[index] = char;
     setOtp(newOtp);
 
-    // Tự động nhảy con trỏ sang ô tiếp theo
     if (char && index < 5) {
       otpInputsRef.current[index + 1]?.focus();
     }
 
-    // Nếu đã đủ 6 số ở ô cuối cùng thì tự động gửi xác thực
     if (char && index === 5) {
       const fullCode = newOtp.join('');
       if (fullCode.length === 6) {
@@ -273,7 +269,6 @@ export const RegisterPage = ({ onNavigate }) => {
     }
   };
 
-  // Xử lý phím Backspace và phím mũi tên trái/phải
   const handleOtpKeyDown = (index, e) => {
     if (e.key === 'Backspace') {
       if (!otp[index] && index > 0) {
@@ -295,7 +290,6 @@ export const RegisterPage = ({ onNavigate }) => {
     }
   };
 
-  // Xử lý dán mã OTP từ clipboard (Ctrl+V)
   const handleOtpPaste = (e) => {
     e.preventDefault();
     setOtpError('');
@@ -318,7 +312,6 @@ export const RegisterPage = ({ onNavigate }) => {
     }
   };
 
-  // Gửi mã OTP lên backend xác thực
   const handleVerifyOtp = async (codeToVerify) => {
     const fullCode = (typeof codeToVerify === 'string' ? codeToVerify : otp.join('')).trim();
     if (fullCode.length !== 6) {
@@ -345,7 +338,6 @@ export const RegisterPage = ({ onNavigate }) => {
     }
   };
 
-  // Gửi lại mã OTP
   const handleResendOtp = async () => {
     if (resendCooldown > 0 || resendingOtp) return;
 
@@ -362,7 +354,6 @@ export const RegisterPage = ({ onNavigate }) => {
       setResendStatus('Đã gửi lại mã OTP mới thành công! Vui lòng kiểm tra hộp thư.');
       setResendCooldown(60);
     } catch (err) {
-      // Fallback thông báo thân thiện
       setResendStatus('Đã gửi lại mã xác thực tới email của bạn. Vui lòng kiểm tra hộp thư.');
       setResendCooldown(60);
     } finally {
@@ -371,45 +362,34 @@ export const RegisterPage = ({ onNavigate }) => {
   };
 
   return (
-    <div
-      className="register-card"
-      style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E5E7EB',
-        borderRadius: '8px',
-        padding: '36px 32px',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
-      }}
-    >
-      {/* Top Center: Isometric Mint Cube Logo matching Login Page */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-        <Logo size={52} showText={false} />
+    <div className="register-card" style={{ padding: '12px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '28px' }}>
+        <Logo size={46} showText={false} />
       </div>
 
-      {/* Heading and Supporting Text */}
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '1.75rem',
-            fontWeight: 800,
-            color: '#111827',
-            letterSpacing: '-0.03em',
-            marginBottom: '8px',
-            lineHeight: 1.2,
-          }}
-        >
-          Create your account
-        </h1>
-        <p style={{ fontSize: '0.875rem', color: '#6B7280', fontFamily: 'var(--font-body)', margin: 0 }}>
-          Start monitoring and protecting your infrastructure.
-        </p>
-      </div>
+      {!submitted && (
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <h1 style={AUTH_HEADING_STYLE}>
+            Tạo tài khoản mới
+          </h1>
+          <p style={{ fontSize: '0.875rem', color: '#4B5563', fontFamily: 'var(--font-body)', margin: 0 }}>
+            Đã có tài khoản?{' '}
+            <a
+              href="/login"
+              className="auth-link"
+              onClick={(e) => handleLink(e, '/login')}
+              style={{ fontWeight: 500 }}
+            >
+              Đăng nhập
+            </a>
+          </p>
+        </div>
+      )}
 
       {submitted ? (
         <div
           style={{
-            padding: '28px 20px',
+            padding: '24px 16px',
             borderRadius: '8px',
             backgroundColor: '#FFFFFF',
             border: '1px solid #E5E7EB',
@@ -417,7 +397,6 @@ export const RegisterPage = ({ onNavigate }) => {
             fontFamily: 'var(--font-body)',
           }}
         >
-          {/* Header Icon: Key/Shield */}
           <div
             style={{
               width: '56px',
@@ -436,12 +415,8 @@ export const RegisterPage = ({ onNavigate }) => {
 
           <h2
             style={{
-              fontSize: '1.35rem',
-              fontWeight: 800,
-              color: '#111827',
-              margin: '0 0 8px 0',
-              fontFamily: 'var(--font-display)',
-              letterSpacing: '-0.02em',
+              ...AUTH_HEADING_STYLE,
+              fontSize: '1.45rem',
             }}
           >
             Nhập mã xác thực OTP
@@ -472,12 +447,11 @@ export const RegisterPage = ({ onNavigate }) => {
             Vui lòng kiểm tra hộp thư (hoặc mục Spam) và nhập mã OTP 6 số bên dưới để kích hoạt tài khoản.
           </p>
 
-          {/* 6 Ô nhập ký tự OTP */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: '10px',
+              gap: '8px',
               marginBottom: '16px',
             }}
             onPaste={handleOtpPaste}
@@ -494,10 +468,10 @@ export const RegisterPage = ({ onNavigate }) => {
                 onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                 aria-label={`Mã OTP số ${idx + 1}`}
                 style={{
-                  width: '46px',
-                  height: '52px',
+                  width: '44px',
+                  height: '50px',
                   textAlign: 'center',
-                  fontSize: '1.5rem',
+                  fontSize: '1.4rem',
                   fontWeight: 700,
                   fontFamily: 'monospace',
                   color: '#111827',
@@ -508,21 +482,10 @@ export const RegisterPage = ({ onNavigate }) => {
                   transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease',
                   boxShadow: digit ? '0 0 0 2px rgba(37, 99, 235, 0.1)' : 'none',
                 }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#2563EB';
-                  e.target.style.backgroundColor = '#FFFFFF';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.15)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = otpError ? '#EF4444' : digit ? '#2563EB' : '#D1D5DB';
-                  e.target.style.backgroundColor = digit ? '#FFFFFF' : '#F9FAFB';
-                  e.target.style.boxShadow = digit ? '0 0 0 2px rgba(37, 99, 235, 0.1)' : 'none';
-                }}
               />
             ))}
           </div>
 
-          {/* Thông báo lỗi nếu OTP không hợp lệ */}
           {otpError && (
             <div
               style={{
@@ -544,7 +507,6 @@ export const RegisterPage = ({ onNavigate }) => {
             </div>
           )}
 
-          {/* Thông báo xác thực thành công */}
           {otpSuccess && (
             <div
               style={{
@@ -566,7 +528,6 @@ export const RegisterPage = ({ onNavigate }) => {
             </div>
           )}
 
-          {/* Nút hành động chính: Xác nhận mã OTP */}
           <button
             type="button"
             disabled={otp.join('').length < 6 || verifyingOtp || otpSuccess}
@@ -579,9 +540,8 @@ export const RegisterPage = ({ onNavigate }) => {
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '6px',
-              fontFamily: 'var(--font-display)',
+              fontFamily: 'var(--font-dm-sans)',
               fontSize: '0.875rem',
-              fontWeight: 700,
               cursor: otp.join('').length === 6 && !verifyingOtp && !otpSuccess ? 'pointer' : 'not-allowed',
               display: 'inline-flex',
               alignItems: 'center',
@@ -609,12 +569,9 @@ export const RegisterPage = ({ onNavigate }) => {
             )}
           </button>
 
-          {/* Gửi lại mã OTP và đếm ngược thời gian */}
           <div style={{ paddingTop: '12px', borderTop: '1px solid #F3F4F6', fontSize: '0.8125rem' }}>
             {resendStatus && (
-              <div style={{ color: '#059669', fontWeight: 600, marginBottom: '8px' }}>
-                {resendStatus}
-              </div>
+              <div style={{ color: '#059669', fontWeight: 600, marginBottom: '8px' }}>{resendStatus}</div>
             )}
 
             {resendCooldown > 0 ? (
@@ -642,7 +599,6 @@ export const RegisterPage = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* Đổi email khác / Quay lại */}
           <div style={{ marginTop: '16px' }}>
             <button
               type="button"
@@ -669,12 +625,12 @@ export const RegisterPage = ({ onNavigate }) => {
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {errors.submit && (
             <div
               style={{
                 padding: '10px 14px',
-                borderRadius: '4px',
+                borderRadius: '6px',
                 backgroundColor: '#FEF2F2',
                 border: '1px solid #FCA5A5',
                 color: '#B91C1C',
@@ -685,20 +641,10 @@ export const RegisterPage = ({ onNavigate }) => {
               {errors.submit}
             </div>
           )}
-          {/* Full Name */}
+
           <div>
-            <label
-              htmlFor="register-name"
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: '#374151',
-                marginBottom: '6px',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Full name
+            <label htmlFor="register-name" style={AUTH_LABEL_STYLE}>
+              Họ và tên
             </label>
             <input
               id="register-name"
@@ -708,21 +654,19 @@ export const RegisterPage = ({ onNavigate }) => {
                 setFullName(e.target.value);
                 if (errors.fullName) setErrors((prev) => ({ ...prev, fullName: '' }));
               }}
-              placeholder="Alex Morgan"
+              placeholder="Nguyễn Văn A"
               style={{
-                width: '100%',
-                padding: '11px 14px',
-                borderRadius: '4px',
+                ...AUTH_INPUT_STYLE,
                 border: errors.fullName ? '1px solid #EF4444' : '1px solid #D1D5DB',
-                backgroundColor: '#FFFFFF',
-                fontSize: '0.9375rem',
-                color: '#111827',
-                fontFamily: 'var(--font-body)',
-                outline: 'none',
-                transition: 'border-color 0.15s ease',
               }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-              onBlur={(e) => (e.target.style.borderColor = errors.fullName ? '#EF4444' : '#D1D5DB')}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#111827';
+                e.target.style.boxShadow = '0 0 0 1px #111827';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = errors.fullName ? '#EF4444' : '#D1D5DB';
+                e.target.style.boxShadow = 'none';
+              }}
             />
             {errors.fullName && (
               <span style={{ display: 'block', marginTop: '4px', fontSize: '0.75rem', color: '#EF4444', fontFamily: 'var(--font-body)' }}>
@@ -731,20 +675,9 @@ export const RegisterPage = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* Work Email */}
           <div>
-            <label
-              htmlFor="register-email"
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: '#374151',
-                marginBottom: '6px',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Work email
+            <label htmlFor="register-email" style={AUTH_LABEL_STYLE}>
+              Email công việc
             </label>
             <input
               id="register-email"
@@ -754,21 +687,19 @@ export const RegisterPage = ({ onNavigate }) => {
                 setEmail(e.target.value);
                 if (errors.email) setErrors((prev) => ({ ...prev, email: '' }));
               }}
-              placeholder="alex@company.com"
+              placeholder="ten@congty.com"
               style={{
-                width: '100%',
-                padding: '11px 14px',
-                borderRadius: '4px',
+                ...AUTH_INPUT_STYLE,
                 border: errors.email ? '1px solid #EF4444' : '1px solid #D1D5DB',
-                backgroundColor: '#FFFFFF',
-                fontSize: '0.9375rem',
-                color: '#111827',
-                fontFamily: 'var(--font-body)',
-                outline: 'none',
-                transition: 'border-color 0.15s ease',
               }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-              onBlur={(e) => (e.target.style.borderColor = errors.email ? '#EF4444' : '#D1D5DB')}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#111827';
+                e.target.style.boxShadow = '0 0 0 1px #111827';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = errors.email ? '#EF4444' : '#D1D5DB';
+                e.target.style.boxShadow = 'none';
+              }}
             />
             {errors.email && (
               <span style={{ display: 'block', marginTop: '4px', fontSize: '0.75rem', color: '#EF4444', fontFamily: 'var(--font-body)' }}>
@@ -777,20 +708,9 @@ export const RegisterPage = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* Password */}
           <div>
-            <label
-              htmlFor="register-password"
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: '#374151',
-                marginBottom: '6px',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Password
+            <label htmlFor="register-password" style={AUTH_LABEL_STYLE}>
+              Mật khẩu
             </label>
             <div style={{ position: 'relative' }}>
               <input
@@ -801,25 +721,24 @@ export const RegisterPage = ({ onNavigate }) => {
                   setPassword(e.target.value);
                   if (errors.password) setErrors((prev) => ({ ...prev, password: '' }));
                 }}
-                placeholder="••••••••"
+                placeholder="••••••••••••"
                 style={{
-                  width: '100%',
-                  padding: '11px 40px 11px 14px',
-                  borderRadius: '4px',
+                  ...AUTH_INPUT_STYLE,
+                  paddingRight: '40px',
                   border: errors.password ? '1px solid #EF4444' : '1px solid #D1D5DB',
-                  backgroundColor: '#FFFFFF',
-                  fontSize: '0.9375rem',
-                  color: '#111827',
-                  fontFamily: 'var(--font-body)',
-                  outline: 'none',
-                  transition: 'border-color 0.15s ease',
-                  boxSizing: 'border-box',
                 }}
-                onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                onBlur={(e) => (e.target.style.borderColor = errors.password ? '#EF4444' : '#D1D5DB')}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#111827';
+                  e.target.style.boxShadow = '0 0 0 1px #111827';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = errors.password ? '#EF4444' : '#D1D5DB';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
               <button
                 type="button"
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                 onClick={() => setShowPassword(!showPassword)}
                 style={{
                   position: 'absolute',
@@ -844,53 +763,30 @@ export const RegisterPage = ({ onNavigate }) => {
               </span>
             )}
 
-            {/* Password Strength Indicator */}
             {password && (
               <div style={{ marginTop: '8px' }}>
                 <div style={{ display: 'flex', gap: '4px', height: '4px', marginBottom: '4px' }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      backgroundColor: strength.score >= 1 ? strength.color : '#E5E7EB',
-                      borderRadius: '2px',
-                    }}
-                  />
-                  <div
-                    style={{
-                      flex: 1,
-                      backgroundColor: strength.score >= 2 ? strength.color : '#E5E7EB',
-                      borderRadius: '2px',
-                    }}
-                  />
-                  <div
-                    style={{
-                      flex: 1,
-                      backgroundColor: strength.score >= 3 ? strength.color : '#E5E7EB',
-                      borderRadius: '2px',
-                    }}
-                  />
+                  {[1, 2, 3].map((level) => (
+                    <div
+                      key={level}
+                      style={{
+                        flex: 1,
+                        backgroundColor: strength.score >= level ? strength.color : '#E5E7EB',
+                        borderRadius: '2px',
+                      }}
+                    />
+                  ))}
                 </div>
                 <span style={{ fontSize: '0.75rem', color: strength.color, fontWeight: 500, fontFamily: 'var(--font-body)' }}>
-                  {strength.label} password
+                  {strength.label}
                 </span>
               </div>
             )}
           </div>
 
-          {/* Confirm Password */}
           <div>
-            <label
-              htmlFor="register-confirm-password"
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: '#374151',
-                marginBottom: '6px',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Confirm password
+            <label htmlFor="register-confirm-password" style={AUTH_LABEL_STYLE}>
+              Xác nhận mật khẩu
             </label>
             <div style={{ position: 'relative' }}>
               <input
@@ -901,25 +797,24 @@ export const RegisterPage = ({ onNavigate }) => {
                   setConfirmPassword(e.target.value);
                   if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: '' }));
                 }}
-                placeholder="••••••••"
+                placeholder="••••••••••••"
                 style={{
-                  width: '100%',
-                  padding: '11px 40px 11px 14px',
-                  borderRadius: '4px',
+                  ...AUTH_INPUT_STYLE,
+                  paddingRight: '40px',
                   border: errors.confirmPassword ? '1px solid #EF4444' : '1px solid #D1D5DB',
-                  backgroundColor: '#FFFFFF',
-                  fontSize: '0.9375rem',
-                  color: '#111827',
-                  fontFamily: 'var(--font-body)',
-                  outline: 'none',
-                  transition: 'border-color 0.15s ease',
-                  boxSizing: 'border-box',
                 }}
-                onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                onBlur={(e) => (e.target.style.borderColor = errors.confirmPassword ? '#EF4444' : '#D1D5DB')}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#111827';
+                  e.target.style.boxShadow = '0 0 0 1px #111827';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = errors.confirmPassword ? '#EF4444' : '#D1D5DB';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
               <button
                 type="button"
+                aria-label={showConfirmPassword ? 'Ẩn mật khẩu xác nhận' : 'Hiện mật khẩu xác nhận'}
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 style={{
                   position: 'absolute',
@@ -945,7 +840,6 @@ export const RegisterPage = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* Terms Agreement Checkbox */}
           <div>
             <label
               style={{
@@ -956,7 +850,7 @@ export const RegisterPage = ({ onNavigate }) => {
                 fontFamily: 'var(--font-body)',
                 fontSize: '0.8125rem',
                 color: '#4B5563',
-                lineHeight: 1.4,
+                lineHeight: 1.45,
               }}
             >
               <input
@@ -968,24 +862,26 @@ export const RegisterPage = ({ onNavigate }) => {
                 }}
                 style={{
                   marginTop: '2px',
-                  accentColor: 'var(--color-primary)',
+                  accentColor: '#111827',
                   cursor: 'pointer',
                 }}
               />
               <span>
-                I agree to the{' '}
+                Tôi đồng ý với{' '}
                 <a
                   href="/terms"
-                  style={{ color: '#2563EB', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+                  className="auth-link"
+                  onClick={(e) => handleLink(e, '/terms')}
                 >
-                  Terms of Service
+                  Điều khoản dịch vụ
                 </a>{' '}
-                and{' '}
+                và{' '}
                 <a
                   href="/privacy"
-                  style={{ color: '#2563EB', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+                  className="auth-link"
+                  onClick={(e) => handleLink(e, '/privacy')}
                 >
-                  Privacy Policy
+                  Chính sách bảo mật
                 </a>
               </span>
             </label>
@@ -996,133 +892,41 @@ export const RegisterPage = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              backgroundColor: '#111827',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '0.9375rem',
-              fontWeight: 600,
-              fontFamily: 'var(--font-body)',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              opacity: loading ? 0.7 : 1,
-              marginTop: '4px',
-              transition: 'background-color 0.15s ease',
-            }}
-          >
-            {loading ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                <span>Creating account...</span>
-              </>
-            ) : (
-              <>
-                <span>Create Account</span>
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-
-          {/* Divider */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              margin: '4px 0',
-              position: 'relative',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
-            <span
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '6px' }}>
+            <button
+              type="submit"
+              disabled={loading}
               style={{
-                padding: '0 12px',
-                fontSize: '0.8125rem',
-                color: '#6B7280',
-                fontFamily: 'var(--font-body)',
-                whiteSpace: 'nowrap',
+                ...AUTH_PRIMARY_BTN_STYLE,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.75 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) e.currentTarget.style.backgroundColor = '#1BD48E';
+              }}
+              onMouseLeave={(e) => {
+                if (!loading) e.currentTarget.style.backgroundColor = '#22E59B';
               }}
             >
-              Or
-            </span>
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
-          </div>
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Đang tạo tài khoản...</span>
+                </>
+              ) : (
+                <>
+                  <span>Bắt đầu miễn phí</span>
+                  <ArrowRight size={17} strokeWidth={2.2} />
+                </>
+              )}
+            </button>
 
-          {/* Continue with Google Button */}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleGoogleSignUp}
-            style={{
-              width: '100%',
-              height: '44px',
-              backgroundColor: '#FFFFFF',
-              color: '#374151',
-              fontWeight: 600,
-              fontSize: '0.875rem',
-              fontFamily: 'var(--font-body)',
-              borderRadius: '4px',
-              border: '1px solid #D1D5DB',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.7 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              transition: 'background-color 0.15s ease',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-label="Google logo">
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                fill="#EA4335"
-              />
-            </svg>
-            <span>Continue with Google</span>
-          </button>
+            <GoogleAuthButton label="Đăng ký với Google" onClick={handleGoogleSignUp} disabled={loading} />
+          </div>
         </form>
       )}
 
-      {/* Switch to Sign In */}
-      <div style={{ textAlign: 'center', marginTop: '24px' }}>
-        <p style={{ fontSize: '0.875rem', color: '#6B7280', fontFamily: 'var(--font-body)', margin: 0 }}>
-          Already have an account?{' '}
-          <a
-            href="/login"
-            onClick={(e) => handleLink(e, '/login')}
-            style={{
-              color: '#2563EB',
-              fontWeight: 600,
-              textDecoration: 'underline',
-              textUnderlineOffset: '2px',
-            }}
-          >
-            Sign in
-          </a>
-        </p>
-      </div>
+      <AuthLegalFooter onNavigate={onNavigate} />
     </div>
   );
 };

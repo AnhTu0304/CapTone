@@ -22,19 +22,21 @@ describe('RegisterPage Suite & OTP Verification', () => {
     );
   };
 
-  test('1. Renders register form fields, terms checkbox, and Google sign up button', () => {
+  test('1. Renders register form fields, terms checkbox, and Google sign up button in Vietnamese', () => {
     renderWithAuth(<RegisterPage />, { register: jest.fn(), loginWithGoogle: jest.fn() });
 
-    expect(screen.getByRole('heading', { name: /Create your account/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Full name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Work email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Password$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Confirm password/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Create Account/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Tạo tài khoản mới/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Họ và tên/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Email công việc/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Mật khẩu$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Xác nhận mật khẩu/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Bắt đầu miễn phí/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Đăng ký với Google/i })).toBeInTheDocument();
+    expect(screen.queryByText(/GitHub/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/GitLab/i)).not.toBeInTheDocument();
   });
 
-  test('2. Submits registration form and shows OTP input screen without old Gmail buttons', async () => {
+  test('2. Submits registration form and shows OTP input screen', async () => {
     const handleNavigate = jest.fn();
     const mockRegister = jest.fn().mockResolvedValue({
       id: 'reg-user-1',
@@ -48,14 +50,14 @@ describe('RegisterPage Suite & OTP Verification', () => {
       loginWithGoogle: jest.fn(),
     });
 
-    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Alex Developer' } });
-    fireEvent.change(screen.getByLabelText(/Work email/i), { target: { value: 'alex@company.com' } });
-    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'SecurePass123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), { target: { value: 'Alex Developer' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc/i), { target: { value: 'alex@company.com' } });
+    fireEvent.change(screen.getByLabelText(/^Mật khẩu$/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Xác nhận mật khẩu/i), { target: { value: 'SecurePass123!' } });
     fireEvent.click(screen.getByRole('checkbox'));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Bắt đầu miễn phí/i }));
     });
 
     expect(mockRegister).toHaveBeenCalledWith({
@@ -64,24 +66,17 @@ describe('RegisterPage Suite & OTP Verification', () => {
       full_name: 'Alex Developer',
     });
 
-    // Màn hình OTP xuất hiện
     expect(screen.getByRole('heading', { name: /Nhập mã xác thực OTP/i })).toBeInTheDocument();
     expect(screen.getByText('alex@company.com')).toBeInTheDocument();
 
-    // 6 ô nhập ký tự OTP
     for (let i = 1; i <= 6; i++) {
       expect(screen.getByLabelText(new RegExp(`Mã OTP số ${i}`, 'i'))).toBeInTheDocument();
     }
 
-    // Không còn 2 nút cũ "Mở Gmail ngay" và "Tiếp tục thiết lập Onboarding"
-    expect(screen.queryByText(/Mở Gmail ngay/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Tiếp tục thiết lập Onboarding/i)).not.toBeInTheDocument();
-
-    // Nút xác nhận OTP hiển thị
     expect(screen.getByRole('button', { name: /Xác nhận mã OTP/i })).toBeInTheDocument();
   });
 
-  test('3. Enters 6-digit OTP, verifies successfully, and navigates to onboarding', async () => {
+  test('3. Enters 6-digit OTP, verifies successfully, and navigates to portal', async () => {
     const handleNavigate = jest.fn();
     const mockRegister = jest.fn().mockResolvedValue({
       id: 'reg-user-1',
@@ -97,17 +92,16 @@ describe('RegisterPage Suite & OTP Verification', () => {
       verifyEmail: mockVerifyEmail,
     });
 
-    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Alex Developer' } });
-    fireEvent.change(screen.getByLabelText(/Work email/i), { target: { value: 'alex@company.com' } });
-    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'SecurePass123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), { target: { value: 'Alex Developer' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc/i), { target: { value: 'alex@company.com' } });
+    fireEvent.change(screen.getByLabelText(/^Mật khẩu$/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Xác nhận mật khẩu/i), { target: { value: 'SecurePass123!' } });
     fireEvent.click(screen.getByRole('checkbox'));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Bắt đầu miễn phí/i }));
     });
 
-    // Nhập 6 chữ số OTP
     const digits = ['1', '2', '3', '4', '5', '6'];
     for (let i = 0; i < 6; i++) {
       const input = screen.getByLabelText(new RegExp(`Mã OTP số ${i + 1}`, 'i'));
@@ -116,7 +110,6 @@ describe('RegisterPage Suite & OTP Verification', () => {
       });
     }
 
-    // Auto submit hoặc nhấn xác nhận
     await act(async () => {
       jest.advanceTimersByTime(1200);
     });
@@ -140,17 +133,16 @@ describe('RegisterPage Suite & OTP Verification', () => {
       verifyEmail: mockVerifyEmail,
     });
 
-    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Alex Developer' } });
-    fireEvent.change(screen.getByLabelText(/Work email/i), { target: { value: 'alex@company.com' } });
-    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'SecurePass123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), { target: { value: 'Alex Developer' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc/i), { target: { value: 'alex@company.com' } });
+    fireEvent.change(screen.getByLabelText(/^Mật khẩu$/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Xác nhận mật khẩu/i), { target: { value: 'SecurePass123!' } });
     fireEvent.click(screen.getByRole('checkbox'));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Bắt đầu miễn phí/i }));
     });
 
-    // Nhập OTP sai
     const digits = ['9', '9', '9', '9', '9', '9'];
     for (let i = 0; i < 6; i++) {
       const input = screen.getByLabelText(new RegExp(`Mã OTP số ${i + 1}`, 'i'));
@@ -198,7 +190,7 @@ describe('RegisterPage Suite & OTP Verification', () => {
       loginWithGoogle: mockLoginWithGoogle,
     });
 
-    const googleBtn = screen.getByRole('button', { name: /Continue with Google/i });
+    const googleBtn = screen.getByRole('button', { name: /Đăng ký với Google/i });
     expect(googleBtn).toBeInTheDocument();
 
     await act(async () => {
@@ -224,25 +216,22 @@ describe('RegisterPage Suite & OTP Verification', () => {
       resendVerification: mockResend,
     });
 
-    fireEvent.change(screen.getByLabelText(/Full name/i), { target: { value: 'Resend User' } });
-    fireEvent.change(screen.getByLabelText(/Work email/i), { target: { value: 'resend@company.com' } });
-    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'SecurePass123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirm password/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), { target: { value: 'Resend User' } });
+    fireEvent.change(screen.getByLabelText(/Email công việc/i), { target: { value: 'resend@company.com' } });
+    fireEvent.change(screen.getByLabelText(/^Mật khẩu$/i), { target: { value: 'SecurePass123!' } });
+    fireEvent.change(screen.getByLabelText(/Xác nhận mật khẩu/i), { target: { value: 'SecurePass123!' } });
     fireEvent.click(screen.getByRole('checkbox'));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Bắt đầu miễn phí/i }));
     });
 
-    // Ban đầu có đếm ngược 60s
     expect(screen.getByText(/Gửi lại sau/i)).toBeInTheDocument();
 
-    // Hết 60s
     await act(async () => {
       jest.advanceTimersByTime(60000);
     });
 
-    // Nút gửi lại mã OTP xuất hiện
     const resendBtn = screen.getByRole('button', { name: /Gửi lại mã OTP/i });
     expect(resendBtn).toBeInTheDocument();
 

@@ -1,6 +1,13 @@
-import Logo from '../../components/common/Logo';
 import React, { useState } from 'react';
 import { ArrowRight, ArrowLeft, Mail, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
+import Logo from '../../components/common/Logo';
+import {
+  AUTH_HEADING_STYLE,
+  AUTH_INPUT_STYLE,
+  AUTH_LABEL_STYLE,
+  AUTH_PRIMARY_BTN_STYLE,
+  AuthLegalFooter,
+} from '../../components/auth/AuthShared';
 
 export const ForgotPasswordPage = ({ onNavigate }) => {
   const [email, setEmail] = useState('');
@@ -25,12 +32,12 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
     setError('');
 
     if (!email.trim()) {
-      setError('Please enter your work email address');
+      setError('Vui lòng nhập địa chỉ email công việc');
       return;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address');
+      setError('Vui lòng nhập địa chỉ email hợp lệ');
       return;
     }
 
@@ -52,29 +59,18 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
   };
 
   return (
-    <div
-      className="forgot-password-card"
-      style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E5E7EB',
-        borderRadius: '8px',
-        padding: '36px 32px',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)',
-      }}
-    >
-      {/* Top Center: Isometric Mint Cube Logo matching Login Page */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-        <Logo size={52} showText={false} />
+    <div className="forgot-password-card" style={{ padding: '12px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '28px' }}>
+        <Logo size={46} showText={false} />
       </div>
 
       {sent ? (
-        /* ================= SUCCESS STATE: Check your inbox ================= */
         <div style={{ textAlign: 'center' }}>
           <div
             style={{
               width: '48px',
               height: '48px',
-              backgroundColor: 'rgba(40, 233, 159, 0.15)',
+              backgroundColor: 'rgba(34, 229, 155, 0.16)',
               color: '#059669',
               borderRadius: '50%',
               display: 'inline-flex',
@@ -88,15 +84,11 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
 
           <h2
             style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '1.625rem',
-              fontWeight: 800,
-              color: '#111827',
-              letterSpacing: '-0.03em',
-              marginBottom: '8px',
+              ...AUTH_HEADING_STYLE,
+              fontSize: '1.65rem',
             }}
           >
-            Check your inbox
+            Kiểm tra hộp thư của bạn
           </h2>
 
           <p
@@ -108,21 +100,21 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               marginBottom: '16px',
             }}
           >
-            We have sent a password reset link to:
+            Chúng tôi đã gửi liên kết đặt lại mật khẩu tới:
           </p>
 
           <div
             style={{
               display: 'inline-block',
               padding: '6px 14px',
-              backgroundColor: 'rgba(61, 59, 79, 0.06)',
-              border: '1px solid var(--border-default)',
+              backgroundColor: '#F3F4F6',
+              border: '1px solid #E5E7EB',
               fontFamily: 'var(--font-mono)',
               fontSize: '0.8125rem',
               fontWeight: 700,
-              color: 'var(--color-ink)',
+              color: '#111827',
               marginBottom: '16px',
-              borderRadius: '4px',
+              borderRadius: '6px',
             }}
           >
             {email}
@@ -137,22 +129,21 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               marginBottom: '24px',
             }}
           >
-            The reset link is valid for 60 minutes. If you don't see it in a few minutes, be sure to check your spam folder.
+            Liên kết khôi phục có hiệu lực trong 60 phút. Nếu chưa thấy email, vui lòng kiểm tra thêm mục Thư rác (Spam).
           </p>
 
-          {/* Quick Simulation Link for demo / test environment */}
           <div
             style={{
               padding: '12px 14px',
               backgroundColor: '#F8FAFC',
               border: '1px dashed #CBD5E1',
-              borderRadius: '4px',
+              borderRadius: '6px',
               marginBottom: '20px',
               textAlign: 'center',
             }}
           >
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#64748B', marginBottom: '6px' }}>
-              DEMO SIMULATION LINK
+              LIÊN KẾT MÔ PHỎNG DEMO
             </div>
             <button
               type="button"
@@ -161,9 +152,8 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
                 background: 'none',
                 border: 'none',
                 color: '#2563EB',
-                fontFamily: 'var(--font-display)',
+                fontFamily: 'var(--font-dm-sans)',
                 fontSize: '0.8125rem',
-                fontWeight: 700,
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -171,12 +161,11 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
                 textDecoration: 'underline',
               }}
             >
-              <span>Open Reset Password Link</span>
+              <span>Mở liên kết đặt lại mật khẩu</span>
               <ExternalLink size={13} />
             </button>
           </div>
 
-          {/* Resend button */}
           <div style={{ marginBottom: '20px' }}>
             <button
               type="button"
@@ -197,94 +186,70 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               <RefreshCw size={13} className={resending ? 'animate-spin' : ''} />
               <span>
                 {resending
-                  ? 'Resending email...'
+                  ? 'Đang gửi lại email...'
                   : resendCooldown > 0
-                    ? `Resend email in ${resendCooldown}s`
-                    : "Didn't receive the email? Resend"}
+                    ? `Gửi lại email sau ${resendCooldown}s`
+                    : 'Chưa nhận được email? Gửi lại'}
               </span>
             </button>
           </div>
 
-          {/* Back to Sign In */}
           <a
             href="/login"
+            className="auth-link"
             onClick={(e) => handleLink(e, '/login')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              color: '#2563EB',
-              fontWeight: 600,
+              fontWeight: 500,
               fontSize: '0.875rem',
-              textDecoration: 'underline',
               fontFamily: 'var(--font-body)',
             }}
           >
             <ArrowLeft size={15} />
-            <span>Back to Sign In</span>
+            <span>Quay lại đăng nhập</span>
           </a>
         </div>
       ) : (
-        /* ================= INITIAL STATE: Enter email form ================= */
         <div>
-          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-            <h1
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.75rem',
-                fontWeight: 800,
-                color: '#111827',
-                letterSpacing: '-0.03em',
-                marginBottom: '8px',
-                lineHeight: 1.2,
-              }}
-            >
-              Forgot your password?
+          <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+            <h1 style={AUTH_HEADING_STYLE}>
+              Quên mật khẩu?
             </h1>
-            <p style={{ fontSize: '0.875rem', color: '#6B7280', fontFamily: 'var(--font-body)', margin: 0, lineHeight: 1.45 }}>
-              Enter the email address associated with your account and we'll send you a password reset link.
+            <p style={{ fontSize: '0.875rem', color: '#4B5563', fontFamily: 'var(--font-body)', margin: 0, lineHeight: 1.55 }}>
+              Nhập email công việc gắn với tài khoản để nhận liên kết khôi phục mật khẩu.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
             <div>
-              <label
-                htmlFor="forgot-email"
-                style={{
-                  display: 'block',
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  color: '#374151',
-                  marginBottom: '6px',
-                  fontFamily: 'var(--font-body)',
-                }}
-              >
-                Work email
+              <label htmlFor="forgot-email" style={AUTH_LABEL_STYLE}>
+                Email công việc
               </label>
               <input
                 id="forgot-email"
                 type="email"
                 required
+                aria-label="Email công việc"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (error) setError('');
                 }}
-                placeholder="me@example.com"
+                placeholder="ten@congty.com"
                 style={{
-                  width: '100%',
-                  padding: '11px 14px',
-                  borderRadius: '4px',
+                  ...AUTH_INPUT_STYLE,
                   border: error ? '1px solid #EF4444' : '1px solid #D1D5DB',
-                  backgroundColor: '#FFFFFF',
-                  fontSize: '0.9375rem',
-                  color: '#111827',
-                  fontFamily: 'var(--font-body)',
-                  outline: 'none',
-                  transition: 'border-color 0.15s ease',
                 }}
-                onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')}
-                onBlur={(e) => (e.target.style.borderColor = error ? '#EF4444' : '#D1D5DB')}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#111827';
+                  e.target.style.boxShadow = '0 0 0 1px #111827';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = error ? '#EF4444' : '#D1D5DB';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
               {error && (
                 <span style={{ display: 'block', marginTop: '6px', fontSize: '0.75rem', color: '#EF4444', fontFamily: 'var(--font-body)' }}>
@@ -297,31 +262,26 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               type="submit"
               disabled={loading}
               style={{
-                width: '100%',
-                height: '44px',
-                backgroundColor: loading ? '#A7F3D0' : 'var(--color-accent)',
-                color: '#000000',
-                fontWeight: 700,
-                fontSize: '0.9375rem',
-                fontFamily: 'var(--font-display)',
-                borderRadius: '4px',
-                border: 'none',
+                ...AUTH_PRIMARY_BTN_STYLE,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'background-color 0.15s ease',
+                opacity: loading ? 0.75 : 1,
+                marginTop: '4px',
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) e.currentTarget.style.backgroundColor = '#1BD48E';
+              }}
+              onMouseLeave={(e) => {
+                if (!loading) e.currentTarget.style.backgroundColor = '#22E59B';
               }}
             >
               {loading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>Sending reset link...</span>
+                  <span>Đang gửi liên kết...</span>
                 </>
               ) : (
                 <>
-                  <span>Send Reset Link</span>
+                  <span>Gửi liên kết khôi phục</span>
                   <ArrowRight size={17} strokeWidth={2.2} />
                 </>
               )}
@@ -330,27 +290,26 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
             <div style={{ textAlign: 'center', marginTop: '8px' }}>
               <a
                 href="/login"
+                className="auth-link-muted"
                 onClick={(e) => handleLink(e, '/login')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  color: '#4B5563',
                   fontWeight: 500,
                   fontSize: '0.875rem',
-                  textDecoration: 'none',
                   fontFamily: 'var(--font-body)',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#4B5563')}
               >
                 <ArrowLeft size={15} />
-                <span>Back to Sign In</span>
+                <span>Quay lại đăng nhập</span>
               </a>
             </div>
           </form>
         </div>
       )}
+
+      <AuthLegalFooter onNavigate={onNavigate} />
     </div>
   );
 };

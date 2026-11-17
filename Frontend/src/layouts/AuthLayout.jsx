@@ -77,7 +77,7 @@ export const AuthLayout = ({ children, onNavigate }) => {
           backgroundColor: '#FFFFFF',
         }}
       >
-        <div style={{ width: '100%', maxWidth: '440px' }}>
+        <div style={{ width: '100%', maxWidth: '380px' }}>
           {children}
         </div>
       </div>
