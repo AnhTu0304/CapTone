@@ -317,10 +317,7 @@ export const LoginPage = ({ onNavigate }) => {
           </button>
         </form>
       ) : (
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-=======
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
->>>>>>> feature/landingpage
         {error && (
           <div
             style={{
