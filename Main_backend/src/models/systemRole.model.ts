@@ -179,18 +179,10 @@ export class SystemRoleModel {
         const db = client || pool;
         const sql = `
             SELECT 1 
-            FROM (
-                SELECT sr.name 
-                FROM user_system_roles usr
-                JOIN system_roles sr ON usr.system_role_id = sr.id
-                WHERE usr.user_id = $1
-                UNION
-                SELECT r.code AS name
-                FROM organization_members om
-                JOIN organization_roles r ON om.role_id = r.id
-                WHERE om.user_id = $1 AND om.status != 'REMOVED'
-            ) all_roles
-            WHERE UPPER(all_roles.name) = ANY($2::text[])
+            FROM user_system_roles usr
+            JOIN system_roles sr ON usr.system_role_id = sr.id
+            WHERE usr.user_id = $1
+              AND UPPER(sr.name) = ANY($2::text[])
             LIMIT 1
         `;
         const result = await db.query(sql, [userId, upperRoleNames]);

@@ -46,8 +46,8 @@ healingActionRoutes.patch('/actions/:id/status', devopsOrAdmin, HealingActionCon
 // GET /api/v1/healing/action-types - List action types
 healingActionRoutes.get('/action-types', HealingActionController.getActionTypes);
 
-// PUT /api/v1/healing/action-types/:id - Update action type
-healingActionRoutes.put('/action-types/:id', devopsOrAdmin, HealingActionController.updateActionType);
+// PUT /api/v1/healing/action-types/:id - Update action type (chỉ System SUPER_ADMIN / System ADMIN)
+healingActionRoutes.put('/action-types/:id', requireRoles('SUPER_ADMIN', 'ADMIN'), HealingActionController.updateActionType);
 
 // ==========================================
 // 3. Self-Healing Policies

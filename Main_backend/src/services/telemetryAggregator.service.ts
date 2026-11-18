@@ -86,7 +86,13 @@ export class TelemetryAggregatorService {
     // Ưu tiên đọc từ In-Memory Buffer (RAM / Redis) nếu không có startTime lịch sử
     let points: GRUMetricPoint[] = [];
     if (!options?.startTime) {
-      points = await TelemetryBufferService.getDisplayPoints(serviceId, bucketSeconds, limit);
+      points = await TelemetryBufferService.getDisplayPoints(
+        serviceId,
+        bucketSeconds,
+        limit,
+        options?.organizationId,
+        options?.clusterId
+      );
     }
     if (points.length === 0) {
       points = await MetricModel.aggregateByService(serviceId, bucketSeconds, limit, {
@@ -571,7 +577,7 @@ export class TelemetryAggregatorService {
     }
 
     // Convert monotonic cumulative pod_restart_count into per-step non-negative deltas
-    const stateKey = `${options?.clusterId || 'default'}:${serviceId}`;
+    const stateKey = `${options?.organizationId || 'default'}:${options?.clusterId || 'default'}:${serviceId}`;
     const prevRawRestart = TelemetryAggregatorService.lastBatchRestartCountByService.get(stateKey);
     const stepDeltas: number[] = [];
     for (let i = 0; i < sequence.length; i++) {

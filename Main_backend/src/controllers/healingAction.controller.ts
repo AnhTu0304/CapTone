@@ -99,7 +99,7 @@ export class HealingActionController {
   public static async createAction(req: Request, res: Response, next: NextFunction) {
     try {
       const user = (req as any).user;
-      const created = await HealingActionService.createAction(req.body, user?.id || null);
+      const created = await HealingActionService.createAction(req.body, user?.id || null, user);
       return ApiResponse.success(res, 'Khởi tạo hành động tự phục hồi thành công', created, 201);
     } catch (error) {
       next(error);
@@ -145,8 +145,13 @@ export class HealingActionController {
   public static async updateActionStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
+      const user = (req as any).user;
+      const requestedOrgId =
+        (req.headers['x-organization-id'] as string | undefined) ||
+        (req.query.organization_id as string | undefined) ||
+        req.body?.organization_id;
       const { status, result, error_message } = req.body;
-      const updated = await HealingActionService.updateActionStatus(id, status, result, error_message);
+      const updated = await HealingActionService.updateActionStatus(id, status, result, error_message, user, requestedOrgId);
       return ApiResponse.success(res, 'Cập nhật trạng thái hành động thành công', updated, 200);
     } catch (error) {
       next(error);
@@ -173,7 +178,8 @@ export class HealingActionController {
   public static async updateActionType(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const updated = await HealingActionService.updateActionType(id, req.body);
+      const user = (req as any).user;
+      const updated = await HealingActionService.updateActionType(id, req.body, user);
       return ApiResponse.success(res, 'Cập nhật loại hành động thành công', updated, 200);
     } catch (error) {
       next(error);

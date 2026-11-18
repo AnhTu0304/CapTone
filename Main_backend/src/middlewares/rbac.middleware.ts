@@ -104,28 +104,34 @@ export const requireRoles = (...allowedRoles: string[]) => {
       }
 
       // 2.2. Kiểm tra vai trò tổ chức (Organization Roles: DEVOPS, SME_OWNER, VIEWER)
-      // Cho phép thành viên tổ chức thực hiện các quyền hạn tương ứng với vai trò trong Tenant
-      const orgRolesAllowed = normalizedAllowed.filter((r) => ['DEVOPS', 'SME_OWNER', 'VIEWER', 'ADMIN'].includes(r));
+      // Lưu ý: KHÔNG gộp 'ADMIN' vào danh sách này để tách biệt System ADMIN khỏi Organization ADMIN
+      const orgRolesAllowed = normalizedAllowed.filter((r) => ['DEVOPS', 'SME_OWNER', 'VIEWER'].includes(r));
       if (orgRolesAllowed.length > 0) {
-        const targetOrgId =
-          (req.headers['x-organization-id'] as string) ||
-          (req.query.organization_id as string) ||
-          req.body?.organization_id ||
-          user.organization_id;
+        const rawOrgId =
+          (req.headers['x-organization-id'] as string | undefined) ??
+          (req.params?.orgId as string | undefined) ??
+          (req.query?.organization_id as string | undefined) ??
+          (req.body?.organization_id as string | undefined);
+        const targetOrgId = typeof rawOrgId === 'string' ? rawOrgId.trim() : '';
 
-        let orgRoleQuery = `
+        if (!targetOrgId) {
+          return next(new ApiError(400, 'Thiếu thông tin định danh tổ chức (organization_id) hợp lệ'));
+        }
+        if (targetOrgId.toUpperCase() === 'ALL') {
+          return next(new ApiError(403, 'Từ chối truy cập: Không hỗ trợ ngữ cảnh tổ chức toàn cục (all)'));
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrgId)) {
+          return next(new ApiError(400, 'Định dạng định danh tổ chức (organization_id) không hợp lệ'));
+        }
+
+        const orgRoleQuery = `
           SELECT r.code, r.name 
           FROM organization_members om 
           JOIN organization_roles r ON om.role_id = r.id 
-          WHERE om.user_id = $1 AND om.status = 'ACTIVE'
+          WHERE om.user_id = $1 AND om.organization_id = $2 AND om.status = 'ACTIVE'
         `;
-        const orgQueryParams: any[] = [user.id];
-        if (targetOrgId && targetOrgId !== 'all') {
-          orgRoleQuery += ` AND om.organization_id = $2`;
-          orgQueryParams.push(targetOrgId);
-        }
 
-        const orgMemberRes = await pool.query(orgRoleQuery, orgQueryParams);
+        const orgMemberRes = await pool.query(orgRoleQuery, [user.id, targetOrgId]);
         if (orgMemberRes.rows.length > 0) {
           const userOrgRoles = orgMemberRes.rows.flatMap((row: any) => [
             String(row.code || '').trim().toUpperCase(),

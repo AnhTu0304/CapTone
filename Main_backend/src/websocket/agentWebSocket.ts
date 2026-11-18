@@ -200,12 +200,18 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               data: {
                 ...msg.data,
                 id: saved.id,
+                organization_id: ws.agent.organization_id,
+                cluster_id: ws.agent.cluster_id,
                 timestamp: new Date().toISOString(),
               }
             });
 
             // GOM CÁI NÀO GỬI CÁI ĐÓ LUÔN: Ngay khi có 1 metric mới của service này, gom và phát ngay lập tức (không đợi service khác)
-            TelemetryPipelineService.processServiceBatch(msg.data.service_id).catch((err) => {
+            TelemetryPipelineService.processServiceBatch(
+              msg.data.service_id,
+              ws.agent.organization_id,
+              ws.agent.cluster_id
+            ).catch((err) => {
               console.error(`[agentWebSocket] Error processing batch on metric for ${msg.data.service_id}:`, err);
             });
 
@@ -224,7 +230,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             ) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, New Restarts: +${hasNewRestart ? 1 : 0})`
+                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, New Restarts: +${hasNewRestart ? 1 : 0})`,
+                ws.agent.organization_id,
+                ws.agent.cluster_id
               );
             }
 
@@ -252,6 +260,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                 ...msg.data,
                 id: saved.id,
                 agent_id: ws.agent.id,
+                organization_id: ws.agent.organization_id,
                 cluster_id: ws.agent.cluster_id,
                 timestamp: new Date().toISOString(),
               },
@@ -278,6 +287,8 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               data: {
                 ...msg.data,
                 id: saved.id,
+                organization_id: ws.agent.organization_id,
+                cluster_id: ws.agent.cluster_id,
                 occurred_at: new Date().toISOString(),
               }
             });
@@ -291,7 +302,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             if (isErrorLog || hasErrorKeywords) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `Error log: ${msg.data.message.slice(0, 70)}`
+                `Error log: ${msg.data.message.slice(0, 70)}`,
+                ws.agent.organization_id,
+                ws.agent.cluster_id
               );
             }
 
@@ -316,6 +329,8 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               data: {
                 ...msg.data,
                 id: saved.id,
+                organization_id: ws.agent.organization_id,
+                cluster_id: ws.agent.cluster_id,
                 last_seen_at: new Date().toISOString(),
               }
             });
@@ -327,7 +342,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             ) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `K8s Warning Event: ${msg.data.event.reason} - ${msg.data.event.message.slice(0, 70)}`
+                `K8s Warning Event: ${msg.data.event.reason} - ${msg.data.event.message.slice(0, 70)}`,
+                ws.agent.organization_id,
+                ws.agent.cluster_id
               );
             }
 
@@ -350,6 +367,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             broadcastTelemetryToUi({
               type: 'cluster_inventory_sync',
               data: {
+                organization_id: ws.agent.organization_id,
                 cluster_id: ws.agent.cluster_id,
                 nodes_count: syncResult.synced_nodes,
                 pods_count: syncResult.synced_pods,
@@ -560,6 +578,8 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                   status,
                   message,
                   agent: ws.agent.name,
+                  organization_id: ws.agent.organization_id,
+                  cluster_id: ws.agent.cluster_id,
                   incident_id: row?.incident_id,
                   timestamp: new Date().toISOString(),
                 },

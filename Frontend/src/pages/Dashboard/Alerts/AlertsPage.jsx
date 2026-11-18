@@ -517,7 +517,11 @@ export const AlertsPage = ({ initialTab = "EVENTS", onNavigate }) => {
     try {
       const token = getAuthToken();
       const wsBase = API_BASE_URL.replace(/^http/i, 'ws');
-      const wsUrl = `${wsBase}/telemetry/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      const params = new URLSearchParams();
+      if (token) params.set('token', token);
+      if (currentOrg?.id) params.set('organization_id', currentOrg.id);
+      const qs = params.toString();
+      const wsUrl = `${wsBase}/telemetry/ws${qs ? `?${qs}` : ''}`;
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {

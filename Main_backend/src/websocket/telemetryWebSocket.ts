@@ -7,13 +7,21 @@ import { UserModel } from '../models/user.model';
 import { expandRoles } from '../middlewares/rbac.middleware';
 import { TelemetryController } from '../controllers/telemetry.controller';
 import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
+import { SessionRevocationService } from '../services/sessionRevocation.service';
+import { HealingActionModel } from '../models/healingAction.model';
+import { pool } from '../config/database';
 
 interface AuthenticatedUiWebSocket extends WebSocket {
   user?: {
     id: string;
     roles: string[];
     isPrivileged: boolean;
+    isSystemAdmin: boolean;
+    allowedOrgIds: string[];
   };
+  clusterId?: string;
+  organizationId?: string;
+  serviceId?: string;
 }
 
 const uiClients = new Set<AuthenticatedUiWebSocket>();
@@ -57,9 +65,25 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
         let decoded: any = null;
         if (token) {
           try {
-            decoded = jwt.verify(token, config.jwt.secret);
+            decoded = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
           } catch {
             decoded = null;
+          }
+        }
+
+        // Kiểm tra Token Revocation (Fail-Closed ở production)
+        if (token && decoded && decoded.id) {
+          try {
+            const isRevoked = await SessionRevocationService.isTokenRevoked(token);
+            if (isRevoked) {
+              socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+              socket.destroy();
+              return;
+            }
+          } catch {
+            socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+            socket.destroy();
+            return;
           }
         }
 
@@ -89,11 +113,31 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
           return;
         }
 
-        const roles = Array.isArray(dbUser.roles) ? dbUser.roles : ['SUPER_ADMIN'];
+        // Không bao giờ fallback sang SUPER_ADMIN nếu roles không phải mảng hợp lệ
+        if (!Array.isArray(dbUser.roles)) {
+          socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+        const roles = dbUser.roles.map((r: any) => String(r).trim().toUpperCase()).filter(Boolean);
         const expanded = expandRoles(roles);
-        const isPrivileged = expanded.some((r) =>
-          ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'DEVOPS'].includes(r)
+        const isSystemAdmin = expanded.some((r) =>
+          ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(r)
         );
+
+        // Lấy danh sách tổ chức ACTIVE và vai trò tổ chức của user
+        const memberRes = await pool.query(
+          `SELECT om.organization_id, r.code AS role_code
+           FROM organization_members om
+           JOIN organization_roles r ON om.role_id = r.id
+           WHERE om.user_id = $1 AND om.status = 'ACTIVE'`,
+          [dbUser.id]
+        );
+        const allowedOrgIds: string[] = memberRes.rows.map((row: any) => row.organization_id);
+        const hasPrivilegedOrgRole = memberRes.rows.some((row: any) =>
+          ['DEVOPS', 'SME_OWNER', 'ADMIN'].includes(String(row.role_code || '').toUpperCase())
+        );
+        const isPrivileged = isSystemAdmin || hasPrivilegedOrgRole;
 
         uiWss.handleUpgrade(request, socket, head, (ws) => {
           const authWs = ws as AuthenticatedUiWebSocket;
@@ -101,6 +145,8 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
             id: dbUser.id,
             roles,
             isPrivileged,
+            isSystemAdmin,
+            allowedOrgIds,
           };
           uiWss.emit('connection', authWs, request);
         });
@@ -112,21 +158,85 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
   });
 
   uiWss.on('connection', async (ws: AuthenticatedUiWebSocket, request) => {
-    uiClients.add(ws);
-    console.log(
-      `🖥️ [UI WebSocket] Frontend client connected! (User: ${ws.user?.id}, Privileged: ${ws.user?.isPrivileged}). Active listeners: ${uiClients.size}`
-    );
-
     const parsedUrl = request.url ? url.parse(request.url, true) : null;
     const serviceId = (parsedUrl?.query?.service_id as string) || 'sme-order-service';
     const clusterId = (parsedUrl?.query?.cluster_id as string) || undefined;
-    (ws as any).clusterId = clusterId;
-    (ws as any).serviceId = serviceId;
+    const rawOrgId = (parsedUrl?.query?.organization_id as string) || '';
+    const requestedOrgId = rawOrgId.trim();
+    const isSystemAdmin = ws.user?.isSystemAdmin ?? false;
+    const allowedOrgIds = ws.user?.allowedOrgIds ?? [];
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // Kiểm tra quyền sở hữu Organization / Cluster / Service trước khi chấp nhận nhận dữ liệu (không fallback allowedOrgIds[0])
+    if (!isSystemAdmin) {
+      if (allowedOrgIds.length === 0) {
+        ws.close(4003, 'Từ chối truy cập: Bạn chưa thuộc tổ chức nào');
+        return;
+      }
+      if (!requestedOrgId || requestedOrgId.toUpperCase() === 'ALL' || !uuidRegex.test(requestedOrgId)) {
+        ws.close(4003, 'Từ chối truy cập: Thiếu hoặc không hợp lệ organization_id cho kết nối WebSocket');
+        return;
+      }
+      if (!allowedOrgIds.includes(requestedOrgId)) {
+        ws.close(4003, 'Từ chối truy cập: Bạn không thuộc tổ chức được yêu cầu');
+        return;
+      }
+      if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
+        const clusterInfo = await HealingActionModel.validateClusterBelongsToOrg(clusterId, requestedOrgId);
+        if (!clusterInfo || clusterInfo.organization_id !== requestedOrgId) {
+          ws.close(4003, 'Từ chối truy cập: Cụm Kubernetes không thuộc tổ chức được yêu cầu');
+          return;
+        }
+      }
+      if (serviceId && serviceId !== 'sme-order-service') {
+        try {
+          const svcRes = await pool.query(
+            `SELECT e.organization_id, c.id AS cluster_id
+             FROM services s
+             JOIN clusters c ON s.cluster_id = c.id
+             JOIN environments e ON c.environment_id = e.id
+             WHERE s.id::text = $1 OR s.name = $1`,
+            [serviceId]
+          );
+          if (svcRes.rows.length > 0) {
+            const matchesOrg = svcRes.rows.some((r: any) => r.organization_id === requestedOrgId);
+            if (!matchesOrg) {
+              ws.close(4003, 'Từ chối truy cập: Service không thuộc tổ chức được yêu cầu');
+              return;
+            }
+            if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
+              const matchesCluster = svcRes.rows.some(
+                (r: any) => r.organization_id === requestedOrgId && r.cluster_id === clusterId
+              );
+              if (!matchesCluster) {
+                ws.close(4003, 'Từ chối truy cập: Service không thuộc cụm Kubernetes đã chọn');
+                return;
+              }
+            }
+          }
+        } catch {
+          ws.close(4003, 'Không thể xác minh quyền sở hữu Service');
+          return;
+        }
+      }
+    } else if (requestedOrgId && requestedOrgId.toUpperCase() !== 'ALL' && !uuidRegex.test(requestedOrgId)) {
+      ws.close(4003, 'Định dạng organization_id không hợp lệ');
+      return;
+    }
+
+    ws.clusterId = clusterId;
+    ws.organizationId = requestedOrgId && requestedOrgId.toUpperCase() !== 'ALL' ? requestedOrgId : undefined;
+    ws.serviceId = serviceId;
+    uiClients.add(ws);
+    console.log(
+      `🖥️ [UI WebSocket] Frontend client connected! (User: ${ws.user?.id}, Org: ${ws.organizationId || 'GLOBAL'}, Privileged: ${ws.user?.isPrivileged}). Active listeners: ${uiClients.size}`
+    );
+
     const isPrivileged = ws.user?.isPrivileged ?? false;
 
     // Send immediate initial state upon connection
     try {
-      const summary = await TelemetryController.getLiveSummaryData(serviceId, clusterId);
+      const summary = await TelemetryController.getLiveSummaryData(serviceId, clusterId, ws.organizationId);
       const dataToSend = isPrivileged ? summary : sanitizeSummaryForViewer(summary);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
@@ -138,7 +248,7 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
         );
       }
       // Also push immediate batch_accumulation state so the 12-step chart updates right away
-      TelemetryPipelineService.processServiceBatch(serviceId).catch(() => {});
+      TelemetryPipelineService.processServiceBatch(serviceId, ws.organizationId, clusterId).catch(() => {});
     } catch (err) {
       console.error('[UI WebSocket] Error sending initial state:', err);
     }
@@ -146,10 +256,28 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
     ws.on('message', async (data) => {
       try {
         const msg = JSON.parse(data.toString());
+        if (msg.organization_id !== undefined || msg.cluster_id !== undefined) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(
+              JSON.stringify({
+                type: 'error',
+                code: 'SCOPE_IMMUTABLE',
+                message: 'Không thể thay đổi ngữ cảnh tổ chức hoặc cụm trên kết nối WebSocket hiện tại',
+                timestamp: new Date().toISOString(),
+              })
+            );
+          }
+          return;
+        }
         if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
         } else if (msg.type === 'request_refresh') {
-          const summary = await TelemetryController.getLiveSummaryData(serviceId);
+          // Luôn dùng scope bất biến đã xác thực lúc kết nối, không tin payload từ client
+          const summary = await TelemetryController.getLiveSummaryData(
+            ws.serviceId || 'sme-order-service',
+            ws.clusterId,
+            ws.organizationId
+          );
           const dataToSend = isPrivileged ? summary : sanitizeSummaryForViewer(summary);
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(
@@ -183,9 +311,9 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
     try {
       for (const client of uiClients) {
         if (client.readyState === WebSocket.OPEN) {
-          const cClusterId = (client as any).clusterId;
-          const cServiceId = (client as any).serviceId || 'sme-order-service';
-          const summary = await TelemetryController.getLiveSummaryData(cServiceId, cClusterId);
+          const cClusterId = client.clusterId;
+          const cServiceId = client.serviceId || 'sme-order-service';
+          const summary = await TelemetryController.getLiveSummaryData(cServiceId, cClusterId, client.organizationId);
           const payload = JSON.stringify({
             type: 'live_pulse',
             data: client.user?.isPrivileged ? summary : sanitizeSummaryForViewer(summary),
@@ -208,11 +336,32 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
 }
 
 /**
- * Broadcast telemetry events to active Frontend UI clients with strict role-filtering
+ * Broadcast telemetry events to active Frontend UI clients with strict role & tenant filtering
  */
-export function broadcastTelemetryToUi(payload: any) {
+export async function broadcastTelemetryToUi(payload: any) {
   if (uiClients.size === 0) return;
   const isRestricted = payload && payload.type && RESTRICTED_BROADCAST_TYPES.has(payload.type);
+
+  const claimedOrgId: string | undefined = payload?.organization_id || payload?.data?.organization_id;
+  const payloadClusterId: string | undefined = payload?.cluster_id || payload?.data?.cluster_id;
+
+  let resolvedOrgId: string | undefined = claimedOrgId;
+  if (payloadClusterId) {
+    try {
+      const clusterInfo = await HealingActionModel.validateClusterBelongsToOrg(payloadClusterId);
+      if (clusterInfo?.organization_id) {
+        // WS-12: Nếu payload khai báo organization_id mâu thuẫn với cluster thực tế -> hủy broadcast
+        if (claimedOrgId && claimedOrgId !== clusterInfo.organization_id) {
+          console.warn(`[TelemetryWS] Dropped inconsistent broadcast: claimed org=${claimedOrgId}, cluster org=${clusterInfo.organization_id}`);
+          return;
+        }
+        resolvedOrgId = clusterInfo.organization_id;
+      }
+    } catch {
+      return;
+    }
+  }
+
   const message = JSON.stringify(payload);
 
   for (const client of uiClients) {
@@ -220,6 +369,16 @@ export function broadcastTelemetryToUi(payload: any) {
       // Viewer/User clients are prohibited from receiving sensitive RCA/AI/Logs/Events
       if (isRestricted && !client.user?.isPrivileged) {
         continue;
+      }
+      // WS-11 & A-C02: Nếu payload không có danh tính tenant tin cậy, hoặc không khớp với org đang bind trên socket -> không broadcast
+      if (!client.user?.isSystemAdmin) {
+        if (
+          !resolvedOrgId ||
+          !client.user?.allowedOrgIds?.includes(resolvedOrgId) ||
+          (client.organizationId && client.organizationId !== resolvedOrgId)
+        ) {
+          continue;
+        }
       }
       client.send(message);
     }

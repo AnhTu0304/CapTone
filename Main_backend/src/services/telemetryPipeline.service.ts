@@ -14,10 +14,80 @@ import { RecoveryVerificationService } from './recoveryVerification.service';
 export class TelemetryPipelineService {
   private static isRunning = false;
   private static intervalHandle: NodeJS.Timeout | null = null;
+  private static readonly STATE_TTL_MS = 30 * 60 * 1000;
   // Boundary tracking: only take time-buckets STRICTLY AFTER this timestamp
   private static lastEvaluatedBucketTimestamp: Record<string, Date | null> = {};
   private static urgentReasonByService: Record<string, string> = {};
   private static isProcessingService: Record<string, boolean> = {};
+
+  private static buildLockKey(serviceId: string, organizationId: string, clusterId: string): string {
+    return `${organizationId.trim().toLowerCase()}:${clusterId.trim()}:${serviceId.trim()}`;
+  }
+
+  private static pruneStalePipelineState(activeLockKeys: Set<string>, nowMs: number = Date.now()): void {
+    for (const [key, ts] of Object.entries(this.lastEvaluatedBucketTimestamp)) {
+      if (!activeLockKeys.has(key) && !this.isProcessingService[key]) {
+        if (!ts || nowMs - ts.getTime() > this.STATE_TTL_MS) {
+          delete this.lastEvaluatedBucketTimestamp[key];
+          delete this.urgentReasonByService[key];
+          delete this.isProcessingService[key];
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute one tenant-aware background pipeline cycle across all active tenant buffers.
+   */
+  public static async runPipelineCycle(): Promise<void> {
+    const startHr = process.hrtime.bigint();
+    try {
+      // Tự động đối soát và giải phóng định kỳ mọi tác vụ RUNNING bị treo quá 60s
+      try {
+        await pool.query(
+          `UPDATE healing_actions 
+           SET execution_status = 'FAILED', 
+               completed_at = NOW(),
+               error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
+               result = jsonb_set(
+                 COALESCE(result, '{}'::jsonb),
+                 '{error}',
+                 '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
+               ) 
+           WHERE execution_status = 'RUNNING' 
+             AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds';`
+        );
+      } catch (sweeperErr) {
+        console.warn('[TelemetryPipeline] Lỗi dọn dẹp định kỳ timeout healing actions:', sweeperErr);
+      }
+
+      const activeTargets = await TelemetryBufferService.getActiveTenantBuffers(5);
+      const activeLockKeys = new Set(
+        activeTargets.map((t) => this.buildLockKey(t.serviceId, t.organizationId, t.clusterId))
+      );
+      this.pruneStalePipelineState(activeLockKeys);
+
+      if (!activeTargets || activeTargets.length === 0) {
+        recordBackgroundJob('telemetry_pipeline', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
+        return;
+      }
+
+      await Promise.allSettled(
+        activeTargets.map((target) =>
+          this.processServiceBatch(target.serviceId, target.organizationId, target.clusterId).catch((err) => {
+            console.error(
+              `[TelemetryPipeline] Error processing org=${target.organizationId} cluster=${target.clusterId} service=${target.serviceId}:`,
+              err?.message || err
+            );
+          })
+        )
+      );
+      recordBackgroundJob('telemetry_pipeline', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
+    } catch (err) {
+      recordBackgroundJob('telemetry_pipeline', 'error', Number(process.hrtime.bigint() - startHr) / 1e9);
+      console.error('[TelemetryPipeline] Error in background cycle:', err);
+    }
+  }
 
   /**
    * Start the continuous background pipeline for Tumbling Batches (Lô 12 điểm mới tinh):
@@ -28,44 +98,8 @@ export class TelemetryPipelineService {
     this.isRunning = true;
     console.log(`⚡ [TelemetryPipeline] Background Tumbling Batch AI Pipeline started (polling every ${intervalSeconds}s for full 12 fresh points)`);
 
-    this.intervalHandle = setInterval(async () => {
-      const startHr = process.hrtime.bigint();
-      try {
-        // Tự động đối soát và giải phóng định kỳ mọi tác vụ RUNNING bị treo quá 60s
-        try {
-          await pool.query(
-            `UPDATE healing_actions 
-             SET execution_status = 'FAILED', 
-                 completed_at = NOW(),
-                 error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
-                 result = jsonb_set(
-                   COALESCE(result, '{}'::jsonb),
-                   '{error}',
-                   '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
-                 ) 
-             WHERE execution_status = 'RUNNING' 
-               AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds';`
-          );
-        } catch (sweeperErr) {
-          console.warn('[TelemetryPipeline] Lỗi dọn dẹp định kỳ timeout healing actions:', sweeperErr);
-        }
-        const activeServices = await TelemetryBufferService.getActiveServices(5);
-        if (!activeServices || activeServices.length === 0) {
-          recordBackgroundJob('telemetry_pipeline', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
-          return;
-        }
-        await Promise.all(
-          activeServices.map((sId) =>
-            this.processServiceBatch(sId).catch((err) => {
-              console.error(`[TelemetryPipeline] Error processing service ${sId}:`, err?.message || err);
-            })
-          )
-        );
-        recordBackgroundJob('telemetry_pipeline', 'success', Number(process.hrtime.bigint() - startHr) / 1e9);
-      } catch (err) {
-        recordBackgroundJob('telemetry_pipeline', 'error', Number(process.hrtime.bigint() - startHr) / 1e9);
-        console.error('[TelemetryPipeline] Error in background cycle:', err);
-      }
+    this.intervalHandle = setInterval(() => {
+      void this.runPipelineCycle();
     }, 5000);
   }
 
@@ -74,8 +108,16 @@ export class TelemetryPipelineService {
    * so when the 12-point batch completes, RCA is guaranteed to evaluate it without
    * bypassing the 12-point tumbling batch rule.
    */
-  public static triggerUrgentEvaluation(serviceId: string, reason: string) {
-    this.urgentReasonByService[serviceId] = reason;
+  public static triggerUrgentEvaluation(
+    serviceId: string,
+    reason: string,
+    organizationId?: string | null,
+    clusterId?: string | null
+  ) {
+    const key = TelemetryBufferService.isValidTenantContext(organizationId, clusterId, serviceId)
+      ? this.buildLockKey(serviceId, organizationId!, clusterId!)
+      : serviceId;
+    this.urgentReasonByService[key] = reason;
   }
 
   /**
@@ -85,24 +127,63 @@ export class TelemetryPipelineService {
    * 3. When 12 new points reached: Advance boundary immediately so next batch [1/12] accumulates in parallel,
    *    and feed all 12 points into GRU + RCA asynchronously without blocking!
    */
-  public static async processServiceBatch(serviceId: string) {
-    if (this.isProcessingService[serviceId]) return;
-    this.isProcessingService[serviceId] = true;
+  public static async processServiceBatch(
+    serviceId: string,
+    organizationId?: string | null,
+    clusterId?: string | null
+  ) {
+    if (!TelemetryBufferService.isValidTenantContext(organizationId, clusterId, serviceId)) {
+      console.warn(
+        `[TelemetryPipeline] Rejected batch processing with missing or invalid tenant context (org=${organizationId}, cluster=${clusterId}, service=${serviceId})`
+      );
+      return;
+    }
+
+    const normalizedOrgId = organizationId!.trim().toLowerCase();
+    const normalizedClusterId = clusterId!.trim();
+    const normalizedServiceId = serviceId.trim();
+    const lockKey = this.buildLockKey(normalizedServiceId, normalizedOrgId, normalizedClusterId);
+
+    if (this.isProcessingService[lockKey]) return;
+    this.isProcessingService[lockKey] = true;
     try {
-      const lastBucket = this.lastEvaluatedBucketTimestamp[serviceId];
+      const lastBucket = this.lastEvaluatedBucketTimestamp[lockKey];
 
       // 1. Luôn lấy 12 điểm viễn trắc gần nhất từ In-Memory Buffer (RAM / Redis)
-      const displayPoints = await TelemetryBufferService.getDisplayPoints(serviceId, 5, 12);
+      const displayPoints = await TelemetryBufferService.getDisplayPoints(
+        normalizedServiceId,
+        5,
+        12,
+        normalizedOrgId,
+        normalizedClusterId
+      );
       if (displayPoints.length === 0) return;
 
       // 2. Lấy số điểm MỚI TINH phát sinh sau mốc đánh giá gần nhất (Tumbling Batch từ RAM / Redis)
       const freshBatch = await TelemetryBufferService.getFreshBatch(
-        serviceId,
+        normalizedServiceId,
         5, // 5s bucket
         lastBucket,
-        12 // batch size: 12 điểm mới
+        12, // batch size: 12 điểm mới
+        normalizedOrgId,
+        normalizedClusterId
       );
 
+      if (freshBatch.organizationId && freshBatch.organizationId.trim().toLowerCase() !== normalizedOrgId) {
+        console.warn(
+          `[TelemetryPipeline] Aborted batch with mismatched organizationId (expected=${normalizedOrgId}, got=${freshBatch.organizationId})`
+        );
+        return;
+      }
+      if (freshBatch.clusterId && freshBatch.clusterId.trim() !== normalizedClusterId) {
+        console.warn(
+          `[TelemetryPipeline] Aborted batch with mismatched clusterId (expected=${normalizedClusterId}, got=${freshBatch.clusterId})`
+        );
+        return;
+      }
+
+      const batchOrgId = normalizedOrgId;
+      const batchClusterId = normalizedClusterId;
       const count = freshBatch.points.length;
 
       // Nếu vừa chốt 12/12 (lastBucket đã có) và đang trong cùng khung 5s chưa sang bucket mới (count === 0):
@@ -113,7 +194,9 @@ export class TelemetryPipelineService {
           broadcastTelemetryToUi({
             type: 'batch_accumulation',
             data: {
-              service_id: serviceId,
+              service_id: normalizedServiceId,
+              organization_id: batchOrgId,
+              cluster_id: batchClusterId,
               collected: 12,
               target: 12,
               active_step: 12,
@@ -136,7 +219,9 @@ export class TelemetryPipelineService {
       broadcastTelemetryToUi({
         type: 'batch_accumulation',
         data: {
-          service_id: serviceId,
+          service_id: normalizedServiceId,
+          organization_id: batchOrgId,
+          cluster_id: batchClusterId,
           collected: count,
           target: 12,
           active_step: currentStep,
@@ -153,39 +238,46 @@ export class TelemetryPipelineService {
 
       // NẾU CHƯA ĐỦ 12 ĐIỂM MỚI: CHỜ TIẾP, TUYỆT ĐỐI CHƯA GỬI VÀO MÔ HÌNH AI!
       if (count < 12) {
-        console.log(`⏳ [TelemetryPipeline] '${serviceId}': Đang gom [${count}/12 điểm mới]. Chưa đủ 12 điểm nên chưa gửi vào mô hình AI...`);
+        console.log(`⏳ [TelemetryPipeline] '${normalizedServiceId}': Đang gom [${count}/12 điểm mới]. Chưa đủ 12 điểm nên chưa gửi vào mô hình AI...`);
+        return;
+      }
+
+      // Chống xử lý trùng lặp cùng 1 lô nếu mốc thời gian không vượt quá lô đã đánh giá
+      if (lastBucket && freshBatch.latestTimeBucket && freshBatch.latestTimeBucket.getTime() <= lastBucket.getTime()) {
         return;
       }
 
       // ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12):
       // 1. Cập nhật mốc chốt chặn NGAY LẬP TỨC để lô tiếp theo [1/12] gom song song không phải đợi AI/RCA!
-      this.lastEvaluatedBucketTimestamp[serviceId] = freshBatch.latestTimeBucket || new Date();
-      delete this.urgentReasonByService[serviceId];
+      this.lastEvaluatedBucketTimestamp[lockKey] = freshBatch.latestTimeBucket || new Date();
+      delete this.urgentReasonByService[lockKey];
 
       const batchPointsSnapshot = [...freshBatch.points];
       const displayPointsSnapshot = [...displayPoints];
-      const batchClusterId = freshBatch.clusterId;
 
-      console.log(`🎯 [TelemetryPipeline] '${serviceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Đẩy bất đồng bộ sang mô hình AI & tiếp tục gom lô mới ngay lập tức...`);
+      console.log(`🎯 [TelemetryPipeline] '${normalizedServiceId}': ĐÃ GOM ĐỦ 12 ĐIỂM MỚI TINH (12/12)! Đẩy bất đồng bộ sang mô hình AI & tiếp tục gom lô mới ngay lập tức...`);
 
-      // 2. Chạy GRU và RCA hoàn toàn bất đồng bộ (non-blocking) ở background để không khóa isProcessingService[serviceId]
+      // 2. Chạy GRU và RCA hoàn toàn bất đồng bộ (non-blocking) ở background để không khóa lockKey
       (async () => {
         try {
-          const result = await TelemetryAggregatorService.evaluateAndDiagnoseService(serviceId, {
+          const result = await TelemetryAggregatorService.evaluateAndDiagnoseService(normalizedServiceId, {
             bucketSeconds: 5,
             windowMinutes: 30,
             forceRca: false,
             autoTriggerRca: true,
             providedSequence: batchPointsSnapshot,
             clusterId: batchClusterId,
+            organizationId: batchOrgId,
             onGruPrediction: (gruPred) => {
               // Broadcast kết quả dự đoán GRU NGAY LẬP TỨC khi GRU vừa trả về (không đợi RCA)
               broadcastTelemetryToUi({
                 type: 'ai_prediction',
                 data: {
                   ...gruPred,
-                  workload_name: serviceId,
-                  service_id: serviceId,
+                  organization_id: batchOrgId,
+                  cluster_id: batchClusterId,
+                  workload_name: normalizedServiceId,
+                  service_id: normalizedServiceId,
                   active_step: 12,
                   sequence: displayPointsSnapshot,
                   evaluated_at: new Date().toISOString(),
@@ -197,12 +289,12 @@ export class TelemetryPipelineService {
 
           // Nếu phát hiện nguy cơ cao -> Kích hoạt RCA & đề xuất khắc phục
           if (result.rca_triggered && result.rca_diagnosis) {
-            console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS on '${serviceId}': ${result.rca_diagnosis.root_cause.cause}`);
+            console.log(`🎯 [TelemetryPipeline] RCA DIAGNOSIS on '${normalizedServiceId}': ${result.rca_diagnosis.root_cause.cause}`);
 
             // Lưu snapshot 12 bước viễn trắc lúc xảy ra sự cố từ RAM vào PostgreSQL
             await TelemetryBufferService.persistIncidentSnapshot(
               result.rca_diagnosis.incident_id,
-              serviceId,
+              normalizedServiceId,
               batchPointsSnapshot
             );
 
@@ -210,8 +302,10 @@ export class TelemetryPipelineService {
               type: 'incident',
               data: {
                 id: result.rca_diagnosis.incident_id,
-                service_id: serviceId,
-                title: `${result.rca_diagnosis.root_cause.cause} trên dịch vụ ${serviceId}`,
+                organization_id: batchOrgId,
+                cluster_id: batchClusterId,
+                service_id: normalizedServiceId,
+                title: `${result.rca_diagnosis.root_cause.cause} trên dịch vụ ${normalizedServiceId}`,
                 severity: result.rca_diagnosis.root_cause.severity,
                 cause: result.rca_diagnosis.root_cause.cause,
                 explanation: result.rca_diagnosis.explanation,
@@ -223,6 +317,7 @@ export class TelemetryPipelineService {
               type: 'ai_recommendation',
               data: {
                 id: result.rca_diagnosis.recommendation_id,
+                organization_id: batchOrgId,
                 incident_id: result.rca_diagnosis.incident_id,
                 recommendation: result.rca_diagnosis.recommendation.action,
                 action: result.rca_diagnosis.recommendation.action,
@@ -230,29 +325,34 @@ export class TelemetryPipelineService {
                 reason: result.rca_diagnosis.recommendation.reason,
                 reasoning: result.rca_diagnosis.recommendation.reason,
                 priority: result.rca_diagnosis.recommendation.priority,
-                target_name: serviceId,
-                target_id: serviceId,
-                incident_title: `${result.rca_diagnosis.root_cause.cause} trên dịch vụ ${serviceId}`,
-                cluster_id: (result.rca_diagnosis as any)?.cluster_id,
+                target_name: normalizedServiceId,
+                target_id: normalizedServiceId,
+                incident_title: `${result.rca_diagnosis.root_cause.cause} trên dịch vụ ${normalizedServiceId}`,
+                cluster_id: (result.rca_diagnosis as any)?.cluster_id || batchClusterId,
                 created_at: new Date().toISOString(),
               },
             });
 
             await TelemetryPipelineService.evaluatePolicyAndTriggerAutonomousHealing(
               result.rca_diagnosis,
-              serviceId
+              normalizedServiceId
             );
           } else if (!result.rca_triggered && (result.rule_evaluation?.anomalies?.length ?? 0) === 0) {
-            await TelemetryPipelineService.autoResolveIfRecovered(serviceId, batchClusterId, batchPointsSnapshot);
+            await TelemetryPipelineService.autoResolveIfRecovered(
+              normalizedServiceId,
+              batchClusterId,
+              batchPointsSnapshot,
+              batchOrgId
+            );
           }
         } catch (bgErr: any) {
-          console.error(`[TelemetryPipeline] Async GRU/RCA error on ${serviceId}:`, bgErr?.message || bgErr);
+          console.error(`[TelemetryPipeline] Async GRU/RCA error on ${normalizedServiceId}:`, bgErr?.message || bgErr);
         }
       })();
     } catch (err: any) {
-      console.error(`[TelemetryPipeline] Processing error on ${serviceId}:`, err?.message || err);
+      console.error(`[TelemetryPipeline] Processing error on ${normalizedServiceId}:`, err?.message || err);
     } finally {
-      this.isProcessingService[serviceId] = false;
+      this.isProcessingService[lockKey] = false;
     }
   }
 
@@ -263,7 +363,8 @@ export class TelemetryPipelineService {
   public static async autoResolveIfRecovered(
     serviceId: string,
     clusterId?: string | null,
-    providedSequence?: any[]
+    providedSequence?: any[],
+    organizationId?: string | null
   ): Promise<void> {
     try {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -415,6 +516,8 @@ export class TelemetryPipelineService {
         broadcastTelemetryToUi({
           type: 'incident_resolved',
           data: {
+            organization_id: organizationId || undefined,
+            cluster_id: clusterId || undefined,
             service_id: serviceId,
             incident_ids: resolvedIds,
             timestamp: new Date().toISOString(),
@@ -714,6 +817,8 @@ export class TelemetryPipelineService {
               type: 'approval_created',
               data: {
                 id: pendingActionId,
+                organization_id: policy.organization_id,
+                cluster_id: (rca as any)?.cluster_id,
                 incident_id: rca.incident_id,
                 target_name: canonicalTargetName,
                 policy_name: policy.policy_name,
@@ -843,6 +948,8 @@ export class TelemetryPipelineService {
         type: 'healing_action_triggered',
         data: {
           action_id: actionId,
+          organization_id: policy.organization_id,
+          cluster_id: (rca as any)?.cluster_id,
           incident_id: rca.incident_id,
           policy_name: policy.policy_name,
           action_type: policy.action_name,
@@ -922,5 +1029,12 @@ export class TelemetryPipelineService {
       this.intervalHandle = null;
     }
     this.isRunning = false;
+  }
+
+  public static resetState() {
+    this.stopPipeline();
+    this.lastEvaluatedBucketTimestamp = {};
+    this.urgentReasonByService = {};
+    this.isProcessingService = {};
   }
 }

@@ -36,6 +36,17 @@ import SecurityPracticesPage from '../pages/SecurityPractices';
 import PrivacyPage from '../pages/Privacy';
 import TermsPage from '../pages/Terms';
 import ForbiddenPage from '../pages/Error/ForbiddenPage';
+import {
+  UnauthorizedPage,
+  NotFoundPage,
+  ServerErrorPage,
+  ServiceUnavailablePage,
+  TooManyRequestsPage,
+  AgentOfflinePage,
+  ClusterLostPage,
+  MonitoringStatusPage,
+  MaintenancePage,
+} from '../pages/Error/StatusPages';
 import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
 import { useAuth } from '../context/AuthContext';
 
@@ -124,8 +135,28 @@ export const RouteRenderer = ({
   const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
 
-  if (path === '/403' || path === '/forbidden') {
-    return <ForbiddenPage onNavigate={onNavigate} />;
+  const statusRoutes = {
+    '/401': <UnauthorizedPage onNavigate={onNavigate} />,
+    '/unauthorized': <UnauthorizedPage onNavigate={onNavigate} />,
+    '/403': <ForbiddenPage onNavigate={onNavigate} />,
+    '/forbidden': <ForbiddenPage onNavigate={onNavigate} />,
+    '/404': <NotFoundPage onNavigate={onNavigate} />,
+    '/not-found': <NotFoundPage onNavigate={onNavigate} />,
+    '/500': <ServerErrorPage onNavigate={onNavigate} />,
+    '/503': <ServiceUnavailablePage onNavigate={onNavigate} />,
+    '/429': <TooManyRequestsPage onNavigate={onNavigate} />,
+    '/status/agent-offline': <AgentOfflinePage onNavigate={onNavigate} />,
+    '/status/cluster-lost': <ClusterLostPage onNavigate={onNavigate} />,
+    '/status/monitoring': <MonitoringStatusPage onNavigate={onNavigate} />,
+    '/maintenance': <MaintenancePage onNavigate={onNavigate} />,
+  };
+
+  if (statusRoutes[path]) {
+    return (
+      <PublicLayout currentPath={path} onNavigate={onNavigate}>
+        {statusRoutes[path]}
+      </PublicLayout>
+    );
   }
 
   // Handle profile routes (unify into Personal Portal Profile)

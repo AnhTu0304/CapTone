@@ -1,4 +1,5 @@
 import { AuditService, IAuditRequestContext } from './audit.service';
+import { SystemRoleService } from './systemRole.service';
 import { AuditAction } from '../models/auditLog.model';
 import { pool } from '../config/database';
 import { HealingActionModel, IHealingActionFilter } from '../models/healingAction.model';
@@ -40,9 +41,6 @@ export class HealingActionService {
         [user.id]
       );
       allowedOrgIds = memberRes.rows.map((r: any) => r.organization_id);
-      if (user.organization_id && !allowedOrgIds.includes(user.organization_id)) {
-        allowedOrgIds.push(user.organization_id);
-      }
       if (allowedOrgIds.length === 0) {
         throw new ApiError(
           403,
@@ -51,14 +49,18 @@ export class HealingActionService {
       }
     }
 
-    // Xác định tổ chức mục tiêu (cho phép truy cập cụm Lab mặc định 00000000-0000-0000-0000-000000000001)
-    let targetOrgId = organizationId && organizationId.toUpperCase() !== 'ALL' ? organizationId : user.organization_id;
-    if (!targetOrgId && !isSystemAdmin) {
-      targetOrgId = allowedOrgIds[0];
+    // Strict mode: không fallback sang tổ chức đầu tiên và không chấp nhận 'ALL' cho non-system-admin
+    const rawOrgId = organizationId ? String(organizationId).trim() : '';
+    const isAll = rawOrgId.toUpperCase() === 'ALL';
+    if (!isSystemAdmin && (!rawOrgId || isAll)) {
+      throw new ApiError(403, 'Từ chối truy cập: Thiếu hoặc không hợp lệ ngữ cảnh tổ chức (organization_id)');
     }
-    const isDefaultSharedOrg = targetOrgId === '00000000-0000-0000-0000-000000000001';
+    const targetOrgId = rawOrgId && !isAll ? rawOrgId : undefined;
+    if (targetOrgId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrgId)) {
+      throw new ApiError(400, 'Định dạng định danh tổ chức (organization_id) không hợp lệ');
+    }
 
-    if (!isSystemAdmin && targetOrgId && !isDefaultSharedOrg) {
+    if (!isSystemAdmin && targetOrgId) {
       if (!allowedOrgIds.includes(targetOrgId)) {
         throw new ApiError(
           403,
@@ -68,7 +70,7 @@ export class HealingActionService {
     }
 
     // Kiểm tra tính hợp lệ của Cụm K8s (nếu có cung cấp)
-    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all' && !isDefaultSharedOrg) {
+    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
       const clusterCheck = await HealingActionModel.validateClusterBelongsToOrg(clusterId, targetOrgId);
       if (!clusterCheck && !isSystemAdmin) {
         throw new ApiError(
@@ -190,13 +192,34 @@ export class HealingActionService {
       risk_level?: string;
       execution_mode?: string;
     },
-    userId?: string | null
+    userId?: string | null,
+    user?: any
   ) {
     if (!data.incident_id || !data.environment_id || !data.action_type_id) {
       throw new ApiError(
         400,
         'Thiếu thông tin bắt buộc: incident_id, environment_id, action_type_id'
       );
+    }
+
+    if (user) {
+      const envRes = await pool.query(
+        `SELECT organization_id FROM environments WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+        [data.environment_id]
+      );
+      if (envRes.rows.length === 0) {
+        throw new ApiError(403, 'Từ chối truy cập: Môi trường không hợp lệ hoặc không thuộc tổ chức của bạn');
+      }
+      const envOrgId = envRes.rows[0].organization_id;
+      await this.validateUserOrgAndCluster(user, envOrgId);
+
+      const incRes = await pool.query(
+        `SELECT environment_id FROM incidents WHERE id = $1 LIMIT 1`,
+        [data.incident_id]
+      );
+      if (incRes.rows.length > 0 && incRes.rows[0].environment_id !== data.environment_id) {
+        throw new ApiError(403, 'Từ chối truy cập: Sự cố không thuộc môi trường/tổ chức được chỉ định');
+      }
     }
 
     const created = await HealingActionModel.createAction({
@@ -529,20 +552,50 @@ export class HealingActionService {
   }
 
   /**
-   * 5. Update execution status
+   * 5. Update execution status (with Tenant Isolation & Atomic Update)
    */
   public static async updateActionStatus(
     actionId: string,
     status: string,
     result?: any,
-    errorMessage?: string
+    errorMessage?: string,
+    user?: any,
+    requestedOrgId?: string
   ) {
     if (!actionId || !status) {
       throw new ApiError(400, 'Mã hành động và trạng thái không được để trống');
     }
 
-    const updated = await HealingActionModel.updateStatus(actionId, status, result, errorMessage);
+    let scopedOrgId: string | undefined;
+    if (user) {
+      const action = await HealingActionModel.findActionById(actionId);
+      if (!action) {
+        throw new ApiError(404, 'Không tìm thấy hành động để cập nhật trạng thái');
+      }
+      const systemRoles = [
+        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
+        ...(Array.isArray(user.roles) ? user.roles : []),
+        ...(user.role ? [user.role] : []),
+      ].map((r: string) => String(r).trim().toUpperCase());
+      const isSystemAdmin = systemRoles.includes('SUPER_ADMIN') || systemRoles.includes('SYSTEM_ADMIN');
+      if (!isSystemAdmin && requestedOrgId && action.organization_id !== requestedOrgId.trim()) {
+        throw new ApiError(403, 'Từ chối truy cập: Hành động không thuộc tổ chức được yêu cầu');
+      }
+      const validation = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      if (!isSystemAdmin) {
+        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id, user.id);
+        if (!member || member.status !== 'ACTIVE' || String(member.role_code || '').toUpperCase() === 'VIEWER') {
+          throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền cập nhật trạng thái hành động này');
+        }
+        scopedOrgId = validation.orgId || action.organization_id;
+      }
+    }
+
+    const updated = await HealingActionModel.updateStatus(actionId, status, result, errorMessage, scopedOrgId);
     if (!updated) {
+      if (scopedOrgId) {
+        throw new ApiError(403, 'Từ chối truy cập: Hành động không thuộc tổ chức được ủy quyền');
+      }
       throw new ApiError(404, 'Không tìm thấy hành động để cập nhật trạng thái');
     }
     return updated;
@@ -556,7 +609,7 @@ export class HealingActionService {
   }
 
   /**
-   * 7. Update action type configuration
+   * 7. Update action type configuration (System SUPER_ADMIN / System ADMIN only)
    */
   public static async updateActionType(
     id: string,
@@ -565,10 +618,21 @@ export class HealingActionService {
       default_risk_level?: string;
       requires_approval_by_default?: boolean;
       description?: string;
-    }
+    },
+    user?: any
   ) {
     if (!id) {
       throw new ApiError(400, 'Mã loại hành động không hợp lệ');
+    }
+
+    if (user) {
+      if (!user.id) {
+        throw new ApiError(401, 'Yêu cầu đăng nhập trước khi cập nhật loại hành động');
+      }
+      const isSystemAdmin = await SystemRoleService.hasAnyRole(user.id, ['SUPER_ADMIN', 'ADMIN']);
+      if (!isSystemAdmin) {
+        throw new ApiError(403, 'Từ chối truy cập: Chỉ System SUPER_ADMIN hoặc System ADMIN mới được cập nhật loại hành động toàn cục');
+      }
     }
 
     const updated = await HealingActionModel.updateActionType(id, data);

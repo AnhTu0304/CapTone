@@ -774,7 +774,9 @@ export const telemetryService = {
           localStorage.getItem('token');
         const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
         const clusterParam = clusterId ? `&cluster_id=${encodeURIComponent(clusterId)}` : '';
-        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}${clusterParam}${tokenParam}`;
+        const orgId = getActiveOrganizationId();
+        const orgParam = orgId ? `&organization_id=${encodeURIComponent(orgId)}` : '';
+        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}${clusterParam}${orgParam}${tokenParam}`;
 
         ws = new WebSocket(wsUrl);
 

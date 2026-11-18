@@ -735,27 +735,47 @@ export class HealingActionModel {
     actionId: string,
     status: string,
     result?: any,
-    errorMessage?: string
+    errorMessage?: string,
+    organizationId?: string
   ): Promise<any> {
-    const validStatuses = ['PENDING', 'QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED'];
-    const safeStatus = validStatuses.includes(status.toUpperCase()) ? status.toUpperCase() : 'SUCCEEDED';
+    const validStatuses = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
+    const normalizedStatus = status.toUpperCase() === 'SUCCEEDED' ? 'COMPLETED' : status.toUpperCase();
+    const safeStatus = validStatuses.includes(normalizedStatus) ? normalizedStatus : 'COMPLETED';
 
-    const query = `
+    const query = organizationId
+      ? `
+      UPDATE healing_actions h
+      SET execution_status = $2::execution_status,
+          error_message = $3,
+          result = COALESCE($4::jsonb, h.result),
+          completed_at = CASE WHEN $2::text IN ('COMPLETED', 'FAILED', 'CANCELLED') THEN NOW() ELSE h.completed_at END
+      FROM environments e
+      WHERE h.id = $1
+        AND h.environment_id = e.id
+        AND e.organization_id = $5::uuid
+      RETURNING h.*;
+    `
+      : `
       UPDATE healing_actions 
       SET execution_status = $2::execution_status,
           error_message = $3,
           result = COALESCE($4::jsonb, result),
-          completed_at = CASE WHEN $2 IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN NOW() ELSE completed_at END
+          completed_at = CASE WHEN $2::text IN ('COMPLETED', 'FAILED', 'CANCELLED') THEN NOW() ELSE completed_at END
       WHERE id = $1
       RETURNING *;
     `;
 
-    const res = await pool.query(query, [
+    const params = [
       actionId,
       safeStatus,
       errorMessage || null,
       result ? JSON.stringify(result) : null,
-    ]);
+    ];
+    if (organizationId) {
+      params.push(organizationId);
+    }
+
+    const res = await pool.query(query, params);
 
     return res.rows[0] || null;
   }

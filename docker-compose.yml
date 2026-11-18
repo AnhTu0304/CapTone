@@ -15,7 +15,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-captone_db}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-captone_db}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,13 +29,13 @@ services:
     image: redis:7-alpine
     container_name: captone-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
     ports:
       - "${REDIS_HOST_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -94,7 +94,7 @@ services:
     ports:
       - "${BACKEND_PORT:-5005}:5000"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -131,7 +131,7 @@ services:
     ports:
       - "${AI_PORT:-8005}:8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -153,7 +153,7 @@ services:
     environment:
       - NODE_ENV=production
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
+      test: [ "CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:80/ || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -179,7 +179,7 @@ services:
     ports:
       - "${INSTALLER_PORT:-8105}:8100"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -206,10 +206,9 @@ services:
       - "443:443"
     networks:
       - captone-network
-
   # ==========================================
-# Volumes & Networks
-# ==========================================
+  # Volumes & Networks
+  # ==========================================
 volumes:
   postgres_data:
     driver: local

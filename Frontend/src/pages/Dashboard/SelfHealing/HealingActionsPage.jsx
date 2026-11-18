@@ -323,7 +323,9 @@ export const HealingActionsPage = ({ onNavigate }) => {
         localStorage.getItem('token');
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
       const clusterParam = activeClusterId ? `&cluster_id=${encodeURIComponent(activeClusterId)}` : '';
-      const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?${tokenParam}${clusterParam}`;
+      const orgId = localStorage.getItem('selfheal_active_org_id');
+      const orgParam = orgId ? `&organization_id=${encodeURIComponent(orgId)}` : '';
+      const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?${tokenParam}${clusterParam}${orgParam}`;
 
       ws = new WebSocket(wsUrl);
       ws.onmessage = (event) => {
