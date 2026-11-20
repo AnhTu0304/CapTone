@@ -5,15 +5,19 @@ import { clusterService } from '../../../services/clusterService';
 import RootCauseModal from './RootCauseModal';
 import { translateIncidentTitle, translateSeverity } from './incidentUtils';
 import {
+  extractActiveK8sServices,
+  normalizeK8sServiceName,
+} from '../../../utils/k8sServiceFilter';
+import {
   AlertTriangle,
   CheckCircle2,
   Clock,
   Search,
   RefreshCw,
+  RotateCcw,
   Zap,
   Layers,
   Eye,
-  Database,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
@@ -21,10 +25,9 @@ import {
   ChevronsRight,
   Calendar,
   ChevronDown,
-  Activity
+  Activity,
+  X,
 } from 'lucide-react';
-
-const INITIAL_INCIDENTS = [];
 
 // Helper lấy chuỗi ngày tháng năm theo giờ địa phương
 const getTodayStr = () => {
@@ -87,7 +90,7 @@ const VALID_RISKS = new Set([
   'SCALE_DOWN_CANDIDATE',
 ]);
 
-// Danh sách các workload kinh doanh chuẩn của hệ thống
+// Danh sách các workload kinh doanh và hạ tầng chuẩn của hệ thống
 const KNOWN_SERVICES = [
   'attack-injector-app',
   'chaos-testagent2',
@@ -95,6 +98,11 @@ const KNOWN_SERVICES = [
   'mongodb',
   'selfheal-test-app',
   'sme-order-service',
+  'opentelemetry-collector',
+  'kube-state-metrics',
+  'kube-prometheus-stack-operator',
+  'prometheus',
+  'prometheus-node-exporter',
 ];
 
 const cleanServiceName = (raw) => {
@@ -105,6 +113,9 @@ const cleanServiceName = (raw) => {
   const lower = s.toLowerCase();
   if (lower === 'ecommerce-store') return 'ecommerce-store-app';
   if (/^mongodb-\d+$/i.test(lower)) return 'mongodb';
+  if (lower === 'otel-collector-opentelemetry-collector') return 'opentelemetry-collector';
+  if (lower === 'prometheus-kube-state-metrics') return 'kube-state-metrics';
+  if (lower === 'prometheus-kube-prometheus-operator') return 'kube-prometheus-stack-operator';
   if (KNOWN_SERVICES.includes(lower)) {
     return lower;
   }
@@ -470,17 +481,43 @@ export const IncidentsPage = ({ onNavigate }) => {
     };
   }, [deepLinkIncidentId, incidents, registeredWorkloads]);
 
-  // Tải danh sách cụm K8s và Workloads đã đăng ký trong tổ chức
+  const activeClusterForWorkloads = useMemo(() => {
+    if (selectedCluster && selectedCluster !== 'all') {
+      if (
+        currentEnv?.clusterId &&
+        (currentEnv.cluster === selectedCluster ||
+          currentEnv.clusterId === selectedCluster ||
+          currentEnv.id === selectedCluster)
+      ) {
+        return currentEnv.clusterId;
+      }
+      return selectedCluster;
+    }
+    return undefined;
+  }, [selectedCluster, currentEnv?.cluster, currentEnv?.clusterId, currentEnv?.id]);
+
+  // Tải danh sách Workloads ĐANG CHẠY THỰC TẾ trên cụm K8s (đã lọc deleted_at IS NULL & bỏ hệ thống/monitoring)
+  const fetchLiveWorkloads = useCallback(async () => {
+    const orgId =
+      currentOrg?.id && !currentOrg.id.startsWith('sandbox-') && currentOrg.id !== 'org-acme'
+        ? currentOrg.id
+        : undefined;
+    try {
+      const workloads = await aiService.getWorkloads(activeClusterForWorkloads, orgId);
+      if (Array.isArray(workloads)) {
+        setRegisteredWorkloads(workloads);
+      }
+    } catch (err) {}
+  }, [activeClusterForWorkloads, currentOrg?.id]);
+
+  useEffect(() => {
+    fetchLiveWorkloads();
+  }, [fetchLiveWorkloads]);
+
+  // Tải danh sách cụm K8s trong tổ chức
   useEffect(() => {
     let isMounted = true;
-    const loadAuxiliary = async () => {
-      try {
-        const workloads = await aiService.getWorkloads();
-        if (isMounted && Array.isArray(workloads)) {
-          setRegisteredWorkloads(workloads);
-        }
-      } catch (err) {}
-
+    const loadClusters = async () => {
       try {
         const orgId = currentOrg?.id;
         if (orgId && !orgId.startsWith('sandbox-') && orgId !== 'org-acme') {
@@ -491,7 +528,7 @@ export const IncidentsPage = ({ onNavigate }) => {
         }
       } catch (err) {}
     };
-    loadAuxiliary();
+    loadClusters();
     return () => { isMounted = false; };
   }, [currentOrg?.id]);
 
@@ -537,6 +574,7 @@ export const IncidentsPage = ({ onNavigate }) => {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    fetchLiveWorkloads();
     fetchIncidents();
     refreshActiveIncidents?.();
   };
@@ -615,48 +653,79 @@ export const IncidentsPage = ({ onNavigate }) => {
     return Array.from(clusterMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [envList, clusterList, incidents]);
 
-  // Danh sách service động kèm số lượng sự cố thực tế
-  const availableServices = useMemo(() => {
-    const counts = {};
-    const clusterIncidents = incidents.filter((inc) => {
-      if (selectedCluster === 'all') return true;
-      return inc.clusterId === selectedCluster || inc.cluster === selectedCluster || inc.clusterName === selectedCluster;
-    });
+  // Hàm kiểm tra trùng khớp bộ lọc thời gian
+  const checkTimeMatch = useCallback((detectedAt) => {
+    if (timeFilterMode === 'all') return true;
+    if (!detectedAt) return false;
+    const d = new Date(detectedAt);
+    if (isNaN(d.getTime())) return false;
 
-    clusterIncidents.forEach((i) => {
-      if (i.service && i.service !== 'ứng dụng hệ thống') {
-        const cleaned = cleanServiceName(i.service);
-        if (cleaned) {
+    const incY = d.getFullYear();
+    const incM = String(d.getMonth() + 1).padStart(2, '0');
+    const incD = String(d.getDate()).padStart(2, '0');
+    const incDateStr = `${incY}-${incM}-${incD}`;
+    const incMonthStr = `${incY}-${incM}`;
+    const incYearStr = String(incY);
+
+    if (timeFilterMode === 'today') {
+      return incDateStr === getTodayStr();
+    }
+    if (timeFilterMode === 'date') {
+      return selectedDate ? incDateStr === selectedDate : true;
+    }
+    if (timeFilterMode === 'month') {
+      return selectedMonth ? incMonthStr === selectedMonth : true;
+    }
+    if (timeFilterMode === 'year') {
+      return selectedYear ? incYearStr === selectedYear : true;
+    }
+    return true;
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+
+  // Danh sách dịch vụ ĐANG CHẠY THỰC TẾ trên cụm K8s (từ GET /api/v1/ai/workloads, đã lọc deleted_at IS NULL & bỏ hệ thống/monitoring)
+  // Tuyệt đối không cộng thêm workload cũ đã bị xóa từ lịch sử sự cố
+  const availableServices = useMemo(() => {
+    const liveServiceNames = extractActiveK8sServices(registeredWorkloads);
+    if (liveServiceNames.length === 0) return [];
+
+    const liveSet = new Set(liveServiceNames);
+    const counts = {};
+    incidents.forEach((inc) => {
+      const matchCluster =
+        selectedCluster === 'all' ||
+        inc.clusterId === selectedCluster ||
+        inc.cluster === selectedCluster ||
+        inc.clusterName === selectedCluster ||
+        (inc.clusterName && selectedCluster && inc.clusterName.toLowerCase() === selectedCluster.toLowerCase()) ||
+        (inc.clusterId && selectedCluster && inc.clusterId.toLowerCase() === selectedCluster.toLowerCase());
+      if (!matchCluster || !checkTimeMatch(inc.detectedAt)) return;
+
+      if (inc.service && inc.service !== 'ứng dụng hệ thống') {
+        const cleaned = normalizeK8sServiceName(inc.service) || cleanServiceName(inc.service);
+        if (cleaned && liveSet.has(cleaned)) {
           counts[cleaned] = (counts[cleaned] || 0) + 1;
         }
       }
     });
 
-    const rawWorkloadNames = (registeredWorkloads || [])
-      .map((w) => (typeof w === 'string' ? w : (w?.name || '')))
-      .map(cleanServiceName)
-      .filter(Boolean);
-
-    const allServiceNames = new Set([
-      ...Object.keys(counts),
-      ...rawWorkloadNames,
-    ]);
-
-    // Các dịch vụ hạ tầng / agent hệ thống không phải ứng dụng nghiệp vụ
-    const SYSTEM_IGNORED = new Set([
-      'coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-apiserver-minikube',
-      'kube-controller', 'kube-controller-manager-minikube', 'kube-scheduler-minikube',
-      'metrics-server', 'selfheal-agent', 'storage-provisioner', 'order-service', 'payment-service', 'mongodb-init'
-    ]);
-
-    return Array.from(allServiceNames)
-      .filter((s) => s && !SYSTEM_IGNORED.has(s) && !s.includes('-0000-'))
+    return liveServiceNames
       .map((name) => ({
         name,
         count: counts[name] || 0,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [incidents, registeredWorkloads, selectedCluster]);
+  }, [incidents, registeredWorkloads, selectedCluster, checkTimeMatch]);
+
+  // Reset bộ lọc dịch vụ nếu dịch vụ đang chọn không còn tồn tại trên cụm K8s hiện tại
+  useEffect(() => {
+    if (
+      selectedService !== 'all' &&
+      availableServices.length > 0 &&
+      !availableServices.some((svc) => svc.name === selectedService)
+    ) {
+      setSelectedService('all');
+    }
+  }, [selectedService, availableServices]);
 
   // Danh sách các năm có sự cố
   const availableYears = useMemo(() => {
@@ -689,35 +758,6 @@ export const IncidentsPage = ({ onNavigate }) => {
     });
     return Array.from(dateSet).sort().reverse().slice(0, 6);
   }, [incidents]);
-
-  // Hàm kiểm tra trùng khớp bộ lọc thời gian
-  const checkTimeMatch = useCallback((detectedAt) => {
-    if (timeFilterMode === 'all') return true;
-    if (!detectedAt) return false;
-    const d = new Date(detectedAt);
-    if (isNaN(d.getTime())) return false;
-
-    const incY = d.getFullYear();
-    const incM = String(d.getMonth() + 1).padStart(2, '0');
-    const incD = String(d.getDate()).padStart(2, '0');
-    const incDateStr = `${incY}-${incM}-${incD}`;
-    const incMonthStr = `${incY}-${incM}`;
-    const incYearStr = String(incY);
-
-    if (timeFilterMode === 'today') {
-      return incDateStr === getTodayStr();
-    }
-    if (timeFilterMode === 'date') {
-      return selectedDate ? incDateStr === selectedDate : true;
-    }
-    if (timeFilterMode === 'month') {
-      return selectedMonth ? incMonthStr === selectedMonth : true;
-    }
-    if (timeFilterMode === 'year') {
-      return selectedYear ? incYearStr === selectedYear : true;
-    }
-    return true;
-  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
 
   // Thống kê nhanh theo Cụm và Thời gian được chọn
   const stats = useMemo(() => {
@@ -794,9 +834,92 @@ export const IncidentsPage = ({ onNavigate }) => {
     return filteredIncidents.slice(startIndex, endIndex);
   }, [filteredIncidents, startIndex, endIndex]);
 
+  const activeClusterLabel =
+    selectedCluster === 'all'
+      ? 'Toàn bộ cụm K8s'
+      : availableClusters.find((c) => c.id === selectedCluster)?.name || selectedCluster;
+
+  const hasActiveFilters =
+    selectedSeverity !== 'all' ||
+    selectedStatus !== 'all' ||
+    selectedService !== 'all' ||
+    timeFilterMode !== 'today' ||
+    searchQuery.trim().length > 0;
+
+  const handleResetFilters = () => {
+    setSelectedSeverity('all');
+    setSelectedStatus('all');
+    setSelectedService('all');
+    setSearchQuery('');
+    setTimeFilterMode('today');
+    setSelectedDate(getTodayStr());
+    setPage(1);
+  };
+
+  const kpiCardStyle = (accent, isSelected = false) => ({
+    backgroundColor: '#FFFFFF',
+    border: isSelected ? `1px solid ${accent}` : '1px solid rgba(226, 232, 240, 0.95)',
+    borderTop: `2.5px solid ${accent}`,
+    borderRadius: '12px',
+    padding: '11px 14px',
+    boxShadow: isSelected
+      ? `0 6px 18px ${accent}22`
+      : '0 4px 16px rgba(15, 23, 42, 0.04)',
+    minWidth: 0,
+    transition: 'transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease',
+  });
+
+  const actionBtnStyle = (disabled = false) => ({
+    height: '34px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '0 12px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(203, 213, 225, 0.9)',
+    borderRadius: '10px',
+    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    color: disabled ? '#94A3B8' : '#334155',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
+  });
+
+  const selectControlStyle = {
+    height: '32px',
+    padding: '0 10px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    border: '1px solid #CBD5E1',
+    borderRadius: '8px',
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+    outline: 'none',
+    cursor: 'pointer',
+  };
+
   return (
-    <div className="dashboard-incidents-page" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Header Banner */}
+    <div className="dashboard-incidents-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <style>{`
+        .incidents-table-row {
+          transition: background-color 0.14s ease;
+        }
+        .incidents-table-row:hover {
+          background-color: #F8FAFC !important;
+        }
+        .incidents-table-row--critical:hover {
+          background-color: #FEF2F2 !important;
+        }
+        .incidents-detail-btn:hover {
+          background-color: #059669 !important;
+          border-color: #059669 !important;
+          color: #FFFFFF !important;
+        }
+      `}</style>
+
+      {/* Page Header (đồng bộ phong cách sạch, gọn của Dashboard, Logs & Events) */}
       <div
         style={{
           display: 'flex',
@@ -806,246 +929,304 @@ export const IncidentsPage = ({ onNavigate }) => {
           gap: '12px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
+            }}
+          >
+            <AlertTriangle size={19} color="#059669" />
+          </div>
+          <div>
+            <h1
               style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                backgroundColor: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
+                fontSize: '1.35rem',
+                fontWeight: 800,
+                color: '#0F172A',
+                letterSpacing: '-0.02em',
+                margin: 0,
               }}
             >
-              <AlertTriangle size={20} color="#059669" />
-            </div>
-            <div>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 800,
-                  color: 'var(--dash-text-primary)',
-                  letterSpacing: '-0.02em',
-                  margin: 0,
-                }}
-              >
-                Quản Lý Sự Cố & Phân Tích Nguyên Nhân Gốc Rễ (RCA)
-              </h1>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-                Bảng tổng quan sự cố và suy diễn cây nguyên nhân nhân quả
-              </p>
-            </div>
+              Quản Lý Sự Cố &amp; Phân Tích Nguyên Nhân Gốc
+            </h1>
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Theo dõi sự cố, suy diễn nguyên nhân nhân quả &amp; trạng thái tự phục hồi từ cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
+            </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
-              color: 'var(--dash-text-primary)',
-            }}
+            style={actionBtnStyle(isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
           </button>
         </div>
       </div>
 
-      {/* 4 Stat Overview Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+      {/* Hàng 4 Thẻ KPI Tóm Tắt (đồng bộ viền màu phía trên giống Dashboard, Logs & Events) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         {/* Card 1: Tổng Sự Cố */}
-        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Tổng Sự Cố
+        <div
+          onClick={() => {
+            setSelectedSeverity('all');
+            setSelectedStatus('all');
+          }}
+          title="Nhấp để hiển thị tất cả sự cố"
+          style={{ ...kpiCardStyle('#059669'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              TỔNG SỰ CỐ
             </span>
-            <Layers size={18} color="#6366F1" />
+            <Layers size={14} color="#059669" />
           </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)' }}>
-            {isLoading && incidents.length === 0 ? '...' : stats.total.toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: '#6366F1',
-              }}
-            />
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              {selectedCluster === 'all'
-                ? 'Toàn bộ cụm K8s'
-                : (availableClusters.find(c => c.id === selectedCluster)?.name || selectedCluster)}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
+              {isLoading && incidents.length === 0 ? '...' : stats.total.toLocaleString('vi-VN')}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {activeClusterLabel}
             </span>
           </div>
         </div>
 
-        {/* Card 2: Nguy Cấp (Critical) */}
-        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Nguy Cấp (Critical)
+        {/* Card 2: Nguy Cấp / Cao */}
+        <div
+          onClick={() => setSelectedSeverity((prev) => (prev === 'CRITICAL' ? 'all' : 'CRITICAL'))}
+          title="Nhấp để lọc nhanh sự cố Nguy cấp (Critical)"
+          style={{ ...kpiCardStyle('#EF4444', selectedSeverity === 'CRITICAL'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              NGUY CẤP &amp; CAO
             </span>
-            <AlertTriangle size={18} color={stats.critical > 0 ? '#DC2626' : '#94A3B8'} />
+            <AlertTriangle size={14} color={stats.critical > 0 ? '#EF4444' : '#94A3B8'} />
           </div>
-          <div
-            style={{
-              fontSize: '1.65rem',
-              fontWeight: 800,
-              color: stats.critical > 0 ? '#DC2626' : '#059669',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {isLoading && incidents.length === 0 ? '...' : stats.critical.toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: stats.critical > 0 ? '#DC2626' : 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span
               style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: stats.critical > 0 ? '#DC2626' : '#10B981',
-                boxShadow: stats.critical > 0 ? '0 0 8px #DC2626' : 'none',
+                fontSize: '1.3rem',
+                fontWeight: 800,
+                color: stats.critical > 0 ? '#DC2626' : '#0F172A',
+                fontFamily: 'var(--font-mono)',
               }}
-            />
-            <span>{stats.critical > 0 ? 'Ưu tiên tự phục hồi khẩn cấp' : 'Không có sự cố nguy cấp'}</span>
+            >
+              {isLoading && incidents.length === 0 ? '...' : stats.critical.toLocaleString('vi-VN')}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: stats.critical > 0 ? '#DC2626' : '#64748B', fontWeight: stats.critical > 0 ? 600 : 500 }}>
+              {stats.critical > 0 ? 'Ưu tiên xử lý' : 'Không có nguy cấp'}
+            </span>
           </div>
         </div>
 
         {/* Card 3: Đang Tự Phục Hồi */}
-        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Đang Tự Phục Hồi
+        <div
+          onClick={() => setSelectedStatus((prev) => (prev === 'RECOVERING' ? 'all' : 'RECOVERING'))}
+          title="Nhấp để lọc nhanh sự cố đang tự phục hồi"
+          style={{ ...kpiCardStyle('#F59E0B', selectedStatus === 'RECOVERING'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              ĐANG TỰ PHỤC HỒI
             </span>
-            <Zap size={18} color={stats.recovering > 0 ? '#D97706' : '#059669'} />
+            <Zap size={14} color={stats.recovering > 0 ? '#F59E0B' : '#94A3B8'} />
           </div>
-          <div
-            style={{
-              fontSize: '1.65rem',
-              fontWeight: 800,
-              color: stats.recovering > 0 ? '#D97706' : '#059669',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {isLoading && incidents.length === 0 ? '...' : stats.recovering.toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span
               style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: stats.recovering > 0 ? '#D97706' : '#10B981',
-                boxShadow: stats.recovering > 0 ? '0 0 8px #D97706' : 'none',
+                fontSize: '1.3rem',
+                fontWeight: 800,
+                color: stats.recovering > 0 ? '#D97706' : '#0F172A',
+                fontFamily: 'var(--font-mono)',
               }}
-            />
-            <span>{stats.recovering > 0 ? 'Vòng lặp MAPE-K đang xử lý' : 'Hệ thống vận hành ổn định'}</span>
+            >
+              {isLoading && incidents.length === 0 ? '...' : stats.recovering.toLocaleString('vi-VN')}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
+              {stats.recovering > 0 ? 'MAPE-K đang chạy' : 'Hệ thống ổn định'}
+            </span>
           </div>
         </div>
 
         {/* Card 4: Đã Khắc Phục */}
-        <div className="dash-card" style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Đã Khắc Phục
+        <div
+          onClick={() => setSelectedStatus((prev) => (prev === 'RESOLVED' ? 'all' : 'RESOLVED'))}
+          title="Nhấp để lọc nhanh sự cố đã khắc phục"
+          style={{ ...kpiCardStyle('#10B981', selectedStatus === 'RESOLVED'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              ĐÃ KHẮC PHỤC
             </span>
-            <CheckCircle2 size={18} color="#059669" />
+            <CheckCircle2 size={14} color="#10B981" />
           </div>
-          <div
-            style={{
-              fontSize: '1.65rem',
-              fontWeight: 800,
-              color: '#059669',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {isLoading && incidents.length === 0 ? '...' : stats.resolved.toLocaleString()}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#10B981', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <CheckCircle2 size={13} />
-            <span>Khôi phục SLA 99.9%</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669', fontFamily: 'var(--font-mono)' }}>
+              {isLoading && incidents.length === 0 ? '...' : stats.resolved.toLocaleString('vi-VN')}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+              Khôi phục SLA 99.9%
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Bộ Lọc Gọn 2 Hàng (Hàng 1: Tìm kiếm + Chọn nhanh Mức độ + Bộ chọn Lịch • Hàng 2: Trạng thái + Dịch vụ + Đặt lại) */}
       <div
         className="dash-card"
         style={{
-          padding: '12px 18px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          borderRadius: '12px',
           backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          padding: '12px 16px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
         }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
-          {/* Bộ Lọc Ngày / Tháng / Năm Đẹp Mắt */}
-          {/* Nút Logo Lịch mở Popover chọn Ngày, Tháng, Năm */}
+        {/* Hàng 1: Tìm kiếm + Pill Mức độ + Lịch */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          {/* Search Input */}
+          <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: '360px' }}>
+            <input
+              type="text"
+              placeholder="Tìm kiếm mã sự cố, tiêu đề, dịch vụ, nguyên nhân..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                height: '34px',
+                width: '100%',
+                padding: '0 30px 0 32px',
+                fontSize: '0.78rem',
+                border: '1px solid #CBD5E1',
+                borderRadius: '9px',
+                backgroundColor: '#F8FAFC',
+                color: '#0F172A',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94A3B8' }} />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Xóa từ khóa tìm kiếm"
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '9px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: 0,
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Severity Quick Pills */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              backgroundColor: '#F8FAFC',
+              padding: '3px',
+              border: '1px solid #E2E8F0',
+              borderRadius: '9px',
+            }}
+          >
+            {[
+              { id: 'all', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
+              { id: 'CRITICAL', label: 'Nguy cấp', color: '#DC2626', bg: '#FEF2F2' },
+              { id: 'HIGH', label: 'Cao', color: '#EA580C', bg: '#FFF7ED' },
+              { id: 'MEDIUM', label: 'Trung bình', color: '#D97706', bg: '#FFFBEB' },
+              { id: 'LOW', label: 'Thấp', color: '#2563EB', bg: '#EFF6FF' },
+            ].map((sev) => {
+              const active = selectedSeverity === sev.id;
+              return (
+                <button
+                  key={sev.id}
+                  type="button"
+                  onClick={() => setSelectedSeverity(sev.id)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '6px',
+                    border: active ? `1px solid ${sev.color}55` : '1px solid transparent',
+                    backgroundColor: active ? sev.bg : 'transparent',
+                    color: active ? sev.color : '#64748B',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.12s ease',
+                  }}
+                >
+                  {sev.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Nút Lịch mở Popover chọn Ngày, Tháng, Năm, Tất cả */}
           <div style={{ position: 'relative' }} ref={calendarRef}>
             <button
               type="button"
               onClick={() => setIsCalendarOpen(!isCalendarOpen)}
               style={{
-                height: '32px',
-                padding: '0 10px',
+                height: '34px',
+                padding: '0 11px',
                 fontSize: '0.75rem',
-                fontWeight: 600,
-                borderRadius: '6px',
-                border: isCalendarOpen ? '1px solid #CBD5E1' : '1px solid var(--dash-border)',
-                backgroundColor: '#F8FAFC',
-                color: 'var(--dash-text-primary)',
-                display: 'flex',
+                fontWeight: 700,
+                borderRadius: '9px',
+                border: isCalendarOpen ? '1px solid #10B981' : '1px solid #CBD5E1',
+                backgroundColor: isCalendarOpen ? '#ECFDF5' : '#F8FAFC',
+                color: isCalendarOpen ? '#047857' : '#0F172A',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 cursor: 'pointer',
-                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(15, 23, 42, 0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
               title="Mở bảng lịch chọn ngày, tháng hoặc năm"
             >
-              <Calendar size={14} color="var(--dash-text-secondary)" />
+              <Calendar size={14} color={isCalendarOpen ? '#059669' : '#64748B'} />
               <span>{currentFilterLabel}</span>
-              <ChevronDown size={12} color="var(--dash-text-secondary)" />
+              <ChevronDown size={12} color={isCalendarOpen ? '#059669' : '#64748B'} />
             </button>
 
-            {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
+            {/* Cửa Sổ Popover Lịch */}
             {isCalendarOpen && (
               <div
                 style={{
                   position: 'absolute',
-                  top: '38px',
-                  left: '0',
+                  top: '40px',
+                  right: '0',
                   zIndex: 100,
-                  width: '330px',
+                  width: '326px',
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   border: '1px solid #E2E8F0',
-                  boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  boxShadow: '0 14px 32px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06)',
                   padding: '14px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -1058,57 +1239,57 @@ export const IncidentsPage = ({ onNavigate }) => {
                     type="button"
                     onClick={() => setTimeFilterMode('date')}
                     style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
+                      padding: '6px 4px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       borderRadius: '6px',
                       border: 'none',
                       backgroundColor: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#047857' : '#64748B',
+                      boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    📅 Ngày
+                    Ngày
                   </button>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('month')}
                     style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
+                      padding: '6px 4px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       borderRadius: '6px',
                       border: 'none',
                       backgroundColor: timeFilterMode === 'month' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'month' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      color: timeFilterMode === 'month' ? '#047857' : '#64748B',
+                      boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    🗓️ Tháng
+                    Tháng
                   </button>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('year')}
                     style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
+                      padding: '6px 4px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       borderRadius: '6px',
                       border: 'none',
                       backgroundColor: timeFilterMode === 'year' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'year' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      color: timeFilterMode === 'year' ? '#047857' : '#64748B',
+                      boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    📆 Năm
+                    Năm
                   </button>
                 </div>
 
                 {/* Tab Body: CHỌN NGÀY */}
-                {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
+                {(timeFilterMode === 'date' || timeFilterMode === 'today' || timeFilterMode === 'all') && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
                       Chọn ngày cụ thể:
@@ -1122,12 +1303,12 @@ export const IncidentsPage = ({ onNavigate }) => {
                       }}
                       style={{
                         width: '100%',
-                        height: '36px',
+                        height: '34px',
                         padding: '0 10px',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.8rem',
                         fontWeight: 600,
                         border: '1px solid #CBD5E1',
-                        borderRadius: '6px',
+                        borderRadius: '8px',
                         backgroundColor: '#F8FAFC',
                         color: '#0F172A',
                         outline: 'none',
@@ -1160,9 +1341,9 @@ export const IncidentsPage = ({ onNavigate }) => {
                               }}
                               style={{
                                 padding: '4px 8px',
-                                fontSize: '0.6875rem',
+                                fontSize: '0.7rem',
                                 fontWeight: isSelected ? 700 : 500,
-                                borderRadius: '4px',
+                                borderRadius: '6px',
                                 border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
                                 backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
                                 color: isSelected ? '#047857' : '#334155',
@@ -1182,7 +1363,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                 {timeFilterMode === 'month' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                      Chọn tháng & năm:
+                      Chọn tháng &amp; năm:
                     </label>
                     <input
                       type="month"
@@ -1190,12 +1371,12 @@ export const IncidentsPage = ({ onNavigate }) => {
                       onChange={(e) => setSelectedMonth(e.target.value)}
                       style={{
                         width: '100%',
-                        height: '36px',
+                        height: '34px',
                         padding: '0 10px',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.8rem',
                         fontWeight: 600,
                         border: '1px solid #CBD5E1',
-                        borderRadius: '6px',
+                        borderRadius: '8px',
                         backgroundColor: '#F8FAFC',
                         color: '#0F172A',
                         outline: 'none',
@@ -1204,7 +1385,6 @@ export const IncidentsPage = ({ onNavigate }) => {
                       }}
                     />
 
-                    {/* 12 Months grid */}
                     <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
                       Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
                     </div>
@@ -1222,12 +1402,12 @@ export const IncidentsPage = ({ onNavigate }) => {
                             }}
                             style={{
                               padding: '6px 2px',
-                              fontSize: '0.6875rem',
+                              fontSize: '0.7rem',
                               fontWeight: isSelected ? 700 : 500,
-                              borderRadius: '4px',
-                              border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                              backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
-                              color: isSelected ? '#1D4ED8' : '#334155',
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                              color: isSelected ? '#047857' : '#334155',
                               cursor: 'pointer',
                               textAlign: 'center',
                             }}
@@ -1258,13 +1438,13 @@ export const IncidentsPage = ({ onNavigate }) => {
                               setIsCalendarOpen(false);
                             }}
                             style={{
-                              padding: '10px 4px',
-                              fontSize: '0.8125rem',
+                              padding: '9px 4px',
+                              fontSize: '0.8rem',
                               fontWeight: isSelected ? 700 : 600,
-                              borderRadius: '6px',
-                              border: isSelected ? '1px solid #7C3AED' : '1px solid #E2E8F0',
-                              backgroundColor: isSelected ? '#F5F3FF' : '#F8FAFC',
-                              color: isSelected ? '#6D28D9' : '#334155',
+                              borderRadius: '8px',
+                              border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                              color: isSelected ? '#047857' : '#334155',
                               cursor: 'pointer',
                               textAlign: 'center',
                             }}
@@ -1278,36 +1458,56 @@ export const IncidentsPage = ({ onNavigate }) => {
                 )}
 
                 {/* Popover Footer */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTimeFilterMode('today');
-                      setSelectedDate(getTodayStr());
-                      setIsCalendarOpen(false);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: '0.7rem',
-                      color: '#10B981',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
-                  >
-                    Về hôm nay
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimeFilterMode('today');
+                        setSelectedDate(getTodayStr());
+                        setIsCalendarOpen(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '0.72rem',
+                        color: '#059669',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      Hôm nay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimeFilterMode('all');
+                        setIsCalendarOpen(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '0.72rem',
+                        color: timeFilterMode === 'all' ? '#047857' : '#64748B',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      Tất cả
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsCalendarOpen(false)}
                     style={{
-                      padding: '4px 12px',
-                      fontSize: '0.7rem',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
-                      backgroundColor: '#0F172A',
+                      backgroundColor: '#059669',
                       color: '#FFFFFF',
-                      borderRadius: '4px',
+                      borderRadius: '7px',
                       border: 'none',
                       cursor: 'pointer',
                     }}
@@ -1318,121 +1518,94 @@ export const IncidentsPage = ({ onNavigate }) => {
               </div>
             )}
           </div>
-
-          {/* Severity Select */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Mức độ:</span>
-            <select
-              value={selectedSeverity}
-              onChange={(e) => setSelectedSeverity(e.target.value)}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                color: 'var(--dash-text-primary)',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="all">Tất cả mức độ</option>
-              <option value="CRITICAL">Critical (Nguy cấp)</option>
-              <option value="HIGH">High (Cao)</option>
-              <option value="MEDIUM">Medium (Trung bình)</option>
-              <option value="LOW">Low (Thấp)</option>
-            </select>
-          </div>
-
-          {/* Status Select */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Trạng thái:</span>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                color: 'var(--dash-text-primary)',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="OPEN">Chưa khắc phục (Tất cả đang mở)</option>
-              <option value="RECOVERING">Đang xử lý / Giám sát</option>
-              <option value="HITL">Chờ phê duyệt HITL</option>
-              <option value="NO_ACTION">Cần kiểm tra / Ngắt mạch (NO_ACTION)</option>
-              <option value="FAILED">Tự khắc phục thất bại</option>
-              <option value="RESOLVED">Đã khắc phục hoàn tất</option>
-            </select>
-          </div>
-
-          {/* Service Select */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Dịch vụ:</span>
-            <select
-              value={selectedService}
-              onChange={(e) => setSelectedService(e.target.value)}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                color: 'var(--dash-text-primary)',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="all">Tất cả dịch vụ ({availableServices.length})</option>
-              {availableServices.map((svc) => (
-                <option key={svc.name} value={svc.name}>
-                  {svc.name} {svc.count > 0 ? '(' + svc.count + ')' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Search Input */}
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              placeholder="Tìm kiếm sự cố..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                height: '32px',
-                width: '220px',
-                padding: '0 10px 0 28px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                outline: 'none',
-              }}
-            />
-            <Search size={13} style={{ position: 'absolute', left: '8px', top: '9px', color: 'var(--dash-text-muted)' }} />
-          </div>
         </div>
 
-        <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-          {isLoading && incidents.length === 0 ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <RefreshCw size={12} className="animate-spin" color="var(--dash-primary)" />
-              <span>Đang đồng bộ danh sách sự cố...</span>
-            </span>
-          ) : (
-            <>
-              Hiển thị <strong>{totalFiltered > 0 ? startIndex + 1 : 0} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố
-            </>
-          )}
+        {/* Hàng 2: Trạng thái, Dịch vụ, Đặt lại & Bộ đếm */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid #F1F5F9',
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+            {/* Status Select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Trạng thái</span>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                style={selectControlStyle}
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="OPEN">Chưa khắc phục (Đang mở)</option>
+                <option value="RECOVERING">Đang xử lý / Giám sát</option>
+                <option value="HITL">Chờ phê duyệt HITL</option>
+                <option value="NO_ACTION">Cần kiểm tra / Ngắt mạch (NO_ACTION)</option>
+                <option value="FAILED">Tự khắc phục thất bại</option>
+                <option value="RESOLVED">Đã khắc phục hoàn tất</option>
+              </select>
+            </div>
+
+            {/* Service Select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Dịch vụ</span>
+              <select
+                value={selectedService}
+                onChange={(e) => setSelectedService(e.target.value)}
+                style={selectControlStyle}
+              >
+                <option value="all">Tất cả dịch vụ ({availableServices.length})</option>
+                {availableServices.map((svc) => (
+                  <option key={svc.name} value={svc.name}>
+                    {svc.name} {svc.count > 0 ? '(' + svc.count + ')' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset Filters Button */}
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                height: '32px',
+                padding: '0 10px',
+                fontSize: '0.73rem',
+                fontWeight: 700,
+                color: hasActiveFilters ? '#DC2626' : '#64748B',
+                backgroundColor: hasActiveFilters ? '#FEF2F2' : '#FFFFFF',
+                border: hasActiveFilters ? '1px solid #FECACA' : '1px solid #E2E8F0',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.14s ease',
+              }}
+            >
+              <RotateCcw size={12} />
+              <span>Đặt lại</span>
+            </button>
+          </div>
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.73rem', color: '#64748B' }}>
+            {isLoading && incidents.length === 0 ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <RefreshCw size={12} className="animate-spin" color="#059669" />
+                <span>Đang đồng bộ danh sách sự cố...</span>
+              </span>
+            ) : (
+              <>
+                Hiển thị <strong style={{ color: '#0F172A' }}>{totalFiltered > 0 ? startIndex + 1 : 0}-{endIndex}</strong> /{' '}
+                <strong style={{ color: '#0F172A' }}>{totalFiltered}</strong> sự cố
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1444,8 +1617,8 @@ export const IncidentsPage = ({ onNavigate }) => {
           overflow: 'hidden',
           borderRadius: '14px',
           backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
         }}
       >
         <div style={{ overflowX: 'auto' }}>
@@ -1458,22 +1631,22 @@ export const IncidentsPage = ({ onNavigate }) => {
                   textAlign: 'left',
                 }}
               >
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '130px' }}>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '132px' }}>
                   MÃ SỰ CỐ
                 </th>
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '110px' }}>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '112px' }}>
                   MỨC ĐỘ
                 </th>
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '170px' }}>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '185px' }}>
                   DỊCH VỤ / NODE
                 </th>
-                <th style={{ padding: '14px 18px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '380px' }}>
-                  TIÊU ĐỀ SỰ CỐ TỔNG QUAN
+                <th style={{ padding: '11px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', minWidth: '340px' }}>
+                  TIÊU ĐỀ SỰ CỐ
                 </th>
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '180px' }}>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '185px' }}>
                   TRẠNG THÁI
                 </th>
-                <th style={{ padding: '14px 16px', fontSize: '0.75rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '130px', textAlign: 'right' }}>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '126px', textAlign: 'right' }}>
                   THAO TÁC
                 </th>
               </tr>
@@ -1481,36 +1654,69 @@ export const IncidentsPage = ({ onNavigate }) => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '54px 20px', textAlign: 'center', color: '#64748B' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'rgba(5, 150, 105, 0.08)', margin: '0 auto 12px auto' }}>
-                      <RefreshCw size={20} className="animate-spin" color="var(--dash-primary)" />
+                  <td colSpan={6} style={{ padding: '56px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '42px', height: '42px', borderRadius: '12px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', margin: '0 auto 12px auto' }}>
+                      <RefreshCw size={20} className="animate-spin" color="#059669" />
                     </div>
-                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A' }}>
                       Đang đồng bộ danh sách sự cố...
                     </div>
-                    <div style={{ fontSize: '0.8125rem', marginTop: '6px', color: '#64748B' }}>
+                    <div style={{ fontSize: '0.78rem', marginTop: '4px', color: '#64748B' }}>
                       Đang phân tích dữ liệu viễn trắc và chuỗi nguyên nhân gốc rễ
                     </div>
                   </td>
                 </tr>
               ) : filteredIncidents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
-                    <ShieldCheck size={42} color="#10B981" style={{ margin: '0 auto 12px auto' }} />
-                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
+                  <td colSpan={6} style={{ padding: '56px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '14px',
+                        backgroundColor: '#ECFDF5',
+                        border: '1px solid #A7F3D0',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <ShieldCheck size={26} color="#059669" />
+                    </div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A' }}>
                       {incidents.length === 0
-                        ? `Cụm ${currentEnv?.cluster || 'K8s'} không ghi nhận sự cố nào`
+                        ? `Cụm ${activeClusterLabel} không ghi nhận sự cố nào`
                         : 'Không tìm thấy sự cố nào phù hợp với bộ lọc'}
                     </div>
-                    <div style={{ fontSize: '0.8125rem', marginTop: '6px', color: '#64748B' }}>
+                    <div style={{ fontSize: '0.78rem', marginTop: '4px', color: '#64748B' }}>
                       {incidents.length === 0
                         ? 'Toàn bộ các dịch vụ và node trên cụm đang hoạt động an toàn theo thời gian thực.'
-                        : 'Thử điều chỉnh lại mức độ, trạng thái hoặc từ khóa tìm kiếm.'}
+                        : 'Thử điều chỉnh lại mức độ, trạng thái, khung thời gian hoặc từ khóa tìm kiếm.'}
                     </div>
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={handleResetFilters}
+                        style={{
+                          marginTop: '10px',
+                          padding: '7px 14px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#047857',
+                          border: '1px solid #A7F3D0',
+                          borderRadius: '9px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Đặt lại bộ lọc
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
-                paginatedIncidents.map((item, index) => {
+                paginatedIncidents.map((item) => {
                   const isCrit = item.severity === 'CRITICAL';
                   const isHigh = item.severity === 'HIGH';
                   const isMed = item.severity === 'MEDIUM';
@@ -1522,33 +1728,42 @@ export const IncidentsPage = ({ onNavigate }) => {
                   const isSafeNoAction = !isUrgentNoAction && (item.status.includes('NO_ACTION') || item.status.includes('an toàn'));
                   const isWait = item.status.includes('duyệt');
                   const isFailed = item.status.includes('thất bại') || item.status.includes('Chưa phục hồi');
+                  const isAlertRow = (isCrit || isFailed || isUrgentNoAction) && !isDone && !isClosedManual && !isAutoStabilized;
 
                   return (
                     <tr
                       key={item.id}
+                      className={`incidents-table-row${isAlertRow ? ' incidents-table-row--critical' : ''}`}
                       onClick={() => setActiveModalIncident(item)}
                       style={{
                         borderBottom: '1px solid #F1F5F9',
-                        backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
-                        transition: 'background-color 0.15s ease',
+                        backgroundColor: isAlertRow ? 'rgba(254, 242, 242, 0.32)' : '#FFFFFF',
                         cursor: 'pointer',
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#F0FDF4';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
-                      }}
                     >
-                      <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                      <td
+                        style={{
+                          padding: '13px 16px',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          color: '#0F172A',
+                          whiteSpace: 'nowrap',
+                          borderLeft: isAlertRow
+                            ? '3px solid #EF4444'
+                            : isHigh && !isDone && !isClosedManual
+                            ? '3px solid #F97316'
+                            : '3px solid transparent',
+                        }}
+                      >
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                           <span
                             style={{
-                              backgroundColor: '#F1F5F9',
+                              backgroundColor: '#F8FAFC',
                               padding: '3px 8px',
-                              borderRadius: '6px',
+                              borderRadius: '7px',
                               border: '1px solid #E2E8F0',
-                              fontSize: '0.75rem',
+                              fontSize: '0.74rem',
+                              color: '#334155',
                             }}
                           >
                             {item.id}
@@ -1562,7 +1777,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                                 border: '1px solid #FDE68A',
                                 padding: '2px 6px',
                                 borderRadius: '6px',
-                                fontSize: '0.6875rem',
+                                fontSize: '0.68rem',
                                 fontWeight: 800,
                               }}
                             >
@@ -1572,17 +1787,17 @@ export const IncidentsPage = ({ onNavigate }) => {
                         </div>
                       </td>
 
-                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '13px 16px', whiteSpace: 'nowrap' }}>
                         <span
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '5px',
-                            padding: '3px 8px',
+                            padding: '3px 9px',
                             fontFamily: 'var(--font-mono)',
-                            fontSize: '0.6875rem',
+                            fontSize: '0.68rem',
                             fontWeight: 800,
-                            borderRadius: '6px',
+                            borderRadius: '999px',
                             backgroundColor: isCrit ? '#FFF1F2' : isHigh ? '#FFF7ED' : isMed ? '#FFFBEB' : '#EFF6FF',
                             color: isCrit ? '#E11D48' : isHigh ? '#EA580C' : isMed ? '#D97706' : '#2563EB',
                             border: `1px solid ${isCrit ? '#FDA4AF' : isHigh ? '#FDBA74' : isMed ? '#FDE68A' : '#BFDBFE'}`,
@@ -1600,23 +1815,55 @@ export const IncidentsPage = ({ onNavigate }) => {
                         </span>
                       </td>
 
-                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--dash-primary)' }}>
+                      <td style={{ padding: '13px 16px', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.78rem', color: '#047857' }}>
                           {item.service}
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '2px' }}>
-                          <span style={{ color: "#94A3B8" }}>Namespace:</span> {item.namespace || 'Chưa rõ'} &bull; <span style={{ color: "#94A3B8" }}>Node:</span> {item.node || 'Chưa rõ'}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px', flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 5px',
+                              borderRadius: '5px',
+                              backgroundColor: '#F1F5F9',
+                              border: '1px solid #E2E8F0',
+                              fontSize: '0.65rem',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 600,
+                              color: '#475569',
+                            }}
+                          >
+                            ns: {item.namespace || '—'}
+                          </span>
+                          {item.node && (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '1px 5px',
+                                borderRadius: '5px',
+                                backgroundColor: '#F8FAFC',
+                                border: '1px solid #E2E8F0',
+                                fontSize: '0.65rem',
+                                fontFamily: 'var(--font-mono)',
+                                fontWeight: 600,
+                                color: '#64748B',
+                              }}
+                            >
+                              {item.node}
+                            </span>
+                          )}
                         </div>
                       </td>
 
-                      {/* CỘT TIÊU ĐỀ: ĐỘ RỘNG VỪA PHẢI, NẰM NGANG, HIỂN THỊ 2 HÀNG RỒI MỚI ... */}
-                      <td style={{ padding: '14px 18px', minWidth: '380px', maxWidth: '420px' }}>
-                        <div title={translateIncidentTitle(item.title)}
+                      {/* CỘT TIÊU ĐỀ: HIỂN THỊ TỐI ĐA 2 HÀNG */}
+                      <td style={{ padding: '13px 18px', minWidth: '340px', maxWidth: '420px' }}>
+                        <div
+                          title={translateIncidentTitle(item.title)}
                           style={{
                             fontWeight: 600,
                             color: '#0F172A',
-                            fontSize: '0.84rem',
-                            lineHeight: 1.5,
+                            fontSize: '0.82rem',
+                            lineHeight: 1.48,
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
@@ -1644,7 +1891,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                         )}
                       </td>
 
-                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '13px 16px', whiteSpace: 'nowrap' }}>
                         {isWait && onNavigate ? (
                           <button
                             type="button"
@@ -1657,8 +1904,8 @@ export const IncidentsPage = ({ onNavigate }) => {
                               alignItems: 'center',
                               gap: '6px',
                               padding: '4px 10px',
-                              borderRadius: '20px',
-                              fontSize: '0.75rem',
+                              borderRadius: '999px',
+                              fontSize: '0.73rem',
                               fontWeight: 700,
                               backgroundColor: '#FEF3C7',
                               color: '#B45309',
@@ -1668,7 +1915,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                             }}
                             title="Chuyển ngay tới Cổng Phê Duyệt HITL"
                           >
-                            <Clock size={13} />
+                            <Clock size={12} />
                             <span>Chờ phê duyệt HITL &rarr;</span>
                           </button>
                         ) : (
@@ -1678,41 +1925,41 @@ export const IncidentsPage = ({ onNavigate }) => {
                               alignItems: 'center',
                               gap: '6px',
                               padding: '4px 10px',
-                              borderRadius: '20px',
-                              fontSize: '0.75rem',
+                              borderRadius: '999px',
+                              fontSize: '0.73rem',
                               fontWeight: 700,
-                              backgroundColor: isDone ? '#DCFCE7' : isAutoStabilized ? '#EFF6FF' : isClosedManual ? '#F1F5F9' : isUrgentNoAction ? '#FEF2F2' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : isFailed ? '#FEE2E2' : '#EFF6FF',
-                              color: isDone ? '#15803D' : isAutoStabilized ? '#1D4ED8' : isClosedManual ? '#475569' : isUrgentNoAction ? '#DC2626' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : isFailed ? '#DC2626' : '#1D4ED8',
-                              border: `1px solid ${isDone ? '#86EFAC' : isAutoStabilized ? '#BFDBFE' : isClosedManual ? '#CBD5E1' : isUrgentNoAction ? '#FECACA' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : isFailed ? '#FCA5A5' : '#BFDBFE'}`,
+                              backgroundColor: isDone ? '#ECFDF5' : isAutoStabilized ? '#EFF6FF' : isClosedManual ? '#F1F5F9' : isUrgentNoAction ? '#FEF2F2' : isSafeNoAction ? '#ECFDF5' : isWait ? '#FEF3C7' : isFailed ? '#FEF2F2' : '#EFF6FF',
+                              color: isDone ? '#047857' : isAutoStabilized ? '#1D4ED8' : isClosedManual ? '#475569' : isUrgentNoAction ? '#DC2626' : isSafeNoAction ? '#047857' : isWait ? '#B45309' : isFailed ? '#DC2626' : '#1D4ED8',
+                              border: `1px solid ${isDone ? '#A7F3D0' : isAutoStabilized ? '#BFDBFE' : isClosedManual ? '#CBD5E1' : isUrgentNoAction ? '#FECACA' : isSafeNoAction ? '#A7F3D0' : isWait ? '#FDE68A' : isFailed ? '#FCA5A5' : '#BFDBFE'}`,
                             }}
                           >
                             {isDone ? (
-                              <CheckCircle2 size={13} />
+                              <CheckCircle2 size={12} />
                             ) : isAutoStabilized ? (
-                              <Activity size={13} />
+                              <Activity size={12} />
                             ) : isClosedManual ? (
-                              <ShieldCheck size={13} />
+                              <ShieldCheck size={12} />
                             ) : isUrgentNoAction ? (
-                              <AlertTriangle size={13} />
+                              <AlertTriangle size={12} />
                             ) : isSafeNoAction ? (
-                              <ShieldCheck size={13} />
+                              <ShieldCheck size={12} />
                             ) : isWait ? (
-                              <Clock size={13} />
+                              <Clock size={12} />
                             ) : isFailed ? (
-                              <AlertTriangle size={13} />
+                              <AlertTriangle size={12} />
                             ) : (
-                              <Zap size={13} />
+                              <Zap size={12} />
                             )}
                             <span>{item.status}</span>
                           </span>
                         )}
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '13px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          {/* Nút Xem Chi Tiết -> BẬT KHUNG CỬA SỔ NHỎ (MODAL) */}
                           <button
                             type="button"
+                            className="incidents-detail-btn"
                             onClick={(e) => {
                               e.stopPropagation();
                               setActiveModalIncident(item);
@@ -1721,34 +1968,34 @@ export const IncidentsPage = ({ onNavigate }) => {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '5px',
-                              padding: '5px 10px',
-                              backgroundColor: '#059669',
-                              color: '#FFFFFF',
-                              fontSize: '0.75rem',
+                              height: '28px',
+                              padding: '0 10px',
+                              backgroundColor: '#ECFDF5',
+                              color: '#047857',
+                              fontSize: '0.74rem',
                               fontWeight: 700,
-                              borderRadius: '7px',
-                              border: 'none',
+                              borderRadius: '8px',
+                              border: '1px solid #A7F3D0',
                               cursor: 'pointer',
-                              boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
-                              transition: 'all 0.15s ease',
+                              transition: 'all 0.14s ease',
                             }}
                           >
-                            <Eye size={13} />
+                            <Eye size={12} />
                             <span>Xem chi tiết</span>
                           </button>
 
-                          {/* Thời điểm ghi nhận đặt ngay dưới nút xem chi tiết */}
                           <div
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              fontSize: '0.6875rem',
-                              color: '#64748B',
+                              fontSize: '0.68rem',
+                              fontFamily: 'var(--font-mono)',
+                              color: '#94A3B8',
                               fontWeight: 500,
                             }}
                           >
-                            <Clock size={11} color="#94A3B8" />
+                            <Clock size={10} color="#94A3B8" />
                             <span>{item.time}</span>
                           </div>
                         </div>
@@ -1765,21 +2012,23 @@ export const IncidentsPage = ({ onNavigate }) => {
         {totalFiltered > 0 && (
           <div
             style={{
-              padding: '12px 20px',
+              padding: '11px 16px',
               borderTop: '1px solid #E2E8F0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
-              gap: '12px',
+              gap: '10px',
               backgroundColor: '#F8FAFC',
-              fontSize: '0.8125rem',
+              fontSize: '0.75rem',
+              fontFamily: 'var(--font-mono)',
+              color: '#475569',
             }}
           >
             {/* Chọn số bản ghi / trang & Tóm tắt */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 500 }}>Số dòng mỗi trang:</span>
+                <span style={{ color: '#64748B', fontSize: '0.74rem' }}>Hiển thị mỗi trang:</span>
                 <select
                   aria-label="Số bản ghi mỗi trang"
                   value={pageSize}
@@ -1788,38 +2037,38 @@ export const IncidentsPage = ({ onNavigate }) => {
                     setPage(1);
                   }}
                   style={{
-                    padding: '4px 8px',
-                    borderRadius: '6px',
+                    height: '28px',
+                    padding: '0 8px',
+                    borderRadius: '7px',
                     border: '1px solid #CBD5E1',
                     backgroundColor: '#FFFFFF',
                     color: '#0F172A',
-                    fontSize: '0.75rem',
+                    fontSize: '0.74rem',
                     fontWeight: 600,
                     outline: 'none',
                     cursor: 'pointer',
                   }}
                 >
-                  <option value={10}>10 sự cố</option>
-                  <option value={20}>20 sự cố</option>
-                  <option value={50}>50 sự cố</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
                 </select>
               </div>
 
               <span style={{ color: '#CBD5E1' }}>|</span>
 
-              <span style={{ color: '#64748B', fontSize: '0.75rem' }}>
-                Đang hiển thị <strong>{startIndex + 1} - {endIndex}</strong> trên <strong>{totalFiltered}</strong> sự cố
+              <span style={{ color: '#64748B', fontSize: '0.74rem' }}>
+                <strong style={{ color: '#0F172A' }}>{startIndex + 1}-{endIndex}</strong> / <strong style={{ color: '#0F172A' }}>{totalFiltered}</strong> sự cố
               </span>
             </div>
 
             {/* Các nút bấm chuyển trang */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#64748B', fontSize: '0.75rem', marginRight: '4px' }}>
-                Trang <strong>{safePage}</strong> / <strong>{totalPages}</strong>
+              <span style={{ color: '#64748B', fontSize: '0.74rem', marginRight: '4px' }}>
+                Trang <strong style={{ color: '#0F172A' }}>{safePage}</strong> / {totalPages}
               </span>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {/* Về trang đầu */}
                 <button
                   type="button"
                   title="Trang đầu"
@@ -1829,20 +2078,18 @@ export const IncidentsPage = ({ onNavigate }) => {
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '6px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
                     border: '1px solid #CBD5E1',
                     backgroundColor: '#FFFFFF',
                     color: safePage <= 1 ? '#CBD5E1' : '#334155',
                     cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <ChevronsLeft size={15} />
+                  <ChevronsLeft size={14} />
                 </button>
 
-                {/* Trang trước */}
                 <button
                   type="button"
                   title="Trang trước"
@@ -1852,20 +2099,18 @@ export const IncidentsPage = ({ onNavigate }) => {
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '6px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
                     border: '1px solid #CBD5E1',
                     backgroundColor: '#FFFFFF',
                     color: safePage <= 1 ? '#CBD5E1' : '#334155',
                     cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <ChevronLeft size={15} />
+                  <ChevronLeft size={14} />
                 </button>
 
-                {/* Các nút số trang */}
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
                   .reduce((acc, p, idx, arr) => {
@@ -1878,7 +2123,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                   .map((item) => {
                     if (typeof item === 'string' && item.startsWith('ellipsis-')) {
                       return (
-                        <span key={item} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.75rem' }}>
+                        <span key={item} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.74rem' }}>
                           ...
                         </span>
                       );
@@ -1893,18 +2138,16 @@ export const IncidentsPage = ({ onNavigate }) => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          minWidth: '30px',
-                          height: '30px',
+                          minWidth: '28px',
+                          height: '28px',
                           padding: '0 6px',
-                          borderRadius: '6px',
-                          border: isCurrent ? 'none' : '1px solid #CBD5E1',
-                          background: isCurrent ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : '#FFFFFF',
+                          borderRadius: '7px',
+                          border: isCurrent ? '1px solid #059669' : '1px solid #CBD5E1',
+                          backgroundColor: isCurrent ? '#059669' : '#FFFFFF',
                           color: isCurrent ? '#FFFFFF' : '#334155',
-                          fontSize: '0.75rem',
-                          fontWeight: isCurrent ? 700 : 500,
+                          fontSize: '0.74rem',
+                          fontWeight: isCurrent ? 700 : 600,
                           cursor: 'pointer',
-                          boxShadow: isCurrent ? '0 2px 4px rgba(5, 150, 105, 0.25)' : 'none',
-                          transition: 'all 0.15s ease',
                         }}
                       >
                         {item}
@@ -1912,7 +2155,6 @@ export const IncidentsPage = ({ onNavigate }) => {
                     );
                   })}
 
-                {/* Trang sau */}
                 <button
                   type="button"
                   title="Trang tiếp theo"
@@ -1922,20 +2164,18 @@ export const IncidentsPage = ({ onNavigate }) => {
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '6px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
                     border: '1px solid #CBD5E1',
                     backgroundColor: '#FFFFFF',
                     color: safePage >= totalPages ? '#CBD5E1' : '#334155',
                     cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <ChevronRight size={15} />
+                  <ChevronRight size={14} />
                 </button>
 
-                {/* Đến trang cuối */}
                 <button
                   type="button"
                   title="Trang cuối"
@@ -1945,17 +2185,16 @@ export const IncidentsPage = ({ onNavigate }) => {
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '6px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '7px',
                     border: '1px solid #CBD5E1',
                     backgroundColor: '#FFFFFF',
                     color: safePage >= totalPages ? '#CBD5E1' : '#334155',
                     cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <ChevronsRight size={15} />
+                  <ChevronsRight size={14} />
                 </button>
               </div>
             </div>

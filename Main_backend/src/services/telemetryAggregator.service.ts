@@ -62,6 +62,9 @@ export interface ServiceEvaluationResult {
 
 export class TelemetryAggregatorService {
   private static lastBatchRestartCountByService = new Map<string, number>();
+  private static lastScaleDownTriggerMsByService = new Map<string, number>();
+  private static readonly SCALE_DOWN_COOLDOWN_MS = 180_000;
+  private static readonly SCALE_DOWN_MIN_REPLICAS = 2;
 
   /**
    * 1. Aggregate raw pod metrics by service_id and time bucket
@@ -345,6 +348,30 @@ export class TelemetryAggregatorService {
         const combinedLogAndEventText = `${formattedEvents.join(' ')} ${formattedLogs.join(' ')}`;
         const hasPrimaryMention = /PRIMARY/i.test(combinedLogAndEventText);
 
+        // Query latest CPU/RAM per pod from metrics table to populate Pod Capacity Headroom
+        const podMetricsMap = new Map<string, { cpu: number; ram: number; request_rate: number }>();
+        try {
+          const recentMetricsRes = await pool.query(
+            `SELECT DISTINCT ON (pod_id) pod_id, cpu, ram, request_rate
+             FROM agent_metrics
+             WHERE service_id = $1
+               AND collected_at >= NOW() - INTERVAL '15 minutes'
+             ORDER BY pod_id, collected_at DESC`,
+            [serviceId]
+          );
+          for (const mRow of recentMetricsRes.rows) {
+            if (mRow.pod_id) {
+              podMetricsMap.set(mRow.pod_id, {
+                cpu: Number(mRow.cpu || 0),
+                ram: Number(mRow.ram || 0),
+                request_rate: Number(mRow.request_rate || 0),
+              });
+            }
+          }
+        } catch (mErr) {
+          console.warn('[TelemetryAggregator] Could not query latest pod metrics for headroom:', mErr);
+        }
+
         allPods = evalPods.map((item, idx) => {
           const { row, rawStatus, isTerminating, isHealthyPod } = item;
           const isSuspected = row.pod_name === podId || idx === 0;
@@ -378,6 +405,7 @@ export class TelemetryAggregatorService {
           }
 
           const effectiveHealthy = isTerminating && hasHealthySibling ? true : isHealthyPod;
+          const pMetrics = podMetricsMap.get(row.pod_name) || podMetricsMap.get(row.pod_id);
           return {
             pod_id: row.pod_id,
             pod_name: row.pod_name,
@@ -388,6 +416,9 @@ export class TelemetryAggregatorService {
             termination,
             mongodb_cluster_health: mongodbHealth,
             storage_pvc: storagePvc,
+            cpu_usage_pct: pMetrics ? pMetrics.cpu : undefined,
+            ram_usage_pct: pMetrics ? pMetrics.ram : undefined,
+            request_rate: pMetrics ? pMetrics.request_rate : undefined,
           };
         });
 
@@ -405,7 +436,7 @@ export class TelemetryAggregatorService {
       const clusterWhere = workloadClusterId ? `WHERE n.cluster_id = $1` : '';
       const clusterParams = workloadClusterId ? [workloadClusterId] : [];
       const nodesRes = await pool.query(
-        `SELECT DISTINCT ON (n.id)
+        `SELECT
            n.id AS node_id,
            n.name AS node_name,
            n.status,
@@ -418,9 +449,21 @@ export class TelemetryAggregatorService {
            COALESCE(nm.ram_usage_percent, 0) AS ram_usage_pct,
            COALESCE(nm.disk_usage_percent, 0) AS disk_usage_pct
          FROM nodes n
-         LEFT JOIN node_metrics nm ON nm.node_id = n.id
+         LEFT JOIN LATERAL (
+           SELECT
+             cpu_usage_percent,
+             ram_total_bytes,
+             ram_used_bytes,
+             ram_available_bytes,
+             ram_usage_percent,
+             disk_usage_percent
+           FROM node_metrics nm
+           WHERE nm.node_id = n.id
+           ORDER BY nm.collected_at DESC, nm.id DESC
+           LIMIT 1
+         ) nm ON true
          ${clusterWhere}
-         ORDER BY n.id, nm.collected_at DESC NULLS LAST;`,
+         ORDER BY n.id;`,
         clusterParams
       );
       const parseBoolCond = (val: any, fallback = false): boolean => {
@@ -641,11 +684,78 @@ export class TelemetryAggregatorService {
     let rcaTriggered = false;
     let rcaTriggerReason: string | undefined = undefined;
 
+    const isDbCacheService = Boolean(
+      serviceId &&
+      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)/i.test(serviceId.trim())
+    );
+    const isBenignDbCacheState = Boolean(
+      isDbCacheService &&
+      !rcaContext.active_pod_issue &&
+      windowRestartTotal === 0 &&
+      !ruleEvaluation.anomalies.includes('MEMORY_PRESSURE') &&
+      !rcaContext.logs?.some((l: string) => /oom|out of memory|fatal/i.test(l)) &&
+      !rcaContext.active_k8s_events?.some((e: any) => /oomkilled|evicted|failed/i.test(String(e.reason || e.message || '')))
+    );
+
     const hasHighGruRisk =
       gruPrediction &&
-      gruPrediction.detected_risks.some(
-        (r) => r.risk_type !== 'SCALE_DOWN_CANDIDATE'
-      );
+      gruPrediction.detected_risks.some((r) => {
+        if (r.risk_type === 'SCALE_DOWN_CANDIDATE') return false;
+        if (isBenignDbCacheState && r.risk_type === 'OOM') return false;
+        return true;
+      });
+
+    // Kiểm tra điều kiện mở khóa Scale Down an toàn:
+    // - GRU dự báo SCALE_DOWN_CANDIDATE
+    // - Chỉ áp dụng cho Deployment (stateless), tuyệt đối không thu StatefulSet / DB (vd: mongodb)
+    // - Số replica hiện tại > SCALE_DOWN_MIN_REPLICAS (giữ tối thiểu 2 pod HA)
+    // - Tài nguyên thực sự rảnh (CPU < 35%, RAM < 60%, 5xx < 1%, không lỗi pod)
+    // - Tôn trọng Cooldown 180s chống giật cục (flapping)
+    const scaleDownRisk = gruPrediction?.detected_risks?.find(
+      (r) => r.risk_type === 'SCALE_DOWN_CANDIDATE'
+    );
+    const currentReplicasForScaleDown =
+      rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1;
+    const workloadTypeLower = String(rcaContext.workload_type || '').toLowerCase();
+    const isSystemNamespace = ['kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage'].includes(
+      String(rcaContext.namespace || '').toLowerCase()
+    );
+    const isKnownDaemonSet = [
+      'kindnet',
+      'kube-proxy',
+      'prometheus-node-exporter',
+      'node-exporter',
+      'etcd-minikube',
+      'kube-apiserver-minikube',
+      'kube-controller-manager-minikube',
+      'kube-scheduler-minikube',
+      'storage-provisioner',
+    ].includes(serviceId.toLowerCase());
+    const isDaemonSetOrStateful =
+      workloadTypeLower === 'daemonset' ||
+      workloadTypeLower === 'statefulset' ||
+      isKnownDaemonSet;
+    const isStatelessDeployment =
+      !isSystemNamespace &&
+      !isDaemonSetOrStateful &&
+      (!workloadTypeLower || workloadTypeLower === 'deployment');
+    const isIdleHealthyMetrics =
+      !rcaContext.active_pod_issue &&
+      (latestMetrics.cpu ?? 0) < 35 &&
+      (latestMetrics.ram ?? 0) < 60 &&
+      (latestMetrics.http_5xx_rate ?? 0) < 1;
+    const lastScaleDownAt =
+      this.lastScaleDownTriggerMsByService.get(serviceId) || 0;
+    const isScaleDownCooldownReady =
+      Date.now() - lastScaleDownAt >= this.SCALE_DOWN_COOLDOWN_MS;
+
+    const canTriggerSafeScaleDown = Boolean(
+      scaleDownRisk &&
+        isStatelessDeployment &&
+        currentReplicasForScaleDown > this.SCALE_DOWN_MIN_REPLICAS &&
+        isIdleHealthyMetrics &&
+        isScaleDownCooldownReady
+    );
 
     if (forceRca) {
       rcaTriggered = true;
@@ -656,6 +766,10 @@ export class TelemetryAggregatorService {
     } else if (hasHighGruRisk) {
       rcaTriggered = true;
       rcaTriggerReason = `GRU forecasted primary risk '${gruPrediction?.primary_risk}' with confidence ${gruPrediction?.confidence_score.toFixed(2)}`;
+    } else if (canTriggerSafeScaleDown && scaleDownRisk) {
+      rcaTriggered = true;
+      this.lastScaleDownTriggerMsByService.set(serviceId, Date.now());
+      rcaTriggerReason = `GRU forecasted SCALE_DOWN_CANDIDATE (${((scaleDownRisk.confidence ?? 0.9) * 100).toFixed(1)}%) with ${currentReplicasForScaleDown} replicas > min ${this.SCALE_DOWN_MIN_REPLICAS} and idle metrics`;
     }
 
     let rcaDiagnosis: RCAResult | null = null;
@@ -692,6 +806,9 @@ export class TelemetryAggregatorService {
           riskType = undefined;
           confidence = undefined;
         }
+      } else if (canTriggerSafeScaleDown && scaleDownRisk) {
+        riskType = 'SCALE_DOWN_CANDIDATE';
+        confidence = scaleDownRisk.confidence ?? gruPrediction?.confidence_score ?? 0.90;
       } else if (
         gruPrediction?.primary_risk &&
         gruPrediction.primary_risk !== 'NONE' &&
@@ -730,6 +847,10 @@ export class TelemetryAggregatorService {
             events: rcaContext.active_pod_issue ? rcaContext.kubernetes_events : (rcaContext.active_k8s_events ?? []),
             desired_replicas: rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1,
             available_replicas: rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1,
+            deployment: {
+              desired_replicas: rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1,
+              available_replicas: rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1,
+            },
             all_pods: rcaContext.all_pods || [],
             nodes: rcaContext.nodes || [],
           },
@@ -773,41 +894,86 @@ export class TelemetryAggregatorService {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
-    const agents = await AgentModel.listAll();
-    const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
+  public static async getLiveSummaryData(
+    serviceId: string = 'sme-order-service',
+    clusterId?: string,
+    organizationId?: string,
+    options?: { lite?: boolean }
+  ) {
+    const isLite = Boolean(options?.lite);
+
+    const sequencePromise = TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
       bucketSeconds: 5,
-      limit: 20,
+      limit: isLite ? 12 : 20,
       fillPadding: false,
       clusterId,
       organizationId,
     });
-    const rawMetrics = await MetricModel.getRecentRaw(10);
-    const logs = await LogModel.getRecent(30);
-    const events = await KubernetesEventModel.getRecent(20);
-    const incidents = await IncidentModel.getRecent(10);
-    const recommendations = await RecommendationModel.getRecent(10, clusterId);
-    const predictions = await AiPredictionModel.getRecent(5);
 
-    // If clusterId is specified, also fetch most recent host/node metrics
-    let latestNodeMetric: any = null;
-    if (clusterId) {
-      try {
-        const nodeRes = await pool.query(
-          `SELECT node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
+    const latestNodeMetricPromise = pool
+      .query(
+        `WITH latest_per_node AS (
+           SELECT DISTINCT ON (node_name)
+             node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
            FROM node_metrics
-           WHERE cluster_id = $1
-           ORDER BY collected_at DESC
-           LIMIT 1`,
-          [clusterId]
-        );
-        if (nodeRes.rows.length > 0) {
-          latestNodeMetric = nodeRes.rows[0];
+           WHERE ($1::text IS NULL OR cluster_id = $1::text)
+             AND collected_at > NOW() - INTERVAL '3 minutes'
+           ORDER BY node_name, collected_at DESC, id DESC
+         )
+         SELECT 
+           'cluster' AS node_name,
+           ROUND((SUM((cpu_usage_percent / 100.0) * COALESCE(cpu_cores, 12)) / NULLIF(SUM(COALESCE(cpu_cores, 12)), 0) * 100.0)::numeric, 1)::float AS cpu_usage_percent,
+           SUM(COALESCE(cpu_cores, 12))::int AS cpu_cores,
+           SUM(COALESCE(ram_total_bytes, 8163258368))::bigint AS ram_total_bytes,
+           SUM(COALESCE(ram_used_bytes, 0))::bigint AS ram_used_bytes,
+           ROUND((SUM(COALESCE(ram_used_bytes, 0)) / NULLIF(SUM(COALESCE(ram_total_bytes, 8163258368)), 0) * 100.0)::numeric, 1)::float AS ram_usage_percent,
+           ROUND(AVG(COALESCE(disk_usage_percent, 4))::numeric, 1)::float AS disk_usage_percent,
+           MAX(collected_at) AS collected_at,
+           COUNT(*)::int AS nodes_count
+         FROM latest_per_node`,
+        [clusterId || null]
+      )
+      .then((r) => {
+        if (r.rows.length > 0 && r.rows[0].nodes_count > 0) {
+          return r.rows[0];
         }
-      } catch (err) {
-        // Safe fallback without disrupting summary
-      }
-    }
+        return null;
+      })
+      .catch(() => null);
+
+    const [
+      sequence,
+      latestNodeMetric,
+      agents,
+      rawMetrics,
+      logs,
+      events,
+      incidents,
+      recommendations,
+      predictions,
+    ] = isLite
+      ? [
+          await sequencePromise,
+          await latestNodeMetricPromise,
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+        ]
+      : await Promise.all([
+          sequencePromise,
+          latestNodeMetricPromise,
+          AgentModel.listAll(),
+          MetricModel.getRecentRaw(10),
+          LogModel.getRecent(30),
+          KubernetesEventModel.getRecent(20),
+          IncidentModel.getRecent(10),
+          RecommendationModel.getRecent(10, clusterId),
+          AiPredictionModel.getRecent(5),
+        ]);
 
     const latestPoint = sequence.length > 0 
       ? sequence[sequence.length - 1] 

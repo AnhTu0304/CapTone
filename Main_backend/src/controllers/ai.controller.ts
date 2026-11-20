@@ -335,27 +335,61 @@ export class AiController {
       const requestedOrgId = (req.query.organization_id as string | undefined) || user?.organization_id;
       const effectiveOrgId = await AiController.validateUserOrgAndCluster(user, requestedOrgId, cluster_id);
 
-      let query = `
-        SELECT DISTINCT w.name 
-        FROM workloads w
-        WHERE 1=1
-      `;
+      let clusterFilterWorkloads = '';
+      let clusterFilterPods = '';
+      let clusterFilterIncidents = '';
       const params: any[] = [];
       let idx = 1;
       if (cluster_id && cluster_id !== 'ALL' && cluster_id !== 'all') {
-        query += ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
+        clusterFilterWorkloads = ` AND (w.cluster_id = $${idx} OR w.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
+        clusterFilterPods = ` AND (p.cluster_id::text = $${idx} OR p.cluster_id IN (SELECT id FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
+        clusterFilterIncidents = ` AND (i.cluster_id::text = $${idx} OR i.cluster_id IN (SELECT id::text FROM clusters WHERE id::text = $${idx} OR cluster_uid = $${idx} OR name = $${idx}))`;
         params.push(cluster_id);
         idx++;
       }
+      let orgFilterWorkloads = '';
+      let orgFilterPods = '';
       if (effectiveOrgId) {
-        query += ` AND EXISTS (SELECT 1 FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE (c.id::text = w.cluster_id OR c.name = w.cluster_id OR c.cluster_uid = w.cluster_id) AND e.organization_id = $${idx})`;
+        orgFilterWorkloads = ` AND EXISTS (SELECT 1 FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE (c.id::text = w.cluster_id OR c.name = w.cluster_id OR c.cluster_uid = w.cluster_id) AND e.organization_id = $${idx})`;
+        orgFilterPods = ` AND EXISTS (SELECT 1 FROM clusters c JOIN environments e ON c.environment_id = e.id WHERE c.id = p.cluster_id AND e.organization_id = $${idx})`;
         params.push(effectiveOrgId);
         idx++;
       }
-      query += ` AND w.name NOT IN ('coredns', 'etcd-minikube', 'kindnet', 'kube', 'kube-controller', 'storage-provisioner', 'kube-apiserver-minikube', 'kube-controller-manager-minikube', 'kube-scheduler-minikube', 'selfheal-agent', 'metrics-server')`;
-      query += ` ORDER BY w.name ASC`;
+
+      const query = `
+        SELECT DISTINCT name FROM (
+          SELECT w.name 
+          FROM workloads w
+          WHERE w.deleted_at IS NULL ${clusterFilterWorkloads} ${orgFilterWorkloads}
+          UNION
+          SELECT COALESCE(NULLIF(p.labels->>'app.kubernetes.io/name', ''), NULLIF(p.labels->>'k8s-app', ''), NULLIF(p.labels->>'app', ''), regexp_replace(p.name, '(-[a-z0-9]{5}|-\\d+)$', '')) AS name
+          FROM pods p
+          WHERE p.deleted_at IS NULL ${clusterFilterPods} ${orgFilterPods}
+          UNION
+          SELECT i.target_name AS name
+          FROM incidents i
+          WHERE i.status = 'OPEN' AND i.target_name IS NOT NULL AND i.target_name != '' ${clusterFilterIncidents}
+        ) combined_workloads
+        WHERE name IS NOT NULL AND name != '' AND name NOT LIKE '%-0000-%'
+        ORDER BY name ASC
+      `;
       const result = await pool.query(query, params);
-      const workloads = result.rows.map((r: any) => r.name);
+      const CANONICAL_MAP: Record<string, string> = {
+        'otel-collector-opentelemetry-collector': 'opentelemetry-collector',
+        'prometheus-kube-prometheus-operator': 'kube-prometheus-stack-operator',
+        'kube-prometheus-stack-prometheus-operator': 'kube-prometheus-stack-operator',
+        'prometheus-kube-state-metrics': 'kube-state-metrics',
+        'prometheus-prometheus-node-exporter': 'prometheus-node-exporter',
+        'kube-dns': 'coredns',
+        'ecommerce-store': 'ecommerce-store-app',
+      };
+      const workloadSet = new Set<string>();
+      result.rows.forEach((r: any) => {
+        let name = (r.name || '').trim();
+        if (CANONICAL_MAP[name]) name = CANONICAL_MAP[name];
+        if (name && !name.includes('-0000-')) workloadSet.add(name);
+      });
+      const workloads = Array.from(workloadSet).sort();
       return ApiResponse.success(res, 'Retrieved cluster workloads', workloads, 200);
     } catch (error) {
       console.error('[getPredictions ERROR]', error);

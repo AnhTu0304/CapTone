@@ -12,7 +12,7 @@ from selfheal_agent.telemetry.schemas import AgentK8sEventData, K8sEventDetail
 
 logger = logging.getLogger("selfheal_agent.collectors.pods")
 
-EXCLUDED_NAMESPACES = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system"}
+EXCLUDED_NAMESPACES = {"kube-public", "kube-node-lease"}
 
 
 def _opt_str(val: Any) -> Optional[str]:
@@ -82,6 +82,8 @@ def parse_memory_to_bytes(mem_str: Optional[str]) -> float:
 
 def extract_service_id(pod_name: str, labels: Optional[dict[str, str]] = None) -> str:
     """Infer service identifier from Kubernetes labels or pod naming conventions."""
+    if pod_name.startswith("coredns-"):
+        return "coredns"
     if isinstance(labels, dict):
         for key in ("app", "app.kubernetes.io/name", "app.kubernetes.io/instance", "k8s-app"):
             val = labels.get(key)

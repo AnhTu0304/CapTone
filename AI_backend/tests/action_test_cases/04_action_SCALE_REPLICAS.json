@@ -4,7 +4,7 @@
   "scenario_title": "Tăng cường quy mô bản sao Workload (Scale Replicas)",
   "file_name": "04_action_SCALE_REPLICAS.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-16T20:38:12.321994+00:00",
+  "tested_at": "2026-11-20T10:26:13.261838+00:00",
   "description": "Đỉnh tải giao dịch cao bất thường đẩy CPU lên 96.5% và số bản sao khả dụng thấp hơn yêu cầu. RCA đề xuất SCALE_REPLICAS tăng thêm pods để phân tải.",
   "input_payload": {
     "request_id": "req-20261026-scale-replicas-004",
@@ -34,6 +34,32 @@
       "restart_count": 0,
       "desired_replicas": 4,
       "available_replicas": 2,
+      "all_pods": [
+        {
+          "pod_name": "checkout-svc-1",
+          "status": "Running",
+          "ready": true,
+          "cpu_usage_pct": 96.5,
+          "latency_ms": 920.0
+        },
+        {
+          "pod_name": "checkout-svc-2",
+          "status": "Running",
+          "ready": true,
+          "cpu_usage_pct": 95.0,
+          "latency_ms": 910.0
+        }
+      ],
+      "nodes": [
+        {
+          "node_name": "worker-node-1",
+          "status": "Ready",
+          "conditions": {
+            "Ready": true
+          },
+          "free_memory_bytes": 8589934592
+        }
+      ],
       "events": [
         "Available replicas (2) are lower than desired replicas (4)"
       ]
@@ -92,7 +118,7 @@
     ],
     "recommendation": {
       "action": "SCALE_REPLICAS",
-      "reason": "Bổ sung số lượng Pod replica (lên 5 replicas) để phân phối tải và phục hồi năng lực xử lý (hạ độ trễ dịch vụ)",
+      "reason": "Đã đánh giá 2 lớp năng lực: Toàn bộ 2 Pod hiện có đều đã chạm ngưỡng năng lực (Trung bình 95.8% CPU). Đánh giá sơ bộ có khả năng lập lịch thành công: Cụm có 1 Node khỏe sẵn sàng; Node tối ưu nhất 'worker-node-1' còn 8.00GB RAM khả dụng (Kubernetes Scheduler sẽ quyết định việc phân bổ thực tế). Đề xuất Scale Up từ 4 lên 5 replicas để đảm bảo thông lượng và hạ độ trễ dịch vụ.",
       "priority": "HIGH",
       "target_type": "DEPLOYMENT",
       "target_name": "checkout-service",
@@ -103,7 +129,7 @@
         "faulty_pod_name": null,
         "faulty_node_id": null,
         "faulty_node_name": null,
-        "recommended_destination_node": null,
+        "recommended_destination_node": "worker-node-1",
         "destination_node_id": null,
         "target_replicas": 5,
         "is_primary_database": false,

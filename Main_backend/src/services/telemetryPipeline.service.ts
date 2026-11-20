@@ -10,6 +10,7 @@ import { WorkloadModel } from '../models';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 import { recordBackgroundJob, recordRemediationAction } from '../telemetry/metrics';
 import { RecoveryVerificationService } from './recoveryVerification.service';
+import { isExcludedSystemService } from '../utils/systemServiceFilter';
 
 export class TelemetryPipelineService {
   private static isRunning = false;
@@ -304,19 +305,7 @@ export class TelemetryPipelineService {
           ).catch(() => {});
           await pool.query(
             `UPDATE incidents SET status = 'RESOLVED', resolved_at = COALESCE(resolved_at, NOW()), updated_at = NOW()
-             WHERE id = $1 AND status = 'OPEN'
-               AND NOT EXISTS (
-                 SELECT 1 FROM healing_actions ha_fail
-                 WHERE ha_fail.incident_id = $1
-                   AND (
-                     ha_fail.execution_status = 'FAILED'
-                     OR EXISTS (
-                       SELECT 1 FROM recovery_verifications rv_fail
-                       WHERE rv_fail.healing_action_id = ha_fail.id
-                         AND rv_fail.verification_result = false
-                     )
-                   )
-               );`,
+             WHERE id = $1 AND status IN ('OPEN', 'INVESTIGATING');`,
             [succRow.incident_id]
           ).catch(() => {});
         }
@@ -460,6 +449,14 @@ export class TelemetryPipelineService {
       let recAction = rca.recommendation.action || 'Restart Pod';
       if (recAction === 'NO_ACTION') {
         console.log(`🛡️ [PolicyEngine] Recommendation is NO_ACTION (Circuit Breaker). Bypassing automated healing dispatch.`);
+        if (rca.recommendation_id) {
+          await pool.query(
+            `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
+            [rca.recommendation_id]
+          ).catch((err) => {
+            console.warn('[TelemetryPipelineService] Cập nhật trạng thái ai_recommendations NO_ACTION thất bại:', err?.message || err);
+          });
+        }
         if (rca.incident_id) {
           CriticalIncidentNotificationService.notifyIfNeeded(rca.incident_id, {
             reasonStage: 'NO_ACTION',
@@ -635,9 +632,30 @@ export class TelemetryPipelineService {
         'DRAIN'
       ].includes(rawAction);
 
-      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold, or StatefulSet Primary DB, or Mandatory HITL action)
-      if (!isAuto || Boolean(policy.requires_approval) || isStatefulPrimaryDestructive || isMandatoryHitlAction) {
-        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' action '${policy.action_code || recAction}' requires HITL approval (Mandatory HITL: ${isMandatoryHitlAction}, Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
+      // Rào chắn bảo vệ hạ tầng hệ thống Kubernetes (K8s System Infrastructure Safety Guard):
+      // Các Namespace lõi hệ thống ('kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage')
+      // hoặc các thành phần mạng / giám sát hạ tầng DaemonSet ('kindnet', 'kube-proxy', 'prometheus-node-exporter')
+      // TUYỆT ĐỐI NGHIÊM CẤM tự động can thiệp (Autonomous Execution) như SCALE_REPLICAS hay RESTART_POD.
+      // Mọi can thiệp hạ tầng BẮT BUỘC phải chuyển qua Cổng Phê Duyệt HITL có kỹ sư xác nhận.
+      const isProtectedSystemNamespace = ['kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage'].includes(
+        String(targetNamespace || '').toLowerCase()
+      );
+      const isSystemInfrastructureWorkload = [
+        'kindnet',
+        'kube-proxy',
+        'prometheus-node-exporter',
+        'node-exporter',
+        'etcd-minikube',
+        'kube-apiserver-minikube',
+        'kube-controller-manager-minikube',
+        'kube-scheduler-minikube',
+        'storage-provisioner',
+      ].includes(canonicalTargetName.toLowerCase());
+      const isProtectedSystemTarget = isProtectedSystemNamespace || isSystemInfrastructureWorkload;
+
+      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold, or StatefulSet Primary DB, or Mandatory HITL action, or Protected System Target)
+      if (!isAuto || Boolean(policy.requires_approval) || isStatefulPrimaryDestructive || isMandatoryHitlAction || isProtectedSystemTarget) {
+        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' action '${policy.action_code || recAction}' requires HITL approval (Protected System: ${isProtectedSystemTarget}, Mandatory HITL: ${isMandatoryHitlAction}, Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
         recordRemediationAction(policy.action_code || 'RESTART_POD', 'hitl_pending');
 
         const hitlActInsert = await pool.query(
@@ -678,7 +696,9 @@ export class TelemetryPipelineService {
         );
         const pendingActionId = hitlActInsert.rows[0]?.id;
         if (pendingActionId) {
-          const hitlReason = isMandatoryHitlAction
+          const hitlReason = isProtectedSystemTarget
+            ? `Dịch vụ ${canonicalTargetName} thuộc hạ tầng hệ thống Kubernetes (${targetNamespace}). Để đảm bảo an toàn tuyệt đối, hành động ${policy.action_name} (${policy.action_code}) BẮT BUỘC phải qua Cổng Phê Duyệt (HITL) có kỹ sư kiểm tra thủ công, nghiêm cấm AI tự động can thiệp.`
+            : isMandatoryHitlAction
             ? `Hành động ${policy.action_name} (${policy.action_code}) có mức độ rủi ro cao (${effectiveRisk}), can thiệp trực tiếp vào phiên bản phát hành/hạ tầng nên BẮT BUỘC phải qua Cổng Phê Duyệt (HITL) có con người xác nhận, nghiêm cấm AI tự động thi hành.`
             : confidence < threshold
             ? `Độ tin cậy chẩn đoán AI (${(confidence * 100).toFixed(0)}%) thấp hơn ngưỡng tự động (${(threshold * 100).toFixed(0)}%) của chính sách ${policy.policy_name}, kích hoạt rào chắn an toàn HITL.`

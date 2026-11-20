@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
+import { aiService } from '../../../services/aiService';
+import { extractActiveK8sServices } from '../../../utils/k8sServiceFilter';
 import SelfHealingTrendChart from '../../../components/dashboard/SelfHealingTrendChart';
 import ActionDetailModal from './ActionDetailModal';
 import {
@@ -21,7 +23,8 @@ import {
   Zap,
   Filter,
   BarChart2,
-  AlertTriangle
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 
 const CANONICAL_ACTION_TYPES = [
@@ -79,6 +82,7 @@ export const ActionHistoryPage = ({ onNavigate }) => {
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedActionType, setSelectedActionType] = useState('ALL');
   const [dbActionTypes, setDbActionTypes] = useState([]);
+  const [liveWorkloads, setLiveWorkloads] = useState([]);
   const [showTrendChart, setShowTrendChart] = useState(false);
 
   // Trạng thái mở Popover Lịch
@@ -328,7 +332,13 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
 
     // Strip WORKLOAD/ or any other prefix from target name
     const rawTarget = item.target_name || item.target_id || 'Chưa xác định';
-    const targetName = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
+    let targetName = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
+    const lTarget = targetName.toLowerCase();
+    if (lTarget === 'otel-collector-opentelemetry-collector') targetName = 'opentelemetry-collector';
+    else if (lTarget === 'prometheus-kube-state-metrics') targetName = 'kube-state-metrics';
+    else if (lTarget === 'prometheus-kube-prometheus-operator') targetName = 'kube-prometheus-stack-operator';
+    else if (lTarget === 'ecommerce-store') targetName = 'ecommerce-store-app';
+    else if (/^mongodb-\d+$/i.test(lTarget)) targetName = 'mongodb';
 
     const resolvedNs = item.result?.details?.namespace ||
       item.result?.namespace ||
@@ -481,12 +491,29 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     return () => { isMounted = false; };
   }, []);
 
+  // Tải danh sách Workloads ĐANG CHẠY THỰC TẾ trên cụm K8s (đã lọc deleted_at IS NULL & bỏ dịch vụ hệ thống/monitoring)
+  const fetchLiveWorkloads = useCallback(async () => {
+    try {
+      const workloads = await aiService.getWorkloads(activeClusterId, activeOrgId);
+      if (Array.isArray(workloads)) {
+        setLiveWorkloads(workloads);
+      }
+    } catch (err) {
+      setLiveWorkloads([]);
+    }
+  }, [activeClusterId, activeOrgId]);
+
+  useEffect(() => {
+    fetchLiveWorkloads();
+  }, [fetchLiveWorkloads]);
+
   useEffect(() => {
     fetchActions();
   }, [fetchActions]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    fetchLiveWorkloads();
     fetchActions();
   };
 
@@ -508,15 +535,20 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     return Array.from(map.values());
   }, [dbActionTypes]);
 
-  // Dynamic Lists for Service Dropdown
+  // Danh sách Dịch vụ K8s đang hoạt động thực tế (từ GET /api/v1/ai/workloads, tuyệt đối không lấy dịch vụ cũ đã xóa)
   const uniqueServices = useMemo(() => {
-    const s = new Set();
-    actions.forEach((a) => {
-      const name = a.targetName || a.rawItem?.target_name || a.rawItem?.target_id;
-      if (name && !name.includes(' ') && name !== 'Chưa xác định') s.add(name);
-    });
-    return Array.from(s).sort();
-  }, [actions]);
+    return extractActiveK8sServices(liveWorkloads);
+  }, [liveWorkloads]);
+
+  useEffect(() => {
+    if (
+      selectedService !== 'ALL' &&
+      uniqueServices.length > 0 &&
+      !uniqueServices.includes(selectedService)
+    ) {
+      setSelectedService('ALL');
+    }
+  }, [selectedService, uniqueServices]);
 
   // Danh sách các năm có hành động
   const availableYears = useMemo(() => {
@@ -706,30 +738,35 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px',
-          paddingTop: '14px',
-          borderTop: '1px solid var(--dash-border)',
+          gap: '10px',
+          padding: '11px 16px',
+          backgroundColor: '#F8FAFC',
+          borderTop: '1px solid #E2E8F0',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.75rem',
         }}
       >
-        <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
-          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> trong tổng số{' '}
-          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> bản ghi ({ITEMS_PER_PAGE} bản ghi / trang)
+        <div style={{ color: '#64748B' }}>
+          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> /{' '}
+          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> bản ghi
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <button
             type="button"
             disabled={currPage <= 1}
             onClick={() => onPageChange(Math.max(1, currPage - 1))}
             style={{
-              padding: '5px 10px',
-              fontSize: '0.75rem',
+              height: '28px',
+              padding: '0 10px',
+              fontSize: '0.74rem',
               fontWeight: 600,
-              borderRadius: '6px',
+              borderRadius: '7px',
               border: '1px solid #CBD5E1',
-              backgroundColor: currPage <= 1 ? '#F8FAFC' : '#FFFFFF',
+              backgroundColor: '#FFFFFF',
               color: currPage <= 1 ? '#94A3B8' : '#334155',
               cursor: currPage <= 1 ? 'not-allowed' : 'pointer',
+              opacity: currPage <= 1 ? 0.55 : 1,
             }}
           >
             &laquo; Trước
@@ -737,7 +774,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
 
           {pages.map((p, idx) =>
             p === '...' ? (
-              <span key={`ellipsis-${idx}`} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.75rem' }}>
+              <span key={`ellipsis-${idx}`} style={{ padding: '0 4px', color: '#94A3B8', fontSize: '0.74rem' }}>
                 ...
               </span>
             ) : (
@@ -746,15 +783,15 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 type="button"
                 onClick={() => onPageChange(p)}
                 style={{
-                  minWidth: '30px',
-                  height: '30px',
-                  padding: '0 8px',
-                  fontSize: '0.75rem',
+                  minWidth: '28px',
+                  height: '28px',
+                  padding: '0 7px',
+                  fontSize: '0.74rem',
                   fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
-                  borderRadius: '6px',
-                  border: currPage === p ? '1px solid #2563EB' : '1px solid #CBD5E1',
-                  backgroundColor: currPage === p ? '#2563EB' : '#FFFFFF',
+                  borderRadius: '7px',
+                  border: currPage === p ? '1px solid #059669' : '1px solid #CBD5E1',
+                  backgroundColor: currPage === p ? '#059669' : '#FFFFFF',
                   color: currPage === p ? '#FFFFFF' : '#334155',
                   cursor: 'pointer',
                 }}
@@ -769,14 +806,16 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
             disabled={currPage >= totalPg}
             onClick={() => onPageChange(Math.min(totalPg, currPage + 1))}
             style={{
-              padding: '5px 10px',
-              fontSize: '0.75rem',
+              height: '28px',
+              padding: '0 10px',
+              fontSize: '0.74rem',
               fontWeight: 600,
-              borderRadius: '6px',
+              borderRadius: '7px',
               border: '1px solid #CBD5E1',
-              backgroundColor: currPage >= totalPg ? '#F8FAFC' : '#FFFFFF',
+              backgroundColor: '#FFFFFF',
               color: currPage >= totalPg ? '#94A3B8' : '#334155',
               cursor: currPage >= totalPg ? 'not-allowed' : 'pointer',
+              opacity: currPage >= totalPg ? 0.55 : 1,
             }}
           >
             Sau &raquo;
@@ -786,182 +825,401 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     );
   };
 
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+
+  const kpiCardStyle = (accent, isSelected = false) => ({
+    backgroundColor: '#FFFFFF',
+    border: isSelected ? `1px solid ${accent}` : '1px solid rgba(226, 232, 240, 0.95)',
+    borderTop: `2.5px solid ${accent}`,
+    borderRadius: '12px',
+    padding: '11px 14px',
+    boxShadow: isSelected ? `0 6px 18px ${accent}22` : '0 4px 16px rgba(15, 23, 42, 0.04)',
+    minWidth: 0,
+    transition: 'transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease',
+  });
+
+  const actionBtnStyle = (active = false, disabled = false) => ({
+    height: '34px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '0 12px',
+    backgroundColor: active ? '#ECFDF5' : '#FFFFFF',
+    border: active ? '1px solid #10B981' : '1px solid rgba(203, 213, 225, 0.9)',
+    borderRadius: '10px',
+    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+    fontSize: '0.8rem',
+    fontWeight: active ? 700 : 600,
+    color: active ? '#047857' : disabled ? '#94A3B8' : '#334155',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
+  });
+
+  const selectControlStyle = {
+    height: '32px',
+    padding: '0 10px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    border: '1px solid #CBD5E1',
+    borderRadius: '8px',
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+    outline: 'none',
+    cursor: 'pointer',
+  };
+
   return (
-    <div className="dashboard-action-history-page" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="dashboard-action-history-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <style>{`
+        .history-table-row {
+          transition: background-color 0.14s ease;
+        }
+        .history-table-row:hover {
+          background-color: #F8FAFC !important;
+        }
+        .history-table-row--failed:hover {
+          background-color: #FEF2F2 !important;
+        }
+        .history-detail-btn:hover {
+          background-color: #ECFDF5 !important;
+          border-color: #10B981 !important;
+          color: #047857 !important;
+        }
+      `}</style>
+
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <History size={20} color="#059669" />
+            <History size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Lịch Sử Tự Phục Hồi & Báo Cáo Hiệu Quả MTTR
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Lịch Sử Tự Phục Hồi &amp; MTTR
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Theo dõi toàn diện nhật ký thực thi, đối soát thời gian phục hồi MTTR và cam kết chất lượng dịch vụ (SLA)
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Nhật ký thực thi, thời gian hồi phục trung bình MTTR &amp; đối soát SLA trên cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setShowTrendChart((prev) => !prev)}
+            style={actionBtnStyle(showTrendChart, false)}
+            title={showTrendChart ? 'Thu gọn biểu đồ MTTR' : 'Mở biểu đồ xu hướng MTTR'}
+          >
+            <BarChart2 size={14} />
+            <span>{showTrendChart ? 'Ẩn biểu đồ MTTR' : 'Biểu đồ MTTR'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
-            }}
+            style={actionBtnStyle(false, isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới lịch sử</span>
+            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
           </button>
         </div>
       </div>
 
-      {/* UNIFIED COMPACT FILTER TOOLBAR */}
+      {/* Hàng 4 Thẻ KPI Tóm Tắt */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div
+          onClick={() => setSelectedStatus('ALL')}
+          title="Hiển thị tất cả hành động"
+          style={{ ...kpiCardStyle('#059669'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG HÀNH ĐỘNG</span>
+            <Activity size={14} color="#059669" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {(dynamicAnalytics.totalActions || 0).toLocaleString('vi-VN')}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+              {dynamicAnalytics.finishedCount || 0} đã hoàn tất
+            </span>
+          </div>
+        </div>
+
+        <div
+          onClick={() => setSelectedStatus((prev) => (prev === 'SUCCEEDED' ? 'ALL' : 'SUCCEEDED'))}
+          title="Nhấp để lọc nhanh hành động thành công"
+          style={{ ...kpiCardStyle('#10B981', selectedStatus === 'SUCCEEDED'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỶ LỆ THÀNH CÔNG</span>
+            <CheckCircle2 size={14} color="#10B981" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>
+              {dynamicAnalytics.successRate}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>theo bộ lọc hiện tại</span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle('#3B82F6')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>MTTR TRUNG BÌNH</span>
+            <Clock size={14} color="#3B82F6" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {dynamicAnalytics.averageRecoveryTime}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>thời gian khôi phục</span>
+          </div>
+        </div>
+
+        <div
+          onClick={() => setSelectedStatus((prev) => (prev === 'PENDING' ? 'ALL' : 'PENDING'))}
+          title="Nhấp để lọc nhanh hành động chờ duyệt HITL"
+          style={{ ...kpiCardStyle('#F59E0B', selectedStatus === 'PENDING'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHỜ DUYỆT HITL</span>
+            <ShieldCheck size={14} color="#F59E0B" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span
+              style={{
+                fontSize: '1.3rem',
+                fontWeight: 800,
+                fontFamily: 'var(--font-mono)',
+                color: dynamicAnalytics.pendingCount > 0 ? '#D97706' : '#0F172A',
+              }}
+            >
+              {dynamicAnalytics.pendingCount || 0}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
+              {dynamicAnalytics.pendingCount > 0 ? 'cần kỹ sư ký duyệt' : 'không có yêu cầu chờ'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bộ Lọc Gọn 2 Hàng */}
       <div
         className="dash-card"
         style={{
-          padding: '10px 14px',
+          padding: '12px 16px',
           backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          borderRadius: '10px',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '8px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          flexDirection: 'column',
+          gap: '10px',
         }}
       >
-        {/* Nhóm Bộ Lọc Trái: Lịch + Dịch vụ + Trạng thái + Loại hành động */}
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+        {/* Hàng 1: Tìm kiếm + Pill Trạng thái + Lịch */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          {/* Search Box */}
+          <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: '360px' }}>
+            <input
+              type="text"
+              placeholder="Tìm kiếm mã bản ghi, hành động, đối tượng..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                height: '34px',
+                width: '100%',
+                padding: '0 30px 0 32px',
+                fontSize: '0.78rem',
+                border: '1px solid #CBD5E1',
+                borderRadius: '9px',
+                backgroundColor: '#F8FAFC',
+                color: '#0F172A',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94A3B8' }} />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Xóa từ khóa tìm kiếm"
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '9px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: 0,
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Status Pills */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              backgroundColor: '#F8FAFC',
+              padding: '3px',
+              border: '1px solid #E2E8F0',
+              borderRadius: '9px',
+            }}
+          >
+            {[
+              { id: 'ALL', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
+              { id: 'SUCCEEDED', label: 'Thành công', color: '#047857', bg: '#ECFDF5' },
+              { id: 'PENDING', label: 'Chờ duyệt', color: '#D97706', bg: '#FFFBEB' },
+              { id: 'FAILED', label: 'Thất bại', color: '#DC2626', bg: '#FEF2F2' },
+              { id: 'CANCELLED', label: 'Đã hủy', color: '#475569', bg: '#F1F5F9' },
+            ].map((st) => {
+              const active = selectedStatus === st.id;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setSelectedStatus(st.id)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '6px',
+                    border: active ? `1px solid ${st.color}55` : '1px solid transparent',
+                    backgroundColor: active ? st.bg : 'transparent',
+                    color: active ? st.color : '#64748B',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.12s ease',
+                  }}
+                >
+                  {st.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Nút Lịch mở Popover chọn Ngày, Tháng, Năm */}
           <div style={{ position: 'relative' }} ref={calendarRef}>
             <button
               type="button"
               onClick={() => setIsCalendarOpen(!isCalendarOpen)}
               style={{
-                height: '32px',
-                padding: '0 10px',
+                height: '34px',
+                padding: '0 11px',
                 fontSize: '0.75rem',
-                fontWeight: 500,
-                borderRadius: '6px',
-                border: '1px solid #CBD5E1',
-                backgroundColor: '#FFFFFF',
-                color: '#1E293B',
-                display: 'flex',
+                fontWeight: 700,
+                borderRadius: '9px',
+                border: isCalendarOpen ? '1px solid #10B981' : '1px solid #CBD5E1',
+                backgroundColor: isCalendarOpen ? '#ECFDF5' : '#F8FAFC',
+                color: isCalendarOpen ? '#047857' : '#0F172A',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 cursor: 'pointer',
-                boxShadow: isCalendarOpen ? '0 0 0 2px rgba(15, 23, 42, 0.08)' : 'none',
                 transition: 'all 0.15s ease',
               }}
               title="Mở bảng lịch chọn ngày, tháng hoặc năm"
             >
-              <Calendar size={14} color="#64748B" />
+              <Calendar size={14} color={isCalendarOpen ? '#059669' : '#64748B'} />
               <span>{currentFilterLabel}</span>
-              <ChevronDown size={12} color="#64748B" />
+              <ChevronDown size={12} color={isCalendarOpen ? '#059669' : '#64748B'} />
             </button>
 
-            {/* Cửa Sổ Popover Lịch Đẹp Mắt */}
             {isCalendarOpen && (
               <div
                 style={{
                   position: 'absolute',
-                  top: '38px',
-                  left: '0',
+                  top: '40px',
+                  right: '0',
                   zIndex: 100,
-                  width: '330px',
+                  width: '326px',
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   border: '1px solid #E2E8F0',
-                  boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  boxShadow: '0 14px 32px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.06)',
                   padding: '14px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '12px',
                 }}
               >
-                {/* Tabs Chế Độ: Ngày | Tháng | Năm */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('date')}
                     style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
+                      padding: '6px 4px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       borderRadius: '6px',
                       border: 'none',
                       backgroundColor: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      color: timeFilterMode === 'date' || timeFilterMode === 'today' ? '#047857' : '#64748B',
+                      boxShadow: timeFilterMode === 'date' || timeFilterMode === 'today' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    📅 Ngày
+                    Ngày
                   </button>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('month')}
                     style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
+                      padding: '6px 4px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       borderRadius: '6px',
                       border: 'none',
                       backgroundColor: timeFilterMode === 'month' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'month' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      color: timeFilterMode === 'month' ? '#047857' : '#64748B',
+                      boxShadow: timeFilterMode === 'month' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    🗓️ Tháng
+                    Tháng
                   </button>
                   <button
                     type="button"
                     onClick={() => setTimeFilterMode('year')}
                     style={{
-                      padding: '6px 2px',
-                      fontSize: '0.7rem',
+                      padding: '6px 4px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       borderRadius: '6px',
                       border: 'none',
                       backgroundColor: timeFilterMode === 'year' ? '#FFFFFF' : 'transparent',
-                      color: timeFilterMode === 'year' ? '#0F172A' : '#64748B',
-                      boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      color: timeFilterMode === 'year' ? '#047857' : '#64748B',
+                      boxShadow: timeFilterMode === 'year' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
                     }}
                   >
-                    📆 Năm
+                    Năm
                   </button>
                 </div>
 
-                {/* Tab Body: CHỌN NGÀY */}
-                {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
+                {(timeFilterMode === 'date' || timeFilterMode === 'today' || timeFilterMode === 'all') && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
                       Chọn ngày cụ thể:
@@ -975,12 +1233,12 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       }}
                       style={{
                         width: '100%',
-                        height: '36px',
+                        height: '34px',
                         padding: '0 10px',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.8rem',
                         fontWeight: 600,
                         border: '1px solid #CBD5E1',
-                        borderRadius: '6px',
+                        borderRadius: '8px',
                         backgroundColor: '#F8FAFC',
                         color: '#0F172A',
                         outline: 'none',
@@ -988,10 +1246,9 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       }}
                     />
 
-                    {/* Quick presets for recent days */}
                     <div style={{ marginTop: '10px' }}>
                       <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                        Ngày có hành động gần đây:
+                        7 ngày gần nhất:
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {Array.from({ length: 7 }, (_, i) => {
@@ -1006,19 +1263,15 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                               key={dStr}
                               type="button"
                               onClick={() => {
-                                if (isToday) {
-                                  setTimeFilterMode('today');
-                                } else {
-                                  setTimeFilterMode('date');
-                                }
+                                setTimeFilterMode(isToday ? 'today' : 'date');
                                 setSelectedDate(dStr);
                                 setIsCalendarOpen(false);
                               }}
                               style={{
                                 padding: '4px 8px',
-                                fontSize: '0.6875rem',
+                                fontSize: '0.7rem',
                                 fontWeight: isSelected ? 700 : 500,
-                                borderRadius: '4px',
+                                borderRadius: '6px',
                                 border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
                                 backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
                                 color: isSelected ? '#047857' : '#334155',
@@ -1034,11 +1287,10 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                   </div>
                 )}
 
-                {/* Tab Body: CHỌN THÁNG */}
                 {timeFilterMode === 'month' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                      Chọn tháng & năm:
+                      Chọn tháng &amp; năm:
                     </label>
                     <input
                       type="month"
@@ -1046,12 +1298,12 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       onChange={(e) => setSelectedMonth(e.target.value)}
                       style={{
                         width: '100%',
-                        height: '36px',
+                        height: '34px',
                         padding: '0 10px',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.8rem',
                         fontWeight: 600,
                         border: '1px solid #CBD5E1',
-                        borderRadius: '6px',
+                        borderRadius: '8px',
                         backgroundColor: '#F8FAFC',
                         color: '#0F172A',
                         outline: 'none',
@@ -1060,7 +1312,6 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       }}
                     />
 
-                    {/* 12 Months grid */}
                     <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
                       Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
                     </div>
@@ -1078,12 +1329,12 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                             }}
                             style={{
                               padding: '6px 2px',
-                              fontSize: '0.6875rem',
+                              fontSize: '0.7rem',
                               fontWeight: isSelected ? 700 : 500,
-                              borderRadius: '4px',
-                              border: isSelected ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                              backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
-                              color: isSelected ? '#1D4ED8' : '#334155',
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                              color: isSelected ? '#047857' : '#334155',
                               cursor: 'pointer',
                               textAlign: 'center',
                             }}
@@ -1096,7 +1347,6 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                   </div>
                 )}
 
-                {/* Tab Body: CHỌN NĂM */}
                 {timeFilterMode === 'year' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
@@ -1114,13 +1364,13 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                               setIsCalendarOpen(false);
                             }}
                             style={{
-                              padding: '10px 4px',
-                              fontSize: '0.8125rem',
+                              padding: '9px 4px',
+                              fontSize: '0.8rem',
                               fontWeight: isSelected ? 700 : 600,
-                              borderRadius: '6px',
-                              border: isSelected ? '1px solid #7C3AED' : '1px solid #E2E8F0',
-                              backgroundColor: isSelected ? '#F5F3FF' : '#F8FAFC',
-                              color: isSelected ? '#6D28D9' : '#334155',
+                              borderRadius: '8px',
+                              border: isSelected ? '1px solid #10B981' : '1px solid #E2E8F0',
+                              backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                              color: isSelected ? '#047857' : '#334155',
                               cursor: 'pointer',
                               textAlign: 'center',
                             }}
@@ -1133,37 +1383,56 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                   </div>
                 )}
 
-                {/* Popover Footer */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTimeFilterMode('today');
-                      setSelectedDate(getTodayStr());
-                      setIsCalendarOpen(false);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: '0.7rem',
-                      color: '#10B981',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
-                  >
-                    Về hôm nay
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimeFilterMode('today');
+                        setSelectedDate(getTodayStr());
+                        setIsCalendarOpen(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '0.72rem',
+                        color: '#059669',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      Hôm nay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimeFilterMode('all');
+                        setIsCalendarOpen(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '0.72rem',
+                        color: timeFilterMode === 'all' ? '#047857' : '#64748B',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      Tất cả
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setIsCalendarOpen(false)}
                     style={{
-                      padding: '4px 12px',
-                      fontSize: '0.7rem',
+                      padding: '5px 12px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
-                      backgroundColor: '#0F172A',
+                      backgroundColor: '#059669',
                       color: '#FFFFFF',
-                      borderRadius: '4px',
+                      borderRadius: '7px',
                       border: 'none',
                       cursor: 'pointer',
                     }}
@@ -1174,112 +1443,80 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
               </div>
             )}
           </div>
-
-          {/* Service Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Server size={14} color="#64748B" />
-            <select
-              value={selectedService}
-              onChange={(e) => setSelectedService(e.target.value)}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                backgroundColor: '#FFFFFF',
-                color: '#1E293B',
-                fontWeight: 500,
-                outline: 'none',
-              }}
-            >
-              <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
-              {uniqueServices.map((svc) => (
-                <option key={svc} value={svc}>Dịch vụ: {svc}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Zap size={14} color="#64748B" />
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                backgroundColor: '#FFFFFF',
-                color: '#1E293B',
-                fontWeight: 500,
-                outline: 'none',
-              }}
-            >
-              <option value="ALL">Tất cả trạng thái</option>
-              <option value="SUCCEEDED">Thành công</option>
-              <option value="PENDING">Chờ duyệt HITL</option>
-              <option value="FAILED">Thất bại</option>
-              <option value="CANCELLED">Đã hủy bỏ</option>
-              <option value="RUNNING">Đang thực thi</option>
-            </select>
-          </div>
-
-          {/* Action Type Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Filter size={14} color="#64748B" />
-            <select
-              value={selectedActionType}
-              onChange={(e) => setSelectedActionType(e.target.value)}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                backgroundColor: '#FFFFFF',
-                color: '#1E293B',
-                fontWeight: 500,
-                outline: 'none',
-                maxWidth: '220px',
-              }}
-            >
-              <option value="ALL">Tất cả hành động</option>
-              {allActionTypes.map((t) => (
-                <option key={t.code} value={t.code}>{t.label}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
-        {/* Nhóm Bên Phải: Tìm kiếm */}
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          {/* Search Box */}
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              placeholder="Tìm kiếm hành động, đối tượng..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+        {/* Hàng 2: Dịch vụ, Loại hành động, Đặt lại & Tổng số */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid #F1F5F9',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Server size={13} color="#64748B" />
+              <select
+                value={selectedService}
+                onChange={(e) => setSelectedService(e.target.value)}
+                style={selectControlStyle}
+              >
+                <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
+                {uniqueServices.map((svc) => (
+                  <option key={svc} value={svc}>Dịch vụ: {svc}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Filter size={13} color="#64748B" />
+              <select
+                value={selectedActionType}
+                onChange={(e) => setSelectedActionType(e.target.value)}
+                style={{ ...selectControlStyle, maxWidth: '240px' }}
+              >
+                <option value="ALL">Tất cả loại hành động</option>
+                {allActionTypes.map((t) => (
+                  <option key={t.code} value={t.code}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetFilters}
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
                 height: '32px',
-                width: '240px',
-                padding: '0 10px 0 28px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                outline: 'none',
+                padding: '0 10px',
+                fontSize: '0.73rem',
+                fontWeight: 700,
+                color: isFiltered ? '#DC2626' : '#64748B',
+                backgroundColor: isFiltered ? '#FEF2F2' : '#FFFFFF',
+                border: isFiltered ? '1px solid #FECACA' : '1px solid #E2E8F0',
+                borderRadius: '8px',
+                cursor: 'pointer',
               }}
-            />
-            <Search size={13} style={{ position: 'absolute', left: '8px', top: '9px', color: 'var(--dash-text-muted)' }} />
+            >
+              <RotateCcw size={12} />
+              <span>Đặt lại</span>
+            </button>
+          </div>
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.73rem', color: '#64748B' }}>
+            Tổng <strong style={{ color: '#0F172A' }}>{filteredHistory.length}</strong> bản ghi &bull; Trang{' '}
+            <strong style={{ color: '#0F172A' }}>{safePage}</strong>/{totalPages}
           </div>
         </div>
       </div>
 
-      {/* Embedded Self-Healing Trend Chart (Mặc định ẩn gọn gàng, có nút mở xem xu hướng MTTR) */}
+      {/* Embedded Self-Healing Trend Chart */}
       {showTrendChart && (
         <SelfHealingTrendChart
           actions={filteredHistory}
@@ -1293,64 +1530,75 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         />
       )}
 
-      {/* History Records Table (Được đồng bộ bộ lọc) */}
-      <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
-          <div>
-            <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Nhật Ký Hành Động
-            </h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-              Thời gian hồi phục trung bình: <strong style={{ color: '#059669' }}>{dynamicAnalytics.averageRecoveryTime}</strong> &bull; Tỷ lệ thành công:{' '}
-              <strong style={{ color: '#059669' }}>{dynamicAnalytics.successRate}</strong> &bull; Nhấp vào hàng để xem chi tiết
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowTrendChart((prev) => !prev)}
-            title={showTrendChart ? 'Thu gọn biểu đồ MTTR' : 'Mở biểu đồ xu hướng MTTR'}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 12px',
-              borderRadius: '6px',
-              border: showTrendChart ? '1px solid #93C5FD' : '1px solid var(--dash-border)',
-              backgroundColor: showTrendChart ? '#EFF6FF' : '#FFFFFF',
-              color: showTrendChart ? '#1D4ED8' : 'var(--dash-text-secondary)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <BarChart2 size={14} />
-            <span>{showTrendChart ? 'Ẩn Biểu Đồ MTTR' : 'Xem Xu Hướng MTTR'}</span>
-          </button>
-        </div>
-
-        <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '10px', overflow: 'hidden' }}>
+      {/* History Records Table */}
+      <div
+        className="dash-card"
+        style={{
+          padding: 0,
+          overflow: 'hidden',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
             <thead>
-              <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)', textAlign: 'left' }}>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>MÃ BẢN GHI</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>HÀNH ĐỘNG & NỘI DUNG</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>ĐỐI TƯỢNG (TARGET)</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>THỜI LƯỢNG</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>KẾT QUẢ KIỂM TRA</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>THỜI ĐIỂM</th>
-                <th style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', textAlign: 'center' }}>CHI TIẾT</th>
+              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left' }}>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>MÃ BẢN GHI</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>HÀNH ĐỘNG &amp; NỘI DUNG</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>ĐỐI TƯỢNG</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>THỜI LƯỢNG</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>KẾT QUẢ</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>THỜI ĐIỂM</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', textAlign: 'center' }}>CHI TIẾT</th>
               </tr>
             </thead>
             <tbody>
               {filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
-                    <ShieldCheck size={32} color="#059669" style={{ margin: '0 auto 8px', display: 'block' }} />
-                    <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>Không có bản ghi lịch sử nào phù hợp</div>
-                    <div style={{ fontSize: '0.75rem', marginTop: '2px' }}>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '52px 20px', color: '#64748B' }}>
+                    <div
+                      style={{
+                        width: '46px',
+                        height: '46px',
+                        borderRadius: '14px',
+                        backgroundColor: '#ECFDF5',
+                        border: '1px solid #A7F3D0',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <ShieldCheck size={24} color="#059669" />
+                    </div>
+                    <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.9rem' }}>
+                      Không có bản ghi lịch sử nào phù hợp
+                    </div>
+                    <div style={{ fontSize: '0.78rem', marginTop: '4px', color: '#64748B' }}>
                       Không tìm thấy hành động tự phục hồi nào khớp với mốc thời gian hoặc tiêu chí đã lọc.
                     </div>
+                    {isFiltered && (
+                      <button
+                        type="button"
+                        onClick={handleResetFilters}
+                        style={{
+                          marginTop: '10px',
+                          padding: '7px 14px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#047857',
+                          border: '1px solid #A7F3D0',
+                          borderRadius: '9px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Đặt lại bộ lọc
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -1361,55 +1609,110 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                   const isPending = rec.status === 'PENDING' || (rec.result && rec.result.includes('Chờ duyệt'));
                   const isVerificationFailed = rec.status === 'VERIFICATION_FAILED';
 
-                  let statusColor = '#059669';
-                  if (isPending || isCancelled) statusColor = '#D97706';
-                  if (isVerificationFailed) statusColor = '#D97706';
-                  if (isFailed) statusColor = '#DC2626';
+                  let statusColor = '#047857';
+                  let statusBg = '#ECFDF5';
+                  let statusBorder = '#A7F3D0';
+                  if (isPending || isCancelled || isVerificationFailed) {
+                    statusColor = '#B45309';
+                    statusBg = '#FFFBEB';
+                    statusBorder = '#FDE68A';
+                  }
+                  if (isFailed) {
+                    statusColor = '#DC2626';
+                    statusBg = '#FEF2F2';
+                    statusBorder = '#FECACA';
+                  }
 
                   return (
                     <tr
                       key={rec.id}
+                      className={`history-table-row${isFailed ? ' history-table-row--failed' : ''}`}
                       onClick={() => setSelectedAction({ id: rec.rawId, item: rec.rawItem })}
                       style={{
                         borderBottom: '1px solid #F1F5F9',
+                        backgroundColor: isFailed ? 'rgba(254, 242, 242, 0.3)' : '#FFFFFF',
                         cursor: 'pointer',
-                        transition: 'background-color 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#F8FAFC';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
-                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                        <span style={{ borderBottom: '1px dashed #CBD5E1' }}>{rec.id}</span>
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          color: '#334155',
+                          whiteSpace: 'nowrap',
+                          borderLeft: isFailed ? '3px solid #EF4444' : isPending ? '3px solid #F59E0B' : '3px solid transparent',
+                        }}
+                      >
+                        <span
+                          style={{
+                            backgroundColor: '#F8FAFC',
+                            padding: '3px 8px',
+                            borderRadius: '7px',
+                            border: '1px solid #E2E8F0',
+                            fontSize: '0.74rem',
+                          }}
+                        >
+                          {rec.id}
+                        </span>
                       </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)', lineHeight: 1.45 }}>{rec.title}</div>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 600, color: '#0F172A', lineHeight: 1.45, fontSize: '0.8rem' }}>{rec.title}</div>
                         {rec.errorMessage && (
-                          <div style={{ fontSize: '0.6875rem', color: '#DC2626', marginTop: '3px' }}>
+                          <div style={{ fontSize: '0.72rem', color: '#DC2626', marginTop: '3px' }}>
                             Lý do: {rec.errorMessage}
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--dash-primary)' }}>{rec.target}</div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>ns: {rec.namespace}</div>
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: '0.76rem', color: '#047857' }}>
+                          {rec.target}
+                        </div>
+                        <div style={{ marginTop: '3px' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 6px',
+                              borderRadius: '5px',
+                              backgroundColor: '#F1F5F9',
+                              border: '1px solid #E2E8F0',
+                              fontSize: '0.66rem',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 600,
+                              color: '#475569',
+                            }}
+                          >
+                            ns: {rec.namespace}
+                          </span>
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: statusColor }}>
+                      <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.78rem', color: statusColor, whiteSpace: 'nowrap' }}>
                         {rec.mttr}
                       </td>
-                      <td style={{ padding: '12px 14px' }}>
+                      <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: statusColor, fontWeight: 600 }}>
-                            {isPending && <Clock size={13} color="#D97706" />}
-                            {isVerificationFailed && <AlertTriangle size={13} color="#D97706" />}
-                            {isSucceeded && <CheckCircle2 size={13} />}
-                            {isCancelled && <XCircle size={13} />}
-                            {isFailed && <AlertCircle size={13} />}
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '3px 9px',
+                              borderRadius: '999px',
+                              backgroundColor: statusBg,
+                              color: statusColor,
+                              border: `1px solid ${statusBorder}`,
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              width: 'fit-content',
+                            }}
+                          >
+                            {isPending && <Clock size={12} />}
+                            {isVerificationFailed && <AlertTriangle size={12} />}
+                            {isSucceeded && <CheckCircle2 size={12} />}
+                            {isCancelled && <XCircle size={12} />}
+                            {isFailed && <AlertCircle size={12} />}
                             <span>{rec.result}</span>
-                          </div>
+                          </span>
                           {isPending && onNavigate && (
                             <button
                               type="button"
@@ -1424,30 +1727,30 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                                 backgroundColor: '#FEF3C7',
                                 color: '#B45309',
                                 border: '1px solid #FDE68A',
-                                borderRadius: '4px',
+                                borderRadius: '6px',
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
                                 width: 'fit-content',
                               }}
-                              title="Chuyen ngay toi Cong Phe Duyet HITL de kiem tra va duyet"
+                              title="Chuyển ngay tới Cổng Phê Duyệt HITL để kiểm tra và duyệt"
                             >
                               <span>Ký duyệt ngay &rarr;</span>
                             </button>
                           )}
                         </div>
                         {rec.verifiedBy ? (
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>{rec.verifiedBy}</div>
+                          <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '3px' }}>{rec.verifiedBy}</div>
                         ) : null}
-
                       </td>
-                      <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+                      <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.74rem', color: '#64748B', whiteSpace: 'nowrap' }}>
                         {rec.timestamp}
                       </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <button
                           type="button"
+                          className="history-detail-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedAction({ id: rec.rawId, item: rec.rawItem });
@@ -1455,29 +1758,20 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #CBD5E1',
-                            backgroundColor: '#FFFFFF',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            color: 'var(--dash-text-primary)',
+                            gap: '5px',
+                            height: '28px',
+                            padding: '0 10px',
+                            borderRadius: '8px',
+                            border: '1px solid #E2E8F0',
+                            backgroundColor: '#F8FAFC',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            color: '#334155',
                             cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#F1F5F9';
-                            e.currentTarget.style.borderColor = 'var(--dash-primary)';
-                            e.currentTarget.style.color = 'var(--dash-primary)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#FFFFFF';
-                            e.currentTarget.style.borderColor = '#CBD5E1';
-                            e.currentTarget.style.color = 'var(--dash-text-primary)';
+                            transition: 'all 0.14s ease',
                           }}
                         >
-                          <Eye size={13} />
+                          <Eye size={12} />
                           <span>Chi tiết</span>
                         </button>
                       </td>

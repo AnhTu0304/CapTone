@@ -33,6 +33,7 @@ from selfheal_agent.telemetry.otel import (
 from selfheal_agent.telemetry.schemas import (
     ActionResultData,
     ActionResultMessage,
+    AgentNodeMetricsData,
     ExecuteActionPayload,
     IncomingMessage,
     K8sEventMessage,
@@ -962,7 +963,9 @@ class AgentService:
         logger.info("Metrics collection loop active (interval: %.1fs)", interval_sec)
 
         while self._is_running:
+            loop_started = time.monotonic()
             node_disk_pct: Optional[float] = None
+            k8s_nodes = []
             try:
                 k8s_nodes = await asyncio.to_thread(self.nodes_collector.list_nodes)
                 if k8s_nodes and self.node_resource_collector.node_name not in [n.name for n in k8s_nodes if getattr(n, "name", None)]:
@@ -971,6 +974,46 @@ class AgentService:
                 node_disk_pct = node_snapshot.disk_usage_percent
                 await self.ws_client.send(NodeMetricsMessage(data=node_snapshot))
                 record_monitoring_operation("nodes", "success")
+
+                # Multi-node cluster telemetry: Thu thập và phát sóng chỉ số cho các Node khác (như minikube-m02) qua metrics.k8s.io
+                if k8s_nodes and len(k8s_nodes) > 1:
+                    k8s_metrics = await asyncio.to_thread(self.nodes_collector.get_cluster_node_metrics)
+                    for n in k8s_nodes:
+                        n_name = getattr(n, "name", None)
+                        if n_name and n_name != self.node_resource_collector.node_name:
+                            usage = k8s_metrics.get(n_name, {})
+                            cpu_used_m = float(usage.get("cpu_millicores", 0.0))
+                            mem_used_b = float(usage.get("memory_bytes", 0.0))
+                            cpu_cap_m = float(getattr(n, "cpu_capacity_millicores", 0) or 12000.0)
+                            mem_cap_b = int(getattr(n, "memory_capacity_bytes", 0) or 8163258368)
+
+                            cpu_pct = round((cpu_used_m / cpu_cap_m) * 100.0, 2) if cpu_cap_m > 0 else 0.0
+                            ram_pct = round((mem_used_b / float(mem_cap_b)) * 100.0, 2) if mem_cap_b > 0 else 0.0
+
+                            other_snap = AgentNodeMetricsData(
+                                node_name=n_name,
+                                timestamp=datetime.now(timezone.utc).isoformat(),
+                                cpu_usage_percent=min(100.0, max(0.0, cpu_pct)),
+                                cpu_cores=int(cpu_cap_m / 1000.0) if cpu_cap_m >= 1000 else 1,
+                                ram_total_bytes=mem_cap_b,
+                                ram_used_bytes=int(mem_used_b),
+                                ram_available_bytes=max(0, mem_cap_b - int(mem_used_b)),
+                                ram_usage_percent=min(100.0, max(0.0, ram_pct)),
+                                disk_total_bytes=int(getattr(n, "disk_capacity_bytes", 0) or node_snapshot.disk_total_bytes),
+                                disk_used_bytes=node_snapshot.disk_used_bytes,
+                                disk_available_bytes=node_snapshot.disk_available_bytes,
+                                disk_usage_percent=node_snapshot.disk_usage_percent,
+                                disk_filesystems=[],
+                                net_rx_bytes=0,
+                                net_tx_bytes=0,
+                                net_rx_bytes_per_sec=0.0,
+                                net_tx_bytes_per_sec=0.0,
+                                net_interfaces=[],
+                                collection_status="OK",
+                                collection_errors={},
+                                metadata={"source": "metrics.k8s.io"},
+                            )
+                            await self.ws_client.send(NodeMetricsMessage(data=other_snap))
             except asyncio.CancelledError:
                 break
             except Exception as node_err:
@@ -979,19 +1022,21 @@ class AgentService:
                 logger.error("Error collecting/sending node resource metrics: %s", node_err)
 
             try:
-                pods = await asyncio.to_thread(
-                    self.pods_collector.list_pods,
-                    self.config.K8S_NAMESPACE,
-                    self.config.MONITOR_ALL_NAMESPACES,
+                pods, replicas = await asyncio.gather(
+                    asyncio.to_thread(
+                        self.pods_collector.list_pods,
+                        self.config.K8S_NAMESPACE,
+                        self.config.MONITOR_ALL_NAMESPACES,
+                    ),
+                    asyncio.to_thread(
+                        self.deployments_collector.get_replicas_map,
+                        self.config.K8S_NAMESPACE,
+                        self.config.MONITOR_ALL_NAMESPACES,
+                    ),
                 )
                 record_monitoring_operation("pods", "success")
-                replicas = await asyncio.to_thread(
-                    self.deployments_collector.get_replicas_map,
-                    self.config.K8S_NAMESPACE,
-                    self.config.MONITOR_ALL_NAMESPACES,
-                )
                 record_monitoring_operation("deployments", "success")
-                nodes = await asyncio.to_thread(self.nodes_collector.list_nodes)
+                nodes = k8s_nodes or await asyncio.to_thread(self.nodes_collector.list_nodes)
                 metrics = await self.metrics_manager.aggregate_metrics(
                     pods,
                     replicas,
@@ -1010,7 +1055,8 @@ class AgentService:
                 logger.error("Error in metrics loop: %s", err)
 
             try:
-                await asyncio.sleep(interval_sec)
+                elapsed = time.monotonic() - loop_started
+                await asyncio.sleep(max(0.2, interval_sec - elapsed))
             except asyncio.CancelledError:
                 break
 

@@ -75,12 +75,9 @@ export const WorkloadsPage = () => {
       let rootName = pod.name;
       let type = 'Deployment';
 
-      if (pod.name.startsWith('sme-order-service')) {
-        rootName = 'sme-order-service';
-        type = 'Deployment';
-      } else if (pod.name.startsWith('selfheal-agent')) {
+      if (pod.name.startsWith('selfheal-agent')) {
         rootName = 'selfheal-agent';
-        type = 'DaemonSet';
+        type = 'Deployment';
       } else if (pod.name.startsWith('coredns')) {
         rootName = 'coredns';
         type = 'Deployment';
@@ -89,12 +86,15 @@ export const WorkloadsPage = () => {
         type = 'Deployment';
       } else if (pod.name.startsWith('storage-provisioner')) {
         rootName = 'storage-provisioner';
-        type = 'Deployment';
+        type = 'Static Pod';
       } else if (pod.name.startsWith('kindnet')) {
         rootName = 'kindnet';
         type = 'DaemonSet';
       } else if (pod.name.startsWith('kube-proxy')) {
         rootName = 'kube-proxy';
+        type = 'DaemonSet';
+      } else if (pod.name.startsWith('prometheus-prometheus-node-exporter')) {
+        rootName = 'prometheus-node-exporter';
         type = 'DaemonSet';
       } else if (
         pod.name.startsWith('kube-apiserver') ||
@@ -104,6 +104,10 @@ export const WorkloadsPage = () => {
       ) {
         rootName = pod.name.replace('-minikube', '');
         type = 'Static Pod';
+      } else if (/-\d+$/.test(pod.name)) {
+        // StatefulSet pods (ví dụ: mongodb-0, mongodb-1, prometheus-...-0)
+        rootName = pod.name.replace(/-\d+$/, '');
+        type = 'StatefulSet';
       } else {
         // Regex bóc tách hash pod K8s chuẩn (ví dụ: my-app-7d8b5c9b-x9qml -> my-app)
         rootName = pod.name.replace(/-[a-z0-9]{9,10}-[a-z0-9]{5}$/, '').replace(/-[a-z0-9]{5}$/, '');
@@ -204,59 +208,61 @@ export const WorkloadsPage = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* 1. Header with View Toggle & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: '#F5F3FF',
-              border: '1px solid #DDD6FE',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Box size={20} color="#7C3AED" />
+            <Box size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Khối Lượng Công Việc (Workloads)
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Khối Lượng Công Việc
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Giám sát chu kỳ sống của ứng dụng, số lần restart và phân phối containers theo từng Namespace
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Giám sát vòng đời ứng dụng, số lần restart &amp; phân bổ Pods theo Namespace trên cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.cluster || currentEnv?.name || 'K8s'}</strong>
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {/* View Mode Toggle: Workloads vs Pods */}
           <div
             style={{
               display: 'flex',
-              backgroundColor: '#F1F5F9',
-              padding: '2px',
-              borderRadius: '6px',
-              border: '1px solid var(--dash-border)',
+              backgroundColor: '#F8FAFC',
+              padding: '3px',
+              borderRadius: '10px',
+              border: '1px solid #E2E8F0',
+              gap: '3px',
             }}
           >
             <button
               type="button"
               onClick={() => setActiveView('WORKLOADS')}
               style={{
-                padding: '5px 12px',
-                fontSize: '0.75rem',
-                fontWeight: activeView === 'WORKLOADS' ? 700 : 500,
-                backgroundColor: activeView === 'WORKLOADS' ? '#FFFFFF' : 'transparent',
-                color: activeView === 'WORKLOADS' ? 'var(--dash-text-primary)' : 'var(--dash-text-secondary)',
-                border: 'none',
-                borderRadius: '4px',
+                padding: '5px 11px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                backgroundColor: activeView === 'WORKLOADS' ? '#ECFDF5' : 'transparent',
+                color: activeView === 'WORKLOADS' ? '#047857' : '#64748B',
+                border: activeView === 'WORKLOADS' ? '1px solid #A7F3D0' : '1px solid transparent',
+                borderRadius: '7px',
                 cursor: 'pointer',
-                boxShadow: activeView === 'WORKLOADS' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
               Khối Công Việc
@@ -265,15 +271,14 @@ export const WorkloadsPage = () => {
               type="button"
               onClick={() => setActiveView('PODS')}
               style={{
-                padding: '5px 12px',
-                fontSize: '0.75rem',
-                fontWeight: activeView === 'PODS' ? 700 : 500,
-                backgroundColor: activeView === 'PODS' ? '#FFFFFF' : 'transparent',
-                color: activeView === 'PODS' ? 'var(--dash-text-primary)' : 'var(--dash-text-secondary)',
-                border: 'none',
-                borderRadius: '4px',
+                padding: '5px 11px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                backgroundColor: activeView === 'PODS' ? '#ECFDF5' : 'transparent',
+                color: activeView === 'PODS' ? '#047857' : '#64748B',
+                border: activeView === 'PODS' ? '1px solid #A7F3D0' : '1px solid transparent',
+                borderRadius: '7px',
                 cursor: 'pointer',
-                boxShadow: activeView === 'PODS' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
               Từng Pod Riêng Lẻ
@@ -284,18 +289,19 @@ export const WorkloadsPage = () => {
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              padding: '0 12px',
               backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              color: 'var(--dash-text-primary)',
-              fontSize: '0.8125rem',
+              border: '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              color: '#334155',
+              fontSize: '0.8rem',
               fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: 'var(--dash-shadow-xs)',
+              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
@@ -304,77 +310,73 @@ export const WorkloadsPage = () => {
         </div>
       </div>
 
-      {/* 2. Top Summary KPI Cards (Dữ liệu thật từ CSDL Cụm) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        {/* Card 1: Tổng số Workloads */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tổng số Workloads</span>
-            <Layers size={16} color="var(--dash-primary)" />
+      {/* 2. Top Summary KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #059669' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG WORKLOADS</span>
+            <Layers size={14} color="#059669" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : distinctWorkloadsCount}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>Khối công việc</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Khối công việc</span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            {deploymentsCount} Deployments, {daemonSetsCount} Daemon, {corePodsCount} Core
-          </div>
-        </div>
-
-        {/* Card 2: Pods Sẵn sàng */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Pods Sẵn sàng</span>
-            <Box size={16} color="var(--dash-mint-600)" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {isLoading ? '...' : `${runningPodsCount} / ${totalPodsCount}`}
-            </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
-              {totalPodsCount > 0 ? `${Math.round((runningPodsCount / totalPodsCount) * 100)}% Running` : 'Chưa có dữ liệu'}
-            </span>
-          </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            {totalPodsCount - runningPodsCount === 0 ? 'Không có Pods CrashLoopBackOff' : 'Đang xử lý container'}
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
+            {deploymentsCount} Deployments · {daemonSetsCount} Daemon · {corePodsCount} Core
           </div>
         </div>
 
-        {/* Card 3: Khởi động lại */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Khởi động lại (Restarts)</span>
-            <RotateCcw size={16} color={totalRestartsCount === 0 ? 'var(--dash-success)' : 'var(--dash-warning)'} />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #10B981' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>PODS SẴN SÀNG</span>
+            <Box size={14} color="#10B981" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {isLoading ? '...' : `${runningPodsCount}/${totalPodsCount}`}
+            </span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#059669' }}>
+              {totalPodsCount > 0 ? `${Math.round((runningPodsCount / totalPodsCount) * 100)}% Running` : '—'}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
+            {totalPodsCount - runningPodsCount === 0 ? 'Không có Pod lỗi' : 'Đang xử lý container'}
+          </div>
+        </div>
+
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: `2.5px solid ${totalRestartsCount === 0 ? '#10B981' : '#F59E0B'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LƯỢT RESTART</span>
+            <RotateCcw size={14} color={totalRestartsCount === 0 ? '#10B981' : '#F59E0B'} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: totalRestartsCount > 0 ? '#D97706' : '#0F172A' }}>
               {isLoading ? '...' : totalRestartsCount}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: totalRestartsCount === 0 ? 'var(--dash-success)' : 'var(--dash-warning-text)' }}>
-              {totalRestartsCount === 0 ? 'Tuyệt đối ổn định' : 'Đã tự ổn định'}
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: totalRestartsCount === 0 ? '#059669' : '#D97706' }}>
+              {totalRestartsCount === 0 ? 'Ổn định' : 'Đã tự ổn định'}
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Giám sát qua cảm biến nhân Linux eBPF
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
+            Giám sát qua cảm biến eBPF
           </div>
         </div>
 
-        {/* Card 4: Số Namespaces */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Số Namespaces</span>
-            <CheckCircle2 size={16} color="var(--dash-info)" />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #3B82F6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>NAMESPACES</span>
+            <CheckCircle2 size={14} color="#3B82F6" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : Math.max(1, dynamicNamespaces.length - 1)}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>Không gian</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Không gian</span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Phân lập tài nguyên theo chuẩn K8s
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
+            Phân lập tài nguyên chuẩn K8s
           </div>
         </div>
       </div>
@@ -454,10 +456,10 @@ export const WorkloadsPage = () => {
 
       {/* 4. Content Tables (Hiển thị khi có dữ liệu) */}
       {(isLoading || totalPodsCount > 0) && (
-        <div className="dash-card" style={{ padding: '20px' }}>
+        <div className="dash-card" style={{ padding: '16px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           {/* Search & Filter Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ position: 'relative', width: '280px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ position: 'relative', width: '290px', maxWidth: '100%' }}>
               <input
                 type="text"
                 placeholder={activeView === 'WORKLOADS' ? "Tìm theo tên workload hoặc namespace..." : "Tìm theo tên Pod hoặc Node..."}
@@ -465,33 +467,37 @@ export const WorkloadsPage = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '8px 12px',
-                  fontSize: '0.8125rem',
-                  border: '1px solid var(--dash-border)',
-                  borderRadius: 'var(--dash-radius-md)',
-                  backgroundColor: 'var(--dash-bg-canvas)',
+                  height: '34px',
+                  padding: '0 12px',
+                  fontSize: '0.8rem',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
                   outline: 'none',
-                  color: 'var(--dash-text-primary)',
+                  color: '#0F172A',
                 }}
               />
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
               {/* Namespace Selector */}
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px', flexWrap: 'wrap' }}>
                 {dynamicNamespaces.map((ns) => (
                   <button
                     key={ns}
                     onClick={() => setSelectedNamespace(ns)}
                     style={{
-                      padding: '5px 10px',
-                      fontSize: '0.75rem',
-                      fontWeight: selectedNamespace === ns ? 600 : 500,
-                      backgroundColor: selectedNamespace === ns ? 'var(--dash-primary-light)' : 'transparent',
-                      color: selectedNamespace === ns ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                      borderRadius: 'var(--dash-radius-md)',
-                      border: selectedNamespace === ns ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-border)',
+                      height: '28px',
+                      padding: '0 10px',
+                      fontSize: '0.74rem',
+                      fontWeight: selectedNamespace === ns ? 700 : 600,
+                      backgroundColor: selectedNamespace === ns ? '#FFFFFF' : 'transparent',
+                      color: selectedNamespace === ns ? '#047857' : '#64748B',
+                      borderRadius: '7px',
+                      border: 'none',
+                      boxShadow: selectedNamespace === ns ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     {ns === 'ALL' ? 'Mọi Namespace' : ns}
@@ -501,7 +507,7 @@ export const WorkloadsPage = () => {
 
               {/* Type Selector (Chỉ hiện khi xem Workloads) */}
               {activeView === 'WORKLOADS' && (
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
                   {[
                     { id: 'ALL', label: 'Mọi loại' },
                     { id: 'Deployment', label: 'Deployments' },
@@ -512,14 +518,17 @@ export const WorkloadsPage = () => {
                       key={t.id}
                       onClick={() => setSelectedType(t.id)}
                       style={{
-                        padding: '5px 10px',
-                        fontSize: '0.75rem',
-                        fontWeight: selectedType === t.id ? 600 : 500,
-                        backgroundColor: selectedType === t.id ? 'var(--dash-bg-subtle)' : 'transparent',
-                        color: selectedType === t.id ? 'var(--dash-text-primary)' : 'var(--dash-text-muted)',
-                        borderRadius: 'var(--dash-radius-md)',
-                        border: selectedType === t.id ? '1px solid var(--dash-border)' : '1px solid transparent',
+                        height: '28px',
+                        padding: '0 10px',
+                        fontSize: '0.74rem',
+                        fontWeight: selectedType === t.id ? 700 : 600,
+                        backgroundColor: selectedType === t.id ? '#FFFFFF' : 'transparent',
+                        color: selectedType === t.id ? '#0F172A' : '#64748B',
+                        borderRadius: '7px',
+                        border: 'none',
+                        boxShadow: selectedType === t.id ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                         cursor: 'pointer',
+                        transition: 'all 0.15s ease',
                       }}
                     >
                       {t.label}
@@ -532,30 +541,30 @@ export const WorkloadsPage = () => {
 
           {/* VIEW 1: Khối Lượng Công Việc (Workloads) Table */}
           {activeView === 'WORKLOADS' && (
-            <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '12px', overflow: 'hidden' }}>
+            <div className="dash-table-container" style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Tên Khối Công Việc</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Loại</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Namespace</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Pods Sẵn Sàng</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Trạng Thái</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>CPU / RAM Ước Tính</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Khởi Động Lại</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Tên Khối Công Việc</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Loại</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Namespace</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Pods Sẵn Sàng</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Trạng Thái</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>CPU / RAM Ước Tính</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Khởi Động Lại</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                      <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
                         Đang tải danh sách Workloads từ cụm Kubernetes...
                       </td>
                     </tr>
                   ) : filteredWorkloads.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                      <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
                         Không tìm thấy khối công việc nào khớp với bộ lọc.
                       </td>
                     </tr>
@@ -564,84 +573,80 @@ export const WorkloadsPage = () => {
                       <tr
                         key={wl.id}
                         style={{
-                          borderBottom: '1px solid var(--dash-border)',
-                          transition: 'background-color 0.15s ease',
+                          borderBottom: '1px solid #F1F5F9',
+                          transition: 'background-color 0.14s ease',
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)')}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
                         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                       >
-                        <td style={{ padding: '12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                        <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0F172A' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Box size={14} color="var(--dash-primary)" />
-                            <span style={{ fontFamily: 'var(--font-mono)' }}>{wl.name}</span>
+                            <Box size={14} color="#059669" />
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{wl.name}</span>
                           </div>
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginLeft: '22px' }}>
+                          <div style={{ fontSize: '0.68rem', color: '#64748B', marginLeft: '22px' }}>
                             {wl.pods.length} containers • {wl.age}
                           </div>
                         </td>
-                        <td style={{ padding: '12px' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <span
                             style={{
-                              padding: '2px 8px',
-                              borderRadius: 'var(--dash-radius-full)',
+                              padding: '2px 9px',
+                              borderRadius: '999px',
                               fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              backgroundColor: 'var(--dash-bg-subtle)',
-                              color: 'var(--dash-text-secondary)',
-                              border: '1px solid var(--dash-border)',
+                              fontWeight: 700,
+                              backgroundColor: '#F8FAFC',
+                              color: '#475569',
+                              border: '1px solid #E2E8F0',
                             }}
                           >
                             {wl.type}
                           </span>
                         </td>
-                        <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+                        <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#475569' }}>
                           {wl.namespace}
                         </td>
-                        <td style={{ padding: '12px', fontWeight: 700, color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)' }}>
+                        <td style={{ padding: '12px 14px', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
                           {wl.podsReady}
                         </td>
-                        <td style={{ padding: '12px' }}>
+                        <td style={{ padding: '12px 14px' }}>
                           <span
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              padding: '2px 8px',
-                              borderRadius: 'var(--dash-radius-full)',
-                              fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              backgroundColor:
-                                wl.status === 'WARNING' ? 'var(--dash-warning-bg)' : 'var(--dash-success-bg)',
-                              color:
-                                wl.status === 'WARNING' ? 'var(--dash-warning-text)' : 'var(--dash-success-text)',
-                              border:
-                                wl.status === 'WARNING'
-                                  ? '1px solid var(--dash-warning-border)'
-                                  : '1px solid var(--dash-success-border)',
+                              padding: '2px 9px',
+                              borderRadius: '999px',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              backgroundColor: wl.status === 'WARNING' ? '#FFFBEB' : '#ECFDF5',
+                              color: wl.status === 'WARNING' ? '#B45309' : '#047857',
+                              border: `1px solid ${wl.status === 'WARNING' ? '#FDE68A' : '#A7F3D0'}`,
                             }}
                           >
                             {wl.status === 'WARNING' ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
                             <span>{wl.statusLabel}</span>
                           </span>
                         </td>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--dash-text-primary)' }}>{wl.cpuUsage}</div>
-                          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{wl.memUsage}</div>
+                        <td style={{ padding: '12px 14px' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{wl.cpuUsage}</div>
+                          <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: '#64748B' }}>{wl.memUsage}</div>
                         </td>
-                        <td style={{ padding: '12px', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        <td style={{ padding: '12px 14px', color: '#475569', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                           {wl.restarts}
                         </td>
-                        <td style={{ padding: '12px', textAlign: 'right' }}>
+                        <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                           <button
                             onClick={() => setSelectedItem({ type: 'WORKLOAD', data: wl })}
                             style={{
-                              padding: '4px 8px',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid var(--dash-border)',
-                              borderRadius: 'var(--dash-radius-sm)',
-                              fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              color: 'var(--dash-text-primary)',
+                              height: '28px',
+                              padding: '0 10px',
+                              backgroundColor: '#ECFDF5',
+                              border: '1px solid #A7F3D0',
+                              borderRadius: '8px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              color: '#047857',
                               cursor: 'pointer',
                             }}
                           >

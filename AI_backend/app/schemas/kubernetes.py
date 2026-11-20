@@ -82,6 +82,15 @@ class PodInfo(BaseModel):
     memory_config: MemoryConfigInfo | None = None
     deep_metrics: DeepPodMetrics | None = None
 
+    # Two-Tier Capacity Awareness extensions
+    cpu_usage_pct: float | None = None
+    ram_usage_pct: float | None = None
+    request_rate: float | None = None
+    latency_ms: float | None = None
+    cpu_throttled_pct: float | None = None
+    cpu_request_millicores: float | None = None
+    memory_request_bytes: int | None = None
+
 
 class NodeConditions(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -111,6 +120,9 @@ class NodeInfo(BaseModel):
     conditions: NodeConditions | dict[str, Any] = Field(default_factory=dict)
     allocatable_memory_bytes: int | None = None
     free_memory_bytes: int | None = None
+    allocatable_cpu_millicores: float | None = None
+    requested_cpu_millicores: float | None = None
+    requested_memory_bytes: int | None = None
 
 
 class DeploymentInfo(BaseModel):

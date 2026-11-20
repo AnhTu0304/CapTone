@@ -93,11 +93,28 @@ export class RuleEngineService {
 
     // Rule 3: Memory Pressure / OOM
     const hasOom = k8sText.includes('oomkilled') || k8sText.includes('out of memory');
-    if (metrics.ram > th.ramCriticalThreshold || hasOom) {
+    const isDbCacheWorkload = Boolean(
+      service_id &&
+      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)/i.test(service_id.trim())
+    );
+
+    if (hasOom) {
       triggeredRules.push(
-        `Rule 3 [Memory Pressure]: ram (${metrics.ram.toFixed(1)}% > ${th.ramCriticalThreshold}%) or OOM detected (${hasOom})`
+        `Rule 3 [Memory OOM]: OOMKilled detected for service ${service_id}`
       );
       anomalies.push('MEMORY_PRESSURE');
+    } else if (metrics.ram > th.ramCriticalThreshold) {
+      if (isDbCacheWorkload && !active_pod_issue && restart_delta === 0) {
+        // WiredTiger / Buffer Pool Cache in database workloads stays ~96% by design without OOM
+        triggeredRules.push(
+          `Rule 3 [Database Cache]: ram (${metrics.ram.toFixed(1)}%) is active buffer cache (WiredTiger), operating safely`
+        );
+      } else {
+        triggeredRules.push(
+          `Rule 3 [Memory Pressure]: ram (${metrics.ram.toFixed(1)}% > ${th.ramCriticalThreshold}%)`
+        );
+        anomalies.push('MEMORY_PRESSURE');
+      }
     }
 
     // Rule 4: HTTP 5xx Error Spike

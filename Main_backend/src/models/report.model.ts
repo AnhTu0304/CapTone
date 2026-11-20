@@ -316,10 +316,13 @@ function classifyServiceTier(name: string, hasCritical: boolean, incCount: numbe
 }
 
 function canonicalizeServiceName(name?: string | null): string {
-  return String(name || '')
+  const s = String(name || '')
     .trim()
-    .toLowerCase()
-    .replace(/-(service|client-service|app)$/, '');
+    .toLowerCase();
+  if (s === 'otel-collector-opentelemetry-collector') return 'opentelemetry-collector';
+  if (s === 'prometheus-kube-state-metrics') return 'kube-state-metrics';
+  if (s === 'prometheus-kube-prometheus-operator') return 'kube-prometheus-stack-operator';
+  return s.replace(/-(service|client-service|app)$/, '');
 }
 
 function normalizeServiceFilter(serviceName?: string | null): string | null {

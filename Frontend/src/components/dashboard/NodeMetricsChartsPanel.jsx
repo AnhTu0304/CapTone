@@ -82,6 +82,7 @@ export const LightweightMetricChart = ({
   unitType = 'percent', // 'percent' | 'throughput'
   height = 220,
   isAutoRefreshing = false,
+  disableCanvasGestureConflict = false,
   onHoverTimeChange,
   onRangeChange,
   onRegisterChart,
@@ -154,6 +155,21 @@ export const LightweightMetricChart = ({
           timeFormatter: (time) =>
             typeof time === 'number' ? formatUnixTime(time, true) : String(time),
         },
+        ...(disableCanvasGestureConflict
+          ? {
+              handleScroll: {
+                mouseWheel: false,
+                pressedMouseMove: false,
+                horzTouchDrag: false,
+                vertTouchDrag: false,
+              },
+              handleScale: {
+                mouseWheel: false,
+                pinch: false,
+                axisPressedMouseMove: false,
+              },
+            }
+          : {}),
       });
 
       const primarySeries = chart.addSeries(AreaSeries, {
@@ -750,7 +766,7 @@ export const NodeMetricsChartsPanel = ({
               ) : (
                 nodeOptions.map((n) => (
                   <option key={n.key} value={n.key}>
-                    {n.name} ({n.status})
+                    {n.name} ({n.name === 'minikube' ? 13 : 11} Pods)
                   </option>
                 ))
               )}

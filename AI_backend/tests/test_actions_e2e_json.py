@@ -127,6 +127,13 @@ ACTION_SCENARIOS = [
                 "restart_count": 0,
                 "desired_replicas": 4,
                 "available_replicas": 2,
+                "all_pods": [
+                    {"pod_name": "checkout-svc-1", "status": "Running", "ready": True, "cpu_usage_pct": 96.5, "latency_ms": 920.0},
+                    {"pod_name": "checkout-svc-2", "status": "Running", "ready": True, "cpu_usage_pct": 95.0, "latency_ms": 910.0}
+                ],
+                "nodes": [
+                    {"node_name": "worker-node-1", "status": "Ready", "conditions": {"Ready": True}, "free_memory_bytes": 8589934592}
+                ],
                 "events": ["Available replicas (2) are lower than desired replicas (4)"]
             }
         }

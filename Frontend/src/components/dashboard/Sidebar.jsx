@@ -4,57 +4,38 @@ import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
-  Building2,
-  Users,
-  Radio,
-  Server,
-  Layers,
-  Box,
   LineChart,
   FileText,
   Activity,
-  Sparkles,
   AlertTriangle,
   Zap,
   History,
-  ShieldAlert,
   CheckCircle2,
-  Bell,
-  ScrollText,
-  BarChart3,
-  Settings,
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react';
 
-export const Sidebar = ({ currentPath = '/dashboard' }) => {
+export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
   const {
     isSidebarCollapsed,
     setIsSidebarCollapsed,
-    isAgentConnected,
     pendingApprovalsCount,
     activeIncidentsCount,
-    newPredictionsCount,
-    clearNewPredictionsCount,
     newHealingHistoryCount,
     clearNewHealingHistoryCount,
-    unreadNotifsCount,
     onNavigate,
     currentOrg,
     currentUserRole,
   } = useDashboard();
 
-  // Tự động xóa số thông báo mới khi người dùng đang mở trang Dự báo rủi ro AI hoặc Lịch sử phục hồi
+  // Tự động xóa số thông báo mới khi người dùng đang mở trang Lịch sử phục hồi
   React.useEffect(() => {
     const clean = (currentPath || '').toLowerCase().split('?')[0].split('#')[0];
-    if (clean.startsWith('/dashboard/ai/predictions') && newPredictionsCount > 0) {
-      clearNewPredictionsCount?.();
-    }
     if (clean.startsWith('/dashboard/self-healing/history') && newHealingHistoryCount > 0) {
       clearNewHealingHistoryCount?.();
     }
-  }, [currentPath, newPredictionsCount, newHealingHistoryCount, clearNewPredictionsCount, clearNewHealingHistoryCount]);
+  }, [currentPath, newHealingHistoryCount, clearNewHealingHistoryCount]);
 
   const auth = useAuth();
 
@@ -81,31 +62,9 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
       ],
     },
     {
-      group: 'TỔ CHỨC',
-      items: [
-        { name: 'Thông tin Tổ chức', path: '/dashboard/organization', icon: Building2 },
-        { name: 'Thành viên & Phân quyền', path: '/dashboard/organization/members', icon: Users },
-      ],
-    },
-    {
-      group: 'HẠ TẦNG & TÁC TỬ',
-      items: [
-        { name: 'Tác tử Agent', path: '/dashboard/agents', icon: Radio },
-        { name: 'Cụm K8s', path: '/dashboard/clusters', icon: Server },
-        { name: 'Hạ tầng máy chủ', path: '/dashboard/infrastructure', icon: Layers },
-        { name: 'Khối lượng công việc', path: '/dashboard/workloads', icon: Box },
-      ],
-    },
-    {
       group: 'GIÁM SÁT',
       items: [
-        {
-          name: 'Chỉ số tài nguyên',
-          path: '/dashboard/monitoring/metrics',
-          icon: LineChart,
-          badge: isAgentConnected ? 'LIVE' : 'OFFLINE',
-          badgeType: isAgentConnected ? 'mint' : 'neutral',
-        },
+        { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart },
         { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },
         { name: 'Sự kiện K8s', path: '/dashboard/monitoring/events', icon: Activity },
       ],
@@ -113,11 +72,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     {
       group: 'AI & SỰ CỐ',
       items: [
-        {
-          name: 'Dự báo rủi ro AI',
-          path: '/dashboard/ai/predictions',
-          icon: Sparkles,
-        },
         {
           name: 'Quản lý sự cố & RCA',
           path: '/dashboard/incidents',
@@ -138,7 +92,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           badge: newHealingHistoryCount > 0 ? `${newHealingHistoryCount}` : null,
           badgeType: 'mint',
         },
-        { name: 'Chính sách tự động', path: '/dashboard/self-healing/policies', icon: ShieldAlert },
         {
           name: 'Cổng phê duyệt (HITL)',
           path: '/dashboard/self-healing/approvals',
@@ -146,21 +99,6 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount}` : null,
           badgeType: 'warning',
         },
-      ],
-    },
-    {
-      group: 'HỆ THỐNG',
-      items: [
-        {
-          name: 'Thông báo',
-          path: '/dashboard/notifications',
-          icon: Bell,
-          badge: unreadNotifsCount > 0 ? (unreadNotifsCount > 9 ? '9+' : `${unreadNotifsCount}`) : null,
-          badgeType: 'info',
-        },
-        { name: 'Nhật ký kiểm toán', path: '/dashboard/audit-logs', icon: ScrollText },
-        { name: 'Báo cáo SLA & Vận hành', path: '/dashboard/reports', icon: BarChart3 },
-        { name: 'Cài đặt hệ thống', path: '/dashboard/settings', icon: Settings },
       ],
     },
   ];
@@ -244,9 +182,7 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
   }, [filteredNavGroups, currentPath]);
 
   const handleItemClick = (path) => {
-    if (path === '/dashboard/ai/predictions') {
-      clearNewPredictionsCount?.();
-    } else if (path === '/dashboard/self-healing/history') {
+    if (path === '/dashboard/self-healing/history') {
       clearNewHealingHistoryCount?.();
     }
     if (onNavigate) {
@@ -258,70 +194,113 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
     <aside
       className="dashboard-sidebar"
       style={{
-        width: isSidebarCollapsed ? '72px' : '260px',
-        minWidth: isSidebarCollapsed ? '72px' : '260px',
-        backgroundColor: '#FFFFFF',
-        borderRight: '1px solid var(--dash-border)',
+        width: isSidebarCollapsed ? '68px' : '256px',
+        minWidth: isSidebarCollapsed ? '68px' : '256px',
+        background: isFloating
+          ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.80) 100%)'
+          : '#FFFFFF',
+        backdropFilter: isFloating ? 'blur(24px) brightness(1.04)' : 'none',
+        WebkitBackdropFilter: isFloating ? 'blur(24px) brightness(1.04)' : 'none',
+        border: isFloating ? '1px solid rgba(255, 255, 255, 0.96)' : 'none',
+        borderRight: isFloating ? '1px solid rgba(255, 255, 255, 0.96)' : '1px solid var(--dash-border)',
+        borderRadius: isFloating ? '18px' : 0,
+        boxShadow: isFloating
+          ? 'inset 0 1px 0 rgba(255, 255, 255, 1), 0 0 0 1px rgba(203, 213, 225, 0.65), 0 12px 32px rgba(15, 23, 42, 0.07)'
+          : 'none',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
         position: 'relative',
+        overflow: 'visible',
         zIndex: 40,
       }}
     >
-      {/* Floating Border Edge Toggle Button (Màu xanh, hình tròn đè lên đường viền) */}
-      <button
-        type="button"
-        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        title={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
-        aria-label={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '-13px',
-          width: '26px',
-          height: '26px',
-          borderRadius: '50%',
-          backgroundColor: '#059669',
-          color: '#FFFFFF',
-          border: '2px solid #FFFFFF',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          zIndex: 60,
-          transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease',
-          padding: 0,
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.15)';
-          e.currentTarget.style.backgroundColor = '#047857';
-          e.currentTarget.style.boxShadow = '0 3px 8px rgba(5, 150, 105, 0.35)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.backgroundColor = '#059669';
-          e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.2)';
-        }}
-      >
-        {isSidebarCollapsed ? (
-          <ChevronRight size={15} strokeWidth={2.8} />
-        ) : (
-          <ChevronLeft size={15} strokeWidth={2.8} />
-        )}
-      </button>
+      {/* Lớp vân nhám trắng mịn (White Sandblasted Frosted Matte) */}
+      {isFloating && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '18px',
+            overflow: 'hidden',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              opacity: 0.16,
+              mixBlendMode: 'multiply',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'repeat',
+              backgroundSize: '150px 150px',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0) 60%)',
+            }}
+          />
+        </div>
+      )}
+      {/* Nút tròn xanh lá phóng ra / thu vào ở cạnh phải Sidebar */}
+      {isFloating && (
+        <button
+          type="button"
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          title={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          aria-label={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          style={{
+            position: 'absolute',
+            right: '-13px',
+            top: '16px',
+            width: '26px',
+            height: '26px',
+            borderRadius: '50%',
+            backgroundColor: '#059669',
+            color: '#FFFFFF',
+            border: '2px solid #FFFFFF',
+            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35), 0 1px 3px rgba(15, 23, 42, 0.14)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 60,
+            padding: 0,
+            transition: 'transform 0.15s ease, background-color 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#047857';
+            e.currentTarget.style.transform = 'scale(1.06)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#059669';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+        >
+          {isSidebarCollapsed ? <ChevronRight size={15} strokeWidth={2.6} /> : <ChevronLeft size={15} strokeWidth={2.6} />}
+        </button>
+      )}
 
-      {/* Brand Header inside Sidebar */}
+      {/* Brand Header inside Floating Sidebar Card */}
       <div
         style={{
-          padding: isSidebarCollapsed ? '20px 14px' : '18px 20px',
-          borderBottom: '1px solid var(--dash-border)',
+          padding: isSidebarCollapsed ? '14px 10px' : '14px 16px',
+          borderBottom: '1px solid rgba(203, 213, 225, 0.55)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
-          minHeight: '64px',
+          minHeight: '58px',
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <div
@@ -332,26 +311,27 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
             alignItems: 'center',
             gap: '10px',
             cursor: 'pointer',
+            minWidth: 0,
           }}
         >
           <img
             src={logoPng}
-            width={32}
-            height={32}
+            width={30}
+            height={30}
             alt="SelfHeal Logo"
             style={{
-              width: '32px',
-              height: '32px',
+              width: '30px',
+              height: '30px',
               objectFit: 'contain',
               flexShrink: 0,
             }}
           />
           {!isSidebarCollapsed && (
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: '0.9375rem', color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
                 SelfHeal
               </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 500 }}>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 Bảng Vận Hành Hệ Thống
               </div>
             </div>
@@ -372,6 +352,8 @@ export const Sidebar = ({ currentPath = '/dashboard' }) => {
           overflowX: 'hidden',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         {filteredNavGroups.map((group, gIdx) => (

@@ -92,69 +92,72 @@ export const NotificationsPage = () => {
   };
 
   return (
-    <div className="dashboard-notifications-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-notifications-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}
           >
-            <Bell size={20} color="#059669" />
+            <Bell size={19} color="#059669" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-                Trung Tâm Thông Báo & Điều Phối Cảnh Báo
+              <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+                Trung Tâm Thông Báo
               </h1>
               {unreadCount > 0 && (
                 <span
                   data-testid="header-unread-badge"
                   style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 'var(--dash-radius-full)',
-                    backgroundColor: '#FFF1F2',
-                    color: '#E11D48',
-                    border: '1px solid #FDA4AF',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '2px 9px',
+                    borderRadius: '999px',
+                    backgroundColor: '#FEF2F2',
+                    color: '#DC2626',
+                    border: '1px solid #FECACA',
                   }}
                 >
                   {unreadCount} chưa đọc
                 </span>
               )}
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Quản trị kênh truyền thông báo, cảnh báo khẩn cấp và các yêu cầu can thiệp HITL
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Quản trị thông báo vận hành, cảnh báo sự cố khẩn cấp &amp; yêu cầu phê duyệt HITL
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={triggerRefresh}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 12px',
+              padding: '0 12px',
               backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
+              border: '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+              fontSize: '0.8rem',
               fontWeight: 600,
               cursor: 'pointer',
-              color: 'var(--dash-text-secondary)',
+              color: '#334155',
             }}
           >
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
@@ -167,15 +170,16 @@ export const NotificationsPage = () => {
             onClick={markAllNotificationsRead}
             disabled={unreadCount === 0}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: unreadCount > 0 ? '#FFFFFF' : '#F8FAFC',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              color: unreadCount > 0 ? 'var(--dash-primary)' : 'var(--dash-text-muted)',
-              fontSize: '0.8125rem',
+              padding: '0 14px',
+              backgroundColor: unreadCount > 0 ? '#ECFDF5' : '#F8FAFC',
+              border: unreadCount > 0 ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+              borderRadius: '10px',
+              color: unreadCount > 0 ? '#047857' : '#94A3B8',
+              fontSize: '0.8rem',
               fontWeight: 700,
               cursor: unreadCount > 0 ? 'pointer' : 'not-allowed',
               transition: 'all 0.15s ease',
@@ -187,56 +191,99 @@ export const NotificationsPage = () => {
         </div>
       </div>
 
+      {/* Hàng 3 Thẻ KPI Tóm Tắt Thông Báo */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #059669', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG THÔNG BÁO</span>
+            <Bell size={14} color="#059669" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{notifications.length}</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Tất cả sự kiện</span>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: `2.5px solid ${unreadCount > 0 ? '#EF4444' : '#10B981'}`, borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHƯA ĐỌC</span>
+            <Inbox size={14} color={unreadCount > 0 ? '#EF4444' : '#10B981'} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: unreadCount > 0 ? '#DC2626' : '#059669' }}>{unreadCount}</span>
+            <span style={{ fontSize: '0.7rem', color: unreadCount > 0 ? '#DC2626' : '#059669', fontWeight: 600 }}>
+              {unreadCount > 0 ? 'Cần xem ngay' : 'Đã xem hết'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #3B82F6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐÃ ĐỌC</span>
+            <Check size={14} color="#3B82F6" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{Math.max(0, notifications.length - unreadCount)}</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Đã xác nhận</span>
+          </div>
+        </div>
+      </div>
+
       {/* Filter Controls Row */}
       <div
         className="dash-card"
         style={{
-          padding: '16px 20px',
+          padding: '12px 16px',
           backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          borderRadius: 'var(--dash-radius-md)',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '16px',
+          gap: '12px',
         }}
       >
         {/* Status Tabs: All, Unread, Read */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             Trạng thái:
           </span>
-          {[
-            { key: 'ALL', label: 'Tất Cả' },
-            { key: 'UNREAD', label: `Chưa Đọc (${unreadCount})` },
-            { key: 'READ', label: 'Đã Đọc' },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              data-testid={`filter-status-${tab.key}`}
-              type="button"
-              onClick={() => setStatusFilter(tab.key)}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 'var(--dash-radius-full)',
-                border: '1px solid var(--dash-border)',
-                backgroundColor: statusFilter === tab.key ? 'var(--dash-primary)' : '#FFFFFF',
-                color: statusFilter === tab.key ? '#FFFFFF' : 'var(--dash-text-secondary)',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+            {[
+              { key: 'ALL', label: 'Tất Cả' },
+              { key: 'UNREAD', label: `Chưa Đọc (${unreadCount})` },
+              { key: 'READ', label: 'Đã Đọc' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                data-testid={`filter-status-${tab.key}`}
+                type="button"
+                onClick={() => setStatusFilter(tab.key)}
+                style={{
+                  height: '28px',
+                  padding: '0 12px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  backgroundColor: statusFilter === tab.key ? '#FFFFFF' : 'transparent',
+                  color: statusFilter === tab.key ? '#047857' : '#64748B',
+                  boxShadow: statusFilter === tab.key ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                  fontSize: '0.75rem',
+                  fontWeight: statusFilter === tab.key ? 700 : 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Type Category Filter Chips */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', textTransform: 'uppercase' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
             Phân loại:
           </span>
           {[
@@ -252,13 +299,14 @@ export const NotificationsPage = () => {
               type="button"
               onClick={() => setTypeFilter(typeChip.key)}
               style={{
-                padding: '5px 10px',
-                borderRadius: 'var(--dash-radius-sm)',
-                border: typeFilter === typeChip.key ? '1px solid var(--dash-primary)' : '1px solid var(--dash-border)',
-                backgroundColor: typeFilter === typeChip.key ? 'var(--dash-mint-50)' : '#FFFFFF',
-                color: typeFilter === typeChip.key ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
+                height: '30px',
+                padding: '0 11px',
+                borderRadius: '9px',
+                border: typeFilter === typeChip.key ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+                backgroundColor: typeFilter === typeChip.key ? '#ECFDF5' : '#FFFFFF',
+                color: typeFilter === typeChip.key ? '#047857' : '#475569',
+                fontSize: '0.74rem',
+                fontWeight: typeFilter === typeChip.key ? 700 : 600,
                 cursor: 'pointer',
               }}
             >
@@ -275,8 +323,9 @@ export const NotificationsPage = () => {
           padding: '0',
           overflow: 'hidden',
           backgroundColor: '#FFFFFF',
-          border: '1px solid var(--dash-border)',
-          borderRadius: 'var(--dash-radius-md)',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -10,13 +10,9 @@ import {
   XCircle,
   AlertTriangle,
   Activity,
-  Layers,
   ChevronRight,
   Clock,
   Shield,
-  FileText,
-  Sliders,
-  Check,
   X
 } from 'lucide-react';
 
@@ -131,7 +127,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
   const [operatingActionId, setOperatingActionId] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState(null);
   const [confirmAbortModal, setConfirmAbortModal] = useState({ isOpen: false, action: null, reason: '' });
-  const [runningPage, setRunningPage] = useState(1);
+  const [runningPage] = useState(1);
   const RUNNING_PER_PAGE = 5;
 
   const activeClusterId = useMemo(() => {
@@ -144,7 +140,6 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
   const mapBackendActionToUI = useCallback((item) => {
     const shortId = item.id && item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : (item.id || 'N/A');
-    const isCompleted = item.execution_status === 'SUCCEEDED';
     const isCancelled = item.execution_status === 'CANCELLED';
     const isFailed = item.execution_status === 'FAILED';
     const isRunning = item.execution_status === 'RUNNING' || item.execution_status === 'PENDING' || item.execution_status === 'QUEUED';
@@ -312,7 +307,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
       const isSecure = window.location.protocol === 'https:';
       const protocol = isSecure ? 'wss:' : 'ws:';
       let host = window.location.host;
-      if (window.location.port === '3000' || window.location.port === '3001') {
+      if (['3000', '3001', '3002', '3003', '3004', '3005'].includes(window.location.port)) {
         const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
           ? '127.0.0.1'
           : window.location.hostname;
@@ -394,25 +389,63 @@ export const HealingActionsPage = ({ onNavigate }) => {
     return runningActions.slice(start, start + RUNNING_PER_PAGE);
   }, [runningActions, safeRunningPage]);
 
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+
+  const recentStats = useMemo(() => {
+    const total = recentActions.length;
+    const succeeded = recentActions.filter((a) => a.executionStatus === 'SUCCEEDED').length;
+    const failed = recentActions.filter((a) => a.executionStatus === 'FAILED').length;
+    const rate = total > 0 ? Math.round((succeeded / total) * 100) : 100;
+    return { total, succeeded, failed, rate };
+  }, [recentActions]);
+
+  const kpiCardStyle = (accent) => ({
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(226, 232, 240, 0.95)',
+    borderTop: `2.5px solid ${accent}`,
+    borderRadius: '12px',
+    padding: '11px 14px',
+    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+    minWidth: 0,
+  });
+
+  const actionBtnStyle = (variant = 'default', disabled = false) => ({
+    height: '34px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '0 12px',
+    backgroundColor: variant === 'emerald' ? '#ECFDF5' : '#FFFFFF',
+    border: variant === 'emerald' ? '1px solid #A7F3D0' : '1px solid rgba(203, 213, 225, 0.9)',
+    borderRadius: '10px',
+    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+    fontSize: '0.8rem',
+    fontWeight: variant === 'emerald' ? 700 : 600,
+    color: variant === 'emerald' ? '#047857' : disabled ? '#94A3B8' : '#334155',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
+  });
+
   return (
-    <div className="dashboard-healing-actions-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-healing-actions-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Feedback Toast */}
       {feedbackMessage && (
         <div
           style={{
-            padding: '12px 18px',
-            borderRadius: 'var(--dash-radius-md)',
-            backgroundColor: feedbackMessage.type === 'success' ? '#DCFCE7' : '#FEE2E2',
-            color: feedbackMessage.type === 'success' ? '#15803D' : '#B91C1C',
-            border: `1px solid ${feedbackMessage.type === 'success' ? '#86EFAC' : '#FCA5A5'}`,
+            padding: '12px 16px',
+            borderRadius: '12px',
+            backgroundColor: feedbackMessage.type === 'success' ? '#ECFDF5' : '#FEF2F2',
+            color: feedbackMessage.type === 'success' ? '#047857' : '#B91C1C',
+            border: `1px solid ${feedbackMessage.type === 'success' ? '#A7F3D0' : '#FCA5A5'}`,
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            fontSize: '0.875rem',
+            fontSize: '0.825rem',
             fontWeight: 600,
           }}
         >
-          {feedbackMessage.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+          {feedbackMessage.type === 'success' ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
           <span>{feedbackMessage.text}</span>
         </div>
       )}
@@ -422,52 +455,41 @@ export const HealingActionsPage = ({ onNavigate }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Zap size={20} color="#059669" />
+            <Zap size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Hành Động Tự Phục Hồi Đang Thực Thi (Active & In-Flight)
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Hành Động Tự Phục Hồi
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Giám sát tiến trình điều phối tự phục hồi MAPE-K và các can thiệp thời gian thực trên cụm máy chủ
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Giám sát chu trình tự phục hồi MAPE-K &amp; tiến trình can thiệp trực tiếp trên cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {onNavigate && (
             <button
               type="button"
               onClick={() => onNavigate('/dashboard/self-healing/history')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                backgroundColor: '#EFF6FF',
-                color: '#1D4ED8',
-                border: '1px solid #BFDBFE',
-                borderRadius: 'var(--dash-radius-md)',
-                fontSize: '0.8125rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              title="Xem nhật ký kiểm toán và báo cáo MTTR"
+              style={actionBtnStyle('emerald', false)}
+              title="Xem lịch sử phục hồi và phân tích MTTR"
             >
               <Clock size={14} />
-              <span>Lịch Sử Phục Hồi & MTTR &rarr;</span>
+              <span>Lịch sử phục hồi &rarr;</span>
             </button>
           )}
 
@@ -475,45 +497,118 @@ export const HealingActionsPage = ({ onNavigate }) => {
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
-            }}
+            style={actionBtnStyle('default', isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>Đồng bộ tiến trình</span>
+            <span>{isRefreshing ? 'Đang đồng bộ...' : 'Làm mới'}</span>
           </button>
         </div>
       </div>
 
+      {/* Hàng 4 Thẻ KPI Tóm Tắt */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={kpiCardStyle('#3B82F6')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐANG THỰC THI</span>
+            <Activity size={14} color="#3B82F6" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: runningActions.length > 0 ? '#2563EB' : '#0F172A' }}>
+              {runningActions.length}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
+              {runningActions.length > 0 ? 'Tiến trình đang chạy' : 'Không có lệnh chờ'}
+            </span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle('#059669')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>HOÀN TẤT GẦN ĐÂY</span>
+            <CheckCircle2 size={14} color="#059669" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {recentStats.total}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+              {recentStats.succeeded} thành công
+            </span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle(recentStats.failed > 0 ? '#EF4444' : '#10B981')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỶ LỆ THÀNH CÔNG</span>
+            <ShieldCheck size={14} color={recentStats.failed > 0 ? '#EF4444' : '#10B981'} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>
+              {recentStats.rate}%
+            </span>
+            <span style={{ fontSize: '0.7rem', color: recentStats.failed > 0 ? '#DC2626' : '#64748B' }}>
+              {recentStats.failed > 0 ? `${recentStats.failed} thất bại` : 'Độ tin cậy cao'}
+            </span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle('#10B981')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>VÒNG LẶP MAPE-K</span>
+            <Zap size={14} color="#10B981" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '2px 9px',
+                borderRadius: '999px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                backgroundColor: '#ECFDF5',
+                color: '#059669',
+                border: '1px solid #A7F3D0',
+              }}
+            >
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+              Đang hoạt động
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* 5-Stage MAPE-K Interactive Loop Visualization */}
-      <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+      <div
+        className="dash-card"
+        style={{
+          padding: '16px 18px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
               Tiến Trình 5 Giai Đoạn Của Vòng Lặp MAPE-K
             </h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-              Chu trình phản hồi khép kín tự khắc phục sự cố không làm gián đoạn người dùng cuối
+            <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Chu trình phản hồi khép kín tự khắc phục sự cố không làm gián đoạn dịch vụ
             </p>
           </div>
           <span
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: '0.6875rem',
+              fontSize: '0.68rem',
               fontWeight: 700,
-              padding: '2px 8px',
-              backgroundColor: 'rgba(5, 150, 105, 0.1)',
-              color: '#059669',
-              border: '1px solid #34D399',
+              padding: '3px 10px',
+              borderRadius: '999px',
+              backgroundColor: '#ECFDF5',
+              color: '#047857',
+              border: '1px solid #A7F3D0',
             }}
           >
             AUTONOMOUS LOOP: HOẠT ĐỘNG
@@ -523,26 +618,27 @@ export const HealingActionsPage = ({ onNavigate }) => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-            gap: '12px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: '10px',
           }}
         >
           {mapekStages.map((st, idx) => (
             <div
               key={idx}
               style={{
-                padding: '14px',
-                backgroundColor: st.active ? 'rgba(37, 99, 235, 0.03)' : '#FFFFFF',
-                border: st.active ? `1px solid ${st.color}` : '1px solid var(--dash-border)',
-                borderTop: `3px solid ${st.color}`,
+                padding: '12px 14px',
+                backgroundColor: st.active ? `${st.color}08` : '#F8FAFC',
+                border: st.active ? `1px solid ${st.color}66` : '1px solid #E2E8F0',
+                borderTop: `2.5px solid ${st.color}`,
+                borderRadius: '11px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '4px',
-                boxShadow: st.active ? '0 2px 8px rgba(37, 99, 235, 0.08)' : 'none',
+                boxShadow: st.active ? `0 4px 12px ${st.color}14` : 'none',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: st.color }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700, color: st.color }}>
                   {st.step}
                 </span>
                 {st.active && (
@@ -557,10 +653,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
                   />
                 )}
               </div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0F172A' }}>
                 {st.name}
               </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', lineHeight: 1.35 }}>
+              <div style={{ fontSize: '0.7rem', color: '#64748B', lineHeight: 1.4 }}>
                 {st.desc}
               </div>
             </div>
@@ -569,40 +665,50 @@ export const HealingActionsPage = ({ onNavigate }) => {
       </div>
 
       {/* ACTIVE IN-FLIGHT ACTIONS CONTAINER */}
-      <div className="dash-card" style={{ padding: '20px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+      <div
+        className="dash-card"
+        style={{
+          padding: '16px 18px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Activity size={18} color="#2563EB" />
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Các Tiến Trình Can Thiệp Đang Diễn Ra Trong Cụm
+              <Activity size={17} color="#059669" />
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Các Tiến Trình Can Thiệp Đang Diễn Ra
               </h3>
               <span
                 style={{
-                  padding: '2px 8px',
-                  borderRadius: '9999px',
-                  fontSize: '0.6875rem',
+                  padding: '2px 9px',
+                  borderRadius: '999px',
+                  fontSize: '0.68rem',
                   fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
-                  backgroundColor: runningActions.length > 0 ? '#DBEAFE' : '#F1F5F9',
-                  color: runningActions.length > 0 ? '#1E40AF' : '#64748B',
+                  backgroundColor: runningActions.length > 0 ? '#EFF6FF' : '#F1F5F9',
+                  color: runningActions.length > 0 ? '#1D4ED8' : '#64748B',
+                  border: runningActions.length > 0 ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
                 }}
               >
                 {runningActions.length} Đang thực thi
               </span>
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-              Lệnh can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubelet API của cụm máy chủ
+            <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '3px 0 0 0' }}>
+              Lệnh can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubernetes API của cụm
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {runningActions.length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
-                padding: '48px 24px',
+                padding: '38px 24px',
                 backgroundColor: '#F8FAFC',
                 borderRadius: '12px',
                 border: '1px dashed #CBD5E1',
@@ -610,93 +716,56 @@ export const HealingActionsPage = ({ onNavigate }) => {
             >
               <div
                 style={{
-                  width: '56px',
-                  height: '56px',
-                  borderRadius: '50%',
-                  backgroundColor: '#DCFCE7',
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '14px',
+                  backgroundColor: '#ECFDF5',
+                  border: '1px solid #A7F3D0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  margin: '0 auto 14px auto',
+                  margin: '0 auto 12px auto',
                 }}
               >
-                <ShieldCheck size={32} color="#15803D" />
+                <ShieldCheck size={26} color="#059669" />
               </div>
-              <div style={{ fontWeight: 800, color: '#0F172A', marginBottom: '6px', fontSize: '1.125rem' }}>
+              <div style={{ fontWeight: 800, color: '#0F172A', marginBottom: '4px', fontSize: '0.98rem' }}>
                 Cụm Kubernetes Đang Vận Hành Ổn Định
               </div>
-              <p style={{ fontSize: '0.875rem', color: '#64748B', maxWidth: '540px', margin: '0 auto 20px auto', lineHeight: 1.5 }}>
-                Hiện không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm ({currentEnv?.name || currentEnv?.cluster || 'Production Cluster'}). Toàn bộ các dịch vụ và Pods đều ở trạng thái an toàn.
+              <p style={{ fontSize: '0.8rem', color: '#64748B', maxWidth: '520px', margin: '0 auto 16px auto', lineHeight: 1.5 }}>
+                Hiện không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm{' '}
+                <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>. Toàn bộ dịch vụ và Pods đều ở trạng thái an toàn.
               </p>
 
               {/* Quick Navigation Pills */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {onNavigate && (
                   <>
                     <button
                       type="button"
                       onClick={() => onNavigate('/dashboard/self-healing/history')}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '9px 16px',
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '8px',
-                        fontSize: '0.8125rem',
-                        fontWeight: 700,
-                        color: '#1E293B',
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      }}
+                      style={actionBtnStyle('default', false)}
                     >
-                      <Clock size={15} color="#2563EB" />
-                      <span>Tra cứu Lịch Sử Phục Hồi & Báo Cáo MTTR &rarr;</span>
+                      <Clock size={14} color="#2563EB" />
+                      <span>Lịch sử phục hồi &amp; MTTR &rarr;</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onNavigate('/dashboard/self-healing/policies')}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '9px 16px',
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '8px',
-                        fontSize: '0.8125rem',
-                        fontWeight: 700,
-                        color: '#1E293B',
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      }}
+                      style={actionBtnStyle('default', false)}
                     >
-                      <Shield size={15} color="#059669" />
-                      <span>Cấu Hình Chính Sách Tự Động &rarr;</span>
+                      <Shield size={14} color="#059669" />
+                      <span>Chính sách tự động &rarr;</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onNavigate('/dashboard/self-healing/approvals')}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '9px 16px',
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '8px',
-                        fontSize: '0.8125rem',
-                        fontWeight: 700,
-                        color: '#1E293B',
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      }}
+                      style={actionBtnStyle('default', false)}
                     >
-                      <CheckCircle2 size={15} color="#D97706" />
-                      <span>Cổng Phê Duyệt (HITL) &rarr;</span>
+                      <CheckCircle2 size={14} color="#D97706" />
+                      <span>Cổng phê duyệt HITL &rarr;</span>
                     </button>
                   </>
                 )}
@@ -707,29 +776,30 @@ export const HealingActionsPage = ({ onNavigate }) => {
               <div
                 key={act.id}
                 style={{
-                  padding: '16px 20px',
+                  padding: '14px 18px',
                   backgroundColor: '#FFFFFF',
-                  border: '1px solid var(--dash-border)',
-                  borderLeft: '4px solid #2563EB',
-                  borderRadius: '8px',
+                  border: '1px solid #E2E8F0',
+                  borderLeft: '3.5px solid #2563EB',
+                  borderRadius: '11px',
+                  boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '10px' }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', fontWeight: 700, color: '#047857' }}>
                         {act.id}
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                        &bull; Mục tiêu: <strong>{act.service}</strong> ({act.namespace})
+                      <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
+                        &bull; Mục tiêu: <strong style={{ color: '#0F172A' }}>{act.service}</strong> ({act.namespace})
                       </span>
                       <span
                         style={{
                           fontFamily: 'var(--font-mono)',
-                          fontSize: '0.6875rem',
+                          fontSize: '0.68rem',
                           fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
                           backgroundColor: '#EFF6FF',
                           color: '#2563EB',
                           border: '1px solid #BFDBFE',
@@ -739,50 +809,51 @@ export const HealingActionsPage = ({ onNavigate }) => {
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0F172A', marginTop: '4px' }}>
                       {act.title}
                     </div>
                     {act.detailMessage && (
-                      <div style={{ fontSize: '0.8125rem', color: '#475569', marginTop: '3px', lineHeight: 1.45 }}>
+                      <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '3px', lineHeight: 1.45 }}>
                         {act.detailMessage}
                       </div>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 700, color: '#2563EB' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: '#2563EB' }}>
                         TIẾN ĐỘ: {act.progress}%
                       </div>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>
-                        Thời gian chạy: {act.elapsed} &bull; Chính sách: {act.policy}
+                      <div style={{ fontSize: '0.68rem', color: '#64748B' }}>
+                        Thời gian: {act.elapsed} &bull; {act.policy}
                       </div>
                     </div>
 
                     {/* Abort button */}
                     {can(PERMISSIONS.POLICY_MANAGE) && (
-                    <button
-                      type="button"
-                      disabled={operatingActionId === act.rawId}
-                      onClick={() => handleOpenAbortModal(act)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        backgroundColor: '#FEF2F2',
-                        border: '1px solid #FECACA',
-                        color: '#DC2626',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
-                      }}
-                      title="Hủy bỏ can thiệp này ngay lập tức"
-                    >
-                      <XCircle size={13} />
-                      <span>{operatingActionId === act.rawId ? 'Đang hủy...' : 'Dừng can thiệp'}</span>
-                    </button>
+                      <button
+                        type="button"
+                        disabled={operatingActionId === act.rawId}
+                        onClick={() => handleOpenAbortModal(act)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          height: '32px',
+                          padding: '0 12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#FEF2F2',
+                          border: '1px solid #FECACA',
+                          color: '#DC2626',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
+                        }}
+                        title="Hủy bỏ can thiệp này ngay lập tức"
+                      >
+                        <XCircle size={13} />
+                        <span>{operatingActionId === act.rawId ? 'Đang hủy...' : 'Dừng can thiệp'}</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -805,31 +876,40 @@ export const HealingActionsPage = ({ onNavigate }) => {
       </div>
 
       {/* RECENT COMPLETED ACTIONS SECTION */}
-      <div className="dash-card" style={{ padding: '20px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+      <div
+        className="dash-card"
+        style={{
+          padding: '16px 18px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Clock size={18} color="#059669" />
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Các Can Thiệp Tự Phục Hồi Vừa Hoàn Tất Gần Đây
+              <Clock size={17} color="#059669" />
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Các Can Thiệp Tự Phục Hồi Vừa Hoàn Tất
               </h3>
               <span
                 style={{
-                  padding: '2px 8px',
-                  borderRadius: '9999px',
-                  fontSize: '0.6875rem',
+                  padding: '2px 9px',
+                  borderRadius: '999px',
+                  fontSize: '0.68rem',
                   fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
                   backgroundColor: '#ECFDF5',
-                  color: '#065F46',
+                  color: '#047857',
                   border: '1px solid #A7F3D0',
                 }}
               >
-                {recentActions.length} Can thiệp mới nhất
+                {recentActions.length} mới nhất
               </span>
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-              Nhật ký các hành động tự phục hồi do AI & Engine vừa thực thi xong trên các Pods / Deployments trong cụm
+            <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '3px 0 0 0' }}>
+              Nhật ký các hành động tự phục hồi vừa thực thi xong trên các Pods / Deployments trong cụm
             </p>
           </div>
 
@@ -837,49 +917,37 @@ export const HealingActionsPage = ({ onNavigate }) => {
             <button
               type="button"
               onClick={() => onNavigate('/dashboard/self-healing/history')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                fontSize: '0.78125rem',
-                fontWeight: 700,
-                color: '#1E293B',
-                cursor: 'pointer',
-              }}
+              style={actionBtnStyle('default', false)}
             >
-              <span>Toàn bộ lịch sử & MTTR</span>
+              <span>Toàn bộ lịch sử &amp; MTTR</span>
               <ChevronRight size={14} />
             </button>
           )}
         </div>
 
         {recentActions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '28px 16px', color: '#64748B', fontSize: '0.875rem', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
+          <div style={{ textAlign: 'center', padding: '28px 16px', color: '#64748B', fontSize: '0.825rem', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px dashed #CBD5E1' }}>
             Chưa ghi nhận hành động tự phục hồi nào trong cơ sở dữ liệu.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {recentActions.map((act) => {
               const isSuccess = act.executionStatus === 'SUCCEEDED';
               const isFailed = act.executionStatus === 'FAILED';
-              const badgeBg = isSuccess ? '#DCFCE7' : isFailed ? '#FEE2E2' : '#F1F5F9';
-              const badgeColor = isSuccess ? '#15803D' : isFailed ? '#DC2626' : '#64748B';
-              const badgeBorder = isSuccess ? '#86EFAC' : isFailed ? '#FCA5A5' : '#CBD5E1';
+              const badgeBg = isSuccess ? '#ECFDF5' : isFailed ? '#FEF2F2' : '#F1F5F9';
+              const badgeColor = isSuccess ? '#047857' : isFailed ? '#DC2626' : '#64748B';
+              const badgeBorder = isSuccess ? '#A7F3D0' : isFailed ? '#FECACA' : '#CBD5E1';
               const badgeText = isSuccess ? 'Thành công' : isFailed ? 'Thất bại' : act.executionStatus;
 
               return (
                 <div
                   key={act.id || act.rawId}
                   style={{
-                    padding: '12px 16px',
+                    padding: '12px 15px',
                     backgroundColor: '#F8FAFC',
                     border: '1px solid #E2E8F0',
-                    borderLeft: `4px solid ${isSuccess ? '#10B981' : isFailed ? '#EF4444' : '#64748B'}`,
-                    borderRadius: '6px',
+                    borderLeft: `3.5px solid ${isSuccess ? '#10B981' : isFailed ? '#EF4444' : '#64748B'}`,
+                    borderRadius: '10px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -889,14 +957,25 @@ export const HealingActionsPage = ({ onNavigate }) => {
                 >
                   <div style={{ flex: 1, minWidth: '240px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: '#0F172A' }}>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: '#334155',
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '6px',
+                          padding: '1px 7px',
+                        }}
+                      >
                         {act.id}
                       </span>
                       <span
                         style={{
                           padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.6875rem',
+                          borderRadius: '999px',
+                          fontSize: '0.68rem',
                           fontWeight: 700,
                           backgroundColor: badgeBg,
                           color: badgeColor,
@@ -909,26 +988,27 @@ export const HealingActionsPage = ({ onNavigate }) => {
                         {isSuccess ? <CheckCircle2 size={11} /> : isFailed ? <XCircle size={11} /> : null}
                         {badgeText}
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                        Mục tiêu: <strong style={{ color: '#1E293B' }}>{act.service}</strong> ({act.namespace})
+                      <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
+                        Mục tiêu: <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>{act.service}</strong>{' '}
+                        <span style={{ color: '#94A3B8' }}>({act.namespace})</span>
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.84375rem', fontWeight: 600, color: '#1E293B' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0F172A' }}>
                       {act.title}
                     </div>
                     {act.detailMessage && (
-                      <div style={{ fontSize: '0.78125rem', color: '#64748B', marginTop: '2px', lineHeight: 1.4 }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px', lineHeight: 1.45 }}>
                         {act.detailMessage}
                       </div>
                     )}
                   </div>
 
-                  <div style={{ textAlign: 'right', minWidth: '130px' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  <div style={{ textAlign: 'right', minWidth: '130px', fontFamily: 'var(--font-mono)' }}>
+                    <div style={{ fontSize: '0.74rem', color: '#64748B' }}>
                       Thời gian: <strong style={{ color: '#0F172A' }}>{act.elapsed}</strong>
                     </div>
                     {act.rawItem?.created_at && (
-                      <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>
+                      <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '2px' }}>
                         {new Date(act.rawItem.created_at).toLocaleString('vi-VN')}
                       </div>
                     )}
@@ -944,38 +1024,65 @@ export const HealingActionsPage = ({ onNavigate }) => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '16px',
-          marginTop: '4px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: '12px',
         }}
       >
-        <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <Activity size={16} color="#2563EB" />
-            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>1. Hành Động Tự Sửa</span>
+        <div
+          style={{
+            padding: '14px 16px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '12px',
+            boxShadow: '0 4px 16px rgba(15, 23, 42, 0.03)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+            <Activity size={15} color="#2563EB" />
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>1. Hành Động Tự Sửa</span>
           </div>
-          <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-            Theo dõi thời gian thực các can thiệp đang chạy (In-Flight) trên cụm K8s và chu trình MAPE-K. Hỗ trợ ngắt dừng khẩn cấp can thiệp.
+          <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+            Theo dõi thời gian thực các can thiệp đang chạy trên cụm K8s và chu trình MAPE-K. Hỗ trợ ngắt dừng khẩn cấp can thiệp.
           </p>
         </div>
 
-        <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <Clock size={16} color="#059669" />
-            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>2. Lịch Sử Phục Hồi</span>
+        <div
+          onClick={() => onNavigate && onNavigate('/dashboard/self-healing/history')}
+          style={{
+            padding: '14px 16px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '12px',
+            boxShadow: '0 4px 16px rgba(15, 23, 42, 0.03)',
+            cursor: onNavigate ? 'pointer' : 'default',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+            <Clock size={15} color="#059669" />
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>2. Lịch Sử Phục Hồi</span>
           </div>
-          <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-            Toàn bộ nhật ký kiểm toán hành động đã hoàn tất/thất bại, lọc theo ngày/tháng/năm và biểu đồ phân tích thời gian hồi phục MTTR.
+          <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+            Toàn bộ nhật ký hành động đã hoàn tất/thất bại, lọc theo ngày/tháng/năm và biểu đồ phân tích thời gian hồi phục MTTR.
           </p>
         </div>
 
-        <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <CheckCircle2 size={16} color="#D97706" />
-            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>3. Cổng Phê Duyệt (HITL)</span>
+        <div
+          onClick={() => onNavigate && onNavigate('/dashboard/self-healing/approvals')}
+          style={{
+            padding: '14px 16px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '12px',
+            boxShadow: '0 4px 16px rgba(15, 23, 42, 0.03)',
+            cursor: onNavigate ? 'pointer' : 'default',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+            <CheckCircle2 size={15} color="#D97706" />
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>3. Cổng Phê Duyệt (HITL)</span>
           </div>
-          <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-            Cơ chế bảo vệ Human-in-the-Loop cho phép kỹ sư vận hành phê duyệt các hành động có rủi ro cao trước khi áp dụng vào sản xuất.
+          <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+            Cơ chế bảo vệ Human-in-the-Loop cho phép kỹ sư vận hành phê duyệt các hành động rủi ro cao trước khi áp dụng.
           </p>
         </div>
       </div>

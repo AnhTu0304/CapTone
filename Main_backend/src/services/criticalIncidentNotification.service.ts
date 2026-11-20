@@ -10,6 +10,7 @@ import { EmailService } from './email.service';
 import { EmailQueue } from './emailQueue.service';
 import { AuditService } from './audit.service';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
+import { isExcludedSystemService } from '../utils/systemServiceFilter';
 
 export type CriticalAlertReasonStage =
   | 'NO_ACTION'
@@ -226,6 +227,19 @@ export class CriticalIncidentNotificationService {
       };
     }
 
+    // Không gửi email / cảnh báo khẩn cho các pod hạ tầng lõi K8s & monitoring stack
+    if (isExcludedSystemService(incident.target_name || (incident as any).service_id)) {
+      return {
+        notified: false,
+        suppressedByCooldown: false,
+        disabledBySettings: false,
+        notifiedUsersCount: 0,
+        emailedCount: 0,
+        recipients: [],
+        reason: 'EXCLUDED_SYSTEM_SERVICE',
+      };
+    }
+
     const severity = String(incident.severity || 'HIGH').toUpperCase();
     if (!options.force && severity !== 'CRITICAL') {
       return {
@@ -269,6 +283,7 @@ export class CriticalIncidentNotificationService {
     }
 
     const serviceName =
+      incident.target_name ||
       incident.service_name ||
       incident.workload_name ||
       incident.healing_target_name ||
@@ -396,6 +411,22 @@ export class CriticalIncidentNotificationService {
     let emailedCount = 0;
     const emailedAddresses: string[] = [];
 
+    let dynamicOrgName = incident.organization_name || null;
+    if (!dynamicOrgName && orgId) {
+      try {
+        const orgRes = await pool.query('SELECT name FROM organizations WHERE id = $1', [orgId]);
+        if (orgRes.rows.length > 0) dynamicOrgName = orgRes.rows[0].name;
+      } catch {}
+    }
+
+    let dynamicClusterName = incident.cluster_name || null;
+    if (!dynamicClusterName && incident.cluster_id) {
+      try {
+        const clRes = await pool.query('SELECT name FROM clusters WHERE id::text = $1 OR name = $1', [String(incident.cluster_id)]);
+        if (clRes.rows.length > 0) dynamicClusterName = clRes.rows[0].name;
+      } catch {}
+    }
+
     for (const target of emailTargets) {
       const emailPayload = {
         toEmail: target.toEmail,
@@ -409,8 +440,8 @@ export class CriticalIncidentNotificationService {
         podName,
         nodeName,
         namespace: incident.namespace || null,
-        clusterName: incident.cluster_name || incident.cluster_id || null,
-        organizationName: incident.organization_name || null,
+        clusterName: dynamicClusterName || incident.cluster_id || null,
+        organizationName: dynamicOrgName || null,
         rootCauseType: incident.root_cause_type || null,
         rootCauseDescription: incident.root_cause_description || incident.description || null,
         confidenceScore: incident.rca_confidence ?? incident.prediction_confidence ?? null,

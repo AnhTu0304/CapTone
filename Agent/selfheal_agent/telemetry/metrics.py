@@ -136,7 +136,7 @@ class MetricsManager:
 
         try:
             session = await self._get_http_session()
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=2.0)) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=1.5)) as resp:
                 elapsed = (time.perf_counter() - t0) * 1000.0
                 probe_latency = round(elapsed, 2)
                 probe_status = resp.status
@@ -177,7 +177,7 @@ class MetricsManager:
                     namespace=pod.namespace,
                     since_seconds=since_sec,
                     tail_lines=150,
-                    _request_timeout=2,
+                    _request_timeout=1.5,
                 )
                 record_k8s_api_call("pods", "read_log", "success", time.perf_counter() - t_log)
                 if raw_logs:
@@ -245,6 +245,7 @@ class MetricsManager:
                     group="metrics.k8s.io",
                     version="v1beta1",
                     plural="pods",
+                    _request_timeout=3,
                 )
             else:
                 raw = self.custom_objects.list_namespaced_custom_object(
@@ -252,6 +253,7 @@ class MetricsManager:
                     version="v1beta1",
                     namespace=namespace,
                     plural="pods",
+                    _request_timeout=3,
                 )
             record_k8s_api_call("metrics.k8s.io", "list", "success", time.perf_counter() - t0)
 
@@ -289,6 +291,7 @@ class MetricsManager:
                 group="metrics.k8s.io",
                 version="v1beta1",
                 plural="nodes",
+                _request_timeout=3,
             )
             record_k8s_api_call("metrics.k8s.io", "list", "success", time.perf_counter() - t0)
             items = raw.get("items", []) if isinstance(raw, dict) else []
@@ -332,8 +335,14 @@ class MetricsManager:
             else {}
         )
 
-        # Fallback to active HTTP probe and in-cluster log parsing for pods without Prometheus
-        pods_to_probe = [pod for pod in pods if pod.name not in prom_data]
+        # Fallback to active HTTP probe and in-cluster log parsing for application pods without Prometheus
+        # (Bỏ qua probe HTTP/đọc log trên các namespace lõi hệ thống & monitoring để không làm nghẽn kube-apiserver)
+        system_namespaces = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system", "monitoring"}
+        pods_to_probe = [
+            pod
+            for pod in pods
+            if pod.name not in prom_data and (pod.namespace or "default") not in system_namespaces
+        ]
         if pods_to_probe:
             probe_results = await asyncio.gather(
                 *[self.probe_pod_http(p) for p in pods_to_probe],

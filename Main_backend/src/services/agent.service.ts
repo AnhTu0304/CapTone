@@ -2506,7 +2506,9 @@ export class AgentService {
         const activeLiveWorkloadNames = new Set<string>();
         for (const pod of data.pods) {
           if (pod.labels?.['app.kubernetes.io/name']) activeLiveWorkloadNames.add(pod.labels['app.kubernetes.io/name']);
+          if (pod.labels?.['k8s-app']) activeLiveWorkloadNames.add(pod.labels['k8s-app']);
           if (pod.labels?.app) activeLiveWorkloadNames.add(pod.labels.app);
+          if (pod.service_id) activeLiveWorkloadNames.add(pod.service_id);
           const baseName = String(pod.name || '')
             .replace(/-(?:[a-f0-9]{8,10}|[0-9a-z]{9,10})-[a-z0-9]{5}$/i, '')
             .replace(/-\d+$/, '')
@@ -2519,7 +2521,7 @@ export class AgentService {
           if (isDeployment && !reportedDeploymentNames.has(wlName) && !activeLiveWorkloadNames.has(wlName)) {
             await client.query('UPDATE pods SET workload_id = NULL WHERE workload_id = $1', [wlMeta.id]);
             await client.query('DELETE FROM deployments WHERE workload_id = $1', [wlMeta.id]).catch(() => {});
-            await client.query('DELETE FROM workloads WHERE id = $1', [wlMeta.id]).catch(() => {});
+            await client.query('UPDATE workloads SET deleted_at = NOW(), status = \'DELETED\', updated_at = NOW() WHERE id = $1', [wlMeta.id]).catch(() => {});
             delete workloadMapByName[wlName];
           }
         }
@@ -2533,6 +2535,7 @@ export class AgentService {
           .replace(/-[a-z0-9]{5}$/i, '');
         const candidateNames = [
           pod.labels?.['app.kubernetes.io/name'],
+          pod.labels?.['k8s-app'],
           pod.labels?.app,
           podStripped,
           pod.service_id,
@@ -2581,25 +2584,56 @@ export class AgentService {
               [wlInfo.id]
             );
           }
-        } else if (
-          !Array.isArray(data.deployments) ||
-          data.deployments.length === 0 ||
-          /-\d+$/.test(String(pod.name || ''))
-        ) {
-          const isStsPod = /-\d+$/.test(String(pod.name || ''));
-          const insWl = await client.query(
-            `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, observed_at, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, 'UNKNOWN', $5, NOW(), NOW(), NOW())
-             RETURNING id, namespace_id, workload_type`,
-            [clusterId, nsId, wlName, isStsPod ? 'StatefulSet' : 'Deployment', JSON.stringify(pod.labels || {})]
+        } else {
+          // Check if an existing workload row exists in database for this cluster and candidate names
+          const existingWlCheck = await client.query(
+            `SELECT id, namespace_id, workload_type, deleted_at 
+             FROM workloads 
+             WHERE cluster_id = $1 AND name = ANY($2)
+             ORDER BY (deleted_at IS NULL) DESC, updated_at DESC LIMIT 1`,
+            [clusterId, candidateNames]
           );
-          if (insWl.rows[0]) {
+
+          const isKnownDaemonSet = candidateNames.some((n) =>
+            ['kindnet', 'kube-proxy', 'prometheus-node-exporter', 'node-exporter'].includes(n.toLowerCase())
+          ) || Boolean(pod.labels?.['controller-revision-hash'] && !/-\d+$/.test(String(pod.name || '')));
+          const isStsPod = /-\d+$/.test(String(pod.name || '')) || candidateNames.some((n) => n.toLowerCase().includes('mongodb'));
+          const targetWlType = isKnownDaemonSet ? 'DaemonSet' : (isStsPod ? 'StatefulSet' : 'Deployment');
+
+          if (existingWlCheck.rows.length > 0) {
+            const exRow = existingWlCheck.rows[0];
+            await client.query(
+              `UPDATE workloads 
+               SET deleted_at = NULL, 
+                   status = 'HEALTHY', 
+                   namespace_id = COALESCE($1, namespace_id),
+                   workload_type = CASE WHEN workload_type = 'Deployment' AND $2 = 'DaemonSet' THEN 'DaemonSet' ELSE COALESCE(workload_type, $2) END,
+                   observed_at = NOW(), 
+                   updated_at = NOW() 
+               WHERE id = $3`,
+              [nsId, targetWlType, exRow.id]
+            );
             wlInfo = {
-              id: insWl.rows[0].id,
-              namespace_id: insWl.rows[0].namespace_id,
-              workload_type: insWl.rows[0].workload_type,
+              id: exRow.id,
+              namespace_id: nsId || exRow.namespace_id,
+              workload_type: exRow.workload_type || targetWlType,
             };
             workloadMapByName[wlName] = wlInfo;
+          } else {
+            const insWl = await client.query(
+              `INSERT INTO workloads (cluster_id, namespace_id, name, workload_type, status, labels, observed_at, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, 'HEALTHY', $5, NOW(), NOW(), NOW())
+               RETURNING id, namespace_id, workload_type`,
+              [clusterId, nsId, wlName, targetWlType, JSON.stringify(pod.labels || {})]
+            );
+            if (insWl.rows[0]) {
+              wlInfo = {
+                id: insWl.rows[0].id,
+                namespace_id: insWl.rows[0].namespace_id,
+                workload_type: insWl.rows[0].workload_type,
+              };
+              workloadMapByName[wlName] = wlInfo;
+            }
           }
         }
 

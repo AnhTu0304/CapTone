@@ -156,59 +156,61 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* 1. Header with Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Radio size={20} color="#059669" />
+            <Radio size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
               Quản Trị Tác Tử eBPF Agent
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF trên cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Toàn hệ thống'}</strong>
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {/* Chế độ xem: Cụm hiện tại vs Tất cả cụm */}
           <div
             style={{
               display: 'flex',
-              backgroundColor: '#F1F5F9',
-              padding: '2px',
-              borderRadius: '6px',
-              border: '1px solid var(--dash-border)',
+              backgroundColor: '#F8FAFC',
+              padding: '3px',
+              borderRadius: '10px',
+              border: '1px solid #E2E8F0',
+              gap: '3px',
             }}
           >
             <button
               type="button"
               onClick={() => setScopeMode('CURRENT_CLUSTER')}
               style={{
-                padding: '4px 10px',
-                fontSize: '0.75rem',
-                fontWeight: scopeMode === 'CURRENT_CLUSTER' ? 700 : 500,
-                backgroundColor: scopeMode === 'CURRENT_CLUSTER' ? '#FFFFFF' : 'transparent',
-                color: scopeMode === 'CURRENT_CLUSTER' ? 'var(--dash-text-primary)' : 'var(--dash-text-secondary)',
-                border: 'none',
-                borderRadius: '4px',
+                padding: '5px 11px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                backgroundColor: scopeMode === 'CURRENT_CLUSTER' ? '#ECFDF5' : 'transparent',
+                color: scopeMode === 'CURRENT_CLUSTER' ? '#047857' : '#64748B',
+                border: scopeMode === 'CURRENT_CLUSTER' ? '1px solid #A7F3D0' : '1px solid transparent',
+                borderRadius: '7px',
                 cursor: 'pointer',
-                boxShadow: scopeMode === 'CURRENT_CLUSTER' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
               {currentEnv?.name || 'Cụm hiện tại'}
@@ -217,15 +219,14 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               type="button"
               onClick={() => setScopeMode('ALL_CLUSTERS')}
               style={{
-                padding: '4px 10px',
-                fontSize: '0.75rem',
-                fontWeight: scopeMode === 'ALL_CLUSTERS' ? 700 : 500,
-                backgroundColor: scopeMode === 'ALL_CLUSTERS' ? '#FFFFFF' : 'transparent',
-                color: scopeMode === 'ALL_CLUSTERS' ? 'var(--dash-text-primary)' : 'var(--dash-text-secondary)',
-                border: 'none',
-                borderRadius: '4px',
+                padding: '5px 11px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                backgroundColor: scopeMode === 'ALL_CLUSTERS' ? '#ECFDF5' : 'transparent',
+                color: scopeMode === 'ALL_CLUSTERS' ? '#047857' : '#64748B',
+                border: scopeMode === 'ALL_CLUSTERS' ? '1px solid #A7F3D0' : '1px solid transparent',
+                borderRadius: '7px',
                 cursor: 'pointer',
-                boxShadow: scopeMode === 'ALL_CLUSTERS' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
               Toàn tổ chức
@@ -236,18 +237,19 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              padding: '0 12px',
               backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              color: 'var(--dash-text-primary)',
-              fontSize: '0.8125rem',
+              border: '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              color: '#334155',
+              fontSize: '0.8rem',
               fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: 'var(--dash-shadow-xs)',
+              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
@@ -255,110 +257,111 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </button>
 
           {can(PERMISSIONS.AGENT_MANAGE) && (
-          <button
-            onClick={() => setIsInstallModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--dash-primary)',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: 'var(--dash-shadow-sm)',
-            }}
-          >
-            <Plus size={16} />
-            <span>Cài đặt Tác tử Mới</span>
-          </button>
+            <button
+              onClick={() => setIsInstallModalOpen(true)}
+              style={{
+                height: '34px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 14px',
+                backgroundColor: '#059669',
+                color: '#FFFFFF',
+                border: '1px solid #059669',
+                borderRadius: '10px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.2)',
+              }}
+            >
+              <Plus size={15} />
+              <span>Cài đặt Tác tử</span>
+            </button>
           )}
         </div>
       </div>
 
-      {/* 2. Stat Summary Cards (Số liệu thật từ cụm K8s) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tổng số Tác tử</span>
-            <Radio size={16} color="var(--dash-primary)" />
+      {/* 2. Stat Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #059669' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG SỐ TÁC TỬ</span>
+            <Radio size={14} color="#059669" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {onlineRatio}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-warning-text)' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: onlineAgents.length > 0 ? '#059669' : '#D97706' }}>
               {onlinePercent}
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            {onlineAgents.length > 0 ? `Bao phủ 100% worker nodes (${currentEnv?.name})` : 'Chờ triển khai tác tử'}
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
+            {onlineAgents.length > 0 ? `Bao phủ worker nodes (${currentEnv?.name})` : 'Chờ triển khai tác tử'}
           </div>
         </div>
 
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Nhịp tim Trung bình</span>
-            <Clock size={16} color="var(--dash-mint-600)" />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #10B981' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>NHỊP TIM TRUNG BÌNH</span>
+            <Clock size={14} color="#10B981" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {onlineAgents.length > 0 ? '3.0s' : 'N/A'}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-muted)' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: onlineAgents.length > 0 ? '#059669' : '#94A3B8' }}>
               Tần suất 5s
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
             {onlineAgents.length > 0 ? 'Độ trễ truyền tin < 1.2ms' : 'Chưa có tín hiệu heartbeat'}
           </div>
         </div>
 
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tải CPU / RAM Tác tử</span>
-            <Cpu size={16} color="var(--dash-info)" />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #3B82F6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TẢI CPU / RAM TÁC TỬ</span>
+            <Cpu size={14} color="#3B82F6" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {onlineAgents.length > 0 ? '0.3%' : '0.0%'}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
               {onlineAgents.length > 0 ? '~15.1 MB RAM' : 'N/A'}
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
             Mô hình siêu nhẹ (Zero-Overhead)
           </div>
         </div>
 
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Đầu dò Nhân eBPF</span>
-            <CheckCircle2 size={16} color={onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-muted)'} />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: `2.5px solid ${onlineAgents.length > 0 ? '#10B981' : '#94A3B8'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐẦU DÒ NHÂN eBPF</span>
+            <CheckCircle2 size={14} color={onlineAgents.length > 0 ? '#10B981' : '#94A3B8'} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-secondary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: onlineAgents.length > 0 ? '#059669' : '#64748B' }}>
               {onlineAgents.length > 0 ? 'Hoạt động' : 'Tạm dừng'}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: onlineAgents.length > 0 ? 'var(--dash-success)' : 'var(--dash-text-muted)' }}>
+            <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 600, color: onlineAgents.length > 0 ? '#059669' : '#94A3B8' }}>
               Linux 5.15+
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
             WebSocket mTLS mã hóa bảo mật
           </div>
         </div>
       </div>
 
       {/* 3. Filter & Agents Table */}
-      <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+      <div className="dash-card" style={{ padding: '16px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           {/* Search box */}
-          <div style={{ position: 'relative', width: '320px' }}>
+          <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
             <input
               type="text"
               placeholder="Tìm theo tên agent, UID hoặc cụm..."
@@ -366,19 +369,20 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
-                padding: '8px 12px',
-                fontSize: '0.8125rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-md)',
-                backgroundColor: 'var(--dash-bg-canvas)',
+                height: '34px',
+                padding: '0 12px',
+                fontSize: '0.8rem',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                backgroundColor: '#F8FAFC',
                 outline: 'none',
-                color: 'var(--dash-text-primary)',
+                color: '#0F172A',
               }}
             />
           </div>
 
-          {/* Status filter */}
-          <div style={{ display: 'flex', gap: '6px' }}>
+          {/* Status filter (Segmented Pill) */}
+          <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
             {[
               { id: 'ALL', label: 'Tất cả' },
               { id: 'ONLINE', label: 'Trực tuyến' },
@@ -388,14 +392,17 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 key={st.id}
                 onClick={() => setFilterStatus(st.id)}
                 style={{
-                  padding: '6px 12px',
+                  height: '28px',
+                  padding: '0 12px',
                   fontSize: '0.75rem',
-                  fontWeight: filterStatus === st.id ? 600 : 500,
-                  backgroundColor: filterStatus === st.id ? 'var(--dash-primary-light)' : 'transparent',
-                  color: filterStatus === st.id ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                  borderRadius: 'var(--dash-radius-md)',
-                  border: filterStatus === st.id ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-border)',
+                  fontWeight: filterStatus === st.id ? 700 : 600,
+                  backgroundColor: filterStatus === st.id ? '#FFFFFF' : 'transparent',
+                  color: filterStatus === st.id ? '#047857' : '#64748B',
+                  borderRadius: '7px',
+                  border: 'none',
+                  boxShadow: filterStatus === st.id ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                   cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 {st.label}
@@ -405,34 +412,38 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
         </div>
 
         {/* Agents Table */}
-        <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '12px', overflow: 'hidden' }}>
+        <div className="dash-table-container" style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
           {isLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}>
-              <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px auto' }} color="var(--dash-primary)" />
+            <div style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontSize: '0.825rem' }}>
+              <RefreshCw size={22} className="animate-spin" style={{ margin: '0 auto 10px auto' }} color="#059669" />
               <div>Đang tải thông tin tác tử từ cụm Kubernetes...</div>
             </div>
           ) : filteredAgents.length === 0 ? (
-            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-              <Radio size={36} color="var(--dash-text-muted)" style={{ margin: '0 auto 12px auto' }} />
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
+            <div style={{ padding: '44px 24px', textAlign: 'center' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
+                <Radio size={22} color="#059669" />
+              </div>
+              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A' }}>
                 {scopeMode === 'CURRENT_CLUSTER'
                   ? `Chưa có Tác tử nào được cài đặt trên cụm "${currentEnv?.name}"`
                   : 'Chưa có Tác tử nào trong tổ chức'}
               </div>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '4px', maxWidth: '460px', margin: '4px auto 16px auto' }}>
+              <p style={{ fontSize: '0.8rem', color: '#64748B', maxWidth: '460px', margin: '5px auto 14px auto' }}>
                 Triển khai Tác tử eBPF vào cụm Kubernetes của bạn để tự động thu thập viễn trắc và kích hoạt cơ chế tự phục hồi AI.
               </p>
               {can(PERMISSIONS.AGENT_MANAGE) && (
               <button
                 onClick={() => setIsInstallModalOpen(true)}
                 style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'var(--dash-primary)',
+                  height: '34px',
+                  padding: '0 16px',
+                  backgroundColor: '#059669',
                   color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: 'var(--dash-radius-md)',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
+                  border: '1px solid #059669',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.2)',
                   cursor: 'pointer',
                 }}
               >
@@ -443,14 +454,14 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#F8FAFC', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Tên Tác Tử & UID</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Cụm & Máy Chủ (Node)</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Trạng Thái & Nhịp Tim</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Phiên Bản</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>CPU / RAM</th>
-                  <th style={{ padding: '12px', fontWeight: 700 }}>Token Hoạt Động</th>
-                  <th style={{ padding: '12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Tên Tác Tử &amp; UID</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Cụm &amp; Máy Chủ (Node)</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Trạng Thái &amp; Nhịp Tim</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Phiên Bản</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>CPU / RAM</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Token Hoạt Động</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -460,82 +471,93 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                     <tr
                       key={agent.id}
                       style={{
-                        borderBottom: '1px solid var(--dash-border)',
-                        transition: 'background-color 0.15s ease',
+                        borderBottom: '1px solid #F1F5F9',
+                        transition: 'background-color 0.14s ease',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      <td style={{ padding: '14px 12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0F172A' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Radio size={15} color={isOnline ? 'var(--dash-primary)' : 'var(--dash-text-muted)'} />
+                          <Radio size={14} color={isOnline ? '#059669' : '#94A3B8'} />
                           <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{agent.name}</span>
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginLeft: '23px', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748B', marginLeft: '22px', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
                           UID: {agent.agent_uid}
                         </div>
                       </td>
-                      <td style={{ padding: '14px 12px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 600, color: '#0F172A' }}>
                           {agent.cluster_name || currentEnv?.name || 'minikube'}
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748B', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                           Node: minikube (1 node)
                         </div>
                       </td>
-                      <td style={{ padding: '14px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '2px 9px',
+                            borderRadius: '999px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            backgroundColor: isOnline ? '#ECFDF5' : '#FEF2F2',
+                            color: isOnline ? '#047857' : '#DC2626',
+                            border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`,
+                          }}
+                        >
                           <span
                             style={{
-                              width: '8px',
-                              height: '8px',
+                              width: '6px',
+                              height: '6px',
                               borderRadius: '50%',
-                              backgroundColor: isOnline ? 'var(--dash-success)' : 'var(--dash-danger, #EF4444)',
-                              boxShadow: isOnline ? '0 0 6px rgba(16, 185, 129, 0.6)' : 'none',
+                              backgroundColor: isOnline ? '#10B981' : '#EF4444',
                             }}
                           />
-                          <span style={{ fontWeight: 700, color: isOnline ? 'var(--dash-success)' : 'var(--dash-danger, #EF4444)' }}>
-                            {isOnline ? 'Trực tuyến' : 'Ngoại tuyến'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '3px' }}>
+                          {isOnline ? 'Trực tuyến' : 'Ngoại tuyến'}
+                        </span>
+                        <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
                           {isOnline ? 'Vừa phản hồi (< 3s trước)' : (agent.last_seen_at ? new Date(agent.last_seen_at).toLocaleTimeString() : 'Chưa nhận tín hiệu')}
                         </div>
                       </td>
-                      <td style={{ padding: '14px 12px', color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 14px', color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
                         {agent.version || 'v2.4.1'}
                       </td>
-                      <td style={{ padding: '14px 12px' }}>
+                      <td style={{ padding: '12px 14px' }}>
                         {isOnline ? (
                           <>
-                            <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>0.3%</div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>15.1 MB</div>
+                            <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>0.3%</div>
+                            <div style={{ fontSize: '0.68rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>15.1 MB</div>
                           </>
                         ) : (
-                          <span style={{ color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>N/A (Ngoại tuyến)</span>
+                          <span style={{ color: '#94A3B8', fontSize: '0.75rem' }}>N/A (Ngoại tuyến)</span>
                         )}
                       </td>
-                      <td style={{ padding: '14px 12px', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 14px', color: '#475569', fontWeight: 600 }}>
                         {agent.active_tokens_count ?? 1} token hợp lệ
                       </td>
-                      <td style={{ padding: '14px 12px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                           {agent.status !== 'OFFLINE' && agent.status !== 'REVOKED' && can(PERMISSIONS.AGENT_MANAGE) && (
                             <button
                               type="button"
                               data-testid={`disconnect-agent-btn-${agent.id}`}
                               onClick={() => { setDisconnectingAgent(agent); setActionError(null); }}
                               style={{
-                                display: 'flex',
+                                height: '28px',
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                padding: '5px 10px',
+                                padding: '0 10px',
                                 backgroundColor: '#FEF2F2',
                                 color: '#DC2626',
-                                border: '1px solid #FCA5A5',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
+                                border: '1px solid #FECACA',
+                                borderRadius: '8px',
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
                                 cursor: 'pointer',
                               }}
                               title="Ngắt kết nối Agent"
@@ -550,15 +572,16 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                               data-testid={`delete-agent-btn-${agent.id}`}
                               onClick={() => { setDeletingAgent(agent); setForceDeleteAgent(false); setActionError(null); }}
                               style={{
-                                display: 'flex',
+                                height: '28px',
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                padding: '5px 10px',
+                                padding: '0 10px',
                                 backgroundColor: '#FFFFFF',
                                 color: '#991B1B',
-                                border: '1px solid #CBD5E1',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '8px',
+                                fontSize: '0.74rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
                               }}
@@ -588,12 +611,12 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.4)',
-            backdropFilter: 'blur(3px)',
+            backgroundColor: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 100,
+            zIndex: 9999,
             padding: '20px',
           }}
         >
@@ -603,7 +626,9 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               width: '100%',
               maxWidth: '640px',
               backgroundColor: '#FFFFFF',
-              boxShadow: 'var(--dash-shadow-dropdown)',
+              border: '1px solid #E2E8F0',
+              borderRadius: '16px',
+              boxShadow: '0 24px 60px rgba(15, 23, 42, 0.18)',
               overflow: 'hidden',
             }}
           >
@@ -611,7 +636,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <div
               style={{
                 padding: '16px 20px',
-                borderBottom: '1px solid var(--dash-border)',
+                borderBottom: '1px solid #F1F5F9',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { telemetryService } from '../../../services/telemetryService';
+import { aiService } from '../../../services/aiService';
+import { extractActiveK8sServices, normalizeK8sServiceName, isExcludedSystemService } from '../../../utils/k8sServiceFilter';
 import ApmChartsPanel from '../../../components/dashboard/ApmChartsPanel';
 import {
   APM_TIME_RANGE_PRESETS,
@@ -66,17 +68,55 @@ export const ApmPage = ({ onNavigate }) => {
     }
 
     try {
-      const list = await telemetryService.getApmServices(60, {
-        organizationId: currentOrg.id,
-        clusterId: activeClusterId,
-      });
-      if (Array.isArray(list) && list.length > 0) {
-        setServicesList(list);
+      const [list, liveWorkloads] = await Promise.all([
+        telemetryService.getApmServices(60, {
+          organizationId: currentOrg.id,
+          clusterId: activeClusterId,
+        }),
+        aiService.getWorkloads(activeClusterId, currentOrg.id).catch(() => null),
+      ]);
+
+      const activeNames = Array.isArray(liveWorkloads) ? extractActiveK8sServices(liveWorkloads) : null;
+      const activeSet = activeNames ? new Set(activeNames) : null;
+
+      let filteredList = Array.isArray(list) ? list : [];
+      if (activeSet) {
+        filteredList = filteredList.filter((s) => {
+          const norm = normalizeK8sServiceName(s.service_name || s.service_id);
+          return norm && activeSet.has(norm);
+        });
+        // Đảm bảo các dịch vụ sống trên K8s vẫn xuất hiện kể cả khi chưa có mẫu APM trong 60p gần nhất
+        activeNames.forEach((name) => {
+          const exists = filteredList.some(
+            (s) => normalizeK8sServiceName(s.service_name || s.service_id) === name
+          );
+          if (!exists) {
+            filteredList.push({
+              service_id: name,
+              service_name: name,
+              service_type: 'Workload',
+              avg_latency_ms: 0,
+              max_latency_ms: 0,
+              avg_request_rate: 0,
+              avg_error_rate: 0,
+              replica_count: 1,
+              total_restarts: 0,
+            });
+          }
+        });
+      } else {
+        filteredList = filteredList.filter(
+          (s) => !isExcludedSystemService(s.service_name || s.service_id)
+        );
+      }
+
+      if (filteredList.length > 0) {
+        setServicesList(filteredList);
         setSelectedService((prev) => {
-          if (prev && list.some((s) => s.service_id === prev || s.service_name === prev)) {
+          if (prev && filteredList.some((s) => s.service_id === prev || s.service_name === prev)) {
             return prev;
           }
-          return list[0].service_id || list[0].service_name || 'hello-minikube';
+          return filteredList[0].service_id || filteredList[0].service_name || '';
         });
       } else {
         setServicesList([]);

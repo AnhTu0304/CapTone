@@ -26,8 +26,8 @@ app.use(
         return callback(null, true);
       }
 
-      // Allow localhost variants in development
-      if (config.isDevelopment && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      // Allow localhost variants on any port (including dev on 3000, 3001, 3002, 3005, etc.)
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
         return callback(null, true);
       }
 

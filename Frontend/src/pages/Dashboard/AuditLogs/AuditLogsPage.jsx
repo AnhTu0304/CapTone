@@ -4,6 +4,11 @@ import { useToast } from '../../../context/ToastContext';
 import { exportToCsv, exportToJson } from '../../../utils/exportUtils';
 import AuditDistributionChart from '../../../components/dashboard/AuditDistributionChart';
 import { fetchOrgAuditLogs } from '../../../services/dashboardAuditLogsService';
+import { aiService } from '../../../services/aiService';
+import {
+  extractActiveK8sServices,
+  isExcludedSystemService,
+} from '../../../utils/k8sServiceFilter';
 import {
   Calendar,
   ScrollText,
@@ -74,15 +79,27 @@ const parseLogDate = (log) => {
   return null;
 };
 
+const normalizeAuditServiceName = (val) => {
+  if (!val || typeof val !== 'string') return null;
+  const s = val.trim();
+  const l = s.toLowerCase();
+  if (l === 'otel-collector-opentelemetry-collector') return 'opentelemetry-collector';
+  if (l === 'prometheus-kube-state-metrics') return 'kube-state-metrics';
+  if (l === 'prometheus-kube-prometheus-operator') return 'kube-prometheus-stack-operator';
+  if (l === 'ecommerce-store') return 'ecommerce-store-app';
+  if (/^mongodb-\d+$/i.test(l)) return 'mongodb';
+  return s;
+};
+
 const resolveLogServiceName = (item) => {
   if (!item) return null;
   if (item.serviceName && typeof item.serviceName === 'string' && item.serviceName.trim()) {
-    return item.serviceName.trim();
+    return normalizeAuditServiceName(item.serviceName);
   }
   const meta = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
   const metaService = meta.target_service || meta.service_id || meta.target_name || meta.pod_name;
   if (metaService && typeof metaService === 'string' && metaService.trim()) {
-    return metaService.trim();
+    return normalizeAuditServiceName(metaService);
   }
   const rType = String(item.resourceType || '').toUpperCase();
   const tType = String(item.targetType || '').toUpperCase();
@@ -102,9 +119,9 @@ const resolveLogServiceName = (item) => {
       return null;
     }
     if (meta.namespace && targetStr.startsWith(`${meta.namespace}/`)) {
-      return targetStr.slice(meta.namespace.length + 1);
+      return normalizeAuditServiceName(targetStr.slice(meta.namespace.length + 1));
     }
-    return targetStr;
+    return normalizeAuditServiceName(targetStr);
   }
   return null;
 };
@@ -613,6 +630,8 @@ export const AuditLogsPage = () => {
 
   // Data states
   const [rawLogs, setRawLogs] = useState([]);
+  const [liveWorkloads, setLiveWorkloads] = useState([]);
+  const [hasLoadedWorkloads, setHasLoadedWorkloads] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showChart, setShowChart] = useState(false);
@@ -831,15 +850,41 @@ export const AuditLogsPage = () => {
     });
   }, [rawLogs, activeClusterId, timeFilterMode, selectedDate, selectedMonth, selectedYear]);
 
-  // Danh sách Dịch vụ K8s thực tế trong phạm vi Thời gian & Cụm hiện tại
+  // Tải danh sách Workloads ĐANG CHẠY THỰC TẾ trên cụm K8s (đã lọc deleted_at IS NULL & bỏ hệ thống/monitoring)
+  useEffect(() => {
+    let isMounted = true;
+    const orgId =
+      currentOrg?.id && !String(currentOrg.id).startsWith('sandbox-') && currentOrg.id !== 'org-acme'
+        ? currentOrg.id
+        : undefined;
+    aiService
+      .getWorkloads(activeClusterId || undefined, orgId)
+      .then((workloads) => {
+        if (isMounted && Array.isArray(workloads)) {
+          setLiveWorkloads(workloads);
+          setHasLoadedWorkloads(true);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setHasLoadedWorkloads(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [activeClusterId, currentOrg?.id]);
+
+  // Danh sách Dịch vụ K8s đang chạy thực tế trong phạm vi Cụm hiện tại (không lấy dịch vụ cũ đã xóa)
   const uniqueServices = useMemo(() => {
+    if (hasLoadedWorkloads) {
+      return extractActiveK8sServices(liveWorkloads);
+    }
     const svcSet = new Set();
     timeAndClusterLogs.forEach((item) => {
       const svc = resolveLogServiceName(item);
-      if (svc) svcSet.add(svc);
+      if (svc && !isExcludedSystemService(svc)) svcSet.add(svc);
     });
     return Array.from(svcSet).sort((a, b) => a.localeCompare(b));
-  }, [timeAndClusterLogs]);
+  }, [hasLoadedWorkloads, liveWorkloads, timeAndClusterLogs]);
 
   // Bộ lọc dữ liệu tập trung theo Dịch vụ K8s, Tác nhân, Trạng thái và Từ khóa tìm kiếm
   const filteredLogs = useMemo(() => {
@@ -1356,54 +1401,57 @@ export const AuditLogsPage = () => {
 
 
   return (
-    <div className="dashboard-audit-logs-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-audit-logs-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* 1. Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <ScrollText size={20} color="#059669" />
+            <ScrollText size={19} color="#059669" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-                Nhật Ký Kiểm Toán Bất Biến
+              <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+                Nhật Ký Kiểm Toán
               </h1>
             </div>
-            <p style={{ fontSize: '0.84375rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0', lineHeight: 1.5 }}>
-              Theo dõi lịch sử thao tác hệ thống, hành động tự phục hồi AI và kiểm soát truy cập theo chuẩn SOC 2 và ISO 27001
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Lịch sử thao tác hệ thống, hành động tự phục hồi &amp; kiểm soát truy cập theo chuẩn SOC 2 / ISO 27001
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
             onClick={loadAuditData}
             disabled={isLoading}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 12px',
+              padding: '0 12px',
               backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
+              border: '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+              fontSize: '0.8rem',
               fontWeight: 600,
               cursor: isLoading ? 'not-allowed' : 'pointer',
-              color: 'var(--dash-text-primary)',
+              color: '#334155',
             }}
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
@@ -1420,22 +1468,23 @@ export const AuditLogsPage = () => {
               aria-label="Tùy chọn xuất sổ cái"
               title="Chọn định dạng file xuất sổ cái kiểm toán (CSV, JSON, PDF)"
               style={{
-                display: 'flex',
+                height: '34px',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '8px 14px',
-                backgroundColor: 'var(--dash-primary)',
-                border: 'none',
-                borderRadius: 'var(--dash-radius-md)',
+                gap: '6px',
+                padding: '0 14px',
+                backgroundColor: '#059669',
+                border: '1px solid #059669',
+                borderRadius: '10px',
                 color: '#FFFFFF',
-                fontSize: '0.8125rem',
+                fontSize: '0.8rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                boxShadow: 'var(--dash-shadow-xs)',
+                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.2)',
                 transition: 'all 0.15s ease',
               }}
             >
-              <Download size={15} />
+              <Download size={14} />
               <span>Xuất Sổ Cái</span>
               <ChevronDown
                 size={14}
@@ -1642,7 +1691,7 @@ export const AuditLogsPage = () => {
       )}
 
       {/* 2. KPI Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
         {summaryKpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
@@ -1650,48 +1699,38 @@ export const AuditLogsPage = () => {
               key={idx}
               className="dash-card"
               style={{
-                padding: '16px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
+                padding: '11px 14px',
                 backgroundColor: '#FFFFFF',
-                borderRadius: '14px',
-                border: '1px solid #E2E8F0',
-                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                borderRadius: '12px',
+                border: '1px solid rgba(226, 232, 240, 0.95)',
+                borderTop: `2.5px solid ${kpi.color}`,
+                boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+                minWidth: 0,
               }}
             >
-              <div
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '12px',
-                  backgroundColor: kpi.bg,
-                  border: `1px solid ${kpi.color}22`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: kpi.color,
-                  flexShrink: 0,
-                }}
-              >
-                <Icon size={20} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {kpi.title}
+                </span>
+                <Icon size={14} color={kpi.color} style={{ flexShrink: 0 }} />
               </div>
-              <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>{kpi.title}</div>
-                <div
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+                <span
                   style={{
-                    fontSize: '1.45rem',
+                    fontSize: '1.3rem',
                     fontWeight: 800,
-                    color: 'var(--dash-text-primary)',
-                    marginTop: '2px',
+                    fontFamily: 'var(--font-mono)',
+                    color: '#0F172A',
                     lineHeight: 1.2,
                     fontVariantNumeric: 'tabular-nums',
                     letterSpacing: '-0.02em',
                   }}
                 >
                   {kpi.value.toLocaleString('vi-VN')}
-                </div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>{kpi.sub}</div>
+                </span>
+                <span style={{ fontSize: '0.68rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {kpi.sub}
+                </span>
               </div>
             </div>
           );
@@ -1702,35 +1741,36 @@ export const AuditLogsPage = () => {
       <div
         className="dash-card"
         style={{
-          padding: '16px 20px',
+          padding: '14px 18px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '14px',
+          gap: '12px',
           borderRadius: '14px',
           border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           {/* Bộ chọn Thời Gian, Cụm K8s (Header) và Dịch Vụ K8s */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Thời Gian:</span>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Thời Gian:</span>
               {calendarFilterControl}
             </div>
 
             {headerClusterId && headerClusterName && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Cụm K8s:</span>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Cụm K8s:</span>
                 <div
                   role="group"
                   aria-label="Phạm vi cụm Kubernetes"
                   style={{
                     display: 'inline-flex',
                     backgroundColor: '#F1F5F9',
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '7px',
-                    padding: '2px',
-                    height: '32px',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    padding: '3px',
+                    height: '34px',
                     alignItems: 'center',
                     boxSizing: 'border-box',
                   }}
@@ -1744,13 +1784,13 @@ export const AuditLogsPage = () => {
                     aria-pressed={scopeMode === 'cluster'}
                     title={`Lọc theo cụm đang chọn trên Header: ${headerClusterName}`}
                     style={{
-                      height: '26px',
-                      padding: '0 10px',
-                      borderRadius: '5px',
+                      height: '28px',
+                      padding: '0 11px',
+                      borderRadius: '7px',
                       border: 'none',
                       backgroundColor: scopeMode === 'cluster' ? '#FFFFFF' : 'transparent',
-                      color: scopeMode === 'cluster' ? '#059669' : '#64748B',
-                      boxShadow: scopeMode === 'cluster' ? '0 1px 2px rgba(15, 23, 42, 0.08)' : 'none',
+                      color: scopeMode === 'cluster' ? '#047857' : '#64748B',
+                      boxShadow: scopeMode === 'cluster' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -1772,13 +1812,13 @@ export const AuditLogsPage = () => {
                     aria-pressed={scopeMode === 'all'}
                     title="Xem nhật ký của toàn bộ các cụm và cấp tổ chức"
                     style={{
-                      height: '26px',
-                      padding: '0 10px',
-                      borderRadius: '5px',
+                      height: '28px',
+                      padding: '0 11px',
+                      borderRadius: '7px',
                       border: 'none',
                       backgroundColor: scopeMode === 'all' ? '#FFFFFF' : 'transparent',
                       color: scopeMode === 'all' ? '#0F172A' : '#64748B',
-                      boxShadow: scopeMode === 'all' ? '0 1px 2px rgba(15, 23, 42, 0.08)' : 'none',
+                      boxShadow: scopeMode === 'all' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -1793,12 +1833,12 @@ export const AuditLogsPage = () => {
 
             {/* Bộ lọc Dịch vụ K8s thực tế */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Dịch Vụ:</span>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Dịch Vụ:</span>
               <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                 <Layers
                   size={13}
                   color="#64748B"
-                  style={{ position: 'absolute', left: '9px', pointerEvents: 'none' }}
+                  style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
                 />
                 <select
                   aria-label="Lọc theo dịch vụ K8s"
@@ -1808,13 +1848,13 @@ export const AuditLogsPage = () => {
                     setPage(1);
                   }}
                   style={{
-                    height: '32px',
-                    padding: '0 10px 0 28px',
-                    fontSize: '0.75rem',
-                    border: selectedService !== 'ALL' ? '1px solid #059669' : '1px solid #CBD5E1',
-                    borderRadius: '6px',
-                    backgroundColor: selectedService !== 'ALL' ? '#ECFDF5' : '#FFFFFF',
-                    color: selectedService !== 'ALL' ? '#047857' : '#1E293B',
+                    height: '34px',
+                    padding: '0 12px 0 30px',
+                    fontSize: '0.78rem',
+                    border: selectedService !== 'ALL' ? '1px solid #059669' : '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    backgroundColor: selectedService !== 'ALL' ? '#ECFDF5' : '#F8FAFC',
+                    color: selectedService !== 'ALL' ? '#047857' : '#0F172A',
                     fontWeight: 600,
                     outline: 'none',
                     cursor: 'pointer',

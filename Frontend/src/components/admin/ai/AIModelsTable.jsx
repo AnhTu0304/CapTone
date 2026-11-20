@@ -478,7 +478,7 @@ export const AIModelsTable = ({
             backgroundColor: '#FFFFFF',
           }}
         >
-          <table style={{ width: '100%', minWidth: '1200px', fontSize: '0.8125rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <table style={{ width: '100%', minWidth: '1000px', fontSize: '0.8125rem', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr
                 style={{
@@ -497,7 +497,6 @@ export const AIModelsTable = ({
                 <th style={{ minWidth: '140px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Khung Công Nghệ</th>
                 <th style={{ minWidth: '180px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
                 <th style={{ minWidth: '220px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Tập Dữ Liệu</th>
-                <th style={{ minWidth: '240px', padding: '14px 16px', whiteSpace: 'nowrap' }}>Chỉ Số Đánh Giá</th>
                 <th
                   style={{
                     position: 'sticky',
@@ -652,12 +651,7 @@ export const AIModelsTable = ({
                     </div>
                   </td>
 
-                  {/* 7. Evaluation Metrics */}
-                  <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#059669', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {m.evaluationMetrics}
-                  </td>
-
-                  {/* 8. Action */}
+                  {/* 7. Action */}
                   <td
                     style={{
                       position: 'sticky',

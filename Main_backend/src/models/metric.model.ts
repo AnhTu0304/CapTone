@@ -167,6 +167,9 @@ export class MetricModel {
         CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_time
           ON agent_metrics(cluster_id, collected_at DESC);
 
+        CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_service_time
+          ON agent_metrics(cluster_id, service_id, collected_at DESC);
+
         CREATE INDEX IF NOT EXISTS idx_agent_metrics_batch_id
           ON agent_metrics(batch_id)
           WHERE batch_id IS NOT NULL;
@@ -214,6 +217,7 @@ export class MetricModel {
         ADD COLUMN IF NOT EXISTS environment_id UUID REFERENCES environments(id) ON DELETE SET NULL;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_node_metrics_dedup ON node_metrics(agent_id, node_name, collected_at);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_org_time ON node_metrics(organization_id, collected_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_node_metrics_org_cluster_time ON node_metrics(organization_id, cluster_id, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_org_node_time ON node_metrics(organization_id, node_name, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_cluster_node_time ON node_metrics(cluster_id, node_name, collected_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_node_metrics_node_id_time ON node_metrics(node_id, collected_at DESC, id DESC);
@@ -517,11 +521,17 @@ export class MetricModel {
       LIMIT $${limitIdx} OFFSET $${offsetIdx};
     `;
 
-    const [countRes, res] = await Promise.all([
-      pool.query(countQuery, params),
-      pool.query(dataQuery, dataParams),
-    ]);
-    const total = countRes.rows[0]?.total || 0;
+    // Khi chỉ lấy 1 bản ghi mới nhất (limit=1, offset=0 — dùng cho Dashboard KPI / snapshot),
+    // bỏ qua COUNT(*) toàn bảng để tránh quét hàng trăm nghìn dòng (~22s -> <1ms)
+    const skipExactCount = safeLimit === 1 && safeOffset === 0;
+
+    const [countRes, res] = skipExactCount
+      ? [null, await pool.query(dataQuery, dataParams)]
+      : await Promise.all([
+          pool.query(countQuery, params),
+          pool.query(dataQuery, dataParams),
+        ]);
+    const total = skipExactCount ? res.rows.length : (countRes?.rows[0]?.total || 0);
     const totalPages = Math.max(1, Math.ceil(total / safeLimit));
 
     return {
@@ -711,31 +721,69 @@ export class MetricModel {
     const clusterId = options?.clusterId || null;
     const organizationId = options?.organizationId || null;
 
+    // Nếu không giới hạn startTime, chỉ lấy tối đa N dòng mới nhất theo index (cluster_id, service_id, collected_at DESC)
+    // thay vì quét & sort toàn bộ lịch sử hàng chục nghìn dòng rồi mới LIMIT 12.
+    const rawScanLimit = startTime ? 50000 : Math.max(limit * 40, 480);
+
+    const conditions: string[] = ['am.service_id = $1'];
+    const params: any[] = [serviceId];
+
+    if (clusterId) {
+      params.push(clusterId);
+      conditions.push(`am.cluster_id = $${params.length}`);
+    } else if (organizationId) {
+      params.push(organizationId);
+      conditions.push(`am.organization_id = $${params.length}::uuid`);
+    }
+    if (startTime) {
+      params.push(startTime);
+      conditions.push(`am.collected_at >= $${params.length}`);
+    }
+    if (endTime) {
+      params.push(endTime);
+      conditions.push(`am.collected_at <= $${params.length}`);
+    }
+
+    const bucketIdx = params.length + 1;
+    const limitIdx = params.length + 2;
+    const scanLimitIdx = params.length + 3;
+    params.push(bucketSeconds, limit, rawScanLimit);
+
     const query = `
-      SELECT 
-        to_timestamp(floor(extract(epoch from am.collected_at) / $2) * $2) as time_bucket,
-        ROUND(COALESCE(MAX(am.cpu), 0)::numeric, 2)::float as cpu,
-        ROUND((CASE WHEN COALESCE(MAX(am.ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(am.ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(am.ram), 0) END)::numeric, 2)::float as ram,
-        ROUND(COALESCE(MAX(am.disk), 0)::numeric, 2)::float as disk,
-        ROUND(COALESCE(SUM(am.request_rate), 0)::numeric, 2)::float as request_rate,
-        ROUND(COALESCE(MAX(am.latency), 0)::numeric, 2)::float as latency,
-        ROUND(COALESCE(AVG(am.http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
-        COALESCE(MAX(am.pod_restart_count), 0)::int as pod_restart_count,
-        GREATEST(COALESCE(MAX(am.replica_count), 1), COUNT(DISTINCT am.pod_id))::int as replica_count
-      FROM agent_metrics am
-      LEFT JOIN clusters c ON c.id::text = am.cluster_id::text OR c.name = am.cluster_id::text
-      LEFT JOIN environments e ON e.id = c.environment_id
-      WHERE am.service_id::text = $1
-        AND ($4::timestamptz IS NULL OR am.collected_at >= $4)
-        AND ($5::timestamptz IS NULL OR am.collected_at <= $5)
-        AND ($6::text IS NULL OR am.cluster_id::text = $6)
-        AND ($7::text IS NULL OR e.organization_id::text = $7::text)
+      WITH recent_rows AS (
+        SELECT
+          am.collected_at,
+          am.cpu,
+          am.ram,
+          am.disk,
+          am.request_rate,
+          am.latency,
+          am.http_5xx_rate,
+          am.pod_restart_count,
+          am.replica_count,
+          am.pod_id
+        FROM agent_metrics am
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY am.collected_at DESC
+        LIMIT $${scanLimitIdx}
+      )
+      SELECT
+        to_timestamp(floor(extract(epoch from collected_at) / $${bucketIdx}) * $${bucketIdx}) as time_bucket,
+        ROUND(COALESCE(MAX(cpu), 0)::numeric, 2)::float as cpu,
+        ROUND((CASE WHEN COALESCE(MAX(ram), 0) > 100 THEN LEAST(100, COALESCE(MAX(ram), 0) / 512.0 * 100.0) ELSE COALESCE(MAX(ram), 0) END)::numeric, 2)::float as ram,
+        ROUND(COALESCE(MAX(disk), 0)::numeric, 2)::float as disk,
+        ROUND(COALESCE(SUM(request_rate), 0)::numeric, 2)::float as request_rate,
+        ROUND(COALESCE(MAX(latency), 0)::numeric, 2)::float as latency,
+        ROUND(COALESCE(AVG(http_5xx_rate), 0)::numeric, 2)::float as http_5xx_rate,
+        COALESCE(MAX(pod_restart_count), 0)::int as pod_restart_count,
+        GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count
+      FROM recent_rows
       GROUP BY time_bucket
       ORDER BY time_bucket DESC
-      LIMIT $3;
+      LIMIT $${limitIdx};
     `;
 
-    const res = await pool.query(query, [serviceId, bucketSeconds, limit, startTime, endTime, clusterId, organizationId]);
+    const res = await pool.query(query, params);
     const points: GRUMetricPoint[] = res.rows.map((row) => ({
       time_bucket: row.time_bucket ? new Date(row.time_bucket).toISOString() : undefined,
       cpu: Number(row.cpu),

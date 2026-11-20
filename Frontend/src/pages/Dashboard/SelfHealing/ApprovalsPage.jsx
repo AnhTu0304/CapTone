@@ -6,6 +6,8 @@ import { PERMISSIONS } from '../../../hooks/usePermissions';
 import { useToast } from '../../../context/ToastContext';
 import { selfHealingService } from '../../../services/selfHealingService';
 import telemetryService from '../../../services/telemetryService';
+import { podService } from '../../../services/podService';
+import aiService from '../../../services/aiService';
 import RootCauseModal from '../Incidents/RootCauseModal';
 import { translateIncidentTitle } from '../Incidents/incidentUtils';
 import {
@@ -27,10 +29,13 @@ import {
   Eye,
   Search,
   Filter,
+  CheckCheck,
+  ShieldAlert,
+  Info,
 } from 'lucide-react';
 
 export const ApprovalsPage = () => {
-  const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh } = useDashboard();
+  const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh, refreshPendingApprovals } = useDashboard();
   const { success: toastSuccess, warning: toastWarning } = useToast();
   const getQueryTarget = () => {
     try {
@@ -54,6 +59,11 @@ export const ApprovalsPage = () => {
 
   const [approvedIds, setApprovedIds] = useState([]);
   const [rejectedIds, setRejectedIds] = useState([]);
+
+  // Lựa chọn 1: Chế độ Tự Động Hủy Khi Dịch Vụ Tự Lành (100% Tự động)
+  const [isAutoDismissEnabled, setIsAutoDismissEnabled] = useState(true);
+  const [autoDismissedList, setAutoDismissedList] = useState([]);
+  const [workloadHealthMap, setWorkloadHealthMap] = useState({});
 
   // Cập nhật searchTerm nếu URL query param thay đổi
   useEffect(() => {
@@ -194,6 +204,36 @@ export const ApprovalsPage = () => {
         targetClusterId = clusterFilter;
       }
 
+      // 1. Kiểm tra trạng thái Pods thực tế trên cụm để đối chiếu sức khỏe dịch vụ
+      let clusterPods = [];
+      const effectiveClusterId = currentEnv?.clusterId || currentEnv?.id;
+      if (effectiveClusterId && !effectiveClusterId.startsWith('org-')) {
+        try {
+          clusterPods = await podService.getPodsByCluster(effectiveClusterId);
+        } catch {
+          clusterPods = [];
+        }
+      }
+
+      // Xây dựng bản đồ sức khỏe Workload theo Pods thực tế
+      const healthMap = {};
+      if (Array.isArray(clusterPods) && clusterPods.length > 0) {
+        for (const pod of clusterPods) {
+          const podName = String(pod.name || '').toLowerCase();
+          const pStatus = String(pod.status || pod.phase || '').toLowerCase();
+          const isHealthy = pStatus === 'running' || pStatus === 'succeeded';
+
+          const baseName = podName.replace(/-[a-z0-9]{8,10}-[a-z0-9]{5}$/, '').replace(/-[a-z0-9]{5}$/, '');
+          if (!healthMap[baseName]) {
+            healthMap[baseName] = { total: 0, healthy: 0, pods: [] };
+          }
+          healthMap[baseName].total += 1;
+          if (isHealthy) healthMap[baseName].healthy += 1;
+          healthMap[baseName].pods.push(pod);
+        }
+      }
+      setWorkloadHealthMap(healthMap);
+
       const offset = (page - 1) * ITEMS_PER_PAGE;
       const res = await selfHealingService.getApprovals({
         organization_id: activeOrgId,
@@ -203,14 +243,78 @@ export const ApprovalsPage = () => {
         limit: ITEMS_PER_PAGE,
         offset: offset,
       });
-      const items = res?.items || (Array.isArray(res) ? res : []);
-      const total = typeof res?.total === 'number' ? res.total : items.length;
+      const rawItems = res?.items || (Array.isArray(res) ? res : []);
+      let total = typeof res?.total === 'number' ? res.total : rawItems.length;
+
+      // ⚡ RECONCILER (Lựa chọn 1: Tự động 100% khi dịch vụ tự lành)
+      // Nếu dịch vụ đã tự ổn định lại (Pods Healthy 100%), hoặc sự cố đã giải quyết,
+      // hoặc yêu cầu quá hạn (> 15 phút): Hệ thống TỰ ĐỘNG THU HỒI / HỦY BỎ.
+      const now = Date.now();
+      const validItems = [];
+      const newlyDismissed = [];
+
+      for (const item of rawItems) {
+        const reqTime = new Date(item.requested_at || 0).getTime();
+        const ageMs = now - reqTime;
+        const isStale = ageMs > 15 * 60 * 1000;
+        const isIncidentResolved = item.incident_status === 'RESOLVED' || item.incident_status === 'CLOSED';
+
+        const rawTarget = item.target_name || item.target_id || '';
+        const cleanTarget = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim().toLowerCase();
+
+        let isWorkloadSelfHealed = false;
+        let matchedHealth = healthMap[cleanTarget];
+        if (!matchedHealth) {
+          const key = Object.keys(healthMap).find((k) => cleanTarget.includes(k) || k.includes(cleanTarget));
+          if (key) matchedHealth = healthMap[key];
+        }
+        if (matchedHealth && matchedHealth.total > 0 && matchedHealth.healthy === matchedHealth.total) {
+          isWorkloadSelfHealed = true;
+        }
+
+        const shouldDismiss = isAutoDismissEnabled && (isWorkloadSelfHealed || isStale || isIncidentResolved);
+
+        if (shouldDismiss) {
+          const actionId = item.healing_action_id || item.id;
+          const dismissReason = isWorkloadSelfHealed
+            ? 'Hệ thống tự động hủy: Dịch vụ đã tự phục hồi ổn định (Auto-recovered)'
+            : isStale
+            ? 'Hệ thống tự động hủy: Yêu cầu đã quá hạn (Stale HITL timeout > 15m), dịch vụ đã ổn định'
+            : 'Hệ thống tự động hủy: Sự cố liên quan đã được xử lý (Incident Resolved)';
+
+          if (actionId) {
+            selfHealingService.rejectAction(actionId, dismissReason).catch(() => {});
+          }
+          if (item.incident_id && isWorkloadSelfHealed) {
+            aiService.updateIncidentStatus(item.incident_id, 'RESOLVED').catch(() => {});
+          }
+
+          newlyDismissed.push({
+            id: item.id,
+            targetName: cleanTarget || item.target_name,
+            actionName: item.action_name || 'Tự phục hồi dịch vụ',
+            reason: dismissReason,
+            dismissedAt: new Date(),
+          });
+          total = Math.max(0, total - 1);
+        } else {
+          validItems.push(item);
+        }
+      }
+
+      if (newlyDismissed.length > 0) {
+        setAutoDismissedList((prev) => [...newlyDismissed, ...prev].slice(0, 10));
+        if (typeof refreshPendingApprovals === 'function') {
+          refreshPendingApprovals();
+        }
+      }
+
       const totalPg = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
       if (page > totalPg && total > 0) {
         setCurrentPage(totalPg);
         return;
       }
-      setApprovalRequests(items.map(mapBackendApprovalToUI));
+      setApprovalRequests(validItems.map(mapBackendApprovalToUI));
       setTotalCount(total);
       setIsUsingLiveDb(true);
     } catch (err) {
@@ -221,7 +325,7 @@ export const ApprovalsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, clusterFilter, searchTerm, mapBackendApprovalToUI]);
+  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, clusterFilter, searchTerm, mapBackendApprovalToUI, isAutoDismissEnabled, refreshPendingApprovals]);
 
   useEffect(() => {
     fetchApprovals(currentPage);
@@ -438,15 +542,15 @@ export const ApprovalsPage = () => {
                 type="button"
                 onClick={() => onPageChange(p)}
                 style={{
-                  minWidth: '30px',
-                  height: '30px',
+                  minWidth: '28px',
+                  height: '28px',
                   padding: '0 8px',
-                  fontSize: '0.75rem',
+                  fontSize: '0.74rem',
                   fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
-                  borderRadius: '6px',
-                  border: currPage === p ? '1px solid #2563EB' : '1px solid #CBD5E1',
-                  backgroundColor: currPage === p ? '#2563EB' : '#FFFFFF',
+                  borderRadius: '7px',
+                  border: currPage === p ? '1px solid #059669' : '1px solid #CBD5E1',
+                  backgroundColor: currPage === p ? '#059669' : '#FFFFFF',
                   color: currPage === p ? '#FFFFFF' : '#334155',
                   cursor: 'pointer',
                 }}
@@ -461,10 +565,11 @@ export const ApprovalsPage = () => {
             disabled={currPage >= totalPg}
             onClick={() => onPageChange(Math.min(totalPg, currPage + 1))}
             style={{
-              padding: '5px 10px',
-              fontSize: '0.75rem',
+              height: '28px',
+              padding: '0 10px',
+              fontSize: '0.74rem',
               fontWeight: 600,
-              borderRadius: '6px',
+              borderRadius: '7px',
               border: '1px solid #CBD5E1',
               backgroundColor: currPage >= totalPg ? '#F8FAFC' : '#FFFFFF',
               color: currPage >= totalPg ? '#94A3B8' : '#334155',
@@ -478,68 +583,287 @@ export const ApprovalsPage = () => {
     );
   };
 
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+
+  const approvalStats = useMemo(() => {
+    const highRiskCount = displayedRequests.filter(
+      (r) => r.riskLevelVi === 'Cao' || r.riskLevelVi === 'Khẩn cấp'
+    ).length;
+    return { highRiskCount };
+  }, [displayedRequests]);
+
+  const kpiCardStyle = (accent) => ({
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(226, 232, 240, 0.95)',
+    borderTop: `2.5px solid ${accent}`,
+    borderRadius: '12px',
+    padding: '11px 14px',
+    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+    minWidth: 0,
+  });
+
+  const actionBtnStyle = (disabled = false) => ({
+    height: '34px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '0 12px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(203, 213, 225, 0.9)',
+    borderRadius: '10px',
+    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    color: disabled ? '#94A3B8' : '#334155',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
+  });
+
   return (
-    <div className="dashboard-approvals-page" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="dashboard-approvals-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: '#EDE9FE',
-              border: '1px solid #DDD6FE',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <CheckCircle2 size={20} color="#7C3AED" />
+            <CheckCircle2 size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Cổng Phê Duyệt Của Con Người (HITL)
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Cổng Phê Duyệt HITL
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Cơ chế an toàn tối thượng: Kiểm duyệt các hành động có mức độ ảnh hưởng lớn trước khi áp dụng
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Kiểm duyệt các hành động tự phục hồi có mức ảnh hưởng cao trước khi áp dụng trên cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
             onClick={triggerRefresh}
             disabled={isRefreshing || isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
-            }}
+            style={actionBtnStyle(isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới danh sách</span>
+            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
           </button>
         </div>
       </div>
 
+      {/* Banner Chế độ Tự Động Hủy Khi Dịch Vụ Tự Lành (Option 1) */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          padding: '10px 16px',
+          borderRadius: '10px',
+          backgroundColor: '#ECFDF5',
+          border: '1px solid #A7F3D0',
+          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.06)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+          <span
+            style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: isAutoDismissEnabled ? '#10B981' : '#94A3B8',
+              boxShadow: isAutoDismissEnabled ? '0 0 0 3px rgba(16, 185, 129, 0.25)' : 'none',
+              display: 'inline-block',
+              flexShrink: 0,
+            }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#065F46' }}>
+              Cơ chế Tự Động Hủy Khi Dịch Vụ Tự Lành (Auto-Dismiss when Self-Healed):
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsAutoDismissEnabled((prev) => !prev)}
+              title="Nhấn để chuyển đổi giữa Tự động và Thủ công"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                backgroundColor: isAutoDismissEnabled ? '#D1FAE5' : '#F1F5F9',
+                color: isAutoDismissEnabled ? '#047857' : '#475569',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                border: isAutoDismissEnabled ? '1px solid #6EE7B7' : '1px solid #CBD5E1',
+                cursor: 'pointer',
+              }}
+            >
+              {isAutoDismissEnabled ? 'ĐANG BẬT (100% Tự Động)' : 'ĐANG TẮT (Chế độ Thủ công)'}
+            </button>
+          </div>
+        </div>
+        <div style={{ fontSize: '0.78125rem', color: '#047857', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Info size={14} color="#059669" />
+          <span>Nếu dịch vụ tự ổn định lại (Pods Ready 100%) hoặc sự cố tự hết, hệ thống sẽ tự động hủy lệnh chờ — không cần từ chối thủ công.</span>
+        </div>
+      </div>
+
+      {/* Thông báo nếu có yêu cầu vừa được tự động hủy */}
+      {autoDismissedList.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px',
+            padding: '9px 15px',
+            borderRadius: '9px',
+            backgroundColor: '#F0FDF4',
+            border: '1px dashed #86EFAC',
+            fontSize: '0.78125rem',
+            color: '#15803D',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+            <CheckCheck size={16} color="#16A34A" />
+            <span>
+              Hệ thống AI vừa <strong>tự động thu hồi {autoDismissedList.length} yêu cầu</strong> cho dịch vụ (<strong>{autoDismissedList.map((a) => a.targetName).join(', ')}</strong>) vì dịch vụ đã tự ổn định lại (Pods Healthy 100%).
+            </span>
+          </div>
+          <span style={{ fontSize: '0.72rem', color: '#166534', opacity: 0.85, fontWeight: 600 }}>
+            Đã đồng bộ kiểm toán (Audit Logs)
+          </span>
+        </div>
+      )}
+
+      {/* Hàng 4 Thẻ KPI Tóm Tắt */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={kpiCardStyle('#F59E0B')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHỜ KÝ DUYỆT</span>
+            <Clock size={14} color="#F59E0B" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: totalCount > 0 ? '#D97706' : '#0F172A' }}>
+              {totalCount}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>yêu cầu đang mở</span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle('#EF4444')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>RỦI RO CAO / KHẨN</span>
+            <AlertTriangle size={14} color="#EF4444" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: approvalStats.highRiskCount > 0 ? '#DC2626' : '#0F172A' }}>
+              {approvalStats.highRiskCount}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle('#10B981')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐÃ XỬ LÝ PHIÊN NÀY</span>
+            <ShieldCheck size={14} color="#10B981" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>
+              {approvedIds.length + rejectedIds.length}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
+              {approvedIds.length} duyệt &bull; {rejectedIds.length} từ chối
+            </span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle(isWsConnected ? '#059669' : '#3B82F6')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐỒNG BỘ TRỰC TUYẾN</span>
+            <Zap size={14} color={isWsConnected ? '#059669' : '#3B82F6'} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '2px 9px',
+                borderRadius: '999px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                backgroundColor: isWsConnected ? '#ECFDF5' : '#EFF6FF',
+                color: isWsConnected ? '#059669' : '#2563EB',
+                border: isWsConnected ? '1px solid #A7F3D0' : '1px solid #BFDBFE',
+              }}
+            >
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isWsConnected ? '#10B981' : '#3B82F6' }} />
+              {isWsConnected ? 'WebSocket Live' : 'Polling định kỳ'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Main Approvals Card */}
-      <div className="dash-card" style={{ padding: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
-          <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-              Yêu Cầu Chờ Ký Duyệt ({totalCount})
+      <div
+        className="dash-card"
+        style={{
+          padding: '16px 18px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px',
+            marginBottom: '14px',
+            paddingBottom: '12px',
+            borderBottom: '1px solid #F1F5F9',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              Yêu Cầu Chờ Ký Duyệt
             </h3>
-            
+            <span
+              style={{
+                padding: '2px 9px',
+                borderRadius: '999px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                fontFamily: 'var(--font-mono)',
+                backgroundColor: totalCount > 0 ? '#FEF3C7' : '#ECFDF5',
+                color: totalCount > 0 ? '#B45309' : '#047857',
+                border: totalCount > 0 ? '1px solid #FDE68A' : '1px solid #A7F3D0',
+              }}
+            >
+              {totalCount}
+            </span>
           </div>
 
           {/* Quick Search & Filter bar */}
@@ -553,12 +877,12 @@ export const ApprovalsPage = () => {
               style={{
                 height: '34px',
                 padding: '0 10px',
-                fontSize: '0.78125rem',
+                fontSize: '0.76rem',
                 fontWeight: 600,
-                border: '1px solid var(--dash-border)',
-                borderRadius: '6px',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
+                border: '1px solid #CBD5E1',
+                borderRadius: '9px',
+                backgroundColor: '#F8FAFC',
+                color: '#0F172A',
                 outline: 'none',
                 cursor: 'pointer',
               }}
@@ -582,39 +906,42 @@ export const ApprovalsPage = () => {
                 style={{
                   height: '34px',
                   width: '260px',
-                  padding: '0 10px 0 32px',
-                  fontSize: '0.78125rem',
-                  border: '1px solid var(--dash-border)',
-                  borderRadius: '6px',
+                  padding: '0 28px 0 32px',
+                  fontSize: '0.78rem',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '9px',
+                  backgroundColor: '#F8FAFC',
+                  color: '#0F172A',
                   outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94A3B8' }} />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    try {
+                      window.history.replaceState({}, '', window.location.pathname);
+                    } catch {}
+                  }}
+                  aria-label="Xóa bộ lọc tìm kiếm"
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '9px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    color: '#94A3B8',
+                    padding: 0,
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  try {
-                    window.history.replaceState({}, '', window.location.pathname);
-                  } catch {}
-                }}
-                style={{
-                  padding: '6px 10px',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  backgroundColor: '#F1F5F9',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  color: '#475569',
-                }}
-              >
-                Xóa lọc
-              </button>
-            )}
           </div>
         </div>
 
@@ -622,20 +949,18 @@ export const ApprovalsPage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {displayedRequests.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--dash-text-muted)' }}>
-              <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
-              <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.9375rem' }}>
+              <ShieldCheck size={38} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
+              <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.95rem' }}>
                 {searchTerm
                   ? `Không tìm thấy yêu cầu nào khớp với "${searchTerm}"`
                   : clusterFilter === 'current'
                     ? `Không có yêu cầu phê duyệt nào trên cụm "${currentEnv?.cluster || 'hiện tại'}"`
-                    : 'Không có yêu cầu phê duyệt nào'}
+                    : 'Không có yêu cầu phê duyệt nào cần xử lý'}
               </div>
-              <div style={{ fontSize: '0.8125rem', maxWidth: '520px', margin: '0 auto 14px auto' }}>
+              <div style={{ fontSize: '0.8125rem', maxWidth: '560px', margin: '0 auto 14px auto', lineHeight: 1.5 }}>
                 {searchTerm
                   ? 'Thử xóa bộ lọc để hiển thị toàn bộ danh sách.'
-                  : clusterFilter === 'current'
-                    ? `Tất cả các hành động trên cụm "${currentEnv?.cluster || 'hiện tại'}" đều nằm trong ngưỡng an toàn tự động hoặc đã được giải quyết.`
-                    : 'Tất cả các hành động tự phục hồi hiện tại đều nằm trong ngưỡng an toàn tự động hoặc đã được giải quyết.'}
+                  : 'Toàn bộ dịch vụ đang hoạt động ổn định. Cơ chế Tự Động Hủy (Auto-Dismiss) đã thu hồi các yêu cầu cũ khi dịch vụ tự phục hồi (tự lành) thành công để bảo vệ an toàn cụm máy chủ.'}
               </div>
               {!searchTerm && clusterFilter === 'current' && (
                 <button
@@ -722,6 +1047,34 @@ export const ApprovalsPage = () => {
                         <Server size={13} color="#64748B" />
                         <span>Dịch vụ: <strong style={{ color: '#0F172A' }}>{req.targetName}</strong></span>
                       </span>
+
+                      {(() => {
+                        const cleanTarget = String(req.targetName || '').toLowerCase();
+                        const matched = workloadHealthMap[cleanTarget] || Object.entries(workloadHealthMap).find(([k]) => cleanTarget.includes(k) || k.includes(cleanTarget))?.[1];
+                        if (matched && matched.total > 0) {
+                          const isHealthy = matched.healthy === matched.total;
+                          return (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '4px 9px',
+                                borderRadius: '6px',
+                                backgroundColor: isHealthy ? '#ECFDF5' : '#FEF2F2',
+                                color: isHealthy ? '#047857' : '#DC2626',
+                                border: `1px solid ${isHealthy ? '#A7F3D0' : '#FECACA'}`,
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isHealthy ? '#10B981' : '#EF4444' }} />
+                              <span>{isHealthy ? `Đã tự ổn định (${matched.healthy}/${matched.total} Pods Ready)` : `Đang suy giảm (${matched.healthy}/${matched.total} Pods Ready)`}</span>
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       <span
                         style={{
@@ -913,55 +1266,60 @@ export const ApprovalsPage = () => {
                           <span>ĐÃ TỪ CHỐI YÊU CẦU</span>
                         </div>
                       ) : (
-                        <>
-                          <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền phê duyệt HITL">
-                            <button
-                              type="button"
-                              onClick={() => handleApprove(req.id)}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '7px 18px',
-                                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                                border: 'none',
-                                borderRadius: '7px',
-                                color: '#FFFFFF',
-                                fontSize: '0.78125rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
-                                transition: 'all 0.15s ease',
-                              }}
-                            >
-                              <Check size={14} />
-                              <span>Phê Duyệt Ngay</span>
-                            </button>
-                          </PermissionGate>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                          <div style={{ fontSize: '0.71rem', color: '#64748B', fontStyle: 'italic' }}>
+                            ⚡ Nếu dịch vụ tự ổn định (tự lành), hệ thống sẽ tự động hủy lệnh này
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền phê duyệt HITL">
+                              <button
+                                type="button"
+                                onClick={() => handleApprove(req.id)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '7px 18px',
+                                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                                  border: 'none',
+                                  borderRadius: '7px',
+                                  color: '#FFFFFF',
+                                  fontSize: '0.78125rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <Check size={14} />
+                                <span>Phê Duyệt Ngay</span>
+                              </button>
+                            </PermissionGate>
 
-                          <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền từ chối HITL">
-                            <button
-                              type="button"
-                              onClick={() => handleReject(req.id)}
-                              style={{
-                                padding: '6px 12px',
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#DC2626',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                textDecoration: 'none',
-                                borderRadius: '6px',
-                                transition: 'background-color 0.15s ease',
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
-                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              Từ chối yêu cầu này
-                            </button>
-                          </PermissionGate>
-                        </>
+                            <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền từ chối HITL">
+                              <button
+                                type="button"
+                                onClick={() => handleReject(req.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#DC2626',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  textDecoration: 'none',
+                                  borderRadius: '6px',
+                                  transition: 'background-color 0.15s ease',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                              >
+                                Từ chối yêu cầu này
+                              </button>
+                            </PermissionGate>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

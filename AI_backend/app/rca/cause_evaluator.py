@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -57,6 +58,7 @@ class CauseEvaluator:
         "underutilized": "Workload underutilized (scale down opportunity)",
         "probe_configuration_error": "Probe configuration error",
         "network_degradation": "Network degradation",
+        "database_cache_utilization": "Database cache allocation (WiredTiger/Buffer Pool)",
         "unknown": "UNKNOWN",
     }
 
@@ -75,6 +77,7 @@ class CauseEvaluator:
         "underutilized": "Tài nguyên dư thừa (Có thể thu hẹp quy mô)",
         "probe_configuration_error": "Lỗi cấu hình kiểm tra probe",
         "network_degradation": "Suy giảm kết nối mạng",
+        "database_cache_utilization": "Bộ nhớ đệm dữ liệu CSDL (WiredTiger Cache)",
         "unknown": "CHƯA XÁC ĐỊNH",
     }
 
@@ -171,6 +174,40 @@ class CauseEvaluator:
                 symptoms=symptoms,
                 explanation="Mức sử dụng RAM bão hòa ở ngưỡng nguy hiểm kèm xu hướng tăng dốc hoặc nhật ký cảnh báo bộ nhớ.",
             )
+
+        # ----------------------------------------------------
+        # 1.1 EVALUATE: DATABASE_CACHE_UTILIZATION (BENIGN WIREDTIGER / BUFFER POOL)
+        # ----------------------------------------------------
+        target_service = (payload.service_id if payload else "") or ""
+        target_pod_name = getattr(kubernetes_raw, "pod_name", None) or getattr(kubernetes_raw, "workload_name", None) or ""
+        if not target_pod_name and kubernetes_raw and getattr(kubernetes_raw, "all_pods", None):
+            if len(kubernetes_raw.all_pods) > 0 and getattr(kubernetes_raw.all_pods[0], "pod_name", None):
+                target_pod_name = kubernetes_raw.all_pods[0].pod_name or ""
+        is_database_service = bool(
+            re.search(r"(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)", target_service, re.IGNORECASE)
+            or re.search(r"(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)", target_pod_name, re.IGNORECASE)
+        )
+        if has_high_ram and not has_oom_killed and not has_oom_log and not has_ram_trend and not has_node_mem_press:
+            if is_database_service:
+                cache_name = "WiredTiger Cache (MongoDB)" if "mongo" in target_service.lower() else "Database Buffer Cache"
+                ram_pct_str = f"~{payload.metrics.ram:.1f}%" if (payload and payload.metrics and payload.metrics.ram) else "cao"
+                for_items = [
+                    f"Mức sử dụng RAM {ram_pct_str} là cơ chế cấp phát bộ nhớ đệm tự nhiên ({cache_name})",
+                    "Không ghi nhận sự kiện sập OOMKilled, không có lỗi nhật ký bộ nhớ và đường xu hướng RAM ổn định",
+                ]
+                return CauseEvaluationResult(
+                    cause_code="database_cache_utilization",
+                    cause_label=self.CAUSE_LABELS["database_cache_utilization"],
+                    cause_label_vi=self.CAUSE_LABELS_VI["database_cache_utilization"],
+                    evidence_status="CONFIRMED",
+                    confidence=0.92,
+                    evidence_for=for_items,
+                    evidence_against=[],
+                    missing_evidence=[],
+                    related_risks=related_risks,
+                    symptoms=symptoms,
+                    explanation=f"Tiến trình cơ sở dữ liệu ({target_service or 'CSDL'}) tự động cấp phát và duy trì vùng đệm {cache_name} để tối ưu hóa tốc độ đọc ghi đĩa. Hệ thống hoàn toàn bình thường và không có nguy cơ tràn RAM.",
+                )
 
         # ----------------------------------------------------
         # 2. EVALUATE: DEPLOYMENT_FAILURE
@@ -527,7 +564,12 @@ class CauseEvaluator:
             and prediction.detected_risks
             and any(r.risk_type == "SCALE_DOWN_CANDIDATE" for r in prediction.detected_risks)
         )
-        cur_replicas = getattr(getattr(kubernetes_raw, "deployment", None), "desired_replicas", None) or getattr(getattr(kubernetes_raw, "deployment", None), "replicas", None)
+        cur_replicas = (
+            getattr(getattr(kubernetes_raw, "deployment", None), "desired_replicas", None)
+            or getattr(getattr(kubernetes_raw, "deployment", None), "replicas", None)
+            or getattr(kubernetes_raw, "desired_replicas", None)
+            or getattr(kubernetes_raw, "available_replicas", None)
+        )
 
         cpu_val = getattr(payload.metrics, "cpu", None) if (payload and payload.metrics) else None
         ram_val = (getattr(payload.metrics, "ram", None) or getattr(payload.metrics, "memory", None)) if (payload and payload.metrics) else None

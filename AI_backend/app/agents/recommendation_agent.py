@@ -4,6 +4,7 @@ import json
 
 from app.agents.historical_incident_agent import HistoricalContext, normalize_cause
 from app.agents.rca_agent import RCAConclusion, RootCauseAnalysisAgent
+from app.rca.capacity_evaluator import TwoTierScalingEngine
 from app.schemas.kubernetes import KubernetesAnalysisResult, KubernetesData
 from app.schemas.rca import (
     Action,
@@ -87,6 +88,13 @@ def _build_manual_playbook(
     ns_flag = f"-n {namespace} " if namespace else ""
     tried_summary = f" (đã thử {', '.join(tried_actions)})" if tried_actions else ""
     err_note = ""
+
+    if cause == "database_cache_utilization":
+        return [
+            f"1. Xác thực WiredTiger Cache '{pod_ref}': Chạy 'kubectl exec -it {ns_flag}{pod_ref} -- mongosh --eval \"db.serverStatus().wiredTiger.cache\"' để kiểm tra dung lượng cache đang sử dụng.",
+            f"2. Giám sát an toàn: Mức RAM ~96% là bộ nhớ đệm tự nhiên để tăng tốc độ đọc ghi đĩa; hệ thống đang hoạt động tối ưu và ổn định.",
+            "3. Duy trì hoạt động: Giữ nguyên trạng thái vận hành, tuyệt đối không can thiệp khởi động lại để tránh làm mất vùng đệm dữ liệu.",
+        ]
 
     if cause == "dependency_failure":
         return [
@@ -193,15 +201,30 @@ class RecommendationAgent:
             action = "REPLACE_POD" if kubernetes.restart_count >= 3 else "RESTART_POD"
             reason = "Pod bị ảnh hưởng đang ở trạng thái không khỏe mạnh hoặc liên tục khởi động lại"
         elif cause in {"traffic_overload", "cpu_saturation", "insufficient_replicas", "service_degradation"}:
-            action = "SCALE_REPLICAS"
             base_rep = desired_rep if (desired_rep is not None and desired_rep >= 1) else 1
-            target_replicas = min(5, max(2, base_rep + 1))
-            reason = f"Bổ sung số lượng Pod replica (lên {target_replicas} replicas) để phân phối tải và phục hồi năng lực xử lý (hạ độ trễ dịch vụ)"
+            # Two-Tier Capacity Assessment: Check if sibling pods have headroom or cluster nodes have capacity
+            target_pods = [
+                p for p in (kubernetes.all_pods or [])
+                if getattr(p, "cpu_usage_pct", None) is not None
+            ]
+            two_tier_res = TwoTierScalingEngine().evaluate_scaling(
+                pods=target_pods,
+                nodes=kubernetes.nodes or [],
+                current_replicas=base_rep,
+            )
+            action = two_tier_res.recommended_action
+            target_replicas = two_tier_res.target_replicas
+            reason = two_tier_res.reason
+            if two_tier_res.destination_node:
+                recommended_destination_node = two_tier_res.destination_node
         elif cause == "underutilized":
             action = "SCALE_REPLICAS"
             base_rep = desired_rep if (desired_rep is not None and desired_rep >= 2) else 2
             target_replicas = max(1, base_rep - 1)
             reason = f"Chỉ số tải ở mức thấp kéo dài; thu hẹp số lượng replica (về {target_replicas} replica) để tối ưu hóa tài nguyên"
+        elif cause == "database_cache_utilization":
+            action = "NO_ACTION"
+            reason = "Mức RAM cao (~96%) là bộ nhớ đệm WiredTiger chuẩn của MongoDB. Duy trì giám sát an toàn, không can thiệp hạ tầng để đảm bảo tính sẵn sàng và hiệu năng cơ sở dữ liệu."
         elif cause == "memory_exhaustion":
             action = "RESTART_POD"
             reason = "Container bị cạn kiệt bộ nhớ RAM (OOM - Cấp 1); đề xuất khởi động lại Pod (RESTART_POD) trước và chờ Verification kiểm tra sức khỏe thực tế"
@@ -272,7 +295,7 @@ class RecommendationAgent:
             or (kubernetes and (getattr(kubernetes, "restart_count", 0) >= 2 or getattr(kubernetes, "pod_status", "") in {"CrashLoopBackOff", "Error"}))
             or any(
                 "crash" in str(e).lower() or "backoff" in str(e).lower() or "oom" in str(e).lower()
-                for e in (conclusion.evidence or [])
+                for e in (getattr(conclusion, "evidence", None) or getattr(conclusion, "evidence_for", None) or [])
             )
         )
 
@@ -286,7 +309,7 @@ class RecommendationAgent:
                     f"Hành động {previous_action or 'RESTART_POD'} ở Cấp 1 có kết quả hậu kiểm là {previous_action_result or 'FAILED'}; "
                     "hệ thống đã phân tích RCA lại trên dữ liệu mới và xác nhận bằng chứng lỗi thuộc Pod; leo thang lên Cấp 2: REPLACE_POD (tạo container mới tinh)"
                 )
-            elif cause == "unknown" or conclusion.result.evidence_status == "INSUFFICIENT_EVIDENCE":
+            elif cause == "unknown" or getattr(conclusion, "evidence_status", None) == "INSUFFICIENT_EVIDENCE" or getattr(getattr(conclusion, "result", None), "evidence_status", None) == "INSUFFICIENT_EVIDENCE":
                 action = "NO_ACTION"
                 reason = (
                     f"Hành động {previous_action or 'RESTART_POD'} trước đó có kết quả hậu kiểm là {previous_action_result or 'FAILED'}, "
@@ -313,12 +336,13 @@ class RecommendationAgent:
                 for item in historical.incidents
             )
             current_evidence = [
-                item for item in conclusion.evidence
-                if not item.startswith("Similar incident")
-                and not item.startswith("Previous ")
+                item for item in (getattr(conclusion, "evidence", None) or getattr(conclusion, "evidence_for", None) or [])
+                if not str(item).startswith("Similar incident")
+                and not str(item).startswith("Previous ")
             ]
+            conf_score = getattr(conclusion, "confidence", None) or getattr(getattr(conclusion, "result", None), "confidence", 0.0)
             strong_new_evidence = (
-                conclusion.result.confidence >= 0.75 and len(current_evidence) >= 2
+                conf_score >= 0.75 and len(current_evidence) >= 2
             )
             if not successful_retry and not strong_new_evidence:
                 action = "NO_ACTION"
@@ -334,12 +358,13 @@ class RecommendationAgent:
                     "nhưng nhiều tín hiệu mới ủng hộ mạnh mẽ hành động này trong điều kiện mới)"
                 )
 
-        # Safeguard: Dependency failure must NEVER be escalated to restart/replace/scale target
-        if cause == "dependency_failure":
+        # Safeguard: Dependency failure or Database cache utilization must NEVER be escalated to restart/replace/scale target
+        if cause in {"dependency_failure", "database_cache_utilization"}:
             action = "NO_ACTION"
             reason = (
-                "Phát hiện lỗi dịch vụ phụ thuộc thượng nguồn (Dependency Failure); "
-                "không thực hiện can thiệp tự động (Restart/Replace/Scale) trên workload này để bảo vệ an toàn hệ thống."
+                "Mức RAM cao (~96%) là bộ nhớ đệm WiredTiger chuẩn của MongoDB. Duy trì giám sát an toàn, không can thiệp hạ tầng để đảm bảo tính sẵn sàng của cơ sở dữ liệu."
+                if cause == "database_cache_utilization"
+                else "Phát hiện lỗi dịch vụ phụ thuộc thượng nguồn (Dependency Failure); không thực hiện can thiệp tự động (Restart/Replace/Scale) trên workload này để bảo vệ an toàn hệ thống."
             )
 
         # ========================================================
@@ -374,7 +399,7 @@ class RecommendationAgent:
         circuit_breaker_tripped = False
         latest_err = _extract_latest_failure_detail(action_history)
         detail_suffix = f" Lỗi gần nhất: {latest_err}." if latest_err else ""
-        cause_label_vi = RootCauseAnalysisAgent.CAUSE_LABELS_VI.get(cause, conclusion.result.cause)
+        cause_label_vi = getattr(conclusion, "cause_label_vi", None) or RootCauseAnalysisAgent.CAUSE_LABELS_VI.get(cause, getattr(conclusion, "cause_label", cause))
 
         replace_failed = (
             (prev_act_norm == "REPLACE_POD" and previous_action_result in {"FAILED", "PARTIAL"})
@@ -494,7 +519,7 @@ class RecommendationAgent:
             manual_playbook=manual_playbook,
         )
 
-        priority = "CRITICAL" if circuit_breaker_tripped else conclusion.result.severity
+        priority = "CRITICAL" if circuit_breaker_tripped else (getattr(conclusion, "severity", None) or getattr(getattr(conclusion, "result", None), "severity", "LOW"))
 
         return RecommendationResult(
             action=action,

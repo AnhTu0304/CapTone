@@ -152,7 +152,7 @@ const SRE_DICTIONARY_VI = {
   'RESTART_POD': 'KHỞI ĐỘNG LẠI POD',
   'REPLACE_POD': 'THAY THẾ POD (REPLACE)',
   'DRAIN_NODE': 'DI DỜI POD KHỎI NODE LỖI (DRAIN_NODE)',
-  'SCALE_REPLICAS': 'TĂNG BẢN SAO POD (SCALE REPLICAS)',
+  'SCALE_REPLICAS': 'ĐIỀU CHỈNH BẢN SAO POD (SCALE REPLICAS)',
   'SCALE_UP': 'MỞ RỘNG BẢN SAO POD (SCALE UP)',
   'SCALE_DOWN': 'THU HẸP BẢN SAO POD (SCALE DOWN)',
   'ROLLBACK_DEPLOYMENT': 'ROLLBACK DEPLOYMENT',
@@ -1724,68 +1724,74 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       <div
         style={{
           width: '100%',
-          maxWidth: '920px',
+          maxWidth: '880px',
           height: '100vh',
           backgroundColor: '#FFFFFF',
-          boxShadow: '-10px 0 40px rgba(0, 0, 0, 0.16)',
+          boxShadow: '-12px 0 40px rgba(15, 23, 42, 0.14)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          animation: 'rcaSlideInRight 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+          animation: 'rcaSlideInRight 0.24s cubic-bezier(0.16, 1, 0.3, 1)',
           borderLeft: '1px solid #E2E8F0',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - Glossy Emerald Gradient */}
+        {/* Header - Gọn gàng, đồng bộ phong cách trắng + nhấn xanh ngọc của Dashboard */}
         <div
           style={{
-            padding: '16px 22px',
-            background: 'linear-gradient(135deg, #065F46 0%, #047857 55%, #059669 100%)',
-            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 6px rgba(6, 95, 70, 0.15)',
-            color: '#FFFFFF',
+            padding: '14px 20px',
+            backgroundColor: '#FFFFFF',
+            borderBottom: '1px solid #E2E8F0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '11px', minWidth: 0 }}>
             <div
               style={{
                 width: '38px',
                 height: '38px',
-                borderRadius: '9px',
-                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                borderRadius: '11px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backdropFilter: 'blur(4px)',
+                flexShrink: 0,
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.1)',
               }}
             >
-              <GitBranch size={16} color="#A7F3D0" />
+              <GitBranch size={17} color="#059669" />
             </div>
-            <div>
-              <div style={{ fontSize: '0.9125rem', fontWeight: 800, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '8px', lineHeight: 1.2 }}>
-                <span>Chi tiết sự cố Self-Healing</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.015em', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', lineHeight: 1.25 }}>
+                <span>Chi tiết sự cố</span>
                 <span
+                  title={incidentIdStr}
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                    color: '#FFFFFF',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontSize: '0.6875rem',
+                    backgroundColor: '#F1F5F9',
+                    color: '#334155',
+                    border: '1px solid #E2E8F0',
+                    padding: '1px 7px',
+                    borderRadius: '6px',
+                    fontSize: '0.68rem',
+                    fontFamily: 'var(--font-mono)',
                     fontWeight: 700,
                   }}
                 >
-                  {incidentIdStr}
+                  {incidentIdStr && incidentIdStr.length > 14 ? `INC-${incidentIdStr.slice(0, 8).toUpperCase()}` : incidentIdStr}
                 </span>
                 {occurrenceCount > 1 && (
                   <span
                     style={{
-                      backgroundColor: 'rgba(254, 243, 199, 0.92)',
-                      color: '#92400E',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '0.6875rem',
+                      backgroundColor: '#FEF3C7',
+                      color: '#B45309',
+                      border: '1px solid #FDE68A',
+                      padding: '1px 7px',
+                      borderRadius: '6px',
+                      fontSize: '0.68rem',
                       fontWeight: 700,
                     }}
                   >
@@ -1793,24 +1799,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: '0.6875rem', color: '#D1FAE5', marginTop: '1px', fontWeight: 500 }}>
-                Dịch vụ: <strong style={{ color: '#FFFFFF' }}>{serviceDisplayName}</strong> &bull; Cụm K8s:{' '}
-                <strong style={{ color: '#FFFFFF' }}>{isLoadingDetail ? 'Đang tải...' : (clusterDisplayName || 'Chưa xác định')}</strong> &bull; Độ tin cậy:{' '}
-                <span
-                  style={{
-                    backgroundColor: detectedEngine.includes('OpenAI') ? 'rgba(16, 185, 129, 0.25)' : 'rgba(253, 230, 138, 0.25)',
-                    color: detectedEngine.includes('OpenAI') ? '#A7F3D0' : '#FDE68A',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    fontWeight: 700,
-                  }}
-                >
-                  {isLoadingDetail
-                    ? 'Đang tải...'
-                    : confidence !== null
-                      ? (detectedEngine !== 'Chưa xác định' ? `${confidence}% ${detectedEngine}` : `${confidence}%`)
-                      : (detectedEngine !== 'Chưa xác định' ? detectedEngine : 'Chưa đánh giá')}
+              <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span>
+                  Dịch vụ: <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>{serviceDisplayName}</strong>
                 </span>
+                <span style={{ color: '#CBD5E1' }}>&bull;</span>
+                <span>
+                  Cụm: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{isLoadingDetail ? 'Đang tải...' : (clusterDisplayName || 'Chưa xác định')}</strong>
+                </span>
+                {detectedEngine && detectedEngine !== 'Chưa xác định' && (
+                  <>
+                    <span style={{ color: '#CBD5E1' }}>&bull;</span>
+                    <span style={{ color: '#64748B', fontSize: '0.7rem' }}>{detectedEngine}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1820,48 +1822,48 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             onClick={onClose}
             aria-label="Đóng cửa sổ"
             style={{
-              background: 'rgba(255, 255, 255, 0.12)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              color: '#D1FAE5',
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              color: '#475569',
               cursor: 'pointer',
-              padding: '6px',
-              borderRadius: '8px',
+              width: '32px',
+              height: '32px',
+              borderRadius: '9px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
               transition: 'all 0.15s ease',
             }}
           >
-            <X size={15} />
+            <X size={16} />
           </button>
         </div>
 
-
-
-        {/* Status Sub-bar (Mockup Header Bar) */}
+        {/* Status Sub-bar gọn gàng */}
         <div
           style={{
-            backgroundColor: '#FFFFFF',
+            backgroundColor: '#F8FAFC',
             borderBottom: '1px solid #E2E8F0',
-            padding: '10px 24px',
+            padding: '8px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '12px',
+            gap: '10px',
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             {/* Root cause badge */}
             <span
               style={{
-                backgroundColor: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '#FEE2E2' : '#EDE9FE',
-                color: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '#B91C1C' : '#6D28D9',
-                border: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '1px solid #FECACA' : '1px solid #DDD6FE',
-                borderRadius: '16px',
-                padding: '3px 12px',
-                fontSize: '0.75rem',
-                fontWeight: 800,
+                backgroundColor: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '#FEF2F2' : '#ECFDF5',
+                color: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '#B91C1C' : '#047857',
+                border: (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? '1px solid #FECACA' : '1px solid #A7F3D0',
+                borderRadius: '999px',
+                padding: '2px 10px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '5px',
@@ -1873,34 +1875,16 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   <span>Chưa xác định nguyên nhân</span>
                 </>
               ) : (
-                <>
-                  <span>{rootCauseTypeVi}</span>
-                </>
+                <span>{rootCauseTypeVi}</span>
               )}
             </span>
 
-            {/* Info tooltip icon */}
-            <span
-              title={`Phân loại: ${rootCauseCategoryVi} • Mức độ: ${severityVi}`}
-              style={{
-                color: '#0284C7',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
-                backgroundColor: '#E0F2FE',
-              }}
-            >
-              <Info size={12} color="#0284C7" />
-            </span>
+            <span style={{ color: '#CBD5E1' }}>|</span>
 
             {/* RCA confidence */}
-            <span style={{ fontSize: '0.78125rem', color: '#64748B' }}>
-              Độ tin cậy RCA:{' '}
-              <strong style={{ color: '#047857' }}>
+            <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
+              Tin cậy RCA:{' '}
+              <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>
                 {confidence !== null ? `${confidence}%` : 'Chưa đánh giá'}
               </strong>
             </span>
@@ -1908,7 +1892,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             <span style={{ color: '#CBD5E1' }}>|</span>
 
             {/* Status */}
-            <span style={{ fontSize: '0.78125rem', color: '#64748B' }}>
+            <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
               Trạng thái:{' '}
               <strong style={{ color: modalStatus.color }}>
                 {modalStatus.label}
@@ -1916,28 +1900,33 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             </span>
           </div>
 
-          {/* Right: GRU prediction pill */}
-          <div
-            onClick={() => setIsGruDrawerOpen(!isGruDrawerOpen)}
+          {/* Right: AI prediction pill -> bấm chuyển qua Tab 2 */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsGruDrawerOpen(!isGruDrawerOpen);
+              setActiveTab('io');
+            }}
+            title="Xem chi tiết 7 đầu rủi ro & dữ liệu viễn trắc"
             style={{
-              backgroundColor: '#F3E8FF',
-              color: '#7E22CE',
-              border: '1px solid #E9D5FF',
-              borderRadius: '8px',
-              padding: '3px 10px',
-              fontSize: '0.75rem',
+              backgroundColor: '#F5F3FF',
+              color: '#6D28D9',
+              border: '1px solid #DDD6FE',
+              borderRadius: '999px',
+              padding: '2px 10px',
+              fontSize: '0.72rem',
               fontWeight: 700,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '5px',
               cursor: 'pointer',
             }}
           >
-            <Activity size={13} color="#7E22CE" />
+            <Activity size={12} color="#7C3AED" />
             <span>
-              Dự báo rủi ro AI <strong>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : 'Chưa đánh giá'}</strong>
+              Dự báo rủi ro AI <strong style={{ fontFamily: 'var(--font-mono)' }}>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : '—'}</strong>
             </span>
-          </div>
+          </button>
         </div>
 
         {/* Sub-navigation Tabs */}
@@ -1945,20 +1934,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           style={{
             display: 'flex',
             alignItems: 'center',
-            backgroundColor: '#F8FAFC',
+            backgroundColor: '#FFFFFF',
             borderBottom: '1px solid #E2E8F0',
-            padding: '0 22px',
-            gap: '8px',
+            padding: '0 20px',
+            gap: '6px',
           }}
         >
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
             style={{
-              padding: '10px 14px',
-              fontSize: '0.8125rem',
+              padding: '9px 12px',
+              fontSize: '0.78rem',
               fontWeight: 700,
-              color: activeTab === 'overview' ? '#059669' : '#64748B',
+              color: activeTab === 'overview' ? '#047857' : '#64748B',
               border: 'none',
               borderBottom: activeTab === 'overview' ? '2px solid #059669' : '2px solid transparent',
               backgroundColor: 'transparent',
@@ -1969,7 +1958,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               transition: 'all 0.15s ease',
             }}
           >
-            <Sparkles size={14} />
+            <Sparkles size={13} />
             <span>1. Chẩn Đoán &amp; Khắc Phục</span>
           </button>
 
@@ -1977,10 +1966,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             type="button"
             onClick={() => setActiveTab('io')}
             style={{
-              padding: '10px 14px',
-              fontSize: '0.8125rem',
+              padding: '9px 12px',
+              fontSize: '0.78rem',
               fontWeight: 700,
-              color: activeTab === 'io' ? '#059669' : '#64748B',
+              color: activeTab === 'io' ? '#047857' : '#64748B',
               border: 'none',
               borderBottom: activeTab === 'io' ? '2px solid #059669' : '2px solid transparent',
               backgroundColor: 'transparent',
@@ -1991,7 +1980,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               transition: 'all 0.15s ease',
             }}
           >
-            <Database size={14} />
+            <Database size={13} />
             <span>2. Viễn Trắc &amp; Dự Báo AI</span>
           </button>
         </div>
@@ -2053,24 +2042,17 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               )}
 
               {/* ======================================================== */}
-              {/* CARD 1: THÔNG TIN SỰ CỐ */}
+              {/* CARD 1: THÔNG TIN SỰ CỐ (GỌN 1 KHỐI TÓM TẮT) */}
               {/* ======================================================== */}
               <div
                 style={{
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   border: '1px solid #E2E8F0',
-                  padding: '14px 18px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                  padding: '12px 15px',
+                  boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Box size={16} color="#2563EB" />
-                    <span>Thông tin sự cố</span>
-                  </div>
-                </div>
-
                 {incidentTitle && (
                   <div
                     data-testid="incident-title-banner"
@@ -2078,31 +2060,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       backgroundColor: '#F8FAFC',
                       border: '1px solid #E2E8F0',
                       borderRadius: '8px',
-                      padding: '8px 12px',
-                      marginBottom: '12px',
+                      padding: '7px 11px',
+                      marginBottom: '10px',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
                     }}
                   >
+                    <Box size={14} color="#059669" style={{ flexShrink: 0 }} />
                     <span
                       style={{
-                        fontSize: '0.6875rem',
+                        fontSize: '0.8rem',
                         fontWeight: 700,
-                        color: '#64748B',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Tiêu đề sự cố:
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.8125rem',
-                        fontWeight: 800,
                         color: '#0F172A',
                         wordBreak: 'break-word',
+                        lineHeight: 1.4,
                       }}
                     >
                       {incidentTitle}
@@ -2113,138 +2085,230 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-                    gap: '12px 20px',
-                    fontSize: '0.75rem',
+                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                    gap: '10px 14px',
+                    fontSize: '0.74rem',
                   }}
                 >
-                  {/* Cột 1: Dịch vụ & Pod */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div>
-                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Dịch vụ</div>
-                      <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.8125rem' }}>
-                        {serviceDisplayName}
-                      </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                      {realPodName ? 'Pod lỗi' : 'Workload'}
                     </div>
-                    <div>
-                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>
-                        {realPodName ? 'Pod lỗi' : 'WORKLOAD MỤC TIÊU'}
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: '#0F172A', fontSize: '0.75rem', wordBreak: 'break-all' }}>
-                        {realPodName || 'Chưa xác định'}
-                      </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', marginTop: '2px', wordBreak: 'break-all' }}>
+                      {realPodName || serviceDisplayName}
                     </div>
                   </div>
 
-                  {/* Cột 2: Namespace & Node */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div>
-                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Namespace</div>
-                      <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.8125rem' }}>
-                        {namespaceName || 'default'}
-                      </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Namespace
                     </div>
-                    <div>
-                      <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Node</div>
-                      <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.8125rem' }}>
-                        {faultyNodeName || 'Chưa xác định'}
-                      </div>
-                      <div style={{ color: '#94A3B8', fontSize: '0.65625rem', marginTop: '1px' }}>
-                        {clusterSubLabel}
-                      </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                      {namespaceName || 'default'}
                     </div>
                   </div>
 
-                  {/* Cột 3: Workload & Thời gian */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Layers size={15} color="#2563EB" />
-                      <div>
-                        <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Loại workload</div>
-                        <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.8125rem' }}>
-                          {workloadKindRaw || 'Chưa xác định'}
-                        </div>
-                      </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Node
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Clock size={15} color="#2563EB" />
-                      <div>
-                        <div style={{ color: '#64748B', fontSize: '0.6875rem' }}>Thời gian bắt đầu</div>
-                        <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.75rem' }}>
-                          {analyzedTimeFormatted}
-                        </div>
-                      </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                      {faultyNodeName || 'Chưa xác định'}
+                    </div>
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Loại / Bắt đầu
+                    </div>
+                    <div style={{ fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
+                      {workloadKindRaw || 'Workload'}
+                    </div>
+                    <div style={{ fontSize: '0.66rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
+                      {analyzedTimeFormatted}
                     </div>
                   </div>
                 </div>
 
-                {/* Dữ liệu phục vụ kiểm tra hệ thống & DevOps */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0', fontSize: '0.6875rem', color: '#64748B' }}>
-                  <span>Cụm K8s: <strong style={{ color: '#334155' }}>{clusterDisplayName || 'Chưa xác định'}</strong></span>
-                  <span>Mức độ: <strong style={{ color: '#334155' }}>{severityVi}</strong></span>
-                  <span>{`Ưu tiên: ${actionPriorityVi}`}</span>
-                  <span>{`Rủi ro: ${actionRiskLevelVi}`}</span>
-                  {rawActionParams.pod_ip && (
-                    <span>IP/Port: <strong style={{ color: '#334155' }}>{rawActionParams.pod_ip}:{rawActionParams.port || 8080}</strong></span>
-                  )}
-                </div>
+                {/* Inline compact metadata chips có màu sắc phân định mức độ trực quan */}
+                {(() => {
+                  const getSeverityStyle = (sev) => {
+                    const s = String(sev || '').toUpperCase();
+                    if (s.includes('CRITICAL') || s.includes('KHẨN')) {
+                      return { bg: '#FEF2F2', border: '#FECACA', label: '#991B1B', val: '#DC2626', dot: '#EF4444' };
+                    }
+                    if (s.includes('HIGH') || s.includes('CAO')) {
+                      return { bg: '#FFF7ED', border: '#FED7AA', label: '#9A3412', val: '#EA580C', dot: '#F97316' };
+                    }
+                    if (s.includes('MED') || s.includes('TRUNG')) {
+                      return { bg: '#FEFCE8', border: '#FEF08A', label: '#854D0E', val: '#D97706', dot: '#EAB308' };
+                    }
+                    if (s.includes('LOW') || s.includes('THẤP')) {
+                      return { bg: '#EFF6FF', border: '#BFDBFE', label: '#1E40AF', val: '#2563EB', dot: '#3B82F6' };
+                    }
+                    return { bg: '#ECFDF5', border: '#A7F3D0', label: '#065F46', val: '#059669', dot: '#10B981' };
+                  };
+
+                  const getPriorityStyle = (pri) => {
+                    const p = String(pri || '').toUpperCase();
+                    if (p.includes('CRITICAL') || p.includes('KHẨN') || p === 'P1') {
+                      return { bg: '#FEF2F2', border: '#FECACA', label: '#991B1B', val: '#DC2626', dot: '#EF4444' };
+                    }
+                    if (p.includes('HIGH') || p.includes('CAO') || p === 'P2') {
+                      return { bg: '#FFF7ED', border: '#FED7AA', label: '#9A3412', val: '#EA580C', dot: '#F97316' };
+                    }
+                    if (p.includes('MED') || p.includes('TRUNG') || p === 'P3') {
+                      return { bg: '#FEFCE8', border: '#FEF08A', label: '#854D0E', val: '#D97706', dot: '#EAB308' };
+                    }
+                    if (p.includes('LOW') || p.includes('THẤP') || p === 'P4') {
+                      return { bg: '#F1F5F9', border: '#CBD5E1', label: '#475569', val: '#334155', dot: '#64748B' };
+                    }
+                    return { bg: '#F8FAFC', border: '#E2E8F0', label: '#64748B', val: '#0F172A', dot: '#94A3B8' };
+                  };
+
+                  const getRiskStyle = (risk) => {
+                    const r = String(risk || '').toUpperCase();
+                    if (r.includes('CRITICAL') || r.includes('KHẨN')) {
+                      return { bg: '#FEF2F2', border: '#FECACA', label: '#991B1B', val: '#DC2626', dot: '#EF4444' };
+                    }
+                    if (r.includes('HIGH') || r.includes('CAO')) {
+                      return { bg: '#FFF7ED', border: '#FED7AA', label: '#9A3412', val: '#EA580C', dot: '#F97316' };
+                    }
+                    if (r.includes('MED') || r.includes('TRUNG')) {
+                      return { bg: '#FEFCE8', border: '#FEF08A', label: '#854D0E', val: '#D97706', dot: '#EAB308' };
+                    }
+                    if (r.includes('LOW') || r.includes('THẤP')) {
+                      return { bg: '#ECFDF5', border: '#A7F3D0', label: '#065F46', val: '#059669', dot: '#10B981' };
+                    }
+                    return { bg: '#F8FAFC', border: '#E2E8F0', label: '#64748B', val: '#0F172A', dot: '#94A3B8' };
+                  };
+
+                  const sevStyle = getSeverityStyle(severityUpper || severityVi);
+                  const priStyle = getPriorityStyle(actionPriority || actionPriorityVi);
+                  const riskStyle = getRiskStyle(actionRiskLevel || actionRiskLevelVi);
+
+                  return (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #F1F5F9', fontSize: '0.69rem', color: '#64748B' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '2px 9px',
+                          borderRadius: '6px',
+                          backgroundColor: sevStyle.bg,
+                          border: `1px solid ${sevStyle.border}`,
+                          color: sevStyle.label,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: sevStyle.dot, flexShrink: 0 }} />
+                        Mức độ: <strong style={{ color: sevStyle.val, fontWeight: 800 }}>{severityVi}</strong>
+                      </span>
+
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '2px 9px',
+                          borderRadius: '6px',
+                          backgroundColor: priStyle.bg,
+                          border: `1px solid ${priStyle.border}`,
+                          color: priStyle.label,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: priStyle.dot, flexShrink: 0 }} />
+                        Ưu tiên: <strong style={{ color: priStyle.val, fontWeight: 800 }}>{actionPriorityVi}</strong>
+                      </span>
+
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '2px 9px',
+                          borderRadius: '6px',
+                          backgroundColor: riskStyle.bg,
+                          border: `1px solid ${riskStyle.border}`,
+                          color: riskStyle.label,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: riskStyle.dot, flexShrink: 0 }} />
+                        Rủi ro: <strong style={{ color: riskStyle.val, fontWeight: 800 }}>{actionRiskLevelVi}</strong>
+                      </span>
+
+                      {clusterSubLabel && (
+                        <span style={{ padding: '2px 9px', borderRadius: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', color: '#475569', fontWeight: 600 }}>
+                          {clusterSubLabel}
+                        </span>
+                      )}
+                      {rawActionParams.pod_ip && (
+                        <span style={{ padding: '2px 9px', borderRadius: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', fontFamily: 'var(--font-mono)', color: '#475569' }}>
+                          {rawActionParams.pod_ip}:{rawActionParams.port || 8080}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Lỗi thực thi gần nhất (nếu có) */}
                 {healingErrorMessage && (
-                  <div style={{ marginTop: '8px', padding: '8px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', fontSize: '0.75rem', color: '#B91C1C' }}>
-                    <div><strong>Lỗi thực thi gần nhất:</strong> {healingErrorMessage}</div>
+                  <div style={{ marginTop: '8px', padding: '7px 11px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', fontSize: '0.74rem', color: '#B91C1C' }}>
+                    <strong>Lỗi thực thi gần nhất:</strong> {healingErrorMessage}
                   </div>
                 )}
               </div>
 
               {/* ======================================================== */}
-              {/* GRID 2 CỘT (CARD 2 & 4 vs CARD 3 & 5) */}
+              {/* GRID 2 CỘT CÂN ĐỐI */}
               {/* ======================================================== */}
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-                  gap: '14px',
+                  gap: '12px',
                   alignItems: 'start',
                 }}
               >
-                {/* ---------------------------------------------------- */}
-                {/* CỘT TRÁI: CARD 2 (TRIỆU CHỨNG) & CARD 4 (LỊCH SỬ PHỤC HỒI) */}
-                {/* ---------------------------------------------------- */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* CỘT TRÁI: TRIỆU CHỨNG & LỊCH SỬ PHỤC HỒI */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {/* CARD 2: TRIỆU CHỨNG CHÍNH */}
                   <div
                     style={{
                       backgroundColor: '#FFFFFF',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
-                      padding: '14px 16px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      padding: '12px 14px',
+                      boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Activity size={16} color="#2563EB" />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Activity size={15} color="#059669" />
                         <span>Triệu chứng chính</span>
                       </div>
                       {groupedSymptoms.length > 0 && (
                         <span
                           style={{
-                            backgroundColor: '#EFF6FF',
-                            color: '#1D4ED8',
-                            fontSize: '0.6875rem',
+                            backgroundColor: '#ECFDF5',
+                            color: '#047857',
+                            border: '1px solid #A7F3D0',
+                            fontSize: '0.68rem',
                             fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '12px',
+                            padding: '1px 8px',
+                            borderRadius: '999px',
                           }}
                         >
-                          {groupedSymptoms.length} loại lỗi · {totalSymptomCount} lần
+                          {groupedSymptoms.length} loại · {totalSymptomCount} lần
                         </span>
                       )}
                     </div>
 
                     {/* Danh sách Triệu chứng */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                       {groupedSymptoms.length > 0 ? (
                         groupedSymptoms.map((grp) => {
                           const isExpanded = expandedSymptomKeys.has(grp.key);
@@ -2257,39 +2321,39 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               key={grp.key}
                               style={{
                                 border: '1px solid #F1F5F9',
-                                borderRadius: '8px',
-                                padding: '10px 12px',
-                                backgroundColor: '#FAFAFA',
+                                borderRadius: '9px',
+                                padding: '9px 11px',
+                                backgroundColor: '#F8FAFC',
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flex: 1, minWidth: 0 }}>
                                   <div
                                     style={{
-                                      width: '26px',
-                                      height: '26px',
+                                      width: '24px',
+                                      height: '24px',
                                       borderRadius: '6px',
                                       backgroundColor: alertBg,
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
                                       flexShrink: 0,
-                                      marginTop: '2px',
+                                      marginTop: '1px',
                                     }}
                                   >
-                                    <AlertTriangle size={14} color={alertColor} />
+                                    <AlertTriangle size={13} color={alertColor} />
                                   </div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      <span style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#0F172A' }}>
                                         {grp.title}
                                       </span>
                                       <span
                                         style={{
-                                          fontSize: '0.65625rem',
+                                          fontSize: '0.65rem',
                                           fontWeight: 700,
                                           padding: '1px 6px',
-                                          borderRadius: '10px',
+                                          borderRadius: '999px',
                                           backgroundColor: alertBg,
                                           color: alertColor,
                                           whiteSpace: 'nowrap',
@@ -2298,16 +2362,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                         {grp.count} lần
                                       </span>
                                     </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', lineHeight: 1.35 }}>
+                                    <div style={{ fontSize: '0.73rem', color: '#475569', marginTop: '2px', lineHeight: 1.38 }}>
                                       {grp.explanation}
                                     </div>
-                                    <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>
+                                    <div style={{ fontSize: '0.67rem', color: '#94A3B8', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
                                       Pod: {grp.podName} · {grp.count} lần
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* Nút xem chi tiết K8s */}
                                 <button
                                   type="button"
                                   onClick={() => toggleSymptomKey(grp.key)}
@@ -2315,9 +2378,9 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                   style={{
                                     border: '1px solid #E2E8F0',
                                     backgroundColor: '#FFFFFF',
-                                    borderRadius: '6px',
+                                    borderRadius: '7px',
                                     padding: '3px 8px',
-                                    fontSize: '0.6875rem',
+                                    fontSize: '0.68rem',
                                     fontWeight: 600,
                                     color: '#475569',
                                     cursor: 'pointer',
@@ -2326,7 +2389,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                     gap: '4px',
                                     flexShrink: 0,
                                     whiteSpace: 'nowrap',
-                                    marginTop: '2px',
                                   }}
                                 >
                                   <span>
@@ -2345,11 +2407,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 </button>
                               </div>
 
-                              {/* Vùng mở rộng Log K8s gốc */}
                               {isExpanded && (
                                 <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
                                   {grp.records.map((rec, rIdx) => (
-                                    <div key={rIdx} style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono, monospace)', backgroundColor: '#0F172A', color: '#F8FAFC', padding: '6px 8px', borderRadius: '4px', overflowX: 'auto', marginBottom: '4px' }}>
+                                    <div key={rIdx} style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono, monospace)', backgroundColor: '#0B1120', color: '#E2E8F0', padding: '6px 8px', borderRadius: '6px', overflowX: 'auto', marginBottom: '4px' }}>
                                       {rec.rawLog || rec.originalText}
                                     </div>
                                   ))}
@@ -2359,134 +2420,133 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           );
                         })
                       ) : (
-                        <div style={{ fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic', padding: '8px 0' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#64748B', padding: '6px 10px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
                           Không ghi nhận triệu chứng bất thường đơn lẻ
                         </div>
                       )}
                     </div>
 
-                    {/* Vùng Bằng chứng xác thực & SRE Checklist */}
-                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {/* Bằng chứng xác thực */}
-                      {parsedEvidenceFor.length > 0 && (
-                        <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 10px', fontSize: '0.71875rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <CheckCircle2 size={13} color="#16A34A" />
-                              <span style={{ fontWeight: 700, color: '#166534', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px', fontSize: '0.65625rem' }}>
-                                {parsedEvidenceFor.length} ghi nhận
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.6875rem' }}>
-                                {evidenceForSummary.map((item, idx) => (
-                                  <span key={idx}>
-                                    • {item.count} sự kiện trên Pod {item.podName}
-                                  </span>
+                    {/* Bằng chứng xác thực & Checklist thiếu */}
+                    {(parsedEvidenceFor.length > 0 || missingEvidenceList.length > 0) && (
+                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {parsedEvidenceFor.length > 0 && (
+                          <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '7px 10px', fontSize: '0.71rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <CheckCircle2 size={13} color="#059669" />
+                                <span style={{ fontWeight: 700, color: '#047857', backgroundColor: '#ECFDF5', padding: '1px 6px', borderRadius: '5px', fontSize: '0.66rem' }}>
+                                  {parsedEvidenceFor.length} ghi nhận
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.68rem' }}>
+                                  {evidenceForSummary.map((item, idx) => (
+                                    <span key={idx}>
+                                      • {item.count} sự kiện ({item.podName})
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsExpandedEvidenceList(!isExpandedEvidenceList)}
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '6px',
+                                  padding: '2px 7px',
+                                  fontSize: '0.66rem',
+                                  fontWeight: 700,
+                                  color: '#047857',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {isExpandedEvidenceList ? 'Thu gọn' : `Xem ${parsedEvidenceFor.length} bản ghi gốc`}
+                              </button>
+                            </div>
+
+                            {isExpandedEvidenceList && (
+                              <div style={{ marginTop: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                                {parsedEvidenceFor.map((ev, eIdx) => (
+                                  <div key={eIdx} style={{ fontSize: '0.66rem', fontFamily: 'var(--font-mono)', backgroundColor: '#FFFFFF', padding: '5px 7px', borderRadius: '5px', border: '1px solid #E2E8F0', marginBottom: '3px' }}>
+                                    <div style={{ fontWeight: 700, color: '#047857' }}>
+                                      {`Bản ghi #${eIdx + 1} • Pod: ${ev.podName || 'workload'}`}
+                                    </div>
+                                    <div style={{ color: '#475569', wordBreak: 'break-all', marginTop: '2px' }}>
+                                      {ev.rawLog || ev.originalText}
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setIsExpandedEvidenceList(!isExpandedEvidenceList)}
-                              style={{
-                                backgroundColor: '#FFFFFF',
-                                border: '1px solid #CBD5E1',
-                                borderRadius: '4px',
-                                padding: '1px 6px',
-                                fontSize: '0.65625rem',
-                                fontWeight: 600,
-                                color: '#2563EB',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Xem toàn bộ {parsedEvidenceFor.length} bản ghi Kubernetes Event gốc
-                            </button>
+                            )}
                           </div>
+                        )}
 
-                          {isExpandedEvidenceList && (
-                            <div style={{ marginTop: '6px', maxHeight: '140px', overflowY: 'auto' }}>
-                              {parsedEvidenceFor.map((ev, eIdx) => (
-                                <div key={eIdx} style={{ fontSize: '0.65625rem', fontFamily: 'monospace', backgroundColor: '#FFFFFF', padding: '4px 6px', borderRadius: '4px', border: '1px solid #E2E8F0', marginBottom: '3px' }}>
-                                  <div style={{ fontWeight: 700, color: '#166534' }}>
-                                    {`Bản ghi #${eIdx + 1} • Pod: ${ev.podName || 'workload'}`}
-                                  </div>
-                                  <div style={{ color: '#475569', wordBreak: 'break-all', marginTop: '2px' }}>
-                                    {ev.rawLog || ev.originalText}
-                                  </div>
-                                </div>
-                              ))}
+                        {missingEvidenceList.length > 0 && (
+                          <div style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px', padding: '7px 10px', fontSize: '0.71rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
+                              <HelpCircle size={12} color="#D97706" />
+                              <span style={{ fontWeight: 700, color: '#92400E', fontSize: '0.69rem' }}>
+                                Bằng chứng cần bổ sung
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* SRE Checklist */}
-                      {missingEvidenceList.length > 0 && (
-                        <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 10px', fontSize: '0.71875rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
-                            <HelpCircle size={13} color="#D97706" />
-                            <span style={{ fontWeight: 700, color: '#92400E', fontSize: '0.6875rem' }}>
-                              Hồ sơ bằng chứng thiếu (SRE Checklist)
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              {missingEvidenceList.map((item, idx) => {
+                                const question = SRE_CHECKLIST_QUESTIONS[item]?.question || translateSREText(item);
+                                return (
+                                  <div key={idx} style={{ color: '#78350F', display: 'flex', alignItems: 'flex-start', gap: '5px', fontSize: '0.69rem' }}>
+                                    <span style={{ fontWeight: 800, color: '#D97706' }}>•</span>
+                                    <span>{question}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            {missingEvidenceList.map((item, idx) => {
-                              const question = SRE_CHECKLIST_QUESTIONS[item]?.question || translateSREText(item);
-                              return (
-                                <div key={idx} style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.6875rem' }}>
-                                  <span style={{ fontWeight: 800, color: '#D97706' }}>?</span>
-                                  <span>{question}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {/* CARD 4: LỊCH SỬ TỰ PHỤC HỒI (TIMELINE CHUẨN MOCKUP) */}
+                  {/* CARD 4: LỊCH SỬ TỰ PHỤC HỒI */}
                   <div
                     style={{
                       backgroundColor: '#FFFFFF',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
-                      padding: '14px 16px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      padding: '12px 14px',
+                      boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <History size={16} color="#2563EB" />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <History size={15} color="#059669" />
                         <span>Lịch sử tự phục hồi</span>
                       </div>
                       <span
                         style={{
-                          backgroundColor: '#EFF6FF',
-                          color: '#1D4ED8',
-                          fontSize: '0.6875rem',
+                          backgroundColor: '#F1F5F9',
+                          color: '#475569',
+                          border: '1px solid #E2E8F0',
+                          fontSize: '0.68rem',
                           fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '12px',
+                          padding: '1px 8px',
+                          borderRadius: '999px',
                         }}
                       >
-                        {timelineList.length} hành động đã thử
+                        {timelineList.length} hành động
                       </span>
                     </div>
 
                     {timelineList.length > 0 ? (
                       <>
-                        {/* Timeline các bước */}
-                        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: '8px' }}>
-                          {/* Đường line kết nối dọc */}
+                        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: '6px' }}>
                           {timelineList.length > 1 && (
                             <div
                               style={{
                                 position: 'absolute',
                                 top: '12px',
-                                bottom: '16px',
-                                left: '19px',
+                                bottom: '14px',
+                                left: '16px',
                                 width: '2px',
-                                backgroundColor: '#DBEAFE',
+                                backgroundColor: '#D1FAE5',
                                 zIndex: 1,
                               }}
                             />
@@ -2499,45 +2559,39 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                gap: '10px',
-                                padding: '8px 0',
+                                gap: '8px',
+                                padding: '6px 0',
                                 position: 'relative',
                                 zIndex: 2,
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                                {/* Vòng tròn số thứ tự bước */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                                 <div
                                   style={{
-                                    width: '24px',
-                                    height: '24px',
+                                    width: '22px',
+                                    height: '22px',
                                     borderRadius: '50%',
-                                    backgroundColor: '#2563EB',
+                                    backgroundColor: '#059669',
                                     color: '#FFFFFF',
-                                    fontSize: '0.6875rem',
+                                    fontSize: '0.66rem',
                                     fontWeight: 800,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     flexShrink: 0,
-                                    boxShadow: '0 1px 2px rgba(37, 99, 235, 0.25)',
                                   }}
                                 >
                                   {st.stepIndex}
                                 </div>
-
-                                {/* Tên hành động */}
-                                <span style={{ fontWeight: 800, fontSize: '0.8125rem', color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#0F172A', whiteSpace: 'nowrap' }}>
                                   {st.actionName}
                                 </span>
-
-                                {/* Badge trạng thái */}
                                 <span
                                   style={{
-                                    fontSize: '0.65625rem',
+                                    fontSize: '0.65rem',
                                     fontWeight: 700,
-                                    padding: '1px 6px',
-                                    borderRadius: '10px',
+                                    padding: '1px 7px',
+                                    borderRadius: '999px',
                                     backgroundColor: st.statusBadge.bg,
                                     color: st.statusBadge.color,
                                     border: `1px solid ${st.statusBadge.border}`,
@@ -2546,81 +2600,73 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 >
                                   {st.statusBadge.label}
                                 </span>
-
-                                {/* Lý do ngắn gọn */}
-                                <span style={{ fontSize: '0.75rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {st.shortReason}
-                                </span>
                               </div>
-
-                              {/* Thời gian */}
-                              <span style={{ fontSize: '0.6875rem', color: '#64748B', flexShrink: 0, fontFamily: 'monospace' }}>
+                              <span style={{ fontSize: '0.68rem', color: '#64748B', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>
                                 {st.timeStr}
                               </span>
                             </div>
                           ))}
                         </div>
 
-                        {/* Vùng mở rộng Chi tiết lịch sử (Metrics Chips) */}
-                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #E2E8F0' }}>
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
                           <button
                             type="button"
                             onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
                             style={{
                               background: 'none',
                               border: 'none',
-                              color: '#2563EB',
-                              fontSize: '0.75rem',
+                              color: '#047857',
+                              fontSize: '0.73rem',
                               fontWeight: 700,
                               cursor: 'pointer',
-                              display: 'flex',
+                              display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
                               padding: 0,
                             }}
                           >
-                            <span>{isTimelineExpanded ? 'Thu gọn lịch sử ↑' : 'Xem chi tiết lịch sử →'}</span>
+                            <span>{isTimelineExpanded ? 'Thu gọn chi tiết ↑' : 'Xem chi tiết lịch sử →'}</span>
                           </button>
 
                           {isTimelineExpanded && (
                             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {timelineList.map((st, idx) => (
-                                <div key={idx} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '8px 10px', fontSize: '0.71875rem' }}>
-                                  <div style={{ fontWeight: 700, color: '#334155', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <div key={idx} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 10px', fontSize: '0.72rem' }}>
+                                  <div style={{ fontWeight: 700, color: '#0F172A', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                     <span>Bước {st.stepIndex}: {st.actionName} — {st.statusBadge.label}</span>
                                     {st.replicaCount && (
-                                      <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE', fontSize: '0.6875rem', fontWeight: 800 }}>
-                                        ☸️ {st.replicaCount} Pods
+                                      <span style={{ backgroundColor: '#ECFDF5', color: '#047857', padding: '1px 6px', borderRadius: '5px', border: '1px solid #A7F3D0', fontSize: '0.67rem', fontWeight: 700 }}>
+                                        {st.replicaCount} Pods
                                       </span>
                                     )}
                                   </div>
-                                  <div style={{ color: '#64748B', lineHeight: 1.35 }}>
+                                  <div style={{ color: '#64748B', lineHeight: 1.4 }}>
                                     {st.rawReason}
                                   </div>
                                   {(st.metrics || st.replicaCount) && (
-                                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', gap: '5px', marginTop: '6px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '0.67rem' }}>
                                       {st.replicaCount && (
-                                        <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '3px', border: '1px solid #BFDBFE', fontWeight: 700 }}>
-                                          ☸️ Số Pod: {st.replicaCount} Pods
+                                        <span style={{ backgroundColor: '#FFFFFF', color: '#047857', padding: '1px 6px', borderRadius: '4px', border: '1px solid #A7F3D0', fontWeight: 700 }}>
+                                          Số Pod: {st.replicaCount}
                                         </span>
                                       )}
                                       {st.metrics?.ram !== null && st.metrics?.ram !== undefined && (
-                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
                                           RAM: {st.metrics.ram}%
                                         </span>
                                       )}
                                       {st.metrics?.cpu !== null && st.metrics?.cpu !== undefined && (
-                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
                                           CPU: {st.metrics.cpu}%
                                         </span>
                                       )}
                                       {st.metrics?.restart !== null && st.metrics?.restart !== undefined && (
-                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
-                                          Restart: {st.metrics.restart} lần
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
+                                          Restart: {st.metrics.restart}
                                         </span>
                                       )}
                                       {st.metrics?.latency !== null && st.metrics?.latency !== undefined && (
-                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 5px', borderRadius: '3px', border: '1px solid #CBD5E1' }}>
+                                        <span style={{ backgroundColor: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
                                           Độ trễ: {st.metrics.latency}ms
                                         </span>
                                       )}
@@ -2633,62 +2679,57 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         </div>
                       </>
                     ) : (
-                      <div style={{ fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic', padding: '10px 8px', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px dashed #CBD5E1' }}>
+                      <div style={{ fontSize: '0.74rem', color: '#64748B', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1', lineHeight: 1.45 }}>
                         {isResolved
-                          ? 'Chưa thực hiện hành động tự động nào. Dịch vụ đã tự ổn định qua viễn trắc Kubernetes.'
+                          ? 'Chưa thực hiện hành động tự động nào. Dịch vụ đã tự ổn định.'
                           : (recAction === 'NO_ACTION' || isUnknown || evidenceStatus === 'INSUFFICIENT_EVIDENCE'
-                              ? 'Chưa thực hiện hành động tự động nào (Hệ thống dừng an toàn do Rule Engine chặn hoặc thiếu bằng chứng xác thực)'
-                              : 'Chưa ghi nhận hành động tự phục hồi nào trước đó')}
+                              ? 'Chưa thực hiện hành động tự động nào (Hệ thống dừng an toàn do Rule Engine chặn hoặc thiếu bằng chứng).'
+                              : 'Chưa ghi nhận hành động tự phục hồi nào trước đó.')}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* ---------------------------------------------------- */}
-                {/* CỘT PHẢI: CARD 3 (QUYẾT ĐỊNH SELFAI) & CARD 5 (PLAYBOOK KỸ SƯ) */}
-                {/* ---------------------------------------------------- */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* CỘT PHẢI: QUYẾT ĐỊNH SELFAI & CẨM NANG KỸ SƯ */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {/* CARD 3: QUYẾT ĐỊNH CỦA SELFAI */}
                   <div
                     style={{
-                      backgroundColor: '#F0FDF4',
-                      borderRadius: '10px',
-                      border: '1px solid #BBF7D0',
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '12px',
+                      border: '1px solid #A7F3D0',
+                      borderTop: '2.5px solid #059669',
                       padding: '12px 14px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      boxShadow: '0 2px 10px rgba(16, 185, 129, 0.06)',
                       display: 'flex',
                       flexDirection: 'column',
-                      alignItems: 'center',
-                      textAlign: 'center',
+                      gap: '8px',
                     }}
                   >
-                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                      <ShieldCheck size={15} color="#16A34A" />
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#166534' }}>
-                        Quyết định của SelfAI
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <ShieldCheck size={15} color="#059669" />
+                        <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>
+                          Quyết định của SelfAI
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          backgroundColor: recAction === 'NO_ACTION' || !recAction ? '#FFF7ED' : '#ECFDF5',
+                          color: recAction === 'NO_ACTION' || !recAction ? '#C2410C' : '#047857',
+                          border: recAction === 'NO_ACTION' || !recAction ? '1px solid #FDBA74' : '1px solid #A7F3D0',
+                          borderRadius: '7px',
+                          padding: '2px 10px',
+                          fontSize: '0.74rem',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {recAction || 'NO_ACTION'}
                       </span>
                     </div>
 
-                    {/* Prominent Action Pill */}
-                    <div
-                      style={{
-                        backgroundColor: '#FFEDD5',
-                        color: '#C2410C',
-                        border: '1px solid #FDBA74',
-                        borderRadius: '8px',
-                        padding: '3px 14px',
-                        fontSize: '0.84375rem',
-                        fontWeight: 800,
-                        letterSpacing: '0.01em',
-                        boxShadow: '0 1px 2px rgba(194, 65, 12, 0.1)',
-                        margin: '2px 0 6px 0',
-                      }}
-                    >
-                      {recAction || 'NO_ACTION'}
-                    </div>
-
-                    {/* Subtitle / Decision Reason */}
-                    <div style={{ fontSize: '0.75rem', color: '#334155', lineHeight: 1.4, maxWidth: '320px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#334155', lineHeight: 1.45 }}>
                       {previousActionSteps.length > 0 || isCircuitBreakerActive
                         ? 'Cầu dao an toàn (Circuit Breaker) đã ngắt mạch sau khi các bước tự phục hồi trước đó chưa thành công.'
                         : isInsufficient
@@ -2697,18 +2738,19 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     </div>
 
                     {/* Rule Engine & Circuit Breaker Badges */}
-                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', paddingTop: '8px', borderTop: '1px solid #DCFCE7', fontSize: '0.71875rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', paddingTop: '8px', borderTop: '1px solid #F1F5F9', fontSize: '0.71rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ color: '#475569' }}>Rule Engine</span>
+                        <span style={{ color: '#64748B' }}>Rule Engine</span>
                         <span
                           style={{
                             fontWeight: 800,
-                            fontSize: '0.65625rem',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: (recAction === 'NO_ACTION' || isInsufficient) ? '#FEE2E2' : '#DCFCE7',
-                            color: (recAction === 'NO_ACTION' || isInsufficient) ? '#B91C1C' : '#15803D',
-                            border: (recAction === 'NO_ACTION' || isInsufficient) ? '1px solid #FECACA' : '1px solid #86EFAC',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.66rem',
+                            padding: '1px 7px',
+                            borderRadius: '5px',
+                            backgroundColor: (recAction === 'NO_ACTION' || isInsufficient) ? '#FEF2F2' : '#ECFDF5',
+                            color: (recAction === 'NO_ACTION' || isInsufficient) ? '#B91C1C' : '#047857',
+                            border: (recAction === 'NO_ACTION' || isInsufficient) ? '1px solid #FECACA' : '1px solid #A7F3D0',
                           }}
                         >
                           {rawActionParams.rule_verdict || (recAction === 'NO_ACTION' ? 'BLOCK' : 'ALLOW')}
@@ -2716,16 +2758,17 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ color: '#475569' }}>Circuit Breaker</span>
+                        <span style={{ color: '#64748B' }}>Circuit Breaker</span>
                         <span
                           style={{
                             fontWeight: 800,
-                            fontSize: '0.65625rem',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '#FEE2E2' : '#DCFCE7',
-                            color: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '#B91C1C' : '#15803D',
-                            border: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '1px solid #FECACA' : '1px solid #86EFAC',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.66rem',
+                            padding: '1px 7px',
+                            borderRadius: '5px',
+                            backgroundColor: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '#FEF2F2' : '#ECFDF5',
+                            color: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '#B91C1C' : '#047857',
+                            border: (isCircuitBreakerActive || isCircuitBreakerTripped) ? '1px solid #FECACA' : '1px solid #A7F3D0',
                           }}
                         >
                           {(isCircuitBreakerActive || isCircuitBreakerTripped) ? 'OPEN' : 'CLOSED'}
@@ -2733,25 +2776,33 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       </div>
                     </div>
 
-                    {/* Dự báo GRU Risks */}
+                    {/* Dự báo rủi ro AI sớm */}
                     {predictedRisk && (
-                      <div style={{ width: '100%', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #DCFCE7', textAlign: 'left', fontSize: '0.6875rem' }}>
-                        <div style={{ color: '#6B21A8', fontWeight: 700, fontSize: '0.65625rem', marginBottom: '2px' }}>
-                          Dự báo rủi ro sớm từ AI — Không phải bằng chứng RCA hoặc lệnh thực thi
+                      <div
+                        style={{
+                          padding: '8px 10px',
+                          backgroundColor: '#FAF5FF',
+                          border: '1px solid #E9D5FF',
+                          borderRadius: '8px',
+                          fontSize: '0.71rem',
+                        }}
+                      >
+                        <div style={{ color: '#7E22CE', fontWeight: 700, fontSize: '0.66rem', marginBottom: '3px' }}>
+                          Dự báo rủi ro sớm từ AI (tham khảo)
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7E22CE' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', color: '#581C87' }}>
                           <span style={{ fontWeight: 700 }}>{GRU_RISK_NAMES_VI[predictedRisk] || predictedRiskVi}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontFamily: 'monospace', backgroundColor: '#F3E8FF', padding: '1px 5px', borderRadius: '4px', fontSize: '0.625rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', backgroundColor: '#FFFFFF', border: '1px solid #DDD6FE', padding: '1px 6px', borderRadius: '5px', fontSize: '0.64rem' }}>
                               {predictedRisk}
                             </span>
-                            <span style={{ fontWeight: 800, color: '#7E22CE', fontSize: '0.6875rem' }}>
+                            <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#7E22CE', fontSize: '0.72rem' }}>
                               {`${Math.round((gruPredictionConfidence ?? 0.965) * 100)}%`}
                             </span>
                           </div>
                         </div>
                         {predictedRisk === 'SCALE_DOWN_CANDIDATE' && (
-                          <div style={{ color: '#581C87', fontSize: '0.625rem', marginTop: '2px', fontStyle: 'italic' }}>
+                          <div style={{ color: '#6B21A8', fontSize: '0.65rem', marginTop: '3px', fontStyle: 'italic' }}>
                             Chưa cho phép giảm replica khi workload đang bất ổn.
                           </div>
                         )}
@@ -2763,49 +2814,53 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   <div
                     style={{
                       backgroundColor: '#FFFFFF',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       border: '1px solid #E2E8F0',
-                      padding: '16px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      padding: '12px 14px',
+                      boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
                       display: 'flex',
                       flexDirection: 'column',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <div style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <BookOpen size={16} color="#2563EB" />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <BookOpen size={15} color="#059669" />
                         <span>Cẩm nang thao tác kỹ sư</span>
                       </div>
-                      <span style={{ fontSize: '0.65625rem', fontWeight: 600, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px' }}>
-                        {isAiPlaybook ? 'Từ AI Playbook' : 'Tự sinh theo ngữ cảnh RCA'}
+                      <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#047857', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1px 7px', borderRadius: '999px' }}>
+                        {isAiPlaybook ? 'AI Playbook' : 'Theo ngữ cảnh RCA'}
                       </span>
                     </div>
 
-                    {/* 3 Numbered Steps */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-                      {manualPlaybookSteps.map((stepText, sIdx) => (
-                        <div key={sIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.75rem', color: '#1E293B', lineHeight: 1.4 }}>
-                          <div
-                            style={{
-                              width: '18px',
-                              height: '18px',
-                              borderRadius: '50%',
-                              backgroundColor: '#2563EB',
-                              color: '#FFFFFF',
-                              fontSize: '0.625rem',
-                              fontWeight: 800,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              marginTop: '1px',
-                            }}
-                          >
-                            {sIdx + 1}
+                    {/* Các bước xử lý (tự loại bỏ số thứ tự trùng lặp kiểu "1. 1.") */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '12px' }}>
+                      {manualPlaybookSteps.map((stepText, sIdx) => {
+                        const cleanStep = String(stepText || '').replace(/^\s*\d+\.\s*/, '');
+                        return (
+                          <div key={sIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.75rem', color: '#334155', lineHeight: 1.45 }}>
+                            <div
+                              style={{
+                                width: '19px',
+                                height: '19px',
+                                borderRadius: '50%',
+                                backgroundColor: '#ECFDF5',
+                                border: '1px solid #A7F3D0',
+                                color: '#047857',
+                                fontSize: '0.65rem',
+                                fontWeight: 800,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                marginTop: '1px',
+                              }}
+                            >
+                              {sIdx + 1}
+                            </div>
+                            <span>{cleanStep}</span>
                           </div>
-                          <span>{stepText}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* Button Xem lệnh chi tiết */}
@@ -2814,34 +2869,33 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       onClick={() => setIsPlaybookExpanded(!isPlaybookExpanded)}
                       style={{
                         width: '100%',
-                        backgroundColor: '#2563EB',
-                        color: '#FFFFFF',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '9px 14px',
-                        fontSize: '0.78125rem',
+                        backgroundColor: isPlaybookExpanded ? '#059669' : '#ECFDF5',
+                        color: isPlaybookExpanded ? '#FFFFFF' : '#047857',
+                        border: '1px solid #A7F3D0',
+                        borderRadius: '9px',
+                        padding: '8px 12px',
+                        fontSize: '0.76rem',
                         fontWeight: 700,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '6px',
-                        boxShadow: '0 1px 2px rgba(37, 99, 235, 0.2)',
+                        transition: 'all 0.15s ease',
                       }}
                     >
-                      <Terminal size={14} color="#FFFFFF" />
-                      <span>{isPlaybookExpanded ? 'Ẩn lệnh chi tiết ↑' : 'Xem lệnh chi tiết →'}</span>
+                      <Terminal size={13} />
+                      <span>{isPlaybookExpanded ? 'Ẩn lệnh điều tra ↑' : 'Xem lệnh điều tra nhanh →'}</span>
                     </button>
 
-                    {/* Terminal Command Drawer */}
                     {isPlaybookExpanded && (
-                      <div style={{ marginTop: '10px', backgroundColor: '#0F172A', borderRadius: '6px', padding: '10px 12px', fontSize: '0.71875rem', fontFamily: 'var(--font-mono, monospace)', color: '#F8FAFC' }}>
+                      <div style={{ marginTop: '10px', backgroundColor: '#0B1120', borderRadius: '8px', padding: '10px 12px', fontSize: '0.71rem', fontFamily: 'var(--font-mono, monospace)', color: '#E2E8F0' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ color: '#94A3B8', fontSize: '0.65625rem' }}># Lệnh điều tra nhanh:</span>
+                          <span style={{ color: '#94A3B8', fontSize: '0.66rem' }}># Lệnh điều tra nhanh:</span>
                           <button
                             type="button"
                             onClick={() => handleCopyText(`kubectl logs ${kubectlNsFlag}${realPodName || serviceDisplayName} --tail=50\nkubectl describe pod ${kubectlNsFlag}${realPodName || serviceDisplayName}\nkubectl get pods ${kubectlNsFlag}`, 'playbook-cli')}
-                            style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', fontSize: '0.65625rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                            style={{ background: 'none', border: 'none', color: '#34D399', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}
                           >
                             {copiedKey === 'playbook-cli' ? <Check size={11} color="#4ADE80" /> : <Copy size={11} />}
                             <span>{copiedKey === 'playbook-cli' ? 'Đã sao chép' : 'Sao chép lệnh'}</span>
@@ -2863,21 +2917,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               </div>
 
               {/* ======================================================== */}
-              {/* CARD 6: BÁO CÁO SRE (TÓM TẮT) */}
+              {/* CARD 6: BÁO CÁO SRE (TÓM TẮT GỌN) */}
               {/* ======================================================== */}
               <div
                 style={{
                   backgroundColor: '#F8FAFC',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   border: '1px solid #E2E8F0',
-                  padding: '14px 18px',
+                  padding: '12px 15px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={16} color="#2563EB" />
-                    <span style={{ fontSize: '0.84375rem', fontWeight: 800, color: '#1E293B' }}>
-                      Báo cáo SRE (Tóm tắt)
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileText size={15} color="#059669" />
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>
+                      Báo cáo tóm tắt SRE
                     </span>
                   </div>
                   <button
@@ -2885,60 +2939,59 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     onClick={() => handleCopyText(`${sreSummaryText}\n\n${fullExplanationVi}`, 'sre-report-copy')}
                     aria-label="Sao chép giải trình"
                     style={{
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '5px',
                       padding: '4px 10px',
-                      fontSize: '0.71875rem',
+                      fontSize: '0.72rem',
                       fontWeight: 600,
                       backgroundColor: '#FFFFFF',
                       border: '1px solid #CBD5E1',
-                      borderRadius: '6px',
+                      borderRadius: '7px',
                       cursor: 'pointer',
                       color: '#334155',
                     }}
                   >
-                    {copiedKey === 'sre-report-copy' ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'sre-report-copy' ? 'Đã sao chép' : 'Sao chép báo cáo'}</span>
+                    {copiedKey === 'sre-report-copy' ? <Check size={12} color="#059669" /> : <Copy size={12} />}
+                    <span>{copiedKey === 'sre-report-copy' ? 'Đã sao chép' : 'Sao chép'}</span>
                   </button>
                 </div>
 
-                <div style={{ fontSize: '0.78125rem', color: '#334155', lineHeight: 1.5, marginBottom: '8px' }}>
+                <div style={{ fontSize: '0.76rem', color: '#334155', lineHeight: 1.5 }}>
                   {sreSummaryText}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '8px', borderTop: '1px dashed #CBD5E1' }}>
-                  {fullExplanationVi.split('\n').filter(Boolean).map((line, idx) => (
-                    <div key={idx} style={{ fontSize: '0.75rem', color: '#475569', lineHeight: 1.45 }}>
-                      {line}
-                    </div>
-                  ))}
-                </div>
+                {fullExplanationVi && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '7px', paddingTop: '7px', borderTop: '1px dashed #CBD5E1' }}>
+                    {fullExplanationVi.split('\n').filter(Boolean).map((line, idx) => (
+                      <div key={idx} style={{ fontSize: '0.73rem', color: '#475569', lineHeight: 1.45 }}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </div>
           )}
 
-          {/* TAB 2: LLM I/O & GRU 7 HEADS */}
+          {/* TAB 2: VIỄN TRẮC & 7 ĐẦU RỦI RO AI */}
           {activeTab === 'io' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* ======================================================== */}
-              {/* 2. KẾT QUẢ DỰ BÁO TỪ MÔ HÌNH HỌC SÂU GRU (7 Heads) */}
-              {/* ======================================================== */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '14px' }}>
               <div
                 style={{
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
+                  borderRadius: '12px',
                   border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
                   overflow: 'hidden',
                 }}
               >
                 <div
                   style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#F5F3FF',
-                    borderBottom: '1px solid #DDD6FE',
+                    padding: '10px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderBottom: '1px solid #E2E8F0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -2946,214 +2999,207 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     gap: '8px',
                   }}
                 >
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#6D28D9', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Activity size={16} color="#7C3AED" />
-                    <span>KẾT QUẢ DỰ BÁO TỪ MÔ HÌNH HỌC SÂU AI (7 HEADS ARCHITECTURE)</span>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Activity size={15} color="#7C3AED" />
+                    <span>Dự Báo 7 Đầu Rủi Ro AI</span>
                   </div>
-                  <span style={{ fontSize: '0.6875rem', color: '#5B21B6', fontWeight: 600, backgroundColor: '#EDE9FE', padding: '2px 8px', borderRadius: '4px' }}>
-                    Ngưỡng phân loại chuẩn: {(primaryThreshold * 100).toFixed(0)}%
+                  <span style={{ fontSize: '0.68rem', color: '#6D28D9', fontWeight: 700, backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE', padding: '2px 9px', borderRadius: '999px' }}>
+                    Ngưỡng chuẩn: {(primaryThreshold * 100).toFixed(0)}%
                   </span>
                 </div>
 
-                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {/* BẢNG 7 HEADS VỚI PROGRESS BAR */}
-                  <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                      Chi tiết điểm số &amp; ngưỡng kích hoạt của 7 Heads:
-                    </div>
-                    {riskOutputsAll && Object.keys(riskOutputsAll).length > 0 ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-                        {Object.entries(riskOutputsAll).map(([headName, headData]) => {
-                          const rawConf = headData?.confidence ?? 0;
-                          const confPct = Math.round(rawConf <= 1 ? rawConf * 100 : rawConf);
-                          const thVal = gruThresholds[headName] ?? primaryThreshold;
-                          const thPct = Math.round(thVal <= 1 ? thVal * 100 : thVal);
-                          const isTriggered = confPct >= thPct;
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {riskOutputsAll && Object.keys(riskOutputsAll).length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+                      {Object.entries(riskOutputsAll).map(([headName, headData]) => {
+                        const rawConf = headData?.confidence ?? 0;
+                        const confPct = Math.round(rawConf <= 1 ? rawConf * 100 : rawConf);
+                        const thVal = gruThresholds[headName] ?? primaryThreshold;
+                        const thPct = Math.round(thVal <= 1 ? thVal * 100 : thVal);
+                        const isTriggered = confPct >= thPct;
 
-                          return (
-                            <div
-                              key={headName}
-                              style={{
-                                padding: '10px 12px',
-                                borderRadius: '8px',
-                                backgroundColor: isTriggered ? '#FEF2F2' : '#F8FAFC',
-                                border: isTriggered ? '1px solid #FECACA' : '1px solid #E2E8F0',
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isTriggered ? '#DC2626' : '#334155' }}>
-                                  {HEAD_NAMES_VI[headName] || headName}
-                                </span>
-                                <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: isTriggered ? '#B91C1C' : '#64748B' }}>
-                                  {confPct}% (Ngưỡng {thPct}%)
-                                </span>
-                              </div>
-                              <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div
-                                  style={{
-                                    width: `${Math.min(confPct, 100)}%`,
-                                    height: '100%',
-                                    backgroundColor: isTriggered ? '#DC2626' : '#3B82F6',
-                                    borderRadius: '3px',
-                                    transition: 'width 0.3s ease',
-                                  }}
-                                />
-                              </div>
-                              <div style={{ fontSize: '0.625rem', marginTop: '4px', fontWeight: 600, color: isTriggered ? '#991B1B' : '#64748B' }}>
-                                {isTriggered ? 'VƯỢT NGƯỠNG CẢNH BÁO' : 'Trong giới hạn an toàn'}
-                              </div>
+                        return (
+                          <div
+                            key={headName}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: '9px',
+                              backgroundColor: isTriggered ? '#FEF2F2' : '#F8FAFC',
+                              border: isTriggered ? '1px solid #FECACA' : '1px solid #E2E8F0',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '5px' }}>
+                              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: isTriggered ? '#DC2626' : '#0F172A' }}>
+                                {HEAD_NAMES_VI[headName] || headName}
+                              </span>
+                              <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: isTriggered ? '#B91C1C' : '#64748B', whiteSpace: 'nowrap' }}>
+                                {confPct}% / {thPct}%
+                              </span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '10px 14px',
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #E2E8F0',
-                          borderRadius: '8px',
-                          fontSize: '0.78125rem',
-                          color: '#64748B',
-                        }}
-                      >
-                        Điểm xác suất chi tiết của 7 Heads GRU chưa được lưu trong payload RCA này.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* BẢNG 8 CHỈ SỐ TỔNG HỢP (SUMMARY METRICS) */}
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#EFF6FF',
-                    borderBottom: '1px solid #BFDBFE',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                  }}
-                >
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sliders size={16} color="#2563EB" />
-                    <span>DỮ LIỆU ĐẦU VÀO AI ({formattedTimesteps.length} MỐC VIỄN TRẮC TELEMETRY)</span>
-                  </div>
-                  <span style={{ fontSize: '0.6875rem', color: '#1D4ED8', fontWeight: 600, backgroundColor: '#DBEAFE', padding: '2px 8px', borderRadius: '4px' }}>
-                    {formattedTimesteps.length > 0 ? `${formattedTimesteps.length} mốc telemetry từ CSDL` : 'Không có dữ liệu telemetry'}
-                  </span>
-                </div>
-
-                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {formattedTimesteps.length === 0 && (
+                            <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  width: `${Math.min(confPct, 100)}%`,
+                                  height: '100%',
+                                  backgroundColor: isTriggered ? '#DC2626' : '#059669',
+                                  borderRadius: '999px',
+                                  transition: 'width 0.3s ease',
+                                }}
+                              />
+                            </div>
+                            <div style={{ fontSize: '0.65rem', marginTop: '4px', fontWeight: 600, color: isTriggered ? '#991B1B' : '#64748B' }}>
+                              {isTriggered ? 'Vượt ngưỡng cảnh báo' : 'Trong giới hạn an toàn'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
                     <div
                       style={{
-                        padding: '12px 14px',
+                        padding: '10px 12px',
                         backgroundColor: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
+                        border: '1px dashed #CBD5E1',
                         borderRadius: '8px',
-                        fontSize: '0.78125rem',
+                        fontSize: '0.75rem',
                         color: '#64748B',
                       }}
                     >
-                      Chưa ghi nhận chuỗi viễn trắc đầu vào cho sự cố này trong CSDL.
+                      Điểm xác suất chi tiết của 7 đầu rủi ro AI chưa được lưu trong bản ghi này.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BẢNG CHỈ SỐ VIỄN TRẮC ĐẦU VÀO */}
+              <div
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderBottom: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sliders size={15} color="#059669" />
+                    <span>Dữ Liệu Viễn Trắc Đầu Vào</span>
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: '#047857', fontWeight: 700, backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 9px', borderRadius: '999px', fontFamily: 'var(--font-mono)' }}>
+                    {formattedTimesteps.length > 0 ? `${formattedTimesteps.length} mốc telemetry` : 'Không có telemetry'}
+                  </span>
+                </div>
+
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {formattedTimesteps.length === 0 && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px dashed #CBD5E1',
+                        borderRadius: '8px',
+                        fontSize: '0.75rem',
+                        color: '#64748B',
+                      }}
+                    >
+                      Chưa ghi nhận chuỗi viễn trắc đầu vào cho sự cố này trong cơ sở dữ liệu.
                     </div>
                   )}
                   {metricSummary && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#15803D', textTransform: 'uppercase' }}>CPU (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #10B981' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>CPU (%)</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.cpu.current}%
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#166534' }}>Max: {metricSummary.cpu.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.cpu.max}%</div>
                       </div>
 
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#EFF6FF', border: '1px solid #DBEAFE' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#1D4ED8', textTransform: 'uppercase' }}>RAM (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #3B82F6' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>RAM (%)</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.ram.current}%
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#1E40AF' }}>Max: {metricSummary.ram.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.ram.max}%</div>
                       </div>
 
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase' }}>DISK (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #F59E0B' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>DISK (%)</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.disk.current}%
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#92400E' }}>Max: {metricSummary.disk.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.disk.max}%</div>
                       </div>
 
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#F5F3FF', border: '1px solid #EDE9FE' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#6D28D9', textTransform: 'uppercase' }}>ĐỘ TRỄ (MS)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-                          {metricSummary.latency.current} ms
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #8B5CF6' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>ĐỘ TRỄ</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
+                          {metricSummary.latency.current}ms
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#5B21B6' }}>Max: {metricSummary.latency.max} ms</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.latency.max}ms</div>
                       </div>
 
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#0E7490', textTransform: 'uppercase' }}>REQ RATE</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-                          {metricSummary.request_rate.current} <span style={{ fontSize: '0.6875rem' }}>req/s</span>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #06B6D4' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>REQ RATE</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
+                          {metricSummary.request_rate.current} <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>r/s</span>
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#155E75' }}>Max: {metricSummary.request_rate.max}</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.request_rate.max}</div>
                       </div>
 
-                      <div style={{ padding: '8px 10px', borderRadius: '6px', backgroundColor: metricSummary.http_5xx_rate.max > 0 ? '#FEF2F2' : '#F8FAFC', border: metricSummary.http_5xx_rate.max > 0 ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: metricSummary.http_5xx_rate.max > 0 ? '#DC2626' : '#64748B', textTransform: 'uppercase' }}>LỖI 5XX (%)</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: metricSummary.http_5xx_rate.max > 0 ? '#FEF2F2' : '#F8FAFC', border: metricSummary.http_5xx_rate.max > 0 ? '1px solid #FECACA' : '1px solid #E2E8F0', borderTop: '2px solid #EF4444' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: metricSummary.http_5xx_rate.max > 0 ? '#DC2626' : '#64748B' }}>LỖI 5XX (%)</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.http_5xx_rate.current}%
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#B91C1C' }}>Đỉnh: {metricSummary.http_5xx_rate.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#B91C1C' }}>Đỉnh: {metricSummary.http_5xx_rate.max}%</div>
                       </div>
 
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#FDF2F8', border: '1px solid #FCE7F3' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#BE185D', textTransform: 'uppercase' }}>RESTARTS</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #EC4899' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>RESTARTS</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.pod_restart_count}
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#9D174D' }}>K8s Restarts</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>K8s Restarts</div>
                       </div>
 
-                      <div style={{ padding: '4px 6px', borderRadius: '5px', backgroundColor: '#EEF2FF', border: '1px solid #E0E7FF' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#4338CA', textTransform: 'uppercase' }}>REPLICAS</div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                      <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #6366F1' }}>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>REPLICAS</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.replica_count}
                         </div>
-                        <div style={{ fontSize: '0.625rem', color: '#3730A3' }}>Pods cụm</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Pods cụm</div>
                       </div>
                     </div>
                   )}
 
-                  {/* BẢNG NHẬT KÝ MỐC VIỄN TRẮC (Audit Table) */}
                   {formattedTimesteps.length > 0 && (
-                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'center' }}>
+                    <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '9px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.73rem', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
                         <thead>
-                          <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
-                            <th style={{ padding: '3px 5px' }}>Mốc</th>
-                            <th style={{ padding: '3px 5px' }}>Thời Điểm</th>
-                            <th style={{ padding: '3px 5px' }}>CPU (%)</th>
-                            <th style={{ padding: '3px 5px' }}>RAM (%)</th>
-                            <th style={{ padding: '3px 5px' }}>Disk (%)</th>
-                            <th style={{ padding: '3px 5px' }}>Req Rate</th>
-                            <th style={{ padding: '3px 5px' }}>Độ Trễ</th>
-                            <th style={{ padding: '3px 5px' }}>5xx (%)</th>
-                            <th style={{ padding: '3px 5px' }}>Restarts</th>
-                            <th style={{ padding: '3px 5px' }}>Replicas</th>
+                          <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: 700 }}>
+                            <th style={{ padding: '6px 5px' }}>Mốc</th>
+                            <th style={{ padding: '6px 5px' }}>Thời điểm</th>
+                            <th style={{ padding: '6px 5px' }}>CPU</th>
+                            <th style={{ padding: '6px 5px' }}>RAM</th>
+                            <th style={{ padding: '6px 5px' }}>Disk</th>
+                            <th style={{ padding: '6px 5px' }}>Req/s</th>
+                            <th style={{ padding: '6px 5px' }}>Độ trễ</th>
+                            <th style={{ padding: '6px 5px' }}>5xx</th>
+                            <th style={{ padding: '6px 5px' }}>Restarts</th>
+                            <th style={{ padding: '6px 5px' }}>Pods</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -3162,21 +3208,21 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               key={idx}
                               style={{
                                 borderBottom: '1px solid #F1F5F9',
-                                backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                                backgroundColor: '#FFFFFF',
                               }}
                             >
-                              <td style={{ padding: '3px 5px', fontWeight: 700, color: '#4F46E5', backgroundColor: '#EEF2FF' }}>
+                              <td style={{ padding: '5px', fontWeight: 700, color: '#047857', backgroundColor: '#ECFDF5' }}>
                                 {row.stepLabel}
                               </td>
-                              <td style={{ padding: '3px 5px', color: '#64748B' }}>{row.displayTime || '-'}</td>
-                              <td style={{ padding: '3px 5px', color: row.cpu > 70 ? '#DC2626' : '#10B981', fontWeight: row.cpu > 70 ? 700 : 400 }}>{row.cpu}%</td>
-                              <td style={{ padding: '3px 5px', color: '#3B82F6' }}>{row.ram}%</td>
-                              <td style={{ padding: '3px 5px', color: '#F59E0B' }}>{row.disk}%</td>
-                              <td style={{ padding: '3px 5px', color: '#06B6D4' }}>{row.request_rate}</td>
-                              <td style={{ padding: '3px 5px', color: row.latency > 100 ? '#D97706' : '#8B5CF6' }}>{row.latency} ms</td>
-                              <td style={{ padding: '3px 5px', color: row.http_5xx_rate > 0 ? '#DC2626' : '#64748B' }}>{row.http_5xx_rate}%</td>
-                              <td style={{ padding: '3px 5px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>{row.pod_restart_count}</td>
-                              <td style={{ padding: '3px 5px', color: '#4338CA' }}>{row.replica_count}</td>
+                              <td style={{ padding: '5px', color: '#64748B' }}>{row.displayTime || '-'}</td>
+                              <td style={{ padding: '5px', color: row.cpu > 70 ? '#DC2626' : '#059669', fontWeight: row.cpu > 70 ? 700 : 500 }}>{row.cpu}%</td>
+                              <td style={{ padding: '5px', color: '#2563EB' }}>{row.ram}%</td>
+                              <td style={{ padding: '5px', color: '#D97706' }}>{row.disk}%</td>
+                              <td style={{ padding: '5px', color: '#0891B2' }}>{row.request_rate}</td>
+                              <td style={{ padding: '5px', color: row.latency > 100 ? '#D97706' : '#7C3AED' }}>{row.latency}ms</td>
+                              <td style={{ padding: '5px', color: row.http_5xx_rate > 0 ? '#DC2626' : '#64748B' }}>{row.http_5xx_rate}%</td>
+                              <td style={{ padding: '5px', color: row.pod_restart_count > 0 ? '#DC2626' : '#64748B' }}>{row.pod_restart_count}</td>
+                              <td style={{ padding: '5px', color: '#334155', fontWeight: 600 }}>{row.replica_count}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3185,8 +3231,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   )}
                 </div>
               </div>
-
-
             </div>
           )}
             </>

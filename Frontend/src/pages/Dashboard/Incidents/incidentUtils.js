@@ -95,11 +95,12 @@ export const translateActionMessageToVi = (rawMsg, targetName = '', actionFriend
   if (scaleMatch) {
     const sTarget = scaleMatch[1] || targetName;
     const sDir = scaleMatch[2].toLowerCase() === 'scale_up' ? 'mở rộng' : 'thu hẹp';
+    const sPrep = scaleMatch[2].toLowerCase() === 'scale_up' ? 'lên' : 'xuống';
     const sFrom = scaleMatch[3];
     const sTo = scaleMatch[4];
     const sNs = scaleMatch[5] || resolvedNs;
     const fromText = sFrom === 'unknown' ? 'số lượng hiện tại' : sFrom;
-    return `Đã điều chỉnh quy mô (${sDir}) thành công cho Deployment "${sTarget}" từ ${fromText} lên ${sTo} bản sao trong namespace "${sNs}".`;
+    return `Đã điều chỉnh quy mô (${sDir}) thành công cho Deployment "${sTarget}" từ ${fromText} ${sPrep} ${sTo} bản sao trong namespace "${sNs}".`;
   }
 
   // 4. Scale skipped at minimum

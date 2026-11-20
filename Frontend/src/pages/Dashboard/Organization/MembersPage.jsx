@@ -25,7 +25,8 @@ import {
   User,
   Phone,
   Calendar,
-  Briefcase
+  Briefcase,
+  Mail,
 } from 'lucide-react';
 
 const RBAC_PERMISSIONS = [
@@ -240,31 +241,32 @@ export const MembersPage = () => {
   };
 
   return (
-    <div className="dashboard-members-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-members-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* 1. Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: '#EFF6FF',
-              border: '1px solid #BFDBFE',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Users size={20} color="#2563EB" />
+            <Users size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Thành Viên & Ma Trận Phân Quyền
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Thành Viên &amp; Phân Quyền
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Phân quyền chặt chẽ theo nguyên tắc tối thiểu (Least Privilege) cho SME Owner, DevOps và Viewer
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Quản lý nhân sự và phân quyền truy cập theo vai trò SME Owner, DevOps &amp; Viewer
             </p>
           </div>
         </div>
@@ -274,22 +276,23 @@ export const MembersPage = () => {
             type="button"
             onClick={() => setShowInviteModal(true)}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--dash-primary)',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
+              padding: '0 14px',
+              backgroundColor: '#059669',
+              border: '1px solid #059669',
+              borderRadius: '10px',
               color: '#FFFFFF',
-              fontSize: '0.8125rem',
+              fontSize: '0.8rem',
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.2)',
             }}
           >
-            <UserPlus size={16} />
-            <span>Mời Thành Viên Mới</span>
+            <UserPlus size={15} />
+            <span>Mời Thành Viên</span>
           </button>
         ) : (
           <div
@@ -297,28 +300,66 @@ export const MembersPage = () => {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '6px 12px',
-              backgroundColor: '#F1F5F9',
-              borderRadius: 'var(--dash-radius-full)',
+              height: '32px',
+              padding: '0 12px',
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: '999px',
               color: '#475569',
-              fontSize: '0.75rem',
+              fontSize: '0.74rem',
               fontWeight: 600,
             }}
           >
             <Eye size={14} />
-            <span>Chế độ Xem Chỉ Đọc (Không có quyền mời/sửa thành viên)</span>
+            <span>Chế độ Chỉ Đọc</span>
           </div>
         )}
       </div>
 
+      {/* Hàng 3 Thẻ KPI Tóm Tắt Nhân Sự */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #059669', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG NHÂN SỰ &amp; LỜI MỜI</span>
+            <Users size={14} color="#059669" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{counts.all}</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Tài khoản liên kết</span>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #10B981', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐANG HOẠT ĐỘNG</span>
+            <CheckCircle2 size={14} color="#10B981" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>{counts.active}</span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>Thành viên chính thức</span>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #F59E0B', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LỜI MỜI ĐANG CHỜ</span>
+            <Mail size={14} color="#F59E0B" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: counts.invited > 0 ? '#D97706' : '#0F172A' }}>{counts.invited}</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Chờ xác nhận qua email</span>
+          </div>
+        </div>
+      </div>
+
       {/* 3. Member & Invitation List Table Card */}
-      <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
+      <div className="dash-card" style={{ padding: '0', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)', overflow: 'hidden' }}>
         {/* Card Header & Controls */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Quản Lý Danh Sách Nhân Sự & Lời Mời
+              <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Quản Lý Danh Sách Nhân Sự &amp; Lời Mời
               </h3>
             </div>
 
@@ -327,41 +368,44 @@ export const MembersPage = () => {
               onClick={fetchMembers}
               disabled={isLoading}
               style={{
+                height: '32px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '6px 12px',
+                padding: '0 12px',
                 backgroundColor: '#FFFFFF',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-md)',
-                color: 'var(--dash-text-secondary)',
-                fontSize: '0.75rem',
+                border: '1px solid rgba(203, 213, 225, 0.9)',
+                borderRadius: '9px',
+                boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+                color: '#334155',
+                fontSize: '0.76rem',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
               title="Tải lại danh sách"
             >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
               <span>Làm mới</span>
             </button>
           </div>
 
           {/* Filter & Search Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
             {/* Status Tabs */}
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+            <div style={{ display: 'inline-flex', gap: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', padding: '3px', borderRadius: '10px' }}>
               <button
                 type="button"
                 onClick={() => setActiveTab('ALL')}
                 style={{
-                  padding: '5px 12px',
+                  height: '28px',
+                  padding: '0 12px',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '7px',
                   fontSize: '0.75rem',
-                  fontWeight: activeTab === 'ALL' ? 700 : 500,
+                  fontWeight: activeTab === 'ALL' ? 700 : 600,
                   backgroundColor: activeTab === 'ALL' ? '#FFFFFF' : 'transparent',
-                  color: activeTab === 'ALL' ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                  boxShadow: activeTab === 'ALL' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                  color: activeTab === 'ALL' ? '#047857' : '#64748B',
+                  boxShadow: activeTab === 'ALL' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                   cursor: 'pointer',
                 }}
               >
@@ -371,14 +415,15 @@ export const MembersPage = () => {
                 type="button"
                 onClick={() => setActiveTab('ACTIVE')}
                 style={{
-                  padding: '5px 12px',
+                  height: '28px',
+                  padding: '0 12px',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '7px',
                   fontSize: '0.75rem',
-                  fontWeight: activeTab === 'ACTIVE' ? 700 : 500,
+                  fontWeight: activeTab === 'ACTIVE' ? 700 : 600,
                   backgroundColor: activeTab === 'ACTIVE' ? '#FFFFFF' : 'transparent',
-                  color: activeTab === 'ACTIVE' ? '#059669' : 'var(--dash-text-secondary)',
-                  boxShadow: activeTab === 'ACTIVE' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                  color: activeTab === 'ACTIVE' ? '#059669' : '#64748B',
+                  boxShadow: activeTab === 'ACTIVE' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                   cursor: 'pointer',
                 }}
               >
@@ -388,14 +433,15 @@ export const MembersPage = () => {
                 type="button"
                 onClick={() => setActiveTab('INVITED')}
                 style={{
-                  padding: '5px 12px',
+                  height: '28px',
+                  padding: '0 12px',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: '7px',
                   fontSize: '0.75rem',
-                  fontWeight: activeTab === 'INVITED' ? 700 : 500,
+                  fontWeight: activeTab === 'INVITED' ? 700 : 600,
                   backgroundColor: activeTab === 'INVITED' ? '#FFFFFF' : 'transparent',
-                  color: activeTab === 'INVITED' ? '#D97706' : 'var(--dash-text-secondary)',
-                  boxShadow: activeTab === 'INVITED' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                  color: activeTab === 'INVITED' ? '#D97706' : '#64748B',
+                  boxShadow: activeTab === 'INVITED' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                   cursor: 'pointer',
                 }}
               >
@@ -405,8 +451,8 @@ export const MembersPage = () => {
 
             {/* Search and Role Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', width: '220px' }}>
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--dash-text-muted)' }} />
+              <div style={{ position: 'relative', width: '240px', maxWidth: '100%' }}>
+                <Search size={14} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
                 <input
                   type="text"
                   placeholder="Tìm theo tên hoặc email..."
@@ -414,10 +460,13 @@ export const MembersPage = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '6px 10px 6px 30px',
-                    fontSize: '0.75rem',
-                    border: '1px solid var(--dash-border)',
-                    borderRadius: 'var(--dash-radius-md)',
+                    height: '34px',
+                    padding: '0 12px 0 32px',
+                    fontSize: '0.8rem',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    backgroundColor: '#F8FAFC',
+                    color: '#0F172A',
                     outline: 'none',
                   }}
                 />
@@ -427,12 +476,15 @@ export const MembersPage = () => {
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value)}
                 style={{
-                  padding: '6px 10px',
-                  fontSize: '0.75rem',
-                  border: '1px solid var(--dash-border)',
-                  borderRadius: 'var(--dash-radius-md)',
-                  color: 'var(--dash-text-secondary)',
-                  backgroundColor: '#FFFFFF',
+                  height: '34px',
+                  padding: '0 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  color: '#334155',
+                  backgroundColor: '#F8FAFC',
+                  outline: 'none',
                 }}
               >
                 <option value="ALL">Tất Cả Vai Trò</option>

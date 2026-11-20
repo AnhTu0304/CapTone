@@ -177,20 +177,19 @@ describe('Platform Admin AI Module', () => {
       const { rerender } = render(<AIModelsTable models={mockModels} />);
 
       // Headers & content check
-      expect(screen.getByText('Tên Mô Hình (Model Name)')).toBeInTheDocument();
-      expect(screen.getByText('Phân Loại (Model Type)')).toBeInTheDocument();
-      expect(screen.getByText('Phiên Bản (Version)')).toBeInTheDocument();
-      expect(screen.getByText('Khung Công Nghệ (Framework)')).toBeInTheDocument();
-      expect(screen.getByText('Trạng Thái (Status)')).toBeInTheDocument();
-      expect(screen.getByText('Tập Dữ Liệu (Dataset)')).toBeInTheDocument();
-      expect(screen.getByText('Chỉ Số Đánh Giá (Evaluation Metrics)')).toBeInTheDocument();
+      expect(screen.getByText(/Tên Mô Hình/)).toBeInTheDocument();
+      expect(screen.getByText(/Phân Loại/)).toBeInTheDocument();
+      expect(screen.getByText(/Phiên Bản/)).toBeInTheDocument();
+      expect(screen.getByText(/Khung Công Nghệ/)).toBeInTheDocument();
+      expect(screen.getByText(/Trạng Thái/)).toBeInTheDocument();
+      expect(screen.getByText(/Tập Dữ Liệu/)).toBeInTheDocument();
+      expect(screen.queryByText('Chỉ Số Đánh Giá')).not.toBeInTheDocument();
 
       // Row values
       expect(screen.getByText('Kernel Anomaly Detector')).toBeInTheDocument();
       expect(screen.getByText('v2.1.0')).toBeInTheDocument();
       expect(screen.getByText('PyTorch / LibTorch C++')).toBeInTheDocument();
       expect(screen.getByText('Kernel Traces v3.2')).toBeInTheDocument();
-      expect(screen.getByText('Acc: 98.4% • Precision: 97.6%')).toBeInTheDocument();
 
       // Empty state check
       rerender(<AIModelsTable models={[]} />);

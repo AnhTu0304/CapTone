@@ -350,7 +350,7 @@ export const UserProfileDropdown = ({
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              maxWidth: '140px',
+              maxWidth: '105px',
             }}
           >
             {displayName}
@@ -374,6 +374,7 @@ export const UserProfileDropdown = ({
         </div>
 
         <ChevronDown
+          className="topheader-avatar-chevron"
           size={14}
           color="#94A3B8"
           style={{

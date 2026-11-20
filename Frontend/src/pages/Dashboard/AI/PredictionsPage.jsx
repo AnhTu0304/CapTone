@@ -672,6 +672,9 @@ export const normalizeServiceName = (val) => {
   const lower = str.toLowerCase();
   if (/^mongodb-\d+$/i.test(lower)) return 'mongodb';
   if (lower === 'ecommerce-store') return 'ecommerce-store-app';
+  if (lower === 'otel-collector-opentelemetry-collector') return 'opentelemetry-collector';
+  if (lower === 'prometheus-kube-state-metrics') return 'kube-state-metrics';
+  if (lower === 'prometheus-kube-prometheus-operator') return 'kube-prometheus-stack-operator';
 
   // Loại bỏ các dịch vụ mẫu (seed cũ) không tồn tại trên K8s và dịch vụ hệ thống
   const IGNORED_SERVICES = new Set([
@@ -689,6 +692,24 @@ export const normalizeServiceName = (val) => {
     'metrics-server',
     'selfheal-agent',
     'storage-provisioner',
+    // Hạ tầng quan sát nội bộ cụm K8s
+    'otel-collector-opentelemetry-collector',
+    'opentelemetry-collector',
+    'prometheus-kube-prometheus-operator',
+    'kube-prometheus-stack-operator',
+    'prometheus-kube-state-metrics',
+    'kube-state-metrics',
+    'prometheus-node-exporter',
+    'prometheus-prometheus-node-exporter',
+    'prometheus',
+    'prometheus-operated',
+    'prometheus-kube-prometheus-prometheus',
+    'prometheus-kube-prometheus-coredns',
+    'prometheus-kube-prometheus-kubelet',
+    // Dịch vụ cũ đã ngừng hoạt động (đã xóa mềm)
+    'chaos-testagent2',
+    'selfheal-test-app',
+    'sme-order-service',
   ]);
   if (IGNORED_SERVICES.has(lower)) return '';
 
@@ -735,60 +756,31 @@ export const PredictionsPage = () => {
 
 
   // Danh sách các dịch vụ hợp lệ của Cụm hiện tại (tải động từ telemetry & Backend)
-
   const availableWorkloads = useMemo(() => {
-
     if (!isAgentConnected) return [];
-
     const set = new Set();
-
-    if (Array.isArray(registeredWorkloads)) {
-
+    if (Array.isArray(registeredWorkloads) && registeredWorkloads.length > 0) {
       registeredWorkloads.forEach((w) => {
-
-        const name = normalizeServiceName(w);
-
+        const rawName = typeof w === 'string' ? w : w?.name;
+        const name = normalizeServiceName(rawName);
         if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
-
           set.add(name);
-
         }
-
       });
-
     }
 
-    predictions.forEach((p) => {
-
-      const name = normalizeServiceName(p.workload_name || p.service_id);
-
-      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
-
-    });
-
-    recommendations.forEach((r) => {
-
-      const name = normalizeServiceName(
-
-        r.target_name || r.target_id || (r.incident_title?.includes(' on ') ? r.incident_title.split(' on ')[1] : null)
-
-      );
-
-      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
-
-    });
-
-    healingActions.forEach((a) => {
-
-      const name = normalizeServiceName(a.target_name || a.target_id);
-
-      if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) set.add(name);
-
-    });
+    // Nếu registeredWorkloads chưa có, fallback lấy từ predictions còn hiệu lực
+    if (set.size === 0 && Array.isArray(predictions)) {
+      predictions.forEach((p) => {
+        const name = normalizeServiceName(p.workload_name || p.service_id);
+        if (name && name !== '-' && name !== 'undefined' && name !== 'selfheal-agent' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
+          set.add(name);
+        }
+      });
+    }
 
     return Array.from(set).filter(Boolean);
-
-  }, [isAgentConnected, registeredWorkloads, predictions, recommendations, healingActions]);
+  }, [isAgentConnected, registeredWorkloads, predictions]);
 
 
 
@@ -4095,12 +4087,6 @@ export const PredictionsPage = () => {
                     <div style={{ color: '#334155', fontSize: '0.78125rem' }}>
 
                       <strong style={{ color: '#1E3A8A' }}>Cơ chế phân loại rủi ro AI đa nhãn:</strong> Mô hình học máy của hệ thống phân tích chuỗi thời gian gồm đúng <strong style={{ color: '#1E3A8A' }}>12 bước quan sát viễn trắc (cửa sổ 60 giây)</strong> và tính toán độc lập xác suất cho 6 nguy cơ bão hòa: CPU, OOM, Disk Full, High Latency, 5xx Spikes, Traffic Overload.
-
-                    </div>
-
-                    <div style={{ marginTop: '8px', color: '#64748B', fontSize: '0.75rem', fontStyle: 'italic', borderTop: '1px dashed #E2E8F0', paddingTop: '6px' }}>
-
-                      AI Backend <strong>không sinh số liệu dự báo thời gian ảo</strong>; biểu đồ cho phép bạn bật/tắt độc lập từng đường viễn trắc để soi từng biến số đầu vào thực tế.
 
                     </div>
 

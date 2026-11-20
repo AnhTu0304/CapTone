@@ -412,26 +412,29 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
 
   return (
-    <div className="cluster-detail-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="cluster-detail-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Top Navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
         <button
           type="button"
           onClick={handleBack}
           style={{
+            height: '32px',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '8px',
-            background: 'none',
-            border: 'none',
-            padding: '6px 0',
-            color: 'var(--dash-primary)',
-            fontSize: '0.875rem',
+            gap: '6px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid rgba(203, 213, 225, 0.9)',
+            borderRadius: '9px',
+            padding: '0 12px',
+            color: '#047857',
+            fontSize: '0.8rem',
             fontWeight: 700,
+            boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
             cursor: 'pointer',
           }}
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={14} />
           <span>Quay lại danh sách Cụm K8s</span>
         </button>
       </div>
@@ -440,60 +443,63 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       <div
         className="dash-card"
         style={{
-          padding: '28px',
+          padding: '20px 22px',
           backgroundColor: '#FFFFFF',
-          borderRadius: 'var(--dash-radius-lg)',
-          border: '1px solid var(--dash-border)',
+          borderRadius: '14px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
+          gap: '16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div
               style={{
-                width: '54px',
-                height: '54px',
+                width: '46px',
+                height: '46px',
                 borderRadius: '12px',
-                backgroundColor: 'var(--dash-mint-100)',
-                color: 'var(--dash-primary)',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                color: '#059669',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <Server size={30} />
+              <Server size={24} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--dash-text-primary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h1 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: '#0F172A', letterSpacing: '-0.02em' }}>
                   {clusterData.name}
                 </h1>
                 <span
                   style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 800,
-                    padding: '3px 10px',
-                    borderRadius: 'var(--dash-radius-full)',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '2px 9px',
+                    borderRadius: '999px',
                     backgroundColor: isProd ? '#ECFDF5' : '#EFF6FF',
-                    color: isProd ? '#059669' : '#2563EB',
+                    color: isProd ? '#047857' : '#2563EB',
                     border: `1px solid ${isProd ? '#A7F3D0' : '#BFDBFE'}`,
-                    letterSpacing: '0.04em',
+                    letterSpacing: '0.03em',
                   }}
                 >
                   {clusterData.environment_type || 'PRODUCTION'}
                 </span>
                 <span
                   style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 800,
-                    padding: '3px 10px',
-                    borderRadius: 'var(--dash-radius-full)',
-                    backgroundColor: '#F1F5F9',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '2px 9px',
+                    borderRadius: '999px',
+                    backgroundColor: '#F8FAFC',
                     color: '#475569',
-                    border: '1px solid #CBD5E1',
+                    border: '1px solid #E2E8F0',
                   }}
                 >
                   {clusterData.provider || 'Kubernetes'}
@@ -501,10 +507,10 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 {/* 4. Agent Status Badge */}
                 <span
                   style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 800,
-                    padding: '3px 10px',
-                    borderRadius: 'var(--dash-radius-full)',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '2px 9px',
+                    borderRadius: '999px',
                     backgroundColor: statusBg,
                     color: statusColor,
                     border: `1px solid ${statusColor}40`,
@@ -519,20 +525,20 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               </div>
 
               {/* Thông tin Môi Trường & Tổ chức chi tiết */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px', fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px', fontSize: '0.78rem', color: '#64748B', flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Building size={13} color="var(--dash-text-muted)" />
-                  Tổ chức: <strong style={{ color: 'var(--dash-text-primary)' }}>{clusterData.organization_name || currentOrg?.name || 'Doanh Nghiệp'}</strong>
+                  <Building size={13} color="#94A3B8" />
+                  Tổ chức: <strong style={{ color: '#0F172A' }}>{clusterData.organization_name || currentOrg?.name || 'Doanh Nghiệp'}</strong>
                 </span>
                 <span>&bull;</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Layers size={13} color="var(--dash-text-muted)" />
-                  Môi trường: <strong style={{ color: 'var(--dash-text-primary)' }}>{clusterData.environment_name} ({clusterData.environment_code || 'prod'})</strong>
+                  <Layers size={13} color="#94A3B8" />
+                  Môi trường: <strong style={{ color: '#0F172A' }}>{clusterData.environment_name} ({clusterData.environment_code || 'prod'})</strong>
                 </span>
                 <span>&bull;</span>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>UUID: {clusterData.id?.slice(0, 18)}...</span>
                 <span>&bull;</span>
-                <span>K8s: <strong style={{ color: 'var(--dash-text-primary)' }}>{clusterData.kubernetes_version || 'Chưa cập nhật'}</strong></span>
+                <span>K8s: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{clusterData.kubernetes_version || 'Chưa cập nhật'}</strong></span>
                 <span>&bull;</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Clock size={13} /> Khởi tạo: {new Date(clusterData.created_at).toLocaleDateString('vi-VN')}
@@ -546,19 +552,19 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         {pollingError && (
           <div
             style={{
-              padding: '10px 16px',
+              padding: '10px 14px',
               backgroundColor: '#FEF2F2',
               border: '1px solid #FECACA',
-              borderRadius: '8px',
+              borderRadius: '10px',
               color: '#991B1B',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              fontSize: '0.8125rem',
+              fontSize: '0.8rem',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertTriangle size={16} />
+              <AlertTriangle size={15} />
               <span>
                 Không thể làm mới trạng thái tài nguyên tự động ({pollingError.message}). Dữ liệu đang hiển thị từ lần quan sát trước.
               </span>
@@ -571,10 +577,10 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 color: '#FFFFFF',
                 border: 'none',
                 padding: '4px 10px',
-                borderRadius: '4px',
+                borderRadius: '7px',
                 cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.75rem',
+                fontWeight: 700,
+                fontSize: '0.74rem',
               }}
             >
               Thử Lại
@@ -586,18 +592,18 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         {liveFreshness && (liveFreshness.state === 'STALE' || !liveFreshness.agent_connected) && (
           <div
             style={{
-              padding: '10px 16px',
+              padding: '10px 14px',
               backgroundColor: '#FFFBEB',
               border: '1px solid #FDE68A',
-              borderRadius: '8px',
+              borderRadius: '10px',
               color: '#92400E',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontSize: '0.8125rem',
+              fontSize: '0.8rem',
             }}
           >
-            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} />
             <span>
               {liveFreshness.warning || 'Dữ liệu quan sát đã cũ hoặc Agent mất kết nối. Trạng thái hiện tại chưa thể xác minh.'}
             </span>
@@ -605,58 +611,62 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         )}
 
         {/* 5 Quick KPI Summary Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', paddingTop: '10px', borderTop: '1px solid var(--dash-border)' }}>
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Activity size={14} color={controlPlaneColor} /> Control Plane:
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '10px', paddingTop: '12px', borderTop: '1px solid #F1F5F9' }}>
+          <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: `2.5px solid ${controlPlaneColor}`, borderRadius: '11px' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Control Plane</span>
+              <Activity size={13} color={controlPlaneColor} />
             </span>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: controlPlaneColor, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {isControlPlaneHealthy ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: controlPlaneColor, marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              {isControlPlaneHealthy ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
               <span>{controlPlaneText}</span>
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Radio size={14} color="var(--dash-primary)" /> Tác tử eBPF Agent:
+          <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: `2.5px solid ${statusDot}`, borderRadius: '11px' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Tác tử eBPF Agent</span>
+              <Radio size={13} color="#059669" />
             </span>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: statusColor, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusDot }} />
+            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: statusColor, marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: statusDot }} />
               <span>
                 {(isOnline || isDegraded) ? `Online${latestLatency != null ? ` (${latestLatency} ms)` : ''}` : (isConnecting ? 'Chờ kết nối...' : 'Offline')}
               </span>
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Cpu size={14} color="#2563EB" /> Máy chủ Nodes:
+          <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2.5px solid #3B82F6', borderRadius: '11px' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Máy chủ Nodes</span>
+              <Cpu size={13} color="#3B82F6" />
             </span>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '5px' }}>
               {nodes.length > 0 ? (
                 <>
                   {nodes.length} Nodes &bull;{' '}
-                  <span style={{ fontSize: '0.8125rem', color: readyNodesCount === nodes.length ? '#059669' : '#DC2626', fontWeight: 700 }}>
+                  <span style={{ fontSize: '0.78rem', color: readyNodesCount === nodes.length ? '#059669' : '#DC2626', fontWeight: 700 }}>
                     {readyNodesCount}/{nodes.length} Ready
                   </span>
                 </>
               ) : (
-                <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Nodes &bull; Chờ kết nối...</span>
+                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>0 Nodes &bull; Chờ kết nối...</span>
               )}
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Box size={14} color="#7C3AED" /> Khối lượng Pods:
+          <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2.5px solid #8B5CF6', borderRadius: '11px' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Khối lượng Pods</span>
+              <Box size={13} color="#8B5CF6" />
             </span>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '5px' }}>
               {pods.length > 0 ? (
                 <>
                   {pods.length} Pods &bull;{' '}
                   <span
                     style={{
-                      fontSize: '0.8125rem',
+                      fontSize: '0.78rem',
                       color: crashLoopPodsCount > 0 ? '#DC2626' : '#059669',
                       fontWeight: 700,
                     }}
@@ -665,22 +675,23 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </span>
                 </>
               ) : (
-                <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Pods &bull; Chưa có dữ liệu</span>
+                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>0 Pods &bull; Chưa có dữ liệu</span>
               )}
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Layers size={14} color="#059669" /> Deployments & Replicas:
+          <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2.5px solid #10B981', borderRadius: '11px' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Deployments</span>
+              <Layers size={13} color="#10B981" />
             </span>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '5px' }}>
               {deployments.length > 0 ? (
                 <>
                   {deployments.length} Deps &bull;{' '}
                   <span
                     style={{
-                      fontSize: '0.8125rem',
+                      fontSize: '0.78rem',
                       color: degradedDeploymentsCount > 0 ? '#DC2626' : '#059669',
                       fontWeight: 700,
                     }}
@@ -689,15 +700,15 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </span>
                 </>
               ) : (
-                <span style={{ fontSize: '0.875rem', color: '#64748B', fontWeight: 600 }}>0 Deployments</span>
+                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>0 Deployments</span>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs Navigation Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--dash-border)', paddingBottom: '0px', overflowX: 'auto' }}>
+      {/* Tabs Navigation Bar (Segmented Pill Style) */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '12px', alignSelf: 'flex-start', maxWidth: '100%', overflowX: 'auto' }}>
         {[
           { id: 'agent', label: 'Quản Lý & Kết Nối Agent', icon: Radio, count: null },
           { id: 'logs', label: 'Nhật Ký Kết Nối (Connection Logs)', icon: FileText, count: connectionLogs.length },
@@ -710,32 +721,35 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                display: 'flex',
+                height: '34px',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '12px 18px',
+                gap: '7px',
+                padding: '0 14px',
                 border: 'none',
-                background: 'none',
-                borderBottom: isActive ? '3px solid var(--dash-primary)' : '3px solid transparent',
-                color: isActive ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                fontWeight: isActive ? 700 : 500,
-                fontSize: '0.875rem',
+                borderRadius: '8px',
+                backgroundColor: isActive ? '#FFFFFF' : 'transparent',
+                color: isActive ? '#047857' : '#475569',
+                boxShadow: isActive ? '0 1px 4px rgba(15, 23, 42, 0.08)' : 'none',
+                fontWeight: isActive ? 700 : 600,
+                fontSize: '0.8rem',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 whiteSpace: 'nowrap',
               }}
             >
-              <Icon size={16} />
+              <Icon size={14} />
               <span>{tab.label}</span>
               {tab.count !== null && (
                 <span
                   style={{
-                    fontSize: '0.6875rem',
-                    padding: '2px 7px',
-                    borderRadius: '10px',
-                    backgroundColor: isActive ? 'var(--dash-mint-100)' : '#F1F5F9',
-                    color: isActive ? 'var(--dash-primary)' : '#64748B',
+                    fontSize: '0.68rem',
+                    padding: '1px 7px',
+                    borderRadius: '999px',
+                    backgroundColor: isActive ? '#ECFDF5' : '#E2E8F0',
+                    color: isActive ? '#059669' : '#475569',
                     fontWeight: 700,
+                    fontFamily: 'var(--font-mono)',
                   }}
                 >
                   {tab.count}
@@ -750,23 +764,25 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       {/* TAB 1: QUẢN LÝ AGENT, KẾT NỐI, ROTATE TOKEN & CẤU HÌNH         */}
       {/* ============================================================== */}
       {activeTab === 'agent' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* 2 Top Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
             
             {/* 4. Agent Status Card */}
-            <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="dash-card" style={{ padding: '18px 20px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Radio size={20} color="var(--dash-primary)" />
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Tác tử Giám Sát eBPF Sensor</h3>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '9px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Radio size={16} color="#059669" />
+                  </div>
+                  <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>Tác tử Giám Sát eBPF Sensor</h3>
                 </div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: statusColor, backgroundColor: statusBg, padding: '3px 10px', borderRadius: '6px', border: `1px solid ${statusColor}30` }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: statusColor, backgroundColor: statusBg, padding: '3px 10px', borderRadius: '999px', border: `1px solid ${statusColor}30` }}>
                   {agentStatusText}
                 </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8125rem', backgroundColor: 'var(--dash-bg-canvas)', padding: '14px', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', fontSize: '0.8rem', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--dash-text-secondary)' }}>Tên Tác Tử:</span>
                   <strong>{clusterData.agent_name || `${clusterData.name}-agent`}</strong>

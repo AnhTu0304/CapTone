@@ -191,17 +191,24 @@ export const telemetryService = {
 
   /**
    * Fetch comprehensive real-time telemetry summary
+   * Pass options = { clusterId, lite: true } for lightweight fast dashboard KPI fetch
    */
-  async getLiveSummary(serviceId = 'sme-order-service') {
+  async getLiveSummary(serviceId = 'sme-order-service', options = {}) {
     try {
-      const res = await fetch(`${API_BASE_URL}/telemetry/live-summary?service_id=${serviceId}`, {
+      const qs = new URLSearchParams();
+      if (serviceId) qs.set('service_id', serviceId);
+      if (options?.clusterId) qs.set('cluster_id', options.clusterId);
+      if (options?.lite) qs.set('lite', 'true');
+      const res = await fetch(`${API_BASE_URL}/telemetry/live-summary?${qs.toString()}`, {
         method: 'GET',
         headers: getHeaders(),
+        signal: options?.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return json.data;
     } catch (err) {
+      if (err?.name === 'AbortError') return null;
       console.warn('[telemetryService] getLiveSummary fallback:', err.message);
       return null;
     }
@@ -762,7 +769,7 @@ export const telemetryService = {
         const protocol = isSecure ? 'wss:' : 'ws:';
         // Connect to port 5000 if running locally on port 3000, else window.location.host
         let host = window.location.host;
-        if (window.location.port === '3000' || window.location.port === '3001' || window.location.port === '3005') {
+        if (['3000', '3001', '3002', '3003', '3004', '3005'].includes(window.location.port)) {
           const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? '127.0.0.1'
             : window.location.hostname;

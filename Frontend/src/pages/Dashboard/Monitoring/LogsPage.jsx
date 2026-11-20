@@ -4,6 +4,8 @@ import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
 import { deploymentService } from '../../../services/deploymentService';
 import { podService } from '../../../services/podService';
+import { aiService } from '../../../services/aiService';
+import { extractActiveK8sServices, isExcludedSystemService } from '../../../utils/k8sServiceFilter';
 import { LogDetailModal, getLogLevelBadgeStyle, formatLogTimestamp, maskSensitiveData } from '../../../components/dashboard/LogDetailModal';
 import {
   Terminal,
@@ -21,7 +23,9 @@ import {
   Filter,
   X,
   ArrowUp,
-  ArrowDown,
+  FileText,
+  Radio,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const LogsPage = () => {
@@ -47,8 +51,8 @@ export const LogsPage = () => {
   const [errorMessage, setErrorMessage] = useState(null);
   const [servicesList, setServicesList] = useState([]);
 
-  // K8s Resources States
-  const [namespacesList, setNamespacesList] = useState(['default', 'kube-system', 'production', 'staging']);
+  // K8s Resources States (100% nạp từ K8s cluster thực tế, không code cứng)
+  const [namespacesList, setNamespacesList] = useState([]);
   const [deploymentsList, setDeploymentsList] = useState([]);
   const [podsList, setPodsList] = useState([]);
 
@@ -73,14 +77,30 @@ export const LogsPage = () => {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // Load available services for dropdown
+  // Load available services for dropdown (đồng bộ theo workloads đang chạy thực tế trên K8s, không lấy dịch vụ cũ đã xóa)
   useEffect(() => {
     let isMounted = true;
+    const clusterId = currentEnv?.clusterId || currentEnv?.id;
+    const orgId = currentOrg?.id;
     (async () => {
       try {
-        const services = await telemetryService.getApmServices({ windowMinutes: 1440 });
-        if (isMounted && Array.isArray(services)) {
-          setServicesList(services);
+        const [liveWorkloads, apmServices] = await Promise.all([
+          aiService.getWorkloads(clusterId, orgId).catch(() => null),
+          telemetryService
+            .getApmServices(1440, { clusterId, organizationId: orgId })
+            .catch(() => []),
+        ]);
+        if (!isMounted) return;
+
+        if (Array.isArray(liveWorkloads)) {
+          const activeNames = extractActiveK8sServices(liveWorkloads);
+          setServicesList(activeNames.map((name) => ({ service_id: name, service_name: name })));
+          return;
+        }
+        if (Array.isArray(apmServices)) {
+          setServicesList(
+            apmServices.filter((s) => !isExcludedSystemService(s.service_name || s.service_id))
+          );
         }
       } catch (err) {
         console.warn('[LogsPage] Could not pre-fetch services:', err.message);
@@ -89,14 +109,14 @@ export const LogsPage = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentEnv?.clusterId, currentEnv?.id, currentOrg?.id]);
 
   // [4.36] Load Cluster Namespaces
   useEffect(() => {
     let isMounted = true;
     const clusterId = currentEnv?.clusterId || currentEnv?.id;
     if (!clusterId || clusterId === 'k8s-cluster-01') {
-      setNamespacesList(['default', 'kube-system', 'production', 'staging']);
+      setNamespacesList([]);
       return;
     }
     (async () => {
@@ -105,14 +125,14 @@ export const LogsPage = () => {
         if (isMounted && Array.isArray(ns) && ns.length > 0) {
           const names = Array.from(
             new Set(ns.map((n) => (typeof n === 'string' ? n : n.name || n.id)).filter(Boolean))
-          );
+          ).sort();
           setNamespacesList(names);
         } else if (isMounted) {
-          setNamespacesList(['default', 'kube-system', 'production', 'staging']);
+          setNamespacesList([]);
         }
       } catch (err) {
         console.warn('[LogsPage] Could not load namespaces:', err.message);
-        if (isMounted) setNamespacesList(['default', 'kube-system', 'production', 'staging']);
+        if (isMounted) setNamespacesList([]);
       }
     })();
     return () => {
@@ -392,11 +412,6 @@ export const LogsPage = () => {
     setShowJumpLatest(false);
   };
 
-  const handleLevelChange = (e) => {
-    setSelectedLevel(e.target.value);
-    setPage(1);
-  };
-
   const handleServiceChange = (e) => {
     setSelectedService(e.target.value);
     setPage(1);
@@ -417,11 +432,6 @@ export const LogsPage = () => {
 
   const handlePodChange = (e) => {
     setSelectedPod(e.target.value);
-    setPage(1);
-  };
-
-  const handleRangeChange = (e) => {
-    setSelectedRange(e.target.value);
     setPage(1);
   };
 
@@ -474,126 +484,133 @@ export const LogsPage = () => {
     selectedRange !== '1h' ||
     searchQuery.trim().length > 0;
 
+  const logStats = useMemo(() => {
+    let errorCount = 0;
+    let warnCount = 0;
+    for (let i = 0; i < logs.length; i++) {
+      const lv = String(logs[i]?.level || '').toUpperCase();
+      if (lv === 'ERROR' || lv === 'FATAL' || lv === 'CRITICAL') errorCount++;
+      else if (lv === 'WARN' || lv === 'WARNING') warnCount++;
+    }
+    return { errorCount, warnCount };
+  }, [logs]);
+
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+
+  const kpiCardStyle = (accent) => ({
+    backgroundColor: '#FFFFFF',
+    border: '1px solid rgba(226, 232, 240, 0.95)',
+    borderTop: `2.5px solid ${accent}`,
+    borderRadius: '12px',
+    padding: '11px 14px',
+    boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+    minWidth: 0,
+    transition: 'transform 0.14s ease, box-shadow 0.14s ease',
+  });
+
+  const actionBtnStyle = (active = false, disabled = false) => ({
+    height: '34px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '0 12px',
+    backgroundColor: active ? '#ECFDF5' : '#FFFFFF',
+    border: active ? '1px solid #10B981' : '1px solid rgba(203, 213, 225, 0.9)',
+    borderRadius: '10px',
+    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+    fontSize: '0.8rem',
+    fontWeight: active ? 700 : 600,
+    color: active ? '#047857' : disabled ? '#94A3B8' : '#334155',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
+  });
+
+  const selectControlStyle = {
+    height: '32px',
+    padding: '0 10px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    border: '1px solid #CBD5E1',
+    borderRadius: '8px',
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+    outline: 'none',
+    cursor: 'pointer',
+  };
+
   return (
-    <div className="dashboard-logs-page" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Page Header */}
+    <div className="dashboard-logs-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* Page Header (đồng bộ phong cách sạch, gọn của Dashboard mới) */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: '#F1F5F9',
-              border: '1px solid #CBD5E1',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Terminal size={20} color="#334155" />
+            <Terminal size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Nhật Ký Hệ Thống Tập Trung (Centralized Logs Stream)
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Nhật Ký Container Tập Trung
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Thu thập nhật ký container từ DaemonSet eBPF Agent thời gian thực
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Thu thập &amp; tra cứu nhật ký container thời gian thực từ cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Live stream toggle */}
           <button
             type="button"
             data-testid="logs-live-toggle"
             onClick={() => setIsLive(!isLive)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 12px',
-              backgroundColor: isLive ? 'rgba(5, 150, 105, 0.1)' : '#FFFFFF',
-              border: isLive ? '1px solid #059669' : '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              color: isLive ? '#059669' : 'var(--dash-text-secondary)',
-              cursor: 'pointer',
-            }}
+            style={actionBtnStyle(isLive, false)}
           >
             {isLive ? <Pause size={14} /> : <Play size={14} />}
-            <span>{isLive ? 'Tạm dừng Live' : 'Bật Live Stream'}</span>
+            <span>{isLive ? 'Đang Live Stream' : 'Bật Live Stream'}</span>
           </button>
 
-          {/* Manual Refresh */}
           <button
             type="button"
             data-testid="logs-refresh-btn"
             onClick={() => fetchLogs(false)}
             disabled={isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 12px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              color: 'var(--dash-text-secondary)',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-            }}
+            style={actionBtnStyle(false, isLoading)}
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             <span>Làm mới</span>
           </button>
 
-          {/* Copy logs */}
           <button
             type="button"
             data-testid="logs-copy-btn"
             onClick={handleCopyLogs}
             disabled={logs.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 12px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: logs.length === 0 ? 'not-allowed' : 'pointer',
-            }}
+            style={actionBtnStyle(copied, logs.length === 0)}
           >
             {copied ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-            <span>{copied ? 'Đã sao chép!' : 'Sao chép'}</span>
+            <span>{copied ? 'Đã sao chép' : 'Sao chép'}</span>
           </button>
 
-          {/* Download logs */}
           <button
             type="button"
             data-testid="logs-download-btn"
             onClick={handleDownloadLogs}
             disabled={logs.length === 0}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 12px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: logs.length === 0 ? 'not-allowed' : 'pointer',
-            }}
+            style={actionBtnStyle(false, logs.length === 0)}
           >
             <Download size={14} />
             <span>Tải .log</span>
@@ -601,68 +618,263 @@ export const LogsPage = () => {
         </div>
       </div>
 
-      {/* Filter Toolbar */}
+      {/* Hàng KPI Tóm Tắt (đồng bộ 4 thẻ kính/viền màu giống Dashboard & Node Metrics) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={kpiCardStyle('#059669')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG NHẬT KÝ</span>
+            <FileText size={14} color="#059669" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {(pagination.total || 0).toLocaleString('vi-VN')}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+              Hiển thị {logs.length} dòng
+            </span>
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setSelectedLevel((prev) => (prev === 'ERROR' ? 'all' : 'ERROR'));
+            setPage(1);
+          }}
+          title="Nhấp để lọc nhanh log lỗi ERROR"
+          style={{ ...kpiCardStyle('#EF4444'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LỖI (ERROR / FATAL)</span>
+            <ShieldAlert size={14} color="#EF4444" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: logStats.errorCount > 0 ? '#DC2626' : '#0F172A' }}>
+              {logStats.errorCount}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+          </div>
+        </div>
+
+        <div
+          onClick={() => {
+            setSelectedLevel((prev) => (prev === 'WARN' ? 'all' : 'WARN'));
+            setPage(1);
+          }}
+          title="Nhấp để lọc nhanh log cảnh báo WARN"
+          style={{ ...kpiCardStyle('#F59E0B'), cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CẢNH BÁO (WARN)</span>
+            <AlertTriangle size={14} color="#F59E0B" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: logStats.warnCount > 0 ? '#D97706' : '#0F172A' }}>
+              {logStats.warnCount}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+          </div>
+        </div>
+
+        <div style={kpiCardStyle(isLive ? '#10B981' : '#3B82F6')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LUỒNG STREAM</span>
+            <Radio size={14} color={isLive ? '#10B981' : '#3B82F6'} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '2px 9px',
+                borderRadius: '999px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                backgroundColor: isLive ? '#ECFDF5' : '#F1F5F9',
+                color: isLive ? '#059669' : '#475569',
+                border: isLive ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+              }}
+            >
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isLive ? '#10B981' : '#94A3B8' }} />
+              {isLive ? 'Trực tiếp (SSE)' : 'Chế độ tĩnh'}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
+              {filteredPodsList.length} Pods
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bộ Lọc Gọn 2 Hàng (Hàng 1: Tìm kiếm + Cấp độ + Thời gian • Hàng 2: Namespace / Deployment / Pod / Dịch vụ) */}
       <div
         className="dash-card"
         data-testid="logs-filter-toolbar"
         style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '14px',
           padding: '12px 16px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
           display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
+          flexDirection: 'column',
+          gap: '10px',
         }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-          {/* Namespace Filter [4.36] */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Namespace:</span>
+        {/* Hàng 1: Tìm kiếm + Chọn nhanh cấp độ + Chọn nhanh thời gian */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
+            <input
+              type="text"
+              data-testid="logs-search-input"
+              placeholder="Tìm kiếm nội dung log, pod, từ khóa lỗi..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                height: '34px',
+                width: '100%',
+                padding: '0 30px 0 32px',
+                fontSize: '0.78rem',
+                border: '1px solid #CBD5E1',
+                borderRadius: '9px',
+                backgroundColor: '#F8FAFC',
+                color: '#0F172A',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94A3B8' }} />
+            {searchQuery && (
+              <button
+                type="button"
+                data-testid="logs-search-clear-btn"
+                onClick={() => setSearchQuery('')}
+                aria-label="Xóa từ khóa tìm kiếm"
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '9px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: 0,
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Chọn nhanh Cấp độ (giữ nguyên select ẩn hoặc pills trực quan + data-testid) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
+            {[
+              { id: 'all', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
+              { id: 'INFO', label: 'INFO', color: '#2563EB', bg: '#EFF6FF' },
+              { id: 'WARN', label: 'WARN', color: '#D97706', bg: '#FFFBEB' },
+              { id: 'ERROR', label: 'ERROR', color: '#DC2626', bg: '#FEF2F2' },
+              { id: 'FATAL', label: 'FATAL', color: '#991B1B', bg: '#FEE2E2' },
+              { id: 'DEBUG', label: 'DEBUG', color: '#475569', bg: '#F1F5F9' },
+            ].map((lv) => {
+              const active = selectedLevel === lv.id;
+              return (
+                <button
+                  key={lv.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedLevel(lv.id);
+                    setPage(1);
+                  }}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '6px',
+                    border: active ? `1px solid ${lv.color}55` : '1px solid transparent',
+                    backgroundColor: active ? lv.bg : 'transparent',
+                    color: active ? lv.color : '#64748B',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.12s ease',
+                  }}
+                >
+                  {lv.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Chọn nhanh Khung thời gian */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
+            {[
+              { id: '15m', label: '15m' },
+              { id: '1h', label: '1h' },
+              { id: '24h', label: '24h' },
+              { id: '7d', label: '7d' },
+              { id: 'all', label: 'Tất cả' },
+            ].map((r) => {
+              const active = selectedRange === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedRange(r.id);
+                    setPage(1);
+                  }}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '6px',
+                    border: active ? '1px solid #10B981' : '1px solid transparent',
+                    backgroundColor: active ? '#ECFDF5' : 'transparent',
+                    color: active ? '#047857' : '#64748B',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Hàng 2: Bộ lọc tài nguyên K8s (Namespace / Deployment / Pod / Dịch vụ) + Đặt lại + Tự cuộn */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            paddingTop: '10px',
+            borderTop: '1px solid #F1F5F9',
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
             <select
               data-testid="logs-namespace-select"
               value={selectedNamespace}
               onChange={handleNamespaceChange}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
-              }}
+              style={selectControlStyle}
             >
-              <option value="ALL">Tất cả Namespaces</option>
+              <option value="ALL">Namespace: Tất cả</option>
               {namespacesList.map((ns) => {
                 const name = typeof ns === 'string' ? ns : ns.name || ns.id;
                 return (
                   <option key={name} value={name}>
-                    {name}
+                    NS: {name}
                   </option>
                 );
               })}
             </select>
-          </div>
 
-          {/* Deployment Filter [4.36] */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Deployment:</span>
             <select
               data-testid="logs-deployment-select"
               value={selectedDeployment}
               onChange={handleDeploymentChange}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
-                maxWidth: '180px',
-              }}
+              style={{ ...selectControlStyle, maxWidth: '190px' }}
             >
-              <option value="ALL">Tất cả Deployments</option>
+              <option value="ALL">Deployment: Tất cả</option>
               {deploymentsList.map((dep) => {
                 const name = dep.name || dep.id;
                 return (
@@ -672,27 +884,14 @@ export const LogsPage = () => {
                 );
               })}
             </select>
-          </div>
 
-          {/* Pod Filter [4.36] */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Pod:</span>
             <select
               data-testid="logs-pod-select"
               value={selectedPod}
               onChange={handlePodChange}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
-                maxWidth: '180px',
-              }}
+              style={{ ...selectControlStyle, maxWidth: '210px' }}
             >
-              <option value="ALL">Tất cả Pods ({filteredPodsList.length})</option>
+              <option value="ALL">Pod: Tất cả ({filteredPodsList.length})</option>
               {filteredPodsList.map((pod) => {
                 const name = pod.name || pod.id;
                 return (
@@ -702,162 +901,72 @@ export const LogsPage = () => {
                 );
               })}
             </select>
-          </div>
 
-          {/* Level Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Cấp độ:</span>
-            <select
-              data-testid="logs-level-select"
-              value={selectedLevel}
-              onChange={handleLevelChange}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
-              }}
-            >
-              <option value="all">Tất cả cấp độ</option>
-              <option value="INFO">INFO (Thông tin)</option>
-              <option value="WARN">WARN (Cảnh báo)</option>
-              <option value="ERROR">ERROR (Lỗi)</option>
-              <option value="FATAL">FATAL (Nghiêm trọng)</option>
-              <option value="DEBUG">DEBUG (Gỡ lỗi)</option>
-            </select>
-          </div>
-
-          {/* Service Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Dịch vụ:</span>
             <select
               data-testid="logs-service-select"
               value={selectedService}
               onChange={handleServiceChange}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
-                maxWidth: '180px',
-              }}
+              style={{ ...selectControlStyle, maxWidth: '190px' }}
             >
-              <option value="all">Tất cả dịch vụ</option>
+              <option value="all">Dịch vụ: Tất cả</option>
               {servicesList.map((svc) => (
                 <option key={svc.service_id || svc.service_name} value={svc.service_name || svc.service_id}>
                   {svc.service_name || svc.service_id}
                 </option>
               ))}
             </select>
-          </div>
 
-          {/* Time Range Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Khoảng thời gian:</span>
-            <select
-              data-testid="logs-range-select"
-              value={selectedRange}
-              onChange={handleRangeChange}
-              style={{
-                height: '32px',
-                padding: '0 8px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                backgroundColor: '#FFFFFF',
-                color: 'var(--dash-text-primary)',
-              }}
-            >
-              <option value="15m">15 phút qua</option>
-              <option value="1h">1 giờ qua</option>
-              <option value="24h">24 giờ qua</option>
-              <option value="7d">7 ngày qua</option>
-              <option value="all">Toàn bộ thời gian</option>
-            </select>
-          </div>
-
-          {/* Search Input */}
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              data-testid="logs-search-input"
-              placeholder="Tìm kiếm nội dung, pod, từ khóa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                height: '32px',
-                width: '260px',
-                padding: '0 28px 0 28px',
-                fontSize: '0.75rem',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                outline: 'none',
-              }}
-            />
-            <Search size={14} style={{ position: 'absolute', left: '8px', top: '9px', color: 'var(--dash-text-muted)' }} />
-            {searchQuery && (
+            {hasActiveFilters && (
               <button
                 type="button"
-                data-testid="logs-search-clear-btn"
-                onClick={() => setSearchQuery('')}
-                aria-label="Xóa từ khóa tìm kiếm"
+                data-testid="logs-reset-filters-btn"
+                onClick={handleResetFilters}
                 style={{
-                  position: 'absolute',
-                  right: '6px',
-                  top: '7px',
-                  background: 'none',
-                  border: 'none',
+                  height: '32px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '0 10px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '8px',
+                  fontSize: '0.73rem',
+                  fontWeight: 700,
+                  color: '#DC2626',
                   cursor: 'pointer',
-                  color: 'var(--dash-text-muted)',
-                  padding: 0,
                 }}
               >
-                <X size={14} />
+                <RotateCcw size={12} />
+                <span>Đặt lại</span>
               </button>
             )}
           </div>
 
-          {/* Reset Filters Button */}
-          {hasActiveFilters && (
-            <button
-              type="button"
-              data-testid="logs-reset-filters-btn"
-              onClick={handleResetFilters}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                backgroundColor: '#F1F5F9',
-                border: '1px solid var(--dash-border)',
-                borderRadius: 'var(--dash-radius-sm)',
-                fontSize: '0.75rem',
-                color: 'var(--dash-text-secondary)',
-                cursor: 'pointer',
-              }}
-            >
-              <RotateCcw size={12} />
-              <span>Đặt lại</span>
-            </button>
-          )}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#475569',
+              cursor: 'pointer',
+              padding: '4px 10px',
+              borderRadius: '8px',
+              backgroundColor: autoScroll ? '#ECFDF5' : '#F8FAFC',
+              border: autoScroll ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+            }}
+          >
+            <input
+              type="checkbox"
+              data-testid="logs-autoscroll-checkbox"
+              checked={autoScroll}
+              onChange={(e) => setAutoScroll(e.target.checked)}
+              style={{ accentColor: '#059669' }}
+            />
+            <span>Tự cuộn mới nhất</span>
+          </label>
         </div>
-
-        {/* Auto Scroll Checkbox */}
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--dash-text-secondary)', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            data-testid="logs-autoscroll-checkbox"
-            checked={autoScroll}
-            onChange={(e) => setAutoScroll(e.target.checked)}
-          />
-          <span>Tự cuộn xuống dưới cùng</span>
-        </label>
       </div>
 
       {/* Error Alert Banner */}
@@ -900,27 +1009,27 @@ export const LogsPage = () => {
         </div>
       )}
 
-      {/* Terminal Display Window */}
+      {/* Terminal Display Window (bo tròn đồng bộ 14px & nền console slate sâu) */}
       <div
         data-testid="logs-terminal-window"
         style={{
           position: 'relative',
-          backgroundColor: '#1E1E1E',
-          border: '1px solid #334155',
-          borderRadius: '6px',
+          backgroundColor: '#0B1120',
+          border: '1px solid #1E293B',
+          borderRadius: '14px',
           overflow: 'hidden',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+          boxShadow: '0 10px 30px rgba(15, 23, 42, 0.14)',
         }}
       >
         {/* Terminal Title Bar */}
         <div
           style={{
             backgroundColor: '#0F172A',
-            padding: '10px 16px',
+            padding: '11px 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: '1px solid rgba(148, 163, 184, 0.14)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -928,11 +1037,12 @@ export const LogsPage = () => {
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
             <span style={{ marginLeft: '10px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#94A3B8' }}>
-              k8s-pod-stream &bull; Đang hiển thị {logs.length} / tổng số {pagination.total} dòng nhật ký
+              k8s-pod-stream &bull; Đang hiển thị <strong style={{ color: '#E2E8F0' }}>{logs.length}</strong> /{' '}
+              {(pagination.total || 0).toLocaleString('vi-VN')} dòng nhật ký
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {streamNotice && (
               <span data-testid="logs-overflow-notice" style={{ fontSize: '0.6875rem', color: '#FBBF24', fontFamily: 'var(--font-mono)' }}>
                 ⚠️ {streamNotice}
@@ -940,9 +1050,18 @@ export const LogsPage = () => {
             )}
             <div
               data-testid="logs-live-status-indicator"
-              style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isLive ? '#34D399' : '#94A3B8' }}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                padding: '3px 9px',
+                borderRadius: '999px',
+                backgroundColor: isLive ? 'rgba(16, 185, 129, 0.14)' : 'rgba(148, 163, 184, 0.12)',
+                color: isLive ? '#34D399' : '#94A3B8',
+                border: isLive ? '1px solid rgba(52, 211, 153, 0.35)' : '1px solid rgba(148, 163, 184, 0.2)',
+              }}
             >
-              {isLive ? '● ĐANG TRUYỀN DỮ LIỆU TRỰC TIẾP' : '○ TẠM DỪNG'}
+              {isLive ? '● TRỰC TIẾP' : '○ TẠM DỪNG'}
             </div>
           </div>
         </div>
@@ -953,12 +1072,14 @@ export const LogsPage = () => {
           data-testid="logs-container"
           onScroll={handleContainerScroll}
           style={{
-            height: '480px',
+            height: 'calc(100vh - 385px)',
+            minHeight: '420px',
+            maxHeight: '620px',
             overflowY: 'auto',
-            padding: '12px 16px',
+            padding: '10px 14px',
             fontFamily: 'var(--font-mono)',
             fontSize: '0.75rem',
-            lineHeight: 1.6,
+            lineHeight: 1.65,
             color: '#E2E8F0',
             position: 'relative',
           }}
@@ -1026,6 +1147,9 @@ export const LogsPage = () => {
               const svcName = item.service_name || item.service_id || 'service';
               const podName = item.pod_id || item.pod || 'container';
 
+              const isErrRow = item.level === 'FATAL' || item.level === 'CRITICAL' || item.level === 'ERROR';
+              const isWarnRow = item.level === 'WARN' || item.level === 'WARNING';
+
               return (
                 <div
                   key={item.id || idx}
@@ -1036,17 +1160,31 @@ export const LogsPage = () => {
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '10px',
-                    padding: '4px 6px',
-                    borderRadius: '3px',
-                    borderBottom: '1px solid rgba(255,255,255,0.03)',
+                    padding: '5px 8px',
+                    borderRadius: '6px',
+                    borderLeft: isErrRow
+                      ? '2.5px solid #EF4444'
+                      : isWarnRow
+                        ? '2.5px solid #F59E0B'
+                        : '2.5px solid transparent',
+                    backgroundColor: isErrRow
+                      ? 'rgba(239, 68, 68, 0.06)'
+                      : isWarnRow
+                        ? 'rgba(245, 158, 11, 0.04)'
+                        : 'transparent',
+                    borderBottom: '1px solid rgba(148, 163, 184, 0.06)',
                     cursor: 'pointer',
-                    transition: 'background-color 0.15s ease',
+                    transition: 'background-color 0.14s ease',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.07)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.backgroundColor = isErrRow
+                      ? 'rgba(239, 68, 68, 0.06)'
+                      : isWarnRow
+                        ? 'rgba(245, 158, 11, 0.04)'
+                        : 'transparent';
                   }}
                 >
                   <span style={{ color: '#64748B', width: '28px', textAlign: 'right', flexShrink: 0, userSelect: 'none' }}>

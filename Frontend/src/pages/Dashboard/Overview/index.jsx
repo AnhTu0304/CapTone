@@ -1,1536 +1,2152 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { aiService } from '../../../services/aiService';
+import { selfHealingService } from '../../../services/selfHealingService';
 import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
 import { dashboardStatisticsService } from '../../../services/dashboardStatisticsService';
+import { extractActiveK8sServices } from '../../../utils/k8sServiceFilter';
+import AIPipelineFlowCanvas from '../../../components/dashboard/ai/AIPipelineFlowCanvas';
 import {
+  Server,
+  RefreshCw,
+  Sliders,
+  ChevronDown,
   Cpu,
   Database,
   HardDrive,
   Box,
   AlertTriangle,
-  AlertCircle,
-  Layers,
-  Activity,
-  ExternalLink,
   Radio,
   Zap,
   CheckCircle2,
-  Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  ShieldCheck,
-  Sparkles,
-  RefreshCw,
-  Terminal,
-  HelpCircle,
-  Server,
-  ArrowRight,
-  LayoutDashboard,
 } from 'lucide-react';
-import InteractiveResourceChart from '../../../components/dashboard/InteractiveResourceChart';
+
+const normalizeServiceName = (raw) => {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw.replace(/^(Deployment|StatefulSet|DaemonSet|Pod|Service)\s*[:/]?\s*/i, '').trim();
+};
+
+const getWorkloadStorageKey = (clusterId) =>
+  clusterId ? `selfheal_overview_selected_workload:${clusterId}` : 'selfheal_overview_selected_workload';
+
+const readSavedWorkload = (clusterId) => {
+  try {
+    return localStorage.getItem(getWorkloadStorageKey(clusterId)) || '';
+  } catch {
+    return '';
+  }
+};
+
+const saveSelectedWorkload = (clusterId, workload) => {
+  try {
+    if (workload) {
+      localStorage.setItem(getWorkloadStorageKey(clusterId), workload);
+    }
+  } catch {}
+};
+
+const METRIC_CONFIGS = [
+  { key: 'cpu', label: 'CPU (%)', unit: '%' },
+  { key: 'ram', label: 'RAM (%)', unit: '%' },
+  { key: 'disk', label: 'Đĩa Disk (%)', unit: '%' },
+  { key: 'latency', label: 'Độ trễ (ms)', unit: 'ms' },
+  { key: 'request_rate', label: 'Lưu lượng (Req/s)', unit: 'req/s' },
+  { key: 'error_5xx', label: 'Lỗi 5xx (%)', unit: '%' },
+];
 
 export const OverviewPage = () => {
   const {
     currentOrg,
     currentEnv,
-    setCurrentEnv,
-    envList,
     isAgentConnected,
-    isAutoRefresh,
-    lastUpdated,
     isRefreshing,
     triggerRefresh,
-    pendingApprovalsCount,
-    refreshPendingApprovals,
+    pendingApprovalsCount: ctxPendingApprovalsCount,
+    activeIncidentsCount: ctxActiveIncidentsCount,
     onNavigate,
   } = useDashboard();
 
-  const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
-  const [chartTimeRange, setChartTimeRange] = useState('15m');
-  const chartTimeRangeRef = useRef(chartTimeRange);
-  useEffect(() => {
-    chartTimeRangeRef.current = chartTimeRange;
-  }, [chartTimeRange]);
+  const clusterParam = currentEnv?.clusterId || currentEnv?.id || currentEnv?.cluster;
+  const orgParam = currentOrg?.id;
+  // Chỉ coi cụm là trực tuyến khi có cụm hợp lệ VÀ tác tử Agent của chính cụm đó đang ONLINE
+  const isClusterOnline = Boolean(
+    currentEnv &&
+      clusterParam &&
+      (isAgentConnected || String(currentEnv?.agentStatus || '').toUpperCase() === 'ONLINE')
+  );
 
-  // Overview Statistics Cluster API State [S5][PBI19]
+  const [registeredWorkloads, setRegisteredWorkloads] = useState([]);
+  const [selectedWorkload, setSelectedWorkload] = useState(() => readSavedWorkload(clusterParam));
+  const [predictions, setPredictions] = useState([]);
+  const [serviceInputsMap, setServiceInputsMap] = useState({});
+  const [serviceStepMap, setServiceStepMap] = useState({});
+  const [batchProgressMap, setBatchProgressMap] = useState({});
+  const [incidents, setIncidents] = useState([]);
+  const [incidentDetailsMap, setIncidentDetailsMap] = useState({});
+  const [recommendations, setRecommendations] = useState([]);
+  const [policies, setPolicies] = useState([]);
+  const [healingActions, setHealingActions] = useState([]);
+  const [approvals, setApprovals] = useState([]);
   const [overviewStats, setOverviewStats] = useState(null);
-  const overviewStatsRef = useRef(null);
-  useEffect(() => {
-    overviewStatsRef.current = overviewStats;
-  }, [overviewStats]);
-
-  const [isStatsLoading, setIsStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState(null);
-
-  const fetchOverviewStats = useCallback(async (isSilent = false) => {
-    if (!isSilent && !overviewStatsRef.current) {
-      setIsStatsLoading(true);
-    }
-    setStatsError(null);
-    try {
-      const orgId = currentOrg?.id;
-      const clusterId = activeClusterId && !activeClusterId.startsWith('org-') ? activeClusterId : undefined;
-      const tr = chartTimeRange === '15m' ? '1h' : chartTimeRange;
-      const data = await dashboardStatisticsService.getOverviewStats({
-        organization_id: orgId,
-        cluster_id: clusterId,
-        time_range: tr,
-      });
-      setOverviewStats(data);
-    } catch (err) {
-      console.warn('[OverviewPage] Không thể tải dữ liệu thống kê tổng hợp:', err);
-      setStatsError(err.message || 'Không thể tải thống kê tổng quan.');
-    } finally {
-      setIsStatsLoading(false);
-    }
-  }, [currentOrg?.id, activeClusterId, chartTimeRange]);
-
-  useEffect(() => {
-    fetchOverviewStats();
-  }, [fetchOverviewStats]);
-
-  // Realtime Telemetry & Live Cluster State
-  const [telemetry, setTelemetry] = useState(null);
-  const telemetryRef = useRef(null);
-  useEffect(() => {
-    telemetryRef.current = telemetry;
-  }, [telemetry]);
-  const [telemetrySequence, setTelemetrySequence] = useState([]);
-  const telemetrySequenceRef = useRef([]);
-  useEffect(() => {
-    telemetrySequenceRef.current = telemetrySequence;
-  }, [telemetrySequence]);
   const [clusterInfo, setClusterInfo] = useState(null);
-  const [isWsLive, setIsWsLive] = useState(false);
-  const [activeIncidents, setActiveIncidents] = useState([]);
-  const [aiRecommendations, setAiRecommendations] = useState([]);
-  const [lastDataTimestamp, setLastDataTimestamp] = useState(null);
-  const [prevCpu, setPrevCpu] = useState(null);
-  const [prevRam, setPrevRam] = useState(null);
-  const [isChartLoading, setIsChartLoading] = useState(false);
-  const [chartError, setChartError] = useState(null);
-  const [isDataStale, setIsDataStale] = useState(false);
-  const activeChartRequestRef = useRef(0);
+  const [nodeTelemetry, setNodeTelemetry] = useState(null);
+  const [clusterOpenIncidents, setClusterOpenIncidents] = useState(null);
+  const [scaleMode, setScaleMode] = useState('auto');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isWsConnected, setIsWsConnected] = useState(false);
+  const isFetchingRef = useRef(false);
+  const fetchSeqRef = useRef(0);
+  const prevClusterParamRef = useRef(clusterParam);
+  // Bộ nhớ đệm lưu trữ metrics mới nhất của từng node để tổng hợp số liệu chuẩn xác cho toàn cụm
+  const nodeMetricsMapRef = useRef(new Map());
 
-  // Kiểm tra trạng thái Agent của Cụm Kubernetes đang chọn
-  const isClusterOnline = useMemo(() => Boolean(
-    currentEnv?.agentStatus === 'ONLINE' ||
-    clusterInfo?.status === 'ACTIVE' ||
-    clusterInfo?.status === 'HEALTHY' ||
-    (Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0)
-  ), [currentEnv?.agentStatus, clusterInfo?.status, clusterInfo?.nodes]);
-
-  // Tính toán số liệu K8s Pods và Nodes THẬT
-  const rawPods = useMemo(() => clusterInfo?.pods || [], [clusterInfo?.pods]);
-  const nodeCount = clusterInfo?.nodes?.length || currentEnv?.nodes || 1;
-  const podCount = rawPods.length || currentEnv?.pods || 0;
-
-  // 1b. Tải chuỗi viễn trắc theo khoảng thời gian được chọn với race-condition guard
-  const loadClusterTrend = useCallback(async (range, isSilent = false) => {
-    const reqId = ++activeChartRequestRef.current;
-    setChartTimeRange(range);
-    setChartError(null);
-
-    if (!isClusterOnline || !activeClusterId) {
-      setTelemetrySequence([]);
-      setIsChartLoading(false);
-      return;
+  // Tính toán số liệu CPU / RAM / Disk trung bình có trọng số cho TOÀN BỘ CỤM (tất cả các nodes)
+  const calculateClusterNodeMetrics = useCallback((nodesMap) => {
+    if (!nodesMap) return null;
+    const now = Date.now();
+    let nodes = Array.from(nodesMap.values()).filter(
+      (n) => !n.last_updated || now - n.last_updated < 180000
+    );
+    if (nodes.length === 0) {
+      nodes = Array.from(nodesMap.values());
     }
+    if (nodes.length === 0) return null;
 
-    // Chỉ bật loading toàn màn hình nếu chưa có dữ liệu trong biểu đồ
-    if (!isSilent && telemetrySequenceRef.current.length === 0) {
-      setIsChartLoading(true);
-    }
-    const controller = new AbortController();
+    let sumUsedCores = 0;
+    let sumTotalCores = 0;
+    let sumUsedRamBytes = 0;
+    let sumTotalRamBytes = 0;
+    let sumDiskPct = 0;
 
-    try {
-      const res = await telemetryService.getClusterResourceTrend(
-        {
-          orgId: currentOrg?.id,
-          clusterId: activeClusterId,
-          range,
-        },
-        { signal: controller.signal }
-      );
+    nodes.forEach((n) => {
+      const cores = Number(n.cpu_cores || 12);
+      const cpuPct = Number(n.cpu_usage_percent || 0);
+      sumUsedCores += (cpuPct / 100) * cores;
+      sumTotalCores += cores;
 
-      // Bỏ qua response cũ nếu người dùng đã chuyển range hoặc cụm khác trong khi request đang bay
-      if (activeChartRequestRef.current !== reqId) return;
+      const ramUsed = Number(n.ram_used_bytes || 0);
+      const ramTotal = Number(n.ram_total_bytes || 8163258368);
+      sumUsedRamBytes += ramUsed;
+      sumTotalRamBytes += ramTotal;
 
-      if (Array.isArray(res?.sequence) && res.sequence.length > 0) {
-        setTelemetrySequence(res.sequence);
-        setIsDataStale(Boolean(res.isStale));
-        if (res.latestPoint) {
-          setTelemetry((prev) => ({
-            ...prev,
-            ...res.latestPoint,
-          }));
-          setLastDataTimestamp(new Date().toLocaleTimeString('vi-VN'));
-        }
-      } else {
-        setTelemetrySequence([]);
-        setIsDataStale(false);
-      }
-    } catch (err) {
-      if (err?.name === 'AbortError') return;
-      if (activeChartRequestRef.current === reqId) {
-        console.warn('[OverviewPage] Không thể tải dữ liệu chuỗi thời gian:', err.message);
-        setChartError(err.message || 'Không thể tải chuỗi viễn trắc từ cụm.');
-        setTelemetrySequence([]);
-      }
-    } finally {
-      if (activeChartRequestRef.current === reqId) {
-        setIsChartLoading(false);
-      }
-    }
-  }, [activeClusterId, currentOrg?.id, isClusterOnline]);
-
-  const handleChartRangeChange = useCallback((newRange) => {
-    loadClusterTrend(newRange);
-  }, [loadClusterTrend]);
-
-  useEffect(() => {
-    loadClusterTrend(chartTimeRange);
-  }, [loadClusterTrend, chartTimeRange]);
-
-  // 1. Tải chi tiết cụm Kubernetes THẬT (Nodes, Pods, dung lượng phần cứng)
-  const fetchClusterInfo = useCallback(async () => {
-    try {
-      const clusterId = currentEnv?.clusterId || currentEnv?.id;
-      const orgId = currentOrg?.id;
-      if (clusterId && !clusterId.startsWith('org-')) {
-        const detail = await clusterService.getClusterDetail(clusterId, orgId);
-        if (detail) {
-          setClusterInfo(detail);
-        }
-      }
-    } catch (err) {
-      console.warn('[OverviewPage] Không thể tải chi tiết cụm:', err);
-    }
-  }, [currentEnv?.clusterId, currentEnv?.id, currentOrg?.id]);
-
-  useEffect(() => {
-    fetchClusterInfo();
-  }, [fetchClusterInfo]);
-
-  // Auto-Refresh background interval (30s)
-  const autoRefreshInterval = 60;
-  const isAutoRefreshActive = true;
-  const isPollingBusyRef = useRef(false);
-
-  // Manual & automated refresh function
-  const refreshAllData = useCallback(async () => {
-    if (isPollingBusyRef.current) return;
-    isPollingBusyRef.current = true;
-    try {
-      await Promise.allSettled([
-        fetchOverviewStats(true),
-        fetchClusterInfo(),
-        loadClusterTrend(chartTimeRange, true),
-        refreshPendingApprovals ? refreshPendingApprovals() : Promise.resolve(),
-      ]);
-      const now = new Date();
-      setLastDataTimestamp(
-        `${now.toLocaleTimeString('vi-VN')} ${now.toLocaleDateString('vi-VN')}`
-      );
-    } finally {
-      isPollingBusyRef.current = false;
-    }
-  }, [fetchOverviewStats, fetchClusterInfo, loadClusterTrend, chartTimeRange]);
-
-  // Unified Auto-Refresh Timer with Tab Visibility Pause & Concurrency Guard
-  useEffect(() => {
-    if (!isAutoRefreshActive || !isClusterOnline) return;
-
-    let isTabVisible = !document.hidden;
-    const handleVisibilityChange = () => {
-      isTabVisible = !document.hidden;
-      if (isTabVisible) {
-        refreshAllData();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    const timer = setInterval(() => {
-      if (isTabVisible && !isPollingBusyRef.current) {
-        refreshAllData();
-      }
-    }, autoRefreshInterval * 1000);
-
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isAutoRefreshActive, autoRefreshInterval, isClusterOnline, refreshAllData]);
-
-
-  // 2. Kết nối WebSocket đẩy viễn trắc Realtime 100% từ Main Backend (CHỈ KHI CỤM ĐANG ONLINE)
-  useEffect(() => {
-    let isMounted = true;
-
-    // Nếu cụm đang chọn là Offline hoặc chưa có Agent kết nối, dọn sạch số liệu cũ và ngắt WS
-    if (!isClusterOnline) {
-      setTelemetry(null);
-      setTelemetrySequence([]);
-      setActiveIncidents([]);
-      setAiRecommendations([]);
-      setIsWsLive(false);
-      return;
-    }
-
-    // Dynamic service ID based on real pods in the cluster, fallback to first pod or sme-order-service
-    const targetServiceId = (rawPods && rawPods.length > 0)
-      ? (rawPods.find((p) => p.workload_name || p.name)?.workload_name || rawPods[0]?.name || 'sme-order-service')
-      : 'sme-order-service';
-
-    // Tải snapshot REST ban đầu cho cụm Online
-    telemetryService.getLiveSummary(targetServiceId).then((data) => {
-      if (isMounted && data) {
-        setTelemetry((prev) => {
-          const next = { ...prev, ...(data.latest_point || {}) };
-          if (data.latest_node_metric) {
-            next.node_cpu_percent = Number(data.latest_node_metric.cpu_usage_percent);
-            next.node_ram_percent = Number(data.latest_node_metric.ram_usage_percent);
-            next.node_cpu_cores = Number(data.latest_node_metric.cpu_cores);
-            if (data.latest_node_metric.ram_used_bytes) {
-              next.node_ram_gb = (Number(data.latest_node_metric.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2);
-            }
-            if (data.latest_node_metric.disk_usage_percent !== undefined) {
-              next.disk = Number(data.latest_node_metric.disk_usage_percent);
-            }
-          }
-          return next;
-        });
-        if (Array.isArray(data.incidents)) setActiveIncidents(data.incidents);
-        if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
-        if (data.timestamp) setLastDataTimestamp(new Date(data.timestamp).toLocaleTimeString());
-      }
+      sumDiskPct += Number(n.disk_usage_percent || 4);
     });
 
-    // Lắng nghe luồng WebSocket trực tiếp
-    const unsubscribe = telemetryService.subscribeWebSocket(
-      targetServiceId,
-      (payload) => {
-        if (!isMounted || !payload) return;
+    const clusterCpuPct = sumTotalCores > 0 ? (sumUsedCores / sumTotalCores) * 100 : 0;
+    const clusterRamPct = sumTotalRamBytes > 0 ? (sumUsedRamBytes / sumTotalRamBytes) * 100 : 0;
+    const avgDiskPct = nodes.length > 0 ? sumDiskPct / nodes.length : 4;
 
-        if (payload.type === 'initial_state' || payload.type === 'live_summary' || payload.type === 'live_pulse') {
-          const data = payload.data;
-          if (data) {
-            setIsDataStale(false);
-            if (data.latest_point || data.latest_node_metric) {
-              if (telemetryRef.current?.cpu !== undefined) setPrevCpu(Number(telemetryRef.current.cpu));
-              if (telemetryRef.current?.ram !== undefined) setPrevRam(Number(telemetryRef.current.ram));
-              setTelemetry((prev) => {
-                const merged = { ...prev };
-                if (data.latest_point) {
-                  merged.cpu = Number(data.latest_point.cpu ?? merged.cpu ?? 0);
-                  merged.ram = Number(data.latest_point.ram ?? merged.ram ?? 0);
-                  if (data.latest_point.disk !== undefined) merged.disk = Number(data.latest_point.disk);
-                  if (data.latest_point.latency !== undefined) merged.latency = Number(data.latest_point.latency);
-                }
-                if (data.latest_node_metric) {
-                  merged.node_cpu_percent = Number(data.latest_node_metric.cpu_usage_percent);
-                  merged.node_ram_percent = Number(data.latest_node_metric.ram_usage_percent);
-                  merged.node_cpu_cores = Number(data.latest_node_metric.cpu_cores);
-                  if (data.latest_node_metric.ram_used_bytes) {
-                    merged.node_ram_gb = (Number(data.latest_node_metric.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2);
+    return {
+      node_cpu_percent: Number(clusterCpuPct.toFixed(1)),
+      node_cpu_cores: sumTotalCores,
+      node_ram_percent: Number(clusterRamPct.toFixed(1)),
+      node_ram_gb: (sumUsedRamBytes / (1024 * 1024 * 1024)).toFixed(2),
+      disk: Number(avgDiskPct.toFixed(1)),
+      nodes_count: nodes.length,
+    };
+  }, []);
+
+  // Chỉ dọn sạch dữ liệu cụm & khôi phục dịch vụ đã lưu khi thực sự ĐỔI SANG CỤM K8s KHÁC
+  // (Không xóa selectedWorkload khi isClusterOnline nhấp nháy lúc vừa tải trang hoặc bấm Làm mới!)
+  useEffect(() => {
+    const prevCluster = prevClusterParamRef.current;
+    if (prevCluster === clusterParam) return;
+    prevClusterParamRef.current = clusterParam;
+
+    setRegisteredWorkloads([]);
+    setSelectedWorkload(readSavedWorkload(clusterParam));
+    setPredictions([]);
+    setServiceInputsMap({});
+    setServiceStepMap({});
+    setBatchProgressMap({});
+    setIncidents([]);
+    setIncidentDetailsMap({});
+    setRecommendations([]);
+    setPolicies([]);
+    setHealingActions([]);
+    setApprovals([]);
+    setOverviewStats(null);
+    setClusterInfo(null);
+    setNodeTelemetry(null);
+    nodeMetricsMapRef.current.clear();
+    setClusterOpenIncidents(0);
+    setIsWsConnected(false);
+    setIsLoading(false);
+  }, [clusterParam]);
+
+  // Khi cụm mất kết nối tạm thời: chỉ ngắt cờ WS/loading, giữ nguyên dịch vụ đã chọn để không bị tự nhảy
+  useEffect(() => {
+    if (!isClusterOnline) {
+      setIsWsConnected(false);
+      setIsLoading(false);
+    }
+  }, [isClusterOnline]);
+
+  // Danh sách Workload thực tế đang chạy trên K8s (CHỈ lấy từ GET /api/v1/ai/workloads — tuyệt đối không fallback sang predictions[0] để tránh tự nhảy dịch vụ theo sự kiện WebSocket!)
+  const availableWorkloads = useMemo(() => {
+    if (!isClusterOnline) return [];
+    return extractActiveK8sServices(registeredWorkloads);
+  }, [isClusterOnline, registeredWorkloads]);
+
+  // Khóa chặt dịch vụ đang chọn ngay khi danh sách workload sẵn sàng (ưu tiên dịch vụ đã lưu trong localStorage)
+  useEffect(() => {
+    if (!isClusterOnline || availableWorkloads.length === 0) return;
+    if (selectedWorkload && availableWorkloads.includes(selectedWorkload)) {
+      return;
+    }
+    const saved = readSavedWorkload(clusterParam);
+    const nextTarget = saved && availableWorkloads.includes(saved) ? saved : availableWorkloads[0];
+    setSelectedWorkload(nextTarget);
+    saveSelectedWorkload(clusterParam, nextTarget);
+  }, [isClusterOnline, availableWorkloads, selectedWorkload, clusterParam]);
+
+  const handleSelectWorkload = useCallback(
+    (nextWorkload) => {
+      setSelectedWorkload(nextWorkload);
+      saveSelectedWorkload(clusterParam, nextWorkload);
+    },
+    [clusterParam]
+  );
+
+  const currentServiceTarget = useMemo(() => {
+    if (!isClusterOnline || availableWorkloads.length === 0) return '';
+    if (selectedWorkload && availableWorkloads.includes(selectedWorkload)) {
+      return selectedWorkload;
+    }
+    const saved = readSavedWorkload(clusterParam);
+    if (saved && availableWorkloads.includes(saved)) {
+      return saved;
+    }
+    return availableWorkloads[0] || '';
+  }, [isClusterOnline, availableWorkloads, selectedWorkload, clusterParam]);
+
+  // Khi đổi sang dịch vụ khác: dọn ngay dữ liệu hành động/phê duyệt cũ để không nháy số liệu dịch vụ trước
+  useEffect(() => {
+    setHealingActions([]);
+    setApprovals([]);
+  }, [currentServiceTarget]);
+
+  // 1. Tải tiến trình song song & cập nhật từng khối NGAY KHI có phản hồi (không bị chặn bởi API chậm nhất)
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isClusterOnline) {
+      setIsLoading(false);
+      setIsWsConnected(false);
+      return;
+    }
+    // Chống chồng chéo request khi polling định kỳ
+    if (isSilent && isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    const seq = ++fetchSeqRef.current;
+
+    if (!isSilent) setIsLoading(true);
+    try {
+      const clusterIdClean =
+        clusterParam && !String(clusterParam).startsWith('org-') && !String(clusterParam).startsWith('sandbox-')
+          ? clusterParam
+          : undefined;
+      const orgIdClean =
+        orgParam && !String(orgParam).startsWith('org-') && !String(orgParam).startsWith('sandbox-')
+          ? orgParam
+          : undefined;
+
+      const isStale = () => seq !== fetchSeqRef.current;
+
+      const tasks = [
+        // Ưu tiên 1: Danh sách dịch vụ (Workloads) — không ghi đè mảng rỗng khi request thoáng lỗi/bị hủy
+        aiService.getWorkloads(clusterParam, orgParam).then((val) => {
+          if (!isStale() && Array.isArray(val) && val.length > 0) setRegisteredWorkloads(val);
+        }),
+
+        // Ưu tiên 2: Chỉ số Node mới nhất cho toàn CỤM K8s (Tổng hợp đúng từ TẤT CẢ các Node đang chạy, không lấy 1 node ngẫu nhiên để tránh nhảy số liệu!)
+        clusterIdClean
+          ? telemetryService
+              .getNodeMetrics({
+                orgId: orgIdClean,
+                clusterId: clusterIdClean,
+                limit: 12,
+                order: 'desc',
+              })
+              .then((val) => {
+                if (isStale() || !val?.items?.length) return;
+                // Gom bản ghi mới nhất của TỪNG node_name và nạp vào nodeMetricsMapRef
+                val.items.forEach((item) => {
+                  const nodeName = item?.node_name || 'default';
+                  const existing = nodeMetricsMapRef.current.get(nodeName);
+                  if (
+                    !existing ||
+                    !existing.collected_at ||
+                    new Date(item.collected_at) >= new Date(existing.collected_at)
+                  ) {
+                    nodeMetricsMapRef.current.set(nodeName, { ...item, last_updated: Date.now() });
                   }
-                  if (data.latest_node_metric.disk_usage_percent !== undefined) {
-                    merged.disk = Number(data.latest_node_metric.disk_usage_percent);
+                });
+
+                const clusterAgg = calculateClusterNodeMetrics(nodeMetricsMapRef.current);
+                if (clusterAgg) {
+                  setNodeTelemetry((prev) => ({
+                    ...(prev || {}),
+                    ...clusterAgg,
+                  }));
+                }
+              })
+          : Promise.resolve(),
+
+        // Ưu tiên 3: Thống kê tổng quan & chi tiết cụm (Pods / Nodes / Tự phục hồi / HITL)
+        dashboardStatisticsService
+          .getOverviewStats({
+            organization_id: orgIdClean,
+            cluster_id: clusterIdClean,
+            time_range: '24h',
+          })
+          .then((val) => {
+            if (!isStale() && val) setOverviewStats(val);
+          }),
+
+        clusterIdClean
+          ? clusterService.getClusterDetail(clusterIdClean, orgIdClean).then((val) => {
+              if (!isStale() && val) setClusterInfo(val);
+            })
+          : Promise.resolve(),
+
+        // Ưu tiên 4: Live Summary bản rút gọn (lite=true, chỉ ~3KB)
+        telemetryService
+          .getLiveSummary(currentServiceTarget || undefined, {
+            clusterId: clusterIdClean,
+            lite: true,
+          })
+          .then((data) => {
+            if (isStale() || !data) return;
+            setNodeTelemetry((prev) => {
+              const next = { ...(prev || {}), ...(data.latest_point || {}) };
+              if (data.latest_node_metric) {
+                const nm = data.latest_node_metric;
+                if (nm.node_name === 'cluster') {
+                  if (nm.cpu_usage_percent !== undefined) next.node_cpu_percent = Number(nm.cpu_usage_percent);
+                  if (nm.ram_usage_percent !== undefined) next.node_ram_percent = Number(nm.ram_usage_percent);
+                  if (nm.cpu_cores !== undefined) next.node_cpu_cores = Number(nm.cpu_cores);
+                  if (nm.ram_used_bytes) next.node_ram_gb = (Number(nm.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2);
+                  if (nm.disk_usage_percent !== undefined) next.disk = Number(nm.disk_usage_percent);
+                } else {
+                  nodeMetricsMapRef.current.set(nm.node_name || 'default', { ...nm, last_updated: Date.now() });
+                  const clusterAgg = calculateClusterNodeMetrics(nodeMetricsMapRef.current);
+                  if (clusterAgg) {
+                    Object.assign(next, clusterAgg);
                   }
                 }
-                return merged;
-              });
+              }
+              return next;
+            });
+          }),
+
+        // Ưu tiên 5: Chuỗi 12 điểm viễn trắc của dịch vụ đang chọn (chạy song song, không đợi phía sau!)
+        currentServiceTarget
+          ? telemetryService
+              .getMetricsSequence(currentServiceTarget, {
+                limit: 12,
+                cluster_id: clusterParam,
+              })
+              .then((metricsSeq) => {
+                if (isStale() || !Array.isArray(metricsSeq) || metricsSeq.length === 0) return;
+                const directInputs = [];
+                metricsSeq.forEach((pt, idx) => {
+                  const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                    if (pt[mName] !== undefined) {
+                      directInputs.push({
+                        id: `seq-init-${currentServiceTarget}-${idx}-${mName}`,
+                        metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
+                        metric_value: pt[mName],
+                        collected_at: ts,
+                      });
+                    }
+                  }
+                });
+                if (directInputs.length > 0) {
+                  setServiceInputsMap((prev) => ({
+                    ...prev,
+                    [currentServiceTarget]: directInputs,
+                  }));
+                }
+              })
+          : Promise.resolve(),
+
+        // Dự báo AI (GRU 7-Head)
+        aiService
+          .getPredictions({
+            limit: 20,
+            cluster_id: clusterParam,
+            organization_id: orgParam,
+          })
+          .then((val) => {
+            if (isStale()) return;
+            const predsList = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
+            setPredictions(predsList);
+
+            const inputsMap = {};
+            predsList.forEach((pred) => {
+              const wl = normalizeServiceName(pred.workload_name || pred.service_id);
+              if (wl && Array.isArray(pred.sequence) && pred.sequence.length > 0) {
+                const directInputs = [];
+                pred.sequence.forEach((pt, idx) => {
+                  const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                    if (pt[mName] !== undefined) {
+                      directInputs.push({
+                        id: `seq-${pred.id}-${idx}-${mName}`,
+                        prediction_id: pred.id,
+                        metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
+                        metric_value: pt[mName],
+                        collected_at: ts,
+                      });
+                    }
+                  }
+                });
+                if (directInputs.length > 0 && !inputsMap[wl]) {
+                  inputsMap[wl] = directInputs;
+                }
+              }
+            });
+            if (Object.keys(inputsMap).length > 0) {
+              setServiceInputsMap((prev) => ({ ...inputsMap, ...prev }));
             }
-            // Cập nhật real-time sequence cho biểu đồ khi có live pulse hoặc initial state (chỉ dùng node metric chuẩn)
-            if (chartTimeRangeRef.current === '15m' && data.latest_node_metric) {
-              const nodeMetric = data.latest_node_metric;
-              const nodeCpu = nodeMetric.cpu_usage_percent !== undefined ? Number(nodeMetric.cpu_usage_percent) : undefined;
-              const nodeRam = nodeMetric.ram_usage_percent !== undefined ? Number(nodeMetric.ram_usage_percent) : undefined;
-              setTelemetrySequence((prevSeq) => {
-                const now = new Date();
-                const nowMs = now.getTime();
-                const newPoint = {
-                  time_bucket: now.toISOString(),
-                  timestamp: nowMs,
-                  time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                  fullTime: `${now.toLocaleTimeString('vi-VN')} (${now.toLocaleDateString('vi-VN')})`,
-                  cpu: nodeCpu !== undefined ? nodeCpu : 0,
-                  ram: nodeRam !== undefined ? nodeRam : 0,
-                  node_cpu_percent: nodeCpu !== undefined ? nodeCpu : 0,
-                  node_ram_percent: nodeRam !== undefined ? nodeRam : 0,
-                  rawRamMb: nodeMetric.ram_used_bytes !== undefined ? Number(nodeMetric.ram_used_bytes) / (1024 * 1024) : 0,
-                  disk: Number(nodeMetric.disk_usage_percent !== undefined ? nodeMetric.disk_usage_percent : 0),
-                  latency: 0,
-                };
-                if (!prevSeq || prevSeq.length === 0) {
-                  return [newPoint];
-                }
-                const lastPt = prevSeq[prevSeq.length - 1];
-                const lastPtMs = lastPt.time_bucket ? new Date(lastPt.time_bucket).getTime() : (lastPt.timestamp || 0);
-                if (nowMs - lastPtMs < 2500) {
-                  const updated = [...prevSeq];
-                  updated[updated.length - 1] = {
-                    ...lastPt,
-                    cpu: nodeCpu !== undefined ? nodeCpu : lastPt.cpu,
-                    ram: nodeRam !== undefined ? nodeRam : lastPt.ram,
-                    node_cpu_percent: nodeCpu !== undefined ? nodeCpu : lastPt.node_cpu_percent,
-                    node_ram_percent: nodeRam !== undefined ? nodeRam : lastPt.node_ram_percent,
-                  };
-                  return updated;
-                }
-                if (prevSeq.length >= 60) {
-                  return [...prevSeq.slice(1), newPoint];
-                }
-                return [...prevSeq, newPoint];
+          }),
+
+        // Gọi DUY NHẤT 1 lần getIncidents thay vì 2 lần trùng nhau (giảm 50% băng thông!)
+        aiService
+          .getIncidents({
+            limit: 30,
+            cluster_id: clusterParam,
+            organization_id: orgParam,
+          })
+          .then((val) => {
+            if (isStale()) return;
+            const allList = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
+            setIncidents(allList);
+            const openCount = allList.filter((i) =>
+              ['OPEN', 'INVESTIGATING'].includes(String(i.status || '').toUpperCase())
+            ).length;
+            setClusterOpenIncidents(openCount);
+
+            const tLower = (currentServiceTarget || '').toLowerCase().trim();
+            if (!tLower) return;
+            const matchingInc =
+              allList.find((inc) => {
+                const fields = [inc.target_name, inc.service_id, inc.workload_name, inc.title];
+                return (
+                  String(inc.status || '').toUpperCase() === 'OPEN' &&
+                  fields.some((f) => {
+                    const n = normalizeServiceName(String(f || '')).toLowerCase();
+                    return n === tLower || n.startsWith(`${tLower}-`) || n.endsWith(` on ${tLower}`) || n.endsWith(` trên ${tLower}`);
+                  })
+                );
+              }) ||
+              allList.find((inc) => {
+                const fields = [inc.target_name, inc.service_id, inc.workload_name, inc.title];
+                return fields.some((f) => {
+                  const n = normalizeServiceName(String(f || '')).toLowerCase();
+                  return n === tLower || n.startsWith(`${tLower}-`) || n.endsWith(` on ${tLower}`) || n.endsWith(` trên ${tLower}`);
+                });
               });
+
+            if (matchingInc?.id) {
+              aiService
+                .getIncidentDetail(matchingInc.id)
+                .then((detail) => {
+                  if (!isStale() && detail) {
+                    setIncidentDetailsMap((prev) => ({ ...prev, [matchingInc.id]: detail }));
+                  }
+                })
+                .catch(() => {});
             }
-            if (Array.isArray(data.incidents)) setActiveIncidents(data.incidents);
-            if (Array.isArray(data.recommendations)) setAiRecommendations(data.recommendations);
-            setLastDataTimestamp(new Date(payload.timestamp || Date.now()).toLocaleTimeString());
+          }),
+
+        // Khuyến nghị, Chính sách, Hành động tự phục hồi, Phê duyệt HITL
+        aiService
+          .getRecommendations({ limit: 20, cluster_id: clusterParam, organization_id: orgParam })
+          .then((val) => {
+            if (!isStale()) setRecommendations(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+          }),
+
+        selfHealingService.getPolicies({ organization_id: orgParam }).then((val) => {
+          if (!isStale()) setPolicies(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+        }),
+
+        currentServiceTarget
+          ? selfHealingService
+              .getActions({
+                limit: 20,
+                cluster_id: clusterParam,
+                organization_id: orgParam,
+                search: currentServiceTarget,
+              })
+              .then((val) => {
+                if (!isStale()) setHealingActions(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+              })
+          : Promise.resolve(),
+
+        currentServiceTarget
+          ? selfHealingService
+              .getApprovals({
+                limit: 20,
+                cluster_id: clusterParam,
+                organization_id: orgParam,
+                search: currentServiceTarget,
+              })
+              .then((val) => {
+                if (!isStale()) setApprovals(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+              })
+          : Promise.resolve(),
+      ];
+
+      await Promise.allSettled(tasks);
+    } catch (err) {
+      console.warn('[OverviewPage] Lỗi khi nạp dữ liệu AI:', err);
+    } finally {
+      isFetchingRef.current = false;
+      setIsLoading(false);
+    }
+  }, [isClusterOnline, clusterParam, orgParam, currentServiceTarget, calculateClusterNodeMetrics]);
+
+  useEffect(() => {
+    if (!isClusterOnline) return;
+    fetchData();
+    const interval = setInterval(() => fetchData(true), 15000);
+    return () => clearInterval(interval);
+  }, [fetchData, isClusterOnline]);
+
+  // 2. Lắng nghe WebSocket thời gian thực (CHỈ kết nối khi cụm ONLINE và đã xác định rõ dịch vụ đang chọn — bỏ fallback cứng 'mongodb')
+  useEffect(() => {
+    if (!isClusterOnline || !currentServiceTarget) {
+      setIsWsConnected(false);
+      return;
+    }
+    let unsubscribe = null;
+    try {
+      unsubscribe = telemetryService.subscribeWebSocket(
+        currentServiceTarget,
+        (payload) => {
+          if (!payload) return;
+
+          // A. Gói tin tiến độ gom 12 bước viễn trắc thời gian thực (batch_accumulation)
+          if (payload.type === 'batch_accumulation' && payload.data) {
+            const bp = payload.data;
+            const sId = normalizeServiceName(bp.service_id);
+            if (!sId) return;
+
+            setBatchProgressMap((prev) => ({
+              ...prev,
+              [sId]: bp,
+            }));
+
+            if (bp.active_step) {
+              setServiceStepMap((prev) => ({
+                ...prev,
+                [sId]: bp.active_step,
+              }));
+            }
+
+            if (Array.isArray(bp.points) && bp.points.length > 0) {
+              const directInputs = [];
+              bp.points.forEach((pt, idx) => {
+                const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                  if (pt[mName] !== undefined) {
+                    directInputs.push({
+                      id: `live-${sId}-${idx}-${mName}`,
+                      metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
+                      metric_value: pt[mName],
+                      collected_at: ts,
+                    });
+                  }
+                }
+              });
+              if (directInputs.length > 0) {
+                setServiceInputsMap((prev) => ({
+                  ...prev,
+                  [sId]: directInputs,
+                }));
+              }
+            }
           }
-        } else if (payload.type === 'node_metrics' && payload.data) {
-          // THÔNG SỐ TOÀN CỤM MÁY CHỦ (Từ eBPF / NodeResourceCollector của Agent)
-          const raw = payload.data;
-          setIsDataStale(false);
-          const nodeCpu = raw.cpu_usage_percent !== undefined ? Number(raw.cpu_usage_percent) : undefined;
-          const nodeRam = raw.ram_usage_percent !== undefined ? Number(raw.ram_usage_percent) : undefined;
 
-          setTelemetry((prev) => ({
-            ...prev,
-            node_cpu_percent: nodeCpu !== undefined ? nodeCpu : prev?.node_cpu_percent,
-            node_ram_percent: nodeRam !== undefined ? nodeRam : prev?.node_ram_percent,
-            node_cpu_cores: raw.cpu_cores !== undefined ? Number(raw.cpu_cores) : prev?.node_cpu_cores,
-            node_ram_gb: raw.ram_used_bytes !== undefined ? (Number(raw.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2) : prev?.node_ram_gb,
-            disk: raw.disk_usage_percent !== undefined ? Number(raw.disk_usage_percent) : prev?.disk,
-          }));
+          // B. Gói tin lượt dự báo mới từ GRU Pipeline (ai_prediction)
+          if (payload.type === 'ai_prediction' && payload.data) {
+            const newPred = payload.data;
+            const predId = newPred.prediction_id || newPred.id;
+            const wlName = normalizeServiceName(newPred.workload_name || newPred.service_id || newPred.target_name);
 
-          // Đồng thời cập nhật Biểu đồ Tài nguyên Cụm máy chủ (CPU & RAM)
-          if (chartTimeRangeRef.current === '15m') {
-            setTelemetrySequence((prevSeq) => {
-              const now = new Date();
-              const nowMs = now.getTime();
-              const lastPt = prevSeq && prevSeq.length > 0 ? prevSeq[prevSeq.length - 1] : null;
+            const formatted = {
+              id: predId,
+              workload_name: wlName,
+              service_id: wlName,
+              status: newPred.status || 'HEALTHY',
+              prediction_type: newPred.primary_risk || 'NORMAL',
+              risk_score: newPred.overall_risk_score,
+              confidence_score: newPred.confidence_score,
+              ...newPred,
+            };
 
-              const newPoint = {
-                time_bucket: now.toISOString(),
-                timestamp: nowMs,
-                time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                fullTime: `${now.toLocaleTimeString('vi-VN')} (${now.toLocaleDateString('vi-VN')})`,
-                cpu: nodeCpu !== undefined ? nodeCpu : (lastPt?.cpu || 0),
-                ram: nodeRam !== undefined ? nodeRam : (lastPt?.ram || 0),
-                node_cpu_percent: nodeCpu !== undefined ? nodeCpu : (lastPt?.node_cpu_percent || 0),
-                node_ram_percent: nodeRam !== undefined ? nodeRam : (lastPt?.node_ram_percent || 0),
-                rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : Number(lastPt?.rawRamMb || 0),
-                disk: Number(raw.disk_usage_percent !== undefined ? raw.disk_usage_percent : (lastPt?.disk || 0)),
-                latency: Number(lastPt?.latency || 0),
-              };
-
-              if (!prevSeq || prevSeq.length === 0) return [newPoint];
-
-              const lastPtMs = lastPt.time_bucket ? new Date(lastPt.time_bucket).getTime() : (lastPt.timestamp || 0);
-              if (nowMs - lastPtMs < 2500) {
-                const updated = [...prevSeq];
-                updated[updated.length - 1] = {
-                  ...lastPt,
-                  time_bucket: now.toISOString(),
-                  timestamp: nowMs,
-                  cpu: nodeCpu !== undefined ? nodeCpu : lastPt.cpu,
-                  ram: nodeRam !== undefined ? nodeRam : lastPt.ram,
-                  node_cpu_percent: nodeCpu !== undefined ? nodeCpu : lastPt.node_cpu_percent,
-                  node_ram_percent: nodeRam !== undefined ? nodeRam : lastPt.node_ram_percent,
-                  rawRamMb: raw.ram_used_bytes !== undefined ? Number(raw.ram_used_bytes) / (1024 * 1024) : lastPt.rawRamMb,
-                };
-                return updated;
+            setPredictions((prev) => {
+              if (!prev.some((p) => p.id === predId)) {
+                return [formatted, ...prev.slice(0, 29)];
               }
+              return prev;
+            });
 
-              if (prevSeq.length >= 60) {
-                return [...prevSeq.slice(1), newPoint];
+            if (Array.isArray(newPred.sequence) && newPred.sequence.length >= 12) {
+              const directInputs = [];
+              newPred.sequence.forEach((pt, idx) => {
+                const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                  if (pt[mName] !== undefined) {
+                    directInputs.push({
+                      id: `ws-${predId}-${idx}-${mName}`,
+                      prediction_id: predId,
+                      metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
+                      metric_value: pt[mName],
+                      collected_at: ts,
+                    });
+                  }
+                }
+              });
+              if (directInputs.length > 0) {
+                setServiceInputsMap((prev) => ({
+                  ...prev,
+                  [wlName]: directInputs,
+                }));
               }
-              return [...prevSeq, newPoint];
+            }
+          }
+
+          // C. Sự cố & Chẩn đoán Đa tác tử RCA mới (incident)
+          if (payload.type === 'incident' && payload.data) {
+            const inc = payload.data;
+            setIncidents((prev) => {
+              const filtered = prev.filter((item) => item.id !== inc.id);
+              return [
+                {
+                  ...inc,
+                  target_name: normalizeServiceName(inc.target_name || inc.service_id),
+                  status: inc.status || 'OPEN',
+                },
+                ...filtered.slice(0, 19),
+              ];
             });
           }
-          setLastDataTimestamp(new Date().toLocaleTimeString());
-        } else if ((payload.type === 'raw_metric' || payload.type === 'metrics') && payload.data) {
-          // THÔNG SỐ POD NGHIỆP VỤ (APM microservice con)
-          const raw = payload.data;
-          setIsDataStale(false);
-          const podCpu = raw.cpu !== undefined ? Number(raw.cpu) : undefined;
-          const podRam = raw.ram !== undefined ? Number(raw.ram) : undefined;
 
-          if (telemetryRef.current?.cpu !== undefined) setPrevCpu(Number(telemetryRef.current.cpu));
-          if (telemetryRef.current?.ram !== undefined) setPrevRam(Number(telemetryRef.current.ram));
-
-          setTelemetry((prev) => ({
-            ...prev,
-            cpu: podCpu !== undefined ? podCpu : prev?.cpu,
-            ram: podRam !== undefined ? podRam : prev?.ram,
-            latency: raw.latency !== undefined ? Number(raw.latency) : prev?.latency,
-            request_rate: raw.request_rate !== undefined ? Number(raw.request_rate) : prev?.request_rate,
-            http_5xx_rate: raw.http_5xx_rate !== undefined ? Number(raw.http_5xx_rate) : prev?.http_5xx_rate,
-          }));
-          setLastDataTimestamp(new Date().toLocaleTimeString());
-        } else if (payload.type === 'incident' && payload.data) {
-          setActiveIncidents((prev) => [payload.data, ...prev.slice(0, 9)]);
-        } else if (payload.type === 'ai_recommendation' && payload.data) {
-          setAiRecommendations((prev) => [payload.data, ...prev.slice(0, 9)]);
-        } else if (
-          payload.type === 'approval_created' ||
-          payload.type === 'approval_status_changed' ||
-          payload.type === 'healing_action_triggered'
-        ) {
-          if (refreshPendingApprovals) {
-            refreshPendingApprovals();
+          // D. Khuyến nghị AI mới từ RecommendationAgent (ai_recommendation)
+          if (payload.type === 'ai_recommendation' && payload.data) {
+            const rec = payload.data;
+            setRecommendations((prev) => {
+              const filtered = prev.filter((item) => item.id !== rec.id);
+              return [rec, ...filtered.slice(0, 19)];
+            });
           }
-        }
-      },
-      (connected) => {
-        if (isMounted) setIsWsLive(connected);
-      },
-      activeClusterId
+
+          // E. Yêu cầu phê duyệt HITL mới (approval_created)
+          if (payload.type === 'approval_created' && payload.data) {
+            const appr = payload.data;
+            setApprovals((prev) => {
+              const filtered = prev.filter((item) => item.id !== appr.id);
+              return [{ ...appr, status: 'PENDING' }, ...filtered.slice(0, 19)];
+            });
+            fetchData(true);
+          }
+
+          // F. Cập nhật hành động tự phục hồi & hậu kiểm tự đóng sự cố
+          if (
+            ['incident_resolved', 'healing_action', 'healing_action_update', 'action_completed', 'recovery_verified'].includes(
+              payload.type
+            )
+          ) {
+            fetchData(true);
+          }
+
+          // G. Thông số toàn cụm máy chủ (CPU/RAM/Disk thực tế từ eBPF NodeResourceCollector)
+          // Đảm bảo tổng hợp trọng số của TẤT CẢ các Node đang chạy, không ghi đè đơn lẻ 1 Node để tránh nhảy số!
+          if (payload.type === 'node_metrics' && payload.data) {
+            const raw = payload.data;
+            const nodeName = raw.node_name || 'default';
+            nodeMetricsMapRef.current.set(nodeName, {
+              ...(nodeMetricsMapRef.current.get(nodeName) || {}),
+              ...raw,
+              last_updated: Date.now(),
+            });
+
+            const clusterAgg = calculateClusterNodeMetrics(nodeMetricsMapRef.current);
+            if (clusterAgg) {
+              setNodeTelemetry((prev) => ({
+                ...(prev || {}),
+                ...clusterAgg,
+              }));
+            }
+          } else if (payload.type === 'initial_snapshot' && payload.data) {
+            const snap = payload.data;
+            if (snap.latest_node_metric || snap.latest_point) {
+              setNodeTelemetry((prev) => {
+                const next = { ...(prev || {}), ...(snap.latest_point || {}) };
+                const nm = snap.latest_node_metric;
+                if (nm) {
+                  if (nm.node_name === 'cluster') {
+                    if (nm.cpu_usage_percent !== undefined) next.node_cpu_percent = Number(nm.cpu_usage_percent);
+                    if (nm.ram_usage_percent !== undefined) next.node_ram_percent = Number(nm.ram_usage_percent);
+                    if (nm.cpu_cores !== undefined) next.node_cpu_cores = Number(nm.cpu_cores);
+                    if (nm.ram_used_bytes) next.node_ram_gb = (Number(nm.ram_used_bytes) / (1024 * 1024 * 1024)).toFixed(2);
+                    if (nm.disk_usage_percent !== undefined) next.disk = Number(nm.disk_usage_percent);
+                  } else {
+                    nodeMetricsMapRef.current.set(nm.node_name || 'default', { ...nm, last_updated: Date.now() });
+                    const clusterAgg = calculateClusterNodeMetrics(nodeMetricsMapRef.current);
+                    if (clusterAgg) {
+                      Object.assign(next, clusterAgg);
+                    }
+                  }
+                }
+                return next;
+              });
+            }
+          } else if ((payload.type === 'raw_metric' || payload.type === 'metrics') && payload.data) {
+            const raw = payload.data;
+            if (raw.latency !== undefined) {
+              setNodeTelemetry((prev) => ({ ...(prev || {}), latency: Number(raw.latency) }));
+            }
+          }
+        },
+        (connected) => setIsWsConnected(connected),
+        clusterParam
+      );
+    } catch (e) {
+      console.warn('[OverviewPage] WebSocket không khả dụng:', e);
+    }
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [isClusterOnline, currentServiceTarget, clusterParam, fetchData, calculateClusterNodeMetrics]);
+
+  // Dự báo mới nhất ĐÚNG của Service đang chọn (tuyệt đối không fallback sang service khác!)
+  const displaySelectedPrediction = useMemo(() => {
+    if (!predictions || predictions.length === 0) return null;
+    const targetLower = (currentServiceTarget || '').toLowerCase();
+    const found = predictions.find((p) => {
+      const wl = normalizeServiceName(p.workload_name || p.service_id).toLowerCase();
+      return wl === targetLower || wl.startsWith(`${targetLower}-`);
+    }) || null;
+
+    if (!found) return null;
+
+    // Kiểm tra xem dịch vụ có sự cố nào ĐANG MỞ hay không
+    const matchesTarget = (raw) => {
+      if (!raw || !targetLower) return false;
+      const normalized = normalizeServiceName(String(raw)).toLowerCase();
+      if (!normalized) return false;
+      if (normalized === targetLower) return true;
+      if (normalized.startsWith(`${targetLower}-`)) return true;
+      if (normalized.endsWith(` on ${targetLower}`) || normalized.endsWith(` trên ${targetLower}`)) return true;
+      return false;
+    };
+
+    const serviceIncidents = (incidents || []).filter(
+      (inc) =>
+        matchesTarget(inc.target_name) ||
+        matchesTarget(inc.service_id) ||
+        matchesTarget(inc.workload_name) ||
+        matchesTarget(inc.title)
     );
+    const hasOpenIncidents = serviceIncidents.some((inc) =>
+      ['OPEN', 'INVESTIGATING', 'AWAITING_APPROVAL'].includes(String(inc.status || '').toUpperCase())
+    );
+    const latestResolved = serviceIncidents.find(
+      (inc) => String(inc.status || '').toUpperCase() === 'RESOLVED'
+    );
+
+    // ANTI-STALE RESOLVED INCIDENT POLLUTION:
+    // Nếu dịch vụ KHÔNG còn sự cố nào đang mở (0 OPEN)
+    // VÀ sự cố gần nhất đã ở trạng thái RESOLVED
+    // VÀ thời điểm dự báo này (predicted_at / created_at) xảy ra TRƯỚC hoặc TẠI THỜI ĐIỂM sự cố được giải quyết (resolved_at):
+    // => Dự báo rủi ro này thuộc về sự cố cũ ĐÃ PHỤC HỒI! Tự động chuyển về trạng thái HEALTHY an toàn.
+    const predTimeMs = found.predicted_at
+      ? new Date(found.predicted_at).getTime()
+      : found.created_at
+        ? new Date(found.created_at).getTime()
+        : 0;
+    const resolvedTimeMs = latestResolved?.resolved_at
+      ? new Date(latestResolved.resolved_at).getTime()
+      : 0;
+
+    const isStaleFromResolvedIncident =
+      !hasOpenIncidents &&
+      (resolvedTimeMs > 0 || (predTimeMs > 0 && Date.now() - predTimeMs > 60000) || predTimeMs === 0);
+
+    if (isStaleFromResolvedIncident) {
+      return {
+        ...found,
+        status: 'HEALTHY',
+        prediction_type: 'NORMAL',
+        primary_risk: 'NORMAL',
+        overall_risk_score: 0,
+        risk_score: 0,
+        confidence_score: 0,
+        detected_risks: [],
+        risk_outputs: {
+          CPU_OVERLOAD: { confidence: 0 },
+          OOM: { confidence: 0 },
+          DISK_FULL: { confidence: 0 },
+          HIGH_LATENCY: { confidence: 0 },
+          HTTP_5XX_SPIKE: { confidence: 0 },
+          TRAFFIC_OVERLOAD: { confidence: 0 },
+          SCALE_DOWN_CANDIDATE: { confidence: 0 },
+        },
+      };
+    }
+
+    return found;
+  }, [predictions, currentServiceTarget, incidents]);
+
+  // Nạp chi tiết inputs khi đổi prediction
+  useEffect(() => {
+    if (!displaySelectedPrediction?.id) return;
+    if (serviceInputsMap[currentServiceTarget]?.length > 0) return;
+
+    let isMounted = true;
+    aiService.getPredictionInputs(displaySelectedPrediction.id).then((inputs) => {
+      if (isMounted && Array.isArray(inputs) && inputs.length > 0) {
+        setServiceInputsMap((prev) => ({
+          ...prev,
+          [currentServiceTarget]: inputs,
+        }));
+      }
+    }).catch(() => {});
 
     return () => {
       isMounted = false;
-      unsubscribe();
     };
-  }, [isClusterOnline, currentEnv?.id, activeClusterId]);
+  }, [displaySelectedPrediction?.id, currentServiceTarget, serviceInputsMap]);
 
-  // Tính toán số liệu phần cứng và K8s Inventory THẬT
-  const runningPodsCount = rawPods.length > 0
-    ? rawPods.filter((p) => p.status === 'Running' || p.phase === 'Running').length
-    : podCount;
-
-  const namespacesList = useMemo(() => {
-    if (rawPods.length > 0) {
-      const set = new Set(rawPods.map((p) => p.namespace).filter(Boolean));
-      return Array.from(set);
-    }
+  // Dữ liệu viễn trắc thô CÔ LẬP theo đúng Service đang chọn (tuyệt đối không mượn dữ liệu của service trước!)
+  const currentInputs = useMemo(() => {
+    if (!currentServiceTarget) return [];
+    const fromMap = serviceInputsMap[currentServiceTarget];
+    if (Array.isArray(fromMap) && fromMap.length > 0) return fromMap;
     return [];
-  }, [rawPods]);
+  }, [serviceInputsMap, currentServiceTarget]);
 
-  const namespacesCount = namespacesList.length;
+  // Biến đổi thành chuỗi 12 bước viễn trắc (T1..T12)
+  const timesteps = useMemo(() => {
+    if (!currentInputs || currentInputs.length === 0) return [];
 
-  // Node hardware capacity - Tổng hợp dung lượng thực tế từ toàn bộ nodes của cụm
-  const { totalCpuCores, totalRamGb, totalDiskTb } = useMemo(() => {
-    if (clusterInfo?.nodes && clusterInfo.nodes.length > 0) {
-      const totalCores = clusterInfo.nodes.reduce((acc, n) => {
-        const mCores = parseInt(n.cpu_capacity_millicores, 10);
-        return acc + (Number.isFinite(mCores) ? mCores / 1000 : 0);
-      }, 0);
-      const totalRam = clusterInfo.nodes.reduce((acc, n) => {
-        const bytes = parseInt(n.memory_capacity_bytes, 10);
-        return acc + (Number.isFinite(bytes) ? bytes : 0);
-      }, 0);
-      const totalDisk = clusterInfo.nodes.reduce((acc, n) => {
-        const bytes = parseInt(n.disk_capacity_bytes, 10);
-        return acc + (Number.isFinite(bytes) ? bytes : 0);
-      }, 0);
+    const map = new Map();
+    currentInputs.forEach((item) => {
+      const key = item.collected_at ? new Date(item.collected_at).toISOString() : item.id;
+      if (!map.has(key)) {
+        const d = new Date(item.collected_at);
+        const timeLabel = isNaN(d.getTime())
+          ? ''
+          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-      return {
-        totalCpuCores: totalCores > 0 ? Math.round(totalCores) : 0,
-        totalRamGb: totalRam > 0 ? (totalRam / (1024 * 1024 * 1024)).toFixed(1) : '0.0',
-        totalDiskTb: totalDisk > 0 ? (totalDisk / (1024 * 1024 * 1024 * 1024)).toFixed(1) : '0.0',
-      };
-    }
-    return {
-      totalCpuCores: 0,
-      totalRamGb: '0.0',
-      totalDiskTb: '0.0',
-    };
-  }, [clusterInfo?.nodes]);
-
-  // Metrics telemetry values
-  const cpuVal = telemetry?.cpu !== undefined ? Number(telemetry.cpu) : 0;
-  const allocatedCpu = ((cpuVal / 100) * totalCpuCores).toFixed(2);
-  const cpuDiff = prevCpu !== null ? (cpuVal - prevCpu).toFixed(1) : '0.0';
-
-  const ramVal = telemetry?.ram !== undefined ? Number(telemetry.ram) : 0; // MB RSS
-  const ramUsagePercent = Math.max(
-    1,
-    Math.min(100, Math.round(((ramVal / (parseFloat(totalRamGb) * 1024)) * 100) * 10) / 10)
-  );
-  const ramDiff = prevRam !== null ? (ramVal - prevRam).toFixed(1) : '0.0';
-
-  // Mức trung bình 1 giờ (Historical 1h average from API)
-  const avgCpu1h = overviewStats?.resource_usage?.avg_cpu_percent !== undefined
-    ? Number(overviewStats.resource_usage.avg_cpu_percent).toFixed(1)
-    : null;
-  const avgRam1h = overviewStats?.resource_usage?.avg_ram_percent !== undefined
-    ? Number(overviewStats.resource_usage.avg_ram_percent).toFixed(1)
-    : null;
-
-  // Mức Tức thời thời gian thực (Real-time Live from eBPF WebSocket stream)
-  const liveCpuPoint = telemetry?.node_cpu_percent !== undefined && telemetry.node_cpu_percent !== null && Number(telemetry.node_cpu_percent) > 0
-    ? Number(telemetry.node_cpu_percent)
-    : (telemetrySequence?.length > 0 ? Number(telemetrySequence[telemetrySequence.length - 1].cpu) : null);
-
-  const liveRamPoint = telemetry?.node_ram_percent !== undefined && telemetry.node_ram_percent !== null && Number(telemetry.node_ram_percent) > 0
-    ? Number(telemetry.node_ram_percent)
-    : (telemetrySequence?.length > 0 ? Number(telemetrySequence[telemetrySequence.length - 1].ram) : null);
-
-  // Ưu tiên hiển thị số TỨC THỜI thời gian thực để đồng bộ 100% với biểu đồ viễn trắc
-  const nodeCpuPercent = liveCpuPoint !== null
-    ? liveCpuPoint.toFixed(1)
-    : (avgCpu1h || '0.0');
-
-  const nodeRamPercent = liveRamPoint !== null
-    ? liveRamPoint.toFixed(1)
-    : (avgRam1h || '0.0');
-
-  // Cores used = (nodeCpuPercent / 100) * totalCpuCores
-  const nodeUsedCpuCores = totalCpuCores > 0
-    ? ((Number(nodeCpuPercent) / 100) * totalCpuCores).toFixed(2)
-    : '0.00';
-  const nodeCpuCores = nodeUsedCpuCores;
-
-  const nodeRamGb = telemetry?.node_ram_gb !== undefined && telemetry.node_ram_gb !== null && Number(telemetry.node_ram_gb) > 0
-    ? Number(telemetry.node_ram_gb).toFixed(2)
-    : ((Number(nodeRamPercent) / 100) * parseFloat(totalRamGb)).toFixed(2);
-
-  const diskVal = overviewStats?.resource_usage?.avg_disk_percent !== undefined
-    ? Math.round(Number(overviewStats.resource_usage.avg_disk_percent))
-    : (telemetry?.disk !== undefined ? Math.round(Number(telemetry.disk)) : 0);
-  const diskStatusText = diskVal > 85 ? 'Cảnh báo đầy' : diskVal > 70 ? 'Cần theo dõi' : 'Bình thường';
-  const diskUsedGb = Math.round((diskVal / 100) * parseFloat(totalDiskTb) * 1024);
-
-  // Lọc sự cố đang diễn ra thực tế (chỉ OPEN hoặc INVESTIGATING) - Loại bỏ tuyệt đối các sự cố đã RESOLVED
-  const activeIncidentsList = useMemo(() => {
-    return activeIncidents.filter(
-      (i) => i.status === 'OPEN' || i.status === 'INVESTIGATING'
-    );
-  }, [activeIncidents]);
-
-  const activeIncidentsCount = activeIncidentsList.length;
-
-  // Lọc khuyến nghị AI: Chỉ hiển thị các dự báo/khuyến nghị chưa phê duyệt (PROPOSED/PENDING)
-  const pendingRecommendations = useMemo(() => {
-    return aiRecommendations.filter(
-      (rec) => rec.status === 'PROPOSED' || rec.status === 'PENDING'
-    );
-  }, [aiRecommendations]);
-
-  // Biến đổi sequence cho biểu đồ với cả giá trị % và đơn vị vật lý (MB/GB)
-  const chartTelemetryData = useMemo(() => {
-    if (!telemetrySequence || telemetrySequence.length === 0) return null;
-    const totalRamMb = (parseFloat(totalRamGb) || 8.0) * 1024;
-
-    return telemetrySequence.map((pt, idx) => {
-      const t = pt.time_bucket
-        ? new Date(pt.time_bucket)
-        : new Date(Date.now() - (telemetrySequence.length - idx) * 5000);
-
-      // Ưu tiên tuyệt đối chỉ số tài nguyên Node Cụm máy chủ (eBPF)
-      const rawRamVal = Number(
-        pt.node_ram_percent !== undefined && pt.node_ram_percent !== null
-          ? pt.node_ram_percent
-          : (pt.ram_usage_percent !== undefined && pt.ram_usage_percent !== null
-              ? pt.ram_usage_percent
-              : pt.ram ?? 0)
-      );
-      let ramPercent = 0;
-      let rawRamMb = Number(pt.rawRamMb ?? 0);
-
-      // Nếu rawRamVal > 100, tức là mang giá trị Megabytes thô (ví dụ 1850MB hay 3350MB)
-      if (rawRamVal > 100) {
-        rawRamMb = rawRamVal;
-        ramPercent = Math.min(100, Math.max(0, Math.round(((rawRamMb / totalRamMb) * 100) * 100) / 100));
-      } else {
-        // rawRamVal đã là phần trăm hợp lệ (ví dụ: 22.8% - 59.3%)
-        ramPercent = Math.min(100, Math.max(0, Math.round(rawRamVal * 100) / 100));
-        if (!rawRamMb && ramPercent > 0) {
-          rawRamMb = Math.round((ramPercent / 100) * totalRamMb);
-        }
+        map.set(key, {
+          rawTime: item.collected_at,
+          timeLabel,
+          cpu: 0,
+          ram: 0,
+          disk: 0,
+          latency: 0,
+          request_rate: 0,
+          error_5xx: 0,
+        });
       }
 
-      const rawCpuVal = Number(
-        pt.node_cpu_percent !== undefined && pt.node_cpu_percent !== null
-          ? pt.node_cpu_percent
-          : (pt.cpu_usage_percent !== undefined && pt.cpu_usage_percent !== null
-              ? pt.cpu_usage_percent
-              : pt.cpu ?? 0)
-      );
-      const cpuPercent = Math.min(100, Math.max(0, Math.round(rawCpuVal * 100) / 100));
+      const entry = map.get(key);
+      const mName = item.metric_name?.toLowerCase();
+      const val = parseFloat(item.metric_value) || 0;
+      const targetKey = mName === 'http_5xx_rate' ? 'error_5xx' : mName;
 
+      if (targetKey && entry[targetKey] !== undefined) {
+        entry[targetKey] = val;
+      }
+    });
+
+    const sorted = Array.from(map.values()).sort(
+      (a, b) => new Date(a.rawTime) - new Date(b.rawTime)
+    );
+
+    return sorted.map((item, idx) => ({
+      ...item,
+      step: idx + 1,
+      stepLabel: `T${idx + 1}`,
+      displayTime: item.timeLabel || `T${idx + 1}`,
+    }));
+  }, [currentInputs]);
+
+  // Thống kê nhanh 6 chỉ số viễn trắc
+  const seriesSummaries = useMemo(() => {
+    if (timesteps.length === 0) return [];
+    return METRIC_CONFIGS.map((cfg) => {
+      const vals = timesteps.map((t) => Number(t[cfg.key] || 0));
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const sum = vals.reduce((a, b) => a + b, 0);
+      const avg = sum / (vals.length || 1);
+      const latest = vals[vals.length - 1] ?? 0;
       return {
-        timestamp: t.getTime(),
-        time_bucket: t.toISOString(),
-        time: t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        fullTime: `${t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} (${t.toLocaleDateString('vi-VN')})`,
-        cpu: cpuPercent,
-        ram: ramPercent,
-        rawRamMb: rawRamMb,
-        disk: Number(pt.disk_usage_percent ?? pt.disk ?? 0),
-        latency: Number(pt.latency) || 0,
+        key: cfg.key,
+        label: cfg.label,
+        min: min.toFixed(2),
+        max: max.toFixed(2),
+        avg: avg.toFixed(2),
+        latest: latest.toFixed(2),
       };
     });
-  }, [telemetrySequence, totalRamGb]);
+  }, [timesteps]);
 
-  // Tìm cụm Online khả dụng để hỗ trợ người dùng chuyển nhanh
-  const onlineCluster = useMemo(() => {
-    if (!envList || envList.length === 0) return null;
-    return envList.find((e) => e.agentStatus === 'ONLINE' && e.id !== currentEnv?.id) || null;
-  }, [envList, currentEnv?.id]);
+  const currentActiveStep = isClusterOnline ? (serviceStepMap[currentServiceTarget] || 12) : 0;
 
-  // ==========================================
-  // Honest Empty State: Khi cụm K8s đang chọn là OFFLINE hoặc chưa cài Agent
-  // ==========================================
-  if (!isClusterOnline || (clusterInfo && (!clusterInfo.nodes || clusterInfo.nodes.length === 0))) {
-    return (
-      <div className="dashboard-overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                backgroundColor: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <LayoutDashboard size={20} color="#059669" />
-            </div>
-            <div>
-              <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-                Tổng Quan Vận Hành Hạ Tầng
-              </h1>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-                Giám sát trạng thái vận hành và kết nối tác tử hạ tầng Kubernetes
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              triggerRefresh();
-              fetchClusterInfo();
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-            <span>Kiểm tra kết nối</span>
-          </button>
-        </div>
+  // Quy mô Pods & Nodes thực tế của Service đang chọn (kiểm tra chặt chẽ vị trí Pod trên từng Node)
+  const currentServiceMetadata = useMemo(() => {
+    if (!isClusterOnline) {
+      return { pods: 0, nodes: 0, totalClusterNodes: 0, nodeNames: [] };
+    }
 
-        {/* Card thông báo Viễn trắc trung thực */}
-        <div
-          className="dash-card"
-          style={{
-            padding: '48px 32px',
-            textAlign: 'center',
-            maxWidth: '680px',
-            margin: '30px auto',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            border: '1px dashed var(--dash-border)',
-            borderRadius: 'var(--dash-radius-lg)',
-          }}
-        >
-          <div
-            style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: 'var(--dash-radius-xl)',
-              backgroundColor: 'var(--dash-warning-bg)',
-              color: 'var(--dash-warning-text)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '20px',
-            }}
-          >
-            <Radio size={32} />
-          </div>
+    const targetLower = (currentServiceTarget || '').toLowerCase().trim();
+    const totalClusterNodes =
+      Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0 ? clusterInfo.nodes.length : 1;
 
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '3px 10px',
-              borderRadius: 'var(--dash-radius-full)',
-              backgroundColor: 'var(--dash-danger-bg)',
-              color: 'var(--dash-danger)',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              marginBottom: '12px',
-            }}
-          >
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--dash-danger)' }} />
-            TÁC TỬ NGOẠI TUYẾN / CHƯA KẾT NỐI
-          </div>
+    // Tìm các Pod thực tế thuộc dịch vụ đang chọn từ clusterInfo.pods (hỗ trợ toàn bộ 11 workloads K8s)
+    const matchedPods = (clusterInfo?.pods || []).filter((p) => {
+      if (!p || !p.name) return false;
+      const podName = String(p.name).toLowerCase();
+      const normalized = normalizeServiceName(String(p.name)).toLowerCase();
+      const svcId = String(p.service_id || '').toLowerCase();
+      const appLabel = String(p.labels?.app || '').toLowerCase();
+      const k8sApp = String(p.labels?.['k8s-app'] || '').toLowerCase();
+      const k8sName = String(p.labels?.['app.kubernetes.io/name'] || '').toLowerCase();
 
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '8px' }}>
-            Cụm Kubernetes "{currentEnv?.cluster || currentEnv?.name || 'Mặc định'}" Chưa Có Tác Tử Kết Nối
-          </h2>
+      const isMatch =
+        normalized === targetLower ||
+        normalized.startsWith(`${targetLower}-`) ||
+        podName.startsWith(`${targetLower}-`) ||
+        svcId === targetLower ||
+        appLabel === targetLower ||
+        k8sApp === targetLower ||
+        k8sName === targetLower ||
+        (targetLower === 'coredns' && (podName.startsWith('coredns') || k8sApp === 'kube-dns')) ||
+        (targetLower === 'opentelemetry-collector' && podName.startsWith('otel-collector')) ||
+        (targetLower === 'kube-prometheus-stack-operator' && podName.startsWith('prometheus-kube-prometheus-operator')) ||
+        (targetLower === 'kube-state-metrics' && podName.startsWith('prometheus-kube-state-metrics')) ||
+        (targetLower === 'prometheus-node-exporter' && podName.includes('node-exporter')) ||
+        (targetLower === 'prometheus' && podName.includes('prometheus-prometheus-kube-prometheus-prometheus'));
 
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', lineHeight: 1.6, maxWidth: '520px', marginBottom: '24px' }}>
-            Cụm <strong>{currentEnv?.cluster || currentEnv?.name || 'Mặc định'}</strong> hiện chưa nhận được viễn trắc từ Tác tử eBPF. SelfHeal tuân thủ nghiêm ngặt nguyên tắc <strong>Viễn trắc trung thực (Honest Telemetry)</strong>: không hiển thị số liệu giả lập khi cụm chưa kết nối tác tử.
-          </p>
+      const isAlive = !['Failed', 'Unknown', 'Completed', 'Succeeded'].includes(p.phase);
+      return isMatch && isAlive;
+    });
 
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button
-              onClick={() => onNavigate && onNavigate('/dashboard/clusters')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                backgroundColor: 'var(--dash-primary)',
-                color: '#FFFFFF',
-                borderRadius: 'var(--dash-radius-md)',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-                boxShadow: 'var(--dash-shadow-sm)',
-              }}
-            >
-              <Terminal size={16} />
-              <span>Lấy Lệnh Cài Đặt Tác Tử Cho Cụm Này</span>
-            </button>
-
-            {onlineCluster && (
-              <button
-                onClick={() => {
-                  setCurrentEnv(onlineCluster);
-                  localStorage.setItem('selfheal_active_cluster_id', onlineCluster.id);
-                  localStorage.setItem('selfheal_active_cluster_name', onlineCluster.cluster || onlineCluster.name);
-                  localStorage.setItem('selfheal_active_env_name', onlineCluster.envName || 'Production');
-                  triggerRefresh();
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '10px 18px',
-                  backgroundColor: '#FFFFFF',
-                  color: 'var(--dash-mint-600)',
-                  borderRadius: 'var(--dash-radius-md)',
-                  border: '1px solid var(--dash-mint-200)',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  cursor: 'pointer',
-                }}
-              >
-                <Server size={16} />
-                <span>Quay lại {onlineCluster.cluster || onlineCluster.name} (Online)</span>
-                <ArrowRight size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+    // Lọc danh sách Node thực tế mà các Pod của dịch vụ này đang cư trú (loại trừ unassigned)
+    const activeNodeNames = Array.from(
+      new Set(
+        matchedPods
+          .map((p) => p.node_name)
+          .filter((name) => Boolean(name) && name !== 'unassigned')
+      )
     );
-  }
+
+    // Dự phòng qua liveBatch nếu clusterInfo.pods chưa load xong
+    const liveBatch = batchProgressMap[currentServiceTarget];
+    const livePt = liveBatch?.latest_point || (Array.isArray(liveBatch?.points) && liveBatch.points[liveBatch.points.length - 1]);
+    const liveReplica = livePt?.replica_count !== undefined && Number(livePt.replica_count) > 0 ? Number(livePt.replica_count) : null;
+
+    const podsCount = matchedPods.length > 0 ? matchedPods.length : (liveReplica || 1);
+    const nodesCount = activeNodeNames.length > 0 ? activeNodeNames.length : (podsCount > 1 ? Math.min(podsCount, totalClusterNodes) : 1);
+
+    return {
+      pods: podsCount,
+      nodes: nodesCount,
+      totalClusterNodes,
+      nodeNames: activeNodeNames,
+    };
+  }, [isClusterOnline, batchProgressMap, currentServiceTarget, clusterInfo]);
+
+  // Tổng hợp dữ liệu thực tế CÔ LẬP NGHIÊM NGẶT theo ĐÚNG dịch vụ đang chọn (tuyệt đối không lẫn dữ liệu dịch vụ khác!)
+  const pipelineContext = useMemo(() => {
+    const targetLower = (currentServiceTarget || '').toLowerCase().trim();
+
+    const matchesTarget = (raw) => {
+      if (!raw || !targetLower) return false;
+      const normalized = normalizeServiceName(String(raw)).toLowerCase();
+      if (!normalized) return false;
+      if (normalized === targetLower) return true;
+      if (normalized.startsWith(`${targetLower}-`)) return true;
+      if (normalized.endsWith(` on ${targetLower}`) || normalized.endsWith(` trên ${targetLower}`)) return true;
+      return false;
+    };
+
+    const resolveActionLabel = (act) =>
+      act?.action_type_name ||
+      act?.action_type_code ||
+      act?.action_name ||
+      act?.action_code ||
+      act?.result?.action ||
+      act?.action ||
+      'Hành động tự phục hồi';
+
+    const serviceIncidents = (incidents || []).filter(
+      (inc) =>
+        matchesTarget(inc.target_name) ||
+        matchesTarget(inc.service_id) ||
+        matchesTarget(inc.workload_name) ||
+        matchesTarget(inc.title)
+    );
+    const openServiceIncidents = serviceIncidents.filter((inc) =>
+      ['OPEN', 'INVESTIGATING', 'AWAITING_APPROVAL'].includes(String(inc.status || '').toUpperCase())
+    );
+    const resolvedServiceIncidents = serviceIncidents.filter(
+      (inc) => String(inc.status || '').toUpperCase() === 'RESOLVED'
+    );
+    // Phân tách rõ ràng Sự cố ĐANG MỞ (activeOpenIncident) với Sự cố ĐÃ ĐÓNG (lastResolvedIncident) — không bao giờ hiển thị sự cố cũ đã RESOLVED như lỗi đang xảy ra!
+    const activeOpenIncident = openServiceIncidents[0] || null;
+    const lastResolvedIncident = resolvedServiceIncidents[0] || null;
+    const latestIncident = activeOpenIncident;
+
+    // Lấy đề xuất của sự cố đang mở hoặc sự cố gần nhất để giữ ngữ cảnh phân tích
+    const targetIncident = activeOpenIncident || lastResolvedIncident;
+    const serviceRecs = (recommendations || []).filter(
+      (rec) =>
+        (targetIncident?.id && rec.incident_id === targetIncident.id) ||
+        (matchesTarget(rec.target_name) ||
+          matchesTarget(rec.service_id) ||
+          matchesTarget(rec.workload_name) ||
+          matchesTarget(rec.incident_title))
+    );
+    const latestRecommendation = serviceRecs[0] || null;
+
+    const activePolicies = (policies || []).filter((p) => p.is_active !== false);
+    const autoPoliciesCount = activePolicies.filter(
+      (p) => ['AUTO', 'AUTONOMOUS'].includes(String(p.execution_mode || '').toUpperCase()) && !p.requires_approval
+    ).length;
+    const hitlPoliciesCount = activePolicies.length - autoPoliciesCount;
+    const policyThresholdsArr = activePolicies
+      .map((p) => Number(p.confidence_threshold))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    const minPolicyConfidencePct =
+      policyThresholdsArr.length > 0 ? Math.round(Math.min(...policyThresholdsArr) * 100) : null;
+    const maxPolicyConfidencePct =
+      policyThresholdsArr.length > 0 ? Math.round(Math.max(...policyThresholdsArr) * 100) : null;
+    const cooldownValues = activePolicies
+      .map((p) => Number(p.cooldown_seconds))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    const policyCooldownSec = cooldownValues.length > 0 ? Math.min(...cooldownValues) : null;
+
+    // Chỉ lấy hành động thuộc ĐÚNG dịch vụ đang chọn (không fallback sang dịch vụ khác)
+    const serviceActions = (healingActions || [])
+      .filter(
+        (act) =>
+          matchesTarget(act.target_name) ||
+          matchesTarget(act.service_id) ||
+          matchesTarget(act.workload_name) ||
+          matchesTarget(act.result?.target) ||
+          (activeOpenIncident?.id && act.incident_id === activeOpenIncident.id)
+      )
+      .map((act) => ({
+        ...act,
+        display_action_name: resolveActionLabel(act),
+      }));
+
+    const latestAutoAction =
+      serviceActions.find((act) =>
+        ['AUTO', 'AUTONOMOUS'].includes(String(act.execution_mode || '').toUpperCase())
+      ) || null;
+
+    // Chỉ lấy yêu cầu phê duyệt HITL thuộc ĐÚNG dịch vụ đang chọn (tuyệt đối không lấy của dịch vụ khác như mongodb)
+    const pendingServiceApprovals = (approvals || [])
+      .filter(
+        (a) =>
+          String(a.status || a.approval_status || '').toUpperCase() === 'PENDING' &&
+          (matchesTarget(a.target_name) ||
+            matchesTarget(a.service_id) ||
+            matchesTarget(a.workload_name) ||
+            matchesTarget(a.healing_action?.target_name) ||
+            (activeOpenIncident?.id && a.incident_id === activeOpenIncident.id))
+      )
+      .map((a) => ({
+        ...a,
+        display_action_name: resolveActionLabel(a.healing_action || a),
+      }));
+    const latestHitlApproval = pendingServiceApprovals[0] || null;
+
+    const recActionStr = String(
+      latestRecommendation?.action || latestRecommendation?.action_code || latestRecommendation?.recommendation || ''
+    ).toUpperCase();
+    // Chỉ kích hoạt Circuit Breaker khi ĐANG có sự cố mở có khuyến nghị NO_ACTION (không kích hoạt từ sự cố cũ đã RESOLVED!)
+    const isCircuitBreakerTripped = Boolean(activeOpenIncident) && recActionStr === 'NO_ACTION';
+
+    const ACTION_VI_MAP = {
+      RESTART_POD: 'Khởi động lại Pod',
+      'Restart Pod': 'Khởi động lại Pod',
+      REPLACE_POD: 'Thay thế Pod',
+      'Replace Pod': 'Thay thế Pod',
+      SCALE_REPLICAS: 'Điều chỉnh bản sao Pod',
+      SCALE_UP: 'Tăng bản sao Pod',
+      'Scale Replicas': 'Điều chỉnh bản sao Pod',
+      SCALE_DOWN: 'Thu nhỏ bản sao Pod',
+      ROLLBACK_DEPLOYMENT: 'Rollback phiên bản',
+      'Rollback Deployment': 'Rollback phiên bản',
+      CLEANUP_TEMP_FILES: 'Dọn dẹp ổ đĩa',
+      CLEANUP_STORAGE: 'Dọn dẹp ổ đĩa',
+      DRAIN_NODE: 'Sơ tán Node (Drain)',
+      BLOCK_IP_TEMP: 'Chặn IP tạm thời',
+      TEMPORARY_IP_BLOCK: 'Chặn IP tạm thời',
+    };
+
+    const translateActionVi = (raw, item = null) => {
+      if (!raw) return 'Hành động tự phục hồi';
+      const str = String(raw).trim();
+      const norm = str.toUpperCase().replace(/\s+/g, '_');
+      if (norm === 'SCALE_REPLICAS' || norm === 'SCALE_DOWN' || norm === 'SCALE_UP') {
+        const rep = item?.result?.details?.replicas ?? item?.details?.replicas ?? item?.result?.params?.target_replicas;
+        const ctxText = `${item?.result?.message || ''} ${item?.incident_title || ''} ${item?.reason || ''} ${item?.reasoning || ''}`.toLowerCase();
+        const isDown =
+          norm === 'SCALE_DOWN' ||
+          ctxText.includes('scale_down') ||
+          ctxText.includes('underutilized') ||
+          ctxText.includes('thu hẹp') ||
+          ctxText.includes('thu nhỏ') ||
+          ctxText.includes('dư thừa');
+        const isUp =
+          norm === 'SCALE_UP' ||
+          ctxText.includes('scale_up') ||
+          ctxText.includes('quá tải') ||
+          ctxText.includes('cpu_overload') ||
+          ctxText.includes('traffic');
+        const base = isDown ? 'Thu nhỏ bản sao Pod' : isUp ? 'Tăng bản sao Pod' : 'Điều chỉnh bản sao Pod';
+        return rep !== undefined && rep !== null ? `${base} (→ ${rep})` : base;
+      }
+      return ACTION_VI_MAP[str] || ACTION_VI_MAP[norm] || str;
+    };
+
+    // Ghép lịch sử chi tiết từ incidentDetail.healing_history (chứa kết quả hậu kiểm thật: Đã phục hồi / Chưa phục hồi) + serviceActions
+    const detailIncidentRef = activeOpenIncident || lastResolvedIncident;
+    const activeIncidentDetail = detailIncidentRef?.id ? incidentDetailsMap[detailIncidentRef.id] : null;
+    const rawDetailHistory = Array.isArray(activeIncidentDetail?.healing_history)
+      ? activeIncidentDetail.healing_history.filter((item) => {
+          const t = item.target_name || item.service_id || '';
+          return !t || matchesTarget(t);
+        })
+      : [];
+
+    const mergedMap = new Map();
+    const isIncidentResolved = !activeOpenIncident;
+    const resolvedIncidentIds = new Set(
+      (incidents || [])
+        .filter((inc) => String(inc.status || '').toUpperCase() === 'RESOLVED')
+        .map((inc) => inc.id)
+    );
+
+    const upsertTimelineItem = (item, source) => {
+      const key = item.id || `${item.action_code || item.action_type_code || item.action_name}-${item.completed_at || item.created_at || source}`;
+      const existing = mergedMap.get(key) || {};
+      const merged = {
+        ...existing,
+        ...item,
+        verification: item.verification ?? existing.verification ?? null,
+        verification_result:
+          item.verification_result !== undefined && item.verification_result !== null
+            ? item.verification_result
+            : existing.verification_result,
+      };
+      const rawCode =
+        merged.action_code ||
+        merged.action_type_code ||
+        merged.action_name ||
+        merged.action_type_name ||
+        merged.result?.action ||
+        merged.display_action_name;
+      const execStatus = String(merged.execution_status || '').toUpperCase();
+      // Đọc đúng kết quả hậu kiểm 60s từ cả 2 nguồn:
+      // 1) GET /healing/actions trả về lồng trong merged.verification.verification_result
+      // 2) GET /ai/incidents/:id (healing_history) trả về phẳng ở merged.verification_result
+      const rawVerResult =
+        merged.verification_result !== undefined && merged.verification_result !== null
+          ? merged.verification_result
+          : merged.verification?.verification_result;
+      const verResult =
+        rawVerResult === true || rawVerResult === 'true'
+          ? true
+          : rawVerResult === false || rawVerResult === 'false'
+            ? false
+            : null;
+      // Nếu sự cố của hành động này ĐÃ ĐƯỢC GIẢI QUYẾT (RESOLVED), hoặc hiện tại dịch vụ không còn sự cố nào mở:
+      // Hành động SUCCEEDED được công nhận là "Đã phục hồi", tránh bị kẹt màu đỏ ở lịch sử hậu kiểm.
+      const isActionIncidentResolved =
+        (merged.incident_id && resolvedIncidentIds.has(merged.incident_id)) ||
+        isIncidentResolved;
+      const isVerifiedRecovered =
+        verResult === true ||
+        (execStatus === 'SUCCEEDED' && (verResult !== false || isActionIncidentResolved));
+      const isFailedOrUnrecovered =
+        execStatus === 'FAILED' ||
+        (verResult === false && !isActionIncidentResolved);
+      const isVerifying =
+        verResult === null &&
+        execStatus === 'SUCCEEDED' &&
+        !isVerifiedRecovered &&
+        !isFailedOrUnrecovered;
+      const isRunning = execStatus === 'RUNNING';
+      const ts =
+        merged.verified_at ||
+        merged.verification?.verified_at ||
+        merged.completed_at ||
+        merged.started_at ||
+        merged.created_at ||
+        null;
+      const timeStr = ts
+        ? new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : '--:--:--';
+
+      mergedMap.set(key, {
+        ...merged,
+        id: key,
+        actionLabelVi: translateActionVi(rawCode, merged),
+        execStatus,
+        isFailedOrUnrecovered,
+        isVerifiedRecovered,
+        isVerifying,
+        isRunning,
+        verdictLabel: isRunning
+          ? 'Đang thực thi'
+          : isFailedOrUnrecovered
+            ? 'Chưa phục hồi'
+            : isVerifiedRecovered
+              ? 'Đã phục hồi'
+              : isVerifying
+                ? 'Đang hậu kiểm'
+                : execStatus || 'Đã ghi nhận',
+        tsMs: ts ? new Date(ts).getTime() : 0,
+        timeStr,
+      });
+    };
+
+    serviceActions.forEach((a) => upsertTimelineItem(a, 'act'));
+    rawDetailHistory.forEach((h) => upsertTimelineItem(h, 'hist'));
+
+    const actionTimeline = Array.from(mergedMap.values())
+      .sort((a, b) => a.tsMs - b.tsMs)
+      .map((item, idx) => ({
+        ...item,
+        stepIndex: idx + 1,
+      }));
+
+    // Thống kê Hậu kiểm 60s tính trên chính actionTimeline đã ghép đầy đủ kết quả xác minh của ĐÚNG dịch vụ đang chọn
+    const succeededCount = actionTimeline.filter((a) => a.isVerifiedRecovered).length;
+    const failedCount = actionTimeline.filter((a) => a.isFailedOrUnrecovered).length;
+    const verifyingCount = actionTimeline.filter((a) => a.isVerifying).length;
+    const runningCount = actionTimeline.filter((a) => a.isRunning).length;
+    const completedCount = succeededCount + failedCount;
+    const successRate = completedCount > 0 ? Math.round((succeededCount / completedCount) * 100) : null;
+    const latestCompletedAction =
+      [...actionTimeline].reverse().find((a) => a.isVerifiedRecovered || a.isFailedOrUnrecovered || a.isVerifying) || null;
+    const effectiveLatestAutoAction =
+      latestAutoAction ||
+      [...actionTimeline].reverse().find((a) => ['AUTO', 'AUTONOMOUS', ''].includes(String(a.execution_mode || '').toUpperCase())) ||
+      null;
+
+    // Phân tích bằng chứng thật từ rca_analyses.analysis_result cho 4 tác tử ở Cột 04 (không dùng chữ cứng)
+    const rawAnalysisSrc = activeIncidentDetail?.analysis_result || activeOpenIncident?.analysis_result || null;
+    let parsedAnalysis = null;
+    if (rawAnalysisSrc) {
+      if (typeof rawAnalysisSrc === 'string') {
+        try {
+          parsedAnalysis = JSON.parse(rawAnalysisSrc);
+        } catch {
+          parsedAnalysis = null;
+        }
+      } else if (typeof rawAnalysisSrc === 'object') {
+        parsedAnalysis = rawAnalysisSrc;
+      }
+    }
+    const evidenceItems = [
+      ...(Array.isArray(parsedAnalysis?.evidence_for) ? parsedAnalysis.evidence_for : []),
+      ...(Array.isArray(parsedAnalysis?.symptoms) ? parsedAnalysis.symptoms : []),
+      ...(Array.isArray(parsedAnalysis?.evidence) ? parsedAnalysis.evidence : []),
+    ].map((e) => (typeof e === 'string' ? e : JSON.stringify(e)).toLowerCase());
+    const missingEv = Array.isArray(parsedAnalysis?.missing_evidence)
+      ? parsedAnalysis.missing_evidence.map((m) => String(m).toLowerCase())
+      : [];
+    const relatedRisksArr = Array.isArray(parsedAnalysis?.related_risks)
+      ? parsedAnalysis.related_risks
+      : Array.isArray(parsedAnalysis?.root_cause?.related_risks)
+        ? parsedAnalysis.root_cause.related_risks
+        : [];
+    const similarIdsArr = Array.isArray(parsedAnalysis?.similar_incident_ids)
+      ? parsedAnalysis.similar_incident_ids
+      : [];
+    const logEvidenceCount = evidenceItems.filter((s) =>
+      /log|error|warn|exception|stacktrace|5xx|timeout|refused/i.test(s)
+    ).length;
+    const k8sEventEvidenceCount = evidenceItems.filter((s) =>
+      /oom|backoff|crashloop|evict|unhealthy|probe|restart|kube|event/i.test(s)
+    ).length;
+    const isMissingK8sEvents = missingEv.some((m) => m.includes('kubernetes events') || m.includes('k8s'));
+    const rawRcaConf =
+      activeIncidentDetail?.confidence_score ??
+      activeOpenIncident?.confidence_score ??
+      parsedAnalysis?.root_cause?.confidence ??
+      null;
+    const rcaConfidencePct =
+      rawRcaConf !== null && rawRcaConf !== undefined && Number.isFinite(Number(rawRcaConf))
+        ? Math.round(Number(rawRcaConf) <= 1 ? Number(rawRcaConf) * 100 : Number(rawRcaConf))
+        : null;
+    const evidenceStatus =
+      parsedAnalysis?.evidence_status || parsedAnalysis?.root_cause?.evidence_status || null;
+
+    const rcaAgentsSummary = {
+      metricsSub:
+        relatedRisksArr.length > 0
+          ? `${timesteps.length || 12} bước • ${relatedRisksArr.length} rủi ro`
+          : timesteps.length > 0
+            ? `${timesteps.length} bước thực`
+            : 'Đang gom mẫu',
+      logSub: activeOpenIncident
+        ? logEvidenceCount > 0
+          ? `${logEvidenceCount} dấu hiệu lỗi`
+          : '0 lỗi log'
+        : 'Đang giám sát',
+      k8sEventSub: activeOpenIncident
+        ? k8sEventEvidenceCount > 0
+          ? `${k8sEventEvidenceCount} sự kiện K8s`
+          : isMissingK8sEvents
+            ? '0 sự kiện K8s'
+            : 'Không bất thường'
+        : 'Pod ổn định',
+      historySub:
+        similarIdsArr.length > 0
+          ? `${similarIdsArr.length} ca tương tự`
+          : `${serviceIncidents.length} lịch sử DV`,
+      rcaConfidencePct,
+      evidenceStatus,
+      relatedRisksCount: relatedRisksArr.length,
+    };
+
+    return {
+      latestIncident,
+      lastResolvedIncident,
+      openServiceIncidentsCount: openServiceIncidents.length,
+      resolvedServiceIncidentsCount: resolvedServiceIncidents.length,
+      totalServiceIncidentsCount: serviceIncidents.length,
+      latestRecommendation,
+      activePoliciesCount: activePolicies.length,
+      totalPoliciesCount: (policies || []).length,
+      autoPoliciesCount,
+      hitlPoliciesCount,
+      policyMeta: {
+        minConfidencePct: minPolicyConfidencePct,
+        maxConfidencePct: maxPolicyConfidencePct,
+        cooldownSec: policyCooldownSec,
+      },
+      rcaAgentsSummary,
+      latestAutoAction: effectiveLatestAutoAction,
+      latestHitlApproval,
+      pendingServiceApprovalsCount: pendingServiceApprovals.length,
+      isCircuitBreakerTripped,
+      actionTimeline,
+      recoveryStats: {
+        totalActions: actionTimeline.length,
+        succeededCount,
+        failedCount,
+        verifyingCount,
+        runningCount,
+        successRate,
+        latestCompletedAction,
+        isServiceScope: true,
+      },
+    };
+  }, [currentServiceTarget, incidents, incidentDetailsMap, recommendations, policies, healingActions, approvals, timesteps.length]);
 
   // ==========================================
-  // Render Dashboard Realtime (Khi cụm đang ONLINE)
+  // 8 THẺ KPI HẠ TẦNG & VẬN HÀNH THỜI GIAN THỰC (CHỈ HIỂN THỊ KHI CỤM/AGENT ONLINE — MẤT KẾT NỐI ĐƯA TOÀN BỘ VỀ 0)
   // ==========================================
+  const clusterKpiCards = useMemo(() => {
+    const rawPods = isClusterOnline && Array.isArray(clusterInfo?.pods) ? clusterInfo.pods : [];
+    const totalPodsCount = isClusterOnline
+      ? rawPods.length > 0
+        ? rawPods.length
+        : Number(currentEnv?.pods || 0)
+      : 0;
+    const runningPodsCount = isClusterOnline
+      ? rawPods.length > 0
+        ? rawPods.filter((p) => p.status === 'Running' || p.phase === 'Running').length
+        : totalPodsCount
+      : 0;
+
+    const rawNodes = isClusterOnline && Array.isArray(clusterInfo?.nodes) ? clusterInfo.nodes : [];
+    const totalNodesCount = isClusterOnline
+      ? rawNodes.length > 0
+        ? rawNodes.length
+        : Number(currentEnv?.nodes || 0)
+      : 0;
+    const readyNodesCount = isClusterOnline
+      ? rawNodes.length > 0
+        ? rawNodes.filter((n) => String(n.status || '').toLowerCase() === 'ready').length
+        : totalNodesCount
+      : 0;
+    const nodeNamesList = rawNodes.map((n) => n.name).filter(Boolean);
+    const allPodsHealthy = totalPodsCount > 0 && runningPodsCount === totalPodsCount;
+    const allNodesHealthy = totalNodesCount > 0 && readyNodesCount === totalNodesCount;
+
+    let totalCpuCores = 0;
+    let totalRamGbNum = 0;
+    let totalDiskTbNum = 0;
+    if (isClusterOnline && Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0) {
+      totalCpuCores = Math.round(
+        clusterInfo.nodes.reduce((acc, n) => {
+          const m = parseInt(n.cpu_capacity_millicores, 10);
+          return acc + (Number.isFinite(m) ? m / 1000 : 0);
+        }, 0)
+      );
+      const totalRamBytes = clusterInfo.nodes.reduce((acc, n) => {
+        const b = parseInt(n.memory_capacity_bytes, 10);
+        return acc + (Number.isFinite(b) ? b : 0);
+      }, 0);
+      const totalDiskBytes = clusterInfo.nodes.reduce((acc, n) => {
+        const b = parseInt(n.disk_capacity_bytes, 10);
+        return acc + (Number.isFinite(b) ? b : 0);
+      }, 0);
+      totalRamGbNum = totalRamBytes > 0 ? totalRamBytes / (1024 * 1024 * 1024) : 0;
+      totalDiskTbNum = totalDiskBytes > 0 ? totalDiskBytes / (1024 * 1024 * 1024 * 1024) : 0;
+    }
+
+    const totalRamGb = totalRamGbNum.toFixed(1);
+    const totalDiskTb = totalDiskTbNum.toFixed(1);
+
+    const avgCpu1h =
+      isClusterOnline && overviewStats?.resource_usage?.avg_cpu_percent !== undefined
+        ? Number(overviewStats.resource_usage.avg_cpu_percent)
+        : null;
+    const avgRam1h =
+      isClusterOnline && overviewStats?.resource_usage?.avg_ram_percent !== undefined
+        ? Number(overviewStats.resource_usage.avg_ram_percent)
+        : null;
+
+    const liveCpuNum = !isClusterOnline
+      ? 0
+      : nodeTelemetry?.node_cpu_percent !== undefined &&
+          nodeTelemetry.node_cpu_percent !== null &&
+          Number.isFinite(Number(nodeTelemetry.node_cpu_percent))
+        ? Number(nodeTelemetry.node_cpu_percent)
+        : avgCpu1h !== null
+          ? avgCpu1h
+          : 0;
+    const liveRamNum = !isClusterOnline
+      ? 0
+      : nodeTelemetry?.node_ram_percent !== undefined &&
+          nodeTelemetry.node_ram_percent !== null &&
+          Number.isFinite(Number(nodeTelemetry.node_ram_percent))
+        ? Number(nodeTelemetry.node_ram_percent)
+        : avgRam1h !== null
+          ? avgRam1h
+          : 0;
+
+    const nodeCpuPercent = liveCpuNum.toFixed(1);
+    const nodeRamPercent = liveRamNum.toFixed(1);
+    const nodeUsedCpuCores =
+      isClusterOnline && totalCpuCores > 0
+        ? ((liveCpuNum / 100) * totalCpuCores).toFixed(2)
+        : '0.00';
+    const nodeRamGb = !isClusterOnline
+      ? '0.00'
+      : nodeTelemetry?.node_ram_gb !== undefined &&
+          nodeTelemetry.node_ram_gb !== null &&
+          Number(nodeTelemetry.node_ram_gb) > 0
+        ? Number(nodeTelemetry.node_ram_gb).toFixed(2)
+        : ((liveRamNum / 100) * totalRamGbNum).toFixed(2);
+
+    const diskVal = !isClusterOnline
+      ? 0
+      : nodeTelemetry?.disk !== undefined && nodeTelemetry.disk !== null
+        ? Math.round(Number(nodeTelemetry.disk))
+        : overviewStats?.resource_usage?.avg_disk_percent !== undefined
+          ? Math.round(Number(overviewStats.resource_usage.avg_disk_percent))
+          : 0;
+    const diskUsedGb = isClusterOnline ? Math.round((diskVal / 100) * totalDiskTbNum * 1024) : 0;
+    const diskStatusText = !isClusterOnline
+      ? 'Chưa kết nối'
+      : diskVal > 85
+        ? 'Cảnh báo đầy'
+        : diskVal > 70
+          ? 'Cần theo dõi'
+          : 'Bình thường';
+
+    const openIncidentsTotal = !isClusterOnline
+      ? 0
+      : clusterOpenIncidents !== null
+        ? clusterOpenIncidents
+        : Number(ctxActiveIncidentsCount || 0);
+
+    const agentLatencyMs =
+      isClusterOnline && nodeTelemetry?.latency !== undefined && nodeTelemetry.latency !== null
+        ? Math.round(Number(nodeTelemetry.latency))
+        : 0;
+
+    const remediationsTotal =
+      isClusterOnline && overviewStats?.remediations?.total !== undefined
+        ? Number(overviewStats.remediations.total)
+        : 0;
+    const remediationsSuccessRate =
+      isClusterOnline && overviewStats?.remediations?.success_rate !== undefined
+        ? Math.round(Number(overviewStats.remediations.success_rate))
+        : 0;
+
+    const pendingHitlTotal = isClusterOnline ? Number(ctxPendingApprovalsCount || 0) : 0;
+
+    return [
+      {
+        id: 'cpu',
+        label: 'CPU Cụm',
+        value: `${nodeCpuPercent}%`,
+        subtext:
+          totalCpuCores > 0
+            ? `${nodeUsedCpuCores} / ${totalCpuCores} vCPUs`
+            : `${nodeUsedCpuCores} vCPUs`,
+        subColor: '#64748B',
+        percent: Math.min(100, Math.max(0, liveCpuNum)),
+        accent: liveCpuNum > 85 ? '#EF4444' : liveCpuNum > 70 ? '#F59E0B' : '#10B981',
+        iconBg: liveCpuNum > 85 ? '#FEF2F2' : '#ECFDF5',
+        iconBorder: liveCpuNum > 85 ? '#FECACA' : '#A7F3D0',
+        Icon: Cpu,
+        path: '/dashboard/infrastructure',
+      },
+      {
+        id: 'ram',
+        label: 'RAM Cụm',
+        value: `${nodeRamPercent}%`,
+        subtext:
+          totalRamGbNum > 0 ? `${nodeRamGb} / ${totalRamGb} GiB` : `${nodeRamGb} GiB`,
+        subColor: '#64748B',
+        percent: Math.min(100, Math.max(0, liveRamNum)),
+        accent: liveRamNum > 85 ? '#EF4444' : liveRamNum > 75 ? '#F59E0B' : '#0EA5E9',
+        iconBg: liveRamNum > 85 ? '#FEF2F2' : '#F0F9FF',
+        iconBorder: liveRamNum > 85 ? '#FECACA' : '#BAE6FD',
+        Icon: Database,
+        path: '/dashboard/infrastructure',
+      },
+      {
+        id: 'disk',
+        label: 'Ổ Đĩa Cụm',
+        value: `${diskVal}%`,
+        subtext:
+          totalDiskTbNum > 0
+            ? `${diskUsedGb} GiB / ${totalDiskTb} TiB`
+            : diskStatusText,
+        badge: diskStatusText,
+        subColor:
+          diskVal > 85 ? '#DC2626' : diskVal > 70 ? '#D97706' : '#059669',
+        percent: Math.min(100, Math.max(0, diskVal)),
+        accent: diskVal > 85 ? '#EF4444' : diskVal > 70 ? '#F59E0B' : '#64748B',
+        iconBg: '#F8FAFC',
+        iconBorder: '#E2E8F0',
+        Icon: HardDrive,
+        path: '/dashboard/infrastructure',
+      },
+      {
+        id: 'pods',
+        label: 'Pods & Nodes',
+        value: `${runningPodsCount} / ${totalPodsCount}`,
+        inlineBadge: isClusterOnline ? `${readyNodesCount}/${totalNodesCount} Node` : '0 Node',
+        inlineBadgeColor: !isClusterOnline
+          ? '#64748B'
+          : allNodesHealthy
+            ? '#0284C7'
+            : '#D97706',
+        inlineBadgeBg: !isClusterOnline
+          ? '#F1F5F9'
+          : allNodesHealthy
+            ? '#E0F2FE'
+            : '#FEF3C7',
+        subtext: !isClusterOnline
+          ? 'Chưa kết nối'
+          : allPodsHealthy && allNodesHealthy
+            ? '100% Bình thường'
+            : `${runningPodsCount}/${totalPodsCount} Pod • ${readyNodesCount}/${totalNodesCount} Node`,
+        tooltip:
+          nodeNamesList.length > 0
+            ? `Pods: ${runningPodsCount}/${totalPodsCount} Running • Nodes: ${rawNodes.map((n) => `${n.name} (${n.status || 'Unknown'})`).join(', ')}`
+            : `Pods: ${runningPodsCount}/${totalPodsCount} • Nodes: ${readyNodesCount}/${totalNodesCount}`,
+        subColor: !isClusterOnline
+          ? '#64748B'
+          : allPodsHealthy && allNodesHealthy
+            ? '#059669'
+            : '#D97706',
+        accent: !isClusterOnline
+          ? '#64748B'
+          : allPodsHealthy && allNodesHealthy
+            ? '#10B981'
+            : '#F59E0B',
+        iconBg: !isClusterOnline
+          ? '#F8FAFC'
+          : allPodsHealthy && allNodesHealthy
+            ? '#ECFDF5'
+            : '#FFFBEB',
+        iconBorder: !isClusterOnline
+          ? '#E2E8F0'
+          : allPodsHealthy && allNodesHealthy
+            ? '#A7F3D0'
+            : '#FDE68A',
+        Icon: Box,
+        path: '/dashboard/workloads',
+      },
+      {
+        id: 'incidents',
+        label: 'Sự cố Mở',
+        value: `${openIncidentsTotal}`,
+        valueColor: openIncidentsTotal > 0 ? '#D97706' : '#0F172A',
+        subtext: openIncidentsTotal === 0 ? 'An toàn' : 'Cần chú ý',
+        subColor: openIncidentsTotal > 0 ? '#D97706' : '#059669',
+        accent: openIncidentsTotal > 0 ? '#F59E0B' : '#10B981',
+        iconBg: openIncidentsTotal > 0 ? '#FFFBEB' : '#ECFDF5',
+        iconBorder: openIncidentsTotal > 0 ? '#FDE68A' : '#A7F3D0',
+        Icon: AlertTriangle,
+        path: '/dashboard/incidents',
+      },
+      {
+        id: 'agent',
+        label: 'Tác tử Agent',
+        value: isClusterOnline ? 'Trực tuyến' : 'Ngoại tuyến',
+        valueSize: '1.02rem',
+        valueColor: isClusterOnline ? '#0F172A' : '#94A3B8',
+        subtext: isClusterOnline
+          ? `${agentLatencyMs}ms • ${isWsConnected ? 'Live' : 'Sync'}`
+          : 'Mất kết nối',
+        subColor: isClusterOnline ? '#059669' : '#DC2626',
+        accent: isClusterOnline ? '#10B981' : '#EF4444',
+        iconBg: isClusterOnline ? '#ECFDF5' : '#FEF2F2',
+        iconBorder: isClusterOnline ? '#A7F3D0' : '#FECACA',
+        Icon: Radio,
+        pulse: isClusterOnline,
+        path: '/dashboard/agents',
+      },
+      {
+        id: 'healing',
+        label: 'Tự Phục Hồi 24h',
+        value: `${remediationsTotal}`,
+        subtext:
+          remediationsTotal > 0
+            ? `${remediationsSuccessRate}% Thành công`
+            : 'Chưa có sự cố',
+        subColor: '#059669',
+        accent: '#0EA5E9',
+        iconBg: '#EFF6FF',
+        iconBorder: '#BFDBFE',
+        Icon: Zap,
+        path: '/dashboard/self-healing/history',
+      },
+      {
+        id: 'hitl',
+        label: 'Chờ Duyệt HITL',
+        value: `${pendingHitlTotal}`,
+        valueColor: pendingHitlTotal > 0 ? '#7C3AED' : '#0F172A',
+        subtext: pendingHitlTotal > 0 ? 'Cần phê duyệt' : 'Không có chờ duyệt',
+        subColor: pendingHitlTotal > 0 ? '#7C3AED' : '#64748B',
+        accent: pendingHitlTotal > 0 ? '#8B5CF6' : '#64748B',
+        iconBg: pendingHitlTotal > 0 ? '#F5F3FF' : '#F8FAFC',
+        iconBorder: pendingHitlTotal > 0 ? '#DDD6FE' : '#E2E8F0',
+        Icon: CheckCircle2,
+        path: '/dashboard/self-healing/approvals',
+      },
+    ];
+  }, [
+    clusterInfo,
+    currentEnv?.pods,
+    currentEnv?.nodes,
+    overviewStats,
+    nodeTelemetry,
+    clusterOpenIncidents,
+    ctxActiveIncidentsCount,
+    ctxPendingApprovalsCount,
+    isClusterOnline,
+    isWsConnected,
+  ]);
+
   return (
-    <div className="dashboard-overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* 1. Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: '#ECFDF5',
-              border: '1px solid #A7F3D0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <LayoutDashboard size={20} color="#059669" />
-          </div>
-          <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Tổng Quan Vận Hành Hạ Tầng
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: 0 }}>
-                Giám sát thời gian thực sức khỏe máy chủ, cụm Kubernetes và tiến trình tự phục hồi
-              </p>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                • <Clock size={12} /> Cập nhật gần nhất: {lastDataTimestamp || lastUpdated}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Manual Refresh Now button */}
-          <button
-            type="button"
-            onClick={() => {
-              triggerRefresh();
-              refreshAllData();
-            }}
-            disabled={isRefreshing || isPollingBusyRef.current}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              color: 'var(--dash-text-primary)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: (isRefreshing || isPollingBusyRef.current) ? 'wait' : 'pointer',
-              boxShadow: 'var(--dash-shadow-xs)',
-            }}
-          >
-            <RefreshCw size={14} className={(isRefreshing || isPollingBusyRef.current) ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Error State Banner for Statistics API */}
-      {statsError && (
-        <div
-          style={{
-            padding: '12px 18px',
-            borderRadius: '8px',
-            backgroundColor: '#FEF2F2',
-            border: '1px solid #FECACA',
-            color: '#DC2626',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', fontWeight: 600 }}>
-            <AlertCircle size={16} />
-            <span>Không thể đồng bộ số liệu thống kê tổng hợp: {statsError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={fetchOverviewStats}
-            style={{
-              padding: '4px 12px',
-              borderRadius: '6px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #FECACA',
-              color: '#DC2626',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Thử lại
-          </button>
-        </div>
-      )}
-
-      {/* 3. Overview Metric Cards (with Loading Skeleton) */}
-      {isStatsLoading && !overviewStats ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px',
-          }}
-        >
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="dash-card"
-              style={{
-                padding: '16px 20px',
-                minHeight: '104px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                opacity: 0.7,
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ width: '55%', height: '14px', backgroundColor: '#E2E8F0', borderRadius: '4px' }} />
-                <div style={{ width: '18px', height: '18px', backgroundColor: '#E2E8F0', borderRadius: '4px' }} />
-              </div>
-              <div style={{ width: '45%', height: '26px', backgroundColor: '#CBD5E1', borderRadius: '6px', margin: '6px 0' }} />
-              <div style={{ width: '75%', height: '12px', backgroundColor: '#F1F5F9', borderRadius: '4px' }} />
-            </div>
-          ))}
-        </div>
-      ) : (
+    <div
+      className="dashboard-overview-container"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        height: '100%',
+        flex: 1,
+        minHeight: 0,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* 1. KHỐI TRÊN ĐẦU NỔI KÍNH MỜ: 8 THẺ KPI HẠ TẦNG + THANH ĐIỀU KHIỂN DỊCH VỤ (NỔI TRÊN CANVAS VÔ CỰC GIỐNG STITCH) */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '16px',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: '2px 18px 8px 22px',
+          zIndex: 25,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          pointerEvents: 'none',
         }}
       >
-        {/* Card 1: CPU Usage */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>CPU Máy Chủ</span>
-            <Cpu size={16} color="var(--dash-primary)" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {nodeCpuPercent}%
-            </span>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--dash-text-muted)',
-              }}
-            >
-              {totalCpuCores > 0 ? `${nodeUsedCpuCores} / ${totalCpuCores} vCPUs` : `${nodeUsedCpuCores} vCPUs`}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 2: Memory Usage */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>RAM Máy Chủ</span>
-            <Database size={16} color="var(--dash-info)" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {nodeRamPercent}%
-            </span>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--dash-text-muted)',
-              }}
-            >
-              {parseFloat(totalRamGb) > 0 ? `${nodeRamGb} / ${totalRamGb} GB` : `${nodeRamGb} GB`}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 3: Disk Usage */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Dung lượng Ổ đĩa</span>
-            <HardDrive size={16} color="var(--dash-text-secondary)" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {diskVal}%
-            </span>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--dash-text-muted)',
-              }}
-            >
-              {parseFloat(totalDiskTb) > 0 ? `${diskUsedGb} GB / ${totalDiskTb} TB` : `${diskUsedGb} GB`}
-            </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: diskVal > 85 ? 'var(--dash-danger)' : diskVal > 70 ? 'var(--dash-warning)' : 'var(--dash-success)' }}>
-              {diskStatusText}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 4: Pods Đang Chạy */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Pods Đang Chạy</span>
-            <Box size={16} color="var(--dash-mint-600)" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {runningPodsCount} / {podCount}
-            </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: runningPodsCount === podCount ? 'var(--dash-success)' : 'var(--dash-warning)' }}>
-              {runningPodsCount === podCount ? '100% Bình thường' : `${runningPodsCount}/${podCount} Đang chạy`}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 5: Active Incidents */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Sự cố Đang Diễn Ra</span>
-            <AlertTriangle size={16} color={activeIncidentsCount > 0 ? 'var(--dash-warning)' : 'var(--dash-success)'} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: activeIncidentsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {activeIncidentsCount}
-            </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: activeIncidentsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-success)' }}>
-              {activeIncidentsCount === 0 ? 'An toàn' : 'Cần chú ý'}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 6: Agent Status */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Trạng thái Tác tử</span>
-            <Radio
-              size={16}
-              color={
-                !isClusterOnline
-                  ? 'var(--dash-danger)'
-                  : isDataStale || telemetrySequence.length === 0
-                  ? 'var(--dash-warning-text)'
-                  : 'var(--dash-primary)'
-              }
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span
-              style={{
-                fontSize: '1.625rem',
-                fontWeight: 800,
-                color:
-                  !isClusterOnline
-                    ? 'var(--dash-text-muted)'
-                    : isDataStale || telemetrySequence.length === 0
-                    ? 'var(--dash-warning-text)'
-                    : 'var(--dash-text-primary)',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              {!isClusterOnline
-                ? 'Ngoại tuyến'
-                : isDataStale || telemetrySequence.length === 0
-                ? 'Chờ viễn trắc'
-                : 'Trực tuyến'}
-            </span>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                color:
-                  !isClusterOnline
-                    ? 'var(--dash-danger)'
-                    : isDataStale || telemetrySequence.length === 0
-                    ? 'var(--dash-warning-text)'
-                    : 'var(--dash-success)',
-                fontWeight: 600,
-              }}
-            >
-              {!isClusterOnline
-                ? 'Mất kết nối'
-                : isDataStale || telemetrySequence.length === 0
-                ? 'Chưa có mẫu'
-                : telemetry?.latency
-                ? `${telemetry.latency}ms`
-                : '0ms'}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 7: Self-Healing Actions */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tự Phục Hồi (24h)</span>
-            <Zap size={16} color="var(--dash-primary)" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {overviewStats?.remediations?.total !== undefined ? overviewStats.remediations.total : 0}
-            </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
-              {overviewStats?.remediations?.total > 0 ? `${Math.round(overviewStats.remediations.success_rate || 0)}% Thành công` : 'Chưa có sự cố'}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 8: Pending Approvals (HITL Gate) */}
+        {/* Hàng 1: 8 Thẻ KPI Hạ tầng & Tự phục hồi thiết kế gọn đẹp, nổi trên nền lưới chấm */}
         <div
-          className="dash-card"
-          onClick={() => onNavigate && onNavigate('/dashboard/self-healing/approvals')}
+          className="dashboard-kpi-grid"
           style={{
-            padding: '16px 20px',
-            cursor: 'pointer',
-            backgroundColor: pendingApprovalsCount > 0 ? 'var(--dash-warning-bg)' : '#FFFFFF',
-            border: pendingApprovalsCount > 0 ? '1px solid var(--dash-warning-border)' : '1px solid var(--dash-border)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
+            gap: '8px',
+            pointerEvents: 'none',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: pendingApprovalsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-text-secondary)' }}>
-              Phê duyệt Chờ Xử lý (HITL)
-            </span>
-            <CheckCircle2 size={16} color={pendingApprovalsCount > 0 ? 'var(--dash-warning)' : 'var(--dash-text-muted)'} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: pendingApprovalsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {pendingApprovalsCount}
-            </span>
-            {pendingApprovalsCount > 0 && (
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-warning-text)' }}>
-                Cần xử lý &rarr;
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* 4. Interactive Infrastructure Metrics Resource Chart */}
-      <InteractiveResourceChart
-        data={chartTelemetryData}
-        totalCpuCores={totalCpuCores}
-        totalMemoryGb={Math.round(parseFloat(totalRamGb))}
-        title="Biến thiên Tài nguyên Cụm máy chủ (CPU & RAM)"
-        subtitle="Dữ liệu viễn trắc đo đạc từ các DaemonSet eBPF theo thời gian thực"
-        timeRange={chartTimeRange}
-        onTimeRangeChange={handleChartRangeChange}
-        showTimeRange={false}
-        isLive={isWsLive && isClusterOnline && !isDataStale}
-        isStale={isDataStale}
-        isClusterOnline={isClusterOnline}
-        isLoading={isChartLoading}
-        error={chartError}
-        onRetry={() => loadClusterTrend(chartTimeRange)}
-      />
-
-      {/* 5, 6, 7. Summaries Grid: AI Predictions, Incidents, Self-Healing */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-        {/* 5. Pending Approvals & AI Remediation Summary */}
-        <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div
+          {clusterKpiCards.map((card) => {
+            const CardIcon = card.Icon;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => onNavigate && card.path && onNavigate(card.path)}
+                title={card.tooltip || `Xem chi tiết ${card.label}`}
                 style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  backgroundColor: pendingApprovalsCount > 0 ? '#FEF3C7' : 'var(--dash-mint-100)',
-                  color: pendingApprovalsCount > 0 ? '#B45309' : 'var(--dash-mint-600)',
+                  pointerEvents: 'auto',
+                  position: 'relative',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '4px',
+                  padding: '8px 10px 7px',
+                  borderRadius: '13px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.94)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(226, 232, 240, 0.95)',
+                  boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  overflow: 'hidden',
+                  transition: 'transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1.5px)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(15, 23, 42, 0.08)';
+                  e.currentTarget.style.borderColor = card.accent;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(15, 23, 42, 0.045)';
+                  e.currentTarget.style.borderColor = 'rgba(226, 232, 240, 0.95)';
                 }}
               >
-                {pendingApprovalsCount > 0 ? <CheckCircle2 size={16} /> : <Sparkles size={16} />}
-              </div>
-              <div>
-                <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Đề Xuất Phê Duyệt (HITL)
-                </h3>
-                <div style={{ fontSize: '0.65625rem', color: 'var(--dash-text-muted)', marginTop: '1px' }}>
-                  AI Dự Báo Rủi Ro Chủ Động &bull; Cổng Phê Duyệt
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => onNavigate && onNavigate('/dashboard/self-healing/approvals')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--dash-primary)',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Cổng phê duyệt &rarr;
-            </button>
-          </div>
-
-          {/* Hiển thị đề xuất thật cần phê duyệt (Ưu tiên pendingApprovalsCount và pendingRecommendations) */}
-          {pendingApprovalsCount > 0 || pendingRecommendations.length > 0 ? (
-            <div
-              style={{
-                padding: '12px 14px',
-                border: '1px solid #BAE6FD',
-                borderRadius: 'var(--dash-radius-md)',
-                backgroundColor: '#F0F9FF',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0369A1' }}>
-                  {pendingApprovalsCount > 0
-                    ? `Có ${pendingApprovalsCount} yêu cầu tự phục hồi chờ phê duyệt`
-                    : pendingRecommendations[0]?.recommendation || 'Đề xuất Tự Khắc Phục AI'}
-                </span>
+                {/* Thanh nhấn sắc mảnh ở đỉnh thẻ */}
                 <span
                   style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    backgroundColor: '#FEF3C7',
-                    color: '#B45309',
-                    border: '1px solid #FDE68A',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '2.5px',
+                    background: `linear-gradient(90deg, ${card.accent} 0%, ${card.accent}55 100%)`,
                   }}
-                >
-                  Cần xử lý
-                </span>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#1E293B', lineHeight: 1.5 }}>
-                {pendingRecommendations[0]?.reasoning ||
-                  'Hệ thống AI đề xuất hành động điều phối (Scale Replicas, Restart Pod...) để phân phối tải và duy trì tính khả dụng của dịch vụ.'}
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginTop: '4px',
-                  paddingTop: '8px',
-                  borderTop: '1px dashed #BAE6FD',
-                }}
-              >
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                  Chế độ an toàn: Human-in-the-Loop
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onNavigate && onNavigate('/dashboard/self-healing/approvals')}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '4px 10px',
-                    background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '0.71875rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
-                  }}
-                >
-                  <CheckCircle2 size={12} />
-                  <span>Xử Lý Ngay &rarr;</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '24px 16px',
-                textAlign: 'center',
-                backgroundColor: 'var(--dash-bg-canvas)',
-                borderRadius: 'var(--dash-radius-md)',
-                border: '1px dashed var(--dash-border)',
-              }}
-            >
-              <ShieldCheck size={28} color="var(--dash-success)" style={{ marginBottom: '6px' }} />
-              <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>
-                Không Có Yêu Cầu Chờ Duyệt
-              </div>
-              <p style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', margin: '4px 0 0 0' }}>
-                Tất cả các dịch vụ đang vận hành ổn định, không có đề xuất cần can thiệp.
-              </p>
-            </div>
-          )}
-        </div>
+                />
 
-        {/* 6. Incident Summary */}
-        <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  backgroundColor: activeIncidentsCount > 0 ? 'var(--dash-warning-bg)' : 'var(--dash-success-bg)',
-                  color: activeIncidentsCount > 0 ? 'var(--dash-warning-text)' : 'var(--dash-success)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {activeIncidentsCount > 0 ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
-              </div>
-              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Sự Cố Đang Diễn Ra ({activeIncidentsCount})
-              </h3>
-            </div>
-            <button
-              onClick={() => onNavigate && onNavigate('/dashboard/incidents')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--dash-primary)',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Xem lịch sử &rarr;
-            </button>
-          </div>
-
-          {activeIncidentsCount > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-              {activeIncidentsList.slice(0, 3).map((inc, i) => (
+                {/* Hàng tiêu đề + Biểu tượng */}
                 <div
-                  key={inc.id || i}
                   style={{
-                    padding: '10px 12px',
-                    borderRadius: 'var(--dash-radius-sm)',
-                    backgroundColor: 'var(--dash-bg-canvas)',
-                    border: '1px solid var(--dash-border)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: '4px',
+                    width: '100%',
                   }}
                 >
-                  <div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
-                      {inc.title || 'Sự cố viễn trắc K8s'}
-                    </div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
-                      {inc.created_at ? new Date(inc.created_at).toLocaleTimeString() : 'Vừa xong'} &bull; Mức độ: {inc.severity || 'HIGH'}
-                    </div>
-                  </div>
                   <span
                     style={{
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      padding: '2px 6px',
-                      borderRadius: 'var(--dash-radius-xs)',
-                      backgroundColor: 'var(--dash-warning-bg)',
-                      color: 'var(--dash-warning-text)',
+                      fontSize: '0.67rem',
+                      fontWeight: 700,
+                      color: '#64748B',
+                      letterSpacing: '-0.01em',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}
                   >
-                    {inc.status || 'OPEN'}
+                    {card.label}
+                  </span>
+                  <span
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '6px',
+                      backgroundColor: card.iconBg,
+                      border: `1px solid ${card.iconBorder}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: card.accent,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <CardIcon size={11} />
                   </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '24px',
-                textAlign: 'center',
-                backgroundColor: 'var(--dash-bg-canvas)',
-                borderRadius: 'var(--dash-radius-md)',
-                border: '1px dashed var(--dash-border)',
-              }}
-            >
-              <ShieldCheck size={32} color="var(--dash-success)" style={{ marginBottom: '8px' }} />
-              <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>
-                Toàn Bộ Hệ Thống Hoạt Động Tốt
-              </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-                Không ghi nhận sự cố nghiêm trọng nào trong môi trường hiện tại suốt 72 giờ qua.
-              </p>
-            </div>
-          )}
+
+                {/* Giá trị chính */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    minHeight: '22px',
+                  }}
+                >
+                  {card.pulse && (
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        backgroundColor: '#10B981',
+                        boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)',
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                  <span
+                    style={{
+                      fontSize: card.valueSize || '1.16rem',
+                      fontWeight: 800,
+                      color: card.valueColor || '#0F172A',
+                      letterSpacing: '-0.025em',
+                      lineHeight: 1.15,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {card.value}
+                  </span>
+                  {card.inlineBadge && (
+                    <span
+                      style={{
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        padding: '1.5px 6px',
+                        borderRadius: '999px',
+                        backgroundColor: card.inlineBadgeBg || '#E0F2FE',
+                        color: card.inlineBadgeColor || '#0284C7',
+                        fontFamily: 'var(--font-mono)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {card.inlineBadge}
+                    </span>
+                  )}
+                </div>
+
+                {/* Thanh tiến độ mảnh (chỉ cho CPU / RAM / Ổ đĩa) */}
+                {typeof card.percent === 'number' && (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '3px',
+                      borderRadius: '99px',
+                      backgroundColor: '#F1F5F9',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.max(card.percent, 2)}%`,
+                        height: '100%',
+                        borderRadius: '99px',
+                        backgroundColor: card.accent,
+                        transition: 'width 0.35s ease',
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Thông số phụ */}
+                <div
+                  style={{
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    color: card.subColor,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    width: '100%',
+                  }}
+                >
+                  {card.subtext}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        {/* 7. Self-Healing Summary */}
-        <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div
+        {/* Hàng 2: Thanh thông số Pod/WebSocket & Bộ điều khiển Dịch vụ nằm gọn phía dưới 8 thẻ KPI */}
+        <div
+          className="overview-controls-row"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          {/* Left Floating Status Pill: Trạng thái LIVE + Pod/Node */}
+          <div
+            className="overview-controls-left"
+            style={{
+              pointerEvents: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '4px 10px',
+              borderRadius: '11px',
+              backgroundColor: 'rgba(255, 255, 255, 0.94)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(226, 232, 240, 0.95)',
+              boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '0.73rem',
+                color: 'var(--dash-text-secondary)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span
                 style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: 'var(--dash-radius-sm)',
-                  backgroundColor: 'var(--dash-mint-100)',
-                  color: 'var(--dash-primary)',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: '4px',
+                  padding: '2px 7px',
+                  borderRadius: '999px',
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  backgroundColor: isClusterOnline ? '#ECFDF5' : '#FEF2F2',
+                  color: isClusterOnline ? '#059669' : '#DC2626',
+                  border: isClusterOnline ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                  letterSpacing: '0.04em',
                 }}
               >
-                <Zap size={16} />
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: isClusterOnline ? '#10B981' : '#EF4444',
+                    boxShadow: isClusterOnline ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
+                    display: 'inline-block',
+                  }}
+                />
+                {isClusterOnline ? 'LIVE' : 'OFFLINE'}
+              </span>
+              <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>
+                {currentServiceMetadata.pods} Pod
+              </strong>
+              <span style={{ color: '#94A3B8' }}>•</span>
+              <strong
+                style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}
+                title={`Dịch vụ đang chiếm ${currentServiceMetadata.nodes} Node trên tổng số ${currentServiceMetadata.totalClusterNodes} Node của cụm`}
+              >
+                {currentServiceMetadata.nodes} / {currentServiceMetadata.totalClusterNodes} Node
+              </strong>
+              {currentServiceMetadata.nodeNames?.length > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.67rem',
+                    color: '#475569',
+                    backgroundColor: '#F1F5F9',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid #E2E8F0',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                  title={`Danh sách Node thực tế đang chạy Pod của dịch vụ: ${currentServiceMetadata.nodeNames.join(', ')}`}
+                >
+                  {currentServiceMetadata.nodeNames.join(', ')}
+                </span>
+              )}
+            </span>
+          </div>
+
+          {/* Right Floating Controls Pill: Dịch vụ Dropdown + Thang đo + Làm mới */}
+          <div
+            className="overview-controls-right"
+            style={{
+              pointerEvents: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              flexWrap: 'wrap',
+              padding: '5px 9px',
+              borderRadius: '11px',
+              backgroundColor: 'rgba(255, 255, 255, 0.92)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(226, 232, 240, 0.95)',
+              boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
+            }}
+          >
+            {/* Workload Select Dropdown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span
+                style={{
+                  fontSize: '0.73rem',
+                  fontWeight: 700,
+                  color: '#475569',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Server size={12} color={isClusterOnline ? '#2563EB' : '#94A3B8'} />
+                Dịch vụ
+                <strong
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: isClusterOnline ? '#1D4ED8' : '#64748B',
+                    fontWeight: 800,
+                  }}
+                  title={`Cụm hiện có tổng cộng ${availableWorkloads.length} dịch vụ`}
+                >
+                  ({availableWorkloads.length})
+                </strong>:
+              </span>
+
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <select
+                  id="overview-workload-select"
+                  value={currentServiceTarget}
+                  disabled={!isClusterOnline || availableWorkloads.length === 0}
+                  onChange={(e) => handleSelectWorkload(e.target.value)}
+                  style={{
+                    padding: '3px 22px 3px 9px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: isClusterOnline ? '#1D4ED8' : '#94A3B8',
+                    backgroundColor: isClusterOnline ? '#EFF6FF' : '#F8FAFC',
+                    border: `1px solid ${isClusterOnline ? '#3B82F6' : '#CBD5E1'}`,
+                    borderRadius: '7px',
+                    outline: 'none',
+                    cursor: isClusterOnline ? 'pointer' : 'not-allowed',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none',
+                  }}
+                >
+                  {availableWorkloads.length === 0 ? (
+                    <option value="">{isClusterOnline ? 'Đang tải...' : 'Chưa kết nối Agent'}</option>
+                  ) : (
+                    availableWorkloads.map((wl) => (
+                      <option key={wl} value={wl}>
+                        {wl}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <ChevronDown
+                  size={12}
+                  color={isClusterOnline ? '#2563EB' : '#94A3B8'}
+                  style={{
+                    position: 'absolute',
+                    right: '6px',
+                    pointerEvents: 'none',
+                  }}
+                />
               </div>
-              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Hiệu Quả Tự Phục Hồi
-              </h3>
             </div>
+
+            {/* Nút Thang đo Auto / Standard */}
             <button
-              onClick={() => onNavigate && onNavigate('/dashboard/self-healing/history')}
+              type="button"
+              onClick={() => setScaleMode((m) => (m === 'auto' ? 'standard' : 'auto'))}
               style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--dash-primary)',
-                fontSize: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 9px',
+                fontSize: '0.72rem',
                 fontWeight: 600,
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                borderRadius: '7px',
                 cursor: 'pointer',
+                color: '#475569',
               }}
             >
-              Nhật ký đầy đủ &rarr;
+              <Sliders size={11} />
+              <span>Thang: {scaleMode === 'auto' ? 'Tự co giãn' : '0 - 100%'}</span>
+            </button>
+
+            {/* Nút Làm mới */}
+            <button
+              type="button"
+              onClick={() => {
+                triggerRefresh();
+                fetchData();
+              }}
+              disabled={isLoading || isRefreshing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 10px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '7px',
+                color: 'var(--dash-text-primary)',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                cursor: isLoading || isRefreshing ? 'wait' : 'pointer',
+              }}
+            >
+              <RefreshCw size={11} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
+              <span>Làm mới</span>
             </button>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-            <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Tỷ Lệ Thành Công</div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-success)', marginTop: '2px' }}>
-                {overviewStats?.remediations?.total > 0 && overviewStats?.remediations?.success_rate !== undefined ? `${Math.round(overviewStats.remediations.success_rate)}%` : '--'}
-              </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>
-                {overviewStats?.remediations?.total > 0 ? `${overviewStats.remediations.succeeded || 0}/${overviewStats.remediations.total} Hành động` : 'Chưa có hành động'}
-              </div>
-            </div>
-            <div style={{ padding: '10px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-sm)', border: '1px solid var(--dash-border)' }}>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Thời Gian Phục Hồi TB</div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                {overviewStats?.remediations?.total > 0 && overviewStats?.remediations?.avg_duration_sec !== undefined ? `${overviewStats.remediations.avg_duration_sec}s` : '--'}
-              </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-secondary)' }}>Không gián đoạn</div>
-            </div>
-          </div>
-
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-            Hành Động Tự Động Gần Đây:
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem' }}>
-            {overviewStats?.remediations?.recent_actions && overviewStats.remediations.recent_actions.length > 0 ? (
-              overviewStats.remediations.recent_actions.map((act) => (
-                <div key={act.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: 'var(--dash-radius-xs)' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>
-                    {act.action_name}: <strong style={{ color: 'var(--dash-text-primary)' }}>{act.target_name}</strong>
-                  </span>
-                  <span style={{ color: 'var(--dash-success)', fontWeight: 600 }}>Tự động trong {act.duration_sec}s</span>
-                </div>
-              ))
-            ) : (
-              <div style={{ padding: '8px', textAlign: 'center', color: 'var(--dash-text-muted)', fontSize: '0.75rem' }}>
-                Chưa có hành động tự phục hồi nào trong chu kỳ này.
-              </div>
-            )}
-          </div>
         </div>
+      </div>
+
+      {/* 2. KHUNG CHÍNH: SƠ ĐỒ LUỒNG AI + NỀN LƯỚI CHẤM ĐỒNG BỘ PHÓNG TO/THU NHỎ TOÀN KHUNG (CHUẨN STITCH) */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          display: 'flex',
+        }}
+      >
+        <AIPipelineFlowCanvas
+          selectedService={isClusterOnline ? (currentServiceTarget || 'Đang tải...') : 'Chưa kết nối'}
+          seriesSummaries={isClusterOnline ? seriesSummaries : []}
+          prediction={isClusterOnline ? displaySelectedPrediction : null}
+          currentActiveStep={isClusterOnline ? currentActiveStep : 0}
+          totalSteps={isClusterOnline ? (timesteps.length || 12) : 12}
+          isAgentConnected={isClusterOnline}
+          timesteps={isClusterOnline ? timesteps : []}
+          scaleMode={scaleMode}
+          isFullScreen={true}
+          showExtendedPipeline={true}
+          defaultViewMode="gru"
+          topSafePadding={126}
+          pipelineContext={isClusterOnline ? pipelineContext : null}
+          podCount={isClusterOnline ? currentServiceMetadata.pods : 0}
+          onNavigate={onNavigate}
+        />
       </div>
     </div>
   );

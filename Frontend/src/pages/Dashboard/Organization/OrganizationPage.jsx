@@ -166,57 +166,59 @@ export const OrganizationPage = () => {
   const currentSlug = orgData?.slug || currentOrg?.slug || 'sme-retail';
 
   return (
-    <div className="dashboard-organization-page" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-organization-page" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* 1. Header & Nút Sửa thông tin */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Building2 size={20} color="#059669" />
+            <Building2 size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Thông Tin Tổ Chức & Doanh Nghiệp
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Thông Tin Tổ Chức
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Quản lý thông tin định danh doanh nghiệp, tên miền và thông tin liên hệ của tổ chức
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Quản lý thông tin định danh doanh nghiệp, tên miền &amp; liên hệ của tổ chức
             </p>
           </div>
         </div>
 
-        {/* Nút Sửa thông tin (Mở cửa sổ nhỏ) */}
+        {/* Nút Sửa thông tin */}
         <div>
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 18px',
-              backgroundColor: 'var(--dash-primary)',
-              border: 'none',
-              borderRadius: 'var(--dash-radius-md)',
+              padding: '0 14px',
+              backgroundColor: '#059669',
+              border: '1px solid #059669',
+              borderRadius: '10px',
               color: '#FFFFFF',
-              fontSize: '0.8125rem',
+              fontSize: '0.8rem',
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.2)',
               transition: 'all 0.15s ease',
             }}
           >
-            <Edit3 size={15} />
+            <Edit3 size={14} />
             <span>Sửa thông tin</span>
           </button>
         </div>
@@ -228,69 +230,118 @@ export const OrganizationPage = () => {
             padding: '12px 16px',
             backgroundColor: '#ECFDF5',
             border: '1px solid #A7F3D0',
-            borderRadius: 'var(--dash-radius-md)',
-            color: '#065F46',
-            fontSize: '0.875rem',
+            borderRadius: '12px',
+            color: '#047857',
+            fontSize: '0.825rem',
+            fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
           }}
         >
-          <CheckCircle2 size={18} color="#059669" />
+          <CheckCircle2 size={17} color="#059669" />
           <span>Thông tin tổ chức doanh nghiệp đã được cập nhật đồng bộ vào cơ sở dữ liệu!</span>
         </div>
       )}
 
+      {/* Hàng 4 Thẻ KPI Tóm Tắt Tổ Chức */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #059669', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>MÃ ĐỊNH DANH SLUG</span>
+            <Building2 size={14} color="#059669" />
+          </div>
+          <div style={{ marginTop: '5px', fontSize: '0.96rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {currentSlug}
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #3B82F6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>THÀNH VIÊN</span>
+            <Users size={14} color="#3B82F6" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {orgData?.members_count ?? 2}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>Đang hoạt động</span>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #F59E0B', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>VAI TRÒ CỦA BẠN</span>
+            <Shield size={14} color="#F59E0B" />
+          </div>
+          <div style={{ marginTop: '6px' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '2px 9px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontFamily: 'var(--font-mono)' }}>
+              {orgData?.role_in_org || currentOrg?.role_in_org || 'SME_OWNER'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #8B5CF6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>MÚI GIỜ VẬN HÀNH</span>
+            <Clock size={14} color="#8B5CF6" />
+          </div>
+          <div style={{ marginTop: '5px', fontSize: '0.88rem', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {formData.timezone || 'Asia/Ho_Chi_Minh'}
+          </div>
+        </div>
+      </div>
+
       {/* 2. CHẾ ĐỘ XEM THÔNG TIN (VIEW MODE) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* Card: Thông tin cơ bản tổ chức (Đã bỏ tiêu đề lặp lại 'Thông Tin Doanh Nghiệp') */}
-        <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Card: Thông tin cơ bản tổ chức */}
+        <div className="dash-card" style={{ padding: '18px 20px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+            <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
                 Tên Doanh Nghiệp / Tổ Chức
               </span>
-              <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
+              <span style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0F172A' }}>
                 {currentName}
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+            <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
                 Mã Định Danh Slug (Duy nhất)
               </span>
               <code
                 style={{
                   display: 'inline-block',
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: 'var(--dash-bg-canvas)',
-                  border: '1px solid var(--dash-border)',
-                  fontSize: '0.875rem',
+                  padding: '2px 8px',
+                  borderRadius: '7px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  fontSize: '0.82rem',
                   fontFamily: 'var(--font-mono)',
-                  color: '#334155',
-                  fontWeight: 600,
+                  color: '#0F172A',
+                  fontWeight: 700,
                 }}
               >
                 {currentSlug}
               </code>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+            <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
                 Loại Hình Tổ Chức
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--dash-text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Layers size={15} color="#64748B" />
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Layers size={14} color="#059669" />
                 {orgData?.type || formData.type || 'Engineering Org'}
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+            <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
                 Vai Trò Của Bạn Trong Tổ Chức
               </span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#D97706', backgroundColor: '#FEF3C7', padding: '3px 8px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '2px 9px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={12} />
                 {orgData?.role_in_org || currentOrg?.role_in_org || 'SME_OWNER'}
               </span>
@@ -298,36 +349,40 @@ export const OrganizationPage = () => {
           </div>
 
           {/* Mô tả doanh nghiệp */}
-          <div style={{ paddingTop: '16px', borderTop: '1px dashed var(--dash-border)' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+          <div style={{ paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
+            <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
               Mô Tả Doanh Nghiệp
             </span>
-            <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', margin: 0, lineHeight: 1.6 }}>
+            <p style={{ fontSize: '0.84rem', color: '#475569', margin: 0, lineHeight: 1.6 }}>
               {orgData?.description || 'Hạ tầng giám sát viễn trắc và tự phục hồi Kubernetes Proactive Self-Healing.'}
             </p>
           </div>
         </div>
 
         {/* Card: Thông Tin Chi Tiết & Hồ Sơ Mở Rộng */}
-        <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Globe size={18} color="var(--dash-primary)" />
-              Thông Tin Chi Tiết & Liên Hệ Quản Trị
-            </h3>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-              Hồ sơ chi tiết được dùng để xác thực hệ thống, gửi thông báo khẩn cấp và báo cáo vận hành định kỳ.
-            </p>
+        <div className="dash-card" style={{ padding: '18px 20px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '9px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Globe size={16} color="#059669" />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Thông Tin Chi Tiết &amp; Liên Hệ Quản Trị
+              </h3>
+              <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '2px 0 0 0' }}>
+                Hồ sơ chi tiết dùng để xác thực hệ thống, gửi thông báo khẩn cấp và báo cáo vận hành định kỳ.
+              </p>
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', paddingTop: '10px', borderTop: '1px solid var(--dash-border)' }}>
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                <Globe size={13} /> Tên Miền (Website / Domain)
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', paddingTop: '12px', borderTop: '1px solid #F1F5F9' }}>
+            <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <Globe size={12} /> Tên Miền (Website / Domain)
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: formData.website ? 'var(--dash-primary)' : 'var(--dash-text-muted)' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: formData.website ? '#059669' : '#94A3B8' }}>
                 {formData.website ? (
-                  <a href={formData.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--dash-primary)', textDecoration: 'none' }}>
+                  <a href={formData.website} target="_blank" rel="noopener noreferrer" style={{ color: '#059669', textDecoration: 'none' }}>
                     {formData.website}
                   </a>
                 ) : (
@@ -336,47 +391,47 @@ export const OrganizationPage = () => {
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                <Mail size={13} /> Email Liên Hệ Quản Trị
+            <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <Mail size={12} /> Email Liên Hệ Quản Trị
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: formData.email ? 'var(--dash-text-primary)' : 'var(--dash-text-muted)' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: formData.email ? '#0F172A' : '#94A3B8' }}>
                 {formData.email || '-- Chưa thiết lập email --'}
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                <Phone size={13} /> Số Điện Thoại
+            <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <Phone size={12} /> Số Điện Thoại
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: formData.phone ? 'var(--dash-text-primary)' : 'var(--dash-text-muted)' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: formData.phone ? '#0F172A' : '#94A3B8' }}>
                 {formData.phone || '-- Chưa thiết lập --'}
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                <MapPin size={13} /> Khu Vực / Thành Phố
+            <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <MapPin size={12} /> Khu Vực / Thành Phố
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#0F172A' }}>
                 {formData.city || 'Hồ Chí Minh'}, {formData.country || 'Việt Nam'}
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                <Clock size={13} /> Múi Giờ Vận Hành
+            <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <Clock size={12} /> Múi Giờ Vận Hành
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
                 {formData.timezone || 'Asia/Ho_Chi_Minh'} (GMT+7)
               </span>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                <Users size={13} /> Thành Viên Trong Tổ Chức
+            <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <Users size={12} /> Thành Viên Trong Tổ Chức
               </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-primary)' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#059669' }}>
                 {orgData?.members_count ?? 2} thành viên đang hoạt động
               </span>
             </div>

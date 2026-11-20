@@ -1,8 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
+import { useAuth } from '../../context/AuthContext';
 import UserProfileDropdown from '../common/UserProfileDropdown';
 import {
   Building2,
+  Users,
+  Radio,
+  Layers,
+  Box,
+  ScrollText,
+  BarChart3,
+  ShieldAlert,
+  Settings,
   Loader2,
   Server,
   RefreshCw,
@@ -12,9 +21,10 @@ import {
   Menu,
 } from 'lucide-react';
 
-export const TopHeader = () => {
+export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard' }) => {
   const {
     currentOrg,
+    currentUserRole,
     orgList,
     switchOrganization,
     isLoadingOrgs,
@@ -34,6 +44,203 @@ export const TopHeader = () => {
     setIsMobileNavOpen,
     onNavigate,
   } = useDashboard();
+
+  const auth = useAuth();
+  const authUser = auth?.user || null;
+  const isSuperAdmin = auth?.isSuperAdmin ? auth.isSuperAdmin(authUser) : false;
+  const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(authUser) : false;
+  const isOwnerUser = auth?.isOwner ? auth.isOwner(authUser) : false;
+  const effectiveRole = (
+    currentUserRole ||
+    currentOrg?.role_in_org ||
+    currentOrg?.role ||
+    (isSuperAdmin || isSystemAdmin || isOwnerUser
+      ? 'SME_OWNER'
+      : auth?.isDevOps && auth.isDevOps(authUser)
+        ? 'DEVOPS'
+        : 'VIEWER')
+  ).toUpperCase();
+  const canViewOrgNav = effectiveRole !== 'DEVOPS' && effectiveRole !== 'VIEWER';
+  const canViewClusters = effectiveRole !== 'VIEWER';
+  const canViewPolicies = effectiveRole !== 'VIEWER';
+  const cleanCurrentPath = (currentPath || '').toLowerCase().split('?')[0].split('#')[0];
+  const isAgentsActive = cleanCurrentPath === '/dashboard/agents' || cleanCurrentPath.startsWith('/dashboard/agents/');
+  const isClustersActive = cleanCurrentPath === '/dashboard/clusters' || cleanCurrentPath.startsWith('/dashboard/clusters/');
+  const isInfraActive = cleanCurrentPath === '/dashboard/infrastructure' || cleanCurrentPath.startsWith('/dashboard/infrastructure/');
+  const isWorkloadsActive = cleanCurrentPath === '/dashboard/workloads' || cleanCurrentPath.startsWith('/dashboard/workloads/');
+  const isOrgInfoActive = cleanCurrentPath === '/dashboard/organization';
+  const isOrgMembersActive = cleanCurrentPath === '/dashboard/organization/members';
+  const isAuditLogsActive = cleanCurrentPath === '/dashboard/audit-logs';
+  const isReportsActive = cleanCurrentPath === '/dashboard/reports';
+  const isPoliciesActive = cleanCurrentPath === '/dashboard/self-healing/policies' || cleanCurrentPath.startsWith('/dashboard/self-healing/policies/');
+  const isSettingsActive = cleanCurrentPath === '/dashboard/settings';
+  const isNotificationsActive = cleanCurrentPath === '/dashboard/notifications';
+
+  const headerGroupDividerStyle = {
+    width: '1px',
+    height: '20px',
+    backgroundColor: 'rgba(203, 213, 225, 0.85)',
+    margin: '0 2px',
+    flexShrink: 0,
+  };
+
+  const getHeaderDropdownBtnStyle = (isActive, isOpen) => ({
+    height: '34px',
+    padding: '0 8px',
+    borderRadius: '10px',
+    border: isActive || isOpen ? '1px solid #10B981' : '1px solid rgba(203, 213, 225, 0.9)',
+    backgroundColor: isActive ? '#ECFDF5' : isOpen ? '#FFFFFF' : 'rgba(255, 255, 255, 0.94)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: isOpen
+      ? '0 4px 12px rgba(16, 185, 129, 0.14)'
+      : '0 2px 8px rgba(15, 23, 42, 0.05)',
+    color: isActive ? '#059669' : 'var(--dash-text-primary)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '5px',
+    fontSize: '0.78rem',
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    outline: 'none',
+    transition: 'all 0.15s ease',
+  });
+
+  const getHeaderIconBtnStyle = (isActive) => ({
+    width: '34px',
+    height: '34px',
+    borderRadius: 'var(--dash-radius-md)',
+    border: isActive ? '1px solid #10B981' : '1px solid rgba(203, 213, 225, 0.9)',
+    backgroundColor: isActive ? '#ECFDF5' : 'rgba(255, 255, 255, 0.94)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)',
+    color: isActive ? '#059669' : 'var(--dash-text-secondary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    transition: 'all 0.15s ease',
+  });
+
+  const headerNavDropdowns = [
+    {
+      key: 'infra',
+      label: 'Hạ tầng',
+      headerTitle: 'Hạ tầng & Tác tử',
+      icon: Server,
+      isActive: isAgentsActive || isClustersActive || isInfraActive || isWorkloadsActive,
+      items: [
+        {
+          label: 'Tác tử Agent',
+          desc: 'Quản lý & cài đặt eBPF Agent',
+          path: '/dashboard/agents',
+          icon: Radio,
+          active: isAgentsActive,
+        },
+        ...(canViewClusters
+          ? [
+              {
+                label: 'Cụm K8s',
+                desc: 'Danh sách cụm & cấu hình kết nối',
+                path: '/dashboard/clusters',
+                icon: Server,
+                active: isClustersActive,
+              },
+            ]
+          : []),
+        {
+          label: 'Hạ tầng máy chủ',
+          desc: 'Tài nguyên Node & Safe Drain',
+          path: '/dashboard/infrastructure',
+          icon: Layers,
+          active: isInfraActive,
+        },
+        {
+          label: 'Khối lượng công việc',
+          desc: 'Deployments, Pods & khởi động lại',
+          path: '/dashboard/workloads',
+          icon: Box,
+          active: isWorkloadsActive,
+        },
+      ],
+    },
+    ...(canViewOrgNav
+      ? [
+          {
+            key: 'org',
+            label: 'Tổ chức',
+            headerTitle: 'Quản trị Tổ chức',
+            icon: Building2,
+            isActive: isOrgInfoActive || isOrgMembersActive,
+            items: [
+              {
+                label: 'Thông tin Tổ chức',
+                desc: 'Hồ sơ doanh nghiệp & thông tin liên hệ',
+                path: '/dashboard/organization',
+                icon: Building2,
+                active: isOrgInfoActive,
+              },
+              {
+                label: 'Thành viên & Phân quyền',
+                desc: 'Quản lý nhân sự & ma trận RBAC',
+                path: '/dashboard/organization/members',
+                icon: Users,
+                active: isOrgMembersActive,
+              },
+            ],
+          },
+        ]
+      : []),
+    {
+      key: 'system',
+      label: 'Hệ thống',
+      headerTitle: 'Quản trị Hệ thống',
+      icon: Settings,
+      isActive: isAuditLogsActive || isReportsActive || isPoliciesActive || isSettingsActive,
+      items: [
+        ...(canViewPolicies
+          ? [
+              {
+                label: 'Chính sách tự động',
+                desc: 'Luật tự phục hồi & ngưỡng an toàn',
+                path: '/dashboard/self-healing/policies',
+                icon: ShieldAlert,
+                active: isPoliciesActive,
+              },
+            ]
+          : []),
+        {
+          label: 'Nhật ký kiểm toán',
+          desc: 'Truy vết thao tác người dùng & AI',
+          path: '/dashboard/audit-logs',
+          icon: ScrollText,
+          active: isAuditLogsActive,
+        },
+        {
+          label: 'Báo cáo SLA & Vận hành',
+          desc: 'Thống kê SLA, chi phí & xuất Excel',
+          path: '/dashboard/reports',
+          icon: BarChart3,
+          active: isReportsActive,
+        },
+        ...(canViewOrgNav
+          ? [
+              {
+                label: 'Cài đặt hệ thống',
+                desc: 'Cảnh báo Email khẩn cấp & cooldown',
+                path: '/dashboard/settings',
+                icon: Settings,
+                active: isSettingsActive,
+              },
+            ]
+          : []),
+      ],
+    },
+  ];
 
   // Dropdown states
   const [isOrgDropdownOpen, setIsOrgDropdownOpen] = useState(false);
@@ -70,60 +277,84 @@ export const TopHeader = () => {
   };
   const [isEnvDropdownOpen, setIsEnvDropdownOpen] = useState(false);
   const [isNotifPopoverOpen, setIsNotifPopoverOpen] = useState(false);
+  const [openNavMenu, setOpenNavMenu] = useState(null); // 'infra' | 'org' | 'system' | null
 
   const orgRef = useRef(null);
   const envRef = useRef(null);
   const notifRef = useRef(null);
+  const navMenusRef = useRef(null);
 
-  // Close dropdowns on click outside
+  // Close dropdowns on click outside or Escape
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (orgRef.current && !orgRef.current.contains(e.target)) setIsOrgDropdownOpen(false);
       if (envRef.current && !envRef.current.contains(e.target)) setIsEnvDropdownOpen(false);
       if (notifRef.current && !notifRef.current.contains(e.target)) setIsNotifPopoverOpen(false);
+      if (navMenusRef.current && !navMenusRef.current.contains(e.target)) setOpenNavMenu(null);
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setOpenNavMenu(null);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   return (
     <header
       className="dashboard-top-header"
       style={{
-        height: '64px',
-        backgroundColor: '#FFFFFF',
-        borderBottom: '1px solid var(--dash-border)',
+        height: '60px',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        backgroundColor: 'rgba(255, 255, 255, 0.96)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1px solid rgba(226, 232, 240, 0.9)',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 25,
+        padding: '0 20px 0 16px',
+        position: 'relative',
+        flexShrink: 0,
+        zIndex: 50,
       }}
     >
-      {/* Left: Mobile Toggle & Selectors */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        {/* Mobile menu trigger */}
+      {/* Left: Mobile-only menu button + Org/Cluster Selectors */}
+      <div className="dashboard-top-header-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button
-          onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+          type="button"
           className="dashboard-mobile-toggle"
+          onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+          aria-label="Mở menu điều hướng"
           style={{
             display: 'none',
-            background: 'none',
-            border: 'none',
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            border: '1px solid rgba(203, 213, 225, 0.9)',
             color: 'var(--dash-text-primary)',
             cursor: 'pointer',
-            padding: '6px',
+            flexShrink: 0,
+            padding: 0,
           }}
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
 
         {/* Organization Selector Dropdown */}
         <div ref={orgRef} style={{ position: 'relative' }}>
           <button
             type="button"
+            className="topheader-org-btn"
             aria-haspopup="listbox"
             aria-expanded={isOrgDropdownOpen}
             aria-label="Chọn tổ chức"
@@ -135,9 +366,11 @@ export const TopHeader = () => {
               alignItems: 'center',
               gap: '8px',
               padding: '6px 12px',
-              backgroundColor: 'var(--dash-bg-canvas)',
-              border: isOrgDropdownOpen ? '1px solid var(--dash-primary)' : '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
+              backgroundColor: isFloatingCanvas ? 'rgba(255, 255, 255, 0.94)' : 'var(--dash-bg-canvas)',
+              backdropFilter: isFloatingCanvas ? 'blur(10px)' : 'none',
+              border: isOrgDropdownOpen ? '1px solid var(--dash-primary)' : '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              boxShadow: isFloatingCanvas ? '0 2px 8px rgba(15, 23, 42, 0.05)' : 'none',
               color: 'var(--dash-text-primary)',
               fontSize: '0.8125rem',
               fontWeight: 600,
@@ -152,13 +385,31 @@ export const TopHeader = () => {
             ) : (
               <Building2 size={15} color="var(--dash-primary)" />
             )}
-            <span>
+            <span
+              className="topheader-org-name topheader-org-desktop"
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: '165px',
+              }}
+            >
               {isSwitchingOrg
                 ? 'Đang chuyển...'
                 : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa có Tổ chức')}
             </span>
+            <span
+              className="topheader-org-name topheader-org-mobile"
+              style={{
+                whiteSpace: 'nowrap',
+                display: 'none',
+              }}
+            >
+              {isSwitchingOrg ? '...' : (currentOrg?.name?.split(' ')[0] || 'Org')}
+            </span>
             {currentOrg?.role_in_org && (
               <span
+                className="topheader-org-badge"
                 style={{
                   fontSize: '0.625rem',
                   fontWeight: 700,
@@ -302,11 +553,12 @@ export const TopHeader = () => {
         </div>
 
         {/* Divider */}
-        <span style={{ color: 'var(--dash-border)', fontSize: '1.2rem' }}>/</span>
+        <span className="dashboard-header-divider" style={{ color: 'var(--dash-border)', fontSize: '1.2rem' }}>/</span>
 
         {/* Environment & K8s Cluster Selector Dropdown */}
         <div ref={envRef} style={{ position: 'relative' }}>
           <button
+            className="topheader-cluster-btn"
             onClick={() => {
               const nextState = !isEnvDropdownOpen;
               setIsEnvDropdownOpen(nextState);
@@ -320,22 +572,54 @@ export const TopHeader = () => {
               alignItems: 'center',
               gap: '8px',
               padding: '6px 12px',
-              backgroundColor: 'var(--dash-bg-canvas)',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
+              backgroundColor: isFloatingCanvas ? 'rgba(255, 255, 255, 0.94)' : 'var(--dash-bg-canvas)',
+              backdropFilter: isFloatingCanvas ? 'blur(10px)' : 'none',
+              border: '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              boxShadow: isFloatingCanvas ? '0 2px 8px rgba(15, 23, 42, 0.05)' : 'none',
               color: 'var(--dash-text-primary)',
               fontSize: '0.8125rem',
               fontWeight: 600,
               cursor: 'pointer',
             }}
           >
-            <Server size={15} color="var(--dash-text-secondary)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <Server size={15} color="var(--dash-text-secondary)" style={{ flexShrink: 0 }} />
+            <span
+              className="topheader-cluster-name topheader-cluster-desktop"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                whiteSpace: 'nowrap',
+              }}
+              title={
+                currentEnv?.cluster
+                  ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}`
+                  : currentEnv?.displayName || currentEnv?.name || ''
+              }
+            >
               {isLoadingEnvs
                 ? 'Đang tải cụm...'
                 : currentEnv?.cluster
                 ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}`
                 : currentEnv?.displayName || currentEnv?.name || (envList.length === 0 ? 'Chưa có Cụm K8s' : 'Chọn Cụm K8s')}
+            </span>
+            <span
+              className="topheader-cluster-name topheader-cluster-mobile"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                whiteSpace: 'nowrap',
+                display: 'none',
+              }}
+              title={
+                currentEnv?.cluster
+                  ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}`
+                  : currentEnv?.displayName || currentEnv?.name || ''
+              }
+            >
+              {isLoadingEnvs
+                ? 'Đang tải...'
+                : currentEnv?.cluster || currentEnv?.name || (envList.length === 0 ? 'K8s' : 'Chọn')}
             </span>
             {currentEnv?.agentStatus === 'ONLINE' ? (
               <span
@@ -345,6 +629,7 @@ export const TopHeader = () => {
                   borderRadius: '50%',
                   backgroundColor: '#10B981',
                   display: 'inline-block',
+                  flexShrink: 0,
                 }}
                 title="Agent eBPF Online"
               />
@@ -356,11 +641,12 @@ export const TopHeader = () => {
                   borderRadius: '50%',
                   backgroundColor: '#EF4444',
                   display: 'inline-block',
+                  flexShrink: 0,
                 }}
                 title="Agent Offline"
               />
             ) : null}
-            <ChevronDown size={14} color="var(--dash-text-muted)" />
+            <ChevronDown size={14} color="var(--dash-text-muted)" style={{ flexShrink: 0 }} />
           </button>
 
           {isEnvDropdownOpen && (
@@ -545,23 +831,165 @@ export const TopHeader = () => {
         </div>
       </div>
 
-      {/* Right: Notifications & Profile */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-        {/* Notifications Popover */}
+      {/* Right: 3 thẻ Dropdown (Hạ tầng | Tổ chức | Hệ thống) + Chế độ Điện thoại + Thông báo + Profile */}
+      <div className="dashboard-top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, boxSizing: 'border-box' }}>
+        <div ref={navMenusRef} className="dashboard-header-nav-groups" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {headerNavDropdowns.map((group) => {
+            const GroupIcon = group.icon;
+            const isOpen = openNavMenu === group.key;
+            return (
+              <div key={group.key} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    setOpenNavMenu(isOpen ? null : group.key);
+                    setIsOrgDropdownOpen(false);
+                    setIsEnvDropdownOpen(false);
+                    setIsNotifPopoverOpen(false);
+                  }}
+                  style={getHeaderDropdownBtnStyle(group.isActive, isOpen)}
+                >
+                  <GroupIcon size={15} color={group.isActive || isOpen ? '#059669' : 'var(--dash-text-secondary)'} />
+                  <span>{group.label}</span>
+                  <ChevronDown
+                    size={13}
+                    color={group.isActive || isOpen ? '#059669' : 'var(--dash-text-muted)'}
+                    style={{
+                      transition: 'transform 0.16s ease',
+                      transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div
+                    role="menu"
+                    aria-label={group.headerTitle}
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: '6px',
+                      width: '272px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid var(--dash-border)',
+                      borderRadius: '12px',
+                      boxShadow: 'var(--dash-shadow-dropdown)',
+                      padding: '6px',
+                      zIndex: 60,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        color: 'var(--dash-text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        borderBottom: '1px solid var(--dash-border)',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      {group.headerTitle}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {group.items.map((item) => {
+                        const ItemIcon = item.icon;
+                        return (
+                          <button
+                            key={item.path}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenNavMenu(null);
+                              if (onNavigate) onNavigate(item.path);
+                            }}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '8px 10px',
+                              border: 'none',
+                              borderRadius: '8px',
+                              backgroundColor: item.active ? '#ECFDF5' : 'transparent',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              transition: 'background-color 0.12s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!item.active) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!item.active) e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: '30px',
+                                height: '30px',
+                                borderRadius: '8px',
+                                backgroundColor: item.active ? '#D1FAE5' : '#F1F5F9',
+                                color: item.active ? '#059669' : '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <ItemIcon size={15} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: '0.8125rem',
+                                  fontWeight: 600,
+                                  color: item.active ? '#047857' : 'var(--dash-text-primary)',
+                                  lineHeight: 1.25,
+                                }}
+                              >
+                                {item.label}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: '0.6875rem',
+                                  color: 'var(--dash-text-muted)',
+                                  marginTop: '2px',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {item.desc}
+                              </div>
+                            </div>
+                            {item.active && <Check size={14} color="#059669" style={{ flexShrink: 0 }} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="dashboard-header-divider" style={headerGroupDividerStyle} />
+
+
+        {/* Notifications Popover (kiêm lối vào trang Thông báo) */}
         <div ref={notifRef} style={{ position: 'relative' }}>
           <button
+            type="button"
             onClick={() => setIsNotifPopoverOpen(!isNotifPopoverOpen)}
+            title="Thông báo"
+            aria-label="Thông báo"
             style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: 'var(--dash-radius-md)',
-              border: '1px solid var(--dash-border)',
-              backgroundColor: 'var(--dash-bg-canvas)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--dash-text-secondary)',
-              cursor: 'pointer',
+              ...getHeaderIconBtnStyle(isNotificationsActive),
               position: 'relative',
             }}
           >

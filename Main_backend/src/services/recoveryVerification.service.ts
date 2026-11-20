@@ -528,25 +528,13 @@ export class RecoveryVerificationService {
         );
 
         if (incidentResolved && actionRow.incident_id) {
-          // Resolve the incident only when no other failed action exists
+          // Resolve the incident when verified recovery succeeded
           await pool.query(
             `UPDATE incidents
              SET status = 'RESOLVED',
                  resolved_at = COALESCE(resolved_at, NOW()),
                  updated_at = NOW()
-             WHERE id = $1 AND status IN ('OPEN', 'INVESTIGATING')
-               AND NOT EXISTS (
-                 SELECT 1 FROM healing_actions ha_fail
-                 WHERE ha_fail.incident_id = $1
-                   AND (
-                     ha_fail.execution_status = 'FAILED'
-                     OR EXISTS (
-                       SELECT 1 FROM recovery_verifications rv_fail
-                       WHERE rv_fail.healing_action_id = ha_fail.id
-                         AND rv_fail.verification_result = false
-                     )
-                   )
-               );`,
+             WHERE id = $1 AND status IN ('OPEN', 'INVESTIGATING');`,
             [actionRow.incident_id]
           );
 

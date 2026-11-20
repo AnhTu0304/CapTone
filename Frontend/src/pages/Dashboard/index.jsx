@@ -7,14 +7,11 @@ import WorkloadsPage from './Workloads';
 import MetricsPage from './Monitoring/MetricsPage';
 import LogsPage from './Monitoring/LogsPage';
 import EventsPage from './Monitoring/EventsPage';
-import PredictionsPage from './AI/PredictionsPage';
 import IncidentsPage from './Incidents/IncidentsPage';
 import HealingActionsPage from './SelfHealing/HealingActionsPage';
 import ActionHistoryPage from './SelfHealing/ActionHistoryPage';
 import ApprovalsPage from './SelfHealing/ApprovalsPage';
 import PoliciesPage from './SelfHealing/PoliciesPage';
-import LogsAndEventsPage from './Monitoring/LogsAndEventsPage';
-import SelfHealingHubPage from './SelfHealing/SelfHealingHubPage';
 import OrganizationPage from './Organization/OrganizationPage';
 import MembersPage from './Organization/MembersPage';
 import ClustersPage from './Clusters/ClustersPage';
@@ -23,7 +20,6 @@ import NotificationsPage from './Notifications/NotificationsPage';
 import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
 import SettingsPage from './Settings/SettingsPage';
-
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
   const path = currentPath.toLowerCase().split('?')[0].split('#')[0] || '/dashboard';
@@ -91,7 +87,7 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       );
     }
     if (path === '/dashboard/clusters') {
-        return <ClustersPage onNavigate={onNavigate} />;
+      return <ClustersPage onNavigate={onNavigate} />;
     }
     if (path === '/dashboard/infrastructure') {
       return <InfrastructurePage />;
@@ -111,10 +107,7 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       return <EventsPage onNavigate={onNavigate} />;
     }
 
-    // 5. AI & Incidents
-    if (path === '/dashboard/ai/predictions') {
-      return <PredictionsPage />;
-    }
+    // 5. Incidents & RCA
     if (path === '/dashboard/incidents' || path.startsWith('/dashboard/incidents')) {
       return <IncidentsPage onNavigate={onNavigate} />;
     }

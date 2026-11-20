@@ -18,13 +18,11 @@ export const selfHealingService = {
       if (params.limit) search.append('limit', String(params.limit));
       if (params.offset) search.append('offset', String(params.offset));
       if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
-      if (params.search) search.append('search', params.search);
-      if (params.target && !params.search) search.append('search', params.target);
       if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
       if (params.risk_level && params.risk_level !== 'all') search.append('risk_level', params.risk_level);
       if (params.execution_mode && params.execution_mode !== 'all') search.append('execution_mode', params.execution_mode);
       if (params.execution_status && params.execution_status !== 'all') search.append('execution_status', params.execution_status);
-      if (params.search) search.append('search', params.search);
+      if (params.search || params.target) search.append('search', params.search || params.target);
 
       const qs = search.toString();
       const res = await request(`/healing/actions${qs ? `?${qs}` : ''}`);

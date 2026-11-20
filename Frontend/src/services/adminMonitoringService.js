@@ -36,9 +36,24 @@ export const getPlatformMonitoringData = async () => {
     ? `${minutes}m ${seconds}s` 
     : `${seconds}s`;
 
+  // Dynamic port detection with fallback to user's configured non-default ports
+  const parsedBackendPort = (() => {
+    if (mainData.externalPort) return Number(mainData.externalPort);
+    if (mainData.port && Number(mainData.port) !== 5000) return Number(mainData.port);
+    try {
+      if (apiClient.API_BASE_URL) {
+        const u = new URL(apiClient.API_BASE_URL, window.location.origin);
+        if (u.port) return Number(u.port);
+      }
+    } catch {
+      // fallback
+    }
+    return 5005;
+  })();
+
   const mainBackend = {
     status: mainData.status === 'UP' ? 'ONLINE' : 'OFFLINE',
-    port: 5000,
+    port: parsedBackendPort,
     uptime: uptimeStr,
     apiLatency: `${apiLatency} ms (p50)`,
     memoryRss: mainData.memory?.rssMb ? `${mainData.memory.rssMb} MB` : 'N/A',
@@ -51,7 +66,7 @@ export const getPlatformMonitoringData = async () => {
   const aiHealth = aiHealthRes || {};
   const aiBackend = {
     status: aiHealth.status === 'healthy' ? 'OPTIMAL' : 'OFFLINE',
-    port: 8000,
+    port: aiHealth.externalPort || mainData.aiPort || (aiHealth.port && Number(aiHealth.port) !== 8000 ? Number(aiHealth.port) : 8005),
     modelLoaded: Boolean(aiHealth.model_loaded),
     modelType: aiHealth.model_type || 'gru_multi_label_risk',
     inputShape: aiHealth.input_shape ? `(${aiHealth.input_shape.join(', ')}) = 96 inputs` : '(12, 8) = 96 inputs',
@@ -64,7 +79,7 @@ export const getPlatformMonitoringData = async () => {
   const dbData = mainData.database || {};
   const database = {
     status: dbData.status === 'CONNECTED' ? 'HEALTHY' : 'DISCONNECTED',
-    port: dbData.port || 5432,
+    port: dbData.externalPort || (dbData.port && Number(dbData.port) !== 5432 ? Number(dbData.port) : 5433),
     name: dbData.name || 'captone_db',
     host: dbData.host || 'postgres',
     serverTime: dbData.serverTime ? new Date(dbData.serverTime).toLocaleTimeString('vi-VN') : 'Đồng bộ',
@@ -74,7 +89,7 @@ export const getPlatformMonitoringData = async () => {
   const redisData = mainData.redis || {};
   const redis = {
     status: redisData.status === 'CONNECTED' ? 'CONNECTED' : 'DISCONNECTED',
-    port: redisData.port || 6379,
+    port: redisData.externalPort || (redisData.port && Number(redisData.port) !== 6379 ? Number(redisData.port) : 6380),
     host: redisData.host || 'redis',
     latency: redisData.latencyMs != null ? `${redisData.latencyMs} ms` : 'N/A',
   };

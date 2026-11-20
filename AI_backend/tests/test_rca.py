@@ -561,6 +561,15 @@ def test_failed_previous_action_is_not_repeated_without_new_evidence():
             "cpu": 40, "ram": 45, "disk": 50, "latency": 200,
             "request_rate": 950, "http_5xx_rate": 0.5,
         },
+        "kubernetes": {
+            "all_pods": [
+                {"pod_name": "payment-1", "status": "Running", "ready": True, "cpu_usage_pct": 95.0, "latency_ms": 200.0},
+                {"pod_name": "payment-2", "status": "Running", "ready": True, "cpu_usage_pct": 92.0, "latency_ms": 200.0},
+            ],
+            "nodes": [
+                {"node_name": "worker-1", "status": "Ready", "conditions": {"Ready": True}, "free_memory_bytes": 4 * 1024 * 1024 * 1024}
+            ],
+        },
         "previous_action": "SCALE_REPLICAS",
         "previous_action_result": "FAILED",
         "previous_action_result_source": "POST_ACTION_VERIFICATION",
@@ -583,6 +592,15 @@ def test_partial_previous_action_triggers_root_cause_and_recommendation_reassess
         "metrics": {
             "cpu": 40, "ram": 45, "disk": 50, "latency": 200,
             "request_rate": 950, "http_5xx_rate": 0.5,
+        },
+        "kubernetes": {
+            "all_pods": [
+                {"pod_name": "payment-1", "status": "Running", "ready": True, "cpu_usage_pct": 95.0, "latency_ms": 200.0},
+                {"pod_name": "payment-2", "status": "Running", "ready": True, "cpu_usage_pct": 92.0, "latency_ms": 200.0},
+            ],
+            "nodes": [
+                {"node_name": "worker-1", "status": "Ready", "conditions": {"Ready": True}, "free_memory_bytes": 4 * 1024 * 1024 * 1024}
+            ],
         },
         "previous_action": "SCALE_REPLICAS",
         "previous_action_result": "PARTIAL",
@@ -610,6 +628,15 @@ def test_failed_action_can_be_recommended_again_with_strong_new_evidence():
         "metrics": {
             "cpu": 40, "ram": 45, "disk": 50, "latency": 200,
             "request_rate": 950, "http_5xx_rate": 0.5,
+        },
+        "kubernetes": {
+            "all_pods": [
+                {"pod_name": "payment-1", "status": "Running", "ready": True, "cpu_usage_pct": 95.0, "latency_ms": 200.0},
+                {"pod_name": "payment-2", "status": "Running", "ready": True, "cpu_usage_pct": 92.0, "latency_ms": 200.0},
+            ],
+            "nodes": [
+                {"node_name": "worker-1", "status": "Ready", "conditions": {"Ready": True}, "free_memory_bytes": 4 * 1024 * 1024 * 1024}
+            ],
         },
         "prediction": {
             "service_id": "payment-service",

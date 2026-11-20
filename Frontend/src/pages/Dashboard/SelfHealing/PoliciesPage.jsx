@@ -490,36 +490,37 @@ export const PoliciesPage = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <ShieldCheck size={20} color="#059669" />
+            <ShieldCheck size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Ma Trận Chính Sách Tự Phục Hồi
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Chính Sách Tự Phục Hồi
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Quản lý chính sách tự động và cơ chế bảo vệ an toàn MAPE-K
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Quản lý quy tắc tự động hóa, ngưỡng tin cậy &amp; cơ chế bảo vệ an toàn MAPE-K
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => {
               if (!canManagePolicies) {
@@ -531,13 +532,15 @@ export const PoliciesPage = () => {
             disabled={!canManagePolicies}
             className="dash-btn"
             style={{
-              padding: '8px 14px',
-              backgroundColor: !canManagePolicies ? '#F1F5F9' : 'white',
-              border: `1px solid ${!canManagePolicies ? '#CBD5E1' : 'var(--dash-primary)'}`,
-              color: !canManagePolicies ? '#94A3B8' : 'var(--dash-primary)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              display: 'flex',
+              height: '34px',
+              padding: '0 13px',
+              backgroundColor: !canManagePolicies ? '#F1F5F9' : '#ECFDF5',
+              border: `1px solid ${!canManagePolicies ? '#CBD5E1' : '#A7F3D0'}`,
+              borderRadius: '10px',
+              color: !canManagePolicies ? '#94A3B8' : '#047857',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
@@ -545,7 +548,7 @@ export const PoliciesPage = () => {
             }}
             title={!canManagePolicies ? 'Chỉ SME Owner hoặc DevOps mới có quyền thêm quy tắc' : 'Thêm quy tắc mới'}
           >
-            <Plus size={16} />
+            <Plus size={15} />
             Thêm Quy Tắc Mới
           </button>
 
@@ -554,21 +557,25 @@ export const PoliciesPage = () => {
             disabled={!canManagePolicies}
             className="dash-btn"
             style={{
-              padding: '8px 16px',
-              backgroundColor: !canManagePolicies ? '#94A3B8' : 'var(--dash-primary)',
-              color: 'white',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              display: 'flex',
+              height: '34px',
+              padding: '0 14px',
+              backgroundColor: !canManagePolicies ? '#94A3B8' : '#059669',
+              border: `1px solid ${!canManagePolicies ? '#94A3B8' : '#059669'}`,
+              borderRadius: '10px',
+              color: '#FFFFFF',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
               opacity: !canManagePolicies ? 0.7 : 1,
+              boxShadow: canManagePolicies ? '0 2px 8px rgba(5, 150, 105, 0.2)' : 'none',
             }}
             title={!canManagePolicies ? 'Chỉ SME Owner hoặc DevOps mới có quyền lưu cấu hình' : 'Lưu cấu hình'}
           >
-            {saveSuccess ? <Check size={16} /> : <Save size={16} />}
-            {saveSuccess ? 'Đã Lưu Thành Công' : 'Lưu Thay Đổi'}
+            {saveSuccess ? <Check size={15} /> : <Save size={15} />}
+            {saveSuccess ? 'Đã Lưu' : 'Lưu Thay Đổi'}
           </button>
         </div>
       </div>
@@ -576,18 +583,19 @@ export const PoliciesPage = () => {
       {hasUnsavedChanges && !saveSuccess && (
         <div
           style={{
-            padding: '12px 16px',
-            backgroundColor: '#fffbeb',
-            border: '1px solid #fde68a',
-            borderRadius: 'var(--dash-radius-md)',
-            color: '#92400e',
-            fontSize: '0.875rem',
+            padding: '11px 15px',
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '12px',
+            color: '#92400E',
+            fontSize: '0.82rem',
+            fontWeight: 500,
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
           }}
         >
-          <AlertTriangle size={18} color="#d97706" />
+          <AlertTriangle size={17} color="#D97706" />
           <span>Bạn có thay đổi cấu hình chưa lưu. Hãy nhấn nút <strong>"Lưu Thay Đổi"</strong> ở góc phải để áp dụng vào hệ thống.</span>
         </div>
       )}
@@ -595,45 +603,47 @@ export const PoliciesPage = () => {
       {saveSuccess && (
         <div
           style={{
-            padding: '12px 16px',
-            backgroundColor: '#ecfdf5',
-            border: '1px solid #a7f3d0',
-            borderRadius: 'var(--dash-radius-md)',
-            color: '#065f46',
-            fontSize: '0.875rem',
+            padding: '11px 15px',
+            backgroundColor: '#ECFDF5',
+            border: '1px solid #A7F3D0',
+            borderRadius: '12px',
+            color: '#047857',
+            fontSize: '0.82rem',
+            fontWeight: 600,
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
           }}
         >
-          <CheckCircle2 size={18} color="#059669" />
+          <CheckCircle2 size={17} color="#059669" />
           <span>Chính sách tự phục hồi đã được áp dụng tức thì vào cụm máy chủ và ghi nhận vào sổ kiểm toán.</span>
         </div>
       )}
 
       {/* 1. Chế Độ Vận Hành Tự Động Hóa (Cluster Automation Mode) */}
-      <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+      <div className="dash-card" style={{ padding: '18px 20px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
           <div
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              width: '34px',
+              height: '34px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--dash-primary)',
+              color: '#059669',
               flexShrink: 0,
             }}
           >
-            <Shield size={18} />
+            <Shield size={17} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
+            <h2 style={{ fontSize: '0.96rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
               Chế Độ Vận Hành Tự Động Hóa (Cluster Automation Mode)
             </h2>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+            <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '2px 0 0 0' }}>
               Quyết định mức độ tự trị và quyền can thiệp phục hồi của AI trên cụm Kubernetes
             </p>
           </div>
@@ -646,9 +656,10 @@ export const PoliciesPage = () => {
             style={{
               padding: '14px 16px',
               borderRadius: '12px',
-              border: globalMode === 'SUPERVISED' ? '2px solid var(--dash-primary)' : '1px solid #E2E8F0',
-              backgroundColor: globalMode === 'SUPERVISED' ? 'rgba(16, 185, 129, 0.04)' : '#FFFFFF',
-              boxShadow: globalMode === 'SUPERVISED' ? '0 2px 6px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
+              border: globalMode === 'SUPERVISED' ? '1.5px solid #059669' : '1px solid #E2E8F0',
+              borderTop: '2.5px solid #059669',
+              backgroundColor: globalMode === 'SUPERVISED' ? '#ECFDF5' : '#FFFFFF',
+              boxShadow: globalMode === 'SUPERVISED' ? '0 4px 14px rgba(5, 150, 105, 0.14)' : '0 2px 8px rgba(15, 23, 42, 0.03)',
               cursor: canManagePolicies ? 'pointer' : 'not-allowed',
               opacity: canManagePolicies ? 1 : 0.8,
               display: 'flex',
@@ -707,9 +718,10 @@ export const PoliciesPage = () => {
             style={{
               padding: '14px 16px',
               borderRadius: '12px',
-              border: globalMode === 'AUTONOMOUS' ? '2px solid #2563EB' : '1px solid #E2E8F0',
-              backgroundColor: globalMode === 'AUTONOMOUS' ? 'rgba(37, 99, 235, 0.04)' : '#FFFFFF',
-              boxShadow: globalMode === 'AUTONOMOUS' ? '0 2px 6px rgba(37, 99, 235, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
+              border: globalMode === 'AUTONOMOUS' ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
+              borderTop: '2.5px solid #2563EB',
+              backgroundColor: globalMode === 'AUTONOMOUS' ? '#EFF6FF' : '#FFFFFF',
+              boxShadow: globalMode === 'AUTONOMOUS' ? '0 4px 14px rgba(37, 99, 235, 0.14)' : '0 2px 8px rgba(15, 23, 42, 0.03)',
               cursor: canManagePolicies ? 'pointer' : 'not-allowed',
               opacity: canManagePolicies ? 1 : 0.8,
               display: 'flex',
@@ -768,9 +780,10 @@ export const PoliciesPage = () => {
             style={{
               padding: '14px 16px',
               borderRadius: '12px',
-              border: globalMode === 'AUDIT' ? '2px solid #D97706' : '1px solid #E2E8F0',
-              backgroundColor: globalMode === 'AUDIT' ? 'rgba(217, 119, 6, 0.04)' : '#FFFFFF',
-              boxShadow: globalMode === 'AUDIT' ? '0 2px 6px rgba(217, 119, 6, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
+              border: globalMode === 'AUDIT' ? '1.5px solid #D97706' : '1px solid #E2E8F0',
+              borderTop: '2.5px solid #F59E0B',
+              backgroundColor: globalMode === 'AUDIT' ? '#FFFBEB' : '#FFFFFF',
+              boxShadow: globalMode === 'AUDIT' ? '0 4px 14px rgba(217, 119, 6, 0.14)' : '0 2px 8px rgba(15, 23, 42, 0.03)',
               cursor: canManagePolicies ? 'pointer' : 'not-allowed',
               opacity: canManagePolicies ? 1 : 0.8,
               display: 'flex',
@@ -825,29 +838,30 @@ export const PoliciesPage = () => {
         </div>
       </div>
 
-                  {/* 2. Ngưỡng Kích Hoạt Cổng Phê Duyệt (HITL Safety Thresholds) */}
-      <div className="dash-card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+      {/* 2. Ngưỡng Kích Hoạt Cổng Phê Duyệt (HITL Safety Thresholds) */}
+      <div className="dash-card" style={{ padding: '18px 20px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
           <div
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              width: '34px',
+              height: '34px',
+              borderRadius: '10px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--dash-primary)',
+              color: '#059669',
               flexShrink: 0,
             }}
           >
-            <Sliders size={18} />
+            <Sliders size={17} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-              Ngưỡng An Toàn & Kích Hoạt Cổng HITL (Safety Guards)
+            <h2 style={{ fontSize: '0.96rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
+              Ngưỡng An Toàn &amp; Kích Hoạt Cổng HITL (Safety Guards)
             </h2>
-            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+            <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '2px 0 0 0' }}>
               Hàng rào bảo vệ tự động (Guardrails) ngăn chặn tác động tiêu cực lan truyền trên toàn bộ cụm Kubernetes
             </p>
           </div>
@@ -860,8 +874,9 @@ export const PoliciesPage = () => {
               padding: '14px 16px',
               backgroundColor: '#FFFFFF',
               border: '1px solid #E2E8F0',
+              borderTop: '2.5px solid #059669',
               borderRadius: '12px',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',

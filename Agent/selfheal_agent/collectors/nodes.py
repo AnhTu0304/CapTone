@@ -450,3 +450,22 @@ class NodesCollector:
         except Exception as err:
             self._record_api_error(err, "list_namespace", time.perf_counter() - t0)
         return results
+
+    def get_cluster_node_metrics(self) -> dict[str, dict[str, float]]:
+        """Query metrics.k8s.io/v1beta1/nodes for all cluster nodes' live CPU & memory usage."""
+        try:
+            custom_api = client.CustomObjectsApi()
+            res = custom_api.list_cluster_custom_object("metrics.k8s.io", "v1beta1", "nodes")
+            metrics_by_node: dict[str, dict[str, float]] = {}
+            for item in res.get("items", []):
+                name = item.get("metadata", {}).get("name")
+                usage = item.get("usage", {})
+                if name:
+                    metrics_by_node[name] = {
+                        "cpu_millicores": parse_k8s_cpu_millicores(usage.get("cpu", "0")),
+                        "memory_bytes": float(parse_k8s_memory_bytes(usage.get("memory", "0"))),
+                    }
+            return metrics_by_node
+        except Exception as e:
+            logger.debug("Could not fetch metrics.k8s.io nodes: %s", e)
+            return {}

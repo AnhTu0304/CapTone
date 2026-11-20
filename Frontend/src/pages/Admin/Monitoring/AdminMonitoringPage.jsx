@@ -44,7 +44,7 @@ export const AdminMonitoringPage = ({ onNavigate }) => {
 
   const mainBackend = monitoringData?.mainBackend || {
     status: 'ONLINE',
-    port: 5000,
+    port: 5005,
     uptime: 'Đang tải...',
     apiLatency: 'Đang đo...',
     memoryRss: 'Đang tải...',
@@ -55,7 +55,7 @@ export const AdminMonitoringPage = ({ onNavigate }) => {
 
   const aiBackend = monitoringData?.aiBackend || {
     status: 'OPTIMAL',
-    port: 8000,
+    port: 8005,
     modelLoaded: true,
     inputShape: '(12, 8) = 96 inputs',
     riskCount: '7 loại rủi ro K8s',
@@ -65,7 +65,7 @@ export const AdminMonitoringPage = ({ onNavigate }) => {
 
   const database = monitoringData?.database || {
     status: 'HEALTHY',
-    port: 5432,
+    port: 5433,
     name: 'captone_db',
     host: 'postgres',
     serverTime: 'Đồng bộ',
@@ -73,7 +73,7 @@ export const AdminMonitoringPage = ({ onNavigate }) => {
 
   const redis = monitoringData?.redis || {
     status: 'CONNECTED',
-    port: 6379,
+    port: 6380,
     host: 'redis',
     latency: '0 ms',
   };

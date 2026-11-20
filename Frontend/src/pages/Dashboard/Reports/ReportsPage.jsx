@@ -7,6 +7,11 @@ import {
   fetchOrganizationSLAReport,
   fetchActionAnalyticsReport,
 } from '../../../services/reportService';
+import { aiService } from '../../../services/aiService';
+import {
+  extractActiveK8sServices,
+  isExcludedSystemService,
+} from '../../../utils/k8sServiceFilter';
 import SLACostSavingsChart from '../../../components/dashboard/SLACostSavingsChart';
 import IncidentSeverityBreakdown from '../../../components/dashboard/IncidentSeverityBreakdown';
 import ActionActorBreakdownChart from '../../../components/dashboard/ActionActorBreakdownChart';
@@ -111,6 +116,8 @@ export const ReportsPage = () => {
   const [selectedService, setSelectedService] = useState('ALL');
   const [exportNotice, setExportNotice] = useState(null);
   const [reportData, setReportData] = useState(null);
+  const [liveWorkloads, setLiveWorkloads] = useState([]);
+  const [hasLoadedWorkloads, setHasLoadedWorkloads] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [reportError, setReportError] = useState(null);
 
@@ -377,9 +384,46 @@ export const ReportsPage = () => {
     services: [],
   };
 
-  // Danh sách Dịch vụ K8s thực tế trong phạm vi Cụm / Toàn công ty hiện tại
+  // Tải danh sách Workloads ĐANG CHẠY THỰC TẾ trên cụm K8s (đã lọc deleted_at IS NULL & bỏ hệ thống/monitoring)
+  useEffect(() => {
+    let isMounted = true;
+    const orgId =
+      currentOrg?.id && !String(currentOrg.id).startsWith('sandbox-') && currentOrg.id !== 'org-acme'
+        ? currentOrg.id
+        : undefined;
+    aiService
+      .getWorkloads(scopeIds.activeClusterId || undefined, orgId)
+      .then((workloads) => {
+        if (isMounted && Array.isArray(workloads)) {
+          setLiveWorkloads(workloads);
+          setHasLoadedWorkloads(true);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setHasLoadedWorkloads(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [scopeIds.activeClusterId, currentOrg?.id]);
+
+  // Danh sách Dịch vụ K8s đang hoạt động thực tế (từ GET /api/v1/ai/workloads, tuyệt đối không lấy dịch vụ cũ đã xóa)
   const uniqueServices = useMemo(() => {
+    if (hasLoadedWorkloads) {
+      return extractActiveK8sServices(liveWorkloads);
+    }
     const svcSet = new Set();
+    const normalizeName = (n) => {
+      if (!n) return '';
+      let s = String(n).trim();
+      const l = s.toLowerCase();
+      if (l === 'otel-collector-opentelemetry-collector') return 'opentelemetry-collector';
+      if (l === 'prometheus-kube-state-metrics') return 'kube-state-metrics';
+      if (l === 'prometheus-kube-prometheus-operator') return 'kube-prometheus-stack-operator';
+      if (l === 'ecommerce-store') return 'ecommerce-store-app';
+      if (/^mongodb-\d+$/i.test(l)) return 'mongodb';
+      return s;
+    };
     const candidates = [
       ...(reportData?.availableServices || []),
       ...(filterOptions?.services || []),
@@ -387,14 +431,17 @@ export const ReportsPage = () => {
       ...(activeServices || []).map((s) => s?.name),
     ];
     candidates.forEach((name) => {
-      const trimmed = String(name || '').trim();
-      if (trimmed) svcSet.add(trimmed);
+      const clean = normalizeName(name);
+      if (clean && !isExcludedSystemService(clean)) svcSet.add(clean);
     });
     if (selectedService && selectedService !== 'ALL' && String(selectedService).trim()) {
-      svcSet.add(String(selectedService).trim());
+      const cleanSel = normalizeName(selectedService);
+      if (cleanSel && !isExcludedSystemService(cleanSel)) svcSet.add(cleanSel);
     }
     return Array.from(svcSet).sort((a, b) => a.localeCompare(b));
   }, [
+    hasLoadedWorkloads,
+    liveWorkloads,
     reportData?.availableServices,
     filterOptions?.services,
     reportData?.actionAnalytics?.filterOptions?.services,
@@ -840,31 +887,32 @@ export const ReportsPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: '#EFF6FF',
-              border: '1px solid #BFDBFE',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <BarChart3 size={20} color="#2563EB" />
+            <BarChart3 size={19} color="#059669" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1
                 style={{
-                  fontSize: '1.45rem',
+                  fontSize: '1.35rem',
                   fontWeight: 800,
-                  color: 'var(--dash-text-primary)',
+                  color: '#0F172A',
                   letterSpacing: '-0.02em',
                   margin: 0,
                 }}
               >
-                Báo Cáo SLA & Vận Hành Doanh Nghiệp
+                Báo Cáo SLA &amp; Vận Hành
               </h1>
             {currentOrg?.name && (
               <span
@@ -872,12 +920,12 @@ export const ReportsPage = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '5px',
-                  padding: '3px 10px',
+                  padding: '2px 9px',
                   borderRadius: '9999px',
                   backgroundColor: '#ECFDF5',
                   border: '1px solid #A7F3D0',
-                  color: '#065F46',
-                  fontSize: '0.75rem',
+                  color: '#047857',
+                  fontSize: '0.72rem',
                   fontWeight: 700,
                 }}
               >
@@ -891,18 +939,18 @@ export const ReportsPage = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '5px',
-                  padding: '3px 10px',
+                  padding: '2px 9px',
                   borderRadius: '9999px',
-                  backgroundColor: reportScope === 'CLUSTER' ? '#EFF6FF' : '#F1F5F9',
-                  border: reportScope === 'CLUSTER' ? '1px solid #BFDBFE' : '1px solid #CBD5E1',
-                  color: reportScope === 'CLUSTER' ? '#1D4ED8' : '#475569',
-                  fontSize: '0.75rem',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  color: '#475569',
+                  fontSize: '0.72rem',
                   fontWeight: 700,
                 }}
               >
                 <Server size={12} />
                 <span>
-                  {reportScope === 'CLUSTER' ? `Cụm K8s: ${headerClusterName}` : 'Phạm vi: Toàn công ty'}
+                  {reportScope === 'CLUSTER' ? `Cụm: ${headerClusterName}` : 'Toàn công ty'}
                 </span>
               </span>
             )}
@@ -912,12 +960,12 @@ export const ReportsPage = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '5px',
-                  padding: '3px 10px',
+                  padding: '2px 9px',
                   borderRadius: '9999px',
                   backgroundColor: '#ECFDF5',
                   border: '1px solid #A7F3D0',
                   color: '#047857',
-                  fontSize: '0.75rem',
+                  fontSize: '0.72rem',
                   fontWeight: 700,
                 }}
               >
@@ -926,13 +974,13 @@ export const ReportsPage = () => {
               </span>
             )}
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0' }}>
-            Đánh giá cam kết SLA, cơ cấu sự cố, người/AI thực thi Action và nguyên nhân thành công hay thất bại
+          <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+            Đánh giá cam kết SLA, cơ cấu sự cố, hành động tự phục hồi &amp; nguyên nhân thành công hay thất bại
           </p>
         </div>
       </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => {
@@ -940,20 +988,23 @@ export const ReportsPage = () => {
               loadReport();
             }}
             style={{
-              display: 'flex',
+              height: '34px',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 12px',
+              padding: '0 12px',
               backgroundColor: '#FFFFFF',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              fontSize: '0.8125rem',
+              border: '1px solid rgba(203, 213, 225, 0.9)',
+              borderRadius: '10px',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
+              color: '#334155',
+              fontSize: '0.8rem',
               fontWeight: 600,
               cursor: 'pointer',
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoadingReport ? 'animate-spin' : ''} />
-            <span>{isLoadingReport ? 'Đang cập nhật...' : 'Làm mới số liệu'}</span>
+            <span>{isLoadingReport ? 'Đang cập nhật...' : 'Làm mới'}</span>
           </button>
 
           <div className="dash-export-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -985,21 +1036,22 @@ export const ReportsPage = () => {
               aria-label="Xuất Excel chọn biểu đồ"
               title="Chọn các loại biểu đồ muốn xuất ra file Excel (.xlsx)"
               style={{
-                display: 'flex',
+                height: '34px',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '7px',
-                padding: '8px 13px',
-                backgroundColor: canExport ? '#059669' : '#94A3B8',
-                border: 'none',
-                borderRadius: 'var(--dash-radius-md)',
-                color: '#FFFFFF',
-                fontSize: '0.8125rem',
+                gap: '6px',
+                padding: '0 13px',
+                backgroundColor: canExport ? '#ECFDF5' : '#F1F5F9',
+                border: canExport ? '1px solid #A7F3D0' : '1px solid #CBD5E1',
+                borderRadius: '10px',
+                color: canExport ? '#047857' : '#94A3B8',
+                fontSize: '0.8rem',
                 fontWeight: 700,
                 cursor: canExport ? 'pointer' : 'not-allowed',
-                opacity: canExport ? 1 : 0.55,
+                opacity: canExport ? 1 : 0.65,
               }}
             >
-              <FileSpreadsheet size={15} />
+              <FileSpreadsheet size={14} />
               <span>Xuất Excel</span>
             </button>
 
@@ -1012,21 +1064,23 @@ export const ReportsPage = () => {
                 aria-expanded={isExportMenuOpen}
                 aria-label="Tùy chọn xuất báo cáo"
                 style={{
-                  display: 'flex',
+                  height: '34px',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 14px',
-                  backgroundColor: canExport ? 'var(--dash-primary)' : '#94A3B8',
-                  border: 'none',
-                  borderRadius: 'var(--dash-radius-md)',
+                  gap: '6px',
+                  padding: '0 14px',
+                  backgroundColor: canExport ? '#059669' : '#94A3B8',
+                  border: canExport ? '1px solid #059669' : '1px solid #94A3B8',
+                  borderRadius: '10px',
+                  boxShadow: canExport ? '0 2px 8px rgba(5, 150, 105, 0.2)' : 'none',
                   color: '#FFFFFF',
-                  fontSize: '0.8125rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: canExport ? 'pointer' : 'not-allowed',
-                  opacity: canExport ? 1 : 0.55,
+                  opacity: canExport ? 1 : 0.65,
                 }}
               >
-                <Download size={15} />
+                <Download size={14} />
                 <span>Xuất Báo Cáo</span>
                 <ChevronDown
                   size={14}
@@ -1277,21 +1331,22 @@ export const ReportsPage = () => {
       <div
         className="dash-card no-print"
         style={{
-          padding: '14px 18px',
+          padding: '12px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '10px',
           borderRadius: '14px',
           border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
           backgroundColor: '#FFFFFF',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {hasHeaderCluster && headerClusterName && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>
                 Cụm K8s:
               </span>
               <div
@@ -1300,10 +1355,10 @@ export const ReportsPage = () => {
                 style={{
                   display: 'inline-flex',
                   backgroundColor: '#F1F5F9',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '7px',
-                  padding: '2px',
-                  height: '32px',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '3px',
+                  height: '34px',
                   alignItems: 'center',
                   boxSizing: 'border-box',
                 }}
@@ -1314,13 +1369,13 @@ export const ReportsPage = () => {
                   aria-pressed={reportScope === 'CLUSTER'}
                   title={`Lọc báo cáo theo cụm đang chọn trên Header: ${headerClusterName}`}
                   style={{
-                    height: '26px',
-                    padding: '0 10px',
-                    borderRadius: '5px',
+                    height: '28px',
+                    padding: '0 11px',
+                    borderRadius: '7px',
                     border: 'none',
                     backgroundColor: reportScope === 'CLUSTER' ? '#FFFFFF' : 'transparent',
-                    color: reportScope === 'CLUSTER' ? '#059669' : '#64748B',
-                    boxShadow: reportScope === 'CLUSTER' ? '0 1px 2px rgba(15, 23, 42, 0.08)' : 'none',
+                    color: reportScope === 'CLUSTER' ? '#047857' : '#64748B',
+                    boxShadow: reportScope === 'CLUSTER' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -1339,13 +1394,13 @@ export const ReportsPage = () => {
                   aria-pressed={reportScope === 'ALL'}
                   title="Xem báo cáo SLA & Action của toàn bộ các cụm thuộc công ty"
                   style={{
-                    height: '26px',
-                    padding: '0 10px',
-                    borderRadius: '5px',
+                    height: '28px',
+                    padding: '0 11px',
+                    borderRadius: '7px',
                     border: 'none',
                     backgroundColor: reportScope === 'ALL' ? '#FFFFFF' : 'transparent',
                     color: reportScope === 'ALL' ? '#0F172A' : '#64748B',
-                    boxShadow: reportScope === 'ALL' ? '0 1px 2px rgba(15, 23, 42, 0.08)' : 'none',
+                    boxShadow: reportScope === 'ALL' ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -1360,27 +1415,27 @@ export const ReportsPage = () => {
 
           {/* Bộ lọc Dịch vụ K8s thực tế */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>
               Dịch Vụ:
             </span>
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
               <Layers
                 size={13}
                 color="#64748B"
-                style={{ position: 'absolute', left: '9px', pointerEvents: 'none' }}
+                style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
               />
               <select
                 aria-label="Lọc theo dịch vụ K8s"
                 value={effectiveService}
                 onChange={(e) => setSelectedService(e.target.value)}
                 style={{
-                  height: '32px',
-                  padding: '0 10px 0 28px',
-                  fontSize: '0.75rem',
-                  border: effectiveService !== 'ALL' ? '1px solid #059669' : '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  backgroundColor: effectiveService !== 'ALL' ? '#ECFDF5' : '#FFFFFF',
-                  color: effectiveService !== 'ALL' ? '#047857' : '#1E293B',
+                  height: '34px',
+                  padding: '0 12px 0 30px',
+                  fontSize: '0.78rem',
+                  border: effectiveService !== 'ALL' ? '1px solid #059669' : '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  backgroundColor: effectiveService !== 'ALL' ? '#ECFDF5' : '#F8FAFC',
+                  color: effectiveService !== 'ALL' ? '#047857' : '#0F172A',
                   fontWeight: 600,
                   outline: 'none',
                   cursor: 'pointer',
@@ -1405,13 +1460,13 @@ export const ReportsPage = () => {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '5px',
-                height: '32px',
-                padding: '0 10px',
-                borderRadius: '6px',
+                height: '34px',
+                padding: '0 12px',
+                borderRadius: '10px',
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#F8FAFC',
                 color: '#475569',
-                fontSize: '0.75rem',
+                fontSize: '0.76rem',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -1424,16 +1479,17 @@ export const ReportsPage = () => {
 
         {/* Time Range Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>
+          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>
             Kỳ Báo Cáo:
           </span>
           <div
             style={{
-              display: 'flex',
-              backgroundColor: '#F8FAFC',
-              border: '1px solid var(--dash-border)',
-              borderRadius: 'var(--dash-radius-md)',
-              padding: '2px',
+              display: 'inline-flex',
+              gap: '3px',
+              backgroundColor: '#F1F5F9',
+              border: '1px solid #E2E8F0',
+              borderRadius: '10px',
+              padding: '3px',
             }}
           >
             {[

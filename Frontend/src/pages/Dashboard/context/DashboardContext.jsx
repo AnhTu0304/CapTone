@@ -3,6 +3,7 @@ import { request, setActiveOrganizationId, cancelPendingRequests } from '../../.
 import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 
 import { clusterService } from '../../../services/clusterService';
+import { podService } from '../../../services/podService';
 import { selfHealingService } from '../../../services/selfHealingService';
 import telemetryService from '../../../services/telemetryService';
 import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/notificationMockData';
@@ -138,10 +139,15 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       }
     } catch (err) {
       console.warn('[DashboardContext] Lỗi tải môi trường & cụm của tổ chức:', err);
+      // Không xóa trắng currentEnv/isAgentConnected nếu lỗi mạng thoáng qua khi bấm Làm mới
+      // để tránh làm nhấp nháy trạng thái cụm và reset dịch vụ đang xem
       if (activeOrgFetchIdRef.current === orgId) {
-        setEnvList([]);
-        setCurrentEnv(null);
-        setIsAgentConnected(false);
+        setCurrentEnv((prev) => {
+          if (prev?.id) return prev;
+          setEnvList([]);
+          setIsAgentConnected(false);
+          return null;
+        });
       }
     } finally {
       if (activeOrgFetchIdRef.current === orgId) {
@@ -432,9 +438,16 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     fetchNotifications();
   }, [fetchNotifications, currentOrg?.id]);
 
-  // Sidebar collapse state
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Sidebar collapse state: Mặc định thu gọn (collapsed = true, rộng 68px) khi vừa mở trang
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Chế độ mô phỏng / chuyển đổi hiển thị Điện thoại (Mobile Mode)
+  const [isMobileMode, setIsMobileMode] = useState(false);
+
+  const toggleMobileMode = useCallback(() => {
+    setIsMobileMode(false);
+  }, []);
 
   // Auto-refresh interval (every 30s)
   useEffect(() => {
@@ -520,15 +533,66 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     try {
       const clusterId = currentEnv?.clusterId || currentEnv?.id;
       const orgId = currentOrg?.id;
-      const params = { status: 'PENDING', limit: 1 };
+      const params = { status: 'PENDING', limit: 50 };
       if (clusterId && !clusterId.startsWith('org-')) {
         params.cluster_id = clusterId;
       }
       if (orgId && !orgId.startsWith('sandbox-')) {
         params.organization_id = orgId;
       }
+
+      // Lấy danh sách pods cụm để đối chiếu tự lành
+      let clusterPods = [];
+      if (clusterId && !clusterId.startsWith('org-')) {
+        try {
+          clusterPods = await podService.getPodsByCluster(clusterId);
+        } catch {
+          clusterPods = [];
+        }
+      }
+
       const data = await selfHealingService.getApprovals(params);
-      setPendingApprovalsCount(typeof data?.total === 'number' ? data.total : (Array.isArray(data?.items) ? data.items.length : 0));
+      const items = data?.items || (Array.isArray(data) ? data : []);
+      const now = Date.now();
+      let activeCount = 0;
+      for (const item of items) {
+        const reqTime = new Date(item.requested_at || 0).getTime();
+        const isStale = (now - reqTime) > 15 * 60 * 1000;
+        const isIncidentResolved = item.incident_status === 'RESOLVED' || item.incident_status === 'CLOSED';
+
+        const rawTarget = item.target_name || item.target_id || '';
+        const cleanTarget = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim().toLowerCase();
+
+        let isWorkloadSelfHealed = false;
+        if (Array.isArray(clusterPods) && clusterPods.length > 0 && cleanTarget) {
+          const matching = clusterPods.filter((p) => {
+            const pName = String(p.name || '').toLowerCase();
+            return pName.includes(cleanTarget);
+          });
+          if (matching.length > 0) {
+            const allRunning = matching.every((p) => {
+              const pStatus = String(p.status || p.phase || '').toLowerCase();
+              return pStatus === 'running' || pStatus === 'succeeded';
+            });
+            if (allRunning) isWorkloadSelfHealed = true;
+          }
+        }
+
+        if (isStale || isIncidentResolved || isWorkloadSelfHealed) {
+          const actionId = item.healing_action_id || item.id;
+          if (actionId) {
+            selfHealingService.rejectAction(
+              actionId,
+              isWorkloadSelfHealed
+                ? 'Hệ thống tự động hủy: Dịch vụ đã tự phục hồi ổn định (Auto-recovered)'
+                : 'Hệ thống tự động hủy: Yêu cầu đã quá hạn hoặc sự cố đã giải quyết'
+            ).catch(() => {});
+          }
+        } else {
+          activeCount++;
+        }
+      }
+      setPendingApprovalsCount(activeCount);
     } catch {
       setPendingApprovalsCount(0);
     }
@@ -790,6 +854,9 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         setIsSidebarCollapsed,
         isMobileNavOpen,
         setIsMobileNavOpen,
+        isMobileMode,
+        setIsMobileMode,
+        toggleMobileMode,
         onNavigate,
       }}
     >

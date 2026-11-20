@@ -233,10 +233,11 @@ export class IncidentModel {
         i.source_type,
         i.target_type,
         i.target_id,
+        i.target_name,
         w.name AS workload_name,
         w.workload_type,
         w.kubernetes_uid AS workload_kubernetes_uid,
-        COALESCE(w.name, ha.target_name, i.target_id::text) AS service_name,
+        COALESCE(NULLIF(i.target_name, ''), w.name, ha.target_name, i.target_id::text) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -319,9 +320,9 @@ export class IncidentModel {
           ELSE NULL 
         END AS mttr_seconds
       FROM incidents i
-      LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
+      LEFT JOIN organizations o ON o.id = COALESCE(i.organization_id, e.organization_id)
       LEFT JOIN LATERAL (
         SELECT p.*
         FROM ai_predictions p
@@ -449,10 +450,11 @@ export class IncidentModel {
         i.source_type,
         i.target_type,
         i.target_id,
+        i.target_name,
         w.name AS workload_name,
         w.workload_type,
         w.kubernetes_uid AS workload_kubernetes_uid,
-        COALESCE(w.name, ha.target_name, i.target_id::text) AS service_name,
+        COALESCE(NULLIF(i.target_name, ''), w.name, ha.target_name, i.target_id::text) AS service_name,
         i.incident_type,
         i.title,
         i.description,
@@ -529,9 +531,9 @@ export class IncidentModel {
             )
         ) AS succeeded_actions_count
       FROM incidents i
-      LEFT JOIN organizations o ON o.id = i.organization_id
       LEFT JOIN environments e ON e.id = i.environment_id
       LEFT JOIN clusters c ON (c.id::text = i.cluster_id::text OR c.name = i.cluster_id::text OR c.cluster_uid = i.cluster_id::text)
+      LEFT JOIN organizations o ON o.id = COALESCE(i.organization_id, e.organization_id)
       LEFT JOIN LATERAL (
         SELECT p.*
         FROM ai_predictions p
@@ -701,9 +703,23 @@ export class IncidentModel {
         // 2. Không bao giờ ghi đè vị trí cũ khiến bậc Thành công nhảy lên trước bậc Thất bại.
         // 3. Ngay khi có một bậc THÀNH CÔNG (verification_result = true hoặc SUCCEEDED trên sự cố RESOLVED),
         //    chuỗi tự phục hồi KẾT THÚC ngay tại bậc đó — tuyệt đối không có bậc thất bại nào xuất hiện phía sau!
+        // Nếu sự cố chưa đóng (OPEN), hiển thị chuỗi diễn tiến thuộc chu kỳ tự phục hồi gần nhất (latest active cycle)
+        let relevantRows = histRes.rows;
+        if (!isIncResolved && histRes.rows.length > 0) {
+          let latestCycleStart = 0;
+          for (let k = 0; k < histRes.rows.length - 1; k++) {
+            const h = histRes.rows[k];
+            const wasOk = h.verification_result === true || String(h.execution_status || '').toUpperCase() === 'SUCCEEDED';
+            if (wasOk) {
+              latestCycleStart = k + 1;
+            }
+          }
+          relevantRows = histRes.rows.slice(latestCycleStart);
+        }
+
         const cleanChain: any[] = [];
         const seenActionCodes = new Set<string>();
-        for (const item of histRes.rows) {
+        for (const item of relevantRows) {
           // Lọc cách ly workload nếu có targetServiceFilter: loại trừ các action thuộc về service khác không liên quan
           if (targetServiceFilter && item.target_name) {
             const filterLower = targetServiceFilter.toLowerCase();
@@ -764,7 +780,7 @@ export class IncidentModel {
 
           cleanChain.push(item);
 
-          if (isVerifiedOk) {
+          if (isIncResolved && isVerifiedOk) {
             // Chuỗi tự phục hồi đã thành công và kết thúc hoàn tất tại bậc này
             break;
           }

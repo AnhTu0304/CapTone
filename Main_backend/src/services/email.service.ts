@@ -447,7 +447,7 @@ export class EmailService {
     occurrenceCount?: number | null;
     detectedAt?: Date | string | null;
   }): { subject: string; html: string; dashboardUrl: string; incidentCode: string } {
-    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const clientUrl = (config.email.clientUrl || 'http://localhost:3002').replace(/\/+$/, '');
     const incidentCode = payload.incidentCode || `INC-${String(payload.incidentId).slice(0, 8).toUpperCase()}`;
     const dashboardUrl = `${clientUrl}/dashboard/incidents?incident=${encodeURIComponent(payload.incidentId)}`;
     const stageDesc = this.describeCriticalStage(payload.reasonStage);
@@ -497,7 +497,7 @@ export class EmailService {
         <div class="header">
           <div class="header-tag">🚨 CẢNH BÁO KHẨN CẤP (URGENT INCIDENT ALERT)</div>
           <h1>[${this.escapeHtml(incidentCode)}] ${this.escapeHtml(payload.title || 'Sự cố nghiêm trọng hệ thống')}</h1>
-          <p>Tổ chức: <strong>${this.escapeHtml(payload.organizationName || 'SME Organization')}</strong> &bull; Thời điểm: <strong>${this.escapeHtml(detectedTime)} (GMT+7)</strong></p>
+          <p>Tổ chức: <strong>${this.escapeHtml(payload.organizationName || 'Tổ chức Quản trị')}</strong> &bull; Thời điểm: <strong>${this.escapeHtml(detectedTime)} (GMT+7)</strong></p>
         </div>
 
         <div class="content">
@@ -521,7 +521,7 @@ export class EmailService {
             <tr>
               <td class="label">☸️ Cụm / Namespace / Pod / Node</td>
               <td class="value">
-                Cụm: <strong>${this.escapeHtml(payload.clusterName || 'Chưa xác định')}</strong>
+                Cụm: <strong>${this.escapeHtml(payload.clusterName || 'Cụm Kubernetes')}</strong>
                 ${payload.namespace ? ` &bull; Namespace: <code>${this.escapeHtml(payload.namespace)}</code>` : ''}
                 ${payload.podName ? `<br/>Pod: <code>${this.escapeHtml(payload.podName)}</code>` : ''}
                 ${payload.nodeName ? ` &bull; Node: <code>${this.escapeHtml(payload.nodeName)}</code>` : ''}
@@ -634,9 +634,9 @@ export class EmailService {
     triggeredByEmail?: string;
   }): Promise<boolean> {
     const transporter = this.getTransporter();
-    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const clientUrl = (config.email.clientUrl || 'http://localhost:3002').replace(/\/+$/, '');
     const settingsUrl = `${clientUrl}/dashboard/settings`;
-    const orgLabel = payload.organizationName || 'Tổ chức SME';
+    const orgLabel = payload.organizationName || 'Tổ chức Quản trị';
 
     if (!transporter) {
       console.log('\n============================================================');
@@ -698,7 +698,7 @@ export class EmailService {
     senderName?: string;
   }): Promise<boolean> {
     const transporter = this.getTransporter();
-    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const clientUrl = (config.email.clientUrl || 'http://localhost:3002').replace(/\/+$/, '');
     const dashboardUrl = `${clientUrl}/dashboard`;
 
     let priorityColor = '#0284c7'; // INFO
@@ -799,7 +799,7 @@ export class EmailService {
     const transporter = this.getTransporter();
     const quickApproveUrl = `http://localhost:${config.port}${config.apiPrefix}/healing/approvals/quick-approve?token=${encodeURIComponent(payload.token)}`;
     const quickRejectUrl = `http://localhost:${config.port}${config.apiPrefix}/healing/approvals/quick-reject?token=${encodeURIComponent(payload.token)}`;
-    const clientUrl = config.email.clientUrl.replace(/:3000\b/, ':3001');
+    const clientUrl = (config.email.clientUrl || 'http://localhost:3002').replace(/\/+$/, '');
     const dashboardUrl = `${clientUrl}/dashboard/self-healing/approvals`;
 
     const hitlCode = `REQ-HITL-${payload.approvalId.slice(0, 8).toUpperCase()}`;
@@ -810,7 +810,7 @@ export class EmailService {
       console.log('\n============================================================');
       console.log('🚨 [EMAIL SERVICE - DEV MODE] YÊU CẦU PHÊ DUYỆT TỰ PHỤC HỒI (HITL)');
       console.log(`➡️  Gửi tới: ${payload.recipientName} (${payload.recipientRole || 'SME/DevOps'}) <${payload.toEmail}>`);
-      console.log(`🏢  Tổ chức: ${payload.organizationName || 'N/A'} | Cụm K8s: ${payload.clusterName || 'cluster-k8s'}`);
+      console.log(`🏢  Tổ chức: ${payload.organizationName || 'N/A'} | Cụm K8s: ${payload.clusterName || 'K8s Cluster'}`);
       console.log(`📦  Dịch vụ / Pod: ${payload.targetName} (${payload.targetType})`);
       console.log(`⚡  Hành động: ${payload.actionName} (${payload.actionCode}) | Rủi ro: ${riskLabel}`);
       console.log(`🔬  Nguyên nhân: ${payload.rootCauseType || 'Bất thường dịch vụ'} (Tin cậy: ${payload.confidenceScore || 70}%)`);
@@ -854,10 +854,10 @@ export class EmailService {
         <div class="header">
           <div class="header-tag">🚨 HITL Human-In-The-Loop Cần Phê Duyệt</div>
           <h1>Yêu Cầu Phê Duyệt Hành Động Khắc Phục</h1>
-          <p>Mã kiểm toán: <strong>${hitlCode}</strong> &bull; Tổ chức: <strong>${payload.organizationName || 'SME Organization'}</strong></p>
+          <p>Mã kiểm toán: <strong>${hitlCode}</strong> &bull; Tổ chức: <strong>${this.escapeHtml(payload.organizationName || 'Tổ chức Quản trị')}</strong></p>
         </div>
         <div class="content">
-          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${payload.recipientName}</strong> (${payload.recipientRole || 'SME/DevOps'}),</p>
+          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong> (${this.escapeHtml(payload.recipientRole || 'SME/DevOps')}),</p>
           <div class="alert-box">
             <strong>Cảnh báo giám sát MAPE-K:</strong> Hệ thống tự phục hồi phát hiện nguy cơ bất thường dịch vụ và chuẩn bị thực thi hành động can thiệp có mức độ rủi ro cần sự phê duyệt của con người trước khi áp dụng.
           </div>
@@ -865,32 +865,32 @@ export class EmailService {
           <table class="info-table">
             <tr>
               <td class="label">🚨 Sự cố phát hiện</td>
-              <td class="value" style="color: #dc2626;">${payload.incidentTitle || 'Pod ứng dụng bất ổn định / CrashLoop'}</td>
+              <td class="value" style="color: #dc2626;">${this.escapeHtml(payload.incidentTitle || payload.actionName || 'Sự cố cần can thiệp')}</td>
             </tr>
             <tr>
               <td class="label">📦 Dịch vụ & Đối tượng</td>
-              <td class="value"><span style="color: #2563eb; font-weight: 800;">${payload.targetName}</span> (${payload.targetType || 'POD'})${payload.namespace ? ` &bull; Namespace: <code>${payload.namespace}</code>` : ''}</td>
+              <td class="value"><span style="color: #2563eb; font-weight: 800;">${this.escapeHtml(payload.targetName)}</span> (${this.escapeHtml(payload.targetType || 'POD')})${payload.namespace ? ` &bull; Namespace: <code>${this.escapeHtml(payload.namespace)}</code>` : ''}</td>
             </tr>
             <tr>
               <td class="label">🔬 Nguyên nhân gốc (RCA)</td>
-              <td class="value">${payload.rootCauseType || 'Pod ứng dụng bất ổn định / CrashLoop'} (Độ tin cậy AI: <strong>${payload.confidenceScore || 70}%</strong>)</td>
+              <td class="value">${this.escapeHtml(payload.rootCauseType || payload.incidentTitle || 'Bất thường hạ tầng phát hiện bởi AI')} (Độ tin cậy AI: <strong>${payload.confidenceScore || 70}%</strong>)</td>
             </tr>
             ${payload.actionReasoning ? `
             <tr>
               <td class="label">💡 Lập luận khuyến nghị AI</td>
-              <td class="value" style="color: #334155; font-style: italic;">${payload.actionReasoning}</td>
+              <td class="value" style="color: #334155; font-style: italic;">${this.escapeHtml(payload.actionReasoning)}</td>
             </tr>` : ''}
             <tr>
               <td class="label">⚡ Hành động tự khắc phục</td>
               <td class="value">
                 <span class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px;">
-                  ${payload.actionName} (${payload.actionCode})
+                  ${this.escapeHtml(payload.actionName)} (${this.escapeHtml(payload.actionCode)})
                 </span>
               </td>
             </tr>
             <tr>
               <td class="label">🛡️ Chính sách an toàn</td>
-              <td class="value"><code>${payload.policyName || 'POL-SAFETY-DEFAULT'}</code></td>
+              <td class="value"><code>${this.escapeHtml(payload.policyName || 'POL-SAFETY-DEFAULT')}</code></td>
             </tr>
             <tr>
               <td class="label">⚠️ Mức độ rủi ro</td>
@@ -902,7 +902,7 @@ export class EmailService {
             </tr>
             <tr>
               <td class="label">☸️ Cụm K8s & Môi trường</td>
-              <td class="value">${payload.clusterName || 'Cụm Production K8s'} (${payload.environmentName || 'Production'}) &bull; ${payload.organizationName || 'Tổ chức CapTone'}</td>
+              <td class="value">${this.escapeHtml(payload.clusterName || 'Cụm Kubernetes')} (${this.escapeHtml(payload.environmentName || 'Production')})${payload.organizationName ? ` &bull; ${this.escapeHtml(payload.organizationName)}` : ''}</td>
             </tr>
             <tr>
               <td class="label">⏱️ Thời hạn xử lý</td>
@@ -931,7 +931,7 @@ export class EmailService {
           </div>
 
           <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">
-            * Lưu ý: Nút <strong>Phê Duyệt Ngay</strong> sử dụng liên kết bảo mật có ký số JWT kèm thời hạn TTL. Khi bạn bấm nút, hệ thống sẽ tự động xác thực quyền hạn RBAC của bạn đối với tổ chức <strong>${payload.organizationName}</strong> và thực thi can thiệp lên cụm Kubernetes.
+            * Lưu ý: Nút <strong>Phê Duyệt Ngay</strong> sử dụng liên kết bảo mật có ký số JWT kèm thời hạn TTL. Khi bạn bấm nút, hệ thống sẽ tự động xác thực quyền hạn RBAC của bạn đối với tổ chức <strong>${this.escapeHtml(payload.organizationName || 'hệ thống')}</strong> và thực thi can thiệp lên cụm Kubernetes.
           </p>
         </div>
 

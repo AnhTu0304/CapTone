@@ -243,8 +243,13 @@ export class TelemetryController {
   /**
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
-  public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
-    return TelemetryAggregatorService.getLiveSummaryData(serviceId, clusterId, organizationId);
+  public static async getLiveSummaryData(
+    serviceId: string = 'sme-order-service',
+    clusterId?: string,
+    organizationId?: string,
+    options?: { lite?: boolean }
+  ) {
+    return TelemetryAggregatorService.getLiveSummaryData(serviceId, clusterId, organizationId, options);
   }
 
   public static async getLiveSummary(
@@ -259,8 +264,9 @@ export class TelemetryController {
       const serviceId = (req.query.service_id as string) || 'sme-order-service';
       const clusterId = (req.query.cluster_id as string) || undefined;
       const orgId = tenantContext.scopedOrgId;
+      const isLite = ['1', 'true', 'yes'].includes(String(req.query.lite || '').toLowerCase());
 
-      const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId, orgId);
+      const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId, orgId, { lite: isLite });
 
       const user = (req as any).user;
       const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);

@@ -170,31 +170,33 @@ export const InfrastructurePage = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* 1. Header with Status & Refresh */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
             }}
           >
-            <Server size={20} color="#059669" />
+            <Server size={19} color="#059669" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-              Hạ Tầng Cụm Máy Chủ Kubernetes
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
+              Hạ Tầng Máy Chủ Kubernetes
             </h1>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Quản lý tài nguyên vCPU, Bộ nhớ RAM và dung lượng Pods của từng máy chủ riêng biệt
+            <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              Quản lý tài nguyên vCPU, RAM &amp; sức chứa Pods của từng Node trên cụm{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.cluster || currentEnv?.name || 'K8s'}</strong>
             </p>
           </div>
         </div>
@@ -203,96 +205,93 @@ export const InfrastructurePage = () => {
           onClick={handleRefresh}
           disabled={isRefreshing || isLoading}
           style={{
-            display: 'flex',
+            height: '34px',
+            display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '8px 14px',
+            padding: '0 12px',
             backgroundColor: '#FFFFFF',
-            border: '1px solid var(--dash-border)',
-            borderRadius: 'var(--dash-radius-md)',
-            color: 'var(--dash-text-primary)',
-            fontSize: '0.8125rem',
+            border: '1px solid rgba(203, 213, 225, 0.9)',
+            borderRadius: '10px',
+            color: '#334155',
+            fontSize: '0.8rem',
             fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: 'var(--dash-shadow-xs)',
+            cursor: isRefreshing || isLoading ? 'not-allowed' : 'pointer',
+            boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
           }}
         >
           <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-          <span>Làm mới Nodes</span>
+          <span>Làm mới</span>
         </button>
       </div>
 
-      {/* 2. Top Metric Cards (Thống kê từ CSDL cụm) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        {/* Card 1: Tổng Nodes */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tổng số Nodes</span>
-            <Layers size={16} color="var(--dash-primary)" />
+      {/* 2. Top Metric Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #059669' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG SỐ NODES</span>
+            <Layers size={14} color="#059669" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : totalNodesCount}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#059669' }}>
               {cpCount} CP / {workerCount} Workers
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
             {readyPercent}% Sẵn sàng (Ready)
           </div>
         </div>
 
-        {/* Card 2: vCPU */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tổng vCPU Khả dụng</span>
-            <Cpu size={16} color="var(--dash-info)" />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #3B82F6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG vCPU KHẢ DỤNG</span>
+            <Cpu size={14} color="#3B82F6" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : totalClusterCpu}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>vCPUs</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>vCPUs</span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
             Đã phân bổ: {totalAllocatedCpu} vCPUs ({clusterCpuPercent}%)
           </div>
         </div>
 
-        {/* Card 3: RAM */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Tổng Bộ nhớ RAM</span>
-            <Database size={16} color="var(--dash-mint-600)" />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #10B981' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG BỘ NHỚ RAM</span>
+            <Database size={14} color="#10B981" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : totalClusterRam.toFixed(1)}
             </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>GB</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>GB</span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
             Đã phân bổ: {totalAllocatedRam.toFixed(1)} GB ({clusterRamPercent}%)
           </div>
         </div>
 
-        {/* Card 4: Sức chứa Pods */}
-        <div className="dash-card" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Sức chứa Pods</span>
-            <Box size={16} color="var(--dash-primary)" />
+        <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #8B5CF6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>SỨC CHỨA PODS</span>
+            <Box size={14} color="#8B5CF6" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em' }}>
-              {isLoading ? '...' : `${totalClusterPods} / ${maxClusterPods}`}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+              {isLoading ? '...' : `${totalClusterPods}/${maxClusterPods}`}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-success)' }}>
-              {totalNodesCount > 0 ? 'Dư địa dồi dào' : 'Chờ kết nối'}
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#059669' }}>
+              {podDensityPercent}%
             </span>
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '6px' }}>
-            Tỷ lệ lấp đầy Pod: {podDensityPercent}%
+          <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
+            {totalNodesCount > 0 ? 'Tỷ lệ lấp đầy Pod trên cụm' : 'Chờ kết nối Node'}
           </div>
         </div>
       </div>
@@ -372,9 +371,9 @@ export const InfrastructurePage = () => {
 
       {/* 4. Nodes Table (Hiển thị khi có dữ liệu) */}
       {(isLoading || normalizedNodes.length > 0) && (
-        <div className="dash-card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ position: 'relative', width: '300px' }}>
+        <div className="dash-card" style={{ padding: '16px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
               <input
                 type="text"
                 placeholder="Tìm theo tên máy chủ hoặc IP..."
@@ -382,18 +381,19 @@ export const InfrastructurePage = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '8px 12px',
-                  fontSize: '0.8125rem',
-                  border: '1px solid var(--dash-border)',
-                  borderRadius: 'var(--dash-radius-md)',
-                  backgroundColor: 'var(--dash-bg-canvas)',
+                  height: '34px',
+                  padding: '0 12px',
+                  fontSize: '0.8rem',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
                   outline: 'none',
-                  color: 'var(--dash-text-primary)',
+                  color: '#0F172A',
                 }}
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
               {[
                 { id: 'ALL', label: 'Tất cả' },
                 { id: 'CP', label: 'Control Plane' },
@@ -403,14 +403,17 @@ export const InfrastructurePage = () => {
                   key={r.id}
                   onClick={() => setRoleFilter(r.id)}
                   style={{
-                    padding: '6px 12px',
+                    height: '28px',
+                    padding: '0 12px',
                     fontSize: '0.75rem',
-                    fontWeight: roleFilter === r.id ? 600 : 500,
-                    backgroundColor: roleFilter === r.id ? 'var(--dash-primary-light)' : 'transparent',
-                    color: roleFilter === r.id ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
-                    borderRadius: 'var(--dash-radius-md)',
-                    border: roleFilter === r.id ? '1px solid var(--dash-mint-200)' : '1px solid var(--dash-border)',
+                    fontWeight: roleFilter === r.id ? 700 : 600,
+                    backgroundColor: roleFilter === r.id ? '#FFFFFF' : 'transparent',
+                    color: roleFilter === r.id ? '#047857' : '#64748B',
+                    borderRadius: '7px',
+                    border: 'none',
+                    boxShadow: roleFilter === r.id ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                     cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
                   {r.label}
@@ -419,30 +422,30 @@ export const InfrastructurePage = () => {
             </div>
           </div>
 
-          <div className="dash-table-container" style={{ border: '1px solid var(--dash-border)', borderRadius: '12px', overflow: 'hidden' }}>
+          <div className="dash-table-container" style={{ border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>Tên Máy Chủ (Node)</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>Vai Trò</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>Trạng Thái</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>CPU Đã Cấp</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>RAM Đã Cấp</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>Số Lượng Pods</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>Hệ Điều Hành / Kubelet</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Tên Máy Chủ (Node)</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Vai Trò</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Trạng Thái</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>CPU Đã Cấp</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>RAM Đã Cấp</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Số Lượng Pods</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Hệ Điều Hành / Kubelet</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
                       Đang tải danh sách Nodes từ cụm Kubernetes...
                     </td>
                   </tr>
                 ) : filteredNodes.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
+                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
                       Không tìm thấy máy chủ nào khớp với bộ lọc.
                     </td>
                   </tr>
@@ -451,78 +454,90 @@ export const InfrastructurePage = () => {
                     <tr
                       key={node.id}
                       style={{
-                        borderBottom: '1px solid var(--dash-border)',
-                        transition: 'background-color 0.15s ease',
+                        borderBottom: '1px solid #F1F5F9',
+                        transition: 'background-color 0.14s ease',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--dash-bg-subtle)')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      <td style={{ padding: '12px', fontWeight: 600, color: 'var(--dash-text-primary)' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0F172A' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Server size={14} color="var(--dash-primary)" />
-                          <span style={{ fontFamily: 'var(--font-mono)' }}>{node.name}</span>
+                          <Server size={14} color="#059669" />
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{node.name}</span>
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginLeft: '22px' }}>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748B', marginLeft: '22px', fontFamily: 'var(--font-mono)' }}>
                           {node.addressDisplay}
                         </div>
                       </td>
-                      <td style={{ padding: '12px' }}>
+                      <td style={{ padding: '12px 14px' }}>
                         <span
                           style={{
-                            padding: '2px 8px',
-                            borderRadius: 'var(--dash-radius-full)',
+                            padding: '2px 9px',
+                            borderRadius: '999px',
                             fontSize: '0.6875rem',
-                            fontWeight: 600,
-                            backgroundColor: node.isControlPlane ? 'var(--dash-info-bg)' : 'var(--dash-bg-subtle)',
-                            color: node.isControlPlane ? 'var(--dash-info-text)' : 'var(--dash-text-primary)',
-                            border: '1px solid var(--dash-border)',
+                            fontWeight: 700,
+                            backgroundColor: node.isControlPlane ? '#EFF6FF' : '#F8FAFC',
+                            color: node.isControlPlane ? '#1D4ED8' : '#475569',
+                            border: `1px solid ${node.isControlPlane ? '#BFDBFE' : '#E2E8F0'}`,
                           }}
                         >
                           {node.role}
                         </span>
                       </td>
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <td style={{ padding: '12px 14px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '2px 9px',
+                            borderRadius: '999px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            backgroundColor: node.status === 'Ready' ? '#ECFDF5' : '#FFFBEB',
+                            color: node.status === 'Ready' ? '#047857' : '#B45309',
+                            border: `1px solid ${node.status === 'Ready' ? '#A7F3D0' : '#FDE68A'}`,
+                          }}
+                        >
                           <span
                             style={{
-                              width: '8px',
-                              height: '8px',
+                              width: '6px',
+                              height: '6px',
                               borderRadius: '50%',
-                              backgroundColor: node.status === 'Ready' ? 'var(--dash-success)' : 'var(--dash-warning)',
+                              backgroundColor: node.status === 'Ready' ? '#10B981' : '#F59E0B',
                             }}
                           />
-                          <span style={{ fontWeight: 600, color: node.status === 'Ready' ? 'var(--dash-success)' : 'var(--dash-warning-text)' }}>
-                            {node.status || 'Ready'}
-                          </span>
-                        </div>
+                          {node.status || 'Ready'}
+                        </span>
                       </td>
-                      <td style={{ padding: '12px', color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                      <td style={{ padding: '12px 14px', color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
                         {node.allocatedCores} / {node.totalCpuCores} vCPUs ({node.cpuPercent}%)
                       </td>
-                      <td style={{ padding: '12px', color: 'var(--dash-text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                      <td style={{ padding: '12px 14px', color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
                         {node.allocatedRamGB} / {node.totalRamGB} GB ({node.ramPercent}%)
                       </td>
-                      <td style={{ padding: '12px', color: 'var(--dash-text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                      <td style={{ padding: '12px 14px', color: '#475569', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
                         {node.podCount} / {node.maxPods}
                       </td>
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-primary)' }}>{node.osDisplay}</div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#0F172A', fontWeight: 600 }}>{node.osDisplay}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
                           Kubelet {node.kubeletDisplay}
                         </div>
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                           <button
                             onClick={() => setSelectedNode(node)}
                             style={{
-                              padding: '4px 8px',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid var(--dash-border)',
-                              borderRadius: 'var(--dash-radius-sm)',
-                              fontSize: '0.6875rem',
-                              fontWeight: 600,
-                              color: 'var(--dash-text-primary)',
+                              height: '28px',
+                              padding: '0 10px',
+                              backgroundColor: '#ECFDF5',
+                              border: '1px solid #A7F3D0',
+                              borderRadius: '8px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              color: '#047857',
                               cursor: 'pointer',
                             }}
                           >
@@ -531,13 +546,14 @@ export const InfrastructurePage = () => {
                           <button
                             onClick={() => setSelectedNode(node)}
                             style={{
-                              padding: '4px 8px',
-                              backgroundColor: 'transparent',
-                              border: '1px solid var(--dash-border)',
-                              borderRadius: 'var(--dash-radius-sm)',
-                              fontSize: '0.6875rem',
+                              height: '28px',
+                              padding: '0 10px',
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #E2E8F0',
+                              borderRadius: '8px',
+                              fontSize: '0.72rem',
                               fontWeight: 600,
-                              color: 'var(--dash-text-secondary)',
+                              color: '#475569',
                               cursor: 'pointer',
                             }}
                           >
