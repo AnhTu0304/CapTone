@@ -341,13 +341,15 @@ export class TelemetryPipelineService {
         ).catch(() => {});
       }
 
+      // 1b. Historical integrity: Past failed verifications are preserved.
+
       const updRes = await pool.query(
         `UPDATE incidents i
          SET status = 'RESOLVED',
              resolved_at = COALESCE(i.resolved_at, NOW()),
              updated_at = NOW()
-         WHERE i.status = 'OPEN'
-           AND COALESCE(i.last_occurred_at, i.detected_at, i.created_at) <= NOW() - interval '45 seconds'
+         WHERE i.status IN ('OPEN', 'INVESTIGATING')
+           AND COALESCE(i.last_occurred_at, i.detected_at, i.created_at) <= NOW() - interval '30 seconds'
            AND (
              LOWER(COALESCE(i.target_name, '')) = ANY($1)
              OR LOWER(COALESCE(i.target_id, '')) = ANY($1)
@@ -364,25 +366,20 @@ export class TelemetryPipelineService {
              WHERE ha.incident_id = i.id
                AND ha.execution_status = 'SUCCEEDED'
                AND ha.completed_at > NOW() - interval '30 seconds'
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM healing_actions ha_fail
-              WHERE ha_fail.incident_id = i.id
-                AND (
-                  ha_fail.execution_status = 'FAILED'
-                  OR EXISTS (
-                    SELECT 1 FROM recovery_verifications rv_fail
-                    WHERE rv_fail.healing_action_id = ha_fail.id
-                      AND rv_fail.verification_result = false
-                  )
-                )
-                AND NOT EXISTS (
-                  SELECT 1 FROM healing_actions ha_win
-                  WHERE ha_win.incident_id = i.id
-                    AND ha_win.completed_at > ha_fail.completed_at
-                    AND ha_win.execution_status = 'SUCCEEDED'
-                )
-            )
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM healing_actions ha_fail
+             WHERE ha_fail.incident_id = i.id
+               AND ha_fail.completed_at > NOW() - interval '45 seconds'
+               AND (
+                 ha_fail.execution_status = 'FAILED'
+                 OR EXISTS (
+                   SELECT 1 FROM recovery_verifications rv_fail
+                   WHERE rv_fail.healing_action_id = ha_fail.id
+                     AND rv_fail.verification_result = false
+                 )
+               )
+           )
          RETURNING i.id, i.title, i.target_name;`,
         [targetAliasesLower, validTargetWorkloadId, serviceId]
       );

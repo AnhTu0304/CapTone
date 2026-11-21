@@ -4,7 +4,7 @@
   "scenario_title": "Khóa tạm thời IP tấn công (Temporary IP Block)",
   "file_name": "07_action_TEMPORARY_IP_BLOCK.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-20T10:26:13.337090+00:00",
+  "tested_at": "2026-11-21T18:29:13.858194+00:00",
   "description": "Phát hiện lưu lượng bất thường từ source IP (198.51.100.25) với 450 req/s và 55 lần xác thực thất bại, vượt ngưỡng Security Policy. RCA đề xuất TEMPORARY_IP_BLOCK.",
   "input_payload": {
     "request_id": "req-20261026-temp-ip-block-007",

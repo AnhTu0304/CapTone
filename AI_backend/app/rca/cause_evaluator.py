@@ -483,15 +483,27 @@ class CauseEvaluator:
         # ----------------------------------------------------
         # 5. EVALUATE: CPU_SATURATION
         # ----------------------------------------------------
-        has_high_cpu = EvidenceType.HIGH_CPU_USAGE in ev_types
+        cpu_val = payload.metrics.cpu if (payload and payload.metrics) else None
+        has_cpu_overload_pred = bool(
+            prediction
+            and prediction.detected_risks
+            and any(
+                r.risk_type == "CPU_OVERLOAD" and (getattr(r, "confidence", 0) or 0) >= 0.70
+                for r in prediction.detected_risks
+            )
+        )
+        has_high_cpu = (EvidenceType.HIGH_CPU_USAGE in ev_types) or (has_cpu_overload_pred and cpu_val is not None and cpu_val >= 50.0)
         has_normal_cpu = EvidenceType.NORMAL_CPU_USAGE in ev_types
         has_high_latency = EvidenceType.HIGH_LATENCY in ev_types
 
-        cpu_val = payload.metrics.cpu if (payload and payload.metrics) else None
-        is_cpu_low = has_normal_cpu or (cpu_val is not None and cpu_val < 50.0)
+        is_cpu_low = (has_normal_cpu and not has_cpu_overload_pred) or (cpu_val is not None and cpu_val < 50.0 and not has_cpu_overload_pred)
 
         if has_high_cpu and not is_cpu_low:
             for_items = [e.description for e in valid_evs if e.evidence_type == EvidenceType.HIGH_CPU_USAGE]
+            if not for_items and cpu_val is not None:
+                for_items = [f"Mức sử dụng CPU bão hòa ({cpu_val:.1f}%)" + (" kết hợp mô hình AI dự báo quá tải CPU" if has_cpu_overload_pred else "")]
+            elif has_cpu_overload_pred:
+                for_items.append("Mô hình học sâu AI GRU dự báo rủi ro bão hòa CPU (CPU_OVERLOAD)")
             return CauseEvaluationResult(
                 cause_code="cpu_saturation",
                 cause_label=self.CAUSE_LABELS["cpu_saturation"],
@@ -564,6 +576,15 @@ class CauseEvaluator:
             and prediction.detected_risks
             and any(r.risk_type == "SCALE_DOWN_CANDIDATE" for r in prediction.detected_risks)
         )
+        has_ai_overload_risk = bool(
+            prediction
+            and prediction.detected_risks
+            and any(
+                r.risk_type in ("CPU_OVERLOAD", "TRAFFIC_OVERLOAD", "HIGH_LATENCY", "OOM")
+                and (getattr(r, "confidence", 0) or 0) >= 0.50
+                for r in prediction.detected_risks
+            )
+        )
         cur_replicas = (
             getattr(getattr(kubernetes_raw, "deployment", None), "desired_replicas", None)
             or getattr(getattr(kubernetes_raw, "deployment", None), "replicas", None)
@@ -586,9 +607,27 @@ class CauseEvaluator:
             or has_image_pull or has_failed_sched
             or has_crash_log or has_5xx or has_crashloop or has_restarts
             or has_high_cpu or has_high_req_rate or has_high_latency
+            or has_ai_overload_risk
         )
 
-        if not has_any_critical_fault and (has_scale_down_prediction or is_metrics_idle) and cur_replicas is not None and cur_replicas >= 2:
+        target_name_lower = (
+            (payload.service_id if payload else "")
+            or getattr(kubernetes_raw, "workload_name", "")
+            or getattr(kubernetes_raw, "pod_name", "")
+            or ""
+        ).lower()
+        workload_type_lower = (getattr(kubernetes_raw, "workload_type", "") or "").lower()
+        is_daemonset_workload = (
+            workload_type_lower == "daemonset"
+            or any(
+                getattr(getattr(p, "controller", None), "owner_kind", "").lower() == "daemonset"
+                or getattr(getattr(p, "controller", None), "workload_type", "").lower() == "daemonset"
+                for p in (getattr(kubernetes_raw, "all_pods", None) or [])
+            )
+            or any(k in target_name_lower for k in ["node-exporter", "kube-proxy", "kindnet", "calico", "flannel", "cilium", "storage-provisioner"])
+        )
+
+        if not has_any_critical_fault and not has_ai_overload_risk and not is_daemonset_workload and (has_scale_down_prediction or is_metrics_idle) and cur_replicas is not None and cur_replicas >= 2:
             scale_down_evs = []
             if has_scale_down_prediction:
                 scale_down_evs.append("Mô hình AI 7-Heads dự báo cơ hội thu hẹp Pod dư thừa (SCALE_DOWN_CANDIDATE)")

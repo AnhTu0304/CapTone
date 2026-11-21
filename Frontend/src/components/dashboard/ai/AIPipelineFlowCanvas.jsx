@@ -26,6 +26,7 @@ import {
   RefreshCw,
   ExternalLink,
   X,
+  ArrowRight,
 } from 'lucide-react';
 
 const translateActionToVi = (rawAction) => {
@@ -81,7 +82,7 @@ export const AIPipelineFlowCanvas = ({
   isAgentConnected = true,
   timesteps = [],
   activeSeriesList = [],
-  scaleMode = 'auto',
+  scaleMode = 'standard',
   isFullScreen = false,
   showExtendedPipeline = false,
   defaultViewMode = 'all',
@@ -215,8 +216,8 @@ export const AIPipelineFlowCanvas = ({
     if (!containerRef.current || !e?.currentTarget) return { x: 24, y: 80, side: 'right' };
     const cRect = containerRef.current.getBoundingClientRect();
     const elRect = e.currentTarget.getBoundingClientRect();
-    const popW = 328;
-    const popH = 290;
+    const popW = 375;
+    const popH = 520;
     const gap = 12;
 
     const relLeft = elRect.left - cRect.left;
@@ -236,7 +237,7 @@ export const AIPipelineFlowCanvas = ({
 
     let y = relCenterY - popH / 2;
     const minY = Math.max(14, topSafePadding + 6);
-    const maxY = Math.max(minY, cRect.height - popH - 58);
+    const maxY = Math.max(minY, cRect.height - popH - 16);
     y = Math.max(minY, Math.min(y, maxY));
 
     return { x: Math.round(x), y: Math.round(y), side };
@@ -276,7 +277,7 @@ export const AIPipelineFlowCanvas = ({
 
   // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình (giữ cố định baseCanvasH để mở/đóng Rule Engine không bị giật khung nhìn)
   const baseCanvasW = showExtendedPipeline ? 2195 : 1000;
-  const baseCanvasH = showExtendedPipeline ? 720 : 550;
+  const baseCanvasH = showExtendedPipeline ? 1000 : 550;
   const autoScale = useMemo(() => {
     if (!containerWidth) return 1;
     if (isFullScreen && containerHeight > 0) {
@@ -611,11 +612,24 @@ export const AIPipelineFlowCanvas = ({
       const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
       const effectiveScale = nextZoom * autoScale;
       const leftMarginPx = containerWidth <= 768 ? 8 : 18;
-      const focusCy = 372;
+      const focusCy = 512;
       return {
         nextZoom,
         nextPan: {
           x: leftMarginPx - containerWidth / 2 + (baseCanvasW / 2 - 16) * effectiveScale,
+          y: (baseCanvasH / 2 - focusCy) * effectiveScale + safeOffsetY,
+        },
+      };
+    }
+    if (mode === 'closedloop') {
+      const targetScale = Math.min(usableW / 1020, usableH / 270, 1.15);
+      const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
+      const effectiveScale = nextZoom * autoScale;
+      const focusCy = feedbackTrackY + 130;
+      return {
+        nextZoom,
+        nextPan: {
+          x: 0,
           y: (baseCanvasH / 2 - focusCy) * effectiveScale + safeOffsetY,
         },
       };
@@ -625,7 +639,7 @@ export const AIPipelineFlowCanvas = ({
     const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
     const effectiveScale = nextZoom * autoScale;
     const leftMarginPx = containerWidth <= 768 ? 8 : 20;
-    const focusCy = 384;
+    const focusCy = 524;
     return {
       nextZoom,
       nextPan: {
@@ -847,22 +861,26 @@ export const AIPipelineFlowCanvas = ({
   const isRcaActive = isAgentConnected && (isRiskDetected || openServiceIncidentsCount > 0);
   const isPolicyActive = isAgentConnected && (isRcaActive || Boolean(latestRecommendation));
   const autoActionStatus = isAgentConnected ? String(latestAutoAction?.execution_status || '').toUpperCase() : '';
-  const isAutoActive =
+  const isAutoActionInProgress =
     isAgentConnected &&
     (autoActionStatus === 'RUNNING' ||
       (!isCircuitBreakerTripped &&
         openServiceIncidentsCount > 0 &&
-        ['AUTO', 'AUTONOMOUS'].includes(String(latestAutoAction?.execution_mode || '').toUpperCase())));
+        ['AUTO', 'AUTONOMOUS'].includes(String(latestAutoAction?.execution_mode || '').toUpperCase()) &&
+        autoActionStatus !== 'SUCCEEDED' &&
+        autoActionStatus !== 'FAILED'));
+  const isAutoActionActive =
+    isAutoActionInProgress ||
+    (!isCircuitBreakerTripped && openServiceIncidentsCount > 0 && autoActionStatus === 'SUCCEEDED');
+  const isVerifyingInProgress =
+    isAgentConnected && (recoveryStats.runningCount > 0 || recoveryStats.verifyingCount > 0);
+  const isAutoActive = isAutoActionActive;
   const isHitlActive = isAgentConnected && pendingApprovalsCount > 0;
   const isAuditActive =
     isAgentConnected &&
     (isCircuitBreakerTripped || (pipelineContext?.totalPoliciesCount > 0 && pipelineContext?.activePoliciesCount === 0));
   const hasUnrecoveredStep = isAgentConnected && actionTimeline.some((s) => s.isFailedOrUnrecovered);
-  const isVerifyActive =
-    isAgentConnected &&
-    (recoveryStats.runningCount > 0 ||
-      recoveryStats.verifyingCount > 0 ||
-      actionTimeline.length > 0);
+  const isVerifyActive = isVerifyingInProgress;
 
   // 3. Đường cong Bezier từ Cột 3 hội tụ vào Cột 4 (Multi-Agent RCA Hub)
   const RCA_IN_PORT = { x: RCA_X, y: RCA_Y + RCA_H / 2 };
@@ -903,7 +921,8 @@ export const AIPipelineFlowCanvas = ({
           id: 'edge-policy-auto',
           label: 'AUTO',
           color: '#10B981',
-          active: isAutoActive || (!isCircuitBreakerTripped && autoActionStatus === 'SUCCEEDED'),
+          active: isAutoActionActive,
+          animating: isAutoActionInProgress,
           pathD: (() => {
             const end = { x: BRANCH_X, y: AUTO_Y + AUTO_H / 2 };
             const mx = policyOutPort.x + (end.x - policyOutPort.x) * 0.5;
@@ -915,6 +934,7 @@ export const AIPipelineFlowCanvas = ({
           label: 'HITL',
           color: '#F59E0B',
           active: isHitlActive,
+          animating: isHitlActive,
           pathD: (() => {
             const end = { x: BRANCH_X, y: HITL_Y + HITL_H / 2 };
             const mx = policyOutPort.x + (end.x - policyOutPort.x) * 0.5;
@@ -926,6 +946,7 @@ export const AIPipelineFlowCanvas = ({
           label: 'AUDIT',
           color: '#64748B',
           active: isAuditActive,
+          animating: isAuditActive,
           pathD: (() => {
             const end = { x: BRANCH_X, y: AUDIT_Y + AUDIT_H / 2 };
             const mx = policyOutPort.x + (end.x - policyOutPort.x) * 0.5;
@@ -937,8 +958,9 @@ export const AIPipelineFlowCanvas = ({
         {
           id: 'edge-policy-summary',
           label: 'DISPATCH',
-          color: isHitlActive ? '#F59E0B' : isAutoActive ? '#10B981' : '#64748B',
-          active: isAutoActive || isHitlActive || isAuditActive,
+          color: isHitlActive ? '#F59E0B' : isAutoActionActive ? '#10B981' : '#64748B',
+          active: isAutoActionActive || isHitlActive || isAuditActive,
+          animating: isAutoActionInProgress || isHitlActive || isAuditActive,
           pathD: `M ${policyOutPort.x} ${policyOutPort.y} L ${BRANCH_X} ${MAIN_MID_Y}`,
         },
       ];
@@ -950,7 +972,8 @@ export const AIPipelineFlowCanvas = ({
         {
           id: 'edge-auto-verify',
           color: '#10B981',
-          active: isAutoActive || autoActionStatus === 'SUCCEEDED',
+          active: isAutoActionActive || isVerifyingInProgress,
+          animating: isAutoActionInProgress || isVerifyingInProgress,
           pathD: (() => {
             const start = { x: BRANCH_X + BRANCH_W, y: AUTO_Y + AUTO_H / 2 };
             const mx = start.x + (verifyInPort.x - start.x) * 0.5;
@@ -961,6 +984,7 @@ export const AIPipelineFlowCanvas = ({
           id: 'edge-hitl-verify',
           color: '#0891B2',
           active: isHitlActive,
+          animating: isHitlActive,
           pathD: (() => {
             const start = { x: BRANCH_X + BRANCH_W, y: HITL_Y + HITL_H / 2 };
             const mx = start.x + (verifyInPort.x - start.x) * 0.5;
@@ -972,7 +996,8 @@ export const AIPipelineFlowCanvas = ({
         {
           id: 'edge-branch-verify-summary',
           color: '#0891B2',
-          active: isAutoActive || isHitlActive || isVerifyActive,
+          active: isAutoActionActive || isHitlActive || isVerifyingInProgress,
+          animating: isAutoActionInProgress || isHitlActive || isVerifyingInProgress,
           pathD: `M ${BRANCH_X + BRANCH_W} ${MAIN_MID_Y} L ${verifyInPort.x} ${verifyInPort.y}`,
         },
       ];
@@ -1427,16 +1452,18 @@ export const AIPipelineFlowCanvas = ({
         actionTimeline.length > 0
           ? actionTimeline.slice(-4).map((step) => ({
               label: `Bước #${step.stepIndex}: ${step.actionLabelVi}`,
-              value: `${step.verdictLabel} (${step.timeStr})`,
+              value: step.verdictLabel,
+              subValue: step.timeStr,
               highlight: step.isFailedOrUnrecovered,
+              isRecovered: step.isVerifiedRecovered,
             }))
           : [
-              { label: 'Số hành động đã thử', value: '0 hành động' },
+              { label: 'Số hành động', value: '0 hành động (Hệ thống ổn định)' },
               { label: 'Trạng thái dịch vụ', value: openServiceIncidentsCount > 0 ? 'Đang có sự cố mở' : 'Ổn định (HEALTHY)' },
             ];
 
       return {
-        badge: '07 • HẬU KIỂM & LỊCH SỬ THỬ ACTION',
+        badge: '07 • HẬU KIỂM & LỊCH SỬ THỬ ACTION (24H)',
         accent: hasUnrecoveredStep ? '#DC2626' : '#0284C7',
         bg: hasUnrecoveredStep ? '#FEF2F2' : '#F0F9FF',
         title: `Hậu Kiểm 60s & Xác Minh — ${selectedService}`,
@@ -1445,22 +1472,134 @@ export const AIPipelineFlowCanvas = ({
             ? 'ĐANG HẬU KIỂM'
             : hasUnrecoveredStep && openServiceIncidentsCount > 0
               ? 'CHƯA PHỤC HỒI'
-              : actionTimeline.length > 0
-                ? `${actionTimeline.length} HÀNH ĐỘNG ĐÃ THỬ`
+              : (recoveryStats.totalActions || actionTimeline.length) > 0
+                ? `${recoveryStats.totalActions || actionTimeline.length} ĐÃ THỬ`
                 : 'AUTO-RESOLVE',
         isAlert: Boolean(hasUnrecoveredStep && openServiceIncidentsCount > 0),
         summary: `Đây là nơi kiểm tra kết quả sau mỗi Action (như Hành động #1: Khởi động lại Pod). Sau khi Cột 06 thực thi lệnh trên "${selectedService}", hệ thống chờ lô 12 bước mới (60 giây): nếu Đã phục hồi → tự đóng sự cố (RESOLVED); nếu Chưa phục hồi → quay vòng hồi tiếp để RCA leo thang sang Action #2 hoặc ngắt mạch Circuit Breaker.`,
         rows: [
+          ...(podCount === 0
+            ? [
+                {
+                  label: 'Trạng thái Pod hiện tại',
+                  value: '0 Pod (Dịch vụ chưa chạy/đã dừng)',
+                  highlight: false,
+                },
+              ]
+            : []),
           {
-            label: 'Tổng hợp trên dịch vụ',
-            value: `${actionTimeline.length} đã thử • ${recoveryStats.succeededCount} phục hồi • ${recoveryStats.failedCount} chưa phục hồi`,
+            label:
+              (recoveryStats.totalActions || 0) > actionTimeline.length
+                ? `Tổng ${recoveryStats.totalActions} đã thử trong 24h (${actionTimeline.length} gần nhất: ${recoveryStats.succeededCount} phục hồi • ${recoveryStats.failedCount} chưa):`
+                : `Tổng ${actionTimeline.length} đã thử trong 24h: ${recoveryStats.succeededCount} phục hồi • ${recoveryStats.failedCount} chưa phục hồi trên dịch vụ:`,
+            value: '',
+            isFullWidth: true,
           },
           ...timelineRows,
         ],
-        nextStep: hasUnrecoveredStep && openServiceIncidentsCount > 0
-          ? 'Action trước chưa phục hồi triệt để → Dữ liệu quay vòng hồi tiếp về Cột 01 & Multi-Agent RCA để nâng cấp hành động tiếp theo (hoặc kích hoạt Circuit Breaker NO_ACTION).'
-          : 'Khép kín vòng lặp: dữ liệu mới tiếp tục chảy về Cột 01 để giám sát liên tục 24/7.',
+        nextStep: podCount === 0
+          ? 'Dịch vụ hiện chưa có Pod nào trên cụm. Khi bạn triển khai/khởi động lại Pod, hệ thống sẽ tiếp tục tự động thu thập viễn trắc và giám sát ở Cột 01.'
+          : hasUnrecoveredStep && openServiceIncidentsCount > 0
+            ? 'Action trước chưa phục hồi triệt để → Dữ liệu quay vòng hồi tiếp về Cột 01 & Multi-Agent RCA để nâng cấp hành động tiếp theo (hoặc kích hoạt Circuit Breaker NO_ACTION).'
+            : 'Khép kín vòng lặp: dữ liệu mới tiếp tục chảy về Cột 01 để giám sát liên tục 24/7.',
         actionLabel: 'Mở Lịch sử Phục hồi →',
+        actionPath: '/dashboard/self-healing/history',
+      };
+    }
+
+    // 6. Các giai đoạn trong Vòng lặp Tự trị Khép kín (Closed-Loop MAPE-K)
+    if (id === 'closedloop:overview') {
+      return {
+        title: 'Tổng Quan Sơ Đồ Vòng Lặp Tự Trị Khép Kín (MAPE-K)',
+        badge: 'KIẾN TRÚC TỰ TRỊ CAPSTONE',
+        accent: '#0369A1',
+        bg: '#F8FAFC',
+        summary: `Chu trình vòng lặp khép kín (Closed-Loop Autonomous Architecture) được thiết kế theo chuẩn MAPE-K (Monitor - Analyze - Plan - Execute - Knowledge) của IBM dành riêng cho hệ thống phân tán Kubernetes. Hệ thống tự động thu thập viễn trắc 60s, chẩn đoán nguyên nhân gốc bằng Multi-Agent, đối soát an toàn qua Policy Engine, thực thi can thiệp và hậu kiểm 60s để tự động đóng sự cố hoặc hồi tiếp leo thang hành động.`,
+        rows: [
+          { label: 'Mô hình kiến trúc', value: 'MAPE-K Autonomous Loop + Feedback Control' },
+          { label: 'Chu kỳ lấy mẫu viễn trắc', value: '5 giây/bước (Sliding Window 12 bước = 60s)' },
+          { label: 'Thời gian phản hồi AI', value: '< 3 giây (GRU + Multi-Agent RCA)' },
+          { label: 'Thời gian hậu kiểm SLA', value: '60 giây (12 bước dữ liệu thực tế sau can thiệp)' },
+          { label: 'Rào chắn an toàn', value: 'Policy Engine, Cooldown 180s, HITL Gate, Circuit Breaker' },
+        ],
+        nextStep: 'Click vào từng khối (Pha 01 đến 04) trong sơ đồ vòng lặp bên dưới để xem chi tiết từng công đoạn vận hành.',
+        actionLabel: 'Mở Quản lý Sự cố →',
+        actionPath: '/dashboard/incidents',
+      };
+    }
+
+    if (id === 'closedloop:monitor') {
+      return {
+        title: 'Pha 1: Giám Sát Viễn Trắc (Monitor)',
+        badge: 'MAPE-K • PHA 1 (CỘT 01 & 02)',
+        accent: '#059669',
+        bg: '#F0FDF4',
+        summary: `Đóng vai trò là "giác quan" của hệ thống tự trị. Thu thập liên tục 6 chỉ số viễn trắc vàng (CPU, Memory, Disk, Độ trễ mạng, Tỷ lệ lỗi 5xx, Requests/giây) từ Prometheus và cAdvisor trên từng Pod/Service theo chu kỳ 5 giây, gom thành Sliding Window 12 bước (60 giây). Dữ liệu được chuẩn hóa min-max và đẩy đồng thời vào AI Hub và Rule Engine.`,
+        rows: [
+          { label: 'Dịch vụ đang chọn', value: selectedService },
+          { label: 'Số chiều dữ liệu', value: '6 chỉ số (CPU, RAM, Disk, Latency, 5xx, Req/s)' },
+          { label: 'Cửa sổ thời gian', value: '12 bước x 5s = 60 giây (Sliding Window)' },
+          { label: 'Tình trạng kết nối viễn trắc', value: isAgentConnected ? 'Trực tuyến (Live Telemetry)' : 'Mất kết nối', highlight: !isAgentConnected },
+        ],
+        nextStep: 'Ma trận viễn trắc 12x6 được đẩy sang Pha 2 để mô hình GRU dự báo xu hướng và Multi-Agent chẩn đoán nguyên nhân gốc.',
+        actionLabel: 'Xem Chi tiết Viễn trắc →',
+        actionPath: '/dashboard/telemetry',
+      };
+    }
+
+    if (id === 'closedloop:analyze') {
+      return {
+        title: 'Pha 2: Phân Tích & Suy Luận AI (Analyze)',
+        badge: 'MAPE-K • PHA 2 (CỘT 03 & 04)',
+        accent: '#6366F1',
+        bg: '#EEF2FF',
+        summary: `Đóng vai trò là "bộ não" suy luận thông minh. Kết hợp 2 cơ chế: (1) Mô hình học sâu GRU dự báo trước nguy cơ suy thoái trong 60 giây tiếp theo (Proactive); (2) 4 Tác tử Multi-Agent (Metrics Agent, Log Agent, K8s Event Agent, History Agent) cùng Rule Engine R1→R6 hội chẩn đa chiều để chẩn đoán chính xác Pod dính lỗi, nguyên nhân gốc (Root Cause) và độ tin cậy AI (55% - 95%).`,
+        rows: [
+          { label: 'Mô hình dự báo chuỗi thời gian', value: 'GRU Model (12 bước quá khứ → 12 bước tương lai)' },
+          { label: 'Hội chẩn đa tác tử', value: '4 Tác tử: Metrics, Logs, K8s Events, Lịch sử' },
+          { label: 'Nguyên nhân gốc chẩn đoán', value: latestIncCauseText || 'Dịch vụ ổn định, không có lỗi' },
+          { label: 'Độ tin cậy AI', value: pipelineContext?.rcaAgentsSummary?.rcaConfidencePct ? `${pipelineContext.rcaAgentsSummary.rcaConfidencePct}%` : '85%' },
+        ],
+        nextStep: 'Sau khi chẩn đoán xong nguyên nhân gốc, đề xuất hành động khắc phục được chuyển giao cho Pha 3 (Policy Engine & K8s Action).',
+        actionLabel: 'Xem Báo cáo RCA →',
+        actionPath: '/dashboard/rca',
+      };
+    }
+
+    if (id === 'closedloop:plan_execute') {
+      return {
+        title: 'Pha 3: Quyết Định & Thực Thi (Plan & Execute)',
+        badge: 'MAPE-K • PHA 3 (CỘT 05 & 06)',
+        accent: '#D97706',
+        bg: '#FFFBEB',
+        summary: `Đóng vai trò là "người ra quyết định và cánh tay hành động". Policy Engine đối soát an toàn (thời gian giãn cách Cooldown 180s, hạn mức thử lại của Circuit Breaker, kiểm tra loại tài nguyên). Sau đó điều phối vào 3 nhánh: Tự trị AUTO (cho tác vụ rủi ro thấp với độ tin cậy AI cao), Cổng duyệt HITL (bảo vệ tác vụ rủi ro cao như DaemonSet hay xóa dữ liệu), hoặc Ngắt mạch Circuit Breaker nếu thử lặp quá nhiều lần.`,
+        rows: [
+          { label: 'Cơ chế bảo vệ', value: 'Policy Engine + Cooldown 180s + Circuit Breaker' },
+          { label: 'Điều phối 3 nhánh', value: 'AUTO (Tự trị) | HITL (Phê duyệt) | Ngắt mạch' },
+          { label: 'Các hành động K8s', value: 'Restart Pod, Thay thế Pod, Điều chỉnh bản sao, Rollback' },
+          { label: 'Cơ chế chặn DaemonSet', value: 'Tự động CANCEL / REJECT nếu giảm bản sao DaemonSet (như kube-proxy)' },
+        ],
+        nextStep: 'Lệnh can thiệp gửi tới K8s API Server. Ngay khi lệnh hoàn tất, hệ thống kích hoạt Pha 4 (Hậu kiểm 60s).',
+        actionLabel: 'Mở Cổng Phê Duyệt HITL →',
+        actionPath: '/dashboard/self-healing/approvals',
+      };
+    }
+
+    if (id === 'closedloop:verify_feedback') {
+      return {
+        title: 'Pha 4: Hậu Kiểm 60s & Khép Vòng Hồi Tiếp (Verify & Feedback)',
+        badge: 'MAPE-K • PHA 4 (CỘT 07)',
+        accent: '#0284C7',
+        bg: '#F0F9FF',
+        summary: `Đóng vai trò "xác minh và khép kín vòng lặp tự phục hồi". Sau khi thực thi lệnh trên K8s, hệ thống chờ đúng 60 giây (1 lô 12 bước viễn trắc mới) để đo lường lại SLA thực tế. Nếu các chỉ số đã về ngưỡng an toàn → Tự động đóng sự cố (Auto-Resolve) và hồi tiếp về Pha 01 để tiếp tục giám sát. Nếu sau 60s lỗi vẫn còn → Hồi tiếp dữ liệu ngược về Pha 02 (Multi-Agent RCA) để nâng cấp hành động (hoặc kích hoạt Circuit Breaker nếu quá số lần thử).`,
+        rows: [
+          { label: 'Thời gian chờ hậu kiểm', value: '60 giây (12 bước viễn trắc mới từ Kubernetes)' },
+          { label: 'Đánh giá chỉ số SLA', value: 'So sánh CPU, RAM, Latency, 5xx với ngưỡng an toàn' },
+          { label: 'Nhánh Thành công', value: 'Auto-Resolved sự cố ➔ Quay về Pha 01 tiếp tục giám sát 24/7' },
+          { label: 'Nhánh Chưa phục hồi', value: 'Hồi tiếp về Pha 02 ➔ Multi-Agent RCA nâng cấp Action tiếp theo' },
+        ],
+        nextStep: 'Vòng lặp khép kín 100% tự trị, đảm bảo hệ thống tự chữa lành bền vững mà không cần can thiệp thủ công.',
+        actionLabel: 'Xem Lịch Sử Phục Hồi →',
         actionPath: '/dashboard/self-healing/history',
       };
     }
@@ -1623,6 +1762,7 @@ export const AIPipelineFlowCanvas = ({
             {[
               { id: 'gru', label: '1. AI & Rule Engine' },
               { id: 'healing', label: '2. RCA & Tự phục hồi' },
+              { id: 'closedloop', label: '3. Vòng lặp Khép kín' },
               { id: 'all', label: 'Toàn luồng' },
             ].map((tab) => {
               const isSelected = activeViewMode === tab.id;
@@ -1981,7 +2121,7 @@ export const AIPipelineFlowCanvas = ({
                     strokeLinecap="round"
                     strokeDasharray={edge.active ? 'none' : '5 3'}
                   />
-                  {edge.active && (
+                  {edge.animating && (
                     <circle r="4" fill={edge.color}>
                       <animateMotion path={edge.pathD} dur="1.6s" repeatCount="indefinite" rotate="auto" />
                     </circle>
@@ -2000,7 +2140,7 @@ export const AIPipelineFlowCanvas = ({
                     strokeLinecap="round"
                     strokeDasharray={edge.active ? 'none' : '5 3'}
                   />
-                  {edge.active && (
+                  {edge.animating && (
                     <circle r="3.8" fill={edge.color}>
                       <animateMotion path={edge.pathD} dur="1.8s" repeatCount="indefinite" rotate="auto" />
                     </circle>
@@ -3702,8 +3842,8 @@ export const AIPipelineFlowCanvas = ({
                     flexShrink: 0,
                   }}
                 >
-                  {actionTimeline.length > 0
-                    ? `${actionTimeline.length} đã thử`
+                  {(recoveryStats.totalActions || actionTimeline.length) > 0
+                    ? `${recoveryStats.totalActions || actionTimeline.length} đã thử (24h)`
                     : recoveryStats.runningCount > 0
                       ? 'Đang kiểm'
                       : 'Auto-Resolve'}
@@ -3762,6 +3902,7 @@ export const AIPipelineFlowCanvas = ({
                       {actionTimeline.slice(-3).map((step) => (
                         <div
                           key={step.id}
+                          title={`${step.actionLabelVi} • ${step.verdictLabel} (${step.timeStr})`}
                           style={{
                             padding: '4px 6px',
                             borderRadius: '7px',
@@ -3835,7 +3976,7 @@ export const AIPipelineFlowCanvas = ({
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.59rem', color: '#64748B', lineHeight: 1.35 }}>
-                      Chưa có hành động nào được thử trên {selectedService}
+                      Chưa có hành động phục hồi nào trên {selectedService}
                     </div>
                   )}
                 </div>
@@ -4162,6 +4303,348 @@ export const AIPipelineFlowCanvas = ({
                 Vòng lặp Hậu kiểm & Giám sát Liên tục (60s Closed-Loop Telemetry Feedback)
               </span>
             </div>
+
+            {/* SƠ ĐỒ VÒNG TRÒN TỰ TRỊ TUẦN HOÀN (CIRCULAR CLOSED-LOOP MAPE-K ARCHITECTURE) */}
+            <div
+              data-inspector-trigger="true"
+              onClick={(e) => handleInspectorClick(e, 'closedloop:overview')}
+              onMouseEnter={(e) => handleInspectorHover(e, 'closedloop:overview')}
+              onMouseLeave={() => handleInspectorLeave('closedloop:overview')}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                top: `${feedbackTrackY + 28}px`,
+                width: '820px',
+                height: '240px',
+                backgroundColor: 'rgba(255, 255, 255, 0.97)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                border: '1.5px solid #CBD5E1',
+                borderRadius: '16px',
+                boxShadow: '0 12px 28px -6px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04)',
+                padding: '8px 16px 8px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                zIndex: 6,
+                boxSizing: 'border-box',
+                cursor: 'pointer',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Tiêu đề sơ đồ vòng tròn */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 800,
+                  color: '#1E293B',
+                  letterSpacing: '0.03em',
+                  zIndex: 4,
+                  userSelect: 'none',
+                }}
+              >
+                <RefreshCw size={12} color="#2563EB" />
+                CHU TRÌNH VÒNG TRÒN TỰ TRỊ TUẦN HOÀN (CLOCKWISE CLOSED-LOOP)
+              </div>
+
+              {/* Vùng Vẽ Vòng Tròn: Trung Tâm Knowledge Core + Quỹ Đạo Tuần Hoàn + 4 Trạm Quỹ Đạo */}
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '190px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {/* SVG Vẽ Vòng Tròn Quỹ Đạo + Các Mũi Tên Cong + Hạt Ánh Sáng Di Chuyển Tuần Hoàn */}
+                <svg
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                  }}
+                  viewBox="0 0 788 190"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <defs>
+                    <marker id="circ-arrow-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#059669" />
+                    </marker>
+                    <marker id="circ-arrow-indigo" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#4F46E5" />
+                    </marker>
+                    <marker id="circ-arrow-amber" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#D97706" />
+                    </marker>
+                    <marker id="circ-arrow-sky" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#0284C7" />
+                    </marker>
+                    <marker id="circ-arrow-escalate" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#EA580C" />
+                    </marker>
+                    <linearGradient id="orbit-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#059669" stopOpacity="0.8" />
+                      <stop offset="33%" stopColor="#4F46E5" stopOpacity="0.8" />
+                      <stop offset="66%" stopColor="#D97706" stopOpacity="0.8" />
+                      <stop offset="100%" stopColor="#0284C7" stopOpacity="0.8" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Vòng tròn quỹ đạo nền (Đường ray đứt nét) tâm tại cx=394, cy=95, r=72 */}
+                  <circle cx="394" cy="95" r="72" fill="none" stroke="#E2E8F0" strokeWidth="8" strokeDasharray="6 4" />
+                  <circle cx="394" cy="95" r="72" fill="none" stroke="url(#orbit-grad)" strokeWidth="2.2" opacity="0.75" />
+
+                  {/* 4 Mũi tên uốn cong theo chiều kim đồng hồ quanh vòng tròn */}
+                  {/* Cung 1 (Đỉnh: Pha 01 ➔ Pha 02) */}
+                  <path d="M 344 44 A 72 72 0 0 1 444 44" fill="none" stroke="#059669" strokeWidth="2.5" markerEnd="url(#circ-arrow-green)" />
+                  {/* Cung 2 (Phải: Pha 02 ➔ Pha 03) */}
+                  <path d="M 462 56 A 72 72 0 0 1 462 134" fill="none" stroke="#4F46E5" strokeWidth="2.5" markerEnd="url(#circ-arrow-indigo)" />
+                  {/* Cung 3 (Đáy: Pha 03 ➔ Pha 04) */}
+                  <path d="M 444 146 A 72 72 0 0 1 344 146" fill="none" stroke="#D97706" strokeWidth="2.5" markerEnd="url(#circ-arrow-amber)" />
+                  {/* Cung 4 (Trái: Pha 04 ➔ Pha 01 - Nhánh Tự Đóng) */}
+                  <path d="M 326 134 A 72 72 0 0 1 326 56" fill="none" stroke="#0284C7" strokeWidth="2.5" markerEnd="url(#circ-arrow-sky)" />
+
+                  {/* Cung hồi tiếp leo thang nội bộ (Pha 04 ➔ Pha 02: Khi chưa đạt SLA) */}
+                  <path d="M 346 125 Q 394 95 442 65" fill="none" stroke="#EA580C" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#circ-arrow-escalate)" />
+
+                  {/* 4 Hạt ánh sáng chuyển động tuần hoàn liên tục theo đường tròn quỹ đạo */}
+                  <circle r="3.5" fill="#059669">
+                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" />
+                  </circle>
+                  <circle r="3.5" fill="#4F46E5">
+                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" begin="1.5s" />
+                  </circle>
+                  <circle r="3.5" fill="#D97706">
+                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" begin="3s" />
+                  </circle>
+                  <circle r="3.5" fill="#0284C7">
+                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" begin="4.5s" />
+                  </circle>
+
+                  {/* 4 Đường gạch ngang định vị (Horizontal Guide Lines) từ 4 thẻ vươn ra 2 bên */}
+                  <line x1="0" y1="38" x2="154" y2="38" stroke="#86EFAC" strokeWidth="1.8" strokeDasharray="4 3" />
+                  <circle cx="6" cy="38" r="2.5" fill="#86EFAC" />
+
+                  <line x1="0" y1="134" x2="154" y2="134" stroke="#7DD3FC" strokeWidth="1.8" strokeDasharray="4 3" />
+                  <circle cx="6" cy="134" r="2.5" fill="#7DD3FC" />
+
+                  <line x1="634" y1="38" x2="788" y2="38" stroke="#A5B4FC" strokeWidth="1.8" strokeDasharray="4 3" />
+                  <circle cx="782" cy="38" r="2.5" fill="#A5B4FC" />
+
+                  <line x1="634" y1="134" x2="788" y2="134" stroke="#FCD34D" strokeWidth="1.8" strokeDasharray="4 3" />
+                  <circle cx="782" cy="134" r="2.5" fill="#FCD34D" />
+                </svg>
+
+                {/* Lõi Tri Thức Trung Tâm (Center Knowledge & SLA Core) */}
+                <div
+                  data-inspector-trigger="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleInspectorClick(e, 'closedloop:overview');
+                  }}
+                  onMouseEnter={(e) => {
+                    e.stopPropagation();
+                    handleInspectorHover(e, 'closedloop:overview');
+                  }}
+                  onMouseLeave={() => handleInspectorLeave('closedloop:overview')}
+                  style={{
+                    position: 'absolute',
+                    left: 'calc(50% - 37px)',
+                    top: '58px',
+                    width: '74px',
+                    height: '74px',
+                    borderRadius: '50%',
+                    backgroundColor: '#FFFFFF',
+                    border: '2.5px solid #2563EB',
+                    boxShadow: '0 4px 16px rgba(37, 99, 235, 0.22)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 3,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    userSelect: 'none',
+                  }}
+                >
+                  <RefreshCw size={15} className="animate-spin" style={{ animationDuration: '6s', color: '#2563EB' }} />
+                  <div style={{ fontSize: '0.52rem', fontWeight: 800, color: '#1E40AF', marginTop: '2px', lineHeight: 1.1 }}>
+                    KNOWLEDGE
+                  </div>
+                  <div style={{ fontSize: '0.45rem', fontWeight: 700, color: '#64748B', lineHeight: 1 }}>
+                    & SLA CORE
+                  </div>
+                  <div style={{ fontSize: '0.42rem', fontWeight: 800, color: '#059669', backgroundColor: '#ECFDF5', padding: '1px 4px', borderRadius: '3px', marginTop: '2px' }}>
+                    MAPE-K
+                  </div>
+                </div>
+
+                {/* 4 Trạm Vòng Tròn (Orbital Stations) đặt ở 4 góc xung quanh đường tròn */}
+                {/* Trạm 1: Top-Left (Monitor) */}
+                <div
+                  data-inspector-trigger="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleInspectorClick(e, 'closedloop:monitor');
+                  }}
+                  onMouseEnter={(e) => {
+                    e.stopPropagation();
+                    handleInspectorHover(e, 'closedloop:monitor');
+                  }}
+                  onMouseLeave={() => handleInspectorLeave('closedloop:monitor')}
+                  style={{
+                    position: 'absolute',
+                    left: 'calc(50% - 240px)',
+                    top: '20px',
+                    width: '155px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                    border: '1.5px solid #86EFAC',
+                    borderRadius: '9px',
+                    padding: '5px 9px',
+                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    zIndex: 3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Activity size={13} color="#059669" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#059669' }}>01. MONITOR</div>
+                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#14532D', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Viễn Trắc 60s</div>
+                  </div>
+                </div>
+
+                {/* Trạm 2: Top-Right (Analyze) */}
+                <div
+                  data-inspector-trigger="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleInspectorClick(e, 'closedloop:analyze');
+                  }}
+                  onMouseEnter={(e) => {
+                    e.stopPropagation();
+                    handleInspectorHover(e, 'closedloop:analyze');
+                  }}
+                  onMouseLeave={() => handleInspectorLeave('closedloop:analyze')}
+                  style={{
+                    position: 'absolute',
+                    left: 'calc(50% + 85px)',
+                    top: '20px',
+                    width: '155px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                    border: '1.5px solid #A5B4FC',
+                    borderRadius: '9px',
+                    padding: '5px 9px',
+                    boxShadow: '0 2px 8px rgba(79, 70, 229, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    zIndex: 3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#E0E7FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Cpu size={13} color="#4F46E5" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#4F46E5' }}>02. ANALYZE</div>
+                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Dự Báo & RCA</div>
+                  </div>
+                </div>
+
+                {/* Trạm 3: Bottom-Right (Plan & Execute) */}
+                <div
+                  data-inspector-trigger="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleInspectorClick(e, 'closedloop:plan_execute');
+                  }}
+                  onMouseEnter={(e) => {
+                    e.stopPropagation();
+                    handleInspectorHover(e, 'closedloop:plan_execute');
+                  }}
+                  onMouseLeave={() => handleInspectorLeave('closedloop:plan_execute')}
+                  style={{
+                    position: 'absolute',
+                    left: 'calc(50% + 85px)',
+                    top: '116px',
+                    width: '155px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                    border: '1.5px solid #FCD34D',
+                    borderRadius: '9px',
+                    padding: '5px 9px',
+                    boxShadow: '0 2px 8px rgba(217, 119, 6, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    zIndex: 3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Zap size={13} color="#D97706" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#D97706' }}>03. PLAN & EXEC</div>
+                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#78350F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Policy & K8s Action</div>
+                  </div>
+                </div>
+
+                {/* Trạm 4: Bottom-Left (Verify & Feedback) */}
+                <div
+                  data-inspector-trigger="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleInspectorClick(e, 'closedloop:verify_feedback');
+                  }}
+                  onMouseEnter={(e) => {
+                    e.stopPropagation();
+                    handleInspectorHover(e, 'closedloop:verify_feedback');
+                  }}
+                  onMouseLeave={() => handleInspectorLeave('closedloop:verify_feedback')}
+                  style={{
+                    position: 'absolute',
+                    left: 'calc(50% - 240px)',
+                    top: '116px',
+                    width: '155px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                    border: '1.5px solid #7DD3FC',
+                    borderRadius: '9px',
+                    padding: '5px 9px',
+                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    zIndex: 3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <ShieldCheck size={13} color="#0284C7" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#0284C7' }}>04. VERIFY</div>
+                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#0C4A6E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hậu Kiểm & Hồi Tiếp</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>
@@ -4176,8 +4659,9 @@ export const AIPipelineFlowCanvas = ({
             position: 'absolute',
             left: `${activeInspector.x}px`,
             top: `${activeInspector.y}px`,
-            width: '334px',
+            width: '375px',
             maxWidth: 'calc(100% - 28px)',
+            maxHeight: `calc(100% - ${Math.max(10, activeInspector.y)}px - 16px)`,
             backgroundColor: 'rgba(255, 255, 255, 0.98)',
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
@@ -4189,6 +4673,8 @@ export const AIPipelineFlowCanvas = ({
             zIndex: 60,
             pointerEvents: isInspectorPinned ? 'auto' : 'none',
             overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
             transition: isDraggingInspector ? 'none' : 'left 0.12s ease-out, top 0.12s ease-out',
             userSelect: isDraggingInspector ? 'none' : 'auto',
           }}
@@ -4276,7 +4762,7 @@ export const AIPipelineFlowCanvas = ({
           </div>
 
           {/* Nội dung giải thích dễ hiểu */}
-          <div style={{ padding: '11px 12px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+          <div style={{ padding: '11px 12px', display: 'flex', flexDirection: 'column', gap: '9px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <div style={{ fontSize: '0.75rem', color: '#334155', lineHeight: 1.5 }}>
               {activeInspectorData.summary}
             </div>
@@ -4294,30 +4780,66 @@ export const AIPipelineFlowCanvas = ({
                   gap: '5px',
                 }}
               >
-                {activeInspectorData.rows.map((row) => (
-                  <div
-                    key={row.label}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                      fontSize: '0.7rem',
-                    }}
-                  >
-                    <span style={{ color: '#64748B', fontWeight: 600 }}>{row.label}:</span>
-                    <span
+                {activeInspectorData.rows.map((row, idx) => {
+                  if (row.isFullWidth) {
+                    return (
+                      <div
+                        key={row.label || idx}
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          color: '#334155',
+                          padding: '3px 0 2px 0',
+                          borderBottom: '1px dashed #E2E8F0',
+                          marginBottom: '2px',
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {row.label}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      key={row.label || idx}
                       style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 700,
-                        color: row.highlight ? '#DC2626' : '#0F172A',
-                        textAlign: 'right',
+                        display: 'flex',
+                        alignItems: row.subValue ? 'flex-start' : 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        fontSize: '0.7rem',
+                        padding: '3px 0',
+                        borderBottom: idx < activeInspectorData.rows.length - 1 ? '1px solid #F8FAFC' : 'none',
                       }}
                     >
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
+                      <span style={{ color: '#475569', fontWeight: 600, flexShrink: 0, maxWidth: '56%', lineHeight: 1.3 }}>
+                        {row.label}:
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          color: row.highlight ? '#DC2626' : (row.isRecovered ? '#059669' : '#0F172A'),
+                          textAlign: 'right',
+                          wordBreak: 'break-word',
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        {row.subValue ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
+                            <span>{row.value}</span>
+                            <span style={{ fontSize: '0.62rem', color: '#64748B', fontWeight: 500, fontFamily: 'sans-serif', marginTop: '1px' }}>
+                              {row.subValue}
+                            </span>
+                          </div>
+                        ) : (
+                          row.value
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -4350,6 +4872,7 @@ export const AIPipelineFlowCanvas = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '8px',
+              flexShrink: 0,
             }}
           >
             <span style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600 }}>

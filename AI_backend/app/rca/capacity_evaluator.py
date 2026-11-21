@@ -88,9 +88,11 @@ class PodCapacityAnalyzer:
         self.throttled_threshold_pct = throttled_threshold_pct
 
     def analyze(self, pods: list[PodInfo]) -> PodCapacityAssessment:
-        ready_pods = [p for p in pods if p.status == "Running" and p.ready]
-
-        # If < 2 ready pods, cannot evaluate distribution among siblings
+        ready_pods = [
+            p for p in pods
+            if str(getattr(p, "status", "") or "").lower() == "running"
+            and (getattr(p, "ready", True) is not False)
+        ]
         if len(ready_pods) < 2:
             return PodCapacityAssessment(
                 has_headroom=False,
@@ -136,8 +138,8 @@ class PodCapacityAnalyzer:
                 and (req_rate is None or req_rate < 10.0)
             )
 
-            is_overloaded = is_high_cpu and not has_explicit_good_health
-            is_idle = cpu < self.idle_cpu_threshold and (lat is None or lat < self.normal_latency_threshold_ms)
+            is_overloaded = (is_high_cpu or (req_rate is not None and req_rate >= self.high_request_rate_threshold)) and not has_explicit_good_health
+            is_idle = cpu < self.idle_cpu_threshold and (lat is None or lat < self.normal_latency_threshold_ms) and (req_rate is None or req_rate < self.high_request_rate_threshold)
 
             if is_overloaded:
                 overloaded_pods.append(p)
@@ -159,14 +161,16 @@ class PodCapacityAnalyzer:
         avg_cpu = sum(cpu_values) / len(cpu_values)
         max_cpu = max(cpu_values)
         min_cpu = min(cpu_values)
+        avg_req = sum(getattr(p, 'request_rate', 0.0) or 0.0 for p in ready_pods) / max(1, len(ready_pods))
 
         # Imbalance exists when one pod is heavily loaded while others have significant headroom
         imbalance = (max_cpu - min_cpu) >= 35.0
 
         # Sufficient headroom exists if:
-        # 1. At least 1 pod is idle (< idle_cpu_threshold)
+        # 1. At least 1 pod is idle (< idle_cpu_threshold AND < high_request_rate_threshold)
         # 2. Total aggregate headroom across siblings is at least 45% (equivalent to almost half a healthy pod)
-        has_headroom = (len(idle_pods) >= 1) and (total_headroom >= 45.0)
+        # 3. Average request rate per pod does not exceed high request rate threshold
+        has_headroom = (len(idle_pods) >= 1) and (total_headroom >= 45.0) and (avg_req < self.high_request_rate_threshold)
 
         if has_headroom:
             reason = (

@@ -4,7 +4,7 @@
   "scenario_title": "Tăng cường quy mô bản sao Workload (Scale Replicas)",
   "file_name": "04_action_SCALE_REPLICAS.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-20T10:26:13.261838+00:00",
+  "tested_at": "2026-11-21T18:29:13.747251+00:00",
   "description": "Đỉnh tải giao dịch cao bất thường đẩy CPU lên 96.5% và số bản sao khả dụng thấp hơn yêu cầu. RCA đề xuất SCALE_REPLICAS tăng thêm pods để phân tải.",
   "input_payload": {
     "request_id": "req-20261026-scale-replicas-004",
@@ -97,7 +97,8 @@
       "severity": "HIGH",
       "evidence_status": "PROBABLE",
       "evidence_for": [
-        "Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%)"
+        "Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%)",
+        "Mô hình học sâu AI GRU dự báo rủi ro bão hòa CPU (CPU_OVERLOAD)"
       ],
       "evidence_against": [],
       "missing_evidence": [
@@ -114,6 +115,7 @@
     },
     "evidence": [
       "Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%)",
+      "Mô hình học sâu AI GRU dự báo rủi ro bão hòa CPU (CPU_OVERLOAD)",
       "AI predicted CPU_OVERLOAD (94.0%)"
     ],
     "recommendation": {
@@ -139,7 +141,7 @@
         "manual_playbook": []
       }
     },
-    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Bão hòa tài nguyên CPU (Trạng thái xác minh: PROBABLE, mức độ nghiêm trọng: HIGH, độ tin cậy: 78%). Tín hiệu xác thực ghi nhận trực tiếp: Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%).",
+    "explanation": "Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: Bão hòa tài nguyên CPU (Trạng thái xác minh: PROBABLE, mức độ nghiêm trọng: HIGH, độ tin cậy: 78%). Tín hiệu xác thực ghi nhận trực tiếp: Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%); Mô hình học sâu AI GRU dự báo rủi ro bão hòa CPU (CPU_OVERLOAD).",
     "historical_context_used": false,
     "similar_incident_ids": [],
     "workload_id": "wl-checkout-svc-004",
@@ -150,7 +152,8 @@
     "engine": "Deterministic Multi-Agent SRE",
     "evidence_status": "PROBABLE",
     "evidence_for": [
-      "Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%)"
+      "Mức sử dụng CPU chạm ngưỡng bão hòa (96.5%)",
+      "Mô hình học sâu AI GRU dự báo rủi ro bão hòa CPU (CPU_OVERLOAD)"
     ],
     "evidence_against": [],
     "missing_evidence": [

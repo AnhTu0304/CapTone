@@ -398,7 +398,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               }
             } else if (/scaled successfully to (\d+) replicas/i.test(message)) {
               const rep = message.match(/scaled successfully to (\d+) replicas/i)?.[1] || '2';
-              message = `Đã mở rộng ngang (SCALE_REPLICAS) dịch vụ "${targetSvc}" lên ${rep} bản sao (Replicas) thành công tại namespace "${targetNs}".`;
+              message = `Đã điều chỉnh quy mô (SCALE_REPLICAS) dịch vụ "${targetSvc}" sang ${rep} bản sao (Replicas) thành công tại namespace "${targetNs}".`;
             } else if (/Specific unhealthy pod '([^']+)' terminated and successfully replaced/i.test(message)) {
               const pod = message.match(/Specific unhealthy pod '([^']+)'/i)?.[1] || targetSvc;
               message = `Đã chấm điểm, cô lập và xóa Pod lỗi "${pod}"; ReplicaSet/Controller trong namespace "${targetNs}" đã tự động khởi tạo Pod mới thay thế thành công.`;

@@ -136,7 +136,7 @@ class MetricsManager:
 
         try:
             session = await self._get_http_session()
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=1.5)) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
                 elapsed = (time.perf_counter() - t0) * 1000.0
                 probe_latency = round(elapsed, 2)
                 probe_status = resp.status
@@ -153,12 +153,12 @@ class MetricsManager:
                     except Exception:
                         pass
         except asyncio.TimeoutError:
-            probe_latency = 2000.0
-            probe_status = 504
+            probe_latency = 5000.0
+            probe_status = 408
         except Exception as err:
             logger.debug("Active probe error for %s (%s): %s", pod.name, url, err)
             probe_latency = 0.0
-            probe_status = 500
+            probe_status = 0
 
         # Read recent logs to count requests and 5xx errors
         requests_in_log = 0
@@ -177,7 +177,7 @@ class MetricsManager:
                     namespace=pod.namespace,
                     since_seconds=since_sec,
                     tail_lines=150,
-                    _request_timeout=1.5,
+                    _request_timeout=3.0,
                 )
                 record_k8s_api_call("pods", "read_log", "success", time.perf_counter() - t_log)
                 if raw_logs:
@@ -220,7 +220,7 @@ class MetricsManager:
         else:
             # Baseline when idle (health probe activity)
             request_rate = 0.2
-            http_5xx_rate = 100.0 if probe_status >= 500 else 0.0
+            http_5xx_rate = 100.0 if probe_status in {500, 502, 503} else 0.0
 
         return {
             "request_rate": max(0.0, request_rate),

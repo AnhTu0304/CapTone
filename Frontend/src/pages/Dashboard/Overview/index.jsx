@@ -87,12 +87,13 @@ export const OverviewPage = () => {
   const [recommendations, setRecommendations] = useState([]);
   const [policies, setPolicies] = useState([]);
   const [healingActions, setHealingActions] = useState([]);
+  const [totalHealingActions, setTotalHealingActions] = useState(0);
   const [approvals, setApprovals] = useState([]);
   const [overviewStats, setOverviewStats] = useState(null);
   const [clusterInfo, setClusterInfo] = useState(null);
   const [nodeTelemetry, setNodeTelemetry] = useState(null);
   const [clusterOpenIncidents, setClusterOpenIncidents] = useState(null);
-  const [scaleMode, setScaleMode] = useState('auto');
+  const [scaleMode, setScaleMode] = useState('standard');
   const [isLoading, setIsLoading] = useState(false);
   const [isWsConnected, setIsWsConnected] = useState(false);
   const isFetchingRef = useRef(false);
@@ -475,13 +476,19 @@ export const OverviewPage = () => {
         currentServiceTarget
           ? selfHealingService
               .getActions({
-                limit: 20,
+                limit: 100,
+                hours: 24,
                 cluster_id: clusterParam,
                 organization_id: orgParam,
                 search: currentServiceTarget,
               })
               .then((val) => {
-                if (!isStale()) setHealingActions(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+                if (!isStale()) {
+                  const items = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
+                  const total = typeof val?.total === 'number' ? val.total : items.length;
+                  setHealingActions(items);
+                  setTotalHealingActions(total);
+                }
               })
           : Promise.resolve(),
 
@@ -511,7 +518,7 @@ export const OverviewPage = () => {
   useEffect(() => {
     if (!isClusterOnline) return;
     fetchData();
-    const interval = setInterval(() => fetchData(true), 15000);
+    const interval = setInterval(() => fetchData(true), 4000);
     return () => clearInterval(interval);
   }, [fetchData, isClusterOnline]);
 
@@ -741,6 +748,8 @@ export const OverviewPage = () => {
       const normalized = normalizeServiceName(String(raw)).toLowerCase();
       if (!normalized) return false;
       if (normalized === targetLower) return true;
+      // Tránh việc target 'prometheus' match luôn 'prometheus-node-exporter', 'prometheus-kube-state-metrics'
+      if (targetLower === 'prometheus' && (normalized.includes('node-exporter') || normalized.includes('operator') || normalized.includes('state-metrics'))) return false;
       if (normalized.startsWith(`${targetLower}-`)) return true;
       if (normalized.endsWith(` on ${targetLower}`) || normalized.endsWith(` trên ${targetLower}`)) return true;
       return false;
@@ -921,20 +930,29 @@ export const OverviewPage = () => {
       const k8sApp = String(p.labels?.['k8s-app'] || '').toLowerCase();
       const k8sName = String(p.labels?.['app.kubernetes.io/name'] || '').toLowerCase();
 
-      const isMatch =
-        normalized === targetLower ||
-        normalized.startsWith(`${targetLower}-`) ||
-        podName.startsWith(`${targetLower}-`) ||
-        svcId === targetLower ||
-        appLabel === targetLower ||
-        k8sApp === targetLower ||
-        k8sName === targetLower ||
-        (targetLower === 'coredns' && (podName.startsWith('coredns') || k8sApp === 'kube-dns')) ||
-        (targetLower === 'opentelemetry-collector' && podName.startsWith('otel-collector')) ||
-        (targetLower === 'kube-prometheus-stack-operator' && podName.startsWith('prometheus-kube-prometheus-operator')) ||
-        (targetLower === 'kube-state-metrics' && podName.startsWith('prometheus-kube-state-metrics')) ||
-        (targetLower === 'prometheus-node-exporter' && podName.includes('node-exporter')) ||
-        (targetLower === 'prometheus' && podName.includes('prometheus-prometheus-kube-prometheus-prometheus'));
+      let isMatch = false;
+      if (targetLower === 'prometheus') {
+        // Chỉ khớp máy chủ Prometheus, tuyệt đối KHÔNG gộp node-exporter, operator hay state-metrics
+        isMatch = podName.includes('prometheus-prometheus-kube-prometheus-prometheus') ||
+                  (podName.startsWith('prometheus-') && !podName.includes('node-exporter') && !podName.includes('operator') && !podName.includes('state-metrics'));
+      } else if (targetLower === 'prometheus-node-exporter') {
+        isMatch = podName.includes('node-exporter');
+      } else if (targetLower === 'kube-state-metrics' || targetLower === 'prometheus-kube-state-metrics') {
+        isMatch = podName.includes('kube-state-metrics');
+      } else if (targetLower === 'kube-prometheus-stack-operator' || targetLower === 'prometheus-kube-prometheus-operator') {
+        isMatch = podName.includes('prometheus-operator') || podName.includes('stack-operator');
+      } else {
+        isMatch =
+          normalized === targetLower ||
+          normalized.startsWith(`${targetLower}-`) ||
+          podName.startsWith(`${targetLower}-`) ||
+          svcId === targetLower ||
+          appLabel === targetLower ||
+          k8sApp === targetLower ||
+          k8sName === targetLower ||
+          (targetLower === 'coredns' && (podName.startsWith('coredns') || k8sApp === 'kube-dns')) ||
+          (targetLower === 'opentelemetry-collector' && podName.startsWith('otel-collector'));
+      }
 
       const isAlive = !['Failed', 'Unknown', 'Completed', 'Succeeded'].includes(p.phase);
       return isMatch && isAlive;
@@ -952,10 +970,17 @@ export const OverviewPage = () => {
     // Dự phòng qua liveBatch nếu clusterInfo.pods chưa load xong
     const liveBatch = batchProgressMap[currentServiceTarget];
     const livePt = liveBatch?.latest_point || (Array.isArray(liveBatch?.points) && liveBatch.points[liveBatch.points.length - 1]);
-    const liveReplica = livePt?.replica_count !== undefined && Number(livePt.replica_count) > 0 ? Number(livePt.replica_count) : null;
+    const liveReplica = (livePt?.replica_count !== undefined && Number(livePt.replica_count) > 0)
+      ? Number(livePt.replica_count)
+      : (nodeTelemetry?.replica_count !== undefined && Number(nodeTelemetry.replica_count) > 0)
+        ? Number(nodeTelemetry.replica_count)
+        : null;
 
-    const podsCount = matchedPods.length > 0 ? matchedPods.length : (liveReplica || 1);
-    const nodesCount = activeNodeNames.length > 0 ? activeNodeNames.length : (podsCount > 1 ? Math.min(podsCount, totalClusterNodes) : 1);
+    // Ưu tiên số Pods thời gian thực (liveReplica) từ chuỗi viễn trắc đo trực tiếp trên cụm K8s
+    const podsCount = (liveReplica !== null && liveReplica !== undefined && liveReplica > 0)
+      ? liveReplica
+      : (matchedPods.length > 0 ? matchedPods.length : 0);
+    const nodesCount = activeNodeNames.length > 0 ? activeNodeNames.length : (podsCount > 0 ? Math.min(podsCount, totalClusterNodes) : 0);
 
     return {
       pods: podsCount,
@@ -963,7 +988,7 @@ export const OverviewPage = () => {
       totalClusterNodes,
       nodeNames: activeNodeNames,
     };
-  }, [isClusterOnline, batchProgressMap, currentServiceTarget, clusterInfo]);
+  }, [isClusterOnline, batchProgressMap, currentServiceTarget, clusterInfo, nodeTelemetry]);
 
   // Tổng hợp dữ liệu thực tế CÔ LẬP NGHIÊM NGẶT theo ĐÚNG dịch vụ đang chọn (tuyệt đối không lẫn dữ liệu dịch vụ khác!)
   const pipelineContext = useMemo(() => {
@@ -974,6 +999,8 @@ export const OverviewPage = () => {
       const normalized = normalizeServiceName(String(raw)).toLowerCase();
       if (!normalized) return false;
       if (normalized === targetLower) return true;
+      // Tránh việc target 'prometheus' match luôn 'prometheus-node-exporter', 'prometheus-kube-state-metrics'
+      if (targetLower === 'prometheus' && (normalized.includes('node-exporter') || normalized.includes('operator') || normalized.includes('state-metrics'))) return false;
       if (normalized.startsWith(`${targetLower}-`)) return true;
       if (normalized.endsWith(` on ${targetLower}`) || normalized.endsWith(` trên ${targetLower}`)) return true;
       return false;
@@ -1035,16 +1062,23 @@ export const OverviewPage = () => {
       .filter((v) => Number.isFinite(v) && v > 0);
     const policyCooldownSec = cooldownValues.length > 0 ? Math.min(...cooldownValues) : null;
 
-    // Chỉ lấy hành động thuộc ĐÚNG dịch vụ đang chọn (không fallback sang dịch vụ khác)
+    // Lấy hành động thuộc ĐÚNG dịch vụ đang chọn trong vòng 24 giờ qua (không lấy lịch sử xa xưa)
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+
     const serviceActions = (healingActions || [])
-      .filter(
-        (act) =>
+      .filter((act) => {
+        const matches =
           matchesTarget(act.target_name) ||
           matchesTarget(act.service_id) ||
           matchesTarget(act.workload_name) ||
           matchesTarget(act.result?.target) ||
-          (activeOpenIncident?.id && act.incident_id === activeOpenIncident.id)
-      )
+          (activeOpenIncident?.id && act.incident_id === activeOpenIncident.id);
+        if (!matches) return false;
+        const actTs = act.completed_at || act.started_at || act.created_at;
+        const actTsMs = actTs ? new Date(actTs).getTime() : 0;
+        return !actTsMs || actTsMs >= nowMs - ONE_DAY_MS;
+      })
       .map((act) => ({
         ...act,
         display_action_name: resolveActionLabel(act),
@@ -1101,34 +1135,51 @@ export const OverviewPage = () => {
       const str = String(raw).trim();
       const norm = str.toUpperCase().replace(/\s+/g, '_');
       if (norm === 'SCALE_REPLICAS' || norm === 'SCALE_DOWN' || norm === 'SCALE_UP') {
-        const rep = item?.result?.details?.replicas ?? item?.details?.replicas ?? item?.result?.params?.target_replicas;
+        const rep = item?.result?.details?.replicas ?? item?.details?.replicas ?? item?.result?.params?.target_replicas ?? item?.target_replicas;
+        const curRep = item?.result?.details?.current_replicas ?? item?.details?.current_replicas ?? item?.result?.params?.current_replicas ?? item?.current_replicas;
         const ctxText = `${item?.result?.message || ''} ${item?.incident_title || ''} ${item?.reason || ''} ${item?.reasoning || ''}`.toLowerCase();
-        const isDown =
+        let isDown =
           norm === 'SCALE_DOWN' ||
           ctxText.includes('scale_down') ||
           ctxText.includes('underutilized') ||
           ctxText.includes('thu hẹp') ||
           ctxText.includes('thu nhỏ') ||
           ctxText.includes('dư thừa');
-        const isUp =
+        let isUp =
           norm === 'SCALE_UP' ||
           ctxText.includes('scale_up') ||
           ctxText.includes('quá tải') ||
           ctxText.includes('cpu_overload') ||
           ctxText.includes('traffic');
+
+        if (rep !== undefined && rep !== null && curRep !== undefined && curRep !== null) {
+          if (Number(rep) < Number(curRep)) {
+            isDown = true;
+            isUp = false;
+          } else if (Number(rep) > Number(curRep)) {
+            isUp = true;
+            isDown = false;
+          }
+        } else if (isDown) {
+          isUp = false;
+        }
+
         const base = isDown ? 'Thu nhỏ bản sao Pod' : isUp ? 'Tăng bản sao Pod' : 'Điều chỉnh bản sao Pod';
         return rep !== undefined && rep !== null ? `${base} (→ ${rep})` : base;
       }
       return ACTION_VI_MAP[str] || ACTION_VI_MAP[norm] || str;
     };
 
-    // Ghép lịch sử chi tiết từ incidentDetail.healing_history (chứa kết quả hậu kiểm thật: Đã phục hồi / Chưa phục hồi) + serviceActions
+    // Ghép lịch sử chi tiết từ incidentDetail.healing_history (chứa kết quả hậu kiểm thật: Đã phục hồi / Chưa phục hồi) + serviceActions (trong vòng 24h)
     const detailIncidentRef = activeOpenIncident || lastResolvedIncident;
     const activeIncidentDetail = detailIncidentRef?.id ? incidentDetailsMap[detailIncidentRef.id] : null;
     const rawDetailHistory = Array.isArray(activeIncidentDetail?.healing_history)
       ? activeIncidentDetail.healing_history.filter((item) => {
           const t = item.target_name || item.service_id || '';
-          return !t || matchesTarget(t);
+          if (t && !matchesTarget(t)) return false;
+          const hTs = item.verified_at || item.completed_at || item.created_at;
+          const hTsMs = hTs ? new Date(hTs).getTime() : 0;
+          return !hTsMs || hTsMs >= nowMs - ONE_DAY_MS;
         })
       : [];
 
@@ -1173,23 +1224,6 @@ export const OverviewPage = () => {
           : rawVerResult === false || rawVerResult === 'false'
             ? false
             : null;
-      // Nếu sự cố của hành động này ĐÃ ĐƯỢC GIẢI QUYẾT (RESOLVED), hoặc hiện tại dịch vụ không còn sự cố nào mở:
-      // Hành động SUCCEEDED được công nhận là "Đã phục hồi", tránh bị kẹt màu đỏ ở lịch sử hậu kiểm.
-      const isActionIncidentResolved =
-        (merged.incident_id && resolvedIncidentIds.has(merged.incident_id)) ||
-        isIncidentResolved;
-      const isVerifiedRecovered =
-        verResult === true ||
-        (execStatus === 'SUCCEEDED' && (verResult !== false || isActionIncidentResolved));
-      const isFailedOrUnrecovered =
-        execStatus === 'FAILED' ||
-        (verResult === false && !isActionIncidentResolved);
-      const isVerifying =
-        verResult === null &&
-        execStatus === 'SUCCEEDED' &&
-        !isVerifiedRecovered &&
-        !isFailedOrUnrecovered;
-      const isRunning = execStatus === 'RUNNING';
       const ts =
         merged.verified_at ||
         merged.verification?.verified_at ||
@@ -1197,8 +1231,38 @@ export const OverviewPage = () => {
         merged.started_at ||
         merged.created_at ||
         null;
-      const timeStr = ts
-        ? new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const tsMs = ts ? new Date(ts).getTime() : 0;
+      if (tsMs && tsMs < nowMs - ONE_DAY_MS) return; // Chỉ lấy các hành động trong vòng 24 giờ qua
+      const isRecentAction = tsMs > Date.now() - 180000; // Trong vòng 3 phút
+
+      // Bảo toàn tính trung thực của lịch sử vòng lặp tự trị MAPE-K:
+      // 1. verResult === true: Xác minh hoàn tất và thành công -> "Đã phục hồi" (Xanh).
+      // 2. verResult === false hoặc execStatus === 'FAILED': Thất bại -> "Chưa phục hồi" (Đỏ).
+      // 3. verResult === null và execStatus === 'SUCCEEDED': Đang chờ 60s hậu kiểm -> "Đang hậu kiểm" (Tuyệt đối không gán nhãn Đã phục hồi sớm!).
+      //    (Chỉ những action cũ > 3 phút không có bảng verification mới coi là đã xong trong quá khứ).
+      const isActionIncidentResolved =
+        (merged.incident_id && resolvedIncidentIds.has(merged.incident_id)) ||
+        isIncidentResolved;
+
+      const isVerifiedRecovered =
+        verResult === true ||
+        (verResult === null && execStatus === 'SUCCEEDED' && !isRecentAction && isActionIncidentResolved);
+
+      const isFailedOrUnrecovered =
+        execStatus === 'FAILED' ||
+        verResult === false;
+
+      const isVerifying =
+        verResult === null &&
+        execStatus === 'SUCCEEDED' &&
+        !isVerifiedRecovered &&
+        !isFailedOrUnrecovered;
+
+      const isRunning = execStatus === 'RUNNING';
+      const d = ts ? new Date(ts) : null;
+      // Hiển thị cả ngày và giờ (dd/MM/yyyy HH:mm:ss) theo đúng yêu cầu
+      const timeStr = d
+        ? `${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
         : '--:--:--';
 
       mergedMap.set(key, {
@@ -1219,7 +1283,7 @@ export const OverviewPage = () => {
               : isVerifying
                 ? 'Đang hậu kiểm'
                 : execStatus || 'Đã ghi nhận',
-        tsMs: ts ? new Date(ts).getTime() : 0,
+        tsMs,
         timeStr,
       });
     };
@@ -1227,12 +1291,15 @@ export const OverviewPage = () => {
     serviceActions.forEach((a) => upsertTimelineItem(a, 'act'));
     rawDetailHistory.forEach((h) => upsertTimelineItem(h, 'hist'));
 
-    const actionTimeline = Array.from(mergedMap.values())
-      .sort((a, b) => a.tsMs - b.tsMs)
-      .map((item, idx) => ({
-        ...item,
-        stepIndex: idx + 1,
-      }));
+    // Lịch sử tự phục hồi và hậu kiểm của dịch vụ đang chọn trong vòng 24 giờ qua
+    const sortedMerged = Array.from(mergedMap.values()).sort((a, b) => a.tsMs - b.tsMs);
+    const totalCount = sortedMerged.length;
+    const startStepIndex = 1;
+
+    const actionTimeline = sortedMerged.map((item, idx) => ({
+      ...item,
+      stepIndex: startStepIndex + idx,
+    }));
 
     // Thống kê Hậu kiểm 60s tính trên chính actionTimeline đã ghép đầy đủ kết quả xác minh của ĐÚNG dịch vụ đang chọn
     const succeededCount = actionTimeline.filter((a) => a.isVerifiedRecovered).length;
@@ -1348,7 +1415,7 @@ export const OverviewPage = () => {
       isCircuitBreakerTripped,
       actionTimeline,
       recoveryStats: {
-        totalActions: actionTimeline.length,
+        totalActions: totalCount,
         succeededCount,
         failedCount,
         verifyingCount,
@@ -1358,7 +1425,7 @@ export const OverviewPage = () => {
         isServiceScope: true,
       },
     };
-  }, [currentServiceTarget, incidents, incidentDetailsMap, recommendations, policies, healingActions, approvals, timesteps.length]);
+  }, [currentServiceTarget, incidents, incidentDetailsMap, recommendations, policies, healingActions, totalHealingActions, approvals, timesteps.length]);
 
   // ==========================================
   // 8 THẺ KPI HẠ TẦNG & VẬN HÀNH THỜI GIAN THỰC (CHỈ HIỂN THỊ KHI CỤM/AGENT ONLINE — MẤT KẾT NỐI ĐƯA TOÀN BỘ VỀ 0)
@@ -1925,43 +1992,85 @@ export const OverviewPage = () => {
                 gap: '6px',
               }}
             >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '2px 7px',
-                  borderRadius: '999px',
-                  fontSize: '0.65rem',
-                  fontWeight: 800,
-                  backgroundColor: isClusterOnline ? '#ECFDF5' : '#FEF2F2',
-                  color: isClusterOnline ? '#059669' : '#DC2626',
-                  border: isClusterOnline ? '1px solid #A7F3D0' : '1px solid #FECACA',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                <span
-                  style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: isClusterOnline ? '#10B981' : '#EF4444',
-                    boxShadow: isClusterOnline ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
-                    display: 'inline-block',
-                  }}
-                />
-                {isClusterOnline ? 'LIVE' : 'OFFLINE'}
-              </span>
-              <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>
-                {currentServiceMetadata.pods} Pod
-              </strong>
-              <span style={{ color: '#94A3B8' }}>•</span>
-              <strong
-                style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}
-                title={`Dịch vụ đang chiếm ${currentServiceMetadata.nodes} Node trên tổng số ${currentServiceMetadata.totalClusterNodes} Node của cụm`}
-              >
-                {currentServiceMetadata.nodes} / {currentServiceMetadata.totalClusterNodes} Node
-              </strong>
+              {currentServiceMetadata.pods > 0 ? (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      backgroundColor: isClusterOnline ? '#ECFDF5' : '#FEF2F2',
+                      color: isClusterOnline ? '#059669' : '#DC2626',
+                      border: isClusterOnline ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: isClusterOnline ? '#10B981' : '#EF4444',
+                        boxShadow: isClusterOnline ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
+                        display: 'inline-block',
+                      }}
+                    />
+                    {isClusterOnline ? 'LIVE' : 'OFFLINE'}
+                  </span>
+                  <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>
+                    {currentServiceMetadata.pods} Pod
+                  </strong>
+                  <span style={{ color: '#94A3B8' }}>•</span>
+                  <strong
+                    style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}
+                    title={`Dịch vụ đang chiếm ${currentServiceMetadata.nodes} Node trên tổng số ${currentServiceMetadata.totalClusterNodes} Node của cụm`}
+                  >
+                    {currentServiceMetadata.nodes} / {currentServiceMetadata.totalClusterNodes} Node
+                  </strong>
+                </>
+              ) : (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      backgroundColor: '#F1F5F9',
+                      color: '#64748B',
+                      border: '1px solid #CBD5E1',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: '#94A3B8',
+                        display: 'inline-block',
+                      }}
+                    />
+                    DỪNG
+                  </span>
+                  <strong style={{ fontFamily: 'var(--font-mono)', color: '#64748B' }}>
+                    0 Pod (Chưa triển khai)
+                  </strong>
+                  <span style={{ color: '#94A3B8' }}>•</span>
+                  <strong
+                    style={{ fontFamily: 'var(--font-mono)', color: '#94A3B8' }}
+                  >
+                    0 / {currentServiceMetadata.totalClusterNodes} Node
+                  </strong>
+                </>
+              )}
               {currentServiceMetadata.nodeNames?.length > 0 && (
                 <span
                   style={{

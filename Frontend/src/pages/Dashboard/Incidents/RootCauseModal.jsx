@@ -467,6 +467,30 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const [isExpandedEvidenceList, setIsExpandedEvidenceList] = useState(false);
   const [expandedSymptoms, setExpandedSymptoms] = useState({});
   const [isEvidenceForExpanded, setIsEvidenceForExpanded] = useState(false);
+  const [isResolvingIncident, setIsResolvingIncident] = useState(false);
+  const [resolveSuccess, setResolveSuccess] = useState(false);
+
+  const handleConfirmResolve = async () => {
+    const rawTargetId = incident?.rawId || incident?.id || incidentDetail?.id;
+    if (!rawTargetId) return;
+    try {
+      setIsResolvingIncident(true);
+      await aiService.updateIncidentStatus(rawTargetId, 'RESOLVED');
+      setResolveSuccess(true);
+      setIncidentDetail((prev) => ({
+        ...(prev || {}),
+        status: 'RESOLVED',
+        resolved_at: new Date().toISOString(),
+      }));
+      if (onResolve) {
+        onResolve(incident?.id, rawTargetId);
+      }
+    } catch (err) {
+      console.error('[RootCauseModal] Failed to resolve incident:', err);
+    } finally {
+      setIsResolvingIncident(false);
+    }
+  };
 
   const toggleSymptomKey = (key) => {
     setExpandedSymptomKeys((prev) => {
@@ -1047,8 +1071,9 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         const isFailed = execStatus === 'FAILED' || verResult === false || isStaleRunning;
         const isVerifiedSuccess = !isFailed && (verResult === true || (execStatus === 'SUCCEEDED' && isResolved));
         const isVerifying = execStatus === 'SUCCEEDED' && !isVerifiedSuccess && !isFailed;
-        const timeStr = (item.verified_at || item.completed_at || item.created_at)
-          ? new Date(item.verified_at || item.completed_at || item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        const actionTs = item.verified_at || item.completed_at || item.created_at;
+        const timeStr = actionTs
+          ? new Date(actionTs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           : null;
 
         const rawReason = cleanExecutionError(
@@ -3307,22 +3332,72 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               <span>{copiedKey === 'raw_json' ? 'Đã sao chép JSON' : 'Sao chép JSON'}</span>
             </button>
 
+            {!isResolved && !resolveSuccess ? (
+              <button
+                type="button"
+                onClick={handleConfirmResolve}
+                disabled={isResolvingIncident || isLoadingDetail}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 16px',
+                  backgroundColor: '#DC2626',
+                  border: '1px solid #DC2626',
+                  borderRadius: '8px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  color: '#FFFFFF',
+                  cursor: isResolvingIncident || isLoadingDetail ? 'not-allowed' : 'pointer',
+                  opacity: isResolvingIncident || isLoadingDetail ? 0.7 : 1,
+                  boxShadow: '0 1px 3px rgba(220, 38, 38, 0.25)',
+                  transition: 'all 0.15s ease',
+                }}
+                title="Xác nhận dịch vụ đã ổn định và đóng sự cố này (Đưa vòng lặp MAPE-K về trạng thái bình thường)"
+              >
+                {isResolvingIncident ? (
+                  <RefreshCw size={13} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={14} color="#FFFFFF" />
+                )}
+                <span>{isResolvingIncident ? 'Đang đóng...' : 'Xác Nhận & Đóng Sự Cố'}</span>
+              </button>
+            ) : (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '6px 14px',
+                  backgroundColor: '#DCFCE7',
+                  border: '1px solid #86EFAC',
+                  borderRadius: '8px',
+                  fontSize: '0.78125rem',
+                  fontWeight: 700,
+                  color: '#15803D',
+                }}
+              >
+                <CheckCircle2 size={13} color="#15803D" />
+                <span>Đã đóng sự cố (Resolved)</span>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={onClose}
               style={{
-                padding: '7px 20px',
-                backgroundColor: '#059669',
-                border: '1px solid #059669',
+                padding: '7px 16px',
+                backgroundColor: '#F1F5F9',
+                border: '1px solid #CBD5E1',
                 borderRadius: '8px',
                 fontSize: '0.8125rem',
                 fontWeight: 700,
-                color: '#FFFFFF',
+                color: '#475569',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
             >
-              Đóng
+              Đóng cửa sổ
             </button>
           </div>
         </div>

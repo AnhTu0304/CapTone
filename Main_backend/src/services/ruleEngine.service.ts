@@ -18,8 +18,8 @@ export interface RuleThresholds {
 const DEFAULT_THRESHOLDS: RuleThresholds = {
   cpuScaleThreshold: 80.0,
   latencyScaleThreshold: 200.0,
-  trafficRateThreshold: 500.0,
-  trafficMaxReplicas: 2,
+  trafficRateThreshold: 70.0,
+  trafficMaxReplicas: 3,
   ramCriticalThreshold: 85.0,
   podRestartThreshold: 3,
   http5xxThreshold: 5.0,

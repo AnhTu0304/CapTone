@@ -218,10 +218,29 @@ class RecommendationAgent:
             if two_tier_res.destination_node:
                 recommended_destination_node = two_tier_res.destination_node
         elif cause == "underutilized":
-            action = "SCALE_REPLICAS"
-            base_rep = desired_rep if (desired_rep is not None and desired_rep >= 2) else 2
-            target_replicas = max(1, base_rep - 1)
-            reason = f"Chỉ số tải ở mức thấp kéo dài; thu hẹp số lượng replica (về {target_replicas} replica) để tối ưu hóa tài nguyên"
+            target_name_lower = (
+                getattr(kubernetes, "workload_name", "")
+                or getattr(kubernetes, "pod_name", "")
+                or ""
+            ).lower()
+            workload_type_lower = (getattr(kubernetes, "workload_type", "") or "").lower()
+            is_daemonset = (
+                workload_type_lower == "daemonset"
+                or any(
+                    getattr(getattr(p, "controller", None), "owner_kind", "").lower() == "daemonset"
+                    or getattr(getattr(p, "controller", None), "workload_type", "").lower() == "daemonset"
+                    for p in (getattr(kubernetes, "all_pods", None) or [])
+                )
+                or any(k in target_name_lower for k in ["node-exporter", "kube-proxy", "kindnet", "calico", "flannel", "cilium", "storage-provisioner"])
+            )
+            if is_daemonset:
+                action = "NO_ACTION"
+                reason = "Workload là DaemonSet hoặc thành phần hạ tầng cố định theo Node; không thể thu hẹp số lượng Pod (SCALE_REPLICAS). Duy trì trạng thái vận hành hiện tại."
+            else:
+                action = "SCALE_REPLICAS"
+                base_rep = desired_rep if (desired_rep is not None and desired_rep >= 2) else 2
+                target_replicas = max(1, base_rep - 1)
+                reason = f"Chỉ số tải ở mức thấp kéo dài; thu hẹp số lượng replica (về {target_replicas} replica) để tối ưu hóa tài nguyên"
         elif cause == "database_cache_utilization":
             action = "NO_ACTION"
             reason = "Mức RAM cao (~96%) là bộ nhớ đệm WiredTiger chuẩn của MongoDB. Duy trì giám sát an toàn, không can thiệp hạ tầng để đảm bảo tính sẵn sàng và hiệu năng cơ sở dữ liệu."
@@ -407,7 +426,7 @@ class RecommendationAgent:
             or consecutive_failures >= 3
         )
 
-        if action_history or replace_failed:
+        if (action_history or replace_failed) and action != "SCALE_REPLICAS":
             explicit_cb = bool(action_history and action_history.circuit_breaker_tripped)
             
             # Additional Safety Checks for DRAIN_NODE (Audit 4)

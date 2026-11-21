@@ -12,6 +12,7 @@ export interface IHealingActionFilter {
   execution_mode?: string;
   execution_status?: string;
   search?: string;
+  hours?: number;
 }
 
 export class HealingActionModel {
@@ -259,6 +260,11 @@ export class HealingActionModel {
       )`);
       values.push(`%${filters.search.trim()}%`);
       idx++;
+    }
+
+    if (filters.hours && Number(filters.hours) > 0) {
+      conditions.push(`h.created_at >= NOW() - ($${idx++} || ' hours')::interval`);
+      values.push(String(filters.hours));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

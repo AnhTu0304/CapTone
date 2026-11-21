@@ -56,6 +56,7 @@ export class HealingActionController {
       const execution_mode = req.query.execution_mode as string | undefined;
       const execution_status = req.query.execution_status as string | undefined;
       const search = req.query.search as string | undefined;
+      const hours = req.query.hours ? parseInt(req.query.hours as string, 10) : undefined;
 
       const result = await HealingActionService.getActions(
         {
@@ -67,6 +68,7 @@ export class HealingActionController {
           execution_mode,
           execution_status,
           search,
+          hours,
         },
         user
       );

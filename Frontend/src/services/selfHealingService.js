@@ -23,6 +23,7 @@ export const selfHealingService = {
       if (params.execution_mode && params.execution_mode !== 'all') search.append('execution_mode', params.execution_mode);
       if (params.execution_status && params.execution_status !== 'all') search.append('execution_status', params.execution_status);
       if (params.search || params.target) search.append('search', params.search || params.target);
+      if (params.hours) search.append('hours', String(params.hours));
 
       const qs = search.toString();
       const res = await request(`/healing/actions${qs ? `?${qs}` : ''}`);

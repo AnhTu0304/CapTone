@@ -61,7 +61,27 @@ export const ApprovalsPage = () => {
   const [rejectedIds, setRejectedIds] = useState([]);
 
   // Lựa chọn 1: Chế độ Tự Động Hủy Khi Dịch Vụ Tự Lành (100% Tự động)
-  const [isAutoDismissEnabled, setIsAutoDismissEnabled] = useState(true);
+  const [isAutoDismissEnabled, setIsAutoDismissEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('captone_hitl_auto_dismiss');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleAutoDismiss = useCallback(() => {
+    const next = !isAutoDismissEnabled;
+    setIsAutoDismissEnabled(next);
+    try {
+      localStorage.setItem('captone_hitl_auto_dismiss', String(next));
+    } catch {}
+    if (next) {
+      toastSuccess('Đã BẬT cơ chế tự động hủy khi dịch vụ tự lành (100% Tự động).');
+    } else {
+      toastWarning('Đã TẮT cơ chế tự động hủy (Chuyển sang chế độ duyệt thủ công).');
+    }
+  }, [isAutoDismissEnabled, toastSuccess, toastWarning]);
   const [autoDismissedList, setAutoDismissedList] = useState([]);
   const [workloadHealthMap, setWorkloadHealthMap] = useState({});
 
@@ -673,54 +693,127 @@ export const ApprovalsPage = () => {
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '12px',
-          padding: '10px 16px',
-          borderRadius: '10px',
-          backgroundColor: '#ECFDF5',
-          border: '1px solid #A7F3D0',
-          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.06)',
+          padding: '12px 18px',
+          borderRadius: '12px',
+          backgroundColor: isAutoDismissEnabled ? '#ECFDF5' : '#F8FAFC',
+          border: `1px solid ${isAutoDismissEnabled ? '#A7F3D0' : '#E2E8F0'}`,
+          boxShadow: isAutoDismissEnabled
+            ? '0 2px 8px rgba(16, 185, 129, 0.08)'
+            : '0 1px 3px rgba(15, 23, 42, 0.04)',
+          transition: 'all 0.2s ease',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-          <span
-            style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              backgroundColor: isAutoDismissEnabled ? '#10B981' : '#94A3B8',
-              boxShadow: isAutoDismissEnabled ? '0 0 0 3px rgba(16, 185, 129, 0.25)' : 'none',
-              display: 'inline-block',
-              flexShrink: 0,
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#065F46' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+            <span
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                backgroundColor: isAutoDismissEnabled ? '#10B981' : '#94A3B8',
+                boxShadow: isAutoDismissEnabled ? '0 0 0 3px rgba(16, 185, 129, 0.25)' : 'none',
+                display: 'inline-block',
+                flexShrink: 0,
+                transition: 'all 0.2s ease',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '0.8125rem',
+                fontWeight: 800,
+                color: isAutoDismissEnabled ? '#065F46' : '#334155',
+                letterSpacing: '-0.01em',
+              }}
+            >
               Cơ chế Tự Động Hủy Khi Dịch Vụ Tự Lành (Auto-Dismiss when Self-Healed):
             </span>
+          </div>
+
+          {/* Nút Bật/Tắt dạng Toggle Switch chuẩn hiện đại */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
-              onClick={() => setIsAutoDismissEnabled((prev) => !prev)}
+              role="switch"
+              aria-checked={isAutoDismissEnabled}
+              onClick={toggleAutoDismiss}
+              title={
+                isAutoDismissEnabled
+                  ? 'Bấm để TẮT cơ chế tự động hủy (Chuyển sang chế độ duyệt thủ công)'
+                  : 'Bấm để BẬT cơ chế tự động hủy khi dịch vụ tự lành'
+              }
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                width: '46px',
+                height: '24px',
+                borderRadius: '999px',
+                backgroundColor: isAutoDismissEnabled ? '#10B981' : '#CBD5E1',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '2px',
+                transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
+                boxShadow: isAutoDismissEnabled
+                  ? '0 0 0 2px rgba(16, 185, 129, 0.2), inset 0 1px 2px rgba(0,0,0,0.1)'
+                  : 'inset 0 1px 2px rgba(0,0,0,0.1)',
+                outline: 'none',
+              }}
+            >
+              <span
+                style={{
+                  display: 'block',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FFFFFF',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                  transform: isAutoDismissEnabled ? 'translateX(22px)' : 'translateX(0px)',
+                  transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              />
+            </button>
+
+            {/* Badge nhãn trạng thái có thể click để toggle */}
+            <button
+              type="button"
+              onClick={toggleAutoDismiss}
               title="Nhấn để chuyển đổi giữa Tự động và Thủ công"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '4px',
-                padding: '2px 8px',
+                gap: '5px',
+                padding: '3px 10px',
                 borderRadius: '6px',
                 backgroundColor: isAutoDismissEnabled ? '#D1FAE5' : '#F1F5F9',
                 color: isAutoDismissEnabled ? '#047857' : '#475569',
-                fontWeight: 700,
+                fontWeight: 800,
                 fontSize: '0.75rem',
                 border: isAutoDismissEnabled ? '1px solid #6EE7B7' : '1px solid #CBD5E1',
                 cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all 0.15s ease',
               }}
             >
-              {isAutoDismissEnabled ? 'ĐANG BẬT (100% Tự Động)' : 'ĐANG TẮT (Chế độ Thủ công)'}
+              <span>{isAutoDismissEnabled ? 'ĐANG BẬT (100% Tự Động)' : 'ĐANG TẮT (Chế độ Thủ công)'}</span>
             </button>
           </div>
         </div>
-        <div style={{ fontSize: '0.78125rem', color: '#047857', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Info size={14} color="#059669" />
-          <span>Nếu dịch vụ tự ổn định lại (Pods Ready 100%) hoặc sự cố tự hết, hệ thống sẽ tự động hủy lệnh chờ — không cần từ chối thủ công.</span>
+
+        <div
+          style={{
+            fontSize: '0.78125rem',
+            color: isAutoDismissEnabled ? '#047857' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+        >
+          <Info size={14} color={isAutoDismissEnabled ? '#059669' : '#64748B'} />
+          <span>
+            {isAutoDismissEnabled
+              ? 'Nếu dịch vụ tự ổn định lại (Pods Ready 100%) hoặc sự cố tự hết, hệ thống sẽ tự động hủy lệnh chờ — không cần từ chối thủ công.'
+              : 'Chế độ thủ công đang bật: Các yêu cầu chờ phê duyệt sẽ được giữ nguyên cho đến khi kỹ sư trực tiếp Duyệt hoặc Từ chối.'}
+          </span>
         </div>
       </div>
 

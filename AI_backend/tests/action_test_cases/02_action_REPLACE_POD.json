@@ -4,7 +4,7 @@
   "scenario_title": "Thay thế và tái tạo mới Pod (Replace Pod)",
   "file_name": "02_action_REPLACE_POD.json",
   "test_status": "PASSED",
-  "tested_at": "2026-11-20T10:26:13.199632+00:00",
+  "tested_at": "2026-11-21T18:29:13.651478+00:00",
   "description": "Pod bị CrashLoopBackOff liên tục với restart_count cao (4 lần >= 3). RCA đề xuất REPLACE_POD để Kubernetes hủy và tái tạo lại Pod hoàn toàn sạch.",
   "input_payload": {
     "request_id": "req-20261026-replace-pod-002",

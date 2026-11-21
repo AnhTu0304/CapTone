@@ -435,7 +435,7 @@ export class ClusterModel {
        FROM pods p
        LEFT JOIN namespaces ns ON p.namespace_id = ns.id
        LEFT JOIN nodes n ON p.node_id = n.id
-       WHERE p.cluster_id = $1
+       WHERE p.cluster_id = $1 AND p.deleted_at IS NULL
        ORDER BY p.name ASC`,
       [cluster.id]
     );

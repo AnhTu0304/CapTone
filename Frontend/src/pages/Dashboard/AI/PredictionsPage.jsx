@@ -881,7 +881,7 @@ export const PredictionsPage = () => {
     http_5xx_rate: true,
   });
 
-  const [scaleMode, setScaleMode] = useState('auto'); // 'auto' | 'standard'
+  const [scaleMode, setScaleMode] = useState('standard'); // 'standard' (0-100%) | 'auto'
 
   const [showThreshold, setShowThreshold] = useState(true);
 

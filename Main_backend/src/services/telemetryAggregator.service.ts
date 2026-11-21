@@ -262,7 +262,8 @@ export class TelemetryAggregatorService {
            OR p.name LIKE $3
            OR p.name LIKE $4
          )
-           AND p.deleted_at IS NULL`;
+           AND p.deleted_at IS NULL
+           AND (p.observed_at >= NOW() - INTERVAL '5 minutes' OR p.observed_at IS NULL)`;
       const queryParams: any[] = [serviceId, canonicalName, `${serviceId}-%`, `${canonicalName}-%`];
       if (clusterId) {
         podQuery += ` AND p.cluster_id::text = $5`;
@@ -416,9 +417,9 @@ export class TelemetryAggregatorService {
             termination,
             mongodb_cluster_health: mongodbHealth,
             storage_pvc: storagePvc,
-            cpu_usage_pct: pMetrics ? pMetrics.cpu : undefined,
-            ram_usage_pct: pMetrics ? pMetrics.ram : undefined,
-            request_rate: pMetrics ? pMetrics.request_rate : undefined,
+            cpu_usage_pct: pMetrics ? pMetrics.cpu : (latestMetrics ? Number(latestMetrics.cpu || 0) : undefined),
+            ram_usage_pct: pMetrics ? pMetrics.ram : (latestMetrics ? Number(latestMetrics.ram || 0) : undefined),
+            request_rate: pMetrics ? pMetrics.request_rate : (latestMetrics ? Number(latestMetrics.request_rate || 0) : undefined),
           };
         });
 
