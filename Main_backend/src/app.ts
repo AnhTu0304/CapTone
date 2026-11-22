@@ -7,22 +7,41 @@ import { config } from "./config/env";
 import apiRouter from "./routes";
 import { notFoundHandler } from "./middlewares/notFound.middleware";
 import { errorHandler } from "./middlewares/error.middleware";
+import { ApiError } from "./utils/apiError";
+import { redactSensitiveString } from "./utils/logSanitizer";
 import { otelHttpMiddleware } from "./telemetry/metrics";
 
 const app: Application = express();
 
-// Security & Core Middlewares
-app.use(helmet({ contentSecurityPolicy: false }));
+// Trust exact proxy hop count (e.g. Edge Nginx) so req.ip reflects real client IP without allowing arbitrary X-Forwarded-For spoofing
+app.set('trust proxy', config.trustProxyHops);
 
-// Strict CORS allowlist
+// Security & Core Middlewares (explicit CSP instead of disabled)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+      },
+    },
+  })
+);
+
+// Strict CORS allowlist (forbids wildcard '*' when credentials: true)
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
 
-      const allowed = config.corsOrigins;
-      if (allowed.includes('*') || allowed.includes(origin)) {
+      const allowed = config.corsOrigins.filter((o) => o !== '*');
+      if (allowed.includes(origin)) {
         return callback(null, true);
       }
 
@@ -31,11 +50,11 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error('Chính sách CORS không cho phép truy cập từ nguồn gốc này'));
+      return callback(new ApiError(403, 'Chính sách CORS không cho phép truy cập từ nguồn gốc này'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Agent-Token', 'X-Organization-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Agent-Token', 'X-Organization-Id', 'X-CSRF-Token'],
   })
 );
 
@@ -43,11 +62,16 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(otelHttpMiddleware);
 
-// HTTP Request Logger
+// HTTP Request Logger (masks ?token=, ?secret=, etc. in URL paths)
+morgan.token('sanitized-url', (req: express.Request) =>
+  redactSensitiveString(req.originalUrl || req.url || '')
+);
 if (config.isDevelopment) {
-  app.use(morgan("dev"));
+  app.use(morgan(':method :sanitized-url :status :response-time ms'));
 } else {
-  app.use(morgan("combined"));
+  app.use(
+    morgan(':remote-addr - [:date[clf]] ":method :sanitized-url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"')
+  );
 }
 
 // Root Route

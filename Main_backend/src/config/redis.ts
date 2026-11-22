@@ -1,13 +1,25 @@
+import fs from 'fs';
 import Redis, { RedisOptions } from 'ioredis';
 import { config } from './env';
+import { redactSensitiveString } from '../utils/logSanitizer';
 
 let isRedisConnected = false;
 let redisErrorLogged = false;
+
+const redisTlsOptions = config.redis.tlsEnabled
+  ? {
+      rejectUnauthorized: true,
+      ...(config.redis.tlsCaPath && fs.existsSync(config.redis.tlsCaPath)
+        ? { ca: fs.readFileSync(config.redis.tlsCaPath, 'utf8') }
+        : {}),
+    }
+  : undefined;
 
 const redisOptions: RedisOptions = {
   host: config.redis.host,
   port: config.redis.port,
   password: config.redis.password,
+  ...(redisTlsOptions ? { tls: redisTlsOptions } : {}),
   lazyConnect: true,
   maxRetriesPerRequest: 1,
   enableOfflineQueue: false, // Fail fast so application can fallback immediately to PostgreSQL
@@ -47,7 +59,7 @@ if (config.redis.enabled && config.nodeEnv !== 'test') {
     isRedisConnected = false;
     if (!redisErrorLogged) {
       console.warn(
-        `⚠️ [Redis] Connection unavailable (${err.message || 'ECONNREFUSED'}). Graceful PostgreSQL fallback is active.`
+        `⚠️ [Redis] Connection unavailable (${redactSensitiveString(err.message || 'ECONNREFUSED')}). Graceful PostgreSQL fallback is active.`
       );
       redisErrorLogged = true;
     }
@@ -131,6 +143,7 @@ export async function testRedisConnection(): Promise<boolean> {
 
     const pong = await redisClient.ping();
     if (pong === 'PONG') {
+      isRedisConnected = true;
       console.log(`✅ [Redis] Cache connected successfully at: ${config.redis.host}:${config.redis.port} (PONG)`);
       return true;
     }

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserService } from '../services/user.service';
+import { RefreshTokenService } from '../services/refreshToken.service';
 import { AuditService } from '../services/audit.service';
 import { UserModel } from '../models/user.model';
 import { ApiResponse } from '../utils/apiResponse';
@@ -224,17 +225,17 @@ export class UserController {
    */
   public static async verifyEmailByAuthToken(req: Request, res: Response, next: NextFunction) {
     try {
+      const code = (req.body?.code || req.body?.token) as string | undefined;
+      if (!code || typeof code !== 'string' || !code.trim()) {
+        throw new ApiError(400, 'Vui lòng cung cấp mã xác thực OTP được gửi về email');
+      }
       const userId = (req as any).user?.id;
       if (!userId) {
         throw new ApiError(401, 'Không có quyền truy cập');
       }
-
-      const updatedUser = await UserService.verifyEmailById(userId);
-      return ApiResponse.success(res, 'Xác thực email thành công bằng Token người dùng!', {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        email_verified_at: updatedUser.email_verified_at,
-      }, 200);
+      const { AuthService } = await import('../services/auth.service');
+      const result = await AuthService.verifyEmail(code, userId);
+      return ApiResponse.success(res, 'Xác thực email thành công!', result, 200);
     } catch (error) {
       next(error);
     }
@@ -265,6 +266,40 @@ export class UserController {
       const updatedUser = await UserService.updateStatus(operatorId, operatorRoles, targetUserId, status);
       const actionText = status === 'SUSPENDED' ? 'Khóa' : 'Mở khóa';
       return ApiResponse.success(res, `${actionText} tài khoản người dùng thành công`, updatedUser, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/users/:id/revoke-sessions
+   * Thu hồi toàn bộ phiên đăng nhập của người dùng (Quản trị viên)
+   */
+  public static async revokeUserSessions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const operatorId = (req as any).user?.id;
+      const targetUserId = req.params.id;
+      if (!operatorId) {
+        throw new ApiError(401, 'Không có quyền truy cập');
+      }
+
+      const targetRoles = await UserModel.getUserRoles(targetUserId);
+      const operatorRoles = await UserModel.getUserRoles(operatorId);
+      if (targetRoles.includes('SUPER_ADMIN') && !operatorRoles.includes('SUPER_ADMIN')) {
+        throw new ApiError(403, 'Quản trị viên không có quyền thu hồi phiên của Super Admin');
+      }
+
+      await RefreshTokenService.revokeAllUserSessions(targetUserId, 'ADMIN_REVOKED');
+      await AuditService.recordFromRequest(req, {
+        organization_id: null,
+        action: 'ADMIN_REVOKE_USER_SESSIONS',
+        resource_type: 'USER',
+        resource_id: targetUserId,
+        status: 'SUCCESS',
+        description: 'Quản trị viên đã thu hồi toàn bộ phiên đăng nhập của người dùng',
+      }).catch(() => {});
+
+      return ApiResponse.success(res, 'Đã thu hồi toàn bộ phiên đăng nhập của người dùng', null, 200);
     } catch (error) {
       next(error);
     }
@@ -307,9 +342,27 @@ export class UserController {
         throw new ApiError(401, 'Không có quyền truy cập');
       }
 
-      const { action, description, category } = req.body;
-      const cleanAction = action ? String(action).toUpperCase() : 'USER_ACTION';
-      const cleanDesc = description ? String(description) : 'Người dùng thực hiện thao tác';
+      const ALLOWED_CLIENT_ACTIONS = new Set([
+        'USER_ACTION',
+        'PAGE_VIEW',
+        'DASHBOARD_VIEW',
+        'FILTER_APPLIED',
+        'REPORT_EXPORT',
+        'PROFILE_VIEW',
+        'SECURITY_CHECK',
+        'SESSION_ACTIVITY',
+      ]);
+
+      const { action, description, category } = req.body || {};
+      const cleanAction = action ? String(action).trim().toUpperCase() : 'USER_ACTION';
+      if (!ALLOWED_CLIENT_ACTIONS.has(cleanAction)) {
+        throw new ApiError(400, 'Loại sự kiện hoạt động không hợp lệ');
+      }
+      const cleanDesc = (description ? String(description).trim() : 'Người dùng thực hiện thao tác').slice(0, 500);
+      const cleanCategory =
+        category && /^[A-Z0-9_]{1,40}$/.test(String(category).trim().toUpperCase())
+          ? String(category).trim().toUpperCase()
+          : 'GENERAL';
 
       const log = await AuditService.recordFromRequest(req, {
         action: cleanAction,
@@ -317,7 +370,7 @@ export class UserController {
         status: 'SUCCESS',
         target_type: 'USER',
         target_id: userId,
-        metadata: { category: category || 'GENERAL' },
+        metadata: { category: cleanCategory },
       });
 
       return ApiResponse.success(res, 'Ghi nhận nhật ký hoạt động thành công', log, 201);

@@ -74,15 +74,13 @@ describe('Real-Time Log Streaming & Load Limits Suite [S4][PB17] 3.3', () => {
     controller.abort();
   });
 
-  test('3. Connects successfully with token in query param (?token=...) for native EventSource compatibility', async () => {
+  test('3. Rejects ?token= query parameter authentication to prevent URL/log token leakage (401)', async () => {
     const controller = new AbortController();
     const res = await fetch(`${baseUrl}/api/v1/telemetry/logs/stream?token=${validUserToken}&tail=0`, {
       signal: controller.signal,
     });
 
-    assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.headers.get('content-type'), 'text/event-stream');
-
+    assert.strictEqual(res.status, 401);
     controller.abort();
   });
 

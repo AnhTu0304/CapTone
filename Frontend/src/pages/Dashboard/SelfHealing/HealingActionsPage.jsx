@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
+import { getWsTicket, getAuthToken } from '../../../services/apiClient';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import {
   Zap,
@@ -69,7 +70,7 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
 
   // 3. Parse generic English success message
   const successMatch = rawMsg.match(/Self-healing mitigate action '([^']+)' executed successfully on ([^.]+)\.?/i);
-  if (successMatch || item.execution_status === 'SUCCEEDED') {
+  if (successMatch || item.execution_status === 'COMPLETED') {
     const code = (successMatch ? successMatch[1] : actionCode || '').toUpperCase();
     if (code === 'NO_ACTION') {
       return {
@@ -144,7 +145,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
   const mapBackendActionToUI = useCallback((item) => {
     const shortId = item.id && item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : (item.id || 'N/A');
-    const isCompleted = item.execution_status === 'SUCCEEDED';
+    const isCompleted = item.execution_status === 'COMPLETED';
     const isCancelled = item.execution_status === 'CANCELLED';
     const isFailed = item.execution_status === 'FAILED';
     const isRunning = item.execution_status === 'RUNNING' || item.execution_status === 'PENDING' || item.execution_status === 'QUEUED';
@@ -308,47 +309,53 @@ export const HealingActionsPage = ({ onNavigate }) => {
   // WebSocket Subscription for Realtime Updates from Main Backend
   useEffect(() => {
     let ws = null;
-    try {
-      const isSecure = window.location.protocol === 'https:';
-      const protocol = isSecure ? 'wss:' : 'ws:';
-      let host = window.location.host;
-      if (window.location.port === '3000' || window.location.port === '3001') {
-        const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-          ? '127.0.0.1'
-          : window.location.hostname;
-        host = `${targetHost}:5005`;
-      }
-      const token =
-        localStorage.getItem('selfheal_auth_token') ||
-        localStorage.getItem('token');
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-      const clusterParam = activeClusterId ? `&cluster_id=${encodeURIComponent(activeClusterId)}` : '';
-      const orgId = localStorage.getItem('selfheal_active_org_id');
-      const orgParam = orgId ? `&organization_id=${encodeURIComponent(orgId)}` : '';
-      const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?${tokenParam}${clusterParam}${orgParam}`;
-
-      ws = new WebSocket(wsUrl);
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (
-            payload.type === 'healing_action_started' ||
-            payload.type === 'healing_action_completed' ||
-            payload.type === 'healing_action_aborted' ||
-            payload.type === 'healing_action_updated'
-          ) {
-            console.log('[HealingActionsPage] Live WebSocket notification received:', payload.type);
-            fetchActions();
-          }
-        } catch (e) {
-          // ignore non-json
+    let cancelled = false;
+    (async () => {
+      try {
+        const isSecure = window.location.protocol === 'https:';
+        const protocol = isSecure ? 'wss:' : 'ws:';
+        let host = window.location.host;
+        if (window.location.port === '3000' || window.location.port === '3001') {
+          const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? '127.0.0.1'
+            : window.location.hostname;
+          host = `${targetHost}:5005`;
         }
-      };
-    } catch (wsErr) {
-      console.warn('[HealingActionsPage] WebSocket connection failed:', wsErr);
-    }
+        const token = getAuthToken();
+        if (!token) return;
+        const ticket = await getWsTicket();
+        if (!ticket || cancelled) return;
+        const params = new URLSearchParams();
+        params.set('ticket', ticket);
+        if (activeClusterId) params.set('cluster_id', activeClusterId);
+        const orgId = localStorage.getItem('selfheal_active_org_id');
+        if (orgId) params.set('organization_id', orgId);
+        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?${params.toString()}`;
+
+        ws = new WebSocket(wsUrl);
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (
+              payload.type === 'healing_action_started' ||
+              payload.type === 'healing_action_completed' ||
+              payload.type === 'healing_action_aborted' ||
+              payload.type === 'healing_action_updated'
+            ) {
+              console.log('[HealingActionsPage] Live WebSocket notification received:', payload.type);
+              fetchActions();
+            }
+          } catch (e) {
+            // ignore non-json
+          }
+        };
+      } catch (wsErr) {
+        console.warn('[HealingActionsPage] WebSocket connection failed:', wsErr);
+      }
+    })();
 
     return () => {
+      cancelled = true;
       if (ws) {
         try {
           ws.close();
@@ -866,7 +873,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {recentActions.map((act) => {
-              const isSuccess = act.executionStatus === 'SUCCEEDED';
+              const isSuccess = act.executionStatus === 'COMPLETED';
               const isFailed = act.executionStatus === 'FAILED';
               const badgeBg = isSuccess ? '#DCFCE7' : isFailed ? '#FEE2E2' : '#F1F5F9';
               const badgeColor = isSuccess ? '#15803D' : isFailed ? '#DC2626' : '#64748B';

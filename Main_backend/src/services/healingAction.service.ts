@@ -24,55 +24,40 @@ export class HealingActionService {
       throw new ApiError(401, 'Yêu cầu đăng nhập trước khi truy cập tài nguyên');
     }
 
-    const systemRoles: string[] = [
-      ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-      ...(Array.isArray(user.roles) ? user.roles : []),
-      ...(user.role ? [user.role] : []),
-    ].map((r: string) => String(r).trim().toUpperCase());
-
-    const isSystemAdmin =
-      systemRoles.includes('SUPER_ADMIN') ||
-      systemRoles.includes('SYSTEM_ADMIN');
-
-    let allowedOrgIds: string[] = [];
-    if (!isSystemAdmin) {
-      const memberRes = await pool.query(
-        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-        [user.id]
+    const memberRes = await pool.query(
+      `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+      [user.id]
+    );
+    const allowedOrgIds: string[] = memberRes.rows.map((r: any) => r.organization_id);
+    if (allowedOrgIds.length === 0) {
+      throw new ApiError(
+        403,
+        'Từ chối truy cập: Tài khoản của bạn chưa thuộc tổ chức hoạt động nào'
       );
-      allowedOrgIds = memberRes.rows.map((r: any) => r.organization_id);
-      if (allowedOrgIds.length === 0) {
-        throw new ApiError(
-          403,
-          'Từ chối truy cập: Tài khoản của bạn chưa thuộc tổ chức hoạt động nào'
-        );
-      }
     }
 
-    // Strict mode: không fallback sang tổ chức đầu tiên và không chấp nhận 'ALL' cho non-system-admin
+    // Strict mode: mọi vai trò (bao gồm SUPER_ADMIN / SYSTEM_ADMIN / ADMIN) đều phải có organization_id hợp lệ và tư cách thành viên ACTIVE
     const rawOrgId = organizationId ? String(organizationId).trim() : '';
     const isAll = rawOrgId.toUpperCase() === 'ALL';
-    if (!isSystemAdmin && (!rawOrgId || isAll)) {
+    if (!rawOrgId || isAll) {
       throw new ApiError(403, 'Từ chối truy cập: Thiếu hoặc không hợp lệ ngữ cảnh tổ chức (organization_id)');
     }
-    const targetOrgId = rawOrgId && !isAll ? rawOrgId : undefined;
-    if (targetOrgId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrgId)) {
+    const targetOrgId = rawOrgId;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrgId)) {
       throw new ApiError(400, 'Định dạng định danh tổ chức (organization_id) không hợp lệ');
     }
 
-    if (!isSystemAdmin && targetOrgId) {
-      if (!allowedOrgIds.includes(targetOrgId)) {
-        throw new ApiError(
-          403,
-          'Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này'
-        );
-      }
+    if (!allowedOrgIds.includes(targetOrgId)) {
+      throw new ApiError(
+        403,
+        'Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này'
+      );
     }
 
     // Kiểm tra tính hợp lệ của Cụm K8s (nếu có cung cấp)
     if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
       const clusterCheck = await HealingActionModel.validateClusterBelongsToOrg(clusterId, targetOrgId);
-      if (!clusterCheck && !isSystemAdmin) {
+      if (!clusterCheck) {
         throw new ApiError(
           403,
           'Từ chối truy cập: Cụm Kubernetes này không tồn tại hoặc không thuộc quyền quản lý của tổ chức của bạn'
@@ -85,6 +70,7 @@ export class HealingActionService {
 
   /**
    * Kiểm tra quyền sở hữu chính sách tự phục hồi theo Tổ chức (Chống IDOR)
+   * Decision 2.2: SUPER_ADMIN / SYSTEM_ADMIN cũng bắt buộc phải là thành viên ACTIVE của tổ chức
    */
   public static async validatePolicyOwnership(
     policyOrgId: string | null | undefined,
@@ -93,16 +79,6 @@ export class HealingActionService {
   ): Promise<void> {
     if (!user || !user.id) {
       throw new ApiError(401, 'Yêu cầu đăng nhập trước khi thao tác chính sách');
-    }
-
-    const systemRoles = [
-      ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-      ...(Array.isArray(user.roles) ? user.roles : []),
-      ...(user.role ? [user.role] : []),
-    ].map((r: string) => String(r).trim().toUpperCase());
-
-    if (systemRoles.includes('SUPER_ADMIN') || systemRoles.includes('SYSTEM_ADMIN')) {
-      return; // Platform admin
     }
 
     if (!policyOrgId) {
@@ -233,7 +209,13 @@ export class HealingActionService {
   /**
    * 4. Execute or retry an action
    */
-  public static async executeAction(actionId: string, executedBy?: string | null, user?: any, reqContext?: IAuditRequestContext) {
+  public static async executeAction(
+    actionId: string,
+    executedBy?: string | null,
+    user?: any,
+    reqContext?: IAuditRequestContext,
+    options?: { timeoutMs?: number; requestedOrgId?: string }
+  ) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
@@ -246,6 +228,31 @@ export class HealingActionService {
     if (action.execution_status === 'RUNNING') {
       throw new ApiError(409, 'Hành động tự phục hồi này đang trong trạng thái thực thi');
     }
+    if (action.approval_status === 'EXPIRED') {
+      throw new ApiError(409, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED), không thể thực thi');
+    }
+    if (action.approval_status === 'REJECTED') {
+      throw new ApiError(403, 'Hành động này đã bị từ chối phê duyệt, không thể thực thi');
+    }
+    if (!['APPROVED', 'AUTO_APPROVED'].includes(String(action.approval_status || '').toUpperCase())) {
+      throw new ApiError(403, 'Hành động chưa được phê duyệt qua cổng HITL, không thể thực thi');
+    }
+    if (action.execution_status !== 'PENDING') {
+      throw new ApiError(409, `Hành động đang ở trạng thái ${action.execution_status}, chỉ có thể thực thi hành động PENDING`);
+    }
+
+    // Tenant & Cluster Access Validation (Decision 2.2: no system admin bypass)
+    if (user) {
+      if (options?.requestedOrgId && action.organization_id !== options.requestedOrgId.trim()) {
+        throw new ApiError(403, 'Từ chối truy cập: Hành động không thuộc tổ chức được yêu cầu');
+      }
+      const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
+      const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+      const roleCode = String(member?.role_code || '').toUpperCase();
+      if (!member || member.status !== 'ACTIVE' || !['SME_OWNER', 'DEVOPS', 'ADMIN'].includes(roleCode)) {
+        throw new ApiError(403, 'Tài khoản không có quyền kích hoạt thực thi hành động tự phục hồi cho tổ chức này');
+      }
+    }
 
     // Target Concurrency Lock: Prevent multiple actions running concurrently on the same target workload/incident
     if (action.target_name || action.incident_id) {
@@ -254,7 +261,7 @@ export class HealingActionService {
          FROM healing_actions h
          LEFT JOIN healing_action_types t ON t.id = h.action_type_id
          WHERE h.id != $1 
-           AND h.execution_status IN ('RUNNING', 'PENDING')
+           AND h.execution_status IN ('RUNNING')
            AND (
              (h.target_name IS NOT NULL AND h.target_name = $2)
              OR (h.incident_id IS NOT NULL AND h.incident_id = $3)
@@ -268,24 +275,6 @@ export class HealingActionService {
           409,
           `Đang có hành động '${running.action_type_code || 'REMEDIATION'}' (${running.execution_status}) đang chạy trên mục tiêu '${action.target_name || action.incident_id}'. Vui lòng chờ hành động trước hoàn tất.`
         );
-      }
-    }
-
-    // Tenant & Cluster Access Validation
-    if (user) {
-      const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      const systemRoles = [
-        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-        ...(Array.isArray(user.roles) ? user.roles : []),
-        ...(user.role ? [user.role] : []),
-      ].map((r: string) => String(r).trim().toUpperCase());
-
-      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
-        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
-        const roleCode = String(member?.role_code || '').toUpperCase();
-        if (roleCode === 'VIEWER') {
-          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được kích hoạt thực thi hành động tự phục hồi');
-        }
       }
     }
 
@@ -307,6 +296,7 @@ export class HealingActionService {
     }
 
     const result = await HealingActionModel.executeAction(actionId, executedBy || undefined);
+    const attemptId = result?.attempt?.id || null;
 
     // Resolve actual namespace and canonical workload name dynamically
     let targetNamespace = 'default';
@@ -325,72 +315,102 @@ export class HealingActionService {
       .trim()
       .replace(/\s+/g, '_');
 
-    if (actionCode === 'NO_ACTION') {
-      console.log(`🛡️ [HealingActionService] Action is NO_ACTION (Circuit Breaker). Skipping automated agent dispatch.`);
-    } else {
-      try {
-        const dispatchResult = await dispatchHealingActionToAgent({
-          action_id: actionId,
-          action_type: actionCode,
-          target_name: targetWorkloadName,
-          namespace: targetNamespace,
-          cluster_id: action.cluster_id,
-          environment_id: action.environment_id,
-          params: action.result?.params || {},
-        });
-        if (dispatchResult?.dispatched) {
-          // Fallback safety timeout: nếu K8s Agent không phản hồi sau 60 giây, đánh dấu FAILED tránh kẹt RUNNING
-          setTimeout(async () => {
-            try {
-              await pool.query(
-                `UPDATE healing_actions 
-                 SET execution_status = 'FAILED', 
-                     completed_at = COALESCE(completed_at, NOW()),
-                     error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
-                     result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Agent execution timeout after 60s"'::jsonb) 
-                 WHERE id = $1 AND execution_status = 'RUNNING'`,
-                [actionId]
-              );
-              if (action.incident_id) {
-                await pool.query(
-                  `UPDATE incidents SET status = 'OPEN', resolved_at = NULL WHERE id = $1 AND status = 'RESOLVED'`,
-                  [action.incident_id]
-                ).catch(() => {});
-              }
-            } catch (e) {
-              // ignore
-            }
-          }, 60000);
+    const timeoutMs = Math.max(50, Number(options?.timeoutMs ?? 60000));
 
-          // Wait briefly for K8s Agent WebSocket action_result callback to persist actual K8s outcome
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          const refreshed = await HealingActionModel.findActionById(actionId);
-          if (refreshed) {
-            result.action = refreshed;
+    if (actionCode === 'NO_ACTION') {
+      console.log(`🛡️ [HealingActionService] Action is NO_ACTION (Circuit Breaker). Marking SKIPPED without Agent dispatch.`);
+      await pool.query(
+        `UPDATE execution_attempts SET status = 'SKIPPED'::execution_status, completed_at = NOW(), duration_ms = 0 WHERE id = $1 AND status = 'RUNNING';`,
+        [attemptId]
+      ).catch(() => {});
+      const skippedRes = await pool.query(
+        `UPDATE healing_actions SET execution_status = 'SKIPPED'::execution_status, completed_at = NOW(), result = COALESCE(result, '{}'::jsonb) || '{"status":"SKIPPED","message":"NO_ACTION circuit breaker"}'::jsonb WHERE id = $1 RETURNING *;`,
+        [actionId]
+      );
+      if (skippedRes.rows[0]) result.action = skippedRes.rows[0];
+    } else if (!action.environment_id || !action.cluster_id) {
+      const routeErr = 'Thiếu environment_id hoặc cluster_id hợp lệ để định tuyến Kubernetes Agent';
+      const failedRow = await HealingActionModel.recordDispatchFailure(actionId, attemptId, routeErr, {
+        reason: 'MISSING_ROUTING_CONTEXT',
+        environment_id: action.environment_id || null,
+        cluster_id: action.cluster_id || null,
+      });
+      if (failedRow) result.action = failedRow;
+    } else {
+      const clusterOwner = await HealingActionModel.validateClusterBelongsToOrg(
+        action.cluster_id,
+        action.organization_id
+      );
+      if (!clusterOwner || clusterOwner.environment_id !== action.environment_id) {
+        const crossErr = 'Cụm Kubernetes không khớp môi trường hoặc tổ chức sở hữu hành động';
+        const failedRow = await HealingActionModel.recordDispatchFailure(actionId, attemptId, crossErr, {
+          reason: 'CLUSTER_ENV_MISMATCH',
+        });
+        if (failedRow) result.action = failedRow;
+      } else {
+        try {
+          const dispatchResult = await dispatchHealingActionToAgent({
+            action_id: actionId,
+            action_type: actionCode,
+            target_name: targetWorkloadName,
+            namespace: targetNamespace,
+            cluster_id: clusterOwner.id,
+            environment_id: action.environment_id,
+            organization_id: action.organization_id,
+            params: action.result?.params || {},
+          });
+          if (dispatchResult?.dispatched) {
+            // Timeout watchdog: marks both attempt and action FAILED if Agent never returns
+            const timeoutHandle = setTimeout(async () => {
+              try {
+                await HealingActionModel.recordDispatchFailure(
+                  actionId,
+                  attemptId,
+                  `Quá thời gian chờ (${timeoutMs}ms) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.`,
+                  { timeout: true, timeout_ms: timeoutMs }
+                );
+                if (action.incident_id) {
+                  await pool.query(
+                    `UPDATE incidents SET status = 'OPEN', resolved_at = NULL WHERE id = $1 AND status = 'RESOLVED'`,
+                    [action.incident_id]
+                  ).catch(() => {});
+                }
+              } catch {}
+            }, timeoutMs);
+            if (typeof timeoutHandle.unref === 'function') {
+              timeoutHandle.unref();
+            }
+
+            // Wait briefly for quick Agent action_result callbacks without delaying short timeout tests
+            await new Promise((resolve) => setTimeout(resolve, Math.min(timeoutMs <= 1000 ? 40 : 1500, 1500)));
+            const refreshed = await HealingActionModel.findActionById(actionId);
+            if (refreshed) {
+              result.action = refreshed;
+            }
+          } else {
+            const failedRow = await HealingActionModel.recordDispatchFailure(
+              actionId,
+              attemptId,
+              'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
+              { reason: 'NO_MATCHING_AGENT' }
+            );
+            if (action.incident_id) {
+              await pool.query(
+                'UPDATE incidents SET status = \'OPEN\', resolved_at = NULL WHERE id = $1 AND status = \'RESOLVED\'',
+                [action.incident_id]
+              ).catch(() => {});
+            }
+            if (failedRow) result.action = failedRow;
           }
-        } else {
-          await pool.query(
-            `UPDATE healing_actions 
-             SET execution_status = 'FAILED', 
-                 completed_at = NOW(),
-                 error_message = 'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
-                 result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Không có Agent K8s trực tuyến"'::jsonb) 
-             WHERE id = $1 AND execution_status = 'RUNNING'`,
-            [actionId]
+        } catch (e: any) {
+          const failedRow = await HealingActionModel.recordDispatchFailure(
+            actionId,
+            attemptId,
+            e?.message || 'Lỗi gửi lệnh tới Kubernetes Agent',
+            { reason: 'DISPATCH_EXCEPTION' }
           );
-          if (action.incident_id) {
-            await pool.query(
-              'UPDATE incidents SET status = \'OPEN\', resolved_at = NULL WHERE id = $1 AND status = \'RESOLVED\'',
-              [action.incident_id]
-            ).catch(() => {});
-          }
-          const refreshed = await HealingActionModel.findActionById(actionId);
-          if (refreshed) {
-            result.action = refreshed;
-          }
+          if (failedRow) result.action = failedRow;
         }
-      } catch (e) {
-        console.warn('[HealingActionService] Dispatch to agent failed:', e);
       }
     }
 
@@ -400,7 +420,7 @@ export class HealingActionService {
         type: 'healing_action_completed',
         data: {
           action_id: actionId,
-          status: result.action?.execution_status || 'SUCCEEDED',
+          status: result.action?.execution_status || 'COMPLETED',
           target_name: targetWorkloadName,
           cluster_name: action.cluster_name,
           result: result.action?.result,
@@ -413,8 +433,8 @@ export class HealingActionService {
 
     // Ghi sổ cái kiểm toán bất biến (Immutable Audit Log)
     try {
-      const actStatus = result.action?.execution_status || 'SUCCEEDED';
-      const isSuccess = actStatus === 'SUCCEEDED';
+      const actStatus = result.action?.execution_status || 'COMPLETED';
+      const isSuccess = actStatus === 'COMPLETED';
       await AuditService.record({
         organization_id: action.organization_id || null,
         user_id: user?.id || (executedBy && !executedBy.includes('@') && executedBy.length > 30 ? executedBy : null),
@@ -471,25 +491,17 @@ export class HealingActionService {
       throw new ApiError(404, 'Không tìm thấy hành động tự phục hồi để hủy bỏ');
     }
 
-    // Tenant & Cluster Access Validation
+    // Tenant & Cluster Access Validation (no system admin bypass)
     if (user) {
       const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      const systemRoles = [
-        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-        ...(Array.isArray(user.roles) ? user.roles : []),
-        ...(user.role ? [user.role] : []),
-      ].map((r: string) => String(r).trim().toUpperCase());
-
-      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
-        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
-        const roleCode = String(member?.role_code || '').toUpperCase();
-        if (roleCode === 'VIEWER') {
-          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được hủy bỏ hành động tự phục hồi');
-        }
+      const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+      const roleCode = String(member?.role_code || '').toUpperCase();
+      if (!member || member.status !== 'ACTIVE' || !['SME_OWNER', 'DEVOPS', 'ADMIN'].includes(roleCode)) {
+        throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được hủy bỏ hành động tự phục hồi');
       }
     }
 
-    const completedStatuses = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+    const completedStatuses = ['COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
     if (completedStatuses.includes(action.execution_status)) {
       throw new ApiError(
         400,
@@ -572,23 +584,16 @@ export class HealingActionService {
       if (!action) {
         throw new ApiError(404, 'Không tìm thấy hành động để cập nhật trạng thái');
       }
-      const systemRoles = [
-        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-        ...(Array.isArray(user.roles) ? user.roles : []),
-        ...(user.role ? [user.role] : []),
-      ].map((r: string) => String(r).trim().toUpperCase());
-      const isSystemAdmin = systemRoles.includes('SUPER_ADMIN') || systemRoles.includes('SYSTEM_ADMIN');
-      if (!isSystemAdmin && requestedOrgId && action.organization_id !== requestedOrgId.trim()) {
+      if (requestedOrgId && action.organization_id !== requestedOrgId.trim()) {
         throw new ApiError(403, 'Từ chối truy cập: Hành động không thuộc tổ chức được yêu cầu');
       }
       const validation = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      if (!isSystemAdmin) {
-        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id, user.id);
-        if (!member || member.status !== 'ACTIVE' || String(member.role_code || '').toUpperCase() === 'VIEWER') {
-          throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền cập nhật trạng thái hành động này');
-        }
-        scopedOrgId = validation.orgId || action.organization_id;
+      const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id, user.id);
+      const roleCode = String(member?.role_code || '').toUpperCase();
+      if (!member || member.status !== 'ACTIVE' || !['SME_OWNER', 'DEVOPS', 'ADMIN'].includes(roleCode)) {
+        throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền cập nhật trạng thái hành động này');
       }
+      scopedOrgId = validation.orgId || action.organization_id;
     }
 
     const updated = await HealingActionModel.updateStatus(actionId, status, result, errorMessage, scopedOrgId);
@@ -829,6 +834,16 @@ export class HealingActionService {
     if (!data.name || !data.organization_id) {
       throw new ApiError(400, 'Tên chính sách và tổ chức là bắt buộc');
     }
+    if (user?.id) {
+      const member = await OrganizationMemberModel.findByOrgAndUser(data.organization_id, user.id);
+      if (
+        !member ||
+        member.status !== 'ACTIVE' ||
+        !['SME_OWNER', 'DEVOPS', 'ADMIN'].includes(member.role_code.toUpperCase())
+      ) {
+        throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền tạo chính sách cho tổ chức này');
+      }
+    }
     const created = await HealingActionModel.createPolicy(data);
 
     try {
@@ -941,7 +956,14 @@ export class HealingActionService {
     return await HealingActionModel.findApprovals(filters);
   }
 
-  public static async approveAction(actionId: string, approvedBy: string, reason?: string, user?: any, reqContext?: IAuditRequestContext) {
+  public static async approveAction(
+    actionId: string,
+    approvedBy: string,
+    reason?: string,
+    user?: any,
+    reqContext?: IAuditRequestContext,
+    requestedOrgId?: string
+  ) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
@@ -949,20 +971,15 @@ export class HealingActionService {
     if (!action) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể phê duyệt');
     }
+    if (requestedOrgId && action.organization_id !== requestedOrgId.trim()) {
+      throw new ApiError(403, 'Từ chối truy cập: Hành động không thuộc tổ chức được yêu cầu');
+    }
     if (user) {
       const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      const systemRoles = [
-        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-        ...(Array.isArray(user.roles) ? user.roles : []),
-        ...(user.role ? [user.role] : []),
-      ].map((r: string) => String(r).trim().toUpperCase());
-
-      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
-        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
-        const roleCode = String(member?.role_code || '').toUpperCase();
-        if (roleCode === 'VIEWER') {
-          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được phê duyệt hành động tự phục hồi');
-        }
+      const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+      const roleCode = String(member?.role_code || '').toUpperCase();
+      if (!member || member.status !== 'ACTIVE' || !['SME_OWNER', 'DEVOPS', 'ADMIN'].includes(roleCode)) {
+        throw new ApiError(403, 'Tài khoản quyền Viewer hoặc không thuộc tổ chức không được phê duyệt hành động tự phục hồi');
       }
     }
     const approved = await HealingActionModel.approveAction(actionId, approvedBy, reason);
@@ -1003,9 +1020,9 @@ export class HealingActionService {
 
     // Sau khi phê duyệt HITL thành công, tự động kích hoạt thực thi xuống K8s Agent
     try {
-      await this.executeAction(actionId, approvedBy, user, reqContext);
-    } catch (execErr) {
-      console.warn('[HealingActionService] Auto-execute after HITL approval warning:', execErr);
+      await this.executeAction(actionId, approvedBy, user, reqContext, { requestedOrgId });
+    } catch (execErr: any) {
+      console.warn('[HealingActionService] Auto-execute after HITL approval warning:', execErr?.message || execErr);
     }
     // Phát sự kiện phê duyệt HITL thành công tới Frontend qua WebSocket
     try {
@@ -1027,7 +1044,14 @@ export class HealingActionService {
     return await HealingActionModel.findActionById(actionId);
   }
 
-  public static async rejectAction(actionId: string, rejectedBy: string, reason?: string, user?: any, reqContext?: IAuditRequestContext) {
+  public static async rejectAction(
+    actionId: string,
+    rejectedBy: string,
+    reason?: string,
+    user?: any,
+    reqContext?: IAuditRequestContext,
+    requestedOrgId?: string
+  ) {
     if (!actionId) {
       throw new ApiError(400, 'Mã hành động không hợp lệ');
     }
@@ -1035,20 +1059,15 @@ export class HealingActionService {
     if (!action) {
       throw new ApiError(404, 'Không tìm thấy hành động hoặc hành động không thể từ chối');
     }
+    if (requestedOrgId && action.organization_id !== requestedOrgId.trim()) {
+      throw new ApiError(403, 'Từ chối truy cập: Hành động không thuộc tổ chức được yêu cầu');
+    }
     if (user) {
       const { orgId } = await this.validateUserOrgAndCluster(user, action.organization_id, action.cluster_id);
-      const systemRoles = [
-        ...(Array.isArray(user.systemRoles) ? user.systemRoles : []),
-        ...(Array.isArray(user.roles) ? user.roles : []),
-        ...(user.role ? [user.role] : []),
-      ].map((r: string) => String(r).trim().toUpperCase());
-
-      if (!systemRoles.includes('SUPER_ADMIN') && !systemRoles.includes('SYSTEM_ADMIN')) {
-        const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
-        const roleCode = String(member?.role_code || '').toUpperCase();
-        if (roleCode === 'VIEWER') {
-          throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được từ chối hành động tự phục hồi');
-        }
+      const member = await OrganizationMemberModel.findByOrgAndUser(action.organization_id || orgId, user.id);
+      const roleCode = String(member?.role_code || '').toUpperCase();
+      if (!member || member.status !== 'ACTIVE' || !['SME_OWNER', 'DEVOPS', 'ADMIN'].includes(roleCode)) {
+        throw new ApiError(403, 'Tài khoản quyền Viewer hoặc không thuộc tổ chức không được từ chối hành động tự phục hồi');
       }
     }
     const rejected = await HealingActionModel.rejectAction(actionId, rejectedBy, reason);

@@ -75,9 +75,29 @@ class MultiHeadLSTM(nn.Module):
         return torch.cat([head(features) for head in self.risk_heads], dim=1)
 
 
+def validate_model_config(config: ModelConfig) -> None:
+    """Enforce bounded hyperparameters to prevent resource exhaustion from crafted checkpoints."""
+    if not (1 <= int(config.input_size) <= 64):
+        raise ValueError("Invalid model_config.input_size")
+    if not (1 <= int(config.hidden_size) <= 1024):
+        raise ValueError("Invalid model_config.hidden_size")
+    if not (1 <= int(config.num_layers) <= 8):
+        raise ValueError("Invalid model_config.num_layers")
+    if not (0.0 <= float(config.dropout) <= 0.8):
+        raise ValueError("Invalid model_config.dropout")
+    if not (1 <= int(config.shared_size) <= 1024):
+        raise ValueError("Invalid model_config.shared_size")
+    if not (1 <= int(config.num_risks) <= 32):
+        raise ValueError("Invalid model_config.num_risks")
+
+
 def build_risk_model(checkpoint: dict[str, Any]) -> nn.Module:
     """Auto-detect GRU vs LSTM from checkpoint state_dict or metadata and load weights."""
-    config = ModelConfig(**checkpoint["model_config"])
+    raw_cfg = checkpoint.get("model_config")
+    if not isinstance(raw_cfg, dict):
+        raise ValueError("Invalid checkpoint model_config")
+    config = ModelConfig(**raw_cfg)
+    validate_model_config(config)
     state_dict = checkpoint["model_state_dict"]
     is_lstm = (
         any(str(k).startswith("lstm.") for k in state_dict.keys())

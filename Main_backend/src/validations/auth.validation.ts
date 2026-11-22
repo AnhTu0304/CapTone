@@ -74,3 +74,25 @@ export const verifyEmailSchema = z.object({
   (data) => Boolean(data.body?.code || data.body?.token || data.query?.code || data.query?.token),
   { message: 'Vui lòng cung cấp mã xác thực được gửi về email của bạn' }
 );
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z
+      .string('Vui lòng cung cấp email')
+      .trim()
+      .email('Địa chỉ email không đúng định dạng'),
+  }),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z
+      .string('Vui lòng cung cấp mã đặt lại mật khẩu')
+      .trim()
+      .min(16, 'Mã đặt lại mật khẩu không hợp lệ'),
+    new_password: z
+      .string('Vui lòng cung cấp mật khẩu mới')
+      .min(6, 'Mật khẩu mới phải có tối thiểu 6 ký tự')
+      .max(128, 'Mật khẩu mới không được vượt quá 128 ký tự'),
+  }),
+});

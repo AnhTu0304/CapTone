@@ -120,17 +120,8 @@ export class OrganizationInvitationModel {
   > {
     const db = client || pool;
     const query = `
-      SELECT 
-        oi.*,
-        o.name AS org_name,
-        o.status AS org_status,
-        o.deleted_at AS org_deleted_at,
-        r.code AS role_code,
-        r.name AS role_name
-      FROM organization_invitations oi
-      JOIN organizations o ON oi.organization_id = o.id
-      JOIN organization_roles r ON oi.role_id = r.id
-      WHERE oi.token_hash = $1
+      SELECT *
+      FROM public.fn_lookup_invitation_by_token_hash($1)
       LIMIT 1;
     `;
     const res = await db.query(query, [tokenHash]);

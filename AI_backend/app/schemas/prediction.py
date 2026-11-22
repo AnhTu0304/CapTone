@@ -38,14 +38,14 @@ class GRUMetricPoint(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    cpu: float = Field(ge=0)
-    ram: float = Field(ge=0)
-    disk: float = Field(ge=0)
-    request_rate: float = Field(ge=0)
-    latency: float = Field(ge=0)
-    http_5xx_rate: float = Field(ge=0)
-    pod_restart_count: int = Field(ge=0)
-    replica_count: int = Field(ge=1)
+    cpu: float = Field(ge=0, le=100, allow_inf_nan=False)
+    ram: float = Field(ge=0, le=100, allow_inf_nan=False)
+    disk: float = Field(ge=0, le=100, allow_inf_nan=False)
+    request_rate: float = Field(ge=0, le=1_000_000, allow_inf_nan=False)
+    latency: float = Field(ge=0, le=1_000_000, allow_inf_nan=False)
+    http_5xx_rate: float = Field(ge=0, le=100, allow_inf_nan=False)
+    pod_restart_count: int = Field(ge=0, le=100_000)
+    replica_count: int = Field(ge=1, le=10_000)
 
 
 class PredictionRequest(BaseModel):

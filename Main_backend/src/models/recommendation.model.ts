@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
-
 import { pool } from '../config/database';
+import { ApiError } from '../utils/apiError';
 
 
 
@@ -463,108 +463,96 @@ export class RecommendationModel {
   }): Promise<any> {
 
     const rawRisk = (data.risk_level || 'LOW').toUpperCase();
-
     const validRisks = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-
     const safeRisk = validRisks.includes(rawRisk) ? rawRisk : 'LOW';
 
+    const rawMode = String(data.execution_mode || 'MANUAL').toUpperCase();
+    const safeMode =
+      rawMode === 'AUTO' || rawMode === 'AUTOMATIC' || rawMode === 'AUTONOMOUS'
+        ? 'AUTOMATIC'
+        : rawMode === 'SEMI_AUTOMATIC'
+          ? 'SEMI_AUTOMATIC'
+          : 'MANUAL';
 
+    const validApprovalStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED'];
+    const requestedApproval = data.approval_status ? String(data.approval_status).toUpperCase() : 'PENDING';
+    if (!validApprovalStatuses.includes(requestedApproval)) {
+      throw new ApiError(400, `Trạng thái phê duyệt không hợp lệ: ${data.approval_status}`);
+    }
+    const isHighRisk = safeRisk === 'HIGH' || safeRisk === 'CRITICAL';
+    const safeApproval = isHighRisk && requestedApproval !== 'APPROVED' ? 'PENDING' : requestedApproval;
 
-    const safeMode = data.execution_mode === 'AUTO' ? 'AUTO' : 'MANUAL';
-
-    const safeApproval = data.approval_status || 'APPROVED';
-
-    const safeStatus = data.execution_status || 'SUCCEEDED';
+    const validExecutionStatuses = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
+    const rawExec = data.execution_status ? String(data.execution_status).toUpperCase() : 'PENDING';
+    const normalizedExec = rawExec === 'SUCCEEDED' ? 'COMPLETED' : rawExec;
+    if (!validExecutionStatuses.includes(normalizedExec)) {
+      throw new ApiError(400, `Trạng thái thực thi không hợp lệ: ${data.execution_status}`);
+    }
+    // Never default missing status fields to COMPLETED or allow COMPLETED without prior evidence at creation
+    const safeStatus = normalizedExec === 'COMPLETED' ? 'PENDING' : normalizedExec;
 
     const safeResult = typeof data.result === 'object' ? JSON.stringify(data.result) : (data.result || '{}');
-
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
     const validTargetId = data.target_id && uuidRegex.test(String(data.target_id)) ? String(data.target_id) : null;
 
-
-
     const query = `
-
       INSERT INTO healing_actions (
-
         incident_id,
-
         recommendation_id,
-
         environment_id,
-
         action_type_id,
-
         target_type,
-
         target_id,
-
         target_name,
-
         risk_level,
-
         execution_mode,
-
         approval_status,
-
         execution_status,
-
         requested_by,
-
         executed_by,
-
         started_at,
-
         completed_at,
-
         result
-
       ) VALUES (
-
-        $1, $2, $3, $4, $5, $6::uuid, $7, $8::risk_level, $9::execution_mode, $10::approval_status, $11::execution_status, $12, $13, NOW(), NOW(), $14::jsonb
-
+        $1, $2, $3, $4, $5, $6::uuid, $7, $8::risk_level, $9::execution_mode, $10::approval_status, $11::execution_status,
+        $12, $13,
+        CASE WHEN $11::text = 'RUNNING' THEN NOW() ELSE NULL END,
+        CASE WHEN $11::text IN ('FAILED', 'CANCELLED', 'SKIPPED') THEN NOW() ELSE NULL END,
+        $14::jsonb
       ) RETURNING *;
-
     `;
 
-
-
     const res = await pool.query(query, [
-
       data.incident_id,
-
       data.recommendation_id || null,
-
       data.environment_id,
-
       data.action_type_id,
-
       data.target_type || 'WORKLOAD',
-
       validTargetId,
-
       data.target_name || '',
-
       safeRisk,
-
       safeMode,
-
       safeApproval,
-
       safeStatus,
-
       data.requested_by || null,
-
       data.executed_by || null,
-
       safeResult,
-
     ]);
 
+    const created = res.rows[0];
+    if (created && safeApproval === 'PENDING') {
+      await pool.query(
+        `INSERT INTO approvals (healing_action_id, requested_by, status, reason, requested_at, expires_at)
+         VALUES ($1, (SELECT id FROM users WHERE id::text = $2 LIMIT 1), 'PENDING', $3, NOW(), NOW() + interval '24 hours');`,
+        [
+          created.id,
+          data.requested_by || null,
+          `Hành động rủi ro mức ${safeRisk} cần phê duyệt trước khi tác động lên ${data.target_name || 'hạ tầng'}.`,
+        ]
+      );
+    }
 
-
-    return res.rows[0];
+    return created;
 
   }
 

@@ -272,6 +272,22 @@ export class UserModel {
         client?: PoolClient
     ): Promise<IUserResponse[]> {
         const db = client || pool;
+        const SORT_ALLOWLIST = new Set([
+            'created_at',
+            'updated_at',
+            'email',
+            'full_name',
+            'status',
+            'last_login_at',
+            'users.created_at',
+            'users.updated_at',
+            'users.email',
+            'users.full_name',
+            'users.status',
+            'users.last_login_at',
+        ]);
+        const cleanSort = SORT_ALLOWLIST.has(sortBy) ? sortBy : 'users.created_at';
+        const cleanOrder = String(order || '').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
         const queryParams = [...params, limit, offset];
         const usersQuery = `
           SELECT 
@@ -313,7 +329,7 @@ export class UserModel {
             ) AS organization_roles
           FROM users
           ${whereClause}
-          ORDER BY ${sortBy} ${order}
+          ORDER BY ${cleanSort} ${cleanOrder}
           LIMIT $${params.length + 1} OFFSET $${params.length + 2}
         `;
         const usersResult = await db.query<IUserResponse>(usersQuery, queryParams);
@@ -402,7 +418,10 @@ export class UserModel {
      */
     public static async updatePassword(userId: string, newHash: string, client?: PoolClient): Promise<void> {
         const db = client || pool;
-        await db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
+        await db.query(
+            'UPDATE users SET password_hash = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2',
+            [newHash, userId]
+        );
     }
 
     /**
@@ -485,13 +504,14 @@ export class UserModel {
     public static async findAuthStatus(
         userId: string,
         client?: PoolClient
-    ): Promise<{ id: string; status: UserStatus; deleted_at?: Date | null; roles: string[] } | null> {
+    ): Promise<{ id: string; status: UserStatus; deleted_at?: Date | null; token_version?: number; roles: string[] } | null> {
         const db = client || pool;
         const sql = `
             SELECT 
                 u.id, 
                 u.status, 
                 u.deleted_at,
+                COALESCE(u.token_version, 1) AS token_version,
                 COALESCE(
                   (
                     SELECT json_agg(DISTINCT sr.name)
@@ -505,7 +525,7 @@ export class UserModel {
             WHERE u.id = $1 
             LIMIT 1
         `;
-        const res = await db.query<{ id: string; status: UserStatus; deleted_at?: Date | null; roles: string[] }>(
+        const res = await db.query<{ id: string; status: UserStatus; deleted_at?: Date | null; token_version?: number; roles: string[] }>(
             sql,
             [userId]
         );

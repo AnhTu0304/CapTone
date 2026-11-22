@@ -10,16 +10,22 @@ from typing import Pattern
 REDACTION_PATTERNS: list[tuple[Pattern[str], str]] = [
     # Bearer tokens in headers or logs
     (re.compile(r"(Bearer\s+)[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE), r"\1[REDACTED_TOKEN]"),
-    # Generic password / secret / api_key assignment
+    # Database / Redis connection URIs with inline passwords
+    (re.compile(r"((?:postgres|postgresql|redis|rediss)://[^:\s/@]*:)([^@\s/]+)(@)", re.IGNORECASE), r"\1[REDACTED]\3"),
+    # Query string tokens/secrets
+    (re.compile(r"([?&](?:token|access_token|refresh_token|code|secret|password|api_key)=)([^&\s\"']+)", re.IGNORECASE), r"\1[REDACTED]"),
+    # Generic password / secret / api_key / token / totp assignment (preserve Bearer/already-redacted tags)
     (
         re.compile(
-            r"""(?i)(["']?(?:password|passwd|secret|api_?key|token|auth_?token|client_?secret)["']?\s*[:=]\s*["']?)([^"',\s\}]{3,})""",
+            r"""(?i)(["']?(?:password|passwd|pwd|secret|api_?key|token|auth_?token|refresh_token|access_token|client_?secret|totp_?secret|hmac_?secret|x-agent-token|authorization)["']?\s*[:=]\s*["']?)(?!Bearer\b|\[REDACTED)([^"',\s\}]{3,})""",
             re.IGNORECASE,
         ),
         r"\1[REDACTED]",
     ),
     # SelfHeal tokens: cap_...
     (re.compile(r"\bcap_[a-zA-Z0-9_-]{8,}\b"), "cap_[REDACTED]"),
+    # JWT tokens
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\b"), "[REDACTED_JWT]"),
     # AWS / Generic Cloud Access Keys
     (re.compile(r"\b(AKIA|ABIA|ACCA)[0-9A-Z]{16}\b"), "[REDACTED_AWS_KEY]"),
     # Private Key blocks

@@ -4,12 +4,17 @@ from fastapi import APIRouter, Depends
 from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import get_prediction_service
+from app.core.internal_auth import require_internal_auth
 from app.core.otel import record_ai_prediction
 from app.schemas.prediction import PredictionRequest, PredictionResponse
 from app.services.prediction_service import PredictionService
 
 
-router = APIRouter(prefix="/api/v1", tags=["prediction"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["prediction"],
+    dependencies=[Depends(require_internal_auth)],
+)
 
 
 @router.post("/predict", response_model=PredictionResponse)

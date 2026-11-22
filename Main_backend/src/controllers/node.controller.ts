@@ -99,39 +99,42 @@ export class NodeController {
     try {
       const user = (req as any).user;
       const nodeId = req.params.nodeId || req.params.id;
+      const scopedOrgId =
+        req.params.orgId ||
+        (req.headers['x-organization-id'] as string | undefined) ||
+        undefined;
+      const scopedClusterId = req.params.clusterId || undefined;
+
       const nodeRes = await pool.query(
         `SELECT n.id, n.name, n.cluster_id, c.name as cluster_name, e.organization_id 
          FROM nodes n 
          JOIN clusters c ON n.cluster_id = c.id 
          LEFT JOIN environments e ON c.environment_id = e.id 
-         WHERE (n.id::text = $1 OR n.name = $1) AND c.deleted_at IS NULL LIMIT 1`,
-        [nodeId]
+         WHERE (n.id::text = $1 OR n.name = $1)
+           AND c.deleted_at IS NULL
+           AND ($2::uuid IS NULL OR e.organization_id = $2::uuid)
+           AND ($3::uuid IS NULL OR n.cluster_id = $3::uuid)
+         LIMIT 1`,
+        [nodeId, scopedOrgId || null, scopedClusterId || null]
       );
       if (!nodeRes.rows[0]) {
         throw new ApiError(404, 'Không tìm thấy Node');
       }
       const node = nodeRes.rows[0];
 
-      const rawRoles: string[] = Array.isArray(user?.roles) ? user.roles : [user?.roles || ''];
-      const isPlatformAdmin = rawRoles.some((r: string) =>
-        ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase())
-      );
-
-      if (!isPlatformAdmin) {
-        if (!node.organization_id) {
-          throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền thao tác trên Node này');
-        }
-        const member = await OrganizationMemberModel.findByOrgAndUser(node.organization_id, user.id);
-        if (
-          !member ||
-          member.status !== 'ACTIVE' ||
-          !['SME_OWNER', 'DEVOPS'].includes(member.role_code.toUpperCase())
-        ) {
-          throw new ApiError(
-            403,
-            'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức'
-          );
-        }
+      if (!node.organization_id || !user?.id) {
+        throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền thao tác trên Node này');
+      }
+      const member = await OrganizationMemberModel.findByOrgAndUser(node.organization_id, user.id);
+      if (
+        !member ||
+        member.status !== 'ACTIVE' ||
+        !['SME_OWNER', 'DEVOPS'].includes(member.role_code.toUpperCase())
+      ) {
+        throw new ApiError(
+          403,
+          'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức'
+        );
       }
 
       await AuditService.recordFromRequest(req, {

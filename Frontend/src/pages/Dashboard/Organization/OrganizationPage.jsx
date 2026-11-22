@@ -90,8 +90,17 @@ export const OrganizationPage = () => {
 
     try {
       let normalizedWebsite = formData.website.trim();
-      if (normalizedWebsite && !normalizedWebsite.startsWith('http://') && !normalizedWebsite.startsWith('https://')) {
-        normalizedWebsite = `https://${normalizedWebsite}`;
+      if (normalizedWebsite) {
+        if (/^(javascript|data|vbscript):/i.test(normalizedWebsite)) {
+          throw new Error('URL website không hợp lệ');
+        }
+        if (!/^https?:\/\//i.test(normalizedWebsite)) {
+          normalizedWebsite = `https://${normalizedWebsite}`;
+        }
+        const parsedUrl = new URL(normalizedWebsite);
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+          throw new Error('URL website chỉ hỗ trợ giao thức http hoặc https');
+        }
       }
 
       const payload = {
@@ -326,8 +335,8 @@ export const OrganizationPage = () => {
                 <Globe size={13} /> Tên Miền (Website / Domain)
               </span>
               <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: formData.website ? 'var(--dash-primary)' : 'var(--dash-text-muted)' }}>
-                {formData.website ? (
-                  <a href={formData.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--dash-primary)', textDecoration: 'none' }}>
+                {formData.website && /^https?:\/\//i.test(formData.website.trim()) ? (
+                  <a href={formData.website.trim()} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--dash-primary)', textDecoration: 'none' }}>
                     {formData.website}
                   </a>
                 ) : (

@@ -8,34 +8,47 @@ import PersonalPreferencesPage from './PersonalPreferencesPage';
 import PersonalNotificationsPage from './PersonalNotificationsPage';
 import PersonalActivityPage from './PersonalActivityPage';
 import PersonalHelpPage from './PersonalHelpPage';
+import { NotFoundPage } from '../Error/StatusPages';
 
 export const PersonalPortalPage = ({ currentPath = '/portal', onNavigate }) => {
   const renderContent = () => {
-    const norm = currentPath.toLowerCase();
+    const rawNorm = currentPath.toLowerCase().split('?')[0].split('#')[0];
+    const norm = rawNorm.length > 1 ? rawNorm.replace(/\/+$/, '') : rawNorm;
 
-    if (norm.includes('/companies')) {
+    if (norm === '/portal/companies') {
       return <PersonalCompaniesPage onNavigate={onNavigate} />;
     }
-    if (norm.includes('/profile')) {
+    if (norm === '/portal/profile') {
       return <PersonalProfilePage onNavigate={onNavigate} />;
     }
-    if (norm.includes('/security')) {
+    if (norm === '/portal/security') {
       return <PersonalSecurityPage onNavigate={onNavigate} />;
     }
-    if (norm.includes('/preferences')) {
+    if (norm === '/portal/preferences') {
       return <PersonalPreferencesPage onNavigate={onNavigate} />;
     }
-    if (norm.includes('/notifications')) {
+    if (norm === '/portal/notifications') {
       return <PersonalNotificationsPage onNavigate={onNavigate} />;
     }
-    if (norm.includes('/activity')) {
+    if (norm === '/portal/activity') {
       return <PersonalActivityPage onNavigate={onNavigate} />;
     }
-    if (norm.includes('/help')) {
+    if (norm === '/portal/help') {
       return <PersonalHelpPage onNavigate={onNavigate} />;
     }
-    // Default: Dashboard
-    return <PersonalDashboardPage onNavigate={onNavigate} />;
+    if (norm === '/portal' || norm === '/portal/dashboard' || norm === '/user' || norm === '/personal' || norm === '/me') {
+      return <PersonalDashboardPage onNavigate={onNavigate} />;
+    }
+
+    return (
+      <NotFoundPage
+        embedded
+        onNavigate={onNavigate}
+        warnPath={currentPath}
+        title="404 — Không tìm thấy trang Cá nhân"
+        message={`Đường dẫn "${currentPath}" không tồn tại trong Cổng Cá Nhân.`}
+      />
+    );
   };
 
   return (

@@ -304,7 +304,7 @@ export class IncidentModel {
           SELECT count(*)::int
           FROM healing_actions ha_succ_cnt
           WHERE ha_succ_cnt.incident_id = i.id
-            AND ha_succ_cnt.execution_status = 'SUCCEEDED'
+            AND ha_succ_cnt.execution_status = 'COMPLETED'
             AND NOT EXISTS (
               SELECT 1 FROM recovery_verifications rv_sf
               WHERE rv_sf.healing_action_id = ha_succ_cnt.id
@@ -521,7 +521,7 @@ export class IncidentModel {
           SELECT count(*)::int
           FROM healing_actions ha_succ_cnt
           WHERE ha_succ_cnt.incident_id = i.id
-            AND ha_succ_cnt.execution_status = 'SUCCEEDED'
+            AND ha_succ_cnt.execution_status = 'COMPLETED'
             AND NOT EXISTS (
               SELECT 1 FROM recovery_verifications rv_sf
               WHERE rv_sf.healing_action_id = ha_succ_cnt.id
@@ -744,7 +744,7 @@ export class IncidentModel {
           }
 
           const isFailed = String(item.execution_status || '').toUpperCase() === 'FAILED' || item.verification_result === false;
-          const isVerifiedOk = item.verification_result === true || (isIncResolved && String(item.execution_status || '').toUpperCase() === 'SUCCEEDED' && !isFailed);
+          const isVerifiedOk = item.verification_result === true || (isIncResolved && String(item.execution_status || '').toUpperCase() === 'COMPLETED' && !isFailed);
 
           if (!isIncResolved && isCurrNoAction && !isFailed) {
             // Khi Circuit Breaker đang ngắt mạch (NO_ACTION), chỉ hiển thị các bậc thất bại đã dẫn đến ngắt mạch
@@ -798,8 +798,19 @@ export class IncidentModel {
   /**
    * Get recent incidents
    */
-  public static async getRecent(limit: number = 10, client?: PoolClient) {
+  public static async getRecent(limit: number = 10, client?: PoolClient, organizationId?: string | null) {
     const db = client || pool;
+    if (organizationId) {
+      const res = await db.query(
+        `SELECT id, title, severity, incident_type, description, status, detected_at, created_at
+         FROM incidents
+         WHERE organization_id = $2::uuid
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit, organizationId]
+      );
+      return res.rows;
+    }
     const res = await db.query(
       `SELECT id, title, severity, incident_type, description, status, detected_at, created_at
        FROM incidents

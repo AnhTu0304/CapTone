@@ -11,26 +11,42 @@ export class HealthController {
       getRedisHealth(),
     ]);
 
+    const isProdLike = !config.isDevelopment;
+    const sanitizedDbStatus =
+      isProdLike && !dbHealth.status.startsWith('CONNECTED') ? 'ERROR' : dbHealth.status;
+
     const healthData = {
       status: 'UP',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
-      nodeVersion: process.version,
+      ...(isProdLike ? {} : { nodeVersion: process.version }),
       memory: {
         rssMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
         heapUsedMb: Math.round(process.memoryUsage().heapUsed / (1024 * 1024)),
         heapTotalMb: Math.round(process.memoryUsage().heapTotal / (1024 * 1024)),
       },
-      database: {
-        status: dbHealth.status,
-        name: config.db.database,
-        host: config.db.host,
-        port: config.db.port,
-        serverTime: dbHealth.serverTime,
-        ...(dbHealth.error ? { error: dbHealth.error } : {}),
-      },
-      redis: redisHealth,
+      database: isProdLike
+        ? {
+            status: sanitizedDbStatus,
+            serverTime: dbHealth.serverTime,
+            ...(dbHealth.ssl ? { ssl: dbHealth.ssl } : {}),
+          }
+        : {
+            status: dbHealth.status,
+            name: config.db.database,
+            host: config.db.host,
+            port: config.db.port,
+            serverTime: dbHealth.serverTime,
+            ...(dbHealth.ssl ? { ssl: dbHealth.ssl } : {}),
+            ...(dbHealth.error ? { error: dbHealth.error } : {}),
+          },
+      redis: isProdLike
+        ? {
+            status: redisHealth.status,
+            latencyMs: redisHealth.latencyMs,
+          }
+        : redisHealth,
     };
 
     return ApiResponse.success(res, 'Server is healthy and running', healthData, 200);

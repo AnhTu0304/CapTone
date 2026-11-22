@@ -1,5 +1,12 @@
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
+import {
+  decryptSecret,
+  encryptSecret,
+  isEncryptedSecret,
+  isMaskedSecretSentinel,
+  maskSecretForApi,
+} from '../utils/cryptoVault';
 
 export interface IOrganizationAlertSettings {
   organization_id: string;
@@ -11,6 +18,8 @@ export interface IOrganizationAlertSettings {
   slack_webhook_url?: string | null;
   slack_channel?: string | null;
   pagerduty_key?: string | null;
+  has_slack_webhook?: boolean;
+  has_pagerduty_key?: boolean;
   updated_by?: string | null;
   created_at?: Date | null;
   updated_at?: Date | null;
@@ -26,9 +35,6 @@ export interface IDefaultAlertRecipient {
 const SIMPLE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class OrganizationAlertSettingsModel {
-  /**
-   * Chuẩn hóa và khử trùng lặp danh sách email tùy chỉnh
-   */
   public static normalizeExtraEmails(rawEmails: unknown): string[] {
     let list: string[] = [];
     if (Array.isArray(rawEmails)) {
@@ -48,8 +54,58 @@ export class OrganizationAlertSettingsModel {
     return Array.from(deduped);
   }
 
+  private static mapRow(row: any, includeDecryptedSecrets: boolean): IOrganizationAlertSettings {
+    const rawWebhook: string | null = row.slack_webhook_url || null;
+    const rawPdKey: string | null = row.pagerduty_key || null;
+
+    const decryptOrPlain = (val: string | null): string | null => {
+      if (!val) return null;
+      return isEncryptedSecret(val) ? decryptSecret(val) : val;
+    };
+
+    return {
+      organization_id: row.organization_id,
+      critical_email_enabled: row.critical_email_enabled !== false,
+      notify_on_no_action: row.notify_on_no_action !== false,
+      notify_on_healing_failed: row.notify_on_healing_failed !== false,
+      extra_emails: this.normalizeExtraEmails(row.extra_emails),
+      cooldown_minutes: Number(row.cooldown_minutes) || 15,
+      slack_webhook_url: includeDecryptedSecrets
+        ? decryptOrPlain(rawWebhook)
+        : maskSecretForApi(rawWebhook, 'webhook'),
+      slack_channel: row.slack_channel || null,
+      pagerduty_key: includeDecryptedSecrets
+        ? decryptOrPlain(rawPdKey)
+        : maskSecretForApi(rawPdKey, 'key'),
+      has_slack_webhook: Boolean(rawWebhook && rawWebhook.trim()),
+      has_pagerduty_key: Boolean(rawPdKey && rawPdKey.trim()),
+      updated_by: row.updated_by || null,
+      created_at: row.created_at || null,
+      updated_at: row.updated_at || null,
+    };
+  }
+
+  private static defaultSettings(orgId: string): IOrganizationAlertSettings {
+    return {
+      organization_id: orgId,
+      critical_email_enabled: true,
+      notify_on_no_action: true,
+      notify_on_healing_failed: true,
+      extra_emails: [],
+      cooldown_minutes: 15,
+      slack_webhook_url: null,
+      slack_channel: null,
+      pagerduty_key: null,
+      has_slack_webhook: false,
+      has_pagerduty_key: false,
+      updated_by: null,
+      created_at: null,
+      updated_at: null,
+    };
+  }
+
   /**
-   * Lấy cấu hình cảnh báo của tổ chức; nếu chưa lưu thì trả về giá trị mặc định an toàn
+   * Public/API safe getter: NEVER exposes raw slack_webhook_url or pagerduty_key.
    */
   public static async findOrDefaultByOrgId(
     orgId: string,
@@ -77,41 +133,48 @@ export class OrganizationAlertSettingsModel {
     );
 
     if (res.rows.length > 0) {
-      const row = res.rows[0];
-      return {
-        organization_id: row.organization_id,
-        critical_email_enabled: row.critical_email_enabled !== false,
-        notify_on_no_action: row.notify_on_no_action !== false,
-        notify_on_healing_failed: row.notify_on_healing_failed !== false,
-        extra_emails: this.normalizeExtraEmails(row.extra_emails),
-        cooldown_minutes: Number(row.cooldown_minutes) || 15,
-        slack_webhook_url: row.slack_webhook_url || null,
-        slack_channel: row.slack_channel || null,
-        pagerduty_key: row.pagerduty_key || null,
-        updated_by: row.updated_by || null,
-        created_at: row.created_at || null,
-        updated_at: row.updated_at || null,
-      };
+      return this.mapRow(res.rows[0], false);
     }
-
-    return {
-      organization_id: orgId,
-      critical_email_enabled: true,
-      notify_on_no_action: true,
-      notify_on_healing_failed: true,
-      extra_emails: [],
-      cooldown_minutes: 15,
-      slack_webhook_url: null,
-      slack_channel: null,
-      pagerduty_key: null,
-      updated_by: null,
-      created_at: null,
-      updated_at: null,
-    };
+    return this.defaultSettings(orgId);
   }
 
   /**
-   * Tạo hoặc cập nhật cấu hình cảnh báo của tổ chức
+   * Internal-only getter for backend alert dispatchers needing decrypted webhook/key.
+   */
+  public static async findDecryptedByOrgId(
+    orgId: string,
+    client?: PoolClient
+  ): Promise<IOrganizationAlertSettings> {
+    const db = client || pool;
+    const res = await db.query(
+      `SELECT
+        organization_id,
+        critical_email_enabled,
+        notify_on_no_action,
+        notify_on_healing_failed,
+        extra_emails,
+        cooldown_minutes,
+        slack_webhook_url,
+        slack_channel,
+        pagerduty_key,
+        updated_by,
+        created_at,
+        updated_at
+      FROM organization_alert_settings
+      WHERE organization_id = $1
+      LIMIT 1;`,
+      [orgId]
+    );
+
+    if (res.rows.length > 0) {
+      return this.mapRow(res.rows[0], true);
+    }
+    return this.defaultSettings(orgId);
+  }
+
+  /**
+   * Create or update org alert settings; encrypts slack_webhook_url & pagerduty_key at rest
+   * using AES-256-GCM and returns masked secret representations.
    */
   public static async upsert(
     orgId: string,
@@ -120,7 +183,12 @@ export class OrganizationAlertSettingsModel {
     client?: PoolClient
   ): Promise<IOrganizationAlertSettings> {
     const db = client || pool;
-    const current = await this.findOrDefaultByOrgId(orgId, client);
+    const currentRes = await db.query(
+      `SELECT * FROM organization_alert_settings WHERE organization_id = $1 LIMIT 1;`,
+      [orgId]
+    );
+    const currentRow = currentRes.rows[0] || null;
+    const current = currentRow ? this.mapRow(currentRow, true) : this.defaultSettings(orgId);
 
     const nextCriticalEnabled =
       payload.critical_email_enabled !== undefined
@@ -145,18 +213,37 @@ export class OrganizationAlertSettingsModel {
     const nextCooldown = Number.isFinite(rawCooldown)
       ? Math.min(1440, Math.max(1, Math.round(rawCooldown)))
       : 15;
-    const nextSlackWebhook =
-      payload.slack_webhook_url !== undefined
-        ? (payload.slack_webhook_url ? String(payload.slack_webhook_url).trim() : null)
-        : current.slack_webhook_url || null;
+
+    const resolveEncryptedField = (
+      incoming: string | null | undefined,
+      existingStored: string | null | undefined
+    ): string | null => {
+      if (incoming === undefined) {
+        if (!existingStored) return null;
+        return isEncryptedSecret(existingStored) ? existingStored : encryptSecret(existingStored);
+      }
+      if (incoming === null) return null;
+      const trimmed = String(incoming).trim();
+      if (!trimmed) return null;
+      if (isMaskedSecretSentinel(trimmed)) {
+        if (!existingStored) return null;
+        return isEncryptedSecret(existingStored) ? existingStored : encryptSecret(existingStored);
+      }
+      return isEncryptedSecret(trimmed) ? trimmed : encryptSecret(trimmed);
+    };
+
+    const nextSlackWebhookEnc = resolveEncryptedField(
+      payload.slack_webhook_url,
+      currentRow?.slack_webhook_url || null
+    );
     const nextSlackChannel =
       payload.slack_channel !== undefined
         ? (payload.slack_channel ? String(payload.slack_channel).trim() : null)
         : current.slack_channel || null;
-    const nextPagerdutyKey =
-      payload.pagerduty_key !== undefined
-        ? (payload.pagerduty_key ? String(payload.pagerduty_key).trim() : null)
-        : current.pagerduty_key || null;
+    const nextPagerdutyKeyEnc = resolveEncryptedField(
+      payload.pagerduty_key,
+      currentRow?.pagerduty_key || null
+    );
 
     const res = await db.query(
       `INSERT INTO organization_alert_settings (
@@ -194,33 +281,16 @@ export class OrganizationAlertSettingsModel {
         nextNotifyHealingFailed,
         JSON.stringify(nextExtraEmails),
         nextCooldown,
-        nextSlackWebhook,
+        nextSlackWebhookEnc,
         nextSlackChannel,
-        nextPagerdutyKey,
+        nextPagerdutyKeyEnc,
         updatedBy || null,
       ]
     );
 
-    const row = res.rows[0];
-    return {
-      organization_id: row.organization_id,
-      critical_email_enabled: Boolean(row.critical_email_enabled),
-      notify_on_no_action: Boolean(row.notify_on_no_action),
-      notify_on_healing_failed: Boolean(row.notify_on_healing_failed),
-      extra_emails: this.normalizeExtraEmails(row.extra_emails),
-      cooldown_minutes: Number(row.cooldown_minutes) || 15,
-      slack_webhook_url: row.slack_webhook_url || null,
-      slack_channel: row.slack_channel || null,
-      pagerduty_key: row.pagerduty_key || null,
-      updated_by: row.updated_by || null,
-      created_at: row.created_at || null,
-      updated_at: row.updated_at || null,
-    };
+    return this.mapRow(res.rows[0], false);
   }
 
-  /**
-   * Lấy danh sách thành viên mặc định tự động nhận cảnh báo khẩn cấp (chỉ SME_OWNER & DEVOPS đang ACTIVE)
-   */
   public static async getDefaultRecipientsPreview(
     orgId: string,
     client?: PoolClient

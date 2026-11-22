@@ -162,7 +162,7 @@ class ActionResultData(BaseModel):
     """Result of an executed self-healing action reported back to Backend."""
     action_id: str
     action_type: Optional[str] = None
-    status: Literal["SUCCEEDED", "FAILED"]
+    status: Literal["COMPLETED", "FAILED"]
     message: Optional[str] = None
     duration_ms: Optional[int] = 1000
     details: Optional[dict[str, Any]] = None

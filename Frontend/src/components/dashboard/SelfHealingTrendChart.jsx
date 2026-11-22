@@ -72,7 +72,7 @@ export const SelfHealingTrendChart = ({
 
         const avgMttr = count > 0 ? parseFloat((totalDurationSec / count).toFixed(1)) : 0;
         const succeededCount = monthActions.filter(
-          (a) => a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED' || a.status === 'completed'
+          (a) => a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED' || a.status === 'completed'
         ).length;
         const successRate = count > 0 ? Math.round((succeededCount / count) * 100) : 100;
 
@@ -132,7 +132,7 @@ export const SelfHealingTrendChart = ({
 
         const avgMttr = count > 0 ? parseFloat((totalDurationSec / count).toFixed(1)) : 0;
         const succeededCount = dayActions.filter(
-          (a) => a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED' || a.status === 'completed'
+          (a) => a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED' || a.status === 'completed'
         ).length;
         const successRate = count > 0 ? Math.round((succeededCount / count) * 100) : 100;
 
@@ -194,7 +194,7 @@ export const SelfHealingTrendChart = ({
 
         const avgMttr = count > 0 ? parseFloat((totalDurationSec / count).toFixed(1)) : 0;
         const succeededCount = dayActions.filter(
-          (a) => a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED' || a.status === 'completed'
+          (a) => a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED' || a.status === 'completed'
         ).length;
         const successRate = count > 0 ? Math.round((succeededCount / count) * 100) : 100;
 
@@ -257,7 +257,7 @@ export const SelfHealingTrendChart = ({
 
         const avgMttr = count > 0 ? parseFloat((totalDurationSec / count).toFixed(1)) : 0;
         const succeededCount = windowActions.filter(
-          (a) => a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED' || a.status === 'completed'
+          (a) => a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED' || a.status === 'completed'
         ).length;
         const successRate = count > 0 ? Math.round((succeededCount / count) * 100) : 100;
 
@@ -317,7 +317,7 @@ export const SelfHealingTrendChart = ({
 
       const avgMttr = count > 0 ? parseFloat((totalDurationSec / count).toFixed(1)) : 0;
       const succeededCount = windowActions.filter(
-        (a) => a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED' || a.status === 'completed'
+        (a) => a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED' || a.status === 'completed'
       ).length;
       const successRate = count > 0 ? Math.round((succeededCount / count) * 100) : 100;
 

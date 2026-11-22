@@ -1,6 +1,7 @@
 import { HitlNotificationService } from '../services/hitlNotification.service';
 import { PoolClient } from 'pg';
 import { pool } from '../config/database';
+import { ApiError } from '../utils/apiError';
 
 export interface IHealingActionFilter {
   limit?: number;
@@ -67,7 +68,7 @@ export class HealingActionModel {
       `);
     } catch {}
 
-    const conditions: string[] = ["h.execution_status = 'RUNNING' AND h.approval_status IN ('APPROVED', 'NOT_REQUIRED')"];
+    const conditions: string[] = ["h.execution_status = 'RUNNING' AND h.approval_status::text IN ('APPROVED', 'AUTO_APPROVED', 'NOT_REQUIRED')"];
     const values: any[] = [];
     let idx = 1;
 
@@ -481,14 +482,68 @@ export class HealingActionModel {
     const validRisks = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
     const riskLevel = validRisks.includes(rawRisk) ? rawRisk : 'LOW';
 
-    const executionMode = (data.execution_mode === 'AUTO' || data.execution_mode === 'AUTONOMOUS') ? 'AUTO' : 'MANUAL';
+    const rawExecMode = String(data.execution_mode || 'MANUAL').toUpperCase();
+    const executionMode =
+      rawExecMode === 'AUTO' || rawExecMode === 'AUTOMATIC' || rawExecMode === 'AUTONOMOUS'
+        ? 'AUTOMATIC'
+        : rawExecMode === 'SEMI_AUTOMATIC'
+          ? 'SEMI_AUTOMATIC'
+          : 'MANUAL';
     const isHighRisk = riskLevel === 'HIGH' || riskLevel === 'CRITICAL';
-    const needsApproval =
-      typeof (data as any).requires_approval === 'boolean'
-        ? (data as any).requires_approval
-        : (executionMode !== 'AUTO' && isHighRisk) || (data as any).approval_status === 'PENDING';
-    const approvalStatus = needsApproval ? 'PENDING' : 'NOT_REQUIRED';
-    const executionStatus = needsApproval ? 'PENDING' : (executionMode === 'AUTO' ? 'RUNNING' : 'PENDING');
+    let typeRequiresApproval = false;
+    if (!isHighRisk && data.action_type_id) {
+      try {
+        const typeRes = await pool.query(
+          `SELECT requires_approval_by_default FROM healing_action_types WHERE id = $1 LIMIT 1;`,
+          [data.action_type_id]
+        );
+        typeRequiresApproval = Boolean(typeRes.rows[0]?.requires_approval_by_default);
+      } catch {}
+    }
+
+    let policyAllowsAuto = false;
+    if (data.policy_id) {
+      try {
+        const polRes = await pool.query(
+          `SELECT is_active, requires_approval, execution_mode FROM healing_policies WHERE id = $1 AND deleted_at IS NULL LIMIT 1;`,
+          [data.policy_id]
+        );
+        const pol = polRes.rows[0];
+        if (pol) {
+          policyAllowsAuto =
+            Boolean(pol.is_active) &&
+            pol.requires_approval === false &&
+            ['AUTO', 'AUTOMATIC', 'AUTONOMOUS'].includes(String(pol.execution_mode || '').toUpperCase());
+        }
+      } catch {}
+    }
+
+    if ((data as any).approval_status) {
+      const reqApp = String((data as any).approval_status).toUpperCase();
+      if (!['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED'].includes(reqApp)) {
+        throw new ApiError(400, `Trạng thái phê duyệt không hợp lệ: ${(data as any).approval_status}`);
+      }
+    }
+    if ((data as any).execution_status) {
+      const reqExec = String((data as any).execution_status).toUpperCase();
+      const normExec = reqExec === 'SUCCEEDED' ? 'COMPLETED' : reqExec;
+      if (!['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'].includes(normExec)) {
+        throw new ApiError(400, `Trạng thái thực thi không hợp lệ: ${(data as any).execution_status}`);
+      }
+    }
+
+    // Require HITL by default whenever status/mode/policy do not prove safe LOW/MEDIUM autonomous policy
+    const explicitAutoAllowed =
+      !isHighRisk &&
+      executionMode === 'AUTOMATIC' &&
+      !typeRequiresApproval &&
+      (data as any).requires_approval === false &&
+      (!data.policy_id || policyAllowsAuto) &&
+      (data as any).approval_status !== 'PENDING';
+
+    const approvalStatus = explicitAutoAllowed ? 'APPROVED' : 'PENDING';
+    const needsApproval = approvalStatus === 'PENDING';
+    const executionStatus = 'PENDING';
 
     const query = `
       INSERT INTO healing_actions (
@@ -507,11 +562,12 @@ export class HealingActionModel {
         requested_by,
         requested_at,
         started_at,
+        completed_at,
         result
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, 
+        $1, $2, $3, $4, $5, $6, $7, $8,
         $9::risk_level, $10::execution_mode, $11::approval_status, $12::execution_status,
-        (SELECT id FROM users WHERE id::text = $13 LIMIT 1), NOW(), CASE WHEN $12 = 'RUNNING' THEN NOW() ELSE NULL END, '{}'::jsonb
+        (SELECT id FROM users WHERE id::text = $13 LIMIT 1), NOW(), NULL, NULL, '{}'::jsonb
       ) RETURNING *;
     `;
 
@@ -555,98 +611,303 @@ export class HealingActionModel {
   }
 
   /**
-   * 4. Execute or retry an action
+   * 4. Transition approved PENDING action into RUNNING and record an in-flight execution_attempts row.
+   * Never creates COMPLETED attempts or fake recovery_verifications prior to real Agent execution + verification.
    */
   public static async executeAction(actionId: string, executedBy?: string): Promise<any> {
-    const action = await this.findActionById(actionId);
-    if (!action) throw new Error('Không tìm thấy hành động tự phục hồi');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (action.approval_status === 'REJECTED') {
-      throw new Error('Hành động này đã bị từ chối phê duyệt, không thể thực thi');
+      const lockRes = await client.query(
+        `SELECT h.*, t.code AS action_type_code, t.name AS action_type_name
+         FROM healing_actions h
+         LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+         WHERE h.id = $1
+         FOR UPDATE OF h;`,
+        [actionId]
+      );
+      const action = lockRes.rows[0];
+      if (!action) {
+        await client.query('ROLLBACK');
+        throw new ApiError(404, 'Không tìm thấy hành động tự phục hồi');
+      }
+
+      // Check approval expiration atomically against PostgreSQL NOW()
+      const apRes = await client.query(
+        `SELECT id, status, expires_at,
+                (expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired
+         FROM approvals
+         WHERE healing_action_id = $1
+         ORDER BY requested_at DESC
+         LIMIT 1
+         FOR UPDATE;`,
+        [actionId]
+      );
+      const ap = apRes.rows[0];
+      if (
+        action.approval_status === 'EXPIRED' ||
+        (ap && (ap.status === 'EXPIRED' || ap.is_expired === true))
+      ) {
+        if (ap) {
+          await client.query(
+            `UPDATE approvals SET status = 'EXPIRED', decided_at = COALESCE(decided_at, NOW())
+             WHERE healing_action_id = $1 AND status IN ('PENDING', 'APPROVED');`,
+            [actionId]
+          );
+        }
+        await client.query(
+          `UPDATE healing_actions
+           SET approval_status = 'EXPIRED',
+               execution_status = CASE WHEN execution_status = 'PENDING' THEN 'CANCELLED'::execution_status ELSE execution_status END,
+               completed_at = COALESCE(completed_at, NOW()),
+               error_message = COALESCE(error_message, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED), không thể thực thi')
+           WHERE id = $1;`,
+          [actionId]
+        );
+        await client.query('COMMIT');
+        throw new ApiError(409, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED), không thể thực thi');
+      }
+
+      if (action.approval_status === 'REJECTED') {
+        await client.query('ROLLBACK');
+        throw new ApiError(403, 'Hành động này đã bị từ chối phê duyệt, không thể thực thi');
+      }
+      if (!['APPROVED', 'AUTO_APPROVED'].includes(String(action.approval_status || '').toUpperCase())) {
+        await client.query('ROLLBACK');
+        throw new ApiError(403, 'Hành động chưa được phê duyệt (HITL Gate), không thể thực thi');
+      }
+      if (action.execution_status !== 'PENDING') {
+        await client.query('ROLLBACK');
+        throw new ApiError(409, `Hành động không ở trạng thái hợp lệ (APPROVED + PENDING) để thực thi (hiện tại: ${action.execution_status})`);
+      }
+
+      const updateRes = await client.query(
+        `UPDATE healing_actions
+         SET execution_status = 'RUNNING',
+             started_at = COALESCE(started_at, NOW()),
+             completed_at = NULL,
+             error_message = NULL,
+             executed_by = COALESCE((SELECT id FROM users WHERE id::text = $2 LIMIT 1), executed_by),
+             result = jsonb_set(COALESCE(result, '{}'::jsonb), '{status}', '"RUNNING"'::jsonb)
+         WHERE id = $1
+           AND approval_status::text IN ('APPROVED', 'AUTO_APPROVED')
+           AND execution_status = 'PENDING'
+         RETURNING *;`,
+        [actionId, executedBy || null]
+      );
+      if (updateRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new ApiError(409, 'Hành động không ở trạng thái hợp lệ (APPROVED + PENDING) để thực thi');
+      }
+
+      const countAttempt = await client.query(
+        'SELECT COALESCE(MAX(attempt_number), 0)::int AS max_num FROM execution_attempts WHERE healing_action_id = $1;',
+        [actionId]
+      );
+      const attemptNum = Number(countAttempt.rows[0]?.max_num || 0) + 1;
+
+      const attemptRes = await client.query(
+        `INSERT INTO execution_attempts (
+          healing_action_id, attempt_number, command_type,
+          request_payload, response_payload, status,
+          started_at, completed_at, duration_ms
+        ) VALUES (
+          $1, $2, $3,
+          $4::jsonb, '{}'::jsonb, 'RUNNING'::execution_status,
+          NOW(), NULL, NULL
+        ) RETURNING *;`,
+        [
+          actionId,
+          attemptNum,
+          action.action_type_code || 'EXECUTE_HEALING',
+          JSON.stringify({ target: action.target_name, action: action.action_type_code }),
+        ]
+      );
+
+      await client.query('COMMIT');
+      return {
+        action: updateRes.rows[0],
+        attempt: attemptRes.rows[0],
+      };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
     }
+  }
 
-    // 1. Get next attempt number
-    const countAttempt = await pool.query(
-      'SELECT count(*) FROM execution_attempts WHERE healing_action_id = $1;',
-      [actionId]
-    );
-    const attemptNum = parseInt(countAttempt.rows[0].count, 10) + 1;
+  /**
+   * 4a. Record dispatch/timeout/routing failure deterministically on both attempt and action.
+   */
+  public static async recordDispatchFailure(
+    actionId: string,
+    attemptId: string | null,
+    errorMessage: string,
+    details?: Record<string, any>
+  ): Promise<any | null> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // 2. Mark action RUNNING
-    await pool.query(
-      `UPDATE healing_actions 
-       SET execution_status = 'RUNNING', started_at = COALESCE(started_at, NOW()), executed_by = COALESCE((SELECT id FROM users WHERE id::text = $2 LIMIT 1), executed_by)
-       WHERE id = $1;`,
-      [actionId, executedBy || null]
-    );
+      if (attemptId) {
+        await client.query(
+          `UPDATE execution_attempts
+           SET status = 'FAILED'::execution_status,
+               completed_at = NOW(),
+               duration_ms = GREATEST(0, COALESCE(duration_ms, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW()))) * 1000)::bigint)),
+               error_message = $2,
+               response_payload = $3::jsonb
+           WHERE id = $1 AND status = 'RUNNING';`,
+          [attemptId, errorMessage, JSON.stringify({ error: errorMessage, ...(details || {}) })]
+        );
+      } else {
+        await client.query(
+          `UPDATE execution_attempts
+           SET status = 'FAILED'::execution_status,
+               completed_at = NOW(),
+               duration_ms = GREATEST(0, COALESCE(duration_ms, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW()))) * 1000)::bigint)),
+               error_message = $2,
+               response_payload = $3::jsonb
+           WHERE id = (
+             SELECT id FROM execution_attempts
+             WHERE healing_action_id = $1 AND status = 'RUNNING'
+             ORDER BY attempt_number DESC
+             LIMIT 1
+           );`,
+          [actionId, errorMessage, JSON.stringify({ error: errorMessage, ...(details || {}) })]
+        );
+      }
 
-    // 3. Record execution attempt
-    const attemptRes = await pool.query(
-      `INSERT INTO execution_attempts (
-        healing_action_id, attempt_number, command_type,
-        request_payload, response_payload, status,
-        started_at, completed_at, duration_ms
-      ) VALUES (
-        $1, $2, $3,
-        $4::jsonb, $5::jsonb, 'SUCCEEDED'::execution_status,
-        NOW(), NOW() + interval '1.5 seconds', 1500
-      ) RETURNING *;`,
-      [
-        actionId,
-        attemptNum,
-        action.action_type_code || 'EXECUTE_HEALING',
-        JSON.stringify({ target: action.target_name, action: action.action_type_code }),
-        JSON.stringify({ statusCode: 200, message: 'Execution succeeded via Controller/Agent' }),
-      ]
-    );
+      const updRes = await client.query(
+        `UPDATE healing_actions
+         SET execution_status = 'FAILED'::execution_status,
+             completed_at = COALESCE(completed_at, NOW()),
+             error_message = $2,
+             result = COALESCE(result, '{}'::jsonb) || $3::jsonb
+         WHERE id = $1 AND execution_status = 'RUNNING'
+         RETURNING *;`,
+        [
+          actionId,
+          errorMessage,
+          JSON.stringify({
+            status: 'FAILED',
+            error: errorMessage,
+            failed_at: new Date().toISOString(),
+            ...(details || {}),
+          }),
+        ]
+      );
 
-    // 4. Record recovery verification
-    await pool.query(
-      `INSERT INTO recovery_verifications (
-        healing_action_id, verification_type,
-        status_before, status_after,
-        verification_result, verification_details,
-        verified_at, duration_ms
-      ) VALUES (
-        $1, 'SLO_HEALTH_CHECK',
-        $2::jsonb, $3::jsonb,
-        true, $4::jsonb,
-        NOW() + interval '2 seconds', 800
-      );`,
-      [
-        actionId,
-        JSON.stringify({ health: 'DEGRADED', target: action.target_name }),
-        JSON.stringify({ health: 'HEALTHY', target: action.target_name }),
-        JSON.stringify({ status: 'RESTORED', message: 'Tất cả các probe và metrics đã trở về ngưỡng bình thường' }),
-      ]
-    );
+      await client.query('COMMIT');
+      return updRes.rows[0] || null;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 
-    // 5. Mark action and incident RESOLVED/SUCCEEDED
-    const updateRes = await pool.query(
-      `UPDATE healing_actions 
-       SET execution_status = 'SUCCEEDED', 
-           completed_at = NOW(),
-           result = $2::jsonb
-       WHERE id = $1
-       RETURNING *;`,
-      [
-        actionId,
-        JSON.stringify({
-          status: 'SUCCESS',
-          message: `Hành động ${action.action_type_name || action.action_type_code} đã hoàn tất thành công trên ${action.target_name}.`,
-          duration_ms: 1500,
-          completed_at: new Date().toISOString(),
-        }),
-      ]
-    );
+  /**
+   * 4b. Persist real post-action recovery verification and transition RUNNING -> COMPLETED or FAILED.
+   * Requires an actual COMPLETED execution_attempts record before COMPLETED is permitted.
+   */
+  public static async finalizeRecoveryVerificationOutcome(
+    actionId: string,
+    verification: {
+      verificationType: string;
+      verified: boolean;
+      statusBefore: any;
+      statusAfter: any;
+      details: any;
+      durationMs?: number;
+      errorMessage?: string;
+    }
+  ): Promise<any | null> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const lockRes = await client.query(
+        `SELECT id, execution_status, incident_id, result FROM healing_actions WHERE id = $1 FOR UPDATE;`,
+        [actionId]
+      );
+      const act = lockRes.rows[0];
+      if (!act) {
+        await client.query('ROLLBACK');
+        return null;
+      }
 
-    // Do not prematurely mark incident RESOLVED here.
-    // Incident is only marked RESOLVED once RecoveryVerificationService confirms verified health.
+      const attRes = await client.query(
+        `SELECT 1 FROM execution_attempts WHERE healing_action_id = $1 AND status = 'COMPLETED' LIMIT 1;`,
+        [actionId]
+      );
+      const hasCompletedAttempt = attRes.rows.length > 0;
 
-    return {
-      action: updateRes.rows[0],
-      attempt: attemptRes.rows[0],
-    };
+      if (verification.verified && !hasCompletedAttempt) {
+        await client.query('ROLLBACK');
+        throw new ApiError(
+          409,
+          'Không thể chuyển sang COMPLETED vì chưa có bằng chứng thực thi thành công từ Kubernetes Agent'
+        );
+      }
+
+      await client.query(
+        `INSERT INTO recovery_verifications (
+           healing_action_id, verification_type, status_before, status_after,
+           verification_result, verification_details, verified_at, duration_ms
+         ) VALUES (
+           $1, $2, $3::jsonb, $4::jsonb,
+           $5, $6::jsonb, NOW(), $7
+         );`,
+        [
+          actionId,
+          verification.verificationType,
+          JSON.stringify(verification.statusBefore || {}),
+          JSON.stringify(verification.statusAfter || {}),
+          Boolean(verification.verified),
+          JSON.stringify(verification.details || {}),
+          Math.max(0, Math.round(Number(verification.durationMs || 0))),
+        ]
+      );
+
+      let updatedRow = act;
+      if (act.execution_status === 'RUNNING') {
+        const nextStatus = verification.verified && hasCompletedAttempt ? 'COMPLETED' : 'FAILED';
+        const failMsg =
+          nextStatus === 'FAILED'
+            ? verification.errorMessage || verification.details?.reason || 'Hậu kiểm phục hồi thất bại'
+            : null;
+        const patchResult = {
+          status: nextStatus === 'COMPLETED' ? 'SUCCESS' : 'FAILED',
+          recovery_verified: Boolean(verification.verified),
+          verified_at: new Date().toISOString(),
+          ...(failMsg ? { error: failMsg } : {}),
+        };
+        const updRes = await client.query(
+          `UPDATE healing_actions
+           SET execution_status = $2::execution_status,
+               completed_at = NOW(),
+               error_message = $3,
+               result = COALESCE(result, '{}'::jsonb) || $4::jsonb
+           WHERE id = $1 AND execution_status = 'RUNNING'
+           RETURNING *;`,
+          [actionId, nextStatus, failMsg, JSON.stringify(patchResult)]
+        );
+        if (updRes.rows[0]) {
+          updatedRow = updRes.rows[0];
+        }
+      }
+
+      await client.query('COMMIT');
+      return updatedRow;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -660,7 +921,7 @@ export class HealingActionModel {
     const action = await this.findActionById(actionId);
     if (!action) throw new Error('Không tìm thấy hành động tự phục hồi để hủy bỏ');
 
-    const completedStatuses = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+    const completedStatuses = ['COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
     if (completedStatuses.includes(action.execution_status)) {
       throw new Error(`Hành động đã kết thúc với trạng thái ${action.execution_status}, không thể hủy bỏ`);
     }
@@ -729,7 +990,7 @@ export class HealingActionModel {
   }
 
   /**
-   * 5. Update action status
+   * 5. Update action status (strict validation: rejects unknown status and requires execution + recovery evidence for COMPLETED)
    */
   public static async updateStatus(
     actionId: string,
@@ -738,9 +999,21 @@ export class HealingActionModel {
     errorMessage?: string,
     organizationId?: string
   ): Promise<any> {
+    if (!status || typeof status !== 'string') {
+      throw new ApiError(400, 'Thiếu trạng thái thực thi (status) hợp lệ');
+    }
     const validStatuses = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
-    const normalizedStatus = status.toUpperCase() === 'SUCCEEDED' ? 'COMPLETED' : status.toUpperCase();
-    const safeStatus = validStatuses.includes(normalizedStatus) ? normalizedStatus : 'COMPLETED';
+    const rawUpper = status.trim().toUpperCase();
+    const normalizedStatus = rawUpper === 'SUCCEEDED' ? 'COMPLETED' : rawUpper;
+    if (!validStatuses.includes(normalizedStatus)) {
+      throw new ApiError(400, `Trạng thái thực thi không hợp lệ: ${status}`);
+    }
+
+    const evidenceGuardSql =
+      normalizedStatus === 'COMPLETED'
+        ? `AND EXISTS (SELECT 1 FROM execution_attempts ea WHERE ea.healing_action_id = h.id AND ea.status = 'COMPLETED')
+           AND EXISTS (SELECT 1 FROM recovery_verifications rv WHERE rv.healing_action_id = h.id AND rv.verification_result = true)`
+        : '';
 
     const query = organizationId
       ? `
@@ -748,26 +1021,28 @@ export class HealingActionModel {
       SET execution_status = $2::execution_status,
           error_message = $3,
           result = COALESCE($4::jsonb, h.result),
-          completed_at = CASE WHEN $2::text IN ('COMPLETED', 'FAILED', 'CANCELLED') THEN NOW() ELSE h.completed_at END
+          completed_at = CASE WHEN $2::text IN ('COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED') THEN COALESCE(h.completed_at, NOW()) ELSE h.completed_at END
       FROM environments e
       WHERE h.id = $1
         AND h.environment_id = e.id
         AND e.organization_id = $5::uuid
+        ${evidenceGuardSql}
       RETURNING h.*;
     `
       : `
-      UPDATE healing_actions 
+      UPDATE healing_actions h
       SET execution_status = $2::execution_status,
           error_message = $3,
-          result = COALESCE($4::jsonb, result),
-          completed_at = CASE WHEN $2::text IN ('COMPLETED', 'FAILED', 'CANCELLED') THEN NOW() ELSE completed_at END
-      WHERE id = $1
-      RETURNING *;
+          result = COALESCE($4::jsonb, h.result),
+          completed_at = CASE WHEN $2::text IN ('COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED') THEN COALESCE(h.completed_at, NOW()) ELSE h.completed_at END
+      WHERE h.id = $1
+        ${evidenceGuardSql}
+      RETURNING h.*;
     `;
 
-    const params = [
+    const params: any[] = [
       actionId,
-      safeStatus,
+      normalizedStatus,
       errorMessage || null,
       result ? JSON.stringify(result) : null,
     ];
@@ -776,6 +1051,15 @@ export class HealingActionModel {
     }
 
     const res = await pool.query(query, params);
+    if (res.rows.length === 0 && normalizedStatus === 'COMPLETED') {
+      const exists = await this.findActionById(actionId);
+      if (exists && (!organizationId || exists.organization_id === organizationId)) {
+        throw new ApiError(
+          409,
+          'Không thể cập nhật trạng thái COMPLETED khi chưa có bằng chứng thực thi (execution_attempts) và hậu kiểm phục hồi (recovery_verifications) hợp lệ'
+        );
+      }
+    }
 
     return res.rows[0] || null;
   }
@@ -1038,7 +1322,7 @@ export class HealingActionModel {
       );
       await pool.query(
         `UPDATE healing_actions
-         SET approval_status = 'NOT_REQUIRED'::approval_status,
+         SET approval_status = 'APPROVED'::approval_status,
              execution_status = 'CANCELLED'::execution_status,
              completed_at = NOW(),
              error_message = 'Chính sách đã chuyển sang chế độ Tự Động Chạy.'
@@ -1276,35 +1560,117 @@ export class HealingActionModel {
   }
 
   public static async approveAction(actionId: string, approvedBy: string, reason?: string): Promise<any> {
-    await pool.query(
-      `UPDATE approvals 
-       SET status = 'APPROVED', approved_by = (SELECT id FROM users WHERE id::text = $2 LIMIT 1), decided_at = NOW(), reason = COALESCE($3, reason)
-       WHERE healing_action_id = $1 AND status = 'PENDING';`,
-      [actionId, approvedBy, reason || 'Phê duyệt can thiệp tự phục hồi']
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const res = await pool.query(
-      `UPDATE healing_actions 
-       SET approval_status = 'APPROVED'
-       WHERE id = $1
-       RETURNING *;`,
-      [actionId]
-    );
+      const lockActRes = await client.query(
+        `SELECT * FROM healing_actions WHERE id = $1 FOR UPDATE;`,
+        [actionId]
+      );
+      const currentAct = lockActRes.rows[0];
+      if (!currentAct) {
+        await client.query('ROLLBACK');
+        return null;
+      }
 
-    const action = res.rows[0];
-    if (action) {
+      const apLockRes = await client.query(
+        `SELECT id, status, expires_at,
+                (expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired
+         FROM approvals
+         WHERE healing_action_id = $1
+         ORDER BY requested_at DESC
+         LIMIT 1
+         FOR UPDATE;`,
+        [actionId]
+      );
+      const ap = apLockRes.rows[0];
+
+      // Enforce expiration atomically against PostgreSQL NOW()
+      if (
+        currentAct.approval_status === 'EXPIRED' ||
+        (ap && (ap.status === 'EXPIRED' || ap.is_expired === true))
+      ) {
+        if (ap && ap.status === 'PENDING') {
+          await client.query(
+            `UPDATE approvals SET status = 'EXPIRED', decided_at = COALESCE(decided_at, NOW()) WHERE id = $1 AND status = 'PENDING';`,
+            [ap.id]
+          );
+        }
+        await client.query(
+          `UPDATE healing_actions
+           SET approval_status = 'EXPIRED',
+               execution_status = CASE WHEN execution_status = 'PENDING' THEN 'CANCELLED'::execution_status ELSE execution_status END,
+               completed_at = COALESCE(completed_at, NOW()),
+               error_message = COALESCE(error_message, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED)')
+           WHERE id = $1;`,
+          [actionId]
+        );
+        await client.query('COMMIT');
+        throw new ApiError(409, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED), không thể phê duyệt');
+      }
+
+      if (currentAct.approval_status !== 'PENDING' || currentAct.execution_status !== 'PENDING') {
+        await client.query('ROLLBACK');
+        throw new ApiError(
+          409,
+          `Hành động đã ở trạng thái (${currentAct.approval_status}/${currentAct.execution_status}), không thể phê duyệt lại`
+        );
+      }
+
+      if (ap) {
+        if (ap.status !== 'PENDING') {
+          await client.query('ROLLBACK');
+          throw new ApiError(409, `Phiếu phê duyệt đã ở trạng thái ${ap.status}, không thể phê duyệt lại`);
+        }
+        const apUpd = await client.query(
+          `UPDATE approvals
+           SET status = 'APPROVED',
+               approved_by = (SELECT id FROM users WHERE id::text = $2 LIMIT 1),
+               decided_at = NOW(),
+               reason = COALESCE($3, reason)
+           WHERE id = $1 AND status = 'PENDING' AND (expires_at IS NULL OR expires_at > NOW())
+           RETURNING id;`,
+          [ap.id, approvedBy, reason || 'Phê duyệt can thiệp tự phục hồi']
+        );
+        if (apUpd.rows.length === 0) {
+          await client.query('ROLLBACK');
+          throw new ApiError(409, 'Phiếu phê duyệt đã hết hạn hoặc đã được xử lý trước đó');
+        }
+      }
+
+      const res = await client.query(
+        `UPDATE healing_actions
+         SET approval_status = 'APPROVED'
+         WHERE id = $1
+           AND approval_status = 'PENDING'
+           AND execution_status = 'PENDING'
+         RETURNING *;`,
+        [actionId]
+      );
+      if (res.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new ApiError(409, 'Hành động không còn ở trạng thái PENDING để phê duyệt');
+      }
+
+      const action = res.rows[0];
       if (action.recommendation_id) {
-        await pool.query(
+        await client.query(
           `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
           [action.recommendation_id]
         );
       }
       if (action.incident_id || action.target_name || action.target_id) {
-        await pool.query(
+        await client.query(
           `UPDATE ai_recommendations r
            SET status = 'APPLIED'
            FROM incidents i
            WHERE r.incident_id = i.id
+             AND EXISTS (
+               SELECT 1 FROM environments env
+               WHERE env.id = $4::uuid
+                 AND env.organization_id = i.organization_id
+             )
              AND (
                ($1::uuid IS NOT NULL AND r.incident_id = $1::uuid)
                OR ($2::text IS NOT NULL AND (
@@ -1316,43 +1682,136 @@ export class HealingActionModel {
                OR ($3::text IS NOT NULL AND i.target_id = $3)
              )
              AND r.status = 'PROPOSED';`,
-          [action.incident_id || null, action.target_name || null, action.target_id ? String(action.target_id) : null]
+          [
+            action.incident_id || null,
+            action.target_name || null,
+            action.target_id ? String(action.target_id) : null,
+            action.environment_id,
+          ]
         );
       }
-      // Note: Approving an action grants execution permission, but does NOT resolve the incident.
-      // The incident remains in its lifecycle until RecoveryVerificationService confirms success.
-    }
 
-    return action || null;
+      await client.query('COMMIT');
+      return action;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   public static async rejectAction(actionId: string, rejectedBy: string, reason?: string): Promise<any> {
-    await pool.query(
-      `UPDATE approvals 
-       SET status = 'REJECTED', approved_by = (SELECT id FROM users WHERE id::text = $2 LIMIT 1), decided_at = NOW(), reason = COALESCE($3, reason)
-       WHERE healing_action_id = $1 AND status = 'PENDING';`,
-      [actionId, rejectedBy, reason || 'Từ chối thực thi do rủi ro gián đoạn dịch vụ']
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const res = await pool.query(
-      `UPDATE healing_actions 
-       SET approval_status = 'REJECTED', execution_status = 'CANCELLED'
-       WHERE id = $1
-       RETURNING *;`,
-      [actionId]
-    );
-
-    const action = res.rows[0];
-    if (action && action.recommendation_id) {
-      await pool.query(
-        `UPDATE ai_recommendations SET status = 'DISMISSED' WHERE id = $1;`,
-        [action.recommendation_id]
+      const lockActRes = await client.query(
+        `SELECT * FROM healing_actions WHERE id = $1 FOR UPDATE;`,
+        [actionId]
       );
-    }
-    // Note: Rejecting an automated action cancels that action, but does NOT mark the incident RESOLVED.
-    // The incident remains OPEN for manual SRE intervention.
+      const currentAct = lockActRes.rows[0];
+      if (!currentAct) {
+        await client.query('ROLLBACK');
+        return null;
+      }
 
-    return action || null;
+      const apLockRes = await client.query(
+        `SELECT id, status, expires_at,
+                (expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired
+         FROM approvals
+         WHERE healing_action_id = $1
+         ORDER BY requested_at DESC
+         LIMIT 1
+         FOR UPDATE;`,
+        [actionId]
+      );
+      const ap = apLockRes.rows[0];
+
+      if (
+        currentAct.approval_status === 'EXPIRED' ||
+        (ap && (ap.status === 'EXPIRED' || ap.is_expired === true))
+      ) {
+        if (ap && ap.status === 'PENDING') {
+          await client.query(
+            `UPDATE approvals SET status = 'EXPIRED', decided_at = COALESCE(decided_at, NOW()) WHERE id = $1 AND status = 'PENDING';`,
+            [ap.id]
+          );
+        }
+        await client.query(
+          `UPDATE healing_actions
+           SET approval_status = 'EXPIRED',
+               execution_status = CASE WHEN execution_status = 'PENDING' THEN 'CANCELLED'::execution_status ELSE execution_status END,
+               completed_at = COALESCE(completed_at, NOW()),
+               error_message = COALESCE(error_message, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED)')
+           WHERE id = $1;`,
+          [actionId]
+        );
+        await client.query('COMMIT');
+        throw new ApiError(409, 'Yêu cầu phê duyệt đã hết hạn (EXPIRED), không thể từ chối');
+      }
+
+      if (currentAct.approval_status !== 'PENDING' || currentAct.execution_status !== 'PENDING') {
+        await client.query('ROLLBACK');
+        throw new ApiError(
+          409,
+          `Hành động đã ở trạng thái (${currentAct.approval_status}/${currentAct.execution_status}), không thể từ chối`
+        );
+      }
+
+      if (ap) {
+        if (ap.status !== 'PENDING') {
+          await client.query('ROLLBACK');
+          throw new ApiError(409, `Phiếu phê duyệt đã ở trạng thái ${ap.status}, không thể từ chối`);
+        }
+        const apUpd = await client.query(
+          `UPDATE approvals
+           SET status = 'REJECTED',
+               approved_by = (SELECT id FROM users WHERE id::text = $2 LIMIT 1),
+               decided_at = NOW(),
+               reason = COALESCE($3, reason)
+           WHERE id = $1 AND status = 'PENDING' AND (expires_at IS NULL OR expires_at > NOW())
+           RETURNING id;`,
+          [ap.id, rejectedBy, reason || 'Từ chối thực thi do rủi ro gián đoạn dịch vụ']
+        );
+        if (apUpd.rows.length === 0) {
+          await client.query('ROLLBACK');
+          throw new ApiError(409, 'Phiếu phê duyệt đã hết hạn hoặc đã được xử lý trước đó');
+        }
+      }
+
+      const res = await client.query(
+        `UPDATE healing_actions
+         SET approval_status = 'REJECTED',
+             execution_status = 'CANCELLED',
+             completed_at = COALESCE(completed_at, NOW())
+         WHERE id = $1
+           AND approval_status = 'PENDING'
+           AND execution_status = 'PENDING'
+         RETURNING *;`,
+        [actionId]
+      );
+      if (res.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new ApiError(409, 'Hành động không còn ở trạng thái PENDING để từ chối');
+      }
+
+      const action = res.rows[0];
+      if (action.recommendation_id) {
+        await client.query(
+          `UPDATE ai_recommendations SET status = 'DISMISSED' WHERE id = $1;`,
+          [action.recommendation_id]
+        );
+      }
+
+      await client.query('COMMIT');
+      return action;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -1382,7 +1841,7 @@ export class HealingActionModel {
     const summarySql = `
       SELECT 
         count(*) AS total_actions,
-        count(*) FILTER (WHERE h.execution_status = 'SUCCEEDED') AS succeeded_actions,
+        count(*) FILTER (WHERE h.execution_status = 'COMPLETED') AS succeeded_actions,
         count(*) FILTER (WHERE h.execution_status = 'FAILED') AS failed_actions,
         COALESCE(AVG(EXTRACT(EPOCH FROM (h.completed_at - h.started_at))) FILTER (WHERE h.completed_at IS NOT NULL AND h.started_at IS NOT NULL), 2.4) AS avg_duration_seconds
       FROM healing_actions h

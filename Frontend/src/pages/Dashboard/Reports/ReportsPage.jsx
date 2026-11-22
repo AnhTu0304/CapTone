@@ -2038,7 +2038,7 @@ export const ReportsPage = () => {
               }}
             >
               <option value="ALL">Mọi trạng thái</option>
-              <option value="SUCCEEDED">Thành công (SUCCEEDED)</option>
+              <option value="COMPLETED">Thành công (COMPLETED)</option>
               <option value="FAILED">Thất bại (FAILED)</option>
               <option value="CANCELLED">Bị hủy / HITL (CANCELLED)</option>
               <option value="PENDING">Đang chờ (PENDING)</option>
@@ -2150,7 +2150,7 @@ export const ReportsPage = () => {
                 </tr>
               ) : (
                 actionRows.map((row) => {
-                  const isOk = row.executionStatus === 'SUCCEEDED';
+                  const isOk = row.executionStatus === 'COMPLETED';
                   const isFail = row.executionStatus === 'FAILED';
                   const isCancel = row.executionStatus === 'CANCELLED';
 

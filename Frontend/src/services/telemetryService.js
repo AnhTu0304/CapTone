@@ -4,7 +4,7 @@
  * Connects directly to Main Backend (/api/v1/telemetry) with automatic fallback.
  */
 
-import { getAuthToken, getActiveOrganizationId, request } from './apiClient';
+import { getAuthToken, getActiveOrganizationId, request, getWsTicket } from './apiClient';
 
 const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
 const API_BASE_URL = rawApiUrl
@@ -13,10 +13,7 @@ const API_BASE_URL = rawApiUrl
   .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
 
 const getHeaders = () => {
-  const token =
-    getAuthToken() ||
-    localStorage.getItem('selfheal_auth_token') ||
-    localStorage.getItem('token');
+  const token = getAuthToken();
 
   const headers = {
     'Content-Type': 'application/json',
@@ -755,7 +752,7 @@ export const telemetryService = {
     let reconnectTimeout = null;
     let isClosedExplicitly = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (isClosedExplicitly) return;
       try {
         const isSecure = window.location.protocol === 'https:';
@@ -768,20 +765,19 @@ export const telemetryService = {
             : window.location.hostname;
           host = `${targetHost}:5005`;
         }
-        const token =
-          getAuthToken() ||
-          localStorage.getItem('selfheal_auth_token') ||
-          localStorage.getItem('token');
-        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+        const token = getAuthToken();
+        if (!token) return;
+        const ticket = await getWsTicket();
+        if (!ticket || isClosedExplicitly) return;
         const clusterParam = clusterId ? `&cluster_id=${encodeURIComponent(clusterId)}` : '';
         const orgId = getActiveOrganizationId();
         const orgParam = orgId ? `&organization_id=${encodeURIComponent(orgId)}` : '';
-        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${serviceId}${clusterParam}${orgParam}${tokenParam}`;
+        const wsUrl = `${protocol}//${host}/api/v1/telemetry/ws?service_id=${encodeURIComponent(serviceId)}${clusterParam}${orgParam}&ticket=${encodeURIComponent(ticket)}`;
 
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-          console.log('🟢 [TelemetryWS] Connected to Live WebSocket Stream:', wsUrl);
+          console.log('🟢 [TelemetryWS] Connected to Live WebSocket Stream');
           if (onStatusChange) onStatusChange(true);
         };
 

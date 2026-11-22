@@ -193,10 +193,10 @@ class LogStreamManager extends EventEmitter {
       }
     }
 
-    // 8. Tenant Isolation check: if stream is scoped to allowedOrgIds [S4][PB17] 3.5
+    // 8. Tenant Isolation check: fail closed if stream is scoped to allowedOrgIds [S4][PB17] 3.5
     if (Array.isArray(filters.allowedOrgIds) && filters.allowedOrgIds.length > 0) {
       const logOrgId = log.organization_id || log.org_id || log.metadata?.organization_id || log.metadata?.org_id;
-      if (logOrgId && !filters.allowedOrgIds.includes(String(logOrgId))) {
+      if (!logOrgId || !filters.allowedOrgIds.includes(String(logOrgId))) {
         return false;
       }
     }

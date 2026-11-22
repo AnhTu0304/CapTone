@@ -6,6 +6,7 @@ import { STATUS_PAGE_CONFIGS } from './statusConfigs';
 export const ForbiddenPage = ({
   title = STATUS_PAGE_CONFIGS['403'].title,
   message = STATUS_PAGE_CONFIGS['403'].message,
+  embedded = false,
 }) => {
   const cfg = STATUS_PAGE_CONFIGS['403'];
 
@@ -14,6 +15,7 @@ export const ForbiddenPage = ({
       {...cfg}
       title={title}
       message={message}
+      embedded={embedded}
       testId="forbidden-page"
     />
   );
@@ -24,6 +26,7 @@ ForbiddenPage.propTypes = {
   title: PropTypes.string,
   message: PropTypes.string,
   redirectPath: PropTypes.string,
+  embedded: PropTypes.bool,
 };
 
 export default ForbiddenPage;

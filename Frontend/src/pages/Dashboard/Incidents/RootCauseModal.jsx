@@ -607,7 +607,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   );
 
   const isVerifyingAfterAction = !isResolved && !hasActualPendingApproval && (
-    (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'SUCCEEDED' ||
+    (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'COMPLETED' ||
     (incident?.status && incident?.status.includes('Đang xác minh'))
   );
 
@@ -1045,8 +1045,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         const verResult = item.verification_result;
         const isStaleRunning = execStatus === 'RUNNING' && (item.started_at || item.created_at) && (Date.now() - new Date(item.started_at || item.created_at).getTime() > 60000);
         const isFailed = execStatus === 'FAILED' || verResult === false || isStaleRunning;
-        const isVerifiedSuccess = !isFailed && (verResult === true || (execStatus === 'SUCCEEDED' && isResolved));
-        const isVerifying = execStatus === 'SUCCEEDED' && !isVerifiedSuccess && !isFailed;
+        const isVerifiedSuccess = !isFailed && (verResult === true || (execStatus === 'COMPLETED' && isResolved));
+        const isVerifying = execStatus === 'COMPLETED' && !isVerifiedSuccess && !isFailed;
         const timeStr = (item.verified_at || item.completed_at || item.created_at)
           ? new Date(item.verified_at || item.completed_at || item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           : null;

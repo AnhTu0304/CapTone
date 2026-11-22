@@ -36,6 +36,7 @@ RUN npm ci --omit=dev
 # Copy compiled code and SQL migrations from builder/context
 COPY --from=builder /app/dist ./dist
 COPY migrations ./migrations
+COPY seeds ./seeds
 
 # Create a non-root user for security
 USER node

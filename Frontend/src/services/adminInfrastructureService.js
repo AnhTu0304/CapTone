@@ -1,14 +1,8 @@
 import { clusterService } from './clusterService';
 import { agentService } from './agentService';
+import { getAuthToken } from './apiClient';
 
-const hasActiveAuthToken = () =>
-  Boolean(
-    typeof window !== 'undefined' &&
-      (sessionStorage.getItem('admin_access_token') ||
-        localStorage.getItem('admin_access_token') ||
-        localStorage.getItem('selfheal_auth_token') ||
-        localStorage.getItem('token'))
-  );
+const hasActiveAuthToken = () => Boolean(typeof window !== 'undefined' && getAuthToken());
 
 /**
  * @file adminInfrastructureService.js

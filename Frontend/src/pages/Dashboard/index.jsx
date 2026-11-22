@@ -20,9 +20,11 @@ import MembersPage from './Organization/MembersPage';
 import ClustersPage from './Clusters/ClustersPage';
 import ClusterDetailPage from './Clusters/ClusterDetailPage';
 import NotificationsPage from './Notifications/NotificationsPage';
+import AlertsPage from './Alerts/AlertsPage';
 import AuditLogsPage from './AuditLogs/AuditLogsPage';
 import ReportsPage from './Reports/ReportsPage';
 import SettingsPage from './Settings/SettingsPage';
+import { NotFoundPage } from '../Error/StatusPages';
 
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
@@ -132,11 +134,14 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     if (path === '/dashboard/self-healing/approvals') {
       return <ApprovalsPage onNavigate={onNavigate} />;
     }
-    if (path.startsWith('/dashboard/self-healing')) {
+    if (path === '/dashboard/self-healing' || path === '/dashboard/self-healing/') {
       return <HealingActionsPage onNavigate={onNavigate} />;
     }
 
     // 7. System
+    if (path === '/dashboard/alerts') {
+      return <AlertsPage onNavigate={onNavigate} />;
+    }
     if (path === '/dashboard/notifications') {
       return <NotificationsPage />;
     }
@@ -150,8 +155,15 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
       return <SettingsPage />;
     }
 
-    // Fallback to overview
-    return <OverviewPage />;
+    return (
+      <NotFoundPage
+        embedded
+        onNavigate={onNavigate}
+        warnPath={currentPath}
+        title="404 — Không tìm thấy trang Dashboard"
+        message={`Đường dẫn "${currentPath}" không tồn tại trong không gian làm việc Dashboard.`}
+      />
+    );
   };
 
   return (

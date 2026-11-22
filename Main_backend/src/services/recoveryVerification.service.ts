@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import { WorkloadModel } from '../models';
+import { HealingActionModel } from '../models/healingAction.model';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
 
 export type VerificationStage = 'COOLDOWN' | 'INITIAL_CHECK' | 'STABILITY_CHECK' | 'EXTENDED_CHECK';
@@ -214,6 +215,7 @@ export class RecoveryVerificationService {
     customOptions?: {
       actionId?: string;
       incidentId?: string;
+      organizationId?: string;
       severity?: string;
       podUidBefore?: string | null;
       podUidAfter?: string | null;
@@ -247,6 +249,7 @@ export class RecoveryVerificationService {
       SELECT h.id, h.incident_id, h.completed_at, h.started_at, h.action_type_id,
              h.execution_status, h.result, act.code AS action_code, i.severity AS incident_severity
       FROM healing_actions h
+      JOIN environments env ON env.id = h.environment_id
       LEFT JOIN healing_action_types act ON act.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
       WHERE (
@@ -256,19 +259,25 @@ export class RecoveryVerificationService {
     `;
     const params: any[] = [targetAliasesLower, validTargetWorkloadId];
 
+    if (customOptions?.organizationId) {
+      params.push(customOptions.organizationId);
+      actionQuery += ` AND env.organization_id = $${params.length}::uuid`;
+    }
+
     if (customOptions?.actionId) {
-      actionQuery += ` AND h.id = $3`;
       params.push(customOptions.actionId);
+      actionQuery += ` AND h.id = $${params.length}`;
     } else {
       actionQuery += `
-        AND h.execution_status = 'SUCCEEDED'
-        AND h.completed_at IS NOT NULL
-        AND h.completed_at >= NOW() - interval '60 minutes'
+        AND (
+          (h.execution_status = 'RUNNING' AND h.result->>'agent_status' = 'COMPLETED')
+          OR (h.execution_status = 'COMPLETED' AND h.completed_at IS NOT NULL AND h.completed_at >= NOW() - interval '60 minutes')
+        )
         AND NOT EXISTS (
           SELECT 1 FROM recovery_verifications rv
           WHERE rv.healing_action_id = h.id
         )
-        ORDER BY h.completed_at DESC
+        ORDER BY COALESCE(h.completed_at, h.started_at, h.created_at) DESC
         LIMIT 1
       `;
     }
@@ -303,9 +312,9 @@ export class RecoveryVerificationService {
       };
     }
 
-    // Cooldown verification:
-    // If completed_at is defined, verify cooldown elapsed
-    const completedAtDate = actionRow?.completed_at ? new Date(actionRow.completed_at) : null;
+    // Cooldown verification: use completed_at or Agent completion timestamp
+    const rawCompletedAt = actionRow?.completed_at || actionRow?.result?.agent_completed_at || null;
+    const completedAtDate = rawCompletedAt ? new Date(rawCompletedAt) : null;
     if (completedAtDate && !isNaN(completedAtDate.getTime())) {
       const elapsedSinceCompletionMs = Date.now() - completedAtDate.getTime();
       if (elapsedSinceCompletionMs < cooldownSec * 1000) {
@@ -498,34 +507,26 @@ export class RecoveryVerificationService {
       violations: allViolations,
     };
 
-    // If an actionRow exists and we have a definitive pass/fail result, persist to recovery_verifications
+    // If an actionRow exists and we have a definitive pass/fail result, persist verification and finalize RUNNING -> COMPLETED/FAILED
     if (actionRow && (stage === 'EXTENDED_CHECK' || (stage === 'STABILITY_CHECK' && incidentResolved) || isDegraded)) {
       try {
-        await pool.query(
-          `INSERT INTO recovery_verifications (
-             healing_action_id, verification_type, status_before, status_after,
-             verification_result, verification_details, verified_at, duration_ms
-           ) VALUES (
-             $1, 'ADAPTIVE_RECOVERY_VERIFICATION', $2::jsonb, $3::jsonb,
-             $4, $5::jsonb, NOW(), $6
-           );`,
-          [
-            actionRow.id,
-            JSON.stringify({ health: 'DEGRADED', stage, severity }),
-            JSON.stringify({
-              health: isDegraded ? 'STILL_DEGRADED' : 'HEALTHY',
-              stage,
-              status,
-              sample_count: sampleCount,
-              pod_uid_before: podUidBefore,
-              pod_uid_after: podUidAfter,
-              latest_metrics: rawSequence[rawSequence.length - 1] || null,
-            }),
-            verified && !isDegraded,
-            JSON.stringify(details),
-            actualDurationMs,
-          ]
-        );
+        await HealingActionModel.finalizeRecoveryVerificationOutcome(actionRow.id, {
+          verificationType: 'ADAPTIVE_RECOVERY_VERIFICATION',
+          verified: verified && !isDegraded,
+          statusBefore: { health: 'DEGRADED', stage, severity },
+          statusAfter: {
+            health: isDegraded ? 'STILL_DEGRADED' : 'HEALTHY',
+            stage,
+            status,
+            sample_count: sampleCount,
+            pod_uid_before: podUidBefore,
+            pod_uid_after: podUidAfter,
+            latest_metrics: rawSequence[rawSequence.length - 1] || null,
+          },
+          details,
+          durationMs: actualDurationMs,
+          errorMessage: isDegraded ? reason : undefined,
+        });
 
         if (incidentResolved && actionRow.incident_id) {
           // Resolve the incident only when no other failed action exists

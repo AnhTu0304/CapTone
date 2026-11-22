@@ -10,7 +10,16 @@ data:
   DB_HOST: "postgres-service"
   DB_PORT: "5432"
   DB_NAME: "captone_db"
-  DB_USER: "postgres"
+  DB_USER: "selfheal_app"
+  DB_SSL_MODE: "verify-full"
+  DB_SSL_CA_PATH: "/etc/postgresql/certs/ca.crt"
+  DB_SSL_REQUIRE_STRICT: "true"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_ENABLED: "true"
+  JWT_ACCESS_EXPIRES_IN: "15m"
+  COOKIE_SECURE: "true"
+  TRUST_PROXY_HOPS: "1"
   OTEL_ENABLED: "true"
   OTEL_SERVICE_NAME: "selfheal-backend"
   OTEL_SERVICE_VERSION: "1.0.0"
@@ -18,16 +27,6 @@ data:
   DEPLOYMENT_ENVIRONMENT: "production"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4318"
   OTEL_METRIC_EXPORT_INTERVAL_MS: "15000"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: backend-secret
-  namespace: captone
-type: Opaque
-stringData:
-  DB_PASSWORD: "postgres"
-  JWT_SECRET: "super_secret_jwt_key_development_only"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,10 +45,19 @@ spec:
       labels:
         app: main-backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: main-backend
           image: captone-main-backend:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 5000
               name: http
@@ -90,6 +98,18 @@ spec:
               port: 5000
             initialDelaySeconds: 5
             periodSeconds: 10
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/postgresql/certs
+              readOnly: true
+      volumes:
+        - name: postgres-ca
+          secret:
+            secretName: postgres-tls-secret
+            items:
+              - key: ca.crt
+                path: ca.crt
+            defaultMode: 0444
 ---
 apiVersion: v1
 kind: Service
@@ -99,11 +119,10 @@ metadata:
   labels:
     app: main-backend
 spec:
-  type: NodePort # Hoặc ClusterIP / LoadBalancer tùy môi trường
+  type: ClusterIP
   ports:
     - port: 5000
       targetPort: 5000
-      nodePort: 30500
       protocol: TCP
       name: http
   selector:

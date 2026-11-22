@@ -1,6 +1,16 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 
+const isSafeHref = (href) => {
+  if (!href || typeof href !== 'string') return false;
+  const trimmed = href.trim();
+  return (
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('#') ||
+    /^https?:\/\//i.test(trimmed)
+  );
+};
+
 export const Breadcrumb = ({ items = [], className = '' }) => {
   return (
     <nav aria-label="Breadcrumb" className={`breadcrumb-nav ${className}`} style={{ marginBottom: '16px' }}>
@@ -25,7 +35,7 @@ export const Breadcrumb = ({ items = [], className = '' }) => {
                 <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.label}</span>
               ) : (
                 <a
-                  href={item.href || '#'}
+                  href={isSafeHref(item.href) ? item.href : '#'}
                   style={{
                     color: 'var(--text-muted)',
                     transition: 'color 0.15s ease',

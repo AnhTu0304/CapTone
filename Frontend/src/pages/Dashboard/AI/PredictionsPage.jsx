@@ -2884,14 +2884,14 @@ export const PredictionsPage = () => {
       if (!Array.isArray(healingActions) || healingActions.length === 0) return false;
       return healingActions.some((ha) => {
         if (ha.recommendation_id && ha.recommendation_id === r.id) {
-          return ha.approval_status === 'APPROVED' || ha.execution_status === 'SUCCEEDED' || ha.execution_status === 'RUNNING';
+          return ha.approval_status === 'APPROVED' || ha.execution_status === 'COMPLETED' || ha.execution_status === 'RUNNING';
         }
         const haTarget = (ha.target_name || ha.target_id || '').toLowerCase();
         const rTarget = target.toLowerCase();
         const haAction = (ha.action_type_code || ha.action_code || '').toUpperCase().trim();
         const rAction = (r.recommendation || r.action_code || '').toUpperCase().trim();
         if (haTarget && rTarget && haTarget === rTarget && haAction && rAction && haAction === rAction) {
-          return ha.approval_status === 'APPROVED' || ha.execution_status === 'SUCCEEDED' || ha.execution_status === 'RUNNING';
+          return ha.approval_status === 'APPROVED' || ha.execution_status === 'COMPLETED' || ha.execution_status === 'RUNNING';
         }
         return false;
       });

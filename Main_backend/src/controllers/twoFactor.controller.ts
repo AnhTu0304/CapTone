@@ -84,8 +84,8 @@ export class TwoFactorController {
                 throw new ApiError(401, 'Không tìm thấy thông tin xác thực');
             }
 
-            const { password } = req.body;
-            const result = await TwoFactorService.disable(user.id, password);
+            const { password, code } = req.body || {};
+            const result = await TwoFactorService.disable(user.id, password, code);
 
             await AuditService.recordFromRequest(req, {
                 action: 'SECURITY_2FA_DISABLED',

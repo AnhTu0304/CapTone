@@ -56,41 +56,44 @@ export class PodController {
     try {
       const user = (req as any).user;
       const podId = req.params.podId || req.params.id;
+      const scopedOrgId =
+        req.params.orgId ||
+        (req.headers['x-organization-id'] as string | undefined) ||
+        undefined;
+      const scopedClusterId = req.params.clusterId || undefined;
+
       const podRes = await pool.query(
         `SELECT p.id, p.name, p.cluster_id, c.name AS cluster_name, e.organization_id, COALESCE(ns.name, 'default') AS namespace
          FROM pods p
          JOIN clusters c ON p.cluster_id = c.id
          LEFT JOIN environments e ON c.environment_id = e.id
          LEFT JOIN namespaces ns ON p.namespace_id = ns.id
-         WHERE (p.id::text = $1 OR p.name = $1) AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+         WHERE (p.id::text = $1 OR p.name = $1)
+           AND p.deleted_at IS NULL
+           AND c.deleted_at IS NULL
+           AND ($2::uuid IS NULL OR e.organization_id = $2::uuid)
+           AND ($3::uuid IS NULL OR p.cluster_id = $3::uuid)
          LIMIT 1`,
-        [podId]
+        [podId, scopedOrgId || null, scopedClusterId || null]
       );
       if (!podRes.rows[0]) {
         throw new ApiError(404, 'Không tìm thấy Pod');
       }
       const pod = podRes.rows[0];
 
-      const rawRoles: string[] = Array.isArray(user?.roles) ? user.roles : [user?.roles || ''];
-      const isPlatformAdmin = rawRoles.some((r: string) =>
-        ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(r).toUpperCase())
-      );
-
-      if (!isPlatformAdmin) {
-        if (!pod.organization_id) {
-          throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền thao tác trên Pod này');
-        }
-        const member = await OrganizationMemberModel.findByOrgAndUser(pod.organization_id, user.id);
-        if (
-          !member ||
-          member.status !== 'ACTIVE' ||
-          !['SME_OWNER', 'DEVOPS'].includes(member.role_code.toUpperCase())
-        ) {
-          throw new ApiError(
-            403,
-            'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức'
-          );
-        }
+      if (!pod.organization_id || !user?.id) {
+        throw new ApiError(403, 'Từ chối truy cập: Bạn không có quyền thao tác trên Pod này');
+      }
+      const member = await OrganizationMemberModel.findByOrgAndUser(pod.organization_id, user.id);
+      if (
+        !member ||
+        member.status !== 'ACTIVE' ||
+        !['SME_OWNER', 'DEVOPS'].includes(member.role_code.toUpperCase())
+      ) {
+        throw new ApiError(
+          403,
+          'Từ chối truy cập: Thao tác này yêu cầu quyền SME_OWNER hoặc DEVOPS của tổ chức'
+        );
       }
 
       await AuditService.recordFromRequest(req, {

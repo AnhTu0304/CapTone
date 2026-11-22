@@ -21,6 +21,14 @@ class InstallerConfig(BaseSettings):
         default="",
         description="Public WebSocket URL for SelfHeal Main Backend (e.g. wss://app.selfheal.vn/api/v1/agent/connect)",
     )
+    ALLOWED_PUBLIC_HOSTS: str = Field(
+        default="",
+        description="Comma-separated allowlist of public hostnames allowed for proxy Host header resolution",
+    )
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000",
+        description="Comma-separated allowed CORS origins (never wildcard '*' when credentials=True)",
+    )
     INSTALLERS_DIR: Path = Field(
         default_factory=lambda: Path(__file__).resolve().parent / "installers",
         description="Path to directory containing installation scripts",

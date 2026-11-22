@@ -1,9 +1,12 @@
 import { pool } from '../config/database';
+import { enterOrUpdateDbContext } from '../config/dbContext';
 import { Request, Response } from 'express';
 import { AiService } from '../services/ai.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { PredictRequestSchema, RCARequestSchema } from '../schemas/ai.schema';
 import { ApiError } from '../utils/apiError';
+import { config } from '../config/env';
+import { redactSensitiveString, sanitizeForLog } from '../utils/logSanitizer';
 import {
   AiPredictionModel,
   IncidentModel,
@@ -13,6 +16,7 @@ import {
   WorkloadModel,
 } from '../models';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
+import { HealingActionModel } from '../models/healingAction.model';
 
 const ACTION_CODE_MAP: Record<string, string> = {
   'Restart Pod': 'RESTART_POD',
@@ -41,6 +45,16 @@ const ACTION_CODE_MAP: Record<string, string> = {
 };
 
 export class AiController {
+  private static respondError(res: Response, error: unknown, tag: string) {
+    if (error instanceof ApiError) {
+      return ApiResponse.error(res, error.message, error.statusCode, error.errors);
+    }
+    console.error(tag, sanitizeForLog(error));
+    const msg = config.isDevelopment
+      ? redactSensitiveString((error as Error)?.message || 'Internal Server Error')
+      : 'Internal Server Error';
+    return ApiResponse.error(res, msg, 500);
+  }
   /**
    * Helper: Check if user has Platform Super Admin or Admin privileges
    */
@@ -65,42 +79,40 @@ export class AiController {
    * Helper: Check if user belongs to requested organization and if cluster belongs to that organization
    */
   private static async validateUserOrgAndCluster(user: any, orgId?: string, clusterId?: string): Promise<string | null> {
-    const isSuper = AiController.isUserSuperAdmin(user);
-
-    let allowedOrgIds: string[] = [];
-    if (!isSuper && user?.id) {
-      const res = await pool.query(
-        `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-        [user.id]
-      );
-      allowedOrgIds = res.rows.map((r: any) => r.organization_id);
-      if (user.organization_id && !allowedOrgIds.includes(user.organization_id)) {
-        allowedOrgIds.push(user.organization_id);
-      }
-      if (allowedOrgIds.length === 0) {
-        throw new ApiError(403, 'Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
-      }
+    if (!user?.id) {
+      throw new ApiError(401, 'Yêu cầu đăng nhập trước khi truy cập');
     }
 
-    let effectiveOrgId = (orgId && orgId !== 'all') ? orgId : user?.organization_id;
-    if (!effectiveOrgId && !isSuper) {
-      effectiveOrgId = allowedOrgIds[0];
+    const rawOrgId = typeof orgId === 'string' ? orgId.trim() : '';
+    if (!rawOrgId) {
+      throw new ApiError(400, 'Thiếu thông tin định danh tổ chức (organization_id) hợp lệ');
+    }
+    if (rawOrgId.toUpperCase() === 'ALL') {
+      throw new ApiError(403, 'Từ chối truy cập: Không hỗ trợ ngữ cảnh tổ chức toàn cục (all)');
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawOrgId)) {
+      throw new ApiError(400, 'Định dạng định danh tổ chức (organization_id) không hợp lệ');
     }
 
-    if (!isSuper && effectiveOrgId) {
-      if (!allowedOrgIds.includes(effectiveOrgId)) {
-        throw new ApiError(403, 'Bạn không thuộc tổ chức được yêu cầu (User does not belong to the requested organization)');
-      }
+    const res = await pool.query(
+      `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
+      [user.id]
+    );
+    const allowedOrgIds: string[] = res.rows.map((r: any) => r.organization_id);
+    if (allowedOrgIds.length === 0 || !allowedOrgIds.includes(rawOrgId)) {
+      throw new ApiError(403, 'Bạn không phải thành viên đang hoạt động của tổ chức được yêu cầu');
     }
 
-    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all' && effectiveOrgId) {
-      const belongs = await IncidentModel.validateClusterBelongsToOrg(clusterId, effectiveOrgId);
-      if (!belongs && !isSuper) {
-        throw new ApiError(404, 'Cụm Kubernetes không thuộc tổ chức này (Cluster does not belong to the requested organization)');
+    enterOrUpdateDbContext({ scope: 'TENANT', organizationId: rawOrgId, userId: user.id });
+
+    if (clusterId && clusterId !== 'ALL' && clusterId !== 'all') {
+      const belongs = await IncidentModel.validateClusterBelongsToOrg(clusterId, rawOrgId);
+      if (!belongs) {
+        throw new ApiError(403, 'Cụm Kubernetes không thuộc tổ chức này (Cluster does not belong to the requested organization)');
       }
     }
 
-    return effectiveOrgId || null;
+    return rawOrgId;
   }
 
   /**
@@ -111,15 +123,13 @@ export class AiController {
     if (!incident) {
       throw new ApiError(404, 'Sự cố không tồn tại (Incident not found)');
     }
-    if (AiController.isUserSuperAdmin(user)) {
-      return incident;
-    }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
-    if (orgId && user?.id) {
-      const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
-      if (!membership || membership.status !== 'ACTIVE') {
-        throw new ApiError(403, 'Bạn không có quyền truy cập sự cố thuộc tổ chức này');
-      }
+    if (!orgId || !user?.id) {
+      throw new ApiError(403, 'Bạn không có quyền truy cập sự cố này');
+    }
+    const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new ApiError(403, 'Bạn không có quyền truy cập sự cố thuộc tổ chức này');
     }
     return incident;
   }
@@ -129,19 +139,14 @@ export class AiController {
    */
   private static async validateIncidentManageAccess(user: any, incidentId: string): Promise<any> {
     const incident = await this.validateIncidentAccess(user, incidentId);
-    if (AiController.isUserSuperAdmin(user)) {
-      return incident;
-    }
     const orgId = incident.effective_organization_id || incident.organization_id || incident.env_organization_id;
-    if (orgId && user?.id) {
-      const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
-      if (!membership || membership.status !== 'ACTIVE') {
-        throw new ApiError(403, 'Bạn không có quyền quản lý sự cố thuộc tổ chức này');
-      }
-      const roleCode = (membership.role_code || '').toUpperCase();
-      if (roleCode === 'VIEWER') {
-        throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được cập nhật trạng thái sự cố hoặc áp dụng can thiệp');
-      }
+    const membership = await OrganizationMemberModel.findByOrgAndUser(orgId, user.id);
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new ApiError(403, 'Bạn không có quyền quản lý sự cố thuộc tổ chức này');
+    }
+    const roleCode = (membership.role_code || '').toUpperCase();
+    if (roleCode === 'VIEWER') {
+      throw new ApiError(403, 'Tài khoản quyền Viewer chỉ có quyền xem, không được cập nhật trạng thái sự cố hoặc áp dụng can thiệp');
     }
     return incident;
   }
@@ -200,14 +205,7 @@ export class AiController {
         201
       );
     } catch (error) {
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode, error.errors);
-      }
-      return ApiResponse.error(
-        res,
-        `Unexpected error during risk prediction: ${(error as Error).message}`,
-        500
-      );
+      return AiController.respondError(res, error, '[AiController.predict]');
     }
   }
 
@@ -241,14 +239,7 @@ export class AiController {
         201
       );
     } catch (error) {
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode, error.errors);
-      }
-      return ApiResponse.error(
-        res,
-        `Unexpected error during RCA evaluation: ${(error as Error).message}`,
-        500
-      );
+      return AiController.respondError(res, error, '[AiController.analyzeRootCause]');
     }
   }
 
@@ -261,7 +252,7 @@ export class AiController {
       const models = await AiPredictionModel.findAllModels();
       return ApiResponse.success(res, 'Retrieved AI models list', models, 200);
     } catch (error) {
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController.getModels]');
     }
   }
 
@@ -292,11 +283,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Retrieved predictions list', result, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -316,11 +303,7 @@ export class AiController {
       const stats = await AiPredictionModel.getPredictionStats(cluster_id, workload, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved prediction statistics', stats, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -358,11 +341,7 @@ export class AiController {
       const workloads = result.rows.map((r: any) => r.name);
       return ApiResponse.success(res, 'Retrieved cluster workloads', workloads, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -379,20 +358,17 @@ export class AiController {
       }
 
       const user = (req as any).user;
-      if (prediction.organization_id && user?.id) {
-        const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
-        if (!membership || membership.status !== 'ACTIVE') {
-          return ApiResponse.error(res, 'Bạn không có quyền truy cập dự đoán thuộc tổ chức này', 403);
-        }
+      if (!prediction.organization_id || !user?.id) {
+        return ApiResponse.error(res, 'Không thể xác minh quyền sở hữu tổ chức của dự đoán này', 403);
+      }
+      const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
+      if (!membership || membership.status !== 'ACTIVE') {
+        return ApiResponse.error(res, 'Bạn không có quyền truy cập dự đoán thuộc tổ chức này', 403);
       }
 
       return ApiResponse.success(res, 'Retrieved prediction details', prediction, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -409,11 +385,12 @@ export class AiController {
       }
 
       const user = (req as any).user;
-      if (prediction.organization_id && user?.id) {
-        const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
-        if (!membership || membership.status !== 'ACTIVE') {
-          return ApiResponse.error(res, 'Bạn không có quyền truy cập dữ liệu chuỗi thời gian của tổ chức này', 403);
-        }
+      if (!prediction.organization_id || !user?.id) {
+        return ApiResponse.error(res, 'Không thể xác minh quyền sở hữu tổ chức của dữ liệu chuỗi thời gian này', 403);
+      }
+      const membership = await OrganizationMemberModel.findByOrgAndUser(prediction.organization_id, user.id);
+      if (!membership || membership.status !== 'ACTIVE') {
+        return ApiResponse.error(res, 'Bạn không có quyền truy cập dữ liệu chuỗi thời gian của tổ chức này', 403);
       }
 
       const inputs = await AiPredictionModel.findInputsByPredictionId(id);
@@ -424,11 +401,7 @@ export class AiController {
         200
       );
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -461,11 +434,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Retrieved incidents list', result, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -480,11 +449,7 @@ export class AiController {
       const incident = await AiController.validateIncidentAccess(user, id);
       return ApiResponse.success(res, 'Retrieved incident details', incident, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -510,11 +475,7 @@ export class AiController {
 
       return ApiResponse.success(res, 'Updated incident status successfully', updated, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -536,11 +497,7 @@ export class AiController {
         200
       );
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -562,11 +519,7 @@ export class AiController {
         200
       );
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -586,11 +539,7 @@ export class AiController {
       const result = await RecommendationModel.getRecent(limit, cluster_id, undefined, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved recommendations list', result, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -608,7 +557,7 @@ export class AiController {
         200
       );
     } catch (error) {
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController.getModels]');
     }
   }
 
@@ -628,11 +577,7 @@ export class AiController {
       const actions = await RecommendationModel.getHealingActions(limit, cluster_id, effectiveOrgId || undefined);
       return ApiResponse.success(res, 'Retrieved executed healing actions', actions, 200);
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 
@@ -660,21 +605,31 @@ export class AiController {
         incident = await IncidentModel.findById(rec.incident_id);
       }
 
-      // Resolve environment_id
-      let environmentId = incident?.environment_id;
+      // Resolve strict environment_id without arbitrary cross-tenant fallback
+      const environmentId = incident?.environment_id;
       if (!environmentId) {
-        const envRes = await pool.query('SELECT id FROM environments LIMIT 1;');
-        environmentId = envRes.rows[0]?.id || 'e0000000-0000-0000-0000-000000000001';
+        throw new ApiError(
+          400,
+          'Sự cố chưa gắn environment_id hợp lệ; từ chối fallback sang môi trường mặc định để bảo toàn cô lập tenant.'
+        );
       }
 
-      // Resolve action_type_id
+      // Resolve action_type_id & HITL default requirement
       let actionTypeId = rec.action_type_id;
+      let requiresApprovalByDefault = false;
       if (!actionTypeId) {
         const actRes = await pool.query(
-          'SELECT id FROM healing_action_types WHERE code = $1 OR name ILIKE $2 LIMIT 1;',
+          'SELECT id, requires_approval_by_default FROM healing_action_types WHERE code = $1 OR name ILIKE $2 LIMIT 1;',
           [rec.recommendation, `%${rec.recommendation}%`]
         );
         actionTypeId = actRes.rows[0]?.id || 'd0000000-0000-0000-0000-000000000001';
+        requiresApprovalByDefault = Boolean(actRes.rows[0]?.requires_approval_by_default);
+      } else {
+        const typeRes = await pool.query(
+          'SELECT requires_approval_by_default FROM healing_action_types WHERE id = $1 LIMIT 1;',
+          [actionTypeId]
+        );
+        requiresApprovalByDefault = Boolean(typeRes.rows[0]?.requires_approval_by_default);
       }
 
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -700,17 +655,22 @@ export class AiController {
       const isNoAction =
         String(rec.recommendation || '').toUpperCase().includes('NO_ACTION') ||
         String(rec.recommendation || '').toUpperCase() === 'NO ACTION';
-      const initialExecStatus = isNoAction ? 'SUCCEEDED' : 'RUNNING';
+      const riskLevelUpper = String(rec.risk_level || 'LOW').toUpperCase();
+      const requiresHitlApproval =
+        !isNoAction && (['HIGH', 'CRITICAL'].includes(riskLevelUpper) || requiresApprovalByDefault);
+      const approvalStatus = requiresHitlApproval ? 'PENDING' : 'APPROVED';
+      const initialExecStatus = isNoAction ? 'SKIPPED' : 'PENDING';
 
       // Concurrency Lock: Prevent simultaneous RUNNING actions on the same target (Resolves DEF-04 concurrency bug: 2 actions RUNNING at 01:41:35)
       if (!isNoAction) {
         const runningCheck = await pool.query(
-          `SELECT id, action_type_code, execution_status, created_at 
-           FROM healing_actions 
-           WHERE execution_status IN ('RUNNING', 'PENDING')
+          `SELECT h.id, t.code AS action_type_code, h.execution_status, h.created_at 
+           FROM healing_actions h
+           LEFT JOIN healing_action_types t ON t.id = h.action_type_id
+           WHERE h.execution_status IN ('RUNNING', 'PENDING')
              AND (
-               (target_name IS NOT NULL AND target_name = $1)
-               OR (incident_id IS NOT NULL AND incident_id = $2)
+               (h.target_name IS NOT NULL AND h.target_name = $1)
+               OR (h.incident_id IS NOT NULL AND h.incident_id = $2)
              )
            LIMIT 1;`,
           [targetName, rec.incident_id]
@@ -735,25 +695,44 @@ export class AiController {
         target_name: targetName,
         risk_level: rec.risk_level || 'LOW',
         execution_mode: 'MANUAL',
-        approval_status: 'APPROVED',
+        approval_status: approvalStatus,
         execution_status: initialExecStatus,
         requested_by: user?.id,
-        executed_by: user?.id,
+        executed_by: requiresHitlApproval ? undefined : user?.id,
         result: {
-          status: 'SUCCESS',
+          status: isNoAction
+            ? 'SKIPPED'
+            : requiresHitlApproval
+              ? 'PENDING_APPROVAL'
+              : 'PENDING_DISPATCH',
           action: rec.recommendation,
           target: targetName,
           applied_by: user?.email || 'admin@example.com',
           message:
-            String(rec.recommendation || '').toUpperCase().includes('NO_ACTION') || String(rec.recommendation || '').toUpperCase() === 'NO ACTION'
+            isNoAction
               ? `AI đánh giá dịch vụ ${targetName} đang ổn định trong ngưỡng an toàn, quyết định giữ nguyên trạng thái (NO_ACTION) và tiếp tục giám sát viễn trắc 12 bước.`
-              : `Đã khởi chạy lệnh tự phục hồi '${rec.recommendation}' trên dịch vụ ${targetName} và gửi tới Kubernetes Agent thực thi.`,
+              : requiresHitlApproval
+                ? `Khuyến nghị '${rec.recommendation}' trên dịch vụ ${targetName} có rủi ro ${riskLevelUpper} và đang chờ phê duyệt HITL trước khi gửi tới Kubernetes Agent.`
+                : `Đang chuyển lệnh tự phục hồi '${rec.recommendation}' trên dịch vụ ${targetName} tới Kubernetes Agent thực thi.`,
           timestamp: new Date().toISOString(),
         },
       });
 
       // 3. Mark recommendation as APPLIED (incident stays OPEN until post-action telemetry verification confirms recovery)
       const updatedRec = await RecommendationModel.updateStatus(id, 'APPLIED');
+
+      if (requiresHitlApproval) {
+        return ApiResponse.success(
+          res,
+          `Recommendation '${rec.recommendation}' requires HITL approval before execution on target '${targetName}'.`,
+          {
+            recommendation: updatedRec,
+            healing_action: healingAction,
+            hitl_required: true,
+          },
+          202
+        );
+      }
 
       // 5. Resolve actual namespace from workload / incident
       let targetNamespace = 'default';
@@ -802,6 +781,9 @@ export class AiController {
         );
       }
 
+      const execLock = await HealingActionModel.executeAction(healingAction.id, user?.id || undefined);
+      const attemptId = execLock?.attempt?.id || null;
+
       const dispatchRes = await dispatchHealingActionToAgent({
         action_id: healingAction.id,
         action_type: actionType,
@@ -809,6 +791,7 @@ export class AiController {
         namespace: targetNamespace,
         cluster_id: incident?.cluster_id || undefined,
         environment_id: environmentId,
+        organization_id: incident?.organization_id || undefined,
         params: {
           ...rcaParams,
           ...(req.body?.params || {}),
@@ -819,32 +802,26 @@ export class AiController {
       });
 
       if (!dispatchRes.dispatched) {
-        await pool.query(
-          `UPDATE healing_actions 
-           SET execution_status = 'FAILED', 
-               completed_at = NOW(), 
-               error_message = 'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
-               result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Không có Agent K8s trực tuyến"'::jsonb) 
-           WHERE id = $1`,
-          [healingAction.id]
+        await HealingActionModel.recordDispatchFailure(
+          healingAction.id,
+          attemptId,
+          'Không có Kubernetes Agent nào trực tuyến để nhận lệnh tự phục hồi.',
+          { reason: dispatchRes.reason || 'NO_MATCHING_AGENT' }
         );
       } else {
-        // Fallback safety timeout: nếu K8s Agent không phản hồi sau 60 giây, đánh dấu FAILED tránh kẹt RUNNING
-        setTimeout(async () => {
+        const timeoutHandle = setTimeout(async () => {
           try {
-            await pool.query(
-              `UPDATE healing_actions 
-               SET execution_status = 'FAILED', 
-                   completed_at = COALESCE(completed_at, NOW()),
-                   error_message = 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
-                   result = jsonb_set(COALESCE(result, '{}'::jsonb), '{error}', '"Agent execution timeout after 60s"'::jsonb) 
-               WHERE id = $1 AND execution_status = 'RUNNING'`,
-              [healingAction.id]
+            await HealingActionModel.recordDispatchFailure(
+              healingAction.id,
+              attemptId,
+              'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.',
+              { timeout: true }
             );
-          } catch (e) {
-            // ignore
-          }
+          } catch {}
         }, 60000);
+        if (typeof timeoutHandle.unref === 'function') {
+          timeoutHandle.unref();
+        }
       }
 
       return ApiResponse.success(
@@ -857,11 +834,7 @@ export class AiController {
         200
       );
     } catch (error) {
-      console.error('[getPredictions ERROR]', error);
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return AiController.respondError(res, error, '[AiController]');
     }
   }
 }

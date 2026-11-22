@@ -81,7 +81,7 @@ export const UserProfileDropdown = ({
     try {
       setProfileData(getStoredProfile());
     } catch {}
-  }, [user]);
+  }, [user?.id, user?.email, user?.full_name, user?.fullName, user?.avatar_url]);
 
     // Đảm bảo chỉ dùng profileData nếu cùng tài khoản email
   const isProfileDataOwnedByCurrentUser = Boolean(

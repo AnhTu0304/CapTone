@@ -1,15 +1,24 @@
 import Logo from '../../components/common/Logo';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ArrowRight, Check, CheckCircle2, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
+import authService from '../../services/authService';
 
-export const ResetPasswordPage = ({ onNavigate }) => {
+export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
+  const token = useMemo(() => {
+    if (propToken) return String(propToken).trim();
+    if (typeof window !== 'undefined') {
+      return (new URLSearchParams(window.location.search).get('token') || '').trim();
+    }
+    return '';
+  }, [propToken]);
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [isTokenExpired, setIsTokenExpired] = useState(false);
+  const [isTokenExpired, setIsTokenExpired] = useState(!token || token.length < 16);
   const [errors, setErrors] = useState({});
 
   // Requirements checklist
@@ -53,15 +62,29 @@ export const ResetPasswordPage = ({ onNavigate }) => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!token || token.length < 16) {
+      setIsTokenExpired(true);
+      return;
+    }
     if (!validate()) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setErrors((prev) => ({ ...prev, form: '' }));
+    try {
+      await authService.resetPassword(token, password);
       setSubmitted(true);
-    }, 750);
+    } catch (err) {
+      const msg = err?.message || 'Unable to reset password. Please try again.';
+      if (/hết hạn|không hợp lệ|expired|invalid/i.test(msg)) {
+        setIsTokenExpired(true);
+      } else {
+        setErrors((prev) => ({ ...prev, form: msg }));
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLink = (e, path) => {
@@ -157,22 +180,6 @@ export const ResetPasswordPage = ({ onNavigate }) => {
           >
             <span>Request New Reset Link</span>
             <ArrowRight size={17} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsTokenExpired(false)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#6B7280',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-            }}
-          >
-            Switch back to active token view (Demo)
           </button>
         </div>
       ) : submitted ? (
@@ -452,6 +459,22 @@ export const ResetPasswordPage = ({ onNavigate }) => {
               </div>
             </div>
 
+            {errors.form && (
+              <div
+                role="alert"
+                style={{
+                  color: '#DC2626',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '4px',
+                  padding: '8px 12px',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                {errors.form}
+              </div>
+            )}
+
             {/* Submit Button */}
             <button
               type="submit"
@@ -486,25 +509,6 @@ export const ResetPasswordPage = ({ onNavigate }) => {
                 </>
               )}
             </button>
-
-            {/* Demo Simulation Toggle */}
-            <div style={{ textAlign: 'center', marginTop: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setIsTokenExpired(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#9CA3AF',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.6875rem',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                }}
-              >
-                Simulate Expired/Invalid Token State (Demo)
-              </button>
-            </div>
           </form>
         </div>
       )}

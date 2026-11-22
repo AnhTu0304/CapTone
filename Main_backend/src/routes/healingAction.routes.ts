@@ -5,11 +5,12 @@ import { requireRoles } from '../middlewares/rbac.middleware';
 
 const healingActionRoutes = Router();
 
-// GET /api/v1/healing/approvals/quick-approve?token=...
-// Đặt TRƯỚC authenticateToken vì người dùng click từ Email không có Authorization header
-// GET /api/v1/healing/approvals/quick-approve?token=... & quick-reject?token=...
-healingActionRoutes.get('/approvals/quick-approve', HealingActionController.quickApproveFromEmail);
-healingActionRoutes.get('/approvals/quick-reject', HealingActionController.quickRejectFromEmail);
+// GET /api/v1/healing/approvals/quick-approve?token=... renders safe POST confirmation page
+// POST /api/v1/healing/approvals/quick-approve executes approval atomically (prevents scanner prefetch mutation)
+healingActionRoutes.get('/approvals/quick-approve', HealingActionController.quickApprovePrompt);
+healingActionRoutes.post('/approvals/quick-approve', HealingActionController.quickApproveFromEmail);
+healingActionRoutes.get('/approvals/quick-reject', HealingActionController.quickRejectPrompt);
+healingActionRoutes.post('/approvals/quick-reject', HealingActionController.quickRejectFromEmail);
 
 // Toàn bộ các API Healing Actions yêu cầu xác thực JWT
 healingActionRoutes.use(authenticateToken);

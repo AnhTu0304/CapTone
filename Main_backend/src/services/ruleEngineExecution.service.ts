@@ -2,6 +2,8 @@ import { AlertRuleModel, IAlertRule } from '../models/alertRule.model';
 import { ResourceMetricEvaluator } from './evaluators/resourceMetricEvaluator';
 import { KubernetesRuleEvaluator } from './evaluators/kubernetesRuleEvaluator';
 import { ApmRuleEvaluator } from './evaluators/apmRuleEvaluator';
+import { pool } from '../config/database';
+import { isValidUuid, runWithTenantContext } from '../config/dbContext';
 
 export interface IRuleEngineRunResult {
   rules_evaluated: number;
@@ -20,6 +22,32 @@ export class RuleEngineExecutionService {
     organizationId?: string;
     clusterId?: string;
   }): Promise<IRuleEngineRunResult> {
+    if (!options?.organizationId) {
+      const startTime = Date.now();
+      let rulesEvaluated = 0;
+      let alertsTriggered = 0;
+      let alertsResolved = 0;
+      const orgRes = await pool.query(`SELECT id FROM public.fn_list_active_organization_ids();`);
+      for (const row of orgRes.rows) {
+        const sub = await this.runEvaluationCycle({ organizationId: row.id, clusterId: options?.clusterId });
+        rulesEvaluated += sub.rules_evaluated;
+        alertsTriggered += sub.alerts_triggered;
+        alertsResolved += sub.alerts_resolved;
+      }
+      return {
+        rules_evaluated: rulesEvaluated,
+        alerts_triggered: alertsTriggered,
+        alerts_resolved: alertsResolved,
+        duration_ms: Date.now() - startTime,
+        evaluated_at: new Date().toISOString(),
+      };
+    }
+
+    if (!isValidUuid(options.organizationId)) {
+      throw new Error(`Invalid organizationId for RuleEngineExecutionService: ${options.organizationId}`);
+    }
+
+    return await runWithTenantContext(options.organizationId, null, async () => {
     const startTime = Date.now();
     let rulesEvaluated = 0;
     let alertsTriggered = 0;
@@ -85,5 +113,6 @@ export class RuleEngineExecutionService {
     }
 
     return result;
+    });
   }
 }

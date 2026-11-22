@@ -2,12 +2,24 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../services/auth.service';
 import { SessionRevocationService } from '../services/sessionRevocation.service';
+import { RefreshTokenService, GENERIC_REFRESH_ERROR } from '../services/refreshToken.service';
+import { WsTicketService } from '../services/wsTicket.service';
 import { UserService } from '../services/user.service';
 import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 import { config } from '../config/env';
 import { IJwtPayload } from '../models/user.model';
+import { clearAuthCookies, parseCookies, setAuthCookies } from '../middlewares/csrfOrigin.middleware';
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 export class AuthController {
   /**
@@ -27,6 +39,13 @@ export class AuthController {
       }
 
       const result = await AuthService.register({ email, password, full_name });
+      if (result.user?.id) {
+        const session = await RefreshTokenService.createSession(result.user.id, {
+          ipAddress: req.ip || req.socket.remoteAddress || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+        setAuthCookies(res, session.rawRefreshToken, session.csrfToken, req);
+      }
       return ApiResponse.success(res, 'Đăng ký tài khoản thành công', result, 201);
     } catch (error) {
       next(error);
@@ -49,6 +68,11 @@ export class AuthController {
       if (result.require_2fa) {
         return ApiResponse.success(res, 'Yêu cầu xác thực hai yếu tố (2FA)', result, 200);
       }
+      const session = await RefreshTokenService.createSession(result.id, {
+        ipAddress: req.ip || req.socket.remoteAddress || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+      setAuthCookies(res, session.rawRefreshToken, session.csrfToken, req);
       const primaryOrgId = result.organization_roles?.[0]?.organization_id || null;
       await AuditService.recordFromRequest(req, {
         organization_id: primaryOrgId,
@@ -91,6 +115,11 @@ export class AuthController {
         throw new ApiError(400, 'Vui lòng cung cấp mã phiên và mã OTP 2FA');
       }
       const result = await AuthService.verify2FALogin(temp_token, code);
+      const session = await RefreshTokenService.createSession(result.id, {
+        ipAddress: req.ip || req.socket.remoteAddress || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+      setAuthCookies(res, session.rawRefreshToken, session.csrfToken, req);
       const primaryOrgId = result.organization_roles?.[0]?.organization_id || null;
       await AuditService.recordFromRequest(req, {
         organization_id: primaryOrgId,
@@ -156,6 +185,7 @@ export class AuthController {
       }
 
       await UserService.changePassword(userId, { old_password, new_password });
+      clearAuthCookies(res, req);
       await AuditService.recordFromRequest(req, {
         action: 'AUTH_PASSWORD_CHANGED',
         status: 'SUCCESS',
@@ -208,7 +238,7 @@ export class AuthController {
 
       if (bearerToken) {
         try {
-          const decoded = jwt.verify(bearerToken, config.jwt.secret) as IJwtPayload;
+          const decoded = jwt.verify(bearerToken, config.jwt.secret, { algorithms: ['HS256'] }) as IJwtPayload;
           userId = decoded.id;
         } catch (err) {
           throw new ApiError(401, 'Token xác thực người dùng không hợp lệ hoặc đã hết hạn');
@@ -309,7 +339,7 @@ export class AuthController {
             <div class="card">
               <div class="icon-circle">✓</div>
               <h1>Xác Thực Email Thành Công!</h1>
-              <div class="email-badge">${result.email}</div>
+              <div class="email-badge">${escapeHtml(result.email)}</div>
               <p>Tài khoản của bạn đã được kích hoạt thành công. Bây giờ bạn có thể đăng nhập và trải nghiệm toàn bộ các tính năng của nền tảng <strong>AI Self-Heal</strong>.</p>
               <a href="/api/v1/auth/login" class="btn">Đăng Nhập Vào Hệ Thống</a>
             </div>
@@ -406,7 +436,7 @@ export class AuthController {
             <div class="card">
               <div class="icon-circle">✕</div>
               <h1>Xác Thực Không Thành Công</h1>
-              <div class="error-box">${errMessage}</div>
+              <div class="error-box">${escapeHtml(errMessage)}</div>
               <p>Mã xác thực có thể đã hết hạn (sau 24h), đã được sử dụng trước đó hoặc không hợp lệ. Vui lòng yêu cầu hệ thống gửi lại email xác thực mới.</p>
               <a href="/" class="btn">Quay lại Trang Chủ</a>
             </div>
@@ -430,6 +460,13 @@ export class AuthController {
       }
 
       const result = await AuthService.loginWithGoogle(token);
+      if (result.user?.id) {
+        const session = await RefreshTokenService.createSession(result.user.id, {
+          ipAddress: req.ip || req.socket.remoteAddress || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+        setAuthCookies(res, session.rawRefreshToken, session.csrfToken, req);
+      }
       return ApiResponse.success(res, 'Đăng nhập Google thành công', result, 200);
     } catch (error) {
       next(error);
@@ -437,8 +474,44 @@ export class AuthController {
   }
 
   /**
+   * [POST] /api/v1/auth/refresh
+   * Xoay vòng Refresh Token nguyên tử từ HttpOnly cookie + kiểm tra CSRF/Origin
+   */
+  public static async refresh(req: Request, res: Response, next: NextFunction) {
+    try {
+      const cookies = parseCookies(req.headers.cookie);
+      const rawRefreshToken = cookies[config.refreshToken.cookieName];
+      if (!rawRefreshToken) {
+        clearAuthCookies(res, req);
+        throw new ApiError(401, GENERIC_REFRESH_ERROR);
+      }
+
+      const rotated = await RefreshTokenService.rotateRefreshToken(rawRefreshToken, {
+        ipAddress: req.ip || req.socket.remoteAddress || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+
+      setAuthCookies(res, rotated.rawRefreshToken, rotated.csrfToken, req);
+      return ApiResponse.success(
+        res,
+        'Làm mới phiên đăng nhập thành công',
+        {
+          token: rotated.accessToken,
+          expires_in: config.jwt.accessExpiresIn,
+        },
+        200
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 401) {
+        clearAuthCookies(res, req);
+      }
+      next(error);
+    }
+  }
+
+  /**
    * [POST] /api/v1/auth/logout
-   * Đăng xuất và thu hồi Access Token hiện tại qua Redis Blacklist
+   * Đăng xuất và thu hồi cả Refresh Session lẫn Access Token hiện tại
    */
   public static async logout(req: Request, res: Response, next: NextFunction) {
     try {
@@ -446,18 +519,117 @@ export class AuthController {
       const match = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
       const token = match ? match[1].trim() : null;
 
+      // 1. Always revoke persistent PostgreSQL refresh session & clear cookies FIRST
+      // so Redis outage never prevents session invalidation or cookie clearing
+      const cookies = parseCookies(req.headers.cookie);
+      const rawRefreshToken = cookies[config.refreshToken.cookieName];
+      const revokedInfo = await RefreshTokenService.revokeSessionByRawToken(rawRefreshToken, 'LOGOUT');
+      clearAuthCookies(res, req);
+
+      // 2. Best-effort short-lived access token blacklisting in Redis (degrade with warning if Redis is down)
       if (token) {
         const decoded = jwt.decode(token) as any;
-        const expSeconds = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
-        await SessionRevocationService.revokeToken(token, Math.max(60, expSeconds));
+        const expSeconds = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 900;
+        try {
+          await SessionRevocationService.revokeToken(token, Math.max(60, expSeconds));
+        } catch (revErr: any) {
+          console.error('[Logout] Redis access-token blacklist failed (PG session & cookies already revoked):', revErr?.message || revErr);
+        }
       }
 
       await AuditService.recordFromRequest(req, {
+        user_id: (req as any).user?.id || revokedInfo.userId || null,
         action: 'AUTH_LOGOUT',
         status: 'SUCCESS',
         description: 'Đăng xuất khỏi hệ thống thành công',
+        metadata: revokedInfo.sessionId ? { session_id: revokedInfo.sessionId } : undefined,
       }).catch(() => {});
       return ApiResponse.success(res, 'Đăng xuất thành công, phiên đăng nhập đã bị vô hiệu hóa', null, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/auth/logout-all
+   * Thu hồi toàn bộ phiên đăng nhập trên mọi thiết bị của người dùng hiện tại
+   */
+  public static async logoutAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Yêu cầu đăng nhập trước khi thu hồi toàn bộ phiên');
+      }
+
+      const authHeader = req.headers.authorization;
+      const match = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
+      const token = match ? match[1].trim() : null;
+      if (token) {
+        const decoded = jwt.decode(token) as any;
+        const expSeconds = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 900;
+        await SessionRevocationService.revokeToken(token, Math.max(60, expSeconds));
+      }
+
+      await RefreshTokenService.revokeAllUserSessions(userId, 'LOGOUT_ALL');
+      clearAuthCookies(res, req);
+
+      await AuditService.recordFromRequest(req, {
+        user_id: userId,
+        action: 'AUTH_LOGOUT_ALL',
+        status: 'SUCCESS',
+        description: 'Thu hồi toàn bộ phiên đăng nhập trên mọi thiết bị thành công',
+      }).catch(() => {});
+
+      return ApiResponse.success(res, 'Đã đăng xuất khỏi toàn bộ thiết bị thành công', null, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/auth/forgot-password
+   */
+  public static async forgotPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body || {};
+      await AuthService.requestPasswordReset(String(email || ''));
+      return ApiResponse.success(
+        res,
+        'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đi',
+        null,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/auth/reset-password
+   */
+  public static async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token, new_password } = req.body || {};
+      await AuthService.resetPasswordWithToken(String(token || ''), String(new_password || ''));
+      clearAuthCookies(res, req);
+      return ApiResponse.success(res, 'Đặt lại mật khẩu thành công. Toàn bộ phiên cũ đã bị thu hồi.', null, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * [POST] /api/v1/auth/ws-ticket
+   * Cấp ticket dùng 1 lần (30s) để Frontend kết nối WebSocket không lộ JWT trên query URL
+   */
+  public static async issueWsTicket(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw new ApiError(401, 'Yêu cầu đăng nhập trước khi lấy WebSocket ticket');
+      }
+      const ticketData = await WsTicketService.issueTicket(userId);
+      return ApiResponse.success(res, 'Tạo WebSocket ticket thành công', ticketData, 200);
     } catch (error) {
       next(error);
     }

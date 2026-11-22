@@ -1,6 +1,8 @@
 import { HitlNotificationService } from '../services/hitlNotification.service';
 import { Request, Response, NextFunction } from 'express';
 import { HealingActionService } from '../services/healingAction.service';
+import { HealingActionModel } from '../models/healingAction.model';
+import { OrganizationMemberModel } from '../models/organizationMember.model';
 import { AuditService } from '../services/audit.service';
 import { ApiResponse } from '../utils/apiResponse';
 
@@ -114,7 +116,17 @@ export class HealingActionController {
     try {
       const { id } = req.params;
       const user = (req as any).user;
-      const result = await HealingActionService.executeAction(id, user?.id || null, user, AuditService.extractRequestContext(req));
+      const requestedOrgId =
+        (req.headers['x-organization-id'] as string | undefined) ||
+        (req.query.organization_id as string | undefined) ||
+        req.body?.organization_id;
+      const result = await HealingActionService.executeAction(
+        id,
+        user?.id || null,
+        user,
+        AuditService.extractRequestContext(req),
+        { requestedOrgId }
+      );
       return ApiResponse.success(res, 'Thực thi hành động tự phục hồi thành công', result, 200);
     } catch (error) {
       next(error);
@@ -319,8 +331,19 @@ export class HealingActionController {
       const { id } = req.params;
       const user = (req as any).user;
       const { reason } = req.body || {};
+      const requestedOrgId =
+        (req.headers['x-organization-id'] as string | undefined) ||
+        (req.query.organization_id as string | undefined) ||
+        req.body?.organization_id;
 
-      const approved = await HealingActionService.approveAction(id, user?.id || null, reason, user, AuditService.extractRequestContext(req));
+      const approved = await HealingActionService.approveAction(
+        id,
+        user?.id || null,
+        reason,
+        user,
+        AuditService.extractRequestContext(req),
+        requestedOrgId
+      );
       return ApiResponse.success(res, 'Phê duyệt hành động tự phục hồi thành công', approved, 200);
     } catch (error) {
       next(error);
@@ -336,8 +359,19 @@ export class HealingActionController {
       const { id } = req.params;
       const user = (req as any).user;
       const { reason } = req.body || {};
+      const requestedOrgId =
+        (req.headers['x-organization-id'] as string | undefined) ||
+        (req.query.organization_id as string | undefined) ||
+        req.body?.organization_id;
 
-      const rejected = await HealingActionService.rejectAction(id, user?.id || null, reason, user, AuditService.extractRequestContext(req));
+      const rejected = await HealingActionService.rejectAction(
+        id,
+        user?.id || null,
+        reason,
+        user,
+        AuditService.extractRequestContext(req),
+        requestedOrgId
+      );
       return ApiResponse.success(res, 'Từ chối thực thi hành động tự phục hồi', rejected, 200);
     } catch (error) {
       next(error);
@@ -361,14 +395,40 @@ export class HealingActionController {
     }
   }
 
+  public static async quickApprovePrompt(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = (req.query.token as string) || '';
+      if (!token.trim()) {
+        return res.status(400).send('<h1>Thiếu mã xác thực token phê duyệt</h1>');
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(HitlNotificationService.renderConfirmationPage('APPROVE', token));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async quickRejectPrompt(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = (req.query.token as string) || '';
+      if (!token.trim()) {
+        return res.status(400).send('<h1>Thiếu mã xác thực token</h1>');
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(HitlNotificationService.renderConfirmationPage('REJECT', token));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
-   * GET /api/v1/healing/approvals/quick-approve?token=...
-   * Phê duyệt nhanh 1-Click an toàn từ Email thông báo (không yêu cầu Bearer token trong header)
+   * POST /api/v1/healing/approvals/quick-approve
+   * Thực thi phê duyệt 1-Click sau xác nhận từ form POST (không mutate trên GET)
    */
   public static async quickApproveFromEmail(req: Request, res: Response, next: NextFunction) {
     try {
-      const token = req.query.token as string;
-      if (!token) {
+      const token = (req.body?.token as string) || (req.query.token as string) || '';
+      if (!token.trim()) {
         return res.status(400).send('<h1>Thiếu mã xác thực token phê duyệt</h1>');
       }
 
@@ -381,13 +441,13 @@ export class HealingActionController {
   }
 
   /**
-   * GET /api/v1/healing/approvals/quick-reject?token=...
-   * Từ chối nhanh 1-Click an toàn từ Email thông báo (không yêu cầu Bearer token trong header)
+   * POST /api/v1/healing/approvals/quick-reject
+   * Thực thi từ chối 1-Click sau xác nhận từ form POST
    */
   public static async quickRejectFromEmail(req: Request, res: Response, next: NextFunction) {
     try {
-      const token = req.query.token as string;
-      if (!token) {
+      const token = (req.body?.token as string) || (req.query.token as string) || '';
+      if (!token.trim()) {
         return res.status(400).send('<h1>Thiếu mã xác thực token</h1>');
       }
 
@@ -406,6 +466,22 @@ export class HealingActionController {
   public static async resendNotification(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
+      const user = (req as any).user;
+      if (!user?.id) {
+        return ApiResponse.error(res, 'Yêu cầu đăng nhập', 401);
+      }
+      const action = await HealingActionModel.findActionById(id);
+      if (!action) {
+        return ApiResponse.error(res, 'Không tìm thấy hành động tự phục hồi', 404);
+      }
+      const actionOrgId = (action as any).organization_id;
+      if (!actionOrgId) {
+        return ApiResponse.error(res, 'Hành động không có ngữ cảnh tổ chức hợp lệ', 403);
+      }
+      const member = await OrganizationMemberModel.findByOrgAndUser(actionOrgId, user.id);
+      if (!member || member.status !== 'ACTIVE') {
+        return ApiResponse.error(res, 'Từ chối truy cập: Bạn không thuộc tổ chức sở hữu hành động này', 403);
+      }
       const result = await HitlNotificationService.notifyApproversForAction(id);
       return ApiResponse.success(res, `Đã gửi thông báo phê duyệt tới ${result.notifiedCount} kỹ sư có quyền`, result, 200);
     } catch (error) {

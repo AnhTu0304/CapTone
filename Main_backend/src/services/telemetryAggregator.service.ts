@@ -1,5 +1,6 @@
 import { TelemetryBufferService } from './telemetryBuffer.service';
 import { pool } from '../config/database';
+import { runWithTenantContext, isValidUuid } from '../config/dbContext';
 import { ApiError } from '../utils/apiError';
 import { GRUMetricPoint } from '../schemas/ai.schema';
 import { RuleEngineService } from './ruleEngine.service';
@@ -163,7 +164,7 @@ export class TelemetryAggregatorService {
       const latestHealRes = await pool.query(
         `SELECT MAX(completed_at) AS latest_completed_at
          FROM healing_actions
-         WHERE execution_status = 'SUCCEEDED'
+         WHERE execution_status = 'COMPLETED'
            AND completed_at >= NOW() - interval '30 minutes'
            AND (
              LOWER(COALESCE(target_name, '')) = ANY($1)
@@ -780,23 +781,45 @@ export class TelemetryAggregatorService {
    * Internal helper to fetch live summary payload for REST API and WebSocket broadcast
    */
   public static async getLiveSummaryData(serviceId: string = 'sme-order-service', clusterId?: string, organizationId?: string) {
-    const agents = await AgentModel.listAll();
-    const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
-      bucketSeconds: 5,
-      limit: 20,
-      fillPadding: false,
-      clusterId,
-      organizationId,
-    });
-    const rawMetrics = await MetricModel.getRecentRaw(10);
-    const logs = await LogModel.getRecent(30);
-    const events = await KubernetesEventModel.getRecent(20);
-    const incidents = await IncidentModel.getRecent(10);
-    const recommendations = await RecommendationModel.getRecent(10, clusterId);
-    const predictions = await AiPredictionModel.getRecent(5);
+    if (!organizationId || !isValidUuid(organizationId)) {
+      throw new Error('TelemetryAggregatorService.getLiveSummaryData requires explicit valid organizationId');
+    }
+    return await runWithTenantContext(organizationId, null, async () => {
+      const agents = await AgentModel.listAll(organizationId);
+      const sequence = await TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
+        bucketSeconds: 5,
+        limit: 20,
+        fillPadding: false,
+        clusterId,
+        organizationId,
+      });
+      const rawMetricsRes = await pool.query(
+        `SELECT * FROM agent_metrics WHERE organization_id = $1::uuid ${clusterId ? 'AND cluster_id::text = $2' : ''} ORDER BY collected_at DESC LIMIT 10`,
+        clusterId ? [organizationId, clusterId] : [organizationId]
+      );
+      const rawMetrics = rawMetricsRes.rows;
+      const logs = await LogModel.queryLogs({
+        allowedOrgIds: [organizationId],
+        clusterId,
+        limit: 30,
+      }).then((r: any) => r?.items || r?.data || []);
+      const events = await KubernetesEventModel.queryEvents({
+        allowedOrgIds: [organizationId],
+        clusterId,
+        limit: 20,
+      }).then((r: any) => r?.items || r?.data || []);
+      const incidents = await IncidentModel.getRecent(10, undefined, organizationId);
+      const recommendations = await RecommendationModel.getRecent(10, clusterId, undefined, organizationId);
+      const predictionsRes = await AiPredictionModel.findMany({
+        organization_id: organizationId,
+        cluster_id: clusterId,
+        limit: 5,
+        offset: 0,
+      });
+      const predictions = (predictionsRes as any)?.items || (predictionsRes as any)?.predictions || [];
 
-    // If clusterId is specified, also fetch most recent host/node metrics
-    let latestNodeMetric: any = null;
+      // If clusterId is specified, also fetch most recent host/node metrics
+      let latestNodeMetric: any = null;
     if (clusterId) {
       try {
         const nodeRes = await pool.query(
@@ -850,6 +873,7 @@ export class TelemetryAggregatorService {
       predictions,
       timestamp: new Date().toISOString(),
     };
+    });
   }
 
   /**

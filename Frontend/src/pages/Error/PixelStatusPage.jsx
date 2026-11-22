@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useToast } from '../../context/ToastContext';
 import './PixelStatusPage.css';
 
 export const PixelStatusPage = ({
@@ -12,7 +13,21 @@ export const PixelStatusPage = ({
   backgroundSrc,
   backgroundFallback = 'linear-gradient(180deg, #5BA7D1 0%, #7CC1E4 48%, #D9CAA3 48.2%, #CDB98E 100%)',
   testId = 'pixel-status-page',
+  embedded = false,
+  warnPath = null,
 }) => {
+  const { warning } = useToast();
+  const lastWarnedPathRef = useRef(null);
+
+  useEffect(() => {
+    if (!warnPath || lastWarnedPathRef.current === warnPath) return;
+    lastWarnedPathRef.current = warnPath;
+    warning(
+      `Đường dẫn "${warnPath}" không tồn tại trên hệ thống hoặc đã bị di chuyển.`,
+      `Cảnh báo chuyển trang — ${code || '404'}`
+    );
+  }, [warnPath, code, warning]);
+
   const displayCode = statusLabel || code;
   const stageStyle = backgroundSrc
     ? { backgroundImage: `url(${backgroundSrc})` }
@@ -20,7 +35,7 @@ export const PixelStatusPage = ({
 
   return (
     <section
-      className="pixel-scenic-page"
+      className={`pixel-scenic-page ${embedded ? 'pixel-scenic-page--embedded' : ''}`}
       style={stageStyle}
       data-testid={testId}
     >

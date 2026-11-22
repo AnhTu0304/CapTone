@@ -13,6 +13,11 @@
   box-sizing: border-box;
 }
 
+.pixel-scenic-page--embedded {
+  min-height: 440px;
+  border-radius: 16px;
+}
+
 .pixel-scenic-container {
   position: relative;
   z-index: 2;

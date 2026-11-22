@@ -20,15 +20,6 @@ export class AlertRuleService {
     allowedOrgIds: string[];
     defaultOrgId?: string;
   }> {
-    const roles: string[] = Array.isArray(user?.roles)
-      ? user.roles.map((r: string) => r.trim().toUpperCase())
-      : [];
-    const isSuperAdmin = roles.includes('SUPER_ADMIN');
-
-    if (isSuperAdmin) {
-      return { isSuperAdmin: true, allowedOrgIds: [] };
-    }
-
     if (!user?.id) {
       throw ApiError.unauthorized('Yêu cầu đăng nhập trước khi thực hiện');
     }
@@ -38,11 +29,6 @@ export class AlertRuleService {
       [user.id]
     );
     const allowedOrgIds = res.rows.map((r: any) => r.organization_id);
-
-    // If user has organization_id on token/user record, include it
-    if (user.organization_id && !allowedOrgIds.includes(user.organization_id)) {
-      allowedOrgIds.push(user.organization_id);
-    }
 
     return {
       isSuperAdmin: false,
@@ -116,16 +102,7 @@ export class AlertRuleService {
    * Enforce tenant authorization for an organization target
    */
   public static async enforceOrgAccess(user: any, requestedOrgId?: string): Promise<string> {
-    const { isSuperAdmin, allowedOrgIds, defaultOrgId } = await this.resolveUserOrganizations(user);
-
-    if (isSuperAdmin) {
-      if (requestedOrgId) return requestedOrgId;
-      if (defaultOrgId) return defaultOrgId;
-      // If superadmin didn't provide orgId, get first org from DB
-      const firstOrg = await pool.query('SELECT id FROM organizations LIMIT 1');
-      if (firstOrg.rows[0]) return firstOrg.rows[0].id;
-      throw ApiError.badRequest('Hệ thống chưa có tổ chức nào được khởi tạo');
-    }
+    const { allowedOrgIds, defaultOrgId } = await this.resolveUserOrganizations(user);
 
     if (requestedOrgId) {
       if (!allowedOrgIds.includes(requestedOrgId)) {
