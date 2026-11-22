@@ -629,7 +629,7 @@ def test_case_14_action_failures_high_service_healthy_not_critical(agent, metric
 # ==============================================================================
 def test_case_15_nested_and_top_level_evidence_fields_identical():
     """15. Nested RCA và top-level evidence fields phải giống nhau."""
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {

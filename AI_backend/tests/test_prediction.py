@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+from tests.hmac_client import SignedTestClient as TestClient
 
 from app.main import app
 

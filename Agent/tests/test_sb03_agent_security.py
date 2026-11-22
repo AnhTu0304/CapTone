@@ -14,6 +14,7 @@ def _make_agent(enable_healing: bool = True) -> AgentService:
     )
     agent = AgentService(config)
     agent.apps_v1 = MagicMock()
+    agent.apps_v1.read_namespaced_deployment.return_value.spec.selector.match_labels = {"app": "orders-api"}
     agent.core_v1 = MagicMock()
     agent.networking_v1 = MagicMock()
     return agent

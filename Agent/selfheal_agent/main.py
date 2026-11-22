@@ -935,7 +935,7 @@ class AgentService:
                     if getattr(self, "apps_v1", None):
                         try:
                             dep = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=target_ns)
-                            if dep.spec and dep.spec.selector and dep.spec.selector.match_labels:
+                            if dep.spec and dep.spec.selector and isinstance(dep.spec.selector.match_labels, dict) and dep.spec.selector.match_labels:
                                 target_pod_labels = dep.spec.selector.match_labels
                         except Exception:
                             pass

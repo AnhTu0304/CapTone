@@ -23,7 +23,7 @@ RCA_RESPONSE_FIELDS = {
 
 
 def test_rca_api_contract_without_gru_can_find_unhealthy_pod():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -54,7 +54,7 @@ def test_rca_api_contract_without_gru_can_find_unhealthy_pod():
 
 
 def test_rca_does_not_run_gru_without_metric_history():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -71,7 +71,7 @@ def test_rca_does_not_run_gru_without_metric_history():
 
 
 def test_rca_accepts_direct_risk_confidence_and_kubernetes_events():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -97,7 +97,7 @@ def test_rca_accepts_direct_risk_confidence_and_kubernetes_events():
 
 
 def test_rca_rejects_incomplete_supplied_prediction():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -119,7 +119,7 @@ def test_rca_rejects_incomplete_supplied_prediction():
 
 
 def test_rca_prefers_supplied_prediction_over_direct_risk_and_sequence():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     sample = json.loads(
@@ -165,7 +165,7 @@ def test_rca_prefers_supplied_prediction_over_direct_risk_and_sequence():
 
 
 def test_rca_rejects_all_metrics_removed_from_scope():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     with TestClient(app) as client:
@@ -185,7 +185,7 @@ def test_rca_rejects_all_metrics_removed_from_scope():
 
 
 def test_rca_rejects_removed_dependency_context():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -206,7 +206,7 @@ def test_rca_rejects_removed_dependency_context():
 
 
 def test_rca_rejects_main_backend_management_identifiers():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     base = {
@@ -223,7 +223,7 @@ def test_rca_rejects_main_backend_management_identifiers():
 
 
 def test_rca_uses_full_multi_label_gru_result_when_history_is_supplied():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     sample = json.loads(
@@ -434,7 +434,7 @@ def test_openai_action_guard_requires_policy_supplied_by_main_backend():
 
 
 def test_rca_api_uses_configured_openai_service():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     class FakeOpenAIRCAService:
@@ -489,7 +489,7 @@ def test_rca_api_uses_configured_openai_service():
 
 
 def test_historical_memory_reassesses_failed_action_and_uses_confirmed_success():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -552,7 +552,7 @@ def test_historical_memory_reassesses_failed_action_and_uses_confirmed_success()
 
 
 def test_failed_previous_action_is_not_repeated_without_new_evidence():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -584,7 +584,7 @@ def test_failed_previous_action_is_not_repeated_without_new_evidence():
 
 
 def test_partial_previous_action_triggers_root_cause_and_recommendation_reassessment():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -620,7 +620,7 @@ def test_partial_previous_action_triggers_root_cause_and_recommendation_reassess
 
 
 def test_failed_action_can_be_recommended_again_with_strong_new_evidence():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -668,7 +668,7 @@ def test_failed_action_can_be_recommended_again_with_strong_new_evidence():
 
 
 def test_historical_action_result_is_strict_enum():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -690,7 +690,7 @@ def test_historical_action_result_is_strict_enum():
 
 
 def test_confirmed_cause_and_previous_result_require_trusted_sources():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     base = {
@@ -727,7 +727,7 @@ def test_confirmed_cause_and_previous_result_require_trusted_sources():
 
 
 def test_unrelated_history_cannot_create_a_root_cause_without_current_evidence():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
@@ -791,7 +791,7 @@ def test_log_agent_deduplicates_relevant_logs():
 
 
 def test_rca_enterprise_mongodb_circuit_breaker_and_node_correlation():
-    from fastapi.testclient import TestClient
+    from tests.hmac_client import SignedTestClient as TestClient
     from app.main import app
 
     payload = {
