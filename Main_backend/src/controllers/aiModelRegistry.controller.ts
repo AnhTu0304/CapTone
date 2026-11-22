@@ -2,6 +2,19 @@ import { Request, Response } from 'express';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 import { AiModelRegistryService } from '../services/aiModelRegistry.service';
+import { config } from '../config/env';
+import { redactSensitiveString, sanitizeForLog } from '../utils/logSanitizer';
+
+function respondRegistryError(res: Response, error: unknown, tag: string) {
+  if (error instanceof ApiError) {
+    return ApiResponse.error(res, error.message, error.statusCode);
+  }
+  console.error(tag, sanitizeForLog(error));
+  const msg = config.isDevelopment
+    ? redactSensitiveString((error as Error)?.message || 'Internal Server Error')
+    : 'Internal Server Error';
+  return ApiResponse.error(res, msg, 500);
+}
 
 export class AiModelRegistryController {
   /**
@@ -13,7 +26,7 @@ export class AiModelRegistryController {
       const models = await AiModelRegistryService.listModels();
       return ApiResponse.success(res, 'Danh sách mô hình học máy AI', models, 200);
     } catch (error) {
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return respondRegistryError(res, error, '[AiModelRegistry.getAllModels]');
     }
   }
 
@@ -50,10 +63,7 @@ export class AiModelRegistryController {
         201
       );
     } catch (error) {
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return respondRegistryError(res, error, '[AiModelRegistry.uploadModel]');
     }
   }
 
@@ -73,10 +83,7 @@ export class AiModelRegistryController {
         200
       );
     } catch (error) {
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return respondRegistryError(res, error, '[AiModelRegistry.activateModel]');
     }
   }
 
@@ -96,10 +103,7 @@ export class AiModelRegistryController {
         200
       );
     } catch (error) {
-      if (error instanceof ApiError) {
-        return ApiResponse.error(res, error.message, error.statusCode);
-      }
-      return ApiResponse.error(res, (error as Error).message, 500);
+      return respondRegistryError(res, error, '[AiModelRegistry.rollbackModel]');
     }
   }
 }

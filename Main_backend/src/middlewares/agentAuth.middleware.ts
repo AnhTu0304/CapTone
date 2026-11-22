@@ -4,6 +4,7 @@ import { ApiError } from '../utils/apiError';
 import { AgentModel } from '../models/agent.model';
 import { pool } from '../config/database';
 import { recordAuthFailure } from '../telemetry/metrics';
+import { runWithTenantContext } from '../config/dbContext';
 
 export interface AuthenticatedAgentContext {
   id: string;
@@ -63,22 +64,24 @@ export const authenticateAgentToken = async (
       return next(ApiError.unauthorized('Token Agent không hợp lệ, đã hết hạn hoặc đã bị thu hồi'));
     }
 
-    if (agentRow.token_id) {
-      await pool.query('UPDATE agent_tokens SET last_used_at = NOW() WHERE id = $1', [agentRow.token_id]);
-    }
+    return await runWithTenantContext(agentRow.organization_id, null, async () => {
+      if (agentRow.token_id) {
+        await pool.query('UPDATE agent_tokens SET last_used_at = NOW() WHERE id = $1', [agentRow.token_id]);
+      }
 
-    req.agent = {
-      id: agentRow.id,
-      name: agentRow.name,
-      agent_uid: agentRow.agent_uid,
-      cluster_id: agentRow.cluster_id || null,
-      environment_id: agentRow.environment_id,
-      organization_id: (agentRow as any).organization_id,
-      status: agentRow.status,
-      token_id: agentRow.token_id,
-    };
+      req.agent = {
+        id: agentRow.id,
+        name: agentRow.name,
+        agent_uid: agentRow.agent_uid,
+        cluster_id: agentRow.cluster_id || null,
+        environment_id: agentRow.environment_id,
+        organization_id: (agentRow as any).organization_id,
+        status: agentRow.status,
+        token_id: agentRow.token_id,
+      };
 
-    return next();
+      return next();
+    });
   } catch (error: any) {
     if (error instanceof ApiError) {
       return next(error);

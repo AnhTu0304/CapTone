@@ -18,31 +18,55 @@ import { EmailQueue } from './emailQueue.service';
 import { resolvePrimarySystemRole } from './user.service';
 import { TwoFactorModel } from '../models/twoFactor.model';
 import { TwoFactorService } from './twoFactor.service';
+import { redisClient, isRedisReady } from '../config/redis';
+import { RefreshTokenService } from './refreshToken.service';
+import { EmailService } from './email.service';
+
+const OTP_COOLDOWN_SECONDS = 60;
+const OTP_MAX_FAILED_ATTEMPTS = 5;
+const OTP_LOCKOUT_SECONDS = 15 * 60;
+const MEMORY_OTP_COOLDOWN = new Map<string, number>();
+const MEMORY_OTP_FAILURES = new Map<string, { count: number; expiresAt: number }>();
+
+let cachedGoogleJwks: { keys: any[]; expiresAt: number } | null = null;
+
+async function fetchGoogleJwks(forceRefresh = false): Promise<any[]> {
+    const now = Date.now();
+    if (!forceRefresh && cachedGoogleJwks && cachedGoogleJwks.expiresAt > now) {
+        return cachedGoogleJwks.keys;
+    }
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    if (!res.ok) {
+        throw new Error(`Failed to fetch Google JWKS: HTTP ${res.status}`);
+    }
+    const cacheControl = res.headers.get('cache-control') || '';
+    const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+    const ttlMs = (maxAgeMatch ? Math.min(3600, Math.max(60, parseInt(maxAgeMatch[1], 10))) : 300) * 1000;
+    const data = (await res.json()) as { keys?: any[] };
+    const keys = Array.isArray(data?.keys) ? data.keys : [];
+    cachedGoogleJwks = { keys, expiresAt: now + ttlMs };
+    return keys;
+}
 
 export class AuthService {
     /**
      * Tạo JWT Token từ thông tin người dùng và danh sách vai trò
      */
-    private static generateToken(user: { id: string; email: string; status: any }, roles: string[] = []): string {
-        const payload: IJwtPayload = {
-            id: user.id,
-            email: user.email,
-            status: user.status,
-            roles: roles,
-        };
-        return jwt.sign(payload, config.jwt.secret, {
-            expiresIn: config.jwt.expiresIn,
-        } as jwt.SignOptions);
+    private static generateToken(
+        user: { id: string; email: string; status: any; token_version?: number },
+        roles: string[] = [],
+        sessionId?: string
+    ): string {
+        return RefreshTokenService.signAccessToken(user, roles, sessionId);
     }
 
     /**
-     * Tạo mã xác thực email (OTP 6 số), lưu sha256 hash qua AuthModel
+     * Tạo mã xác thực email (OTP 6 số dùng CSPRNG), lưu sha256 hash qua AuthModel
      */
     public static async createEmailVerificationToken(userId: string): Promise<string> {
-        // Sinh mã xác thực 6 chữ số ngẫu nhiên
-        const rawCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const rawCode = crypto.randomInt(100000, 1000000).toString();
         const tokenHash = crypto.createHash('sha256').update(rawCode).digest('hex');
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 giờ hiệu lực
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút hiệu lực
 
         // Xóa các mã chưa xác thực cũ của user này qua AuthModel
         await AuthModel.deletePendingTokens(userId);
@@ -82,13 +106,12 @@ export class AuthService {
 
         const verificationToken = await this.createEmailVerificationToken(newUser.id);
         
-        // Gửi email xác thực nếu muốn xác minh tài khoản sau này (không bắt buộc)
+        // Gửi email xác thực (không trả OTP trong HTTP response)
         EmailQueue.enqueueVerification(newUser.email, verificationToken, newUser.full_name).catch(() => {});
 
         return { 
             user: newUser, 
             token: this.generateToken(newUser, newUser.system_roles || ['USER']),
-            verification_token: verificationToken
         };
     }
 
@@ -96,7 +119,7 @@ export class AuthService {
     public static async verify2FALogin(tempToken: string, code: string): Promise<ILoginResult> {
         let decoded: any;
         try {
-            decoded = jwt.verify(tempToken, config.jwt.secret);
+            decoded = jwt.verify(tempToken, config.jwt.secret, { algorithms: ['HS256'] });
         } catch {
             throw new ApiError(401, 'Phiên xác thực 2FA đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
         }
@@ -115,14 +138,18 @@ export class AuthService {
         if (!user) {
             throw new ApiError(404, 'Không tìm thấy người dùng');
         }
+        if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+            throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
+        }
 
+        const authStatus = await UserModel.findAuthStatus(user.id);
         await UserModel.updateLastLogin(user.id);
 
         const systemRoles = await UserModel.getUserSystemRoles(user.id);
         const orgRoles = await UserModel.getUserOrganizations(user.id);
         const primarySystemRole = resolvePrimarySystemRole(systemRoles);
 
-        const token = this.generateToken(user, systemRoles);
+        const token = this.generateToken({ ...user, token_version: authStatus?.token_version ?? 1 }, systemRoles);
         return {
             id: user.id,
             email: user.email,
@@ -185,7 +212,8 @@ await UserModel.updateLastLogin(user.id);
         const orgRoles = await UserModel.getUserOrganizations(user.id);
         const primarySystemRole = resolvePrimarySystemRole(systemRoles);
 
-        const token = this.generateToken(user, systemRoles);
+        const authStatus = await UserModel.findAuthStatus(user.id);
+        const token = this.generateToken({ ...user, token_version: authStatus?.token_version ?? 1 }, systemRoles);
         return {
             id: user.id,
             email: user.email,
@@ -207,12 +235,43 @@ await UserModel.updateLastLogin(user.id);
             throw new ApiError(400, 'Vui lòng cung cấp mã xác thực được gửi về email của bạn');
         }
 
+        const attemptKey = userId ? `otp:fail:${userId}` : null;
+        if (attemptKey) {
+            if (isRedisReady()) {
+                const fails = Number(await redisClient.get(attemptKey) || 0);
+                if (fails >= OTP_MAX_FAILED_ATTEMPTS) {
+                    throw new ApiError(429, 'Bạn đã nhập sai mã OTP quá nhiều lần. Vui lòng yêu cầu gửi lại mã mới sau 15 phút.');
+                }
+            } else {
+                const mem = MEMORY_OTP_FAILURES.get(attemptKey);
+                if (mem && mem.expiresAt > Date.now() && mem.count >= OTP_MAX_FAILED_ATTEMPTS) {
+                    throw new ApiError(429, 'Bạn đã nhập sai mã OTP quá nhiều lần. Vui lòng yêu cầu gửi lại mã mới sau 15 phút.');
+                }
+            }
+        }
+
         const tokenHash = crypto.createHash('sha256').update(rawCode.trim()).digest('hex');
 
         // Tìm mã xác thực qua AuthModel
         const tokenRecord = await AuthModel.findVerificationToken(tokenHash, userId);
 
         if (!tokenRecord) {
+            if (attemptKey) {
+                if (isRedisReady()) {
+                    const count = await redisClient.incr(attemptKey);
+                    if (count === 1) await redisClient.expire(attemptKey, OTP_LOCKOUT_SECONDS);
+                    if (count >= OTP_MAX_FAILED_ATTEMPTS && userId) {
+                        await AuthModel.deletePendingTokens(userId).catch(() => {});
+                    }
+                } else {
+                    const cur = MEMORY_OTP_FAILURES.get(attemptKey);
+                    const nextCount = cur && cur.expiresAt > Date.now() ? cur.count + 1 : 1;
+                    MEMORY_OTP_FAILURES.set(attemptKey, { count: nextCount, expiresAt: Date.now() + OTP_LOCKOUT_SECONDS * 1000 });
+                    if (nextCount >= OTP_MAX_FAILED_ATTEMPTS && userId) {
+                        await AuthModel.deletePendingTokens(userId).catch(() => {});
+                    }
+                }
+            }
             throw new ApiError(400, 'Mã xác thực không chính xác hoặc không tồn tại');
         }
 
@@ -224,8 +283,18 @@ await UserModel.updateLastLogin(user.id);
             throw new ApiError(400, 'Mã xác thực đã hết hạn, vui lòng yêu cầu gửi mã mới');
         }
 
-        // Đánh dấu mã xác thực đã được sử dụng qua AuthModel
-        await AuthModel.markTokenVerified(tokenRecord.id);
+        // Đánh dấu mã xác thực đã được sử dụng atomic (single-use)
+        const claimed = await AuthModel.markTokenVerified(tokenRecord.id);
+        if (!claimed) {
+            throw new ApiError(400, 'Mã xác thực này đã được sử dụng trước đó');
+        }
+
+        if (attemptKey) {
+            if (isRedisReady()) {
+                await redisClient.del(attemptKey).catch(() => {});
+            }
+            MEMORY_OTP_FAILURES.delete(attemptKey);
+        }
 
         // Kích hoạt người dùng sang ACTIVE và lưu mốc email_verified_at qua AuthModel
         const activatedUser = await AuthModel.verifyUserEmailAndActivate(tokenRecord.user_id);
@@ -239,13 +308,29 @@ await UserModel.updateLastLogin(user.id);
         };
     }
 
-    // 4. Gửi mã xác thực về email cho người dùng (dựa trên userId từ Token đăng nhập)
+    // 4. Gửi mã xác thực về email cho người dùng (có cooldown, không trả OTP ra HTTP response)
     public static async sendVerificationEmail(userId: string): Promise<ISendVerificationResult> {
         if (!userId) {
             throw new ApiError(400, 'Không tìm thấy thông tin định danh người dùng');
         }
 
-        const user = await UserModel.findBasicById(userId.trim());
+        const cleanUserId = userId.trim();
+        const cooldownKey = `otp:cooldown:${cleanUserId}`;
+        if (isRedisReady()) {
+            const acquired = await redisClient.set(cooldownKey, '1', 'EX', OTP_COOLDOWN_SECONDS, 'NX');
+            if (!acquired) {
+                throw new ApiError(429, 'Vui lòng chờ ít nhất 60 giây trước khi yêu cầu gửi lại mã xác thực');
+            }
+        } else {
+            const now = Date.now();
+            const until = MEMORY_OTP_COOLDOWN.get(cooldownKey) || 0;
+            if (until > now) {
+                throw new ApiError(429, 'Vui lòng chờ ít nhất 60 giây trước khi yêu cầu gửi lại mã xác thực');
+            }
+            MEMORY_OTP_COOLDOWN.set(cooldownKey, now + OTP_COOLDOWN_SECONDS * 1000);
+        }
+
+        const user = await UserModel.findBasicById(cleanUserId);
         if (!user) {
             throw new ApiError(404, 'Không tìm thấy người dùng');
         }
@@ -254,54 +339,77 @@ await UserModel.updateLastLogin(user.id);
             throw new ApiError(400, 'Tài khoản này đã được xác thực email trước đó rồi');
         }
 
-        // Tạo mã xác thực OTP 6 số mới
+        // Tạo mã xác thực OTP 6 số mới bằng CSPRNG
         const rawCode = await this.createEmailVerificationToken(user.id);
         
-        // Gửi email xác thực
+        // Gửi email xác thực (không lộ OTP ra API response)
         await EmailQueue.enqueueVerification(user.email, rawCode, user.full_name);
 
         return {
             email: user.email,
-            code: rawCode,
-            token: rawCode,
+            sent: true,
         };
     }
 
     /**
-     * Xác thực token với Google (hỗ trợ cả ID token và OAuth2 access token)
+     * Xác thực token với Google (kiểm chứng chữ ký RS256 JWKS, aud, iss, exp, email_verified)
      */
     public static async verifyGoogleToken(token: string): Promise<{ email: string; name: string; picture?: string }> {
-        // 1. Thử xác thực theo ID Token nếu token có định dạng JWT (3 phần)
+        // 1. Google ID Token (JWT 3 phần) -> Xác thực chữ ký mật mã RS256 qua Google JWKS + claims iss/aud/exp/email_verified
         if (token.includes('.') && token.split('.').length === 3) {
             try {
-                const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
-                if (res.ok) {
-                    const data = await res.json() as any;
-                    if (data.email) {
-                        return {
-                            email: data.email,
-                            name: data.name || data.email.split('@')[0],
-                            picture: data.picture,
-                        };
-                    }
+                const decodedHeader = jwt.decode(token, { complete: true }) as { header?: { kid?: string; alg?: string } } | null;
+                if (!decodedHeader?.header || decodedHeader.header.alg !== 'RS256') {
+                    throw new ApiError(401, 'Google ID token có thuật toán chữ ký không hợp lệ');
                 }
-            } catch {
-                // Tiếp tục thử phương án access_token
+                let keys = await fetchGoogleJwks(false);
+                let jwk =
+                    keys.find((k) => k.kid && k.kid === decodedHeader.header!.kid) ||
+                    (!decodedHeader.header.kid && keys.length === 1 ? keys[0] : undefined);
+                if (!jwk) {
+                    keys = await fetchGoogleJwks(true);
+                    jwk = keys.find((k) => k.kid && k.kid === decodedHeader.header!.kid);
+                }
+                if (!jwk) {
+                    throw new ApiError(401, 'Không tìm thấy khóa xác thực Google phù hợp');
+                }
+                const publicKey = crypto.createPublicKey({ key: jwk, format: 'jwk' });
+                const verified = jwt.verify(token, publicKey, {
+                    algorithms: ['RS256'],
+                    audience: config.googleClientId,
+                    issuer: ['https://accounts.google.com', 'accounts.google.com'],
+                }) as any;
+
+                if (!verified?.email || verified.email_verified !== true) {
+                    throw new ApiError(401, 'Tài khoản Google chưa xác thực email hoặc thiếu email');
+                }
+                return {
+                    email: verified.email,
+                    name: verified.name || verified.email.split('@')[0],
+                    picture: verified.picture,
+                };
+            } catch (err) {
+                if (err instanceof ApiError) throw err;
+                throw new ApiError(401, 'Google ID token không hợp lệ hoặc đã hết hạn');
             }
         }
 
-        // 2. Thử xác thực theo Google OAuth2 Access Token qua UserInfo endpoint
+        // 2. Google OAuth2 Access Token -> bắt buộc đối chiếu tokeninfo (kiểm tra aud & email_verified)
         try {
-            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-                const data = await res.json() as any;
-                if (data.email) {
+            const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`);
+            if (infoRes.ok) {
+                const info = (await infoRes.json()) as any;
+                const audMatches = info.aud === config.googleClientId || info.azp === config.googleClientId;
+                const emailVerified = info.email_verified === true || info.email_verified === 'true';
+                if (audMatches && emailVerified && info.email) {
+                    const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const profile = userRes.ok ? ((await userRes.json()) as any) : {};
                     return {
-                        email: data.email,
-                        name: data.name || data.email.split('@')[0],
-                        picture: data.picture,
+                        email: info.email,
+                        name: profile.name || info.email.split('@')[0],
+                        picture: profile.picture,
                     };
                 }
             }
@@ -372,7 +480,8 @@ await UserModel.updateLastLogin(user.id);
         const systemRoles = await UserModel.getUserSystemRoles(user.id);
         const orgRoles = await UserModel.getUserOrganizations(user.id);
         const primarySystemRole = resolvePrimarySystemRole(systemRoles);
-        const jwtToken = this.generateToken(user, systemRoles);
+        const authStatus = await UserModel.findAuthStatus(user.id);
+        const jwtToken = this.generateToken({ ...user, token_version: authStatus?.token_version ?? 1 }, systemRoles);
 
         return {
             user: {
@@ -389,5 +498,59 @@ await UserModel.updateLastLogin(user.id);
             },
             token: jwtToken,
         };
+    }
+
+    /**
+     * Request a password reset token (stored hashed in password_reset_tokens, 15m TTL).
+     * Always returns neutral success response to prevent account enumeration.
+     */
+    public static async requestPasswordReset(email: string): Promise<{ accepted: boolean }> {
+        const cleanEmail = (email || '').toLowerCase().trim();
+        if (!cleanEmail) return { accepted: true };
+
+        const user = await UserModel.findByEmailWithPassword(cleanEmail);
+        if (!user || user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+            return { accepted: true };
+        }
+
+        const rawResetToken = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(rawResetToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+        await AuthModel.deletePendingPasswordResetTokens(user.id);
+        await AuthModel.createPasswordResetToken(user.id, tokenHash, expiresAt);
+
+        await EmailService.sendPasswordResetEmail(
+            user.email,
+            user.full_name || user.email,
+            rawResetToken
+        ).catch((err) => {
+            console.error('[AuthService] Lỗi gửi email đặt lại mật khẩu:', (err as Error).message);
+        });
+        return { accepted: true };
+    }
+
+    /**
+     * Complete password reset using a single-use token from password_reset_tokens.
+     * Updates password, bumps token_version, and revokes all active refresh sessions & WS connections.
+     */
+    public static async resetPasswordWithToken(rawToken: string, newPassword: string): Promise<void> {
+        if (!rawToken || typeof rawToken !== 'string' || rawToken.trim().length < 16) {
+            throw new ApiError(400, 'Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+        }
+        if (!newPassword || newPassword.length < 6) {
+            throw new ApiError(400, 'Mật khẩu mới phải có tối thiểu 6 ký tự');
+        }
+
+        const tokenHash = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
+        const consumed = await AuthModel.consumePasswordResetToken(tokenHash);
+        if (!consumed) {
+            throw new ApiError(400, 'Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(newPassword, salt);
+        await UserModel.updatePassword(consumed.user_id, newHash);
+        await RefreshTokenService.revokeAllUserSessions(consumed.user_id, 'PASSWORD_RESET');
     }
 }

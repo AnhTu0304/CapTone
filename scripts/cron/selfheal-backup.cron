@@ -1,0 +1,13 @@
+# ==============================================================================
+# Cron / Off-Host Backup & Restore Drill Schedule (Sprint D SD-04)
+# Copy to /etc/cron.d/selfheal-backup on production VPS (chmod 0644, root owned).
+# Requires /opt/selfheal/.env containing BACKUP_ENCRYPTION_KEY & DB credentials.
+# ==============================================================================
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Daily 02:15 UTC: Encrypted PostgreSQL backup (container-internal dump + retention)
+15 2 * * * root cd /opt/selfheal && set -a && . ./.env && set +a && DOCKER_COMPOSE_FILE=docker-compose.prod.yml DOCKER_PG_SERVICE=postgres BACKUP_DIR=/var/backups/selfheal BACKUP_RETENTION_DAYS=30 ./scripts/backup-postgres.sh >> /var/log/selfheal-backup.log 2>&1
+
+# Weekly Sunday 03:30 UTC: Automated restore drill into ephemeral verify DB
+30 3 * * 0 root cd /opt/selfheal && set -a && . ./.env && set +a && LATEST="$(ls -1t /var/backups/selfheal/*.dump.enc | head -n1)" && [ -n "$LATEST" ] && docker compose -f docker-compose.prod.yml exec -T postgres psql -U "${DB_MIGRATOR_USER:-postgres}" -d postgres -c "DROP DATABASE IF EXISTS backup_verify_drill; CREATE DATABASE backup_verify_drill;" && DOCKER_COMPOSE_FILE=docker-compose.prod.yml DOCKER_PG_SERVICE=postgres ./scripts/restore-postgres.sh "$LATEST" backup_verify_drill && docker compose -f docker-compose.prod.yml exec -T postgres psql -U "${DB_MIGRATOR_USER:-postgres}" -d postgres -c "DROP DATABASE IF EXISTS backup_verify_drill;" >> /var/log/selfheal-restore-drill.log 2>&1

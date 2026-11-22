@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowRight, ArrowLeft, Mail, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Mail, Loader2, RefreshCw } from 'lucide-react';
 import Logo from '../../components/common/Logo';
+import authService from '../../services/authService';
 import {
   AUTH_HEADING_STYLE,
   AUTH_INPUT_STYLE,
@@ -27,7 +28,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -42,20 +43,29 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await authService.forgotPassword(email.trim());
       setSent(true);
       setResendCooldown(30);
-    }, 700);
+    } catch (err) {
+      setError(err?.message || 'Không thể gửi yêu cầu đặt lại mật khẩu. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResend = () => {
-    if (resendCooldown > 0) return;
+  const handleResend = async () => {
+    if (resendCooldown > 0 || !email.trim()) return;
     setResending(true);
-    setTimeout(() => {
-      setResending(false);
+    setError('');
+    try {
+      await authService.forgotPassword(email.trim());
       setResendCooldown(30);
-    }, 600);
+    } catch (err) {
+      setError(err?.message || 'Không thể gửi lại email khôi phục lúc này.');
+    } finally {
+      setResending(false);
+    }
   };
 
   return (
@@ -129,42 +139,8 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               marginBottom: '24px',
             }}
           >
-            Liên kết khôi phục có hiệu lực trong 60 phút. Nếu chưa thấy email, vui lòng kiểm tra thêm mục Thư rác (Spam).
+            Liên kết khôi phục có hiệu lực trong 15 phút và chỉ dùng một lần. Nếu chưa thấy email, vui lòng kiểm tra thêm mục Thư rác (Spam).
           </p>
-
-          <div
-            style={{
-              padding: '12px 14px',
-              backgroundColor: '#F8FAFC',
-              border: '1px dashed #CBD5E1',
-              borderRadius: '6px',
-              marginBottom: '20px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#64748B', marginBottom: '6px' }}>
-              LIÊN KẾT MÔ PHỎNG DEMO
-            </div>
-            <button
-              type="button"
-              onClick={(e) => handleLink(e, '/reset-password')}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#2563EB',
-                fontFamily: 'var(--font-dm-sans)',
-                fontSize: '0.8125rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                textDecoration: 'underline',
-              }}
-            >
-              <span>Mở liên kết đặt lại mật khẩu</span>
-              <ExternalLink size={13} />
-            </button>
-          </div>
 
           <div style={{ marginBottom: '20px' }}>
             <button

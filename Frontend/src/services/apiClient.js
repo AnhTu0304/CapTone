@@ -21,6 +21,48 @@ export const API_BASE_URL = rawApiUrl
 
 let currentActiveOrgId = null;
 let currentSwitchAbortController = null;
+let inMemoryAccessToken = null;
+let refreshInFlightPromise = null;
+
+const CSRF_COOKIE_NAME = 'selfheal_csrf_token';
+
+const readCsrfCookie = () => {
+  if (typeof document === 'undefined' || !document.cookie) return null;
+  for (const part of document.cookie.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    if (part.slice(0, idx).trim() === CSRF_COOKIE_NAME) {
+      const val = part.slice(idx + 1).trim();
+      try {
+        return decodeURIComponent(val);
+      } catch {
+        return val;
+      }
+    }
+  }
+  return null;
+};
+
+/**
+ * Lưu access token ngắn hạn (15m) trong bộ nhớ RAM (không lưu refresh token vào storage)
+ * @param {string|null} token
+ */
+export const setAuthToken = (token) => {
+  inMemoryAccessToken = token || null;
+};
+
+/**
+ * Xóa toàn bộ access token trong bộ nhớ và các khóa storage cũ
+ */
+export const clearAuthToken = () => {
+  inMemoryAccessToken = null;
+  try {
+    sessionStorage.removeItem('admin_access_token');
+    localStorage.removeItem('admin_access_token');
+    localStorage.removeItem('selfheal_auth_token');
+    localStorage.removeItem('token');
+  } catch {}
+};
 
 const PUBLIC_OR_GLOBAL_ENDPOINTS = [
   '/auth/login',
@@ -75,21 +117,58 @@ export const cancelPendingRequests = () => {
 };
 
 /**
- * Lấy Bearer Token xác thực hiện hành (nếu có)
+ * Lấy Bearer Token xác thực hiện hành (chỉ lưu trong bộ nhớ RAM, không đọc từ localStorage/sessionStorage để chống XSS)
  * @returns {string|null}
  */
-export const getAuthToken = () => {
-  try {
-    return (
-      sessionStorage.getItem('admin_access_token') ||
-      localStorage.getItem('admin_access_token') ||
-      localStorage.getItem('selfheal_auth_token') ||
-      localStorage.getItem('token') ||
-      null
-    );
-  } catch (e) {
-    return null;
+export const getAuthToken = () => inMemoryAccessToken || null;
+
+/**
+ * Làm mới access token single-flight: mọi 401 đồng thời dùng chung 1 POST /auth/refresh
+ * để tránh đụng độ rotation & kích hoạt reuse detection giả.
+ * @returns {Promise<string|null>}
+ */
+export const refreshAccessTokenSingleFlight = async () => {
+  if (refreshInFlightPromise) {
+    return refreshInFlightPromise;
   }
+
+  refreshInFlightPromise = (async () => {
+    const refreshUrl = `${API_BASE_URL.replace(/\/$/, '')}/auth/refresh`;
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    const csrf = readCsrfCookie();
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
+
+    const res = await fetch(refreshUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const payload = await res.json().catch(() => null);
+    const nextToken = payload?.data?.token || null;
+    if (nextToken) {
+      setAuthToken(nextToken);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('selfheal:access-token-refreshed', { detail: { token: nextToken } })
+        );
+      }
+    }
+    return nextToken;
+  })().finally(() => {
+    refreshInFlightPromise = null;
+  });
+
+  return refreshInFlightPromise;
 };
 
 /**
@@ -108,6 +187,11 @@ export const createDefaultHeaders = (customHeaders = {}, endpoint = '') => {
   const token = getAuthToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const csrf = readCsrfCookie();
+  if (csrf && !headers['X-CSRF-Token'] && !headers['x-csrf-token']) {
+    headers['X-CSRF-Token'] = csrf;
   }
 
   // Tự động đính kèm X-Organization-Id nếu không phải endpoint public hoặc danh sách tổ chức toàn cục
@@ -129,12 +213,14 @@ export const createDefaultHeaders = (customHeaders = {}, endpoint = '') => {
  */
 export const request = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
+  const { _retriedAfterRefresh, ...fetchRest } = options;
 
-  const signal = options.signal || (currentSwitchAbortController ? currentSwitchAbortController.signal : undefined);
+  const signal = fetchRest.signal || (currentSwitchAbortController ? currentSwitchAbortController.signal : undefined);
 
   const config = {
-    ...options,
-    headers: createDefaultHeaders(options.headers, endpoint),
+    credentials: 'include',
+    ...fetchRest,
+    headers: createDefaultHeaders(fetchRest.headers, endpoint),
     signal,
   };
 
@@ -152,8 +238,47 @@ export const request = async (endpoint, options = {}) => {
   }
 
   if (!response.ok) {
-    // Nếu token bị từ chối 401 trên endpoint bảo vệ, phát tín hiệu thoát session cho tất cả các tab
-    if (response.status === 401 && !isPublicOrGlobalEndpoint(endpoint)) {
+    // 401 trên endpoint bảo vệ: thử single-flight refresh đúng 1 lần trước khi thu hồi phiên
+    const canAttemptRefresh =
+      response.status === 401 &&
+      !_retriedAfterRefresh &&
+      !String(endpoint).toLowerCase().includes('/auth/login') &&
+      !String(endpoint).toLowerCase().includes('/auth/refresh') &&
+      !String(endpoint).toLowerCase().includes('/auth/logout') &&
+      !String(endpoint).toLowerCase().includes('/auth/register');
+
+    if (canAttemptRefresh) {
+      let refreshedToken = null;
+      try {
+        refreshedToken = await refreshAccessTokenSingleFlight();
+      } catch {
+        refreshedToken = null;
+      }
+
+      if (refreshedToken) {
+        const retryHeaders = { ...(fetchRest.headers || {}) };
+        delete retryHeaders.Authorization;
+        delete retryHeaders.authorization;
+        return request(endpoint, {
+          ...fetchRest,
+          headers: retryHeaders,
+          _retriedAfterRefresh: true,
+        });
+      }
+
+      // Refresh thất bại -> xóa sạch auth state cả tab hiện tại lẫn các tab khác
+      clearAuthToken();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('selfheal:session-revoked'));
+      }
+      try {
+        multiTabSync.broadcast(SYNC_EVENTS.SESSION_REVOKED);
+      } catch {}
+    } else if (response.status === 401 && !isPublicOrGlobalEndpoint(endpoint)) {
+      clearAuthToken();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('selfheal:session-revoked'));
+      }
       try {
         multiTabSync.broadcast(SYNC_EVENTS.SESSION_REVOKED);
       } catch {}
@@ -178,6 +303,13 @@ export const request = async (endpoint, options = {}) => {
     const error = new Error(errorMsg);
     error.status = response.status;
     error.data = errorData;
+    if (response.status === 503 && typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('selfheal:http-status', {
+          detail: { status: 503, endpoint, message: errorMsg },
+        })
+      );
+    }
     throw error;
   }
 
@@ -192,28 +324,43 @@ export const request = async (endpoint, options = {}) => {
  * @returns {Promise<T>}
  */
 export const executeWithFallback = async (apiCall, fallbackMockCall) => {
-  // Nếu có biến môi trường yêu cầu buộc dùng mock
-  if (process.env.REACT_APP_USE_MOCK === 'true') {
+  // Tuyệt đối không dùng mock fallback trong production hoặc khi bị từ chối xác thực/phân quyền (401/403)
+  if (process.env.NODE_ENV !== 'production' && process.env.REACT_APP_USE_MOCK === 'true') {
     return fallbackMockCall();
   }
 
   try {
     return await apiCall();
   } catch (err) {
+    if (err && (err.status === 401 || err.status === 403 || err.name === 'AbortError' || err.isAborted)) {
+      throw err;
+    }
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
     console.warn('[apiClient] Lời gọi backend không khả dụng, chuyển sang fallback mock:', err.message);
     return fallbackMockCall();
   }
 };
 
+export const getWsTicket = async () => {
+  const res = await request('/auth/ws-ticket', { method: 'POST' });
+  return res?.data?.ticket || null;
+};
+
 const apiClient = {
   API_BASE_URL,
   getAuthToken,
+  setAuthToken,
+  clearAuthToken,
+  refreshAccessTokenSingleFlight,
   getActiveOrganizationId,
   setActiveOrganizationId,
   cancelPendingRequests,
   createDefaultHeaders,
   request,
   executeWithFallback,
+  getWsTicket,
 };
 
 export default apiClient;

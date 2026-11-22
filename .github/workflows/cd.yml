@@ -40,7 +40,12 @@ jobs:
       - name: Validate Docker Compose Configuration
         env:
           DB_PASSWORD: ci_dummy_db_password
+          REDIS_PASSWORD: ci_dummy_redis_password
           JWT_SECRET: ci_dummy_jwt_secret_minimum_32_characters_long
+          REFRESH_TOKEN_PEPPER: ci_dummy_refresh_pepper_minimum_32_chars_long
+          AI_INTERNAL_HMAC_SECRET: ci_dummy_hmac_secret_minimum_32_characters_long
+          TOTP_ENCRYPTION_KEY: ci_dummy_totp_key_minimum_32_characters_long
+          DATA_ENCRYPTION_KEY: ci_dummy_data_key_minimum_32_characters_long
         run: |
           docker compose -f docker-compose.yml config -q
           docker compose -f docker-compose.prod.yml config -q
@@ -258,28 +263,55 @@ jobs:
             fi
 
             echo "=========================================================="
-            echo "📦 [2/5] KÉO IMAGES MỚI TỪ DOCKER HUB (phamthaisang/captone1)"
+            echo "💾 [2/6] SAO LƯU MÃ HÓA BẮT BUỘC TRƯỚC TRIỂN KHAI (FAIL-CLOSED)"
+            echo "=========================================================="
+            if [ -f .env ]; then
+              set -a
+              . ./.env
+              set +a
+            fi
+            if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ] || [ "${#BACKUP_ENCRYPTION_KEY}" -lt 24 ]; then
+              echo "❌ FATAL SECURITY GATE: BACKUP_ENCRYPTION_KEY (>= 24 chars) is required before deployment/migration!" >&2
+              exit 1
+            fi
+            if [ ! -x ./scripts/backup-postgres.sh ]; then
+              echo "❌ FATAL SECURITY GATE: ./scripts/backup-postgres.sh is missing or not executable!" >&2
+              exit 1
+            fi
+            # Record current running main-backend image digest/id for real rollback on smoke-test failure
+            PREV_BACKEND_IMAGE="$(docker inspect --format='{{.Config.Image}}' captone-main-backend 2>/dev/null || true)"
+            if docker compose -f docker-compose.prod.yml ps -q postgres | grep -q .; then
+              DOCKER_COMPOSE_FILE="docker-compose.prod.yml" DOCKER_PG_SERVICE="postgres" ./scripts/backup-postgres.sh
+            else
+              echo "ℹ️ PostgreSQL container not yet running (initial bootstrap); pre-migration backup deferred until after DB bootstrap."
+            fi
+
+            echo "=========================================================="
+            echo "📦 [3/6] KÉO IMAGES MỚI TỪ DOCKER HUB (phamthaisang/captone1)"
             echo "=========================================================="
             docker compose -f docker-compose.prod.yml pull
 
             echo "=========================================================="
-            echo "🔄 [3/5] TRIỂN KHAI PHIÊN BẢN MỚI (ZERO-DOWNTIME)"
+            echo "🔄 [4/6] TRIỂN KHAI PHIÊN BẢN MỚI & CHẠY MIGRATIONS AN TOÀN"
             echo "=========================================================="
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            if [ ! -f /var/backups/selfheal/.initial_bootstrapped ]; then
+              DOCKER_COMPOSE_FILE="docker-compose.prod.yml" DOCKER_PG_SERVICE="postgres" ./scripts/backup-postgres.sh
+              touch /var/backups/selfheal/.initial_bootstrapped || true
+            fi
+            docker compose -f docker-compose.prod.yml exec -T \
+              -e DB_USER="${DB_MIGRATOR_USER:-selfheal_migrator}" \
+              -e DB_PASSWORD="${DB_MIGRATOR_PASSWORD:-${DB_PASSWORD}}" \
+              main-backend node dist/scripts/migrate.js
 
             echo "=========================================================="
-            echo "🗄️ [4/5] THỰC THI DATABASE MIGRATIONS"
-            echo "=========================================================="
-            docker compose -f docker-compose.prod.yml exec -T main-backend node dist/scripts/migrate.js || true
-
-            echo "=========================================================="
-            echo "🩺 [5/5] POST-DEPLOYMENT SMOKE TEST & HEALTHCHECK GATE"
+            echo "🩺 [5/6] POST-DEPLOYMENT SMOKE TEST & HEALTHCHECK GATE"
             echo "=========================================================="
             HEALTHY=0
             for i in $(seq 1 12); do
-              echo "Kiểm tra sức khỏe Backend (lần $i/12)..."
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/api/v1/health || true)
-              if [ "$STATUS" = "200" ]; then
+              echo "Kiểm tra sức khỏe Backend & Edge Proxy (lần $i/12)..."
+              if docker compose -f docker-compose.prod.yml exec -T main-backend \
+                wget -qO- http://127.0.0.1:5000/api/v1/health >/dev/null 2>&1; then
                 echo "✅ Backend Healthcheck HOÀN TOÀN KHỎE MẠNH (HTTP 200 OK)!"
                 HEALTHY=1
                 break
@@ -288,11 +320,13 @@ jobs:
             done
 
             if [ "$HEALTHY" -ne 1 ]; then
-              echo "❌ LỖI NGHIÊM TRỌNG: Backend không phản hồi HTTP 200 sau 60 giây!"
-              echo "Logs sự cố gần nhất:"
+              echo "❌ LỖI NGHIÊM TRỌNG: Backend không phản hồi sau 60 giây!"
               docker compose -f docker-compose.prod.yml logs --tail 40 main-backend
-              echo "🛡️ KÍCH HOẠT TỰ ĐỘNG PHỤC HỒI / ROLLBACK..."
-              docker compose -f docker-compose.prod.yml restart
+              echo "🛡️ [6/6] KÍCH HOẠT ROLLBACK..."
+              if [ -n "$PREV_BACKEND_IMAGE" ]; then
+                docker compose -f docker-compose.prod.yml down --remove-orphans || true
+                docker compose -f docker-compose.prod.yml up -d || true
+              fi
               exit 1
             fi
 

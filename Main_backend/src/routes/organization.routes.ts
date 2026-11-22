@@ -333,12 +333,14 @@ router.get(
   '/:id/alert-settings',
   validate(orgAlertSettingsParamSchema),
   requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   OrganizationController.getAlertSettings
 );
 router.get(
   '/:orgId/alert-settings',
   validate(orgAlertSettingsParamSchema),
   requireOrgMember,
+  requireOrgRole('SME_OWNER', 'DEVOPS'),
   OrganizationController.getAlertSettings
 );
 

@@ -19,7 +19,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { alertService, formatAlertApiError } from '../../../services/alertService';
-import { getAuthToken, API_BASE_URL } from '../../../services/apiClient';
+import { getAuthToken, getWsTicket, API_BASE_URL } from '../../../services/apiClient';
 import AlertDetailDrawer, {
   getSeverityStyle,
   getStatusStyle,
@@ -266,29 +266,39 @@ export const AlertHistoryPage = ({ onNavigate }) => {
     }
 
     let ws = null;
-    try {
-      const token = getAuthToken();
-      const wsBase = API_BASE_URL.replace(/^http/i, 'ws');
-      const wsUrl = `${wsBase}/telemetry/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-      ws = new WebSocket(wsUrl);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) return;
+        const ticket = await getWsTicket();
+        if (!ticket || cancelled) return;
+        const wsBase = API_BASE_URL.replace(/^http/i, 'ws');
+        const params = new URLSearchParams();
+        params.set('ticket', ticket);
+        if (currentOrg?.id) params.set('organization_id', currentOrg.id);
+        const wsUrl = `${wsBase}/telemetry/ws?${params.toString()}`;
+        ws = new WebSocket(wsUrl);
 
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload?.type === 'alert_updated') {
-            if (!currentOrg?.id || !payload.organization_id || payload.organization_id === currentOrg.id) {
-              fetchRef.current?.();
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload?.type === 'alert_updated') {
+              if (!currentOrg?.id || !payload.organization_id || payload.organization_id === currentOrg.id) {
+                fetchRef.current?.();
+              }
             }
+          } catch {
+            // Ignore malformed WS messages
           }
-        } catch {
-          // Ignore malformed WS messages
-        }
-      };
-    } catch {
-      // Fallback to polling
-    }
+        };
+      } catch {
+        // Fallback to polling
+      }
+    })();
 
     return () => {
+      cancelled = true;
       if (ws && ws.readyState <= 1) {
         try {
           ws.close();

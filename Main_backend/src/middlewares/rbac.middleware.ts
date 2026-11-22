@@ -3,6 +3,7 @@ import { ApiError } from '../utils/apiError';
 import { SystemRoleService } from '../services/systemRole.service';
 import { AuditService } from '../services/audit.service';
 import { pool } from '../config/database';
+import { runWithDbContext, runWithTenantContext } from '../config/dbContext';
 
 /**
  * Mở rộng vai trò kế thừa (Role inheritance / expansion)
@@ -66,66 +67,57 @@ export const requireRoles = (...allowedRoles: string[]) => {
 
       const normalizedAllowed = allowedRoles.map((r) => r.trim().toUpperCase());
 
-      // 1. Kiểm tra nhanh qua roles đã được đồng bộ từ CSDL mới nhất trong auth.middleware
-      const rawTokenRoles: string[] = Array.isArray(user.roles)
-        ? user.roles.map((r: string) => String(r).trim().toUpperCase())
-        : (user.roles ? [String(user.roles).trim().toUpperCase()] : []);
+      // Phân tách rõ vai trò Hệ thống toàn cục (Platform) và vai trò Tổ chức (Organization-scoped).
+      // Decision 2.2: SUPER_ADMIN / SYSTEM_ADMIN / ADMIN KHÔNG được phép bypass kiểm tra organization_members trên các route theo tổ chức.
+      const orgRolesAllowed = normalizedAllowed.filter((r) => ['DEVOPS', 'SME_OWNER', 'VIEWER'].includes(r));
+      const isOrgScopedRoute = orgRolesAllowed.length > 0;
 
-      // Mặc định nếu không có role nào, coi như USER/VIEWER
-      if (rawTokenRoles.length === 0) {
-        rawTokenRoles.push('USER', 'VIEWER');
-      }
+      if (!isOrgScopedRoute) {
+        // Platform-level route: xác thực trực tiếp qua CSDL user_system_roles (không tin cậy token role chưa kiểm chứng)
+        const systemRolesThatSatisfy = new Set<string>(['SUPER_ADMIN']);
+        if (normalizedAllowed.includes('ADMIN')) systemRolesThatSatisfy.add('ADMIN');
+        if (normalizedAllowed.includes('SYSTEM_ADMIN')) systemRolesThatSatisfy.add('SYSTEM_ADMIN');
+        if (normalizedAllowed.includes('USER')) {
+          systemRolesThatSatisfy.add('ADMIN');
+          systemRolesThatSatisfy.add('SYSTEM_ADMIN');
+          systemRolesThatSatisfy.add('USER');
+        }
 
-      const effectiveTokenRoles = expandRoles(rawTokenRoles);
+        const hasSystemDbMatch = await SystemRoleService.hasAnyRole(
+          user.id,
+          Array.from(systemRolesThatSatisfy)
+        );
+        if (hasSystemDbMatch) {
+          return runWithDbContext({ scope: 'PLATFORM_ADMIN', userId: user.id }, () => next());
+        }
+      } else {
+        // Organization-scoped route: mọi người dùng (bao gồm SUPER_ADMIN / ADMIN) đều phải có organization_id hợp lệ
+        // và tư cách thành viên ACTIVE trong organization_members cho đúng tổ chức đó.
+        const rawOrgId =
+          (req.headers['x-organization-id'] as string | undefined) ??
+          (req.params?.orgId as string | undefined) ??
+          (req.query?.organization_id as string | undefined) ??
+          (req.body?.organization_id as string | undefined);
+        const targetOrgId = typeof rawOrgId === 'string' ? rawOrgId.trim() : '';
 
-      // SUPER_ADMIN luôn có toàn quyền truy cập
-      if (effectiveTokenRoles.includes('SUPER_ADMIN')) {
-        return next();
-      }
+        if (!targetOrgId) {
+          return next(new ApiError(400, 'Thiếu thông tin định danh tổ chức (organization_id) hợp lệ'));
+        }
+        if (targetOrgId.toUpperCase() === 'ALL') {
+          return next(new ApiError(403, 'Từ chối truy cập: Không hỗ trợ ngữ cảnh tổ chức toàn cục (all)'));
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrgId)) {
+          return next(new ApiError(400, 'Định dạng định danh tổ chức (organization_id) không hợp lệ'));
+        }
 
-      // Kiểm tra xem vai trò hiệu lực có khớp với danh sách cho phép không
-      const hasTokenMatch = effectiveTokenRoles.some((r) => normalizedAllowed.includes(r));
-      if (hasTokenMatch) {
-        return next();
-      }
-
-      // 2. Dự phòng: Kiểm tra trực tiếp trong Database
-      // 2.1. Kiểm tra vai trò hệ thống toàn cục (System Roles)
-      const systemRolesThatSatisfy: string[] = ['SUPER_ADMIN'];
-      if (normalizedAllowed.includes('ADMIN')) systemRolesThatSatisfy.push('ADMIN');
-      if (normalizedAllowed.includes('DEVOPS')) systemRolesThatSatisfy.push('ADMIN', 'SYSTEM_ADMIN');
-      if (normalizedAllowed.includes('VIEWER') || normalizedAllowed.includes('USER')) {
-        systemRolesThatSatisfy.push('ADMIN', 'SYSTEM_ADMIN', 'USER');
-      }
-
-      const hasSystemDbMatch = await SystemRoleService.hasAnyRole(user.id, systemRolesThatSatisfy);
-      if (hasSystemDbMatch) {
-        return next();
-      }
-
-      // 2.2. Kiểm tra vai trò tổ chức (Organization Roles: DEVOPS, SME_OWNER, VIEWER)
-      // Cho phép thành viên tổ chức thực hiện các quyền hạn tương ứng với vai trò trong Tenant
-      const orgRolesAllowed = normalizedAllowed.filter((r) => ['DEVOPS', 'SME_OWNER', 'VIEWER', 'ADMIN'].includes(r));
-      if (orgRolesAllowed.length > 0) {
-        const targetOrgId =
-          (req.headers['x-organization-id'] as string) ||
-          (req.query.organization_id as string) ||
-          req.body?.organization_id ||
-          user.organization_id;
-
-        let orgRoleQuery = `
+        const orgRoleQuery = `
           SELECT r.code, r.name 
           FROM organization_members om 
           JOIN organization_roles r ON om.role_id = r.id 
-          WHERE om.user_id = $1 AND om.status = 'ACTIVE'
+          WHERE om.user_id = $1 AND om.organization_id = $2 AND om.status = 'ACTIVE'
         `;
-        const orgQueryParams: any[] = [user.id];
-        if (targetOrgId && targetOrgId !== 'all') {
-          orgRoleQuery += ` AND om.organization_id = $2`;
-          orgQueryParams.push(targetOrgId);
-        }
 
-        const orgMemberRes = await pool.query(orgRoleQuery, orgQueryParams);
+        const orgMemberRes = await pool.query(orgRoleQuery, [user.id, targetOrgId]);
         if (orgMemberRes.rows.length > 0) {
           const userOrgRoles = orgMemberRes.rows.flatMap((row: any) => [
             String(row.code || '').trim().toUpperCase(),
@@ -135,10 +127,15 @@ export const requireRoles = (...allowedRoles: string[]) => {
           const expandedOrgRoles = expandRoles(userOrgRoles);
           const hasOrgMatch = expandedOrgRoles.some((r) => normalizedAllowed.includes(r));
           if (hasOrgMatch) {
-            return next();
+            return runWithTenantContext(targetOrgId, user.id, () => next());
           }
         }
       }
+
+      const rawTokenRoles: string[] = Array.isArray(user.roles)
+        ? user.roles.map((r: string) => String(r).trim().toUpperCase())
+        : (user.roles ? [String(user.roles).trim().toUpperCase()] : []);
+      const effectiveTokenRoles = expandRoles(rawTokenRoles);
 
       // 3. Nếu không có vai trò hợp lệ -> Trả về lỗi 403 Forbidden
       await AuditService.recordFromRequest(req, {
@@ -190,18 +187,7 @@ export const requireSelfOrAdmin = (getTargetUserId: (req: Request) => string | u
         return next();
       }
 
-      // Nếu không phải chính chủ, kiểm tra xem có quyền ADMIN hoặc SUPER_ADMIN không
-      const rawTokenRoles: string[] = Array.isArray(user.roles)
-        ? user.roles.map((r: string) => String(r).trim().toUpperCase())
-        : (user.roles ? [String(user.roles).trim().toUpperCase()] : []);
-
-      const effectiveTokenRoles = expandRoles(rawTokenRoles);
-
-      if (effectiveTokenRoles.includes('SUPER_ADMIN') || effectiveTokenRoles.includes('ADMIN')) {
-        return next();
-      }
-
-      // Kiểm tra DB nếu trong token chưa có quyền
+      // Nếu không phải chính chủ, kiểm tra trực tiếp trong DB xem có quyền ADMIN hoặc SUPER_ADMIN không
       const isAdminInDb = await SystemRoleService.hasAnyRole(user.id, ['ADMIN', 'SUPER_ADMIN']);
       if (isAdminInDb) {
         return next();

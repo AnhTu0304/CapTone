@@ -1,5 +1,7 @@
 import { AgentModel } from '../models/agent.model';
 import { AuditService } from './audit.service';
+import { pool } from '../config/database';
+import { runWithTenantContext } from '../config/dbContext';
 
 export interface IAgentTimeoutCheckResult {
   checked_at: Date;
@@ -50,34 +52,40 @@ export class AgentTimeoutService {
   public static async checkAndMarkStaleAgents(timeoutSeconds?: number): Promise<IAgentTimeoutCheckResult> {
     const threshold = timeoutSeconds !== undefined ? timeoutSeconds : this.getTimeoutThresholdSeconds();
 
-    const staleAgents = await AgentModel.markStaleAgentsOffline(threshold);
-
-    for (const agent of staleAgents) {
-      try {
-        await AuditService.record({
-          organization_id: (agent as any).organization_id || null,
-          actor_type: 'SYSTEM',
-          action: 'AGENT_DISCONNECTED',
-          reason_code: 'HEARTBEAT_TIMEOUT',
-          target_type: 'AGENT',
-          target_id: agent.id,
-          resource_type: 'AGENT',
-          resource_id: agent.id,
-          status: 'SUCCESS',
-          description: `Agent '${agent.name}' timed out after missing heartbeats (> ${threshold}s). Status transitioned from ONLINE to OFFLINE.`,
-          before_data: { status: 'ONLINE', last_seen_at: agent.last_seen_at },
-          after_data: { status: 'OFFLINE' },
-          metadata: {
-            agent_id: agent.id,
-            agent_name: agent.name,
-            agent_uid: agent.agent_uid,
-            cluster_id: agent.cluster_id,
-            timeout_threshold_seconds: threshold,
-          },
-        });
-      } catch (err) {
-        console.warn(`[AgentTimeoutService] Failed to record audit log for agent ${agent.id}:`, err);
-      }
+    const staleAgents: Array<any> = [];
+    const orgRes = await pool.query(`SELECT id FROM public.fn_list_active_organization_ids();`);
+    for (const row of orgRes.rows) {
+      await runWithTenantContext(row.id, null, async () => {
+        const orgStale = await AgentModel.markStaleAgentsOffline(threshold);
+        for (const agent of orgStale) {
+          staleAgents.push(agent);
+          try {
+            await AuditService.record({
+              organization_id: (agent as any).organization_id || row.id,
+              actor_type: 'SYSTEM',
+              action: 'AGENT_DISCONNECTED',
+              reason_code: 'HEARTBEAT_TIMEOUT',
+              target_type: 'AGENT',
+              target_id: agent.id,
+              resource_type: 'AGENT',
+              resource_id: agent.id,
+              status: 'SUCCESS',
+              description: `Agent '${agent.name}' timed out after missing heartbeats (> ${threshold}s). Status transitioned from ONLINE to OFFLINE.`,
+              before_data: { status: 'ONLINE', last_seen_at: agent.last_seen_at },
+              after_data: { status: 'OFFLINE' },
+              metadata: {
+                agent_id: agent.id,
+                agent_name: agent.name,
+                agent_uid: agent.agent_uid,
+                cluster_id: agent.cluster_id,
+                timeout_threshold_seconds: threshold,
+              },
+            });
+          } catch (err) {
+            console.warn(`[AgentTimeoutService] Failed to record audit log for agent ${agent.id}:`, err);
+          }
+        }
+      });
     }
 
     return {

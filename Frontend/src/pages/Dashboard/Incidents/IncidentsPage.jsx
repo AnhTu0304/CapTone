@@ -213,7 +213,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const healingStartedMs = item.healing_started_at ? new Date(item.healing_started_at).getTime() : 0;
   const healingCompletedMs = item.healing_completed_at ? new Date(item.healing_completed_at).getTime() : 0;
   const isRecentlyRunning = (item.healing_status === 'IN_PROGRESS' || item.healing_status === 'RUNNING') && healingStartedMs > 0 && (nowMs - healingStartedMs < 60000);
-  const isRecentlyVerifying = item.healing_status === 'SUCCEEDED' && !isResolved && (item.healing_verification_result === null || item.healing_verification_result === undefined) && healingCompletedMs > 0 && (nowMs - healingCompletedMs < 90000);
+  const isRecentlyVerifying = item.healing_status === 'COMPLETED' && !isResolved && (item.healing_verification_result === null || item.healing_verification_result === undefined) && healingCompletedMs > 0 && (nowMs - healingCompletedMs < 90000);
 
   const failedCount = Number(item.failed_actions_count || 0);
   const succeededCount = Number(item.succeeded_actions_count || 0);
@@ -225,7 +225,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
 
   const isHealingSucceeded =
     succeededCount > 0 ||
-    (item.healing_status === 'SUCCEEDED' && item.healing_verification_result === true);
+    (item.healing_status === 'COMPLETED' && item.healing_verification_result === true);
 
   const hasNoActions = failedCount === 0 && succeededCount === 0 && !item.healing_action_id;
 
@@ -250,7 +250,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     statusLabel = 'Tự khắc phục thất bại (Chưa phục hồi)';
   } else if (isRecentlyVerifying) {
     statusLabel = 'Đang tự phục hồi (Đang xác minh)';
-  } else if (item.healing_status === 'SUCCEEDED') {
+  } else if (item.healing_status === 'COMPLETED') {
     statusLabel = 'Hậu kiểm thất bại (Chưa phục hồi)';
   } else if (isRecentlyRunning) {
     statusLabel = 'Đang tự phục hồi';

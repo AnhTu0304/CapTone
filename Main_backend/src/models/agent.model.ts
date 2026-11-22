@@ -82,21 +82,12 @@ export class AgentModel {
    * 1. Tìm Agent hợp lệ qua hash của token (phục vụ WebSocket và HTTP auth)
    * (Giữ nguyên tương thích với code hiện tại)
    */
-  public static async findByTokenHash(tokenHash: string, rawToken: string) {
-    const cleanToken = rawToken ? rawToken.trim() : '';
-
+  public static async findByTokenHash(tokenHash: string, _rawToken: string) {
     const result = await pool.query(
-      `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.environment_id, a.status, t.id AS token_id, e.organization_id
-       FROM agent_tokens t
-       JOIN agents a ON a.id = t.agent_id
-       LEFT JOIN environments e ON a.environment_id = e.id
-       WHERE (t.token_hash = $1 OR t.token_hash = $2)
-         AND (t.expires_at IS NULL OR t.expires_at > NOW())
-         AND t.revoked_at IS NULL
-         AND a.revoked_at IS NULL
-         AND a.status != 'REVOKED'
+      `SELECT id, name, agent_uid, cluster_id, environment_id, status, token_id, organization_id
+       FROM public.fn_authenticate_agent_token($1)
        LIMIT 1`,
-      [tokenHash, cleanToken]
+      [tokenHash]
     );
     return result.rows[0] || null;
   }
@@ -183,7 +174,18 @@ export class AgentModel {
    * 6. Danh sách tất cả agent cho Telemetry Aggregator
    * (Giữ nguyên tương thích với code hiện tại)
    */
-  public static async listAll() {
+  public static async listAll(organizationId?: string | null) {
+    if (organizationId) {
+      const result = await pool.query(
+        `SELECT a.id, a.name, a.agent_uid, a.cluster_id, a.status, a.last_seen_at
+         FROM agents a
+         JOIN environments e ON e.id = a.environment_id
+         WHERE e.organization_id = $1::uuid
+         ORDER BY a.last_seen_at DESC`,
+        [organizationId]
+      );
+      return result.rows;
+    }
     const result = await pool.query(
       `SELECT id, name, agent_uid, cluster_id, status, last_seen_at
        FROM agents

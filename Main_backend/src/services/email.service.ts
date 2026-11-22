@@ -1,5 +1,6 @@
 import nodemailer, { Transporter, SendMailOptions } from 'nodemailer';
 import { config } from '../config/env';
+import { maskSecretValue, redactSensitiveString } from '../utils/logSanitizer';
 
 /**
  * Service xử lý việc gửi email thông báo và xác thực tài khoản
@@ -136,8 +137,13 @@ export class EmailService {
    * Gửi email xác thực tài khoản kèm token kích hoạt
    */
   public static async sendVerificationEmail(toEmail: string, token: string, fullName: string): Promise<boolean> {
-    const backendVerifyUrl = `http://localhost:${config.port}${config.apiPrefix}/auth/verify-email?token=${token}`;
-    const frontendVerifyUrl = `${config.email.clientUrl}/verify-email?token=${token}`;
+    const publicBaseUrl = (process.env.PUBLIC_API_URL || config.email.clientUrl || `http://localhost:${config.port}`).replace(/\/+$/, '');
+    const clientBaseUrl = (config.email.clientUrl || publicBaseUrl).replace(/\/+$/, '');
+    const backendVerifyUrl = `${publicBaseUrl}${config.apiPrefix}/auth/verify-email?token=${encodeURIComponent(token)}`;
+    const frontendVerifyUrl = `${clientBaseUrl}/verify-email?token=${encodeURIComponent(token)}`;
+    const safeName = this.escapeHtml(fullName || toEmail);
+    const safeToken = this.escapeHtml(token);
+    const safeBackendVerifyUrl = this.escapeHtml(backendVerifyUrl);
 
     const transporter = this.getTransporter();
 
@@ -185,26 +191,26 @@ export class EmailService {
           <p>Hệ thống Giám sát & Tự khắc phục sự cố hệ thống</p>
         </div>
         <div class="content">
-          <div class="greeting">Xin chào ${fullName},</div>
+          <div class="greeting">Xin chào ${safeName},</div>
           <p>Bạn vừa yêu cầu mã xác thực địa chỉ email trên nền tảng <strong>AI Self-Heal</strong>. Vui lòng sử dụng mã xác thực bên dưới để hoàn tất:</p>
           
           <div style="text-align: center; margin: 28px 0;">
             <p style="margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #475569;">MÃ XÁC THỰC EMAIL CỦA BẠN:</p>
             <div style="display: inline-block; background: #eff6ff; border: 2px dashed #2563eb; color: #1d4ed8; font-size: 34px; font-weight: 800; letter-spacing: 8px; padding: 12px 28px; border-radius: 8px; font-family: monospace;">
-              ${token}
+              ${safeToken}
             </div>
             <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">(Mã có hiệu lực trong vòng 24 giờ)</p>
           </div>
 
           <div class="button-wrapper">
-            <a href="${backendVerifyUrl}" class="btn" target="_blank">Hoặc Nhấn Vào Đây Để Kích Hoạt Ngay</a>
+            <a href="${safeBackendVerifyUrl}" class="btn" target="_blank">Hoặc Nhấn Vào Đây Để Kích Hoạt Ngay</a>
           </div>
 
           <p style="font-size: 13px; color: #64748b;">
             Nếu nút phía trên không bấm được, bạn có thể copy link sau và dán trực tiếp vào trình duyệt:
           </p>
           <div class="token-box">
-            <a href="${backendVerifyUrl}" style="color: #2563eb; text-decoration: none;">${backendVerifyUrl}</a>
+            <a href="${safeBackendVerifyUrl}" style="color: #2563eb; text-decoration: none;">${safeBackendVerifyUrl}</a>
           </div>
 
           <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">
@@ -284,11 +290,11 @@ export class EmailService {
           <p>Lời mời cộng tác quản trị hạ tầng</p>
         </div>
         <div class="content">
-          <p>Xin chào <strong>${recipientName}</strong>,</p>
-          <p><strong>${inviterName}</strong> vừa mời bạn tham gia quản trị hệ thống cho tổ chức <strong>${orgName}</strong> trên nền tảng CapTone.</p>
-          <p>Vai trò được chỉ định: <span class="badge">${roleName}</span></p>
+          <p>Xin chào <strong>${this.escapeHtml(recipientName)}</strong>,</p>
+          <p><strong>${this.escapeHtml(inviterName)}</strong> vừa mời bạn tham gia quản trị hệ thống cho tổ chức <strong>${this.escapeHtml(orgName)}</strong> trên nền tảng CapTone.</p>
+          <p>Vai trò được chỉ định: <span class="badge">${this.escapeHtml(roleName)}</span></p>
           <div class="btn-wrapper">
-            <a href="${config.email.clientUrl}/portal/dashboard" class="btn" target="_blank">Xem và Chấp Nhận Lời Mời</a>
+            <a href="${this.escapeHtml(config.email.clientUrl)}/portal/dashboard" class="btn" target="_blank">Xem và Chấp Nhận Lời Mời</a>
           </div>
           <p style="font-size: 13px; color: #64748b;">
             Vui lòng đăng nhập vào hệ thống để chấp nhận lời mời và bắt đầu quản lý cụm Kubernetes cùng đồng đội.
@@ -357,11 +363,11 @@ export class EmailService {
           <p>Chào mừng bạn đã liên kết tài khoản Google</p>
         </div>
         <div class="content">
-          <p>Xin chào <strong>${fullName}</strong>,</p>
-          <p>Tài khoản của bạn đã được liên kết thành công với tài khoản Google (<strong>${toEmail}</strong>).</p>
+          <p>Xin chào <strong>${this.escapeHtml(fullName)}</strong>,</p>
+          <p>Tài khoản của bạn đã được liên kết thành công với tài khoản Google (<strong>${this.escapeHtml(toEmail)}</strong>).</p>
           <p>Hệ thống của chúng tôi đã tự động xác thực địa chỉ email từ nhà cung cấp Google. Bạn có thể thiết lập tổ chức và cấu hình giám sát hạ tầng ngay bây giờ.</p>
           <div class="btn-wrapper">
-            <a href="${portalUrl}" class="btn" target="_blank">Tiếp Tục Thiết Lập Tổ Chức</a>
+            <a href="${this.escapeHtml(portalUrl)}" class="btn" target="_blank">Tiếp Tục Thiết Lập Tổ Chức</a>
           </div>
           <p style="font-size: 13px; color: #64748b;">
             Nếu bạn không thực hiện đăng nhập hoặc đăng ký này, vui lòng liên hệ ngay với đội ngũ bảo mật của chúng tôi.
@@ -797,16 +803,21 @@ export class EmailService {
     expiresAt?: Date | string;
   }): Promise<boolean> {
     const transporter = this.getTransporter();
-    const quickApproveUrl = `http://localhost:${config.port}${config.apiPrefix}/healing/approvals/quick-approve?token=${encodeURIComponent(payload.token)}`;
-    const quickRejectUrl = `http://localhost:${config.port}${config.apiPrefix}/healing/approvals/quick-reject?token=${encodeURIComponent(payload.token)}`;
-    const clientUrl = (config.email.clientUrl || 'http://localhost:3002').replace(/\/+$/, '');
+    const publicBaseUrl = (process.env.PUBLIC_API_URL || config.email.clientUrl || `http://localhost:${config.port}`).replace(/\/+$/, '');
+    const quickApproveUrl = `${publicBaseUrl}${config.apiPrefix}/healing/approvals/quick-approve?token=${encodeURIComponent(payload.token)}`;
+    const quickRejectUrl = `${publicBaseUrl}${config.apiPrefix}/healing/approvals/quick-reject?token=${encodeURIComponent(payload.token)}`;
+    const clientUrl = (config.email.clientUrl || publicBaseUrl).replace(/\/+$/, '');
     const dashboardUrl = `${clientUrl}/dashboard/self-healing/approvals`;
 
+    const esc = (v?: string | null) => this.escapeHtml(v);
     const hitlCode = `REQ-HITL-${payload.approvalId.slice(0, 8).toUpperCase()}`;
     const riskColor = payload.riskLevel?.toUpperCase() === 'CRITICAL' ? '#DC2626' : (payload.riskLevel?.toUpperCase() === 'HIGH' ? '#EA580C' : '#D97706');
     const riskLabel = payload.riskLevel?.toUpperCase() === 'CRITICAL' ? 'NGUY HIỂM (CRITICAL)' : (payload.riskLevel?.toUpperCase() === 'HIGH' ? 'RỦI RO CAO' : 'TRUNG BÌNH');
 
     if (!transporter) {
+      const maskedToken = maskSecretValue(payload.token);
+      const maskedApproveUrl = quickApproveUrl.replace(encodeURIComponent(payload.token), maskedToken).replace(payload.token, maskedToken);
+      const maskedRejectUrl = quickRejectUrl.replace(encodeURIComponent(payload.token), maskedToken).replace(payload.token, maskedToken);
       console.log('\n============================================================');
       console.log('🚨 [EMAIL SERVICE - DEV MODE] YÊU CẦU PHÊ DUYỆT TỰ PHỤC HỒI (HITL)');
       console.log(`➡️  Gửi tới: ${payload.recipientName} (${payload.recipientRole || 'SME/DevOps'}) <${payload.toEmail}>`);
@@ -814,9 +825,9 @@ export class EmailService {
       console.log(`📦  Dịch vụ / Pod: ${payload.targetName} (${payload.targetType})`);
       console.log(`⚡  Hành động: ${payload.actionName} (${payload.actionCode}) | Rủi ro: ${riskLabel}`);
       console.log(`🔬  Nguyên nhân: ${payload.rootCauseType || 'Bất thường dịch vụ'} (Tin cậy: ${payload.confidenceScore || 70}%)`);
-      console.log(`🔑  Mã phiếu: ${hitlCode}`);
-      console.log(`✅  LINK 1-CLICK PHÊ DUYỆT NGAY: ${quickApproveUrl}`);
-      console.log(`❌  LINK 1-CLICK TỪ CHỐI: ${quickRejectUrl}`);
+      console.log(`🔑  Mã phiếu: ${hitlCode} | Token: ${maskedToken} (đã che giấu)`);
+      console.log(`✅  LINK 1-CLICK PHÊ DUYỆT NGAY: ${maskedApproveUrl}`);
+      console.log(`❌  LINK 1-CLICK TỪ CHỐI: ${maskedRejectUrl}`);
       console.log(`🌐  LINK XEM CHI TIẾT TRÊN WEB: ${dashboardUrl}`);
       console.log('============================================================\n');
       return true;
@@ -854,10 +865,10 @@ export class EmailService {
         <div class="header">
           <div class="header-tag">🚨 HITL Human-In-The-Loop Cần Phê Duyệt</div>
           <h1>Yêu Cầu Phê Duyệt Hành Động Khắc Phục</h1>
-          <p>Mã kiểm toán: <strong>${hitlCode}</strong> &bull; Tổ chức: <strong>${this.escapeHtml(payload.organizationName || 'Tổ chức Quản trị')}</strong></p>
+          <p>Mã kiểm toán: <strong>${esc(hitlCode)}</strong> &bull; Tổ chức: <strong>${esc(payload.organizationName || 'Tổ chức Quản trị')}</strong></p>
         </div>
         <div class="content">
-          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong> (${this.escapeHtml(payload.recipientRole || 'SME/DevOps')}),</p>
+          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${esc(payload.recipientName || payload.toEmail)}</strong> (${esc(payload.recipientRole || 'SME/DevOps')}),</p>
           <div class="alert-box">
             <strong>Cảnh báo giám sát MAPE-K:</strong> Hệ thống tự phục hồi phát hiện nguy cơ bất thường dịch vụ và chuẩn bị thực thi hành động can thiệp có mức độ rủi ro cần sự phê duyệt của con người trước khi áp dụng.
           </div>
@@ -865,32 +876,32 @@ export class EmailService {
           <table class="info-table">
             <tr>
               <td class="label">🚨 Sự cố phát hiện</td>
-              <td class="value" style="color: #dc2626;">${this.escapeHtml(payload.incidentTitle || payload.actionName || 'Sự cố cần can thiệp')}</td>
+              <td class="value" style="color: #dc2626;">${esc(payload.incidentTitle || payload.actionName || 'Sự cố cần can thiệp')}</td>
             </tr>
             <tr>
               <td class="label">📦 Dịch vụ & Đối tượng</td>
-              <td class="value"><span style="color: #2563eb; font-weight: 800;">${this.escapeHtml(payload.targetName)}</span> (${this.escapeHtml(payload.targetType || 'POD')})${payload.namespace ? ` &bull; Namespace: <code>${this.escapeHtml(payload.namespace)}</code>` : ''}</td>
+              <td class="value"><span style="color: #2563eb; font-weight: 800;">${esc(payload.targetName)}</span> (${esc(payload.targetType || 'POD')})${payload.namespace ? ` &bull; Namespace: <code>${esc(payload.namespace)}</code>` : ''}</td>
             </tr>
             <tr>
               <td class="label">🔬 Nguyên nhân gốc (RCA)</td>
-              <td class="value">${this.escapeHtml(payload.rootCauseType || payload.incidentTitle || 'Bất thường hạ tầng phát hiện bởi AI')} (Độ tin cậy AI: <strong>${payload.confidenceScore || 70}%</strong>)</td>
+              <td class="value">${esc(payload.rootCauseType || payload.incidentTitle || 'Bất thường hạ tầng phát hiện bởi AI')} (Độ tin cậy AI: <strong>${Number(payload.confidenceScore || 70)}%</strong>)</td>
             </tr>
             ${payload.actionReasoning ? `
             <tr>
               <td class="label">💡 Lập luận khuyến nghị AI</td>
-              <td class="value" style="color: #334155; font-style: italic;">${this.escapeHtml(payload.actionReasoning)}</td>
+              <td class="value" style="color: #334155; font-style: italic;">${esc(payload.actionReasoning)}</td>
             </tr>` : ''}
             <tr>
               <td class="label">⚡ Hành động tự khắc phục</td>
               <td class="value">
                 <span class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px;">
-                  ${this.escapeHtml(payload.actionName)} (${this.escapeHtml(payload.actionCode)})
+                  ${esc(payload.actionName)} (${esc(payload.actionCode)})
                 </span>
               </td>
             </tr>
             <tr>
               <td class="label">🛡️ Chính sách an toàn</td>
-              <td class="value"><code>${this.escapeHtml(payload.policyName || 'POL-SAFETY-DEFAULT')}</code></td>
+              <td class="value"><code>${esc(payload.policyName || 'POL-SAFETY-DEFAULT')}</code></td>
             </tr>
             <tr>
               <td class="label">⚠️ Mức độ rủi ro</td>
@@ -902,7 +913,7 @@ export class EmailService {
             </tr>
             <tr>
               <td class="label">☸️ Cụm K8s & Môi trường</td>
-              <td class="value">${this.escapeHtml(payload.clusterName || 'Cụm Kubernetes')} (${this.escapeHtml(payload.environmentName || 'Production')})${payload.organizationName ? ` &bull; ${this.escapeHtml(payload.organizationName)}` : ''}</td>
+              <td class="value">${esc(payload.clusterName || 'Cụm Kubernetes')} (${esc(payload.environmentName || 'Production')})${payload.organizationName ? ` &bull; ${esc(payload.organizationName)}` : ''}</td>
             </tr>
             <tr>
               <td class="label">⏱️ Thời hạn xử lý</td>
@@ -915,13 +926,13 @@ export class EmailService {
               ⚡ Kỹ sư có thể phê duyệt hoặc từ chối trực tiếp ngay tại Email này:
             </div>
             <div style="margin-bottom: 12px;">
-              <a href="${quickApproveUrl}" class="btn-approve" target="_blank">
+              <a href="${esc(quickApproveUrl)}" class="btn-approve" target="_blank">
                 ✅ Phê Duyệt Ngay (1-Click)
               </a>
-              <a href="${quickRejectUrl}" style="display: inline-block; background: #dc2626; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 13px 24px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3); margin-right: 8px;" target="_blank">
+              <a href="${esc(quickRejectUrl)}" style="display: inline-block; background: #dc2626; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 13px 24px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3); margin-right: 8px;" target="_blank">
                 ❌ Từ Chối Yêu Cầu
               </a>
-              <a href="${dashboardUrl}" class="btn-dashboard" target="_blank">
+              <a href="${esc(dashboardUrl)}" class="btn-dashboard" target="_blank">
                 🔍 Xem Bảng Chứng & Diff YAML
               </a>
             </div>
@@ -931,7 +942,7 @@ export class EmailService {
           </div>
 
           <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">
-            * Lưu ý: Nút <strong>Phê Duyệt Ngay</strong> sử dụng liên kết bảo mật có ký số JWT kèm thời hạn TTL. Khi bạn bấm nút, hệ thống sẽ tự động xác thực quyền hạn RBAC của bạn đối với tổ chức <strong>${this.escapeHtml(payload.organizationName || 'hệ thống')}</strong> và thực thi can thiệp lên cụm Kubernetes.
+            * Lưu ý: Nút <strong>Phê Duyệt Ngay</strong> sử dụng liên kết bảo mật có ký số JWT kèm thời hạn TTL. Khi bạn bấm nút, hệ thống sẽ tự động xác thực quyền hạn RBAC của bạn đối với tổ chức <strong>${esc(payload.organizationName || 'hệ thống')}</strong> và thực thi can thiệp lên cụm Kubernetes.
           </p>
         </div>
 
@@ -963,4 +974,48 @@ export class EmailService {
     }
   }
 
+  /**
+   * Gửi email đặt lại mật khẩu (liên kết an toàn 15 phút qua CLIENT_URL)
+   */
+  public static async sendPasswordResetEmail(
+    toEmail: string,
+    fullName: string,
+    resetToken: string
+  ): Promise<boolean> {
+    const safeName = this.escapeHtml(fullName || 'Quý khách');
+    const baseUrl = (config.email.clientUrl || 'http://localhost:3000').replace(/\/+$/, '');
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head><meta charset="UTF-8" /></head>
+    <body style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px;">
+        <h2 style="margin-top: 0; color: #059669;">Đặt lại mật khẩu AI Self-Heal</h2>
+        <p>Xin chào <strong>${safeName}</strong>,</p>
+        <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhấn vào nút bên dưới để tạo mật khẩu mới (hiệu lực trong 15 phút, dùng 1 lần):</p>
+        <p style="margin: 24px 0;">
+          <a href="${resetUrl}" style="display: inline-block; background: #059669; color: #ffffff; text-decoration: none; padding: 12px 22px; border-radius: 6px; font-weight: 700;">
+            Đặt lại mật khẩu
+          </a>
+        </p>
+        <p style="font-size: 13px; color: #475569;">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này. Tài khoản và phiên đăng nhập hiện tại của bạn vẫn an toàn.</p>
+      </div>
+    </body>
+    </html>`;
+
+    try {
+      await this.sendMailWithRetry({
+        from: this.getFromAddress(),
+        to: toEmail,
+        subject: '🔐 [AI Self-Heal] Yêu cầu đặt lại mật khẩu',
+        html: htmlContent,
+      });
+      return true;
+    } catch (error) {
+      console.error(`❌ [EMAIL] Gửi email đặt lại mật khẩu tới ${toEmail} thất bại:`, (error as Error).message);
+      return false;
+    }
+  }
 }

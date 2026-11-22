@@ -4,6 +4,7 @@ import { LogStreamService } from './logStream.service';
 import crypto from 'crypto';
 
 import { pool } from '../config/database';
+import { runWithTenantContext } from '../config/dbContext';
 import {
   AgentModel,
   MetricModel,
@@ -28,6 +29,7 @@ export interface AuthenticatedAgent {
   name: string;
   agent_uid: string;
   cluster_id: string | null;
+  cluster_name?: string;
   environment_id: string;
   organization_id?: string;
   status: string;
@@ -48,25 +50,28 @@ export class AgentService {
         return null;
       }
 
-      // Mark agent ONLINE and update token last_used
-      await AgentModel.setOnline(agentRow.id, agentRow.token_id);
+      const agentOrgId = (agentRow as any).organization_id;
+      return await runWithTenantContext(agentOrgId, null, async () => {
+        // Mark agent ONLINE and update token last_used
+        await AgentModel.setOnline(agentRow.id, agentRow.token_id);
 
-      // Record connection heartbeat
-      await AgentModel.recordHeartbeat(
-        agentRow.id,
-        'ONLINE',
-        { event: 'connect', token_prefix: token.slice(0, 8) }
-      );
+        // Record connection heartbeat
+        await AgentModel.recordHeartbeat(
+          agentRow.id,
+          'ONLINE',
+          { event: 'connect', token_prefix: token.slice(0, 8) }
+        );
 
-      return {
-        id: agentRow.id,
-        name: agentRow.name,
-        agent_uid: agentRow.agent_uid,
-        cluster_id: agentRow.cluster_id,
-        environment_id: agentRow.environment_id,
-        organization_id: (agentRow as any).organization_id,
-        status: 'ONLINE',
-      };
+        return {
+          id: agentRow.id,
+          name: agentRow.name,
+          agent_uid: agentRow.agent_uid,
+          cluster_id: agentRow.cluster_id,
+          environment_id: agentRow.environment_id,
+          organization_id: agentOrgId,
+          status: 'ONLINE',
+        };
+      });
     } catch (error) {
       console.error('Error during agent authentication:', error);
       return null;
@@ -1970,23 +1975,26 @@ export class AgentService {
       throw ApiError.unauthorized('Token Agent không hợp lệ, đã hết hạn hoặc đã bị thu hồi');
     }
 
-    if (agentRow.token_id) {
-      await pool.query('UPDATE agent_tokens SET last_used_at = NOW() WHERE id = $1', [agentRow.token_id]);
-    }
+    const agentOrgId = (agentRow as any).organization_id;
+    return await runWithTenantContext(agentOrgId, null, async () => {
+      if (agentRow.token_id) {
+        await pool.query('UPDATE agent_tokens SET last_used_at = NOW() WHERE id = $1', [agentRow.token_id]);
+      }
 
-    return this.recordHeartbeatForAgent(
-      {
-        id: agentRow.id,
-        name: agentRow.name,
-        agent_uid: agentRow.agent_uid,
-        cluster_id: agentRow.cluster_id,
-        environment_id: agentRow.environment_id,
-        organization_id: (agentRow as any).organization_id,
-        status: agentRow.status,
-      },
-      data,
-      reqContext
-    );
+      return this.recordHeartbeatForAgent(
+        {
+          id: agentRow.id,
+          name: agentRow.name,
+          agent_uid: agentRow.agent_uid,
+          cluster_id: agentRow.cluster_id,
+          environment_id: agentRow.environment_id,
+          organization_id: agentOrgId,
+          status: agentRow.status,
+        },
+        data,
+        reqContext
+      );
+    });
   }
 
   /**

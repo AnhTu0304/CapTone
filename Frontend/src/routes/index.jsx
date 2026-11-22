@@ -36,8 +36,28 @@ import SecurityPracticesPage from '../pages/SecurityPractices';
 import PrivacyPage from '../pages/Privacy';
 import TermsPage from '../pages/Terms';
 import ForbiddenPage from '../pages/Error/ForbiddenPage';
-import { AdminNotFound, AdminAccessDenied } from '../components/admin/common';
+import {
+  UnauthorizedPage,
+  NotFoundPage,
+  ServerErrorPage,
+  ServiceUnavailablePage,
+  TooManyRequestsPage,
+  AgentOfflinePage,
+  ClusterLostPage,
+  MonitoringStatusPage,
+  MaintenancePage,
+} from '../pages/Error/StatusPages';
 import { useAuth } from '../context/AuthContext';
+
+const VALID_ONBOARDING_PATHS = new Set([
+  '/onboarding',
+  '/onboarding/',
+  '/onboarding/organization',
+  '/onboarding/environment',
+  '/onboarding/kubernetes',
+  '/onboarding/verify-agent',
+  '/onboarding/complete',
+]);
 
 export const ROUTES = {
   HOME: '/',
@@ -104,7 +124,16 @@ export const ROUTES = {
   PROFILE: '/portal/profile',
   NOTIFICATIONS: '/dashboard/notifications',
   ALERTS: '/dashboard/alerts',
+  UNAUTHORIZED: '/401',
   FORBIDDEN: '/403',
+  NOT_FOUND: '/404',
+  TOO_MANY_REQUESTS: '/429',
+  SERVER_ERROR: '/500',
+  SERVICE_UNAVAILABLE: '/503',
+  MAINTENANCE: '/maintenance',
+  STATUS_AGENT_OFFLINE: '/status/agent-offline',
+  STATUS_CLUSTER_LOST: '/status/cluster-lost',
+  STATUS_MONITORING: '/status/monitoring',
 };
 
 export const RouteRenderer = ({
@@ -118,14 +147,55 @@ export const RouteRenderer = ({
   const auth = useAuth();
 
   const user = auth?.user || null;
+  const isAuthenticated = Boolean(auth?.isAuthenticated && user);
+  const authLoading = Boolean(auth?.loading);
   const isSuperAdmin = auth?.isSuperAdmin ? auth.isSuperAdmin(user) : false;
   const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(user) : false;
   const isOwnerUser = auth?.isOwner ? auth.isOwner(user) : false;
   const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
 
-  if (path === '/403' || path === '/forbidden') {
-    return <ForbiddenPage onNavigate={onNavigate} />;
+  const isProtectedPath =
+    path === '/profile' ||
+    path === '/user' ||
+    path === '/personal' ||
+    path === '/me' ||
+    path === '/notifications' ||
+    path.startsWith('/portal') ||
+    path.startsWith('/onboarding') ||
+    path.startsWith('/dashboard') ||
+    path.startsWith('/admin');
+
+  if (isProtectedPath && !authLoading && !isAuthenticated) {
+    return (
+      <AuthLayout onNavigate={onNavigate}>
+        <LoginPage onNavigate={onNavigate} />
+      </AuthLayout>
+    );
+  }
+
+  const statusRoutes = {
+    '/401': <UnauthorizedPage onNavigate={onNavigate} />,
+    '/unauthorized': <UnauthorizedPage onNavigate={onNavigate} />,
+    '/403': <ForbiddenPage onNavigate={onNavigate} />,
+    '/forbidden': <ForbiddenPage onNavigate={onNavigate} />,
+    '/404': <NotFoundPage onNavigate={onNavigate} />,
+    '/not-found': <NotFoundPage onNavigate={onNavigate} />,
+    '/500': <ServerErrorPage onNavigate={onNavigate} />,
+    '/503': <ServiceUnavailablePage onNavigate={onNavigate} />,
+    '/429': <TooManyRequestsPage onNavigate={onNavigate} />,
+    '/status/agent-offline': <AgentOfflinePage onNavigate={onNavigate} />,
+    '/status/cluster-lost': <ClusterLostPage onNavigate={onNavigate} />,
+    '/status/monitoring': <MonitoringStatusPage onNavigate={onNavigate} />,
+    '/maintenance': <MaintenancePage onNavigate={onNavigate} />,
+  };
+
+  if (statusRoutes[path]) {
+    return (
+      <PublicLayout currentPath={path} onNavigate={onNavigate}>
+        {statusRoutes[path]}
+      </PublicLayout>
+    );
   }
 
   // Handle profile routes (unify into Personal Portal Profile)
@@ -140,6 +210,18 @@ export const RouteRenderer = ({
 
   // Handle all onboarding routes
   if (path.startsWith('/onboarding')) {
+    if (!VALID_ONBOARDING_PATHS.has(path)) {
+      return (
+        <PublicLayout currentPath={path} onNavigate={onNavigate}>
+          <NotFoundPage
+            onNavigate={onNavigate}
+            warnPath={currentPath}
+            title="404 — Không tìm thấy bước thiết lập"
+            message={`Đường dẫn "${currentPath}" không tồn tại trong quy trình khởi tạo hệ thống.`}
+          />
+        </PublicLayout>
+      );
+    }
     return <OnboardingPage currentPath={path} onNavigate={onNavigate} />;
   }
 
@@ -159,7 +241,7 @@ export const RouteRenderer = ({
 
     if (isDashboardViewer && isRestrictedForViewer) {
       return (
-        <AdminAccessDenied
+        <ForbiddenPage
           onNavigate={onNavigate}
           redirectPath="/dashboard"
           title="403 — Không Có Quyền Truy Cập"
@@ -169,7 +251,7 @@ export const RouteRenderer = ({
     }
     if (isDashboardDevOps && (path.startsWith('/dashboard/organization') || path === '/dashboard/settings')) {
       return (
-        <AdminAccessDenied
+        <ForbiddenPage
           onNavigate={onNavigate}
           redirectPath="/dashboard"
           title="403 — Không Có Quyền Truy Cập"
@@ -189,6 +271,17 @@ export const RouteRenderer = ({
   if (path.startsWith('/admin')) {
     let adminContent = null;
 
+    if (!isSuperAdmin && !isSystemAdmin && !isOwnerUser && !isDevOpsUser && !isViewerUser) {
+      return (
+        <ForbiddenPage
+          onNavigate={onNavigate}
+          redirectPath="/portal"
+          title="403 — Không Có Quyền Truy Cập Quản Trị"
+          message="Tài khoản của bạn không có quyền truy cập khu vực quản trị."
+        />
+      );
+    }
+
     const activeRole = auth?.activeRole;
     const isAdminRole = activeRole === 'ADMIN';
     const isSmeOwnerRole = activeRole === 'SME_OWNER';
@@ -200,7 +293,7 @@ export const RouteRenderer = ({
 
     if (isSmeOwnerRole && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/') || path === '/admin/users' || path === '/admin/members')) {
       return (
-        <AdminAccessDenied
+        <ForbiddenPage
           onNavigate={onNavigate}
           redirectPath="/dashboard"
           title="403 — Quyền Hạn Dành Riêng Cho Quản Trị Nền Tảng"
@@ -211,7 +304,7 @@ export const RouteRenderer = ({
 
     if (isDevOpsUser && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/') || path === '/admin/users')) {
       return (
-        <AdminAccessDenied
+        <ForbiddenPage
           onNavigate={onNavigate}
           redirectPath="/dashboard"
           title="403 — Không Có Quyền Quản Trị Hệ Thống"
@@ -229,7 +322,8 @@ export const RouteRenderer = ({
     if (isAdminRole && isRestrictedForAdmin) {
       const isRolePath = path.startsWith('/admin/roles');
       adminContent = (
-        <AdminAccessDenied
+        <ForbiddenPage
+          embedded
           onNavigate={onNavigate}
           redirectPath="/admin"
           title={isRolePath ? '403 — Không Có Quyền Phân Quyền Vai Trò' : '403 — Không Có Quyền Cấu Hình Hệ Thống'}
@@ -248,7 +342,8 @@ export const RouteRenderer = ({
       adminContent = <AdminSystemSettingsPage onNavigate={onNavigate} />;
     } else if (isViewerUser && path !== '/admin' && path !== '/admin/overview' && path !== '/admin/profile') {
       adminContent = (
-        <AdminAccessDenied
+        <ForbiddenPage
+          embedded
           onNavigate={onNavigate}
           redirectPath="/admin"
           title="403 — Không Có Quyền Truy Cập"
@@ -257,7 +352,8 @@ export const RouteRenderer = ({
       );
     } else if (isDevOpsUser && (path === '/admin/users' || path === '/admin/members')) {
       adminContent = (
-        <AdminAccessDenied
+        <ForbiddenPage
+          embedded
           onNavigate={onNavigate}
           redirectPath="/admin"
           title="403 — Không Có Quyền Quản Lý Người Dùng"
@@ -324,7 +420,15 @@ export const RouteRenderer = ({
     } else if (path === '/admin/users' || path === '/admin/members') {
       adminContent = <AdminUsersPage onNavigate={onNavigate} />;
     } else {
-      adminContent = <AdminNotFound onNavigate={onNavigate} />;
+      adminContent = (
+        <NotFoundPage
+          embedded
+          onNavigate={onNavigate}
+          warnPath={currentPath}
+          title="404 — Không tìm thấy trang quản trị"
+          message={`Đường dẫn quản trị "${currentPath}" không tồn tại hoặc đã được chuyển sang phân hệ khác.`}
+        />
+      );
     }
 
     return (
@@ -420,10 +524,20 @@ export const RouteRenderer = ({
       );
 
     case ROUTES.HOME:
-    default:
       return (
         <PublicLayout currentPath={ROUTES.HOME} onNavigate={onNavigate}>
           <HomePage onNavigate={onNavigate} />
+        </PublicLayout>
+      );
+
+    default:
+      return (
+        <PublicLayout currentPath={path} onNavigate={onNavigate}>
+          <NotFoundPage
+            onNavigate={onNavigate}
+            warnPath={currentPath}
+            message={`Đường dẫn "${currentPath}" không tồn tại trên hệ thống hoặc đã được di chuyển sang vị trí khác.`}
+          />
         </PublicLayout>
       );
   }

@@ -340,7 +340,7 @@ export const renderChartToPngBase64 = (sectionId, payload) => {
       ctx,
       width,
       `Biểu Đồ 1B: Xu Hướng Kết Quả Action Theo Thời Gian (${meta.timeRangeLabel})`,
-      'So sánh Thành công (SUCCEEDED), Thất bại (FAILED), Bị hủy/HITL (CANCELLED) & Tỷ lệ đạt (%)'
+      'So sánh Thành công (COMPLETED), Thất bại (FAILED), Bị hủy/HITL (CANCELLED) & Tỷ lệ đạt (%)'
     );
 
     const series =
@@ -937,7 +937,7 @@ export const exportReportsToExcel = async ({
       const hRow = ws.addRow([
         'Mốc Thời Gian',
         'Tổng Action',
-        'Thành Công (SUCCEEDED)',
+        'Thành Công (COMPLETED)',
         'Thất Bại (FAILED)',
         'Bị Hủy / HITL (CANCELLED)',
         'Đang Chờ (PENDING)',
@@ -1034,7 +1034,7 @@ export const exportReportsToExcel = async ({
         'Phân Loại',
         'Chế Độ Thực Thi',
         'Tổng Action',
-        'Thành Công (SUCCEEDED)',
+        'Thành Công (COMPLETED)',
         'Thất Bại (FAILED)',
         'Bị Hủy / HITL (CANCELLED)',
         'Tỷ Lệ Đạt (%)',
@@ -1159,7 +1159,7 @@ export const exportReportsToExcel = async ({
         const detailText =
           item.failureReason ||
           item.resultSummary ||
-          (item.executionStatus === 'SUCCEEDED' ? 'Thành công' : '—');
+          (item.executionStatus === 'COMPLETED' ? 'Thành công' : '—');
         const verifyText =
           item.verificationResult === null || item.verificationResult === undefined
             ? '—'
@@ -1180,7 +1180,7 @@ export const exportReportsToExcel = async ({
           item.executionStatus || '',
           item.durationSeconds ?? '—',
           verifyText,
-          item.reasonCategory || (item.executionStatus === 'SUCCEEDED' ? 'Thành công' : '—'),
+          item.reasonCategory || (item.executionStatus === 'COMPLETED' ? 'Thành công' : '—'),
           detailText,
         ]);
         styleDataRow(row, idx, { 11: 'center', 12: 'right', 13: 'center' });
@@ -1189,7 +1189,7 @@ export const exportReportsToExcel = async ({
           bold: true,
           color: {
             argb:
-              item.executionStatus === 'SUCCEEDED'
+              item.executionStatus === 'COMPLETED'
                 ? 'FF047857'
                 : item.executionStatus === 'FAILED'
                   ? 'FFB91C1C'

@@ -4,6 +4,7 @@ import { OrganizationMemberModel, MemberStatus } from '../models/organizationMem
 import { OrganizationRoleCode } from '../models/organizationRole.model';
 import { OrganizationModel } from '../models/organization.model';
 import { AuditService } from '../services/audit.service';
+import { enterOrUpdateDbContext, runWithTenantContext } from '../config/dbContext';
 
 export interface IOrgMemberContext {
   organizationId: string;
@@ -67,46 +68,50 @@ export const requireOrgMember = async (req: Request, res: Response, next: NextFu
       );
     }
 
-    // 3. Kiểm tra trạng thái hoạt động của chính Tổ chức
-    // Nếu tổ chức đang bị khóa (SUSPENDED) hoặc ngừng hoạt động (INACTIVE)
-    const org = await OrganizationModel.findById(orgId);
-    if (!org || org.deleted_at) {
-      return next(new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa'));
-    }
-
-    if (org.status === 'SUSPENDED' || org.status === 'INACTIVE') {
-      // Cho phép endpoint GET xem chi tiết chính tổ chức đó (/api/v1/organizations/:id) để hiển thị banner cảnh báo
-      const isGetOrgDetail =
-        req.method === 'GET' &&
-        (req.originalUrl.endsWith(`/${orgId}`) || req.originalUrl.endsWith(`/${orgId}/`));
-
-      if (!isGetOrgDetail) {
-        await AuditService.recordFromRequest(req, {
-          organization_id: orgId,
-          action: 'ACCESS_DENIED_TENANT',
-          status: 'DENIED',
-          reason_code: 'ORG_SUSPENDED',
-          description: `Tổ chức này đang trong trạng thái '${org.status}' (bị tạm khóa hoặc ngừng hoạt động)`,
-          metadata: { path: req.originalUrl || req.path, method: req.method, org_status: org.status },
-        }).catch(() => {});
-
-        return next(
-          new ApiError(
-            403,
-            `Tổ chức này đang trong trạng thái '${org.status}' (bị tạm khóa hoặc ngừng hoạt động). Mọi thao tác vận hành đã bị vô hiệu hóa.`
-          )
-        );
+    // Bind TENANT DB context immediately after verified active org membership
+    return await runWithTenantContext(orgId, user.id, async () => {
+      // 3. Kiểm tra trạng thái hoạt động của chính Tổ chức
+      // Nếu tổ chức đang bị khóa (SUSPENDED) hoặc ngừng hoạt động (INACTIVE)
+      const org = await OrganizationModel.findById(orgId);
+      if (!org || org.deleted_at) {
+        return next(new ApiError(404, 'Không tìm thấy tổ chức hoặc tổ chức đã bị xóa'));
       }
-    }
 
-    req.orgMember = {
-      organizationId: orgId,
-      roleCode: member.role_code,
-      status: member.status,
-      userId: user.id,
-    };
+      if (org.status === 'SUSPENDED' || org.status === 'INACTIVE') {
+        // Cho phép endpoint GET xem chi tiết chính tổ chức đó (/api/v1/organizations/:id) để hiển thị banner cảnh báo
+        const isGetOrgDetail =
+          req.method === 'GET' &&
+          (req.originalUrl.endsWith(`/${orgId}`) || req.originalUrl.endsWith(`/${orgId}/`));
 
-    return next();
+        if (!isGetOrgDetail) {
+          await AuditService.recordFromRequest(req, {
+            organization_id: orgId,
+            action: 'ACCESS_DENIED_TENANT',
+            status: 'DENIED',
+            reason_code: 'ORG_SUSPENDED',
+            description: `Tổ chức này đang trong trạng thái '${org.status}' (bị tạm khóa hoặc ngừng hoạt động)`,
+            metadata: { path: req.originalUrl || req.path, method: req.method, org_status: org.status },
+          }).catch(() => {});
+
+          return next(
+            new ApiError(
+              403,
+              `Tổ chức này đang trong trạng thái '${org.status}' (bị tạm khóa hoặc ngừng hoạt động). Mọi thao tác vận hành đã bị vô hiệu hóa.`
+            )
+          );
+        }
+      }
+
+      req.orgMember = {
+        organizationId: orgId,
+        roleCode: member.role_code,
+        status: member.status,
+        userId: user.id,
+      };
+
+      enterOrUpdateDbContext({ scope: 'TENANT', organizationId: orgId, userId: user.id });
+      return next();
+    });
   } catch (error) {
     return next(error);
   }

@@ -3,6 +3,7 @@ import { ReportModel } from '../models/report.model';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
+import { enterOrUpdateDbContext } from '../config/dbContext';
 
 export class ReportController {
   /**
@@ -44,6 +45,8 @@ export class ReportController {
           403
         );
       }
+
+      enterOrUpdateDbContext({ scope: 'TENANT', organizationId, userId: user.id });
 
       const reportData = await ReportModel.getOrganizationSLAReport(
         organizationId,
@@ -88,6 +91,8 @@ export class ReportController {
           403
         );
       }
+
+      enterOrUpdateDbContext({ scope: 'TENANT', organizationId, userId: user.id });
 
       const environmentId = (req.query.environmentId as string) || null;
       const clusterId = (req.query.clusterId as string) || null;

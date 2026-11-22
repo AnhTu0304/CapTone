@@ -31,16 +31,16 @@ class HistoricalIncident(BaseModel):
 
     incident_id: str = Field(min_length=1, max_length=200)
     service_id: str | None = Field(default=None, max_length=200)
-    root_cause: str | None = None
-    predicted_root_cause: str | None = None
-    confirmed_root_cause: str | None = None
-    recommended_action: str | None = None
-    executed_action: str | None = None
+    root_cause: str | None = Field(default=None, max_length=1000)
+    predicted_root_cause: str | None = Field(default=None, max_length=1000)
+    confirmed_root_cause: str | None = Field(default=None, max_length=1000)
+    recommended_action: str | None = Field(default=None, max_length=200)
+    executed_action: str | None = Field(default=None, max_length=200)
     action_result: ActionResult | None = None
     action_result_source: ActionResultSource | None = None
     confirmation_source: ConfirmationSource | None = None
     evidence: list[str] = Field(default_factory=list, max_length=100)
-    operator_feedback: str | None = None
+    operator_feedback: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def require_trusted_sources(self):
@@ -194,16 +194,16 @@ class RCARequest(BaseModel):
         },
     )
 
-    request_id: str | None = None
-    incident_id: str | None = None
-    cluster_id: str | None = None
-    namespace: str | None = None
-    workload_id: str | None = None
-    workload_type: str | None = None
-    suspected_pod_name: str | None = None
+    request_id: str | None = Field(default=None, max_length=200)
+    incident_id: str | None = Field(default=None, max_length=200)
+    cluster_id: str | None = Field(default=None, max_length=200)
+    namespace: str | None = Field(default=None, max_length=253)
+    workload_id: str | None = Field(default=None, max_length=200)
+    workload_type: str | None = Field(default=None, max_length=100)
+    suspected_pod_name: str | None = Field(default=None, max_length=253)
     service_id: str = Field(min_length=1, max_length=200)
     risk_type: RiskType | None = None
-    confidence: float | None = Field(default=None, ge=0, le=1)
+    confidence: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
     pod_id: str | None = Field(default=None, max_length=253)
     metrics: MetricPoint
     metric_sequence: list[GRUMetricPoint] | None = Field(default=None, min_length=12, max_length=12)
@@ -219,7 +219,7 @@ class RCARequest(BaseModel):
     previous_action: str | None = Field(default=None, max_length=100)
     previous_action_result: ActionResult | None = None
     previous_action_result_source: ActionResultSource | None = None
-    previous_rca_root_cause: str | None = None
+    previous_rca_root_cause: str | None = Field(default=None, max_length=1000)
     action_history: ActionHistoryContext | None = None
     historical_incidents: list[HistoricalIncident] = Field(default_factory=list, max_length=100)
     workload_slo: WorkloadSLOContext | None = None
@@ -268,7 +268,6 @@ class RootCauseResult(BaseModel):
     evidence_against: list[str] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
     related_risks: list[RelatedRiskItem] = Field(default_factory=list)
-    symptoms: list[str] = Field(default_factory=list)
     symptoms: list[str] = Field(default_factory=list)
 
 

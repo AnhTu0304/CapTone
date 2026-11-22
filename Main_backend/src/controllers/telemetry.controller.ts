@@ -28,57 +28,50 @@ export class TelemetryController {
   public static async resolveAndVerifyTelemetryOrg(
     req: Request,
     res: Response
-  ): Promise<{ allowedOrgIds: string[]; scopedOrgId: string } | null> {
+  ): Promise<{ allowedOrgIds: string[]; scopedOrgId: string; orgRoles: string[] } | null> {
     const user = (req as any).user;
     if (!user || !user.id) {
       ApiResponse.error(res, 'Yêu cầu đăng nhập trước khi truy cập dữ liệu viễn trắc', 401);
       return null;
     }
 
-    const userRoles = Array.isArray(user.roles) ? user.roles : [];
-    const isSuperAdmin = userRoles.some((r: string) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(r).trim().toUpperCase()));
-
-    const memberRes = await pool.query(
-      `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
-      [user.id]
-    );
-    const userOrgIds: string[] = memberRes.rows.map((r) => r.organization_id);
-
-    if (isSuperAdmin) {
-      const requestedOrg =
-        (req.headers['x-organization-id'] as string) ||
-        (req.query.organization_id as string) ||
-        (req.query.orgId as string) ||
-        (req.body?.organization_id as string) ||
-        (req.params?.orgId as string);
-
-      if (requestedOrg) {
-        return { allowedOrgIds: [requestedOrg], scopedOrgId: requestedOrg };
-      }
-      return { allowedOrgIds: [], scopedOrgId: '' };
-    }
-
-    if (userOrgIds.length === 0) {
-      ApiResponse.error(res, 'Từ chối truy cập: Bạn không thuộc tổ chức nào hoặc chưa được cấp quyền', 403);
-      return null;
-    }
-
-    const requestedOrg =
+    const rawRequestedOrg =
       (req.headers['x-organization-id'] as string) ||
       (req.query.organization_id as string) ||
       (req.query.orgId as string) ||
       (req.body?.organization_id as string) ||
-      (req.params?.orgId as string);
+      (req.params?.orgId as string) ||
+      '';
+    const requestedOrg = typeof rawRequestedOrg === 'string' ? rawRequestedOrg.trim() : '';
 
-    if (requestedOrg) {
-      if (!userOrgIds.includes(requestedOrg)) {
-        ApiResponse.error(res, 'Từ chối truy cập: Bạn không có quyền xem dữ liệu của tổ chức này', 403);
-        return null;
-      }
-      return { allowedOrgIds: [requestedOrg], scopedOrgId: requestedOrg };
+    if (!requestedOrg) {
+      ApiResponse.error(res, 'Thiếu thông tin định danh tổ chức (organization_id) hợp lệ', 400);
+      return null;
+    }
+    if (requestedOrg.toUpperCase() === 'ALL') {
+      ApiResponse.error(res, 'Từ chối truy cập: Không hỗ trợ ngữ cảnh tổ chức toàn cục (all)', 403);
+      return null;
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedOrg)) {
+      ApiResponse.error(res, 'Định dạng định danh tổ chức (organization_id) không hợp lệ', 400);
+      return null;
     }
 
-    return { allowedOrgIds: userOrgIds, scopedOrgId: userOrgIds[0] };
+    const memberRes = await pool.query(
+      `SELECT om.organization_id, r.code AS role_code
+       FROM organization_members om
+       JOIN organization_roles r ON om.role_id = r.id
+       WHERE om.user_id = $1 AND om.organization_id = $2 AND om.status = 'ACTIVE'`,
+      [user.id, requestedOrg]
+    );
+
+    if (memberRes.rows.length === 0) {
+      ApiResponse.error(res, 'Từ chối truy cập: Bạn không phải thành viên đang hoạt động của tổ chức này', 403);
+      return null;
+    }
+
+    const orgRoles = memberRes.rows.map((r: any) => String(r.role_code || '').trim().toUpperCase()).filter(Boolean);
+    return { allowedOrgIds: [requestedOrg], scopedOrgId: requestedOrg, orgRoles };
   }
 
   /**
@@ -268,10 +261,8 @@ export class TelemetryController {
 
       const data = await TelemetryController.getLiveSummaryData(serviceId, clusterId, orgId, { lite: isLite });
 
-      const user = (req as any).user;
-      const userRoles: string[] = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
-      const expanded = expandRoles(userRoles);
-      const isPrivileged = expanded.some((r) => ['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'DEVOPS'].includes(r));
+      const expandedOrgRoles = expandRoles(tenantContext.orgRoles);
+      const isPrivileged = expandedOrgRoles.some((r) => ['ADMIN', 'DEVOPS', 'SME_OWNER'].includes(r));
 
       const payload = isPrivileged
         ? data

@@ -3,11 +3,13 @@ import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import url from 'url';
 import { pool } from '../config/database';
+import { runWithTenantContext } from '../config/dbContext';
 import { AgentService, AuthenticatedAgent } from '../services/agent.service';
 import { AgentWsMessageSchema } from '../schemas/agentWebSocket.schema';
 import { broadcastTelemetryToUi } from './telemetryWebSocket';
 import { TelemetryPipelineService } from '../services/telemetryPipeline.service';
 import { CriticalIncidentNotificationService } from '../services/criticalIncidentNotification.service';
+import { sanitizeForLog } from '../utils/logSanitizer';
 import {
   injectTraceContext,
   recordAgentHeartbeat,
@@ -31,6 +33,7 @@ interface ExtWebSocket extends WebSocket {
 export function initAgentWebSocket(server: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({
     noServer: true,
+    maxPayload: 2 * 1024 * 1024, // 2 MiB hard frame cap against memory DoS
   });
   activeAgentWss = wss;
 
@@ -153,8 +156,13 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
         const msg = parseResult.data;
 
-        // Handle first-message auth if not authenticated via URL
+        // Handle first-message auth if not authenticated via URL (forbid identity re-binding on authenticated socket)
         if (msg.type === 'auth') {
+          if (ws.agent) {
+            recordAuthFailure('agent_token', 'invalid_token');
+            ws.close(4003, 'Re-authentication on an already authenticated agent session is forbidden');
+            return;
+          }
           const agent = await AgentService.authenticateAgent(msg.token);
           if (!agent) {
             recordAuthFailure('agent_token', 'agent_revoked');
@@ -178,8 +186,8 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
           return;
         }
 
-        // Require authenticated agent for data messages
-        if (!ws.agent) {
+        // Require authenticated agent with valid tenant context for data messages
+        if (!ws.agent || !ws.agent.organization_id) {
           ws.send(
             JSON.stringify({
               status: 'error',
@@ -189,7 +197,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
           return;
         }
 
-        // Dispatch based on message type
+        // Dispatch based on verified agent tenant context
+        await runWithTenantContext(ws.agent.organization_id, null, async () => {
+        if (!ws.agent) return;
         switch (msg.type) {
           case 'metrics': {
             const saved = await AgentService.storeMetrics(ws.agent, msg.data);
@@ -200,12 +210,18 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               data: {
                 ...msg.data,
                 id: saved.id,
+                organization_id: ws.agent.organization_id,
+                cluster_id: ws.agent.cluster_id,
                 timestamp: new Date().toISOString(),
               }
             });
 
             // GOM CÁI NÀO GỬI CÁI ĐÓ LUÔN: Ngay khi có 1 metric mới của service này, gom và phát ngay lập tức (không đợi service khác)
-            TelemetryPipelineService.processServiceBatch(msg.data.service_id).catch((err) => {
+            TelemetryPipelineService.processServiceBatch(
+              msg.data.service_id,
+              ws.agent.organization_id,
+              ws.agent.cluster_id
+            ).catch((err) => {
               console.error(`[agentWebSocket] Error processing batch on metric for ${msg.data.service_id}:`, err);
             });
 
@@ -224,7 +240,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             ) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, New Restarts: +${hasNewRestart ? 1 : 0})`
+                `Metrics breached anomaly threshold (CPU: ${msg.data.cpu}%, 5xx: ${msg.data.http_5xx_rate}%, New Restarts: +${hasNewRestart ? 1 : 0})`,
+                ws.agent.organization_id,
+                ws.agent.cluster_id
               );
             }
 
@@ -252,6 +270,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                 ...msg.data,
                 id: saved.id,
                 agent_id: ws.agent.id,
+                organization_id: ws.agent.organization_id,
                 cluster_id: ws.agent.cluster_id,
                 timestamp: new Date().toISOString(),
               },
@@ -278,6 +297,8 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               data: {
                 ...msg.data,
                 id: saved.id,
+                organization_id: ws.agent.organization_id,
+                cluster_id: ws.agent.cluster_id,
                 occurred_at: new Date().toISOString(),
               }
             });
@@ -291,7 +312,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             if (isErrorLog || hasErrorKeywords) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `Error log: ${msg.data.message.slice(0, 70)}`
+                `Error log: ${msg.data.message.slice(0, 70)}`,
+                ws.agent.organization_id,
+                ws.agent.cluster_id
               );
             }
 
@@ -316,6 +339,8 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               data: {
                 ...msg.data,
                 id: saved.id,
+                organization_id: ws.agent.organization_id,
+                cluster_id: ws.agent.cluster_id,
                 last_seen_at: new Date().toISOString(),
               }
             });
@@ -327,7 +352,9 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             ) {
               TelemetryPipelineService.triggerUrgentEvaluation(
                 msg.data.service_id,
-                `K8s Warning Event: ${msg.data.event.reason} - ${msg.data.event.message.slice(0, 70)}`
+                `K8s Warning Event: ${msg.data.event.reason} - ${msg.data.event.message.slice(0, 70)}`,
+                ws.agent.organization_id,
+                ws.agent.cluster_id
               );
             }
 
@@ -350,6 +377,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             broadcastTelemetryToUi({
               type: 'cluster_inventory_sync',
               data: {
+                organization_id: ws.agent.organization_id,
                 cluster_id: ws.agent.cluster_id,
                 nodes_count: syncResult.synced_nodes,
                 pods_count: syncResult.synced_pods,
@@ -372,10 +400,11 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
           case 'action_result': {
             const { action_id, status, message: rawMessage, duration_ms, details } = msg.data;
             const actionTypeMetric = String(details?.action || 'RESTART_POD').toUpperCase();
-            recordRemediationAction(actionTypeMetric, status === 'SUCCEEDED' ? 'succeeded' : 'failed');
+            const isCompleted = status === 'COMPLETED';
+            recordRemediationAction(actionTypeMetric, isCompleted ? 'succeeded' : 'failed');
             recordRemediationDuration(
               actionTypeMetric,
-              status === 'SUCCEEDED' ? 'success' : 'failed',
+              isCompleted ? 'success' : 'failed',
               Math.max(0.001, Number(duration_ms || 1000) / 1000)
             );
 
@@ -406,7 +435,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
               message = `Đã thực thi khởi động lại cuốn chiếu không gián đoạn (Zero-downtime Rolling Restart) thành công cho dịch vụ "${targetSvc}" tại namespace "${targetNs}".`;
             } else if (/Replaced pod via rolling restart/i.test(message)) {
               message = `Đã thay thế Pod lỗi thông qua khởi động lại cuốn chiếu (Rolling Restart) trên dịch vụ "${targetSvc}" tại namespace "${targetNs}".`;
-            } else if (/Rollback/i.test(message) && status === 'SUCCEEDED') {
+            } else if (/Rollback/i.test(message) && isCompleted) {
               message = `Đã khôi phục (Rollback) dịch vụ "${targetSvc}" về phiên bản ReplicaSet ổn định trước đó tại namespace "${targetNs}".`;
             } else if (/Ephemeral disk cleanup/i.test(message)) {
               message = `Đã dọn dẹp bộ nhớ tạm (emptyDir / Ephemeral Storage) và tái khởi tạo lưu trữ sạch cho dịch vụ "${targetSvc}" tại namespace "${targetNs}".`;
@@ -415,62 +444,177 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             }
             console.log(`🎯 [AGENT ACTION RESULT] [${ws.agent.name}] Action: ${action_id} | Status: ${status} | Msg: ${message}`);
 
+            const client = await pool.connect();
             try {
-              // 1. Update healing_actions execution_status & persist explicit error_message on failure
+              await client.query('BEGIN');
+
+              // 1. Lock action atomically scoped to Agent's environment + organization + cluster
+              const lockRes = await client.query(
+                `SELECT h.id, h.incident_id, h.recommendation_id, h.target_name, h.target_id, h.policy_id, h.environment_id,
+                        h.execution_status, h.result, i.cluster_id AS incident_cluster_id
+                 FROM healing_actions h
+                 LEFT JOIN incidents i ON i.id = h.incident_id
+                 WHERE h.id = $1
+                   AND h.environment_id = $2::uuid
+                   AND EXISTS (SELECT 1 FROM environments e WHERE e.id = h.environment_id AND e.organization_id = $3::uuid)
+                 FOR UPDATE OF h;`,
+                [action_id, ws.agent.environment_id, ws.agent.organization_id]
+              );
+
+              if (lockRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                console.warn(`⚠️ [AGENT ACTION RESULT] Rejected cross-tenant or unknown action_result from agent '${ws.agent.name}' for action ${action_id}`);
+                break;
+              }
+
+              const row = lockRes.rows[0];
+              if (
+                row.incident_cluster_id &&
+                ws.agent.cluster_id &&
+                String(row.incident_cluster_id) !== String(ws.agent.cluster_id) &&
+                String(row.incident_cluster_id) !== String(ws.agent.cluster_name || '')
+              ) {
+                await client.query('ROLLBACK');
+                console.warn(`⚠️ [AGENT ACTION RESULT] Rejected cross-cluster action_result from agent '${ws.agent.name}' for action ${action_id}`);
+                break;
+              }
+
+              // Guard against out-of-state or duplicate action_result callbacks
+              const alreadyAwaitingRv = String(row.result?.agent_status || '').toUpperCase() === 'COMPLETED';
+              if (row.execution_status !== 'RUNNING' || alreadyAwaitingRv) {
+                await client.query('ROLLBACK');
+                console.warn(
+                  `⚠️ [AGENT ACTION RESULT] Ignored duplicate or non-RUNNING callback for action ${action_id} (execution_status=${row.execution_status}, agent_status=${row.result?.agent_status || 'NONE'})`
+                );
+                ws.send(
+                  JSON.stringify({
+                    status: 'ignored',
+                    reason: 'DUPLICATE_OR_NOT_RUNNING',
+                    type: 'action_result',
+                    action_id,
+                    timestamp: new Date().toISOString(),
+                  })
+                );
+                break;
+              }
+
               const failureErrorMessage =
-                status === 'SUCCEEDED'
+                isCompleted
                   ? null
                   : (message ? String(message).slice(0, 1000) : 'Thực thi tác vụ tự phục hồi thất bại trên K8s Agent');
-              const actRes = await pool.query(
-                `UPDATE healing_actions 
-                 SET execution_status = $2, 
-                     completed_at = NOW(),
-                     error_message = $4,
-                     result = $3::jsonb
-                 WHERE id = $1
-                 RETURNING incident_id, recommendation_id, target_name, target_id, policy_id, environment_id;`,
-                [
-                  action_id,
-                  status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
-                  JSON.stringify({
-                    status,
-                    message,
-                    ...(status === 'SUCCEEDED' ? {} : { error: message }),
-                    duration_ms,
-                    executed_by_agent: ws.agent.name,
-                    completed_at: new Date().toISOString(),
-                    details,
-                  }),
-                  failureErrorMessage,
-                ]
+              const canonicalStatus = isCompleted ? 'COMPLETED' : 'FAILED';
+
+              // 2. Update the in-flight RUNNING execution_attempt (or insert attempt 1 if missing)
+              const runningAttRes = await client.query(
+                `SELECT id FROM execution_attempts
+                 WHERE healing_action_id = $1 AND status = 'RUNNING'
+                 ORDER BY attempt_number DESC
+                 LIMIT 1
+                 FOR UPDATE;`,
+                [action_id]
               );
 
-              const row = actRes.rows[0];
+              if (runningAttRes.rows.length > 0) {
+                await client.query(
+                  `UPDATE execution_attempts
+                   SET agent_id = $2,
+                       status = $3::execution_status,
+                       response_payload = $4::jsonb,
+                       error_message = $5,
+                       completed_at = NOW(),
+                       duration_ms = $6
+                   WHERE id = $1 AND status = 'RUNNING';`,
+                  [
+                    runningAttRes.rows[0].id,
+                    ws.agent.id,
+                    canonicalStatus,
+                    JSON.stringify({ message, details }),
+                    failureErrorMessage,
+                    duration_ms || 1000,
+                  ]
+                );
+              } else {
+                const maxNumRes = await client.query(
+                  `SELECT COALESCE(MAX(attempt_number), 0)::int AS max_num FROM execution_attempts WHERE healing_action_id = $1;`,
+                  [action_id]
+                );
+                const nextAttempt = Number(maxNumRes.rows[0]?.max_num || 0) + 1;
+                await client.query(
+                  `INSERT INTO execution_attempts (
+                    healing_action_id, attempt_number, agent_id, command_type,
+                    request_payload, response_payload, status, error_message,
+                    started_at, completed_at, duration_ms
+                  ) VALUES (
+                    $1, $2, $3, 'K8S_AGENT_REMEDIATION',
+                    $4::jsonb, $5::jsonb, $6::execution_status, $7,
+                    NOW() - interval '1 second', NOW(), $8
+                  );`,
+                  [
+                    action_id,
+                    nextAttempt,
+                    ws.agent.id,
+                    JSON.stringify({ target: row?.target_name, agent: ws.agent.name }),
+                    JSON.stringify({ message, details }),
+                    canonicalStatus,
+                    failureErrorMessage,
+                    duration_ms || 1000,
+                  ]
+                );
+              }
 
-              // 2. Insert execution attempt
-              await pool.query(
-                `INSERT INTO execution_attempts (
-                  healing_action_id, attempt_number, command_type,
-                  request_payload, response_payload, status,
-                  started_at, completed_at, duration_ms
-                ) VALUES (
-                  $1, 1, 'K8S_AGENT_REMEDIATION',
-                  $2::jsonb, $3::jsonb, $4::execution_status,
-                  NOW() - interval '1 second', NOW(), $5
-                );`,
-                [
-                  action_id,
-                  JSON.stringify({ target: row?.target_name, agent: ws.agent.name }),
-                  JSON.stringify({ message, details }),
-                  status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
-                  duration_ms || 1000,
-                ]
-              );
+              // 3. Persist Agent outcome WITHOUT prematurely marking COMPLETED:
+              // - FAILED -> execution_status = 'FAILED', completed_at = NOW()
+              // - COMPLETED from Agent -> keep execution_status = 'RUNNING' & mark awaiting RecoveryVerificationService!
+              const agentCompletedAtIso = new Date().toISOString();
+              if (!isCompleted) {
+                await client.query(
+                  `UPDATE healing_actions
+                   SET execution_status = 'FAILED'::execution_status,
+                       completed_at = NOW(),
+                       error_message = $2,
+                       result = COALESCE(result, '{}'::jsonb) || $3::jsonb
+                   WHERE id = $1 AND execution_status = 'RUNNING';`,
+                  [
+                    action_id,
+                    failureErrorMessage,
+                    JSON.stringify({
+                      status: 'FAILED',
+                      agent_status: 'FAILED',
+                      message,
+                      error: failureErrorMessage,
+                      duration_ms,
+                      executed_by_agent: ws.agent.name,
+                      failed_at: agentCompletedAtIso,
+                      details,
+                    }),
+                  ]
+                );
+              } else {
+                await client.query(
+                  `UPDATE healing_actions
+                   SET error_message = NULL,
+                       result = COALESCE(result, '{}'::jsonb) || $2::jsonb
+                   WHERE id = $1 AND execution_status = 'RUNNING';`,
+                  [
+                    action_id,
+                    JSON.stringify({
+                      status: 'AWAITING_RECOVERY_VERIFICATION',
+                      phase: 'AWAITING_RECOVERY_VERIFICATION',
+                      agent_status: 'COMPLETED',
+                      agent_completed_at: agentCompletedAtIso,
+                      message,
+                      duration_ms,
+                      executed_by_agent: ws.agent.name,
+                      details,
+                    }),
+                  ]
+                );
+              }
 
-              // 3. Keep incident OPEN for Post-Action Verification (12-point telemetry batch check after 45-60s).
-              // Only mark recommendation as APPLIED to indicate K8s command execution completed.
-              if (status === 'SUCCEEDED') {
-                // Mark recommendation applied
+              await client.query('COMMIT');
+
+              // 4. Keep incident OPEN for Post-Action Verification. Mark recommendation APPLIED once Agent command succeeded.
+              if (isCompleted) {
                 if (row?.recommendation_id) {
                   await pool.query(
                     `UPDATE ai_recommendations SET status = 'APPLIED' WHERE id = $1;`,
@@ -483,6 +627,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                      SET status = 'APPLIED'
                      FROM incidents i
                      WHERE r.incident_id = i.id
+                       AND i.organization_id = $4::uuid
                        AND (
                          ($1::uuid IS NOT NULL AND r.incident_id = $1::uuid)
                          OR ($2::text IS NOT NULL AND (
@@ -494,41 +639,33 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                          OR ($3::text IS NOT NULL AND i.target_id = $3)
                        )
                        AND r.status = 'PROPOSED';`,
-                    [row?.incident_id || null, row?.target_name || null, row?.target_id ? String(row.target_id) : null]
+                    [
+                      row?.incident_id || null,
+                      row?.target_name || null,
+                      row?.target_id ? String(row.target_id) : null,
+                      ws.agent.organization_id,
+                    ]
                   );
                 }
               }
 
-              // Ghi audit log kết quả thực thi từ K8s Agent
-              let agentOrgId = ws.agent?.organization_id || null;
-              if (!agentOrgId && row?.policy_id) {
-                try {
-                  const polRes = await pool.query('SELECT organization_id FROM healing_policies WHERE id = $1', [row.policy_id]);
-                  agentOrgId = polRes.rows[0]?.organization_id || null;
-                } catch {}
-              }
-              if (!agentOrgId && row?.environment_id) {
-                try {
-                  const envRes = await pool.query('SELECT organization_id FROM environments WHERE id = $1', [row.environment_id]);
-                  agentOrgId = envRes.rows[0]?.organization_id || null;
-                } catch {}
-              }
+              const agentOrgId = ws.agent?.organization_id || null;
               AuditService.record({
                 organization_id: agentOrgId,
                 actor_type: 'AGENT',
-                action: status === 'SUCCEEDED' ? 'REMEDIATION_COMPLETED' : 'REMEDIATION_FAILED',
+                action: isCompleted ? 'REMEDIATION_AGENT_SUCCEEDED' : 'REMEDIATION_FAILED',
                 resource_type: 'HEALING_ACTION',
                 resource_id: action_id,
                 target_type: 'WORKLOAD',
                 request_id: ws.requestId || null,
                 user_agent: ws.userAgent || null,
                 ip_address: ws.remoteIp || null,
-                description: status === 'SUCCEEDED'
-                  ? `Tác vụ tự phục hồi hoàn tất thành công bởi Agent ${ws.agent.name}: ${message}`
+                description: isCompleted
+                  ? `K8s Agent ${ws.agent.name} đã thực thi thành công (chờ hậu kiểm phục hồi): ${message}`
                   : `Tác vụ tự phục hồi thất bại bởi Agent ${ws.agent.name}: ${message}`,
-                status: status === 'SUCCEEDED' ? 'SUCCESS' : 'FAILURE',
+                status: isCompleted ? 'SUCCESS' : 'FAILURE',
                 before_data: { execution_status: 'RUNNING' },
-                after_data: { execution_status: status, message, duration_ms },
+                after_data: { execution_status: isCompleted ? 'RUNNING' : 'FAILED', agent_status: canonicalStatus, message, duration_ms },
                 metadata: {
                   agent_id: ws.agent.id,
                   agent_name: ws.agent.name,
@@ -539,7 +676,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                 },
               }).catch(() => {});
 
-              if (status !== 'SUCCEEDED' && row?.incident_id) {
+              if (!isCompleted && row?.incident_id) {
                 await pool.query(
                   'UPDATE incidents SET status = \'OPEN\', resolved_at = NULL WHERE id = $1 AND status = \'RESOLVED\'',
                   [row.incident_id]
@@ -554,12 +691,15 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
 
               // Broadcast live event to UI
               broadcastTelemetryToUi({
-                type: 'healing_action_completed',
+                type: isCompleted ? 'healing_action_verifying' : 'healing_action_completed',
                 data: {
                   action_id,
-                  status,
+                  status: isCompleted ? 'RUNNING' : 'FAILED',
+                  agent_status: canonicalStatus,
                   message,
                   agent: ws.agent.name,
+                  organization_id: ws.agent.organization_id,
+                  cluster_id: ws.agent.cluster_id,
                   incident_id: row?.incident_id,
                   timestamp: new Date().toISOString(),
                 },
@@ -574,7 +714,10 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
                 })
               );
             } catch (actErr) {
+              await client.query('ROLLBACK').catch(() => {});
               console.error('Error persisting action_result from agent:', actErr);
+            } finally {
+              client.release();
             }
             break;
           }
@@ -588,12 +731,13 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             );
           }
         }
+        }); // end runWithTenantContext(ws.agent.organization_id)
       } catch (err) {
-        console.error('Error handling WebSocket message from agent:', err);
+        console.error('Error handling WebSocket message from agent:', sanitizeForLog(err));
         ws.send(
           JSON.stringify({
             status: 'error',
-            message: `Internal processing error: ${(err as Error).message}`,
+            message: 'Internal server error handling message',
           })
         );
       }
@@ -602,12 +746,17 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
     ws.on('close', async (code, reason) => {
       if (ws.agent) {
         console.log(`🔌 Agent disconnected: [${ws.agent.name}] (Code: ${code}, Reason: ${reason})`);
-        await AgentService.setAgentOffline(ws.agent.id);
+        const agentObj = ws.agent;
+        if (agentObj.organization_id) {
+          await runWithTenantContext(agentObj.organization_id, null, () =>
+            AgentService.setAgentOffline(agentObj.id)
+          ).catch(() => {});
+        }
       }
     });
 
     ws.on('error', (err) => {
-      console.error('WebSocket connection error:', err);
+      console.error('WebSocket connection error:', sanitizeForLog(err));
     });
   });
 
@@ -617,7 +766,12 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
       const extWs = client as ExtWebSocket;
       if (!extWs.isAlive) {
         if (extWs.agent) {
-          AgentService.setAgentOffline(extWs.agent.id);
+          const agentObj = extWs.agent;
+          if (agentObj.organization_id) {
+            runWithTenantContext(agentObj.organization_id, null, () =>
+              AgentService.setAgentOffline(agentObj.id)
+            ).catch(() => {});
+          }
         }
         return client.terminate();
       }
@@ -669,38 +823,43 @@ export async function dispatchHealingActionToAgent(payload: {
   params?: any;
   cluster_id?: string;
   environment_id?: string;
-}): Promise<{ dispatched: boolean; recipient_agent?: string }> {
+  organization_id?: string;
+}): Promise<{ dispatched: boolean; recipient_agent?: string; reason?: string }> {
   return withBackendSpan(
     'remediation.dispatch',
     { 'action.type': payload.action_type || 'UNKNOWN' },
     async () => {
+      if (!payload.cluster_id || !payload.environment_id) {
+        console.warn(`[AgentWebSocket] Refusing dispatch for action '${payload.action_id}': missing strict cluster_id/environment_id routing context.`);
+        return { dispatched: false, reason: 'MISSING_ROUTING_CONTEXT' };
+      }
+
       if (!activeAgentWss || activeAgentWss.clients.size === 0) {
         console.warn(`[AgentWebSocket] No connected agents available to receive action '${payload.action_type}' for target '${payload.target_name}'.`);
-        return { dispatched: false };
+        return { dispatched: false, reason: 'NO_CONNECTED_AGENTS' };
       }
 
       let chosenClient: ExtWebSocket | null = null;
-      // Tenant-aware agent selection: match specifically by cluster_id or environment_id if provided
+      // Strict tenant + cluster + environment routing: never fall back to unrelated agents or sockets
       for (const client of activeAgentWss.clients) {
         const extWs = client as ExtWebSocket;
         if (extWs.isAlive && extWs.agent && extWs.readyState === WebSocket.OPEN) {
-          if (payload.cluster_id && extWs.agent.cluster_id === payload.cluster_id) {
+          if (payload.organization_id && String(extWs.agent.organization_id || '') !== String(payload.organization_id)) {
+            continue;
+          }
+          if (
+            String(extWs.agent.cluster_id || '') === String(payload.cluster_id) &&
+            String(extWs.agent.environment_id || '') === String(payload.environment_id)
+          ) {
             chosenClient = extWs;
             break;
-          }
-          if (!payload.cluster_id && payload.environment_id && extWs.agent.environment_id === payload.environment_id) {
-            chosenClient = extWs;
-            break;
-          }
-          if (!payload.cluster_id && !payload.environment_id && !chosenClient) {
-            chosenClient = extWs;
           }
         }
       }
 
       if (!chosenClient || !chosenClient.agent) {
-        console.warn(`[AgentWebSocket] No authenticated, open agent WebSocket socket found.`);
-        return { dispatched: false };
+        console.warn(`[AgentWebSocket] No matching authenticated agent WebSocket found for cluster=${payload.cluster_id}, env=${payload.environment_id}.`);
+        return { dispatched: false, reason: 'NO_MATCHING_AGENT' };
       }
 
       const agentName = chosenClient.agent.name;

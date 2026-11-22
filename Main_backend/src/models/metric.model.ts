@@ -642,6 +642,39 @@ export class MetricModel {
   }
 
   /**
+   * Get distinct active (organization_id, cluster_id, service_id) tuples from agent_metrics
+   */
+  public static async getActiveTenantServices(
+    windowMinutes: number = 30
+  ): Promise<Array<{ organizationId: string; clusterId: string; serviceId: string }>> {
+    try {
+      const res = await pool.query(
+        `SELECT DISTINCT
+           organization_id::text AS organization_id,
+           cluster_id::text AS cluster_id,
+           service_id
+         FROM agent_metrics
+         WHERE organization_id IS NOT NULL
+           AND cluster_id IS NOT NULL
+           AND BTRIM(cluster_id::text) <> ''
+           AND service_id IS NOT NULL
+           AND BTRIM(service_id) <> ''
+           AND collected_at > NOW() - ($1 || ' minutes')::INTERVAL
+         ORDER BY organization_id ASC, cluster_id ASC, service_id ASC`,
+        [windowMinutes]
+      );
+      return res.rows.map((r) => ({
+        organizationId: r.organization_id,
+        clusterId: r.cluster_id,
+        serviceId: r.service_id,
+      }));
+    } catch (err) {
+      console.warn('[MetricModel] Error fetching active tenant services:', err);
+      return [];
+    }
+  }
+
+  /**
    * Insert raw pod metric record
    */
   public static async create(
@@ -818,8 +851,14 @@ export class MetricModel {
     serviceId: string,
     bucketSeconds: number = 5,
     afterTimestamp?: Date | null,
-    limit: number = 12
-  ): Promise<{ points: GRUMetricPoint[]; latestTimeBucket?: Date; clusterId?: string }> {
+    limit: number = 12,
+    organizationId?: string | null,
+    clusterIdFilter?: string | null
+  ): Promise<{ points: GRUMetricPoint[]; latestTimeBucket?: Date; clusterId?: string; organizationId?: string }> {
+    if (!organizationId || !clusterIdFilter) {
+      return { points: [] };
+    }
+
     let query: string;
     let params: any[];
 
@@ -837,12 +876,15 @@ export class MetricModel {
           GREATEST(COALESCE(MAX(replica_count), 1), COUNT(DISTINCT pod_id))::int as replica_count,
           MAX(cluster_id) as cluster_id
         FROM agent_metrics
-        WHERE service_id::text = $1 AND collected_at >= ($3::timestamptz + ($2 * interval '1 second'))
+        WHERE service_id::text = $1
+          AND organization_id::text = $5::text
+          AND cluster_id::text = $6::text
+          AND collected_at >= ($3::timestamptz + ($2 * interval '1 second'))
         GROUP BY time_bucket
         ORDER BY time_bucket ASC
         LIMIT $4;
       `;
-      params = [serviceId, bucketSeconds, afterTimestamp, limit];
+      params = [serviceId, bucketSeconds, afterTimestamp, limit, organizationId, clusterIdFilter];
     } else {
       query = `
         WITH recent_buckets AS (
@@ -859,13 +901,15 @@ export class MetricModel {
           MAX(cluster_id) as cluster_id
           FROM agent_metrics
           WHERE service_id::text = $1
+            AND organization_id::text = $4::text
+            AND cluster_id::text = $5::text
           GROUP BY time_bucket
           ORDER BY time_bucket DESC
           LIMIT $3
         )
         SELECT * FROM recent_buckets ORDER BY time_bucket ASC;
       `;
-      params = [serviceId, bucketSeconds, limit];
+      params = [serviceId, bucketSeconds, limit, organizationId, clusterIdFilter];
     }
 
     const res = await pool.query(query, params);
@@ -892,8 +936,8 @@ export class MetricModel {
     const latestTimeBucket =
       res.rows.length > 0 ? new Date(res.rows[res.rows.length - 1].time_bucket) : undefined;
 
-    const clusterId = res.rows.length > 0 ? (res.rows[res.rows.length - 1].cluster_id || undefined) : undefined;
-    return { points, latestTimeBucket, clusterId };
+    const clusterId = res.rows.length > 0 ? (res.rows[res.rows.length - 1].cluster_id || clusterIdFilter) : undefined;
+    return { points, latestTimeBucket, clusterId, organizationId };
   }
 
   /**

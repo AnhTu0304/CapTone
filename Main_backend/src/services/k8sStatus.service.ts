@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import { ApiError } from '../utils/apiError';
+import { SystemRoleService } from './systemRole.service';
 
 /**
  * [S3][PB14] Task 5.2 – Node, Pod, Deployment & Replica Status Service.
@@ -535,6 +536,7 @@ export interface StatusRequestScope {
 
 export interface ResolvedTenantScope {
   isPlatformAdmin: boolean;
+  allowPlatformScope: boolean;
   effectiveOrgId: string | null;
   allowedOrgIds: string[];
   clusterId: string | null;
@@ -575,16 +577,11 @@ export class K8sStatusService {
       throw ApiError.unauthorized('Yêu cầu đăng nhập trước khi truy cập');
     }
 
-    const rawRoles: string[] = Array.isArray(user.roles)
-      ? user.roles
-      : user.roles
-        ? [String(user.roles)]
-        : [];
-    const isPlatformAdmin =
-      scope.orgMember?.roleCode === 'SUPER_ADMIN' ||
-      rawRoles.some((r) =>
-        ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(String(r).trim().toUpperCase())
-      );
+    const isPlatformAdmin = await SystemRoleService.hasAnyRole(user.id, [
+      'SUPER_ADMIN',
+      'SYSTEM_ADMIN',
+      'ADMIN',
+    ]);
 
     const urlOrgId = scope.orgId || scope.orgMember?.organizationId;
     const queryOrgId =
@@ -598,21 +595,11 @@ export class K8sStatusService {
     }
 
     const requestedOrgId = urlOrgId || queryOrgId || null;
-    let allowedOrgIds: string[] = [];
-
     const memberRes = await pool.query(
       `SELECT organization_id FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'`,
       [user.id]
     );
-    allowedOrgIds = memberRes.rows.map((r) => r.organization_id);
-
-    if (requestedOrgId) {
-      if (!allowedOrgIds.includes(requestedOrgId)) {
-        throw ApiError.forbidden('Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này');
-      }
-    } else if (allowedOrgIds.length === 0) {
-      throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
-    }
+    const allowedOrgIds: string[] = memberRes.rows.map((r) => r.organization_id);
 
     const rawClusterParam = scope.clusterId;
     const rawClusterQuery =
@@ -633,6 +620,18 @@ export class K8sStatusService {
     }
 
     const candidateClusterId = rawClusterParam || rawClusterQuery;
+    const allowPlatformScope = Boolean(
+      isPlatformAdmin && !requestedOrgId && !candidateClusterId && !scope.orgMember
+    );
+
+    if (requestedOrgId) {
+      if (!allowedOrgIds.includes(requestedOrgId)) {
+        throw ApiError.forbidden('Từ chối truy cập: Bạn không phải là thành viên đang hoạt động của tổ chức này');
+      }
+    } else if (allowedOrgIds.length === 0 && !allowPlatformScope) {
+      throw ApiError.forbidden('Từ chối truy cập: Tài khoản chưa thuộc tổ chức hoạt động nào');
+    }
+
     let resolvedClusterId: string | null = null;
 
     if (
@@ -665,6 +664,7 @@ export class K8sStatusService {
 
     return {
       isPlatformAdmin,
+      allowPlatformScope,
       effectiveOrgId: requestedOrgId,
       allowedOrgIds,
       clusterId: resolvedClusterId,
@@ -707,7 +707,7 @@ export class K8sStatusService {
       LEFT JOIN LATERAL (
         SELECT a.status
         FROM agents a
-        WHERE a.cluster_id = c.id
+        WHERE a.cluster_id::text = c.id::text
         ORDER BY (a.status = 'ONLINE') DESC, a.last_seen_at DESC NULLS LAST, a.updated_at DESC
         LIMIT 1
       ) ag ON TRUE
@@ -718,7 +718,7 @@ export class K8sStatusService {
     if (resolved.effectiveOrgId) {
       params.push(resolved.effectiveOrgId);
       sql += ` AND e.organization_id = $${params.length}`;
-    } else {
+    } else if (!resolved.allowPlatformScope) {
       params.push(resolved.allowedOrgIds);
       sql += ` AND e.organization_id = ANY($${params.length}::uuid[])`;
     }
@@ -781,7 +781,7 @@ export class K8sStatusService {
        LEFT JOIN LATERAL (
          SELECT a.status
          FROM agents a
-         WHERE a.cluster_id = c.id
+         WHERE a.cluster_id::text = c.id::text
          ORDER BY (a.status = 'ONLINE') DESC, a.last_seen_at DESC NULLS LAST, a.updated_at DESC
          LIMIT 1
        ) ag ON TRUE
@@ -797,7 +797,7 @@ export class K8sStatusService {
     const matchingRow = nodeRes.rows.find((row) => {
       if (resolved.clusterId && row.cluster_id !== resolved.clusterId) return false;
       if (resolved.effectiveOrgId && row.organization_id !== resolved.effectiveOrgId) return false;
-      if (!resolved.allowedOrgIds.includes(row.organization_id)) return false;
+      if (!resolved.allowPlatformScope && !resolved.allowedOrgIds.includes(row.organization_id)) return false;
       return true;
     });
 
@@ -895,7 +895,7 @@ export class K8sStatusService {
       LEFT JOIN LATERAL (
         SELECT a.status
         FROM agents a
-        WHERE a.cluster_id = c.id
+        WHERE a.cluster_id::text = c.id::text
         ORDER BY (a.status = 'ONLINE') DESC, a.last_seen_at DESC NULLS LAST, a.updated_at DESC
         LIMIT 1
       ) ag ON TRUE
@@ -905,7 +905,7 @@ export class K8sStatusService {
     if (resolved.effectiveOrgId) {
       params.push(resolved.effectiveOrgId);
       sql += ` AND e.organization_id = $${params.length}`;
-    } else {
+    } else if (!resolved.allowPlatformScope) {
       params.push(resolved.allowedOrgIds);
       sql += ` AND e.organization_id = ANY($${params.length}::uuid[])`;
     }
@@ -988,7 +988,7 @@ export class K8sStatusService {
        LEFT JOIN LATERAL (
          SELECT a.status
          FROM agents a
-         WHERE a.cluster_id = c.id
+         WHERE a.cluster_id::text = c.id::text
          ORDER BY (a.status = 'ONLINE') DESC, a.last_seen_at DESC NULLS LAST, a.updated_at DESC
          LIMIT 1
        ) ag ON TRUE
@@ -1005,7 +1005,7 @@ export class K8sStatusService {
     const matchingRow = podRes.rows.find((row) => {
       if (resolved.clusterId && row.cluster_id !== resolved.clusterId) return false;
       if (resolved.effectiveOrgId && row.organization_id !== resolved.effectiveOrgId) return false;
-      if (!resolved.allowedOrgIds.includes(row.organization_id)) return false;
+      if (!resolved.allowPlatformScope && !resolved.allowedOrgIds.includes(row.organization_id)) return false;
       return true;
     });
 
@@ -1056,7 +1056,7 @@ export class K8sStatusService {
       LEFT JOIN LATERAL (
         SELECT a.status
         FROM agents a
-        WHERE a.cluster_id = c.id
+        WHERE a.cluster_id::text = c.id::text
         ORDER BY (a.status = 'ONLINE') DESC, a.last_seen_at DESC NULLS LAST, a.updated_at DESC
         LIMIT 1
       ) ag ON TRUE
@@ -1068,7 +1068,7 @@ export class K8sStatusService {
     if (resolved.effectiveOrgId) {
       params.push(resolved.effectiveOrgId);
       sql += ` AND e.organization_id = $${params.length}`;
-    } else {
+    } else if (!resolved.allowPlatformScope) {
       params.push(resolved.allowedOrgIds);
       sql += ` AND e.organization_id = ANY($${params.length}::uuid[])`;
     }
@@ -1144,7 +1144,7 @@ export class K8sStatusService {
        LEFT JOIN LATERAL (
          SELECT a.status
          FROM agents a
-         WHERE a.cluster_id = c.id
+         WHERE a.cluster_id::text = c.id::text
          ORDER BY (a.status = 'ONLINE') DESC, a.last_seen_at DESC NULLS LAST, a.updated_at DESC
          LIMIT 1
        ) ag ON TRUE
@@ -1161,7 +1161,7 @@ export class K8sStatusService {
     const matchingRow = depRes.rows.find((row) => {
       if (resolved.clusterId && row.cluster_id !== resolved.clusterId) return false;
       if (resolved.effectiveOrgId && row.organization_id !== resolved.effectiveOrgId) return false;
-      if (!resolved.allowedOrgIds.includes(row.organization_id)) return false;
+      if (!resolved.allowPlatformScope && !resolved.allowedOrgIds.includes(row.organization_id)) return false;
       if (namespace && namespace !== 'ALL' && row.namespace !== namespace) return false;
       return true;
     });

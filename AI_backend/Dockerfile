@@ -11,6 +11,12 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY app ./app
 COPY saved_models ./saved_models
 
+RUN groupadd --system --gid 10001 appgroup && \
+    useradd --system --uid 10001 --gid appgroup --create-home appuser && \
+    chown -R appuser:appgroup /app
+
+USER appuser
+
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"

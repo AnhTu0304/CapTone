@@ -12,6 +12,7 @@ from app.agents.metrics_agent import MetricsAnalysisAgent
 from app.agents.rca_agent import RootCauseAnalysisAgent
 from app.agents.recommendation_agent import RecommendationAgent
 from app.api.dependencies import get_openai_rca_service, get_prediction_service
+from app.core.internal_auth import require_internal_auth
 from app.core.otel import record_ai_prediction, record_ai_rca
 from app.schemas.rca import RCARequest, RCAResponse
 from app.schemas.prediction import HeadPrediction, PredictionResponse, RiskScore
@@ -19,7 +20,11 @@ from app.services.prediction_service import PredictionService
 from app.services.openai_rca_service import OpenAIRCAService
 
 
-router = APIRouter(prefix="/api/v1", tags=["root-cause-analysis"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["root-cause-analysis"],
+    dependencies=[Depends(require_internal_auth)],
+)
 logger = logging.getLogger(__name__)
 
 
