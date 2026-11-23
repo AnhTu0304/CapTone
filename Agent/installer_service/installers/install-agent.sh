@@ -116,11 +116,11 @@ if [ -z "${SERVER_URL}" ]; then
   elif [ -n "${SELFHEAL_SERVER_URL:-}" ]; then
     SERVER_URL="${SELFHEAL_SERVER_URL}"
   elif [[ "${CURRENT_CONTEXT}" == *"minikube"* ]]; then
-    SERVER_URL="ws://host.minikube.internal:5000/api/v1/agent/connect"
+    SERVER_URL="ws://host.minikube.internal:5005/api/v1/agent/connect"
   elif [[ "${CURRENT_CONTEXT}" == *"docker"* ]]; then
-    SERVER_URL="ws://host.docker.internal:5000/api/v1/agent/connect"
+    SERVER_URL="ws://host.docker.internal:5005/api/v1/agent/connect"
   else
-    SERVER_URL="ws://localhost:5000/api/v1/agent/connect"
+    SERVER_URL="ws://localhost:5005/api/v1/agent/connect"
   fi
 fi
 

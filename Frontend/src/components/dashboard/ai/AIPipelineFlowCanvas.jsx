@@ -27,6 +27,7 @@ import {
   ExternalLink,
   X,
   ArrowRight,
+  Layers,
 } from 'lucide-react';
 
 const translateActionToVi = (rawAction) => {
@@ -277,7 +278,7 @@ export const AIPipelineFlowCanvas = ({
 
   // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình (giữ cố định baseCanvasH để mở/đóng Rule Engine không bị giật khung nhìn)
   const baseCanvasW = showExtendedPipeline ? 2195 : 1000;
-  const baseCanvasH = showExtendedPipeline ? 1000 : 550;
+  const baseCanvasH = showExtendedPipeline ? 730 : 550;
   const autoScale = useMemo(() => {
     if (!containerWidth) return 1;
     if (isFullScreen && containerHeight > 0) {
@@ -290,7 +291,7 @@ export const AIPipelineFlowCanvas = ({
     return Math.min(Math.max(containerWidth / baseCanvasW, 0.65), 1.6);
   }, [containerWidth, containerHeight, isFullScreen, baseCanvasW, baseCanvasH, showExtendedPipeline, topSafePadding]);
 
-  // Ánh xạ 6 chiều dữ liệu viễn trắc thực tế của hệ thống
+  // Ánh xạ chuẩn 8 chiều dữ liệu viễn trắc của mô hình GRU [12×8]
   const METRIC_CONFIGS = [
     {
       key: 'cpu',
@@ -358,6 +359,28 @@ export const AIPipelineFlowCanvas = ({
       unit: '%',
       threshold: 5,
     },
+    {
+      key: 'pod_restart_count',
+      name: 'Pod Restarts',
+      label: 'Metric 7: Pod Restarts',
+      icon: RotateCcw,
+      color: '#F97316', // Orange
+      bgColor: '#FFF7ED',
+      borderColor: '#FFEDD5',
+      unit: 'lần',
+      threshold: 1,
+    },
+    {
+      key: 'replica_count',
+      name: 'Replicas (Pod)',
+      label: 'Metric 8: Replicas (Pod)',
+      icon: Layers,
+      color: '#6366F1', // Indigo
+      bgColor: '#EEF2FF',
+      borderColor: '#E0E7FF',
+      unit: 'Pod',
+      threshold: 999,
+    },
   ];
 
   // Ánh xạ 7 đầu ra rủi ro AI đồng bộ 100% với bảng "Hồ Sơ Xác Suất Rủi Ro"
@@ -402,11 +425,11 @@ export const AIPipelineFlowCanvas = ({
       id: 'scale_down',
       title: 'Thu Nhỏ Bản Sao (Scale Down / Tiết Kiệm)',
       riskKey: 'SCALE_DOWN_CANDIDATE',
-      threshold: 0.96,
+      threshold: 0.70,
     },
   ];
 
-  // Nạp dữ liệu thực tế từ seriesSummaries (khi mất kết nối Agent / Cụm -> toàn bộ hiển thị về 0.00)
+  // Nạp dữ liệu thực tế từ seriesSummaries & timesteps (khi mất kết nối Agent / Cụm -> toàn bộ hiển thị về 0.00)
   const liveMetrics = useMemo(() => {
     const map = {};
     for (const cfg of METRIC_CONFIGS) {
@@ -419,17 +442,95 @@ export const AIPipelineFlowCanvas = ({
         };
         continue;
       }
-      const summary = seriesSummaries.find((s) => s.key === cfg.key);
-      const latestNum = parseFloat(summary?.latest || 0);
+      const summary = seriesSummaries.find(
+        (s) =>
+          s.key === cfg.key ||
+          (cfg.key === 'http_5xx_rate' && (s.key === 'error_5xx' || s.key === 'http_5xx_rate')) ||
+          (cfg.key === 'pod_restart_count' && (s.key === 'restarts' || s.key === 'restart_count' || s.key === 'pod_restart_count')) ||
+          (cfg.key === 'replica_count' && (s.key === 'replicas' || s.key === 'pod_count' || s.key === 'replica_count'))
+      );
+
+      let latestNum = summary && summary.latest != null ? parseFloat(summary.latest) : null;
+      let avgNum = summary && summary.avg != null ? parseFloat(summary.avg) : null;
+      let maxNum = summary && summary.max != null ? parseFloat(summary.max) : null;
+
+      if (cfg.key === 'replica_count' && podCount > 0) {
+        const repVal = Number(podCount);
+        latestNum = repVal;
+        avgNum = repVal;
+        maxNum = repVal;
+      }
+
+      if (
+        latestNum === null || isNaN(latestNum) ||
+        avgNum === null || isNaN(avgNum) ||
+        maxNum === null || isNaN(maxNum)
+      ) {
+        if (timesteps && timesteps.length > 0) {
+          const vals = timesteps.map((t) => {
+            if (cfg.key === 'http_5xx_rate') return Number(t.http_5xx_rate ?? t.error_5xx ?? 0);
+            if (cfg.key === 'pod_restart_count') return Number(t.pod_restart_count ?? t.restarts ?? 0);
+            if (cfg.key === 'replica_count') return Number(t.replica_count ?? t.replicas ?? podCount ?? 1);
+            return Number(t[cfg.key] ?? 0);
+          });
+          const validVals = vals.filter((v) => !isNaN(v));
+          latestNum = validVals[validVals.length - 1] ?? 0;
+          maxNum = validVals.length > 0 ? Math.max(...validVals) : 0;
+          avgNum = validVals.length > 0 ? validVals.reduce((a, b) => a + b, 0) / validVals.length : 0;
+        } else if (cfg.key === 'replica_count') {
+          const repVal = Number(podCount || pipelineContext?.replicaCount || 1);
+          latestNum = repVal;
+          avgNum = repVal;
+          maxNum = repVal;
+        } else {
+          latestNum = 0;
+          avgNum = 0;
+          maxNum = 0;
+        }
+      }
+
+      latestNum = Number(latestNum || 0);
+      avgNum = Number(avgNum || 0);
+      maxNum = Number(maxNum || 0);
+
+      const fmtVal = (num, rawStr) => {
+        if (rawStr != null && rawStr !== '') return String(rawStr);
+        if (num == null || isNaN(num)) return '0.00';
+        return Number.isInteger(num) ? String(num) : num.toFixed(2);
+      };
+
       map[cfg.key] = {
-        latest: summary?.latest ?? '0.00',
-        avg: summary?.avg ?? '0.00',
-        max: summary?.max ?? '0.00',
+        latest: fmtVal(latestNum, summary?.latest),
+        avg: fmtVal(avgNum, summary?.avg),
+        max: fmtVal(maxNum, summary?.max),
         isWarning: latestNum >= cfg.threshold,
       };
     }
     return map;
-  }, [seriesSummaries, isAgentConnected]);
+  }, [seriesSummaries, isAgentConnected, timesteps, podCount, pipelineContext?.replicaCount]);
+
+  // Trích xuất ngữ cảnh sự cố từ pipelineContext để các tầng suy luận sử dụng
+  const latestIncident = isAgentConnected ? (pipelineContext?.latestIncident || null) : null;
+  const lastResolvedIncident = isAgentConnected ? (pipelineContext?.lastResolvedIncident || null) : null;
+  const openServiceIncidentsCount = isAgentConnected ? (pipelineContext?.openServiceIncidentsCount || 0) : 0;
+  const latestIncCauseText = String(latestIncident?.cause || latestIncident?.root_cause || latestIncident?.title || '').toLowerCase();
+
+  // Nhận diện Workload cơ sở dữ liệu / Cache (MongoDB, Redis, Postgres, MySQL, Cassandra...)
+  // Các hệ thống này luôn giữ RAM cao (~80-100%) làm Buffer Cache / Page Cache
+  const isDbCacheService = Boolean(
+    (selectedService &&
+      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd|cassandra|clickhouse|neo4j|couchdb|scylladb|database|db$|.*[-_]db)/i.test(
+        selectedService.trim()
+      )) ||
+    String(pipelineContext?.workload_type || '').toLowerCase() === 'statefulset'
+  );
+  // Nếu là cơ sở dữ liệu, không có OOMKilled và không có sự cố mở -> Coi là bộ đệm an toàn (Benign DB Cache)
+  const isBenignDbCacheState = Boolean(
+    isDbCacheService &&
+    openServiceIncidentsCount === 0 &&
+    !latestIncCauseText.includes('oom') &&
+    !latestIncCauseText.includes('crash')
+  );
 
   // Tính toán xác suất của 7 đầu rủi ro AI (đồng bộ chính xác với Hồ sơ xác suất rủi ro)
   const riskProbabilities = useMemo(() => {
@@ -470,7 +571,8 @@ export const AIPipelineFlowCanvas = ({
         ? prediction.thresholds[action.riskKey]
         : action.threshold;
 
-      const isExceeded = isAgentConnected && Boolean(prediction) && probValue >= effectiveThreshold;
+      const isOomSuppressed = isBenignDbCacheState && action.riskKey === 'OOM';
+      const isExceeded = isAgentConnected && Boolean(prediction) && probValue >= effectiveThreshold && !isOomSuppressed;
       const percentVal = probValue * 100;
 
       const displayPercentText = (!isAgentConnected || !prediction)
@@ -621,19 +723,6 @@ export const AIPipelineFlowCanvas = ({
         },
       };
     }
-    if (mode === 'closedloop') {
-      const targetScale = Math.min(usableW / 1020, usableH / 270, 1.15);
-      const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
-      const effectiveScale = nextZoom * autoScale;
-      const focusCy = feedbackTrackY + 130;
-      return {
-        nextZoom,
-        nextPan: {
-          x: 0,
-          y: (baseCanvasH / 2 - focusCy) * effectiveScale + safeOffsetY,
-        },
-      };
-    }
     // mode === 'healing': Neo sát lề trái từ Cột 04 (Multi-Agent RCA) → 05 (Policy) → 06 (AUTO/HITL/Audit) → 07 (Hậu kiểm)
     const targetScale = Math.min(usableW / 1165, usableH / 650, 1.02);
     const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
@@ -687,12 +776,12 @@ export const AIPipelineFlowCanvas = ({
   // Tọa độ bố cục chuẩn: giữ cố định Y_SHIFT = 162 để khi mở/gập Rule Engine toàn bộ sơ đồ không bị nhảy vị trí!
   const Y_SHIFT = showExtendedPipeline ? 162 : 0;
 
-  // 1. Cột 1 (6 Metric Input Cards): x = 16, width = 205, height = 62, gap = 14
+  // 1. Cột 1 (8 Metric Input Cards - ma trận chuẩn [12×8]): x = 16, width = 205, height = 48, gap = 8
   const LEFT_X = 16;
   const LEFT_W = 205;
-  const LEFT_H = 62;
-  const LEFT_GAP = 14;
-  const LEFT_Y_START = 48 + Y_SHIFT;
+  const LEFT_H = 48;
+  const LEFT_GAP = 8;
+  const LEFT_Y_START = 52 + Y_SHIFT;
 
   // 2. Cột 2 (Central AI Hub tích hợp Biểu đồ sóng): x = 265, width = 440, height = 430
   const CENTER_X = 265;
@@ -748,7 +837,7 @@ export const AIPipelineFlowCanvas = ({
     y: CENTER_Y + CENTER_H / 2,
   };
 
-  // 1. Đường cong Bezier từ Cột 1 vào AI Hub (6 đường khi mở rộng, 1 đường gọn khi thu gọn)
+  // 1. Đường cong Bezier từ Cột 1 vào AI Hub (8 đường khi mở rộng, 1 đường gọn khi thu gọn)
   const warningMetricsCount = METRIC_CONFIGS.filter((cfg) => liveMetrics[cfg.key]?.isWarning).length;
   const inputEdges = isTelemetryExpanded
     ? METRIC_CONFIGS.map((cfg, idx) => {
@@ -756,7 +845,7 @@ export const AIPipelineFlowCanvas = ({
         const startPort = { x: LEFT_X + LEFT_W, y: leftNodeY + LEFT_H / 2 };
         const endPort = {
           x: CENTER_X,
-          y: CENTER_Y + 70 + idx * 46,
+          y: Math.round(CENTER_Y + 42 + idx * ((CENTER_H - 84) / Math.max(METRIC_CONFIGS.length - 1, 1))),
         };
         const c1x = startPort.x + (endPort.x - startPort.x) * 0.48;
         const c2x = startPort.x + (endPort.x - startPort.x) * 0.52;
@@ -834,12 +923,10 @@ export const AIPipelineFlowCanvas = ({
   const isRiskDetected =
     isAgentConnected &&
     !isPredictionHealthy &&
-    (prediction?.status === 'RISK_DETECTED' || rawRiskScore >= 0.7 || hasAnyTriggeredRisk);
+    (prediction?.status === 'RISK_DETECTED' || rawRiskScore >= 0.7 || hasAnyTriggeredRisk) &&
+    !isBenignDbCacheState;
 
   // Trạng thái kích hoạt thực tế cho các giai đoạn sau AI (khi mất kết nối Agent -> toàn bộ tắt hiệu ứng về trạng thái nghỉ)
-  const latestIncident = isAgentConnected ? (pipelineContext?.latestIncident || null) : null;
-  const lastResolvedIncident = isAgentConnected ? (pipelineContext?.lastResolvedIncident || null) : null;
-  const openServiceIncidentsCount = isAgentConnected ? (pipelineContext?.openServiceIncidentsCount || 0) : 0;
   const latestRecommendation = isAgentConnected ? (pipelineContext?.latestRecommendation || null) : null;
   const latestAutoAction = isAgentConnected ? (pipelineContext?.latestAutoAction || null) : null;
   const latestHitlApproval = isAgentConnected ? (pipelineContext?.latestHitlApproval || null) : null;
@@ -858,7 +945,7 @@ export const AIPipelineFlowCanvas = ({
         latestCompletedAction: null,
       };
 
-  const isRcaActive = isAgentConnected && (isRiskDetected || openServiceIncidentsCount > 0);
+  const isRcaActive = isAgentConnected && (openServiceIncidentsCount > 0 || (isRiskDetected && !isBenignDbCacheState));
   const isPolicyActive = isAgentConnected && (isRcaActive || Boolean(latestRecommendation));
   const autoActionStatus = isAgentConnected ? String(latestAutoAction?.execution_status || '').toUpperCase() : '';
   const isAutoActionInProgress =
@@ -869,13 +956,14 @@ export const AIPipelineFlowCanvas = ({
         ['AUTO', 'AUTONOMOUS'].includes(String(latestAutoAction?.execution_mode || '').toUpperCase()) &&
         autoActionStatus !== 'SUCCEEDED' &&
         autoActionStatus !== 'FAILED'));
+  const isHitlActive = isAgentConnected && pendingApprovalsCount > 0;
   const isAutoActionActive =
-    isAutoActionInProgress ||
-    (!isCircuitBreakerTripped && openServiceIncidentsCount > 0 && autoActionStatus === 'SUCCEEDED');
+    !isHitlActive &&
+    (isAutoActionInProgress ||
+      (!isCircuitBreakerTripped && openServiceIncidentsCount > 0 && autoActionStatus === 'SUCCEEDED'));
   const isVerifyingInProgress =
     isAgentConnected && (recoveryStats.runningCount > 0 || recoveryStats.verifyingCount > 0);
   const isAutoActive = isAutoActionActive;
-  const isHitlActive = isAgentConnected && pendingApprovalsCount > 0;
   const isAuditActive =
     isAgentConnected &&
     (isCircuitBreakerTripped || (pipelineContext?.totalPoliciesCount > 0 && pipelineContext?.activePoliciesCount === 0));
@@ -1014,7 +1102,6 @@ export const AIPipelineFlowCanvas = ({
   const liveLatVal = parseFloat(liveMetrics.latency?.latest) || 0;
   const liveReqVal = parseFloat(liveMetrics.request_rate?.latest) || 0;
   const live5xxVal = parseFloat(liveMetrics.http_5xx_rate?.latest) || 0;
-  const latestIncCauseText = String(latestIncident?.cause || latestIncident?.root_cause || latestIncident?.title || '').toLowerCase();
 
   const ruleEngineChecks = [
     {
@@ -1033,10 +1120,12 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       id: 'R3',
-      name: 'R3: Memory / OOM',
-      cond: 'RAM > 85% / OOMKilled',
+      name: isDbCacheService ? 'R3: Buffer Cache / OOM' : 'R3: Memory / OOM',
+      cond: isDbCacheService ? 'RAM Cache (WiredTiger)' : 'RAM > 85% / OOMKilled',
       value: `${liveRamVal.toFixed(1)}%`,
-      triggered: isAgentConnected && (liveRamVal > 85 || latestIncCauseText.includes('oom')),
+      triggered:
+        isAgentConnected &&
+        (latestIncCauseText.includes('oom') || (!isDbCacheService && liveRamVal > 85)),
     },
     {
       id: 'R4',
@@ -1085,11 +1174,19 @@ export const AIPipelineFlowCanvas = ({
 
   // 8. Vòng lặp hồi tiếp phía dưới cùng: từ Hậu Kiểm Phục Hồi (Cột 7) quay về Đầu vào Viễn trắc (Cột 1)
   const verifyBottomPort = { x: VERIFY_X + VERIFY_W / 2, y: VERIFY_Y + VERIFY_H };
+  const lastMetricIdx = Math.max(0, METRIC_CONFIGS.length - 1);
   const metricBottomPort = {
     x: LEFT_X + LEFT_W / 2,
-    y: isTelemetryExpanded ? LEFT_Y_START + 5 * (LEFT_H + LEFT_GAP) + LEFT_H : LEFT_COMPACT_Y + LEFT_COMPACT_H,
+    y: isTelemetryExpanded
+      ? LEFT_Y_START + lastMetricIdx * (LEFT_H + LEFT_GAP) + LEFT_H
+      : LEFT_COMPACT_Y + LEFT_COMPACT_H,
   };
-  const feedbackTrackY = CENTER_Y + CENTER_H + 38;
+  const lowestContentY = Math.max(
+    CENTER_Y + CENTER_H,
+    isTelemetryExpanded ? LEFT_Y_START + lastMetricIdx * (LEFT_H + LEFT_GAP) + LEFT_H : LEFT_COMPACT_Y + LEFT_COMPACT_H,
+    VERIFY_Y + VERIFY_H
+  );
+  const feedbackTrackY = lowestContentY + 28;
   const feedbackLoopPath = `M ${verifyBottomPort.x} ${verifyBottomPort.y} L ${verifyBottomPort.x} ${feedbackTrackY - 18} Q ${verifyBottomPort.x} ${feedbackTrackY} ${verifyBottomPort.x - 18} ${feedbackTrackY} L ${metricBottomPort.x + 18} ${feedbackTrackY} Q ${metricBottomPort.x} ${feedbackTrackY} ${metricBottomPort.x} ${feedbackTrackY - 18} L ${metricBottomPort.x} ${metricBottomPort.y + 6}`;
 
   // ==========================================
@@ -1124,14 +1221,18 @@ export const AIPipelineFlowCanvas = ({
           nextStep: 'Khi kích hoạt → Multi-Agent RCA phân tích có phải tấn công DDoS hay tải thật để đề xuất Scale Replicas hoặc chặn IP tạm thời.',
         },
         R3: {
-          title: 'Luật R3: Áp Lực Bộ Nhớ RAM / OOMKilled',
-          summary: `Theo dõi sát bộ nhớ RAM của "${selectedService}". Nếu RAM vượt 85% hoặc Kubernetes ghi nhận sự kiện OOMKilled (Container bị hệ điều hành tắt do tràn RAM), luật lập tức kích hoạt ở độ tin cậy 95%.`,
+          title: isDbCacheService ? 'Luật R3: Bộ Nhớ Đệm Database (Buffer Cache)' : 'Luật R3: Áp Lực Bộ Nhớ RAM / OOMKilled',
+          summary: isDbCacheService
+            ? `Dịch vụ "${selectedService}" sử dụng cơ chế đệm trang (WiredTiger Cache). RAM duy trì mức cao là trạng thái tối ưu hoá đọc/ghi đĩa tự nhiên của database, không có nguy cơ OOM do không có sự kiện OOMKilled và Pod không bị restart.`
+            : `Theo dõi sát bộ nhớ RAM của "${selectedService}". Nếu RAM vượt 85% hoặc Kubernetes ghi nhận sự kiện OOMKilled (Container bị hệ điều hành tắt do tràn RAM), luật lập tức kích hoạt ở độ tin cậy 95%.`,
           rows: [
-            { label: 'RAM hiện tại', value: `${liveRamVal.toFixed(1)}% (ngưỡng > 85%)`, highlight: liveRamVal > 85 },
-            { label: 'Dấu hiệu OOMKilled', value: latestIncCauseText.includes('oom') ? 'Phát hiện OOM' : 'Không phát hiện', highlight: latestIncCauseText.includes('oom') },
-            { label: 'Mã bất thường', value: 'MEMORY_PRESSURE' },
+            { label: 'RAM hiện tại', value: `${liveRamVal.toFixed(1)}% ${isDbCacheService ? '(Bộ đệm WiredTiger)' : '(ngưỡng > 85%)'}`, highlight: !isDbCacheService && liveRamVal > 85 },
+            { label: 'Dấu hiệu OOMKilled', value: latestIncCauseText.includes('oom') ? 'Phát hiện OOM' : 'Không phát hiện (An toàn)', highlight: latestIncCauseText.includes('oom') },
+            { label: 'Trạng thái luật', value: isDbCacheService && !latestIncCauseText.includes('oom') ? 'ĐẠT CHUẨN (BUFFER CACHE)' : 'MEMORY_PRESSURE' },
           ],
-          nextStep: 'Khi kích hoạt → Đẩy vào Multi-Agent RCA chẩn đoán rò rỉ bộ nhớ (Memory Leak) và đề xuất Restart / Replace Pod.',
+          nextStep: isDbCacheService
+            ? 'Cơ chế tự trị tiếp tục bảo vệ, không kích hoạt khởi động lại Pod ngoài ý muốn đối với cơ sở dữ liệu.'
+            : 'Khi kích hoạt → Đẩy vào Multi-Agent RCA chẩn đoán rò rỉ bộ nhớ (Memory Leak) và đề xuất Restart / Replace Pod.',
         },
         R4: {
           title: 'Luật R4: Đột Biến Lỗi Máy Chủ HTTP 5xx',
@@ -1180,7 +1281,7 @@ export const AIPipelineFlowCanvas = ({
       };
     }
 
-    // 2. 6 Metric Input Cards
+    // 2. 8 Metric Input Cards
     if (id.startsWith('metric:')) {
       const key = id.replace('metric:', '');
       const cfg = METRIC_CONFIGS.find((m) => m.key === key);
@@ -1193,6 +1294,8 @@ export const AIPipelineFlowCanvas = ({
         latency: 'Đo độ trễ phản hồi (ms) của dịch vụ. Độ trễ tăng vọt báo hiệu nghẽn tài nguyên, quá tải DB hoặc lỗi mạng nội bộ.',
         request_rate: 'Đo số lượng yêu cầu mỗi giây (Req/s) đổ vào dịch vụ để phát hiện đột biến lưu lượng hoặc tải nhàn rỗi.',
         http_5xx_rate: 'Đo tỷ lệ phần trăm yêu cầu trả về mã lỗi máy chủ HTTP 5xx (500–504).',
+        pod_restart_count: 'Đo số lần khởi động lại (Pod Restarts) trong cửa sổ giám sát nhằm phát hiện sớm hiện tượng CrashLoopBackOff hoặc OOMKilled tái diễn.',
+        replica_count: 'Đo số lượng bản sao Pod (Replicas) đang khả dụng và sẵn sàng tiếp nhận lưu lượng truy cập của dịch vụ trên Kubernetes.',
       };
       return {
         badge: '01 • VIỄN TRẮC ĐẦU VÀO',
@@ -1267,9 +1370,11 @@ export const AIPipelineFlowCanvas = ({
       const rcaStatusLabel =
         openServiceIncidentsCount > 0
           ? `${openServiceIncidentsCount} SỰ CỐ OPEN`
-          : isRcaActive
-            ? 'ĐANG CHẨN ĐOÁN'
-            : 'ỔN ĐỊNH • CHỜ TÍN HIỆU';
+          : isBenignDbCacheState
+            ? 'BỘ ĐỆM AN TOÀN'
+            : isRcaActive
+              ? 'ĐANG CHẨN ĐOÁN'
+              : 'ỔN ĐỊNH • CHỜ TÍN HIỆU';
 
       const rawRecAction =
         latestRecommendation?.action ||
@@ -1324,7 +1429,9 @@ export const AIPipelineFlowCanvas = ({
         : [
             {
               label: 'Sự cố đang mở (OPEN)',
-              value: `0 sự cố (${isRcaActive ? 'Đang chờ RCA xử lý tín hiệu mới' : 'Hệ thống ổn định'})`,
+              value: isBenignDbCacheState
+                ? '0 sự cố (Bộ đệm WiredTiger an toàn)'
+                : `0 sự cố (${isRcaActive ? 'Đang gom 12 bước viễn trắc mới' : 'Hệ thống ổn định'})`,
             },
             ...(lastResolved
               ? [
@@ -1509,6 +1616,7 @@ export const AIPipelineFlowCanvas = ({
 
     // 6. Các giai đoạn trong Vòng lặp Tự trị Khép kín (Closed-Loop MAPE-K)
     if (id === 'closedloop:overview') {
+      const activeCooldownSec = pipelineContext?.policyMeta?.cooldownSec || 60;
       return {
         title: 'Tổng Quan Sơ Đồ Vòng Lặp Tự Trị Khép Kín (MAPE-K)',
         badge: 'KIẾN TRÚC TỰ TRỊ CAPSTONE',
@@ -1520,7 +1628,7 @@ export const AIPipelineFlowCanvas = ({
           { label: 'Chu kỳ lấy mẫu viễn trắc', value: '5 giây/bước (Sliding Window 12 bước = 60s)' },
           { label: 'Thời gian phản hồi AI', value: '< 3 giây (GRU + Multi-Agent RCA)' },
           { label: 'Thời gian hậu kiểm SLA', value: '60 giây (12 bước dữ liệu thực tế sau can thiệp)' },
-          { label: 'Rào chắn an toàn', value: 'Policy Engine, Cooldown 180s, HITL Gate, Circuit Breaker' },
+          { label: 'Rào chắn an toàn', value: `Policy Engine, Cooldown ${activeCooldownSec}s, HITL Gate, Circuit Breaker` },
         ],
         nextStep: 'Click vào từng khối (Pha 01 đến 04) trong sơ đồ vòng lặp bên dưới để xem chi tiết từng công đoạn vận hành.',
         actionLabel: 'Mở Quản lý Sự cố →',
@@ -1534,14 +1642,14 @@ export const AIPipelineFlowCanvas = ({
         badge: 'MAPE-K • PHA 1 (CỘT 01 & 02)',
         accent: '#059669',
         bg: '#F0FDF4',
-        summary: `Đóng vai trò là "giác quan" của hệ thống tự trị. Thu thập liên tục 6 chỉ số viễn trắc vàng (CPU, Memory, Disk, Độ trễ mạng, Tỷ lệ lỗi 5xx, Requests/giây) từ Prometheus và cAdvisor trên từng Pod/Service theo chu kỳ 5 giây, gom thành Sliding Window 12 bước (60 giây). Dữ liệu được chuẩn hóa min-max và đẩy đồng thời vào AI Hub và Rule Engine.`,
+        summary: `Đóng vai trò là "giác quan" của hệ thống tự trị. Thu thập liên tục 8 chỉ số viễn trắc chuẩn (CPU, RAM, Disk, Độ trễ, Tần suất request, Lỗi 5xx, Restarts, Replicas) từ Prometheus và cAdvisor trên từng Pod/Service theo chu kỳ 5 giây, gom thành Sliding Window 12 bước (60 giây). Ma trận [12×8] được chuẩn hóa và đẩy đồng thời vào AI Hub và Rule Engine.`,
         rows: [
           { label: 'Dịch vụ đang chọn', value: selectedService },
-          { label: 'Số chiều dữ liệu', value: '6 chỉ số (CPU, RAM, Disk, Latency, 5xx, Req/s)' },
+          { label: 'Số chiều dữ liệu', value: '8 chỉ số (CPU, RAM, Disk, Latency, Req/s, 5xx, Restarts, Replicas)' },
           { label: 'Cửa sổ thời gian', value: '12 bước x 5s = 60 giây (Sliding Window)' },
           { label: 'Tình trạng kết nối viễn trắc', value: isAgentConnected ? 'Trực tuyến (Live Telemetry)' : 'Mất kết nối', highlight: !isAgentConnected },
         ],
-        nextStep: 'Ma trận viễn trắc 12x6 được đẩy sang Pha 2 để mô hình GRU dự báo xu hướng và Multi-Agent chẩn đoán nguyên nhân gốc.',
+        nextStep: 'Ma trận viễn trắc 12x8 được đẩy sang Pha 2 để mô hình GRU dự báo xu hướng và Multi-Agent chẩn đoán nguyên nhân gốc.',
         actionLabel: 'Xem Chi tiết Viễn trắc →',
         actionPath: '/dashboard/telemetry',
       };
@@ -1567,14 +1675,15 @@ export const AIPipelineFlowCanvas = ({
     }
 
     if (id === 'closedloop:plan_execute') {
+      const activeCooldownSec = pipelineContext?.policyMeta?.cooldownSec || 60;
       return {
         title: 'Pha 3: Quyết Định & Thực Thi (Plan & Execute)',
         badge: 'MAPE-K • PHA 3 (CỘT 05 & 06)',
         accent: '#D97706',
         bg: '#FFFBEB',
-        summary: `Đóng vai trò là "người ra quyết định và cánh tay hành động". Policy Engine đối soát an toàn (thời gian giãn cách Cooldown 180s, hạn mức thử lại của Circuit Breaker, kiểm tra loại tài nguyên). Sau đó điều phối vào 3 nhánh: Tự trị AUTO (cho tác vụ rủi ro thấp với độ tin cậy AI cao), Cổng duyệt HITL (bảo vệ tác vụ rủi ro cao như DaemonSet hay xóa dữ liệu), hoặc Ngắt mạch Circuit Breaker nếu thử lặp quá nhiều lần.`,
+        summary: `Đóng vai trò là "người ra quyết định và cánh tay hành động". Policy Engine đối soát an toàn (thời gian giãn cách Cooldown ${activeCooldownSec}s, hạn mức thử lại của Circuit Breaker, kiểm tra loại tài nguyên). Sau đó điều phối vào 3 nhánh: Tự trị AUTO (cho tác vụ rủi ro thấp với độ tin cậy AI cao), Cổng duyệt HITL (bảo vệ tác vụ rủi ro cao như DaemonSet hay xóa dữ liệu), hoặc Ngắt mạch Circuit Breaker nếu thử lặp quá nhiều lần.`,
         rows: [
-          { label: 'Cơ chế bảo vệ', value: 'Policy Engine + Cooldown 180s + Circuit Breaker' },
+          { label: 'Cơ chế bảo vệ', value: `Policy Engine + Cooldown ${activeCooldownSec}s + Circuit Breaker` },
           { label: 'Điều phối 3 nhánh', value: 'AUTO (Tự trị) | HITL (Phê duyệt) | Ngắt mạch' },
           { label: 'Các hành động K8s', value: 'Restart Pod, Thay thế Pod, Điều chỉnh bản sao, Rollback' },
           { label: 'Cơ chế chặn DaemonSet', value: 'Tự động CANCEL / REJECT nếu giảm bản sao DaemonSet (như kube-proxy)' },
@@ -1630,7 +1739,10 @@ export const AIPipelineFlowCanvas = ({
         disk: 0,
         latency: 0,
         request_rate: 0,
+        http_5xx_rate: 0,
         error_5xx: 0,
+        pod_restart_count: 0,
+        replica_count: 0,
       }));
     }
     if (timesteps && timesteps.length >= 2) return timesteps;
@@ -1642,9 +1754,12 @@ export const AIPipelineFlowCanvas = ({
       disk: parseFloat(liveMetrics.disk?.latest) || 0,
       latency: parseFloat(liveMetrics.latency?.latest) || 0,
       request_rate: parseFloat(liveMetrics.request_rate?.latest) || 0,
+      http_5xx_rate: parseFloat(liveMetrics.http_5xx_rate?.latest) || 0,
       error_5xx: parseFloat(liveMetrics.http_5xx_rate?.latest) || 0,
+      pod_restart_count: parseFloat(liveMetrics.pod_restart_count?.latest) || 0,
+      replica_count: parseFloat(liveMetrics.replica_count?.latest) || (podCount || 1),
     }));
-  }, [isAgentConnected, timesteps, liveMetrics]);
+  }, [isAgentConnected, timesteps, liveMetrics, podCount]);
 
   // Tính Y max & Ticks cho biểu đồ mini
   const chartMaxY = useMemo(() => {
@@ -1762,7 +1877,6 @@ export const AIPipelineFlowCanvas = ({
             {[
               { id: 'gru', label: '1. AI & Rule Engine' },
               { id: 'healing', label: '2. RCA & Tự phục hồi' },
-              { id: 'closedloop', label: '3. Vòng lặp Khép kín' },
               { id: 'all', label: 'Toàn luồng' },
             ].map((tab) => {
               const isSelected = activeViewMode === tab.id;
@@ -2006,7 +2120,7 @@ export const AIPipelineFlowCanvas = ({
               markerHeight="6"
               orient="auto-start-reverse"
             >
-              <path d="M 0 1 L 8 5 L 0 9 z" fill="#0891B2" />
+              <path d="M 0 1 L 8 5 L 0 9 z" fill="#0284C7" />
             </marker>
             <marker
               id="arrow-rule"
@@ -2189,24 +2303,22 @@ export const AIPipelineFlowCanvas = ({
                 <path
                   d={feedbackLoopPath}
                   fill="none"
-                  stroke={isVerifyActive ? '#0891B2' : '#94A3B8'}
-                  strokeWidth={isVerifyActive ? 2 : 1.6}
-                  strokeDasharray="6 4"
+                  stroke={isVerifyActive ? '#0284C7' : '#0EA5E9'}
+                  strokeWidth={isVerifyActive ? 2.4 : 1.8}
+                  strokeDasharray={isVerifyActive ? 'none' : '6 4'}
                   strokeLinecap="round"
                   markerEnd="url(#arrow-feedback)"
-                  opacity={isVerifyActive ? 0.9 : 0.55}
+                  opacity={isVerifyActive ? 1 : 0.8}
                 />
-                {isVerifyActive && (
-                  <circle r="3.5" fill="#0891B2">
-                    <animateMotion path={feedbackLoopPath} dur="5.5s" repeatCount="indefinite" rotate="auto" />
-                  </circle>
-                )}
+                <circle r={isVerifyActive ? 4 : 3.2} fill={isVerifyActive ? '#0284C7' : '#0EA5E9'}>
+                  <animateMotion path={feedbackLoopPath} dur={isVerifyActive ? '3.8s' : '6.5s'} repeatCount="indefinite" rotate="auto" />
+                </circle>
               </g>
             </>
           )}
         </svg>
 
-        {/* Layer 2: Cột Trái - 6 Metric Input Nodes (Thu gọn 1 thẻ ↔ Nhấn bung đủ 6 thẻ nguyên bản) */}
+        {/* Layer 2: Cột Trái - 8 Metric Input Nodes (Thu gọn 1 thẻ ↔ Nhấn bung đủ 8 thẻ nguyên bản) */}
         {isTelemetryExpanded ? (
           METRIC_CONFIGS.map((cfg, idx) => {
           const live = liveMetrics[cfg.key] || { latest: '0.00', avg: '0.00', max: '0.00' };
@@ -2235,7 +2347,7 @@ export const AIPipelineFlowCanvas = ({
                 width: `${LEFT_W}px`,
                 height: `${LEFT_H}px`,
                 backgroundColor: '#FFFFFF',
-                borderRadius: '10px',
+                borderRadius: '8px',
                 border: `1.5px solid ${pinnedInspector?.id === `metric:${cfg.key}` ? cfg.color : live.isWarning ? '#FCA5A5' : '#E2E8F0'}`,
                 boxShadow: live.isWarning
                   ? '0 4px 12px rgba(239, 68, 68, 0.15)'
@@ -2244,8 +2356,8 @@ export const AIPipelineFlowCanvas = ({
                     : '0 2px 8px rgba(15, 23, 42, 0.04)',
                 display: 'flex',
                 alignItems: 'center',
-                padding: '0 10px',
-                gap: '8px',
+                padding: '0 8px',
+                gap: '7px',
                 zIndex: 10,
                 cursor: 'pointer',
                 transform: hoveredNode === cfg.key ? 'translateY(-1px)' : 'none',
@@ -2255,9 +2367,9 @@ export const AIPipelineFlowCanvas = ({
               {/* Icon Container bên trái */}
               <div
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
                   backgroundColor: cfg.bgColor,
                   border: `1px solid ${cfg.borderColor}`,
                   display: 'flex',
@@ -2267,26 +2379,26 @@ export const AIPipelineFlowCanvas = ({
                   color: cfg.color,
                 }}
               >
-                <IconComp size={18} />
+                <IconComp size={15} />
               </div>
 
               {/* Thông tin Chỉ số (Tên & Live Telemetry Metrics) */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
-                    fontSize: '0.5625rem',
+                    fontSize: '0.5rem',
                     fontWeight: 600,
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                     color: '#94A3B8',
-                    lineHeight: 1.2,
+                    lineHeight: 1.1,
                   }}
                 >
                   Metric Input
                 </div>
                 <div
                   style={{
-                    fontSize: '0.75rem',
+                    fontSize: '0.6875rem',
                     fontWeight: 700,
                     color: '#1E293B',
                     whiteSpace: 'nowrap',
@@ -2297,16 +2409,16 @@ export const AIPipelineFlowCanvas = ({
                 >
                   {cfg.label}
                 </div>
-                {/* Dữ liệu thực tế: Hiện tại | TB | Max */}
+                {/* Dữ liệu thực tế: Hiện tại | TB */}
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
-                    fontSize: '0.625rem',
+                    fontSize: '0.58rem',
                     fontFamily: 'var(--font-mono)',
                     color: '#64748B',
-                    marginTop: '2px',
+                    marginTop: '1px',
                   }}
                 >
                   <span style={{ color: live.isWarning ? '#DC2626' : '#0F172A', fontWeight: 700 }}>
@@ -2321,11 +2433,11 @@ export const AIPipelineFlowCanvas = ({
               <div
                 style={{
                   position: 'absolute',
-                  right: '-9px',
+                  right: '-8px',
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  width: '18px',
-                  height: '18px',
+                  width: '16px',
+                  height: '16px',
                   borderRadius: '50%',
                   backgroundColor: '#FFFFFF',
                   border: '2px solid #94A3B8',
@@ -2333,7 +2445,7 @@ export const AIPipelineFlowCanvas = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.6875rem',
+                  fontSize: '0.625rem',
                   fontWeight: 700,
                   color: '#64748B',
                   zIndex: 12,
@@ -2377,10 +2489,10 @@ export const AIPipelineFlowCanvas = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#059669' }}>METRIC INPUT</span>
                 <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: !isAgentConnected ? '#F1F5F9' : warningMetricsCount > 0 ? '#FEF3C7' : '#ECFDF5', color: !isAgentConnected ? '#64748B' : warningMetricsCount > 0 ? '#B45309' : '#059669' }}>
-                  {!isAgentConnected ? 'Offline' : warningMetricsCount > 0 ? `${warningMetricsCount} cảnh báo` : '6/6 ổn định'}
+                  {!isAgentConnected ? 'Offline' : warningMetricsCount > 0 ? `${warningMetricsCount} cảnh báo` : `${METRIC_CONFIGS.length}/${METRIC_CONFIGS.length} ổn định`}
                 </span>
               </div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>6 Chỉ số Viễn trắc</div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>8 Chỉ số Viễn trắc</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -2395,10 +2507,16 @@ export const AIPipelineFlowCanvas = ({
                 <span style={{ color: '#64748B' }}>Req/s • 5xx</span>
                 <span style={{ fontWeight: 700, color: live5xxVal > 5 ? '#DC2626' : '#0891B2' }}>{liveReqVal.toFixed(1)} • {live5xxVal.toFixed(1)}%</span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748B' }}>Restarts • Pods</span>
+                <span style={{ fontWeight: 700, color: (parseFloat(liveMetrics.pod_restart_count?.latest) || 0) > 0 ? '#DC2626' : '#6366F1' }}>
+                  {liveMetrics.pod_restart_count?.latest ?? 0} lần • {liveMetrics.replica_count?.latest ?? podCount ?? 1} Pod
+                </span>
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '7px', borderTop: '1px solid #F1F5F9', fontSize: '0.68rem', fontWeight: 800, color: '#059669' }}>
-              <span>Nhấn mở 6 nhánh</span>
-              <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' }}>+6</span>
+              <span>Nhấn mở 8 nhánh</span>
+              <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' }}>+8</span>
             </div>
           </div>
         )}
@@ -2555,7 +2673,13 @@ export const AIPipelineFlowCanvas = ({
               {effectiveTimesteps && effectiveTimesteps.length > 0 && METRIC_CONFIGS.map((cfg) => {
                 // Xây dựng đường Path và Gradient Area
                 const points = effectiveTimesteps.map((t, i) => {
-                  const val = Number(t[cfg.key] || 0);
+                  const val = Number(
+                    t[cfg.key] ??
+                    (cfg.key === 'http_5xx_rate' ? t.error_5xx : undefined) ??
+                    (cfg.key === 'pod_restart_count' ? t.restarts : undefined) ??
+                    (cfg.key === 'replica_count' ? (t.replicas ?? podCount ?? 1) : undefined) ??
+                    0
+                  );
                   return { x: getMiniX(i), y: getMiniY(val) };
                 });
 
@@ -2669,15 +2793,6 @@ export const AIPipelineFlowCanvas = ({
               }}
             >
               AI to Analyze {selectedService} & Assess Health
-            </div>
-            <div
-              style={{
-                fontSize: '0.6875rem',
-                color: '#64748B',
-                marginTop: '1px',
-              }}
-            >
-              Mô hình học máy chuỗi thời gian (60s Telemetry Window)
             </div>
 
             <div
@@ -3030,25 +3145,31 @@ export const AIPipelineFlowCanvas = ({
                     backgroundColor:
                       openServiceIncidentsCount > 0
                         ? '#FEE2E2'
-                        : isRcaActive
-                          ? '#EDE9FE'
-                          : '#ECFDF5',
+                        : isBenignDbCacheState
+                          ? '#ECFDF5'
+                          : isRcaActive
+                            ? '#EDE9FE'
+                            : '#ECFDF5',
                     color:
                       openServiceIncidentsCount > 0
                         ? '#DC2626'
-                        : isRcaActive
-                          ? '#6D28D9'
-                          : '#059669',
+                        : isBenignDbCacheState
+                          ? '#059669'
+                          : isRcaActive
+                            ? '#6D28D9'
+                            : '#059669',
                     whiteSpace: 'nowrap',
                   }}
                 >
                   {openServiceIncidentsCount > 0
                     ? `${openServiceIncidentsCount} Sự cố OPEN`
-                    : isRcaActive
-                      ? 'Đang chẩn đoán'
-                      : lastResolvedIncident
-                        ? '🟢 Đã ổn định'
-                        : '🟢 Hoạt động tối ưu'}
+                    : isBenignDbCacheState
+                      ? '🟢 Bộ đệm an toàn'
+                      : isRcaActive
+                        ? `Đang thu thập [${currentActiveStep || 12}/12]`
+                        : lastResolvedIncident
+                          ? '🟢 Đã ổn định'
+                          : '🟢 Hoạt động tối ưu'}
                 </span>
               </div>
 
@@ -3164,7 +3285,7 @@ export const AIPipelineFlowCanvas = ({
                           color: '#15803D',
                         }}
                       >
-                        {lastResolvedIncident ? 'ĐÃ PHỤC HỒI' : 'BÌNH THƯỜNG'}
+                        {isBenignDbCacheState ? 'AN TOÀN' : lastResolvedIncident ? 'ĐÃ PHỤC HỒI' : 'BÌNH THƯỜNG'}
                       </span>
                     )}
                   </div>
@@ -3193,11 +3314,13 @@ export const AIPipelineFlowCanvas = ({
                       ? translateIncidentTitle(
                           latestIncident.cause || latestIncident.root_cause || latestIncident.title
                         )
-                      : isRcaActive
-                        ? `Đang chờ RCA phân tích tín hiệu trên ${selectedService}`
-                        : lastResolvedIncident
-                          ? `Gần nhất: ${translateIncidentTitle(lastResolvedIncident.cause || lastResolvedIncident.root_cause || lastResolvedIncident.title)} (Đã ổn định)`
-                          : `Dịch vụ hoạt động tối ưu — Toàn bộ 6 chỉ số đạt chuẩn SLA`}
+                      : isBenignDbCacheState
+                        ? `Bộ nhớ đệm WiredTiger an toàn (0% lỗi, kết nối thông suốt)`
+                        : isRcaActive
+                          ? `Đang thu thập viễn trắc (${currentActiveStep || 12}/12 bước) để hội chẩn RCA`
+                          : lastResolvedIncident
+                            ? `Gần nhất: ${translateIncidentTitle(lastResolvedIncident.cause || lastResolvedIncident.root_cause || lastResolvedIncident.title)} (Đã ổn định)`
+                            : `Dịch vụ hoạt động tối ưu — Toàn bộ 8 chỉ số đạt chuẩn SLA`}
                   </div>
                 </div>
 
@@ -3227,9 +3350,11 @@ export const AIPipelineFlowCanvas = ({
                                 latestRecommendation?.recommendation
                             )
                           : null) ||
-                        (lastResolvedIncident
-                          ? 'Duy trì hoạt động bình thường (Đã phục hồi)'
-                          : 'Duy trì hoạt động bình thường (Không can thiệp)')
+                        (isBenignDbCacheState
+                          ? 'Duy trì hoạt động bình thường (Bộ đệm an toàn)'
+                          : lastResolvedIncident
+                            ? 'Duy trì hoạt động bình thường (Đã phục hồi)'
+                            : 'Duy trì hoạt động bình thường (Không can thiệp)')
                       }
                       style={{
                         fontSize: '0.6875rem',
@@ -3247,9 +3372,11 @@ export const AIPipelineFlowCanvas = ({
                               latestRecommendation?.recommendation
                           )
                         : null) ||
-                        (lastResolvedIncident
-                          ? 'Duy trì hoạt động bình thường (Đã phục hồi)'
-                          : 'Duy trì hoạt động bình thường (Không can thiệp)')}
+                        (isBenignDbCacheState
+                          ? 'Duy trì hoạt động bình thường (Bộ đệm an toàn)'
+                          : lastResolvedIncident
+                            ? 'Duy trì hoạt động bình thường (Đã phục hồi)'
+                            : 'Duy trì hoạt động bình thường (Không can thiệp)')}
                     </div>
                   </div>
                   <ExternalLink size={12} color={openServiceIncidentsCount > 0 ? '#7C3AED' : '#16A34A'} style={{ flexShrink: 0 }} />
@@ -4303,349 +4430,7 @@ export const AIPipelineFlowCanvas = ({
                 Vòng lặp Hậu kiểm & Giám sát Liên tục (60s Closed-Loop Telemetry Feedback)
               </span>
             </div>
-
-            {/* SƠ ĐỒ VÒNG TRÒN TỰ TRỊ TUẦN HOÀN (CIRCULAR CLOSED-LOOP MAPE-K ARCHITECTURE) */}
-            <div
-              data-inspector-trigger="true"
-              onClick={(e) => handleInspectorClick(e, 'closedloop:overview')}
-              onMouseEnter={(e) => handleInspectorHover(e, 'closedloop:overview')}
-              onMouseLeave={() => handleInspectorLeave('closedloop:overview')}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                top: `${feedbackTrackY + 28}px`,
-                width: '820px',
-                height: '240px',
-                backgroundColor: 'rgba(255, 255, 255, 0.97)',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-                border: '1.5px solid #CBD5E1',
-                borderRadius: '16px',
-                boxShadow: '0 12px 28px -6px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04)',
-                padding: '8px 16px 8px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                zIndex: 6,
-                boxSizing: 'border-box',
-                cursor: 'pointer',
-                transition: 'border-color 0.2s, box-shadow 0.2s',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Tiêu đề sơ đồ vòng tròn */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.6875rem',
-                  fontWeight: 800,
-                  color: '#1E293B',
-                  letterSpacing: '0.03em',
-                  zIndex: 4,
-                  userSelect: 'none',
-                }}
-              >
-                <RefreshCw size={12} color="#2563EB" />
-                CHU TRÌNH VÒNG TRÒN TỰ TRỊ TUẦN HOÀN (CLOCKWISE CLOSED-LOOP)
-              </div>
-
-              {/* Vùng Vẽ Vòng Tròn: Trung Tâm Knowledge Core + Quỹ Đạo Tuần Hoàn + 4 Trạm Quỹ Đạo */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  height: '190px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {/* SVG Vẽ Vòng Tròn Quỹ Đạo + Các Mũi Tên Cong + Hạt Ánh Sáng Di Chuyển Tuần Hoàn */}
-                <svg
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    pointerEvents: 'none',
-                    zIndex: 2,
-                  }}
-                  viewBox="0 0 788 190"
-                  preserveAspectRatio="xMidYMid meet"
-                >
-                  <defs>
-                    <marker id="circ-arrow-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#059669" />
-                    </marker>
-                    <marker id="circ-arrow-indigo" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#4F46E5" />
-                    </marker>
-                    <marker id="circ-arrow-amber" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#D97706" />
-                    </marker>
-                    <marker id="circ-arrow-sky" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#0284C7" />
-                    </marker>
-                    <marker id="circ-arrow-escalate" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#EA580C" />
-                    </marker>
-                    <linearGradient id="orbit-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#059669" stopOpacity="0.8" />
-                      <stop offset="33%" stopColor="#4F46E5" stopOpacity="0.8" />
-                      <stop offset="66%" stopColor="#D97706" stopOpacity="0.8" />
-                      <stop offset="100%" stopColor="#0284C7" stopOpacity="0.8" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Vòng tròn quỹ đạo nền (Đường ray đứt nét) tâm tại cx=394, cy=95, r=72 */}
-                  <circle cx="394" cy="95" r="72" fill="none" stroke="#E2E8F0" strokeWidth="8" strokeDasharray="6 4" />
-                  <circle cx="394" cy="95" r="72" fill="none" stroke="url(#orbit-grad)" strokeWidth="2.2" opacity="0.75" />
-
-                  {/* 4 Mũi tên uốn cong theo chiều kim đồng hồ quanh vòng tròn */}
-                  {/* Cung 1 (Đỉnh: Pha 01 ➔ Pha 02) */}
-                  <path d="M 344 44 A 72 72 0 0 1 444 44" fill="none" stroke="#059669" strokeWidth="2.5" markerEnd="url(#circ-arrow-green)" />
-                  {/* Cung 2 (Phải: Pha 02 ➔ Pha 03) */}
-                  <path d="M 462 56 A 72 72 0 0 1 462 134" fill="none" stroke="#4F46E5" strokeWidth="2.5" markerEnd="url(#circ-arrow-indigo)" />
-                  {/* Cung 3 (Đáy: Pha 03 ➔ Pha 04) */}
-                  <path d="M 444 146 A 72 72 0 0 1 344 146" fill="none" stroke="#D97706" strokeWidth="2.5" markerEnd="url(#circ-arrow-amber)" />
-                  {/* Cung 4 (Trái: Pha 04 ➔ Pha 01 - Nhánh Tự Đóng) */}
-                  <path d="M 326 134 A 72 72 0 0 1 326 56" fill="none" stroke="#0284C7" strokeWidth="2.5" markerEnd="url(#circ-arrow-sky)" />
-
-                  {/* Cung hồi tiếp leo thang nội bộ (Pha 04 ➔ Pha 02: Khi chưa đạt SLA) */}
-                  <path d="M 346 125 Q 394 95 442 65" fill="none" stroke="#EA580C" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#circ-arrow-escalate)" />
-
-                  {/* 4 Hạt ánh sáng chuyển động tuần hoàn liên tục theo đường tròn quỹ đạo */}
-                  <circle r="3.5" fill="#059669">
-                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" />
-                  </circle>
-                  <circle r="3.5" fill="#4F46E5">
-                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" begin="1.5s" />
-                  </circle>
-                  <circle r="3.5" fill="#D97706">
-                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" begin="3s" />
-                  </circle>
-                  <circle r="3.5" fill="#0284C7">
-                    <animateMotion path="M 394 23 A 72 72 0 1 1 393.9 23 Z" dur="6s" repeatCount="indefinite" begin="4.5s" />
-                  </circle>
-
-                  {/* 4 Đường gạch ngang định vị (Horizontal Guide Lines) từ 4 thẻ vươn ra 2 bên */}
-                  <line x1="0" y1="38" x2="154" y2="38" stroke="#86EFAC" strokeWidth="1.8" strokeDasharray="4 3" />
-                  <circle cx="6" cy="38" r="2.5" fill="#86EFAC" />
-
-                  <line x1="0" y1="134" x2="154" y2="134" stroke="#7DD3FC" strokeWidth="1.8" strokeDasharray="4 3" />
-                  <circle cx="6" cy="134" r="2.5" fill="#7DD3FC" />
-
-                  <line x1="634" y1="38" x2="788" y2="38" stroke="#A5B4FC" strokeWidth="1.8" strokeDasharray="4 3" />
-                  <circle cx="782" cy="38" r="2.5" fill="#A5B4FC" />
-
-                  <line x1="634" y1="134" x2="788" y2="134" stroke="#FCD34D" strokeWidth="1.8" strokeDasharray="4 3" />
-                  <circle cx="782" cy="134" r="2.5" fill="#FCD34D" />
-                </svg>
-
-                {/* Lõi Tri Thức Trung Tâm (Center Knowledge & SLA Core) */}
-                <div
-                  data-inspector-trigger="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleInspectorClick(e, 'closedloop:overview');
-                  }}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    handleInspectorHover(e, 'closedloop:overview');
-                  }}
-                  onMouseLeave={() => handleInspectorLeave('closedloop:overview')}
-                  style={{
-                    position: 'absolute',
-                    left: 'calc(50% - 37px)',
-                    top: '58px',
-                    width: '74px',
-                    height: '74px',
-                    borderRadius: '50%',
-                    backgroundColor: '#FFFFFF',
-                    border: '2.5px solid #2563EB',
-                    boxShadow: '0 4px 16px rgba(37, 99, 235, 0.22)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 3,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    userSelect: 'none',
-                  }}
-                >
-                  <RefreshCw size={15} className="animate-spin" style={{ animationDuration: '6s', color: '#2563EB' }} />
-                  <div style={{ fontSize: '0.52rem', fontWeight: 800, color: '#1E40AF', marginTop: '2px', lineHeight: 1.1 }}>
-                    KNOWLEDGE
-                  </div>
-                  <div style={{ fontSize: '0.45rem', fontWeight: 700, color: '#64748B', lineHeight: 1 }}>
-                    & SLA CORE
-                  </div>
-                  <div style={{ fontSize: '0.42rem', fontWeight: 800, color: '#059669', backgroundColor: '#ECFDF5', padding: '1px 4px', borderRadius: '3px', marginTop: '2px' }}>
-                    MAPE-K
-                  </div>
-                </div>
-
-                {/* 4 Trạm Vòng Tròn (Orbital Stations) đặt ở 4 góc xung quanh đường tròn */}
-                {/* Trạm 1: Top-Left (Monitor) */}
-                <div
-                  data-inspector-trigger="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleInspectorClick(e, 'closedloop:monitor');
-                  }}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    handleInspectorHover(e, 'closedloop:monitor');
-                  }}
-                  onMouseLeave={() => handleInspectorLeave('closedloop:monitor')}
-                  style={{
-                    position: 'absolute',
-                    left: 'calc(50% - 240px)',
-                    top: '20px',
-                    width: '155px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-                    border: '1.5px solid #86EFAC',
-                    borderRadius: '9px',
-                    padding: '5px 9px',
-                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    zIndex: 3,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Activity size={13} color="#059669" />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#059669' }}>01. MONITOR</div>
-                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#14532D', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Viễn Trắc 60s</div>
-                  </div>
-                </div>
-
-                {/* Trạm 2: Top-Right (Analyze) */}
-                <div
-                  data-inspector-trigger="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleInspectorClick(e, 'closedloop:analyze');
-                  }}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    handleInspectorHover(e, 'closedloop:analyze');
-                  }}
-                  onMouseLeave={() => handleInspectorLeave('closedloop:analyze')}
-                  style={{
-                    position: 'absolute',
-                    left: 'calc(50% + 85px)',
-                    top: '20px',
-                    width: '155px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-                    border: '1.5px solid #A5B4FC',
-                    borderRadius: '9px',
-                    padding: '5px 9px',
-                    boxShadow: '0 2px 8px rgba(79, 70, 229, 0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    zIndex: 3,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#E0E7FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Cpu size={13} color="#4F46E5" />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#4F46E5' }}>02. ANALYZE</div>
-                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Dự Báo & RCA</div>
-                  </div>
-                </div>
-
-                {/* Trạm 3: Bottom-Right (Plan & Execute) */}
-                <div
-                  data-inspector-trigger="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleInspectorClick(e, 'closedloop:plan_execute');
-                  }}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    handleInspectorHover(e, 'closedloop:plan_execute');
-                  }}
-                  onMouseLeave={() => handleInspectorLeave('closedloop:plan_execute')}
-                  style={{
-                    position: 'absolute',
-                    left: 'calc(50% + 85px)',
-                    top: '116px',
-                    width: '155px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-                    border: '1.5px solid #FCD34D',
-                    borderRadius: '9px',
-                    padding: '5px 9px',
-                    boxShadow: '0 2px 8px rgba(217, 119, 6, 0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    zIndex: 3,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Zap size={13} color="#D97706" />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#D97706' }}>03. PLAN & EXEC</div>
-                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#78350F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Policy & K8s Action</div>
-                  </div>
-                </div>
-
-                {/* Trạm 4: Bottom-Left (Verify & Feedback) */}
-                <div
-                  data-inspector-trigger="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleInspectorClick(e, 'closedloop:verify_feedback');
-                  }}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    handleInspectorHover(e, 'closedloop:verify_feedback');
-                  }}
-                  onMouseLeave={() => handleInspectorLeave('closedloop:verify_feedback')}
-                  style={{
-                    position: 'absolute',
-                    left: 'calc(50% - 240px)',
-                    top: '116px',
-                    width: '155px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-                    border: '1.5px solid #7DD3FC',
-                    borderRadius: '9px',
-                    padding: '5px 9px',
-                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    zIndex: 3,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <ShieldCheck size={13} color="#0284C7" />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#0284C7' }}>04. VERIFY</div>
-                    <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#0C4A6E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hậu Kiểm & Hồi Tiếp</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
+</>
         )}
       </div>
 

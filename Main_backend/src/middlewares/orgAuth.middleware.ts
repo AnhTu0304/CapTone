@@ -137,6 +137,13 @@ export const requireOrgRole = (...allowedRoles: OrganizationRoleCode[]) => {
         );
       }
 
+      // Tự động cho phép SUPER_ADMIN toàn quyền hoặc vai trò Quản trị viên/Chủ sở hữu
+      const user = (req as any).user;
+      const isSuperAdmin = user?.roles?.includes('SUPER_ADMIN') || user?.systemRoles?.includes('SUPER_ADMIN');
+      if (isSuperAdmin || orgMember.roleCode === 'ADMIN' || orgMember.roleCode === 'SME_OWNER') {
+        return next();
+      }
+
       const normalizedAllowed = allowedRoles.map((r) => r.trim().toUpperCase());
       if (!normalizedAllowed.includes(orgMember.roleCode.toUpperCase())) {
         await AuditService.recordFromRequest(req, {

@@ -607,18 +607,21 @@ class AgentService:
                 elif action_type in ["SCALE_REPLICAS", "SCALE_UP", "SCALE_DOWN", "SCALE_IN", "SCALE REPLICAS"]:
                     is_scale_down = ("DOWN" in action_type or "IN" in action_type)
                     explicit_rep = (cmd.params or {}).get("target_replicas") or (cmd.params or {}).get("replicas")
-                    if explicit_rep is not None:
-                        new_replicas = max(1, min(10, int(explicit_rep)))
-                    elif self.apps_v1 and not is_daemonset and not is_bare_pod:
+                    cur_rep = None
+                    if self.apps_v1 and not is_daemonset and not is_bare_pod:
                         try:
                             if is_statefulset:
                                 cur_obj = self.apps_v1.read_namespaced_stateful_set(name=target_name, namespace=namespace)
                             else:
                                 cur_obj = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
                             cur_rep = int(getattr(getattr(cur_obj, "spec", None), "replicas", None) or 1)
-                            new_replicas = max(1, cur_rep - 1) if is_scale_down else min(5, max(2, cur_rep + 1))
                         except Exception:
-                            new_replicas = 1 if is_scale_down else 2
+                            pass
+
+                    if explicit_rep is not None:
+                        new_replicas = max(1, min(10, int(explicit_rep)))
+                    elif cur_rep is not None:
+                        new_replicas = max(1, cur_rep - 1) if is_scale_down else min(5, max(2, cur_rep + 1))
                     else:
                         new_replicas = 1 if is_scale_down else 2
 
@@ -626,6 +629,8 @@ class AgentService:
                         _scale_workload(new_replicas)
                         details["strategy"] = "horizontal_scaling"
                         details["replicas"] = new_replicas
+                        if cur_rep is not None:
+                            details["current_replicas"] = cur_rep
                         msg_str = f"{workload_kind_label}/{target_name} scaled successfully to {new_replicas} replicas in '{namespace}'"
                         logger.info("✅ %s", msg_str)
                     else:

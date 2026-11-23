@@ -75,18 +75,21 @@ export class RuleEngineService {
     // 1. ANOMALY DETECTION (Deterministic Rule Evaluation)
     // =========================================================================
 
-    // Rule 1: High CPU + High Latency Saturation
-    if (metrics.cpu > th.cpuScaleThreshold && metrics.latency > th.latencyScaleThreshold) {
+    // Rule 1: High CPU + High Latency Saturation, or Latency Congestion (> 250ms with active CPU > 35%)
+    const isCpuLatencySaturation = (metrics.cpu > th.cpuScaleThreshold && metrics.latency > th.latencyScaleThreshold);
+    const isLatencyCongestion = (metrics.latency > 250.0 && metrics.cpu > 35.0);
+    if (isCpuLatencySaturation || isLatencyCongestion) {
       triggeredRules.push(
-        `Rule 1 [CPU+Latency]: cpu (${metrics.cpu.toFixed(1)}% > ${th.cpuScaleThreshold}%) and latency (${metrics.latency.toFixed(1)}ms > ${th.latencyScaleThreshold}ms)`
+        `Rule 1 [CPU+Latency]: cpu (${metrics.cpu.toFixed(1)}%) and latency (${metrics.latency.toFixed(1)}ms > 200ms)`
       );
       anomalies.push('CPU_LATENCY_SATURATION');
     }
 
-    // Rule 2: High Request Rate with low replicas
-    if (metrics.request_rate > th.trafficRateThreshold && metrics.replica_count <= th.trafficMaxReplicas) {
+    // Rule 2: High Request Rate with low replicas (Proactive scaling above 40 RPS)
+    const trafficThresh = 40.0;
+    if (metrics.request_rate > trafficThresh && metrics.replica_count <= th.trafficMaxReplicas) {
       triggeredRules.push(
-        `Rule 2 [Traffic Surge]: request_rate (${metrics.request_rate.toFixed(1)} req/s > ${th.trafficRateThreshold}) with replica count ${metrics.replica_count}`
+        `Rule 2 [Traffic Surge]: request_rate (${metrics.request_rate.toFixed(1)} req/s > ${trafficThresh}) with replica count ${metrics.replica_count}`
       );
       anomalies.push('TRAFFIC_SURGE');
     }
@@ -95,7 +98,7 @@ export class RuleEngineService {
     const hasOom = k8sText.includes('oomkilled') || k8sText.includes('out of memory');
     const isDbCacheWorkload = Boolean(
       service_id &&
-      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)/i.test(service_id.trim())
+      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd|cassandra|clickhouse|neo4j|couchdb|scylladb|database|db$|.*[-_]db)/i.test(service_id.trim())
     );
 
     if (hasOom) {
@@ -105,9 +108,9 @@ export class RuleEngineService {
       anomalies.push('MEMORY_PRESSURE');
     } else if (metrics.ram > th.ramCriticalThreshold) {
       if (isDbCacheWorkload && !active_pod_issue && restart_delta === 0) {
-        // WiredTiger / Buffer Pool Cache in database workloads stays ~96% by design without OOM
+        // WiredTiger / InnoDB / Shared Buffers Cache in database workloads stays ~96% by design without OOM
         triggeredRules.push(
-          `Rule 3 [Database Cache]: ram (${metrics.ram.toFixed(1)}%) is active buffer cache (WiredTiger), operating safely`
+          `Rule 3 [Database Cache]: ram (${metrics.ram.toFixed(1)}%) is active buffer cache (Buffer Pool/Page Cache), operating safely`
         );
       } else {
         triggeredRules.push(

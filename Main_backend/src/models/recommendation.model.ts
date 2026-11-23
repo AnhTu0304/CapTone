@@ -617,10 +617,13 @@ export class RecommendationModel {
         h.result,
         h.created_at,
         i.title AS incident_title,
-        i.severity AS incident_severity
+        i.severity AS incident_severity,
+        r.reasoning AS reasoning,
+        r.recommendation AS recommendation_text
       FROM healing_actions h
       LEFT JOIN healing_action_types t ON t.id = h.action_type_id
       LEFT JOIN incidents i ON i.id = h.incident_id
+      LEFT JOIN ai_recommendations r ON r.id = h.recommendation_id
       ${whereClause}
       ORDER BY h.created_at DESC
       LIMIT $${idx} OFFSET $${idx + 1};

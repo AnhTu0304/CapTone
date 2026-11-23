@@ -60,13 +60,13 @@ export const ApprovalsPage = () => {
   const [approvedIds, setApprovedIds] = useState([]);
   const [rejectedIds, setRejectedIds] = useState([]);
 
-  // Lựa chọn 1: Chế độ Tự Động Hủy Khi Dịch Vụ Tự Lành (100% Tự động)
+  // Chế độ Tự Động Hủy Yêu Cầu Quá Hạn (>15m) hoặc khi sự cố đã đóng
   const [isAutoDismissEnabled, setIsAutoDismissEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem('captone_hitl_auto_dismiss');
-      return saved !== null ? saved === 'true' : true;
+      return saved !== null ? saved === 'true' : false;
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -292,7 +292,7 @@ export const ApprovalsPage = () => {
           isWorkloadSelfHealed = true;
         }
 
-        const shouldDismiss = isAutoDismissEnabled && (isWorkloadSelfHealed || isStale || isIncidentResolved);
+        const shouldDismiss = isAutoDismissEnabled && (isStale || isIncidentResolved);
 
         if (shouldDismiss) {
           const actionId = item.healing_action_id || item.id;
@@ -1162,7 +1162,7 @@ export const ApprovalsPage = () => {
                               }}
                             >
                               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isHealthy ? '#10B981' : '#EF4444' }} />
-                              <span>{isHealthy ? `Đã tự ổn định (${matched.healthy}/${matched.total} Pods Ready)` : `Đang suy giảm (${matched.healthy}/${matched.total} Pods Ready)`}</span>
+                              <span>{isHealthy ? `Trạng thái: ${matched.healthy}/${matched.total} Pods Ready` : `Cảnh báo: ${matched.healthy}/${matched.total} Pods Ready`}</span>
                             </span>
                           );
                         }
@@ -1360,8 +1360,10 @@ export const ApprovalsPage = () => {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <div style={{ fontSize: '0.71rem', color: '#64748B', fontStyle: 'italic' }}>
-                            ⚡ Nếu dịch vụ tự ổn định (tự lành), hệ thống sẽ tự động hủy lệnh này
+                          <div style={{ fontSize: '0.71rem', color: isAutoDismissEnabled ? '#D97706' : '#64748B', fontStyle: 'italic' }}>
+                            {isAutoDismissEnabled
+                              ? '⚡ Chế độ tự hủy đang bật: Sẽ tự thu hồi nếu sự cố tự phục hồi'
+                              : '🛡️ Đang giữ lệnh chờ ký duyệt (Chế độ thủ công)'}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền phê duyệt HITL">

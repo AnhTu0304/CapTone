@@ -630,11 +630,11 @@ export class TelemetryPipelineService {
       ].includes(rawAction);
 
       // Rào chắn bảo vệ hạ tầng hệ thống Kubernetes (K8s System Infrastructure Safety Guard):
-      // Các Namespace lõi hệ thống ('kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage')
-      // hoặc các thành phần mạng / giám sát hạ tầng DaemonSet ('kindnet', 'kube-proxy', 'prometheus-node-exporter')
+      // Các Namespace lõi hệ thống ('kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage', 'selfheal-system')
+      // hoặc các thành phần mạng / giám sát hạ tầng DaemonSet ('kindnet', 'kube-proxy', 'prometheus-node-exporter', 'selfheal-agent')
       // TUYỆT ĐỐI NGHIÊM CẤM tự động can thiệp (Autonomous Execution) như SCALE_REPLICAS hay RESTART_POD.
       // Mọi can thiệp hạ tầng BẮT BUỘC phải chuyển qua Cổng Phê Duyệt HITL có kỹ sư xác nhận.
-      const isProtectedSystemNamespace = ['kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage'].includes(
+      const isProtectedSystemNamespace = ['kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage', 'selfheal-system'].includes(
         String(targetNamespace || '').toLowerCase()
       );
       const isSystemInfrastructureWorkload = [
@@ -647,12 +647,96 @@ export class TelemetryPipelineService {
         'kube-controller-manager-minikube',
         'kube-scheduler-minikube',
         'storage-provisioner',
+        'selfheal-agent',
       ].includes(canonicalTargetName.toLowerCase());
       const isProtectedSystemTarget = isProtectedSystemNamespace || isSystemInfrastructureWorkload;
 
-      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or HITL switch enabled, or confidence < threshold, or StatefulSet Primary DB, or Mandatory HITL action, or Protected System Target)
-      if (!isAuto || Boolean(policy.requires_approval) || isStatefulPrimaryDestructive || isMandatoryHitlAction || isProtectedSystemTarget) {
-        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' action '${policy.action_code || recAction}' requires HITL approval (Protected System: ${isProtectedSystemTarget}, Mandatory HITL: ${isMandatoryHitlAction}, Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
+      // ----------------------------------------------------
+      // Rào chắn Bán kính ảnh hưởng (Blast Radius Safety Guard):
+      // Giới hạn tỷ lệ Pods bị can thiệp đồng thời trong cùng một Namespace.
+      // Nếu can thiệp thêm làm tỷ lệ vượt quá blastRadiusThreshold (mặc định 45%), bắt buộc chuyển sang Cổng Phê Duyệt HITL!
+      // ----------------------------------------------------
+      let isBlastRadiusExceeded = false;
+      let blastRadiusInfo = {
+        totalPods: 0,
+        alreadyAffected: 0,
+        newAffectedCount: 0,
+        ratioPercent: 0,
+        threshold: 45,
+      };
+      let clusterGlobalMode = 'AUTONOMOUS';
+
+      try {
+        let guardThreshold = 45;
+        let restartWindowMin = 15;
+        if (policy.organization_id) {
+          const guardRes = await pool.query(
+            `SELECT blast_radius_threshold, restart_time_window, max_restarts, global_mode 
+             FROM cluster_safety_guards 
+             WHERE organization_id = $1 
+             ORDER BY cluster_id NULLS LAST 
+             LIMIT 1;`,
+            [policy.organization_id]
+          );
+          if (guardRes.rows.length > 0) {
+            guardThreshold = Number(guardRes.rows[0].blast_radius_threshold) || 45;
+            restartWindowMin = Number(guardRes.rows[0].restart_time_window) || 15;
+            clusterGlobalMode = String(guardRes.rows[0].global_mode || 'AUTONOMOUS').toUpperCase();
+          }
+        }
+
+        const totalPodsRes = await pool.query(
+          `SELECT COUNT(p.id) AS total_pods 
+           FROM pods p 
+           JOIN namespaces n ON p.namespace_id = n.id 
+           WHERE LOWER(n.name) = LOWER($1) 
+             AND p.deleted_at IS NULL;`,
+          [targetNamespace]
+        );
+        const totalPodsInNs = parseInt(totalPodsRes.rows[0]?.total_pods || '0', 10);
+
+        const recentInterventionsRes = await pool.query(
+          `SELECT COUNT(DISTINCT COALESCE(ha.result->'params'->>'pod_name', ha.target_name)) AS affected_count
+           FROM healing_actions ha
+           WHERE (
+               LOWER(COALESCE(ha.result->>'namespace', '')) = LOWER($1)
+               OR LOWER(COALESCE(ha.result->'params'->>'namespace', '')) = LOWER($1)
+               OR LOWER(COALESCE(ha.target_name, '')) = LOWER($2)
+           )
+           AND ha.created_at >= NOW() - ($3 || ' minutes')::interval
+           AND ha.execution_status IN ('RUNNING', 'SUCCEEDED', 'PENDING');`,
+          [targetNamespace, canonicalTargetName, restartWindowMin]
+        );
+        const alreadyAffected = parseInt(recentInterventionsRes.rows[0]?.affected_count || '0', 10);
+        const newAffectedCount = alreadyAffected + 1;
+
+        if (totalPodsInNs > 0) {
+          const ratio = (newAffectedCount / totalPodsInNs) * 100;
+          blastRadiusInfo = {
+            totalPods: totalPodsInNs,
+            alreadyAffected,
+            newAffectedCount,
+            ratioPercent: Math.round(ratio),
+            threshold: guardThreshold,
+          };
+
+          if (totalPodsInNs >= 2 && ratio > guardThreshold) {
+            isBlastRadiusExceeded = true;
+            console.warn(`🛡️ [SafetyGuard:BlastRadius] VƯỢT NGƯỠNG BÁN KÍNH ẢNH HƯỞNG: ${newAffectedCount}/${totalPodsInNs} Pods (${ratio.toFixed(1)}% > ${guardThreshold}%) trong Namespace '${targetNamespace}'. Bắt buộc chuyển sang Cổng Phê Duyệt HITL!`);
+          }
+        }
+      } catch (brErr: any) {
+        console.warn('[TelemetryPipelineService] Lỗi tính toán Blast Radius:', brErr?.message || brErr);
+      }
+
+      // Case 2: Policy requires HITL confirmation (High/Critical risk in SUPERVISED mode, or AUDIT mode, or HITL switch enabled, or confidence < threshold, or StatefulSet Primary DB, or Mandatory HITL action, or Protected System Target, or Blast Radius Exceeded)
+      const isAuditMode = ['AUDIT', 'AUDIT_ONLY'].includes(clusterGlobalMode);
+      const isSupervisedMode = ['SUPERVISED', 'SEMI_AUTONOMOUS'].includes(clusterGlobalMode);
+      const isEffectiveHighRisk = effectiveRisk === 'HIGH' || effectiveRisk === 'CRITICAL';
+      const requiresSupervisedHitl = isSupervisedMode && isEffectiveHighRisk;
+
+      if (isAuditMode || requiresSupervisedHitl || !isAuto || Boolean(policy.requires_approval) || (confidence < threshold) || isStatefulPrimaryDestructive || isMandatoryHitlAction || isProtectedSystemTarget || isBlastRadiusExceeded) {
+        console.log(`🛡️ [PolicyEngine] Policy '${policy.policy_name}' action '${policy.action_code || recAction}' requires HITL approval (BlastRadiusExceeded: ${isBlastRadiusExceeded}, Protected System: ${isProtectedSystemTarget}, Mandatory HITL: ${isMandatoryHitlAction}, Mode: ${policy.execution_mode}, HITL: ${policy.requires_approval}, Confidence: ${confidence.toFixed(2)}/${threshold.toFixed(2)}). Routing to HITL Approval Gate.`);
         recordRemediationAction(policy.action_code || 'RESTART_POD', 'hitl_pending');
 
         const hitlActInsert = await pool.query(
@@ -695,6 +779,8 @@ export class TelemetryPipelineService {
         if (pendingActionId) {
           const hitlReason = isProtectedSystemTarget
             ? `Dịch vụ ${canonicalTargetName} thuộc hạ tầng hệ thống Kubernetes (${targetNamespace}). Để đảm bảo an toàn tuyệt đối, hành động ${policy.action_name} (${policy.action_code}) BẮT BUỘC phải qua Cổng Phê Duyệt (HITL) có kỹ sư kiểm tra thủ công, nghiêm cấm AI tự động can thiệp.`
+            : isBlastRadiusExceeded
+            ? `Bán kính ảnh hưởng (Blast Radius) vượt ngưỡng an toàn: Can thiệp thêm sẽ làm ảnh hưởng ${blastRadiusInfo.newAffectedCount}/${blastRadiusInfo.totalPods} Pods (${blastRadiusInfo.ratioPercent}% > ${blastRadiusInfo.threshold}%) trong Namespace '${targetNamespace}'. Rào chắn an toàn đã tự động chuyển sang Cổng Phê Duyệt (HITL) có kỹ sư thẩm định, ngăn ngừa nguy cơ sập toàn bộ dịch vụ (downtime).`
             : isMandatoryHitlAction
             ? `Hành động ${policy.action_name} (${policy.action_code}) có mức độ rủi ro cao (${effectiveRisk}), can thiệp trực tiếp vào phiên bản phát hành/hạ tầng nên BẮT BUỘC phải qua Cổng Phê Duyệt (HITL) có con người xác nhận, nghiêm cấm AI tự động thi hành.`
             : confidence < threshold
@@ -833,10 +919,13 @@ export class TelemetryPipelineService {
       });
 
       // Rào chắn bảo vệ tầng cuối cùng (Fail-safe Hard Guard):
-      // Ngăn chặn tuyệt đối việc phát lệnh tự động đối với các hành động rủi ro cao (Rollback, Drain Node).
+      // Ngăn chặn tuyệt đối việc phát lệnh tự động đối với các hành động rủi ro cao (Rollback, Drain Node) hoặc vượt Bán kính ảnh hưởng.
       const candidateAction = String(policy.action_code || recAction || '').toUpperCase().replace(/[\s-]+/g, '_');
-      if (['ROLLBACK_DEPLOYMENT', 'ROLLBACK', 'ROLLBACK_DEPLOY', 'DRAIN_NODE', 'DRAIN'].includes(candidateAction)) {
-        console.warn(`🛑 [SafetyGuard] CHẶN ĐỨNG THỰC THI TỰ ĐỘNG: Hành động '${policy.action_code || candidateAction}' bắt buộc 100% phải qua Cổng Phê Duyệt HITL của con người! Huỷ lệnh Autonomous dispatch.`);
+      if (['ROLLBACK_DEPLOYMENT', 'ROLLBACK', 'ROLLBACK_DEPLOY', 'DRAIN_NODE', 'DRAIN'].includes(candidateAction) || isBlastRadiusExceeded) {
+        const blockReason = isBlastRadiusExceeded
+          ? `Bán kính ảnh hưởng vượt ngưỡng an toàn (${blastRadiusInfo.newAffectedCount}/${blastRadiusInfo.totalPods} Pods, ${blastRadiusInfo.ratioPercent}% > ${blastRadiusInfo.threshold}%). Bắt buộc phải qua Cổng HITL có kỹ sư duyệt.`
+          : `Hành động ${policy.action_code || candidateAction} là hành động rủi ro cao, bắt buộc phải duyệt qua Cổng HITL (Human-In-The-Loop) của kỹ sư. Không cho phép tự động thi hành.`;
+        console.warn(`🛑 [SafetyGuard] CHẶN ĐỨNG THỰC THI TỰ ĐỘNG: ${blockReason}`);
         await pool.query(
           `UPDATE healing_actions 
            SET execution_status = 'CANCELLED',
@@ -846,7 +935,7 @@ export class TelemetryPipelineService {
           [
             JSON.stringify({
               status: 'BLOCKED_BY_SAFETY_GUARD',
-              reason: `Hành động ${policy.action_code || candidateAction} là hành động rủi ro cao, bắt buộc phải duyệt qua Cổng HITL (Human-In-The-Loop) của kỹ sư. Không cho phép tự động thi hành.`,
+              reason: blockReason,
               timestamp: new Date().toISOString(),
             }),
             actionId,

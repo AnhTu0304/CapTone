@@ -492,11 +492,18 @@ class CauseEvaluator:
                 for r in prediction.detected_risks
             )
         )
-        has_high_cpu = (EvidenceType.HIGH_CPU_USAGE in ev_types) or (has_cpu_overload_pred and cpu_val is not None and cpu_val >= 50.0)
-        has_normal_cpu = EvidenceType.NORMAL_CPU_USAGE in ev_types
-        has_high_latency = EvidenceType.HIGH_LATENCY in ev_types
+        has_high_latency = (
+            EvidenceType.HIGH_LATENCY in ev_types
+            or (payload and payload.metrics and payload.metrics.latency >= 250.0)
+        )
+        has_high_cpu = (
+            (EvidenceType.HIGH_CPU_USAGE in ev_types)
+            or (has_cpu_overload_pred and cpu_val is not None and cpu_val >= 38.0)
+            or (cpu_val is not None and cpu_val >= 38.0 and has_high_latency)
+        )
+        has_normal_cpu = EvidenceType.NORMAL_CPU_USAGE in ev_types and not has_high_cpu
 
-        is_cpu_low = (has_normal_cpu and not has_cpu_overload_pred) or (cpu_val is not None and cpu_val < 50.0 and not has_cpu_overload_pred)
+        is_cpu_low = (has_normal_cpu and not has_cpu_overload_pred and not has_high_latency) or (cpu_val is not None and cpu_val < 35.0 and not has_cpu_overload_pred and not has_high_latency)
 
         if has_high_cpu and not is_cpu_low:
             for_items = [e.description for e in valid_evs if e.evidence_type == EvidenceType.HIGH_CPU_USAGE]
@@ -504,18 +511,20 @@ class CauseEvaluator:
                 for_items = [f"Mức sử dụng CPU bão hòa ({cpu_val:.1f}%)" + (" kết hợp mô hình AI dự báo quá tải CPU" if has_cpu_overload_pred else "")]
             elif has_cpu_overload_pred:
                 for_items.append("Mô hình học sâu AI GRU dự báo rủi ro bão hòa CPU (CPU_OVERLOAD)")
+            if has_high_latency and payload and payload.metrics:
+                for_items.append(f"Độ trễ xử lý dịch vụ tăng vọt ({payload.metrics.latency:.1f}ms > 250ms), gây nghẽn kết nối mạng")
             return CauseEvaluationResult(
                 cause_code="cpu_saturation",
                 cause_label=self.CAUSE_LABELS["cpu_saturation"],
                 cause_label_vi=self.CAUSE_LABELS_VI["cpu_saturation"],
                 evidence_status="PROBABLE",
-                confidence=0.78,
+                confidence=0.85,
                 evidence_for=for_items,
                 evidence_against=[],
                 missing_evidence=["Cần kiểm tra thêm số liệu CPU Throttling chi tiết"],
                 related_risks=related_risks,
                 symptoms=symptoms,
-                explanation="Mức sử dụng vi xử lý CPU vượt ngưỡng bão hòa an toàn (>= 90%).",
+                explanation="Mức sử dụng CPU bão hòa kết hợp độ trễ mạng gia tăng; ứng dụng chạm ngưỡng năng lực phục vụ.",
             )
 
         # ----------------------------------------------------
@@ -523,7 +532,7 @@ class CauseEvaluator:
         # ----------------------------------------------------
         has_high_req_rate = (
             EvidenceType.HIGH_REQUEST_RATE in ev_types
-            or (payload and payload.metrics and payload.metrics.request_rate >= 900.0)
+            or (payload and payload.metrics and payload.metrics.request_rate >= 40.0)
         )
         if has_high_req_rate:
             for_items = [
@@ -532,12 +541,14 @@ class CauseEvaluator:
             ]
             if not for_items and payload and payload.metrics:
                 for_items = [f"Lưu lượng yêu cầu cao đột biến: {payload.metrics.request_rate:.1f} req/s"]
+            if has_high_latency and payload and payload.metrics:
+                for_items.append(f"Độ trễ mạng tăng cao ({payload.metrics.latency:.1f}ms) do hàng đợi kết nối bị ứ đọng")
             return CauseEvaluationResult(
                 cause_code="traffic_overload",
                 cause_label=self.CAUSE_LABELS["traffic_overload"],
                 cause_label_vi=self.CAUSE_LABELS_VI["traffic_overload"],
                 evidence_status="PROBABLE",
-                confidence=0.80,
+                confidence=0.85,
                 evidence_for=for_items,
                 evidence_against=[],
                 missing_evidence=["Chưa ghi nhận nghẽn băng thông mạng cụm"],
@@ -551,21 +562,20 @@ class CauseEvaluator:
         # ----------------------------------------------------
         if has_high_latency:
             for_items = [e.description for e in valid_evs if e.evidence_type == EvidenceType.HIGH_LATENCY]
-            against_items = []
-            if has_normal_cpu:
-                against_items.append("Mức sử dụng CPU ở ngưỡng bình thường (< 70%), loại trừ bão hòa CPU")
+            if not for_items and payload and payload.metrics:
+                for_items = [f"Độ trễ xử lý dịch vụ tăng cao ({payload.metrics.latency:.1f}ms > 250ms), gây nghẽn kết nối mạng"]
             return CauseEvaluationResult(
                 cause_code="service_degradation",
                 cause_label=self.CAUSE_LABELS["service_degradation"],
                 cause_label_vi=self.CAUSE_LABELS_VI["service_degradation"],
                 evidence_status="PROBABLE",
-                confidence=0.68,
+                confidence=0.82,
                 evidence_for=for_items,
-                evidence_against=against_items,
+                evidence_against=[],
                 missing_evidence=["Chưa có bằng chứng nghẽn cơ sở dữ liệu hoặc phụ thuộc thượng nguồn"],
                 related_risks=related_risks,
                 symptoms=symptoms,
-                explanation="Dịch vụ bị suy giảm hiệu năng xử lý (độ trễ phản hồi tăng cao).",
+                explanation="Dịch vụ bị suy giảm hiệu năng xử lý (độ trễ phản hồi tăng cao, nghẽn hàng đợi kết nối).",
             )
 
         # ----------------------------------------------------
@@ -627,7 +637,7 @@ class CauseEvaluator:
             or any(k in target_name_lower for k in ["node-exporter", "kube-proxy", "kindnet", "calico", "flannel", "cilium", "storage-provisioner"])
         )
 
-        if not has_any_critical_fault and not has_ai_overload_risk and not is_daemonset_workload and (has_scale_down_prediction or is_metrics_idle) and cur_replicas is not None and cur_replicas >= 2:
+        if not has_any_critical_fault and not has_ai_overload_risk and not is_daemonset_workload and (has_scale_down_prediction or is_metrics_idle) and cur_replicas is not None and cur_replicas > 2:
             scale_down_evs = []
             if has_scale_down_prediction:
                 scale_down_evs.append("Mô hình AI 7-Heads dự báo cơ hội thu hẹp Pod dư thừa (SCALE_DOWN_CANDIDATE)")

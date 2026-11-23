@@ -597,37 +597,63 @@ export class AiService {
           if (restartCount > 0) metricParts.push(`Restart: ${restartCount} lần`);
 
           const telemetrySnapshot = `CPU: ${cpuVal}%, RAM: ${ramVal}%, Restart: ${restartCount}`;
-          const reasonStr = metricParts.length > 0
-            ? `vẫn còn bất thường (${metricParts.join(', ')}; ${telemetrySnapshot})`
-            : `chưa ổn định hoàn toàn theo chu kỳ kiểm tra (${telemetrySnapshot})`;
-
-          const failMsg = `Hậu kiểm thất bại (Post-Action Verification Failed): Sau khi chạy ${unv.action_code || 'lệnh K8s'}, dịch vụ ${input.service_id} ${reasonStr}.`;
+          const isHealthy = metricParts.length === 0;
           const actCompletedAt = unv.completed_at ? new Date(unv.completed_at) : null;
-          const actualFailDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
-          await pool.query(
-            `INSERT INTO recovery_verifications (
-               healing_action_id, verification_type, status_before, status_after,
-               verification_result, verification_details, verified_at, duration_ms
-             ) VALUES (
-               $1, 'K8S_POST_HEALING_PROBE', $2::jsonb, $3::jsonb,
-               false, $4::jsonb, NOW(), $5
-             );`,
-            [
-              unv.id,
-              JSON.stringify({ health: 'DEGRADED' }),
-              JSON.stringify({ health: 'STILL_DEGRADED', metrics: input.metrics }),
-              JSON.stringify({ status: 'VERIFICATION_FAILED', message: failMsg, elapsed_since_completion_ms: actualFailDurationMs }),
-              actualFailDurationMs,
-            ]
-          ).catch(() => {});
-          await pool.query(
-            `UPDATE healing_actions
-             SET error_message = $2,
-                 result = jsonb_set(COALESCE(result, '{}'::jsonb), '{verification_status}', '"FAILED"'::jsonb)
-             WHERE id = $1;`,
-            [unv.id, failMsg]
-          ).catch(() => {});
-          console.log(`⚠️ [PostActionVerification] Action ${unv.id} (${unv.action_code}) on '${input.service_id}' FAILED post-action verification. Escalating in Re-RCA...`);
+          const actualDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
+
+          if (isHealthy) {
+            const passMsg = `Hậu kiểm thành công (Post-Action Verification Passed): Dịch vụ ${input.service_id} đã ổn định hoàn toàn (${telemetrySnapshot}).`;
+            await pool.query(
+              `INSERT INTO recovery_verifications (
+                 healing_action_id, verification_type, status_before, status_after,
+                 verification_result, verification_details, verified_at, duration_ms
+               ) VALUES (
+                 $1, 'K8S_POST_HEALING_PROBE', $2::jsonb, $3::jsonb,
+                 true, $4::jsonb, NOW(), $5
+               );`,
+              [
+                unv.id,
+                JSON.stringify({ health: 'DEGRADED' }),
+                JSON.stringify({ health: 'HEALTHY', metrics: input.metrics }),
+                JSON.stringify({ status: 'VERIFIED_HEALTHY', message: passMsg, elapsed_since_completion_ms: actualDurationMs }),
+                actualDurationMs,
+              ]
+            ).catch(() => {});
+            await pool.query(
+              `UPDATE healing_actions
+               SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{verification_status}', '"VERIFIED"'::jsonb)
+               WHERE id = $1;`,
+              [unv.id]
+            ).catch(() => {});
+            console.log(`✅ [PostActionVerification] Action ${unv.id} (${unv.action_code}) on '${input.service_id}' PASSED post-action verification.`);
+          } else {
+            const reasonStr = `vẫn còn bất thường (${metricParts.join(', ')}; ${telemetrySnapshot})`;
+            const failMsg = `Hậu kiểm thất bại (Post-Action Verification Failed): Sau khi chạy ${unv.action_code || 'lệnh K8s'}, dịch vụ ${input.service_id} ${reasonStr}.`;
+            await pool.query(
+              `INSERT INTO recovery_verifications (
+                 healing_action_id, verification_type, status_before, status_after,
+                 verification_result, verification_details, verified_at, duration_ms
+               ) VALUES (
+                 $1, 'K8S_POST_HEALING_PROBE', $2::jsonb, $3::jsonb,
+                 false, $4::jsonb, NOW(), $5
+               );`,
+              [
+                unv.id,
+                JSON.stringify({ health: 'DEGRADED' }),
+                JSON.stringify({ health: 'STILL_DEGRADED', metrics: input.metrics }),
+                JSON.stringify({ status: 'VERIFICATION_FAILED', message: failMsg, elapsed_since_completion_ms: actualDurationMs }),
+                actualDurationMs,
+              ]
+            ).catch(() => {});
+            await pool.query(
+              `UPDATE healing_actions
+               SET error_message = $2,
+                   result = jsonb_set(COALESCE(result, '{}'::jsonb), '{verification_status}', '"FAILED"'::jsonb)
+               WHERE id = $1;`,
+              [unv.id, failMsg]
+            ).catch(() => {});
+            console.log(`⚠️ [PostActionVerification] Action ${unv.id} (${unv.action_code}) on '${input.service_id}' FAILED post-action verification. Escalating in Re-RCA...`);
+          }
         }
 
         const prevActionQuery = `
@@ -755,9 +781,12 @@ export class AiService {
             }
           }
           const blockedActions: string[] = [];
+          const isCurrentlyHealthy = Number(input.metrics.cpu ?? 0) < 60 && Number((input.metrics as any).http_5xx_rate ?? 0) === 0;
           for (const r of [...actRes.rows].reverse()) {
             const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
             if (isFailed && r.action_code) {
+              // Never block SCALE_REPLICAS if current metrics are healthy (safe scale-down scenario)
+              if (r.action_code === 'SCALE_REPLICAS' && isCurrentlyHealthy) continue;
               if (!blockedActions.includes(r.action_code)) {
                 blockedActions.push(r.action_code);
               }

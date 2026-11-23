@@ -138,7 +138,11 @@ class PodCapacityAnalyzer:
                 and (req_rate is None or req_rate < 10.0)
             )
 
-            is_overloaded = (is_high_cpu or (req_rate is not None and req_rate >= self.high_request_rate_threshold)) and not has_explicit_good_health
+            is_overloaded = (
+                is_high_cpu
+                or (req_rate is not None and req_rate >= self.high_request_rate_threshold)
+                or (lat is not None and lat >= self.safe_latency_threshold_ms)
+            ) and not has_explicit_good_health
             is_idle = cpu < self.idle_cpu_threshold and (lat is None or lat < self.normal_latency_threshold_ms) and (req_rate is None or req_rate < self.high_request_rate_threshold)
 
             if is_overloaded:
@@ -392,7 +396,23 @@ class TwoTierScalingEngine:
                 node_assessment=node_assessment,
             )
 
-        # CASE 3: TIER 2 - Check Node Capacity when scaling is truly needed
+        # CASE 3: Check Max Replicas Ceiling (Anti-Scale Loop Guard)
+        if base_rep >= max_replicas:
+            return TwoTierScalingResult(
+                decision="MAX_REPLICAS_REACHED",
+                recommended_action="NO_ACTION",
+                target_replicas=base_rep,
+                destination_node=None,
+                reason=(
+                    f"Dịch vụ đã đạt số lượng bản sao tối đa cho phép ({base_rep}/{max_replicas} Pods). "
+                    f"Toàn bộ {pod_assessment.ready_count} Pods hiện có đang hoạt động hết công suất (Trung bình {pod_assessment.avg_cpu_pct:.1f}% CPU). "
+                    f"Hệ thống tự động kích hoạt Circuit Breaker, giữ nguyên {base_rep} replicas để bảo toàn tài nguyên cụm."
+                ),
+                pod_assessment=pod_assessment,
+                node_assessment=node_assessment,
+            )
+
+        # CASE 4: TIER 2 - Check Node Capacity when scaling is truly needed
         if node_assessment.can_fit_new_pod:
             new_rep = min(max_replicas, base_rep + 1)
             reason = (

@@ -120,11 +120,37 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
     (detail?.error_message?.match(/namespace "([^"]+)"/)?.[1]) ||
     'default';
 
+  const translateRcaText = (str) => {
+    if (!str) return '';
+    let res = String(str);
+    res = res.replace(/\bPROBABLE\b/g, 'Khả năng cao');
+    res = res.replace(/\bCONFIRMED\b/g, 'Đã xác nhận');
+    res = res.replace(/\bSUSPECTED\b/g, 'Nghi vấn');
+    res = res.replace(/\bCRITICAL\b/g, 'Khẩn cấp');
+    res = res.replace(/\bHIGH\b/g, 'Cao');
+    res = res.replace(/\bMEDIUM\b/g, 'Trung bình');
+    res = res.replace(/\bLOW\b/g, 'Thấp');
+    res = res.replace(/\bRESOLVED\b/g, 'Đã giải quyết');
+    res = res.replace(/\bVerification\b/g, 'Hậu kiểm');
+    res = res.replace(/\bverification\b/g, 'hậu kiểm');
+    return res;
+  };
+
   const formatActionMessageVi = (rawMsg) => {
     if (!rawMsg) {
       return `Đã thực thi thành công ${detail?.action_type_name || 'hành động'} trên dịch vụ "${cleanTargetName(detail?.target_name)}"`;
     }
     let text = String(rawMsg).trim();
+
+    if (text.includes('Safety Guard Blocked') || text.includes('protected Kubernetes system namespace')) {
+      const nsMatch = text.match(/Namespace '([^']+)'/i);
+      const ns = nsMatch ? nsMatch[1] : detectedNamespace;
+      return `Thực thi ${detail?.action_type_name || 'hành động'} trên dịch vụ "${cleanTargetName(detail?.target_name)}" thất bại: Rào chắn an toàn đã chặn do Namespace "${ns}" là hạ tầng hệ thống cốt lõi của Kubernetes, không được phép can thiệp tự động.`;
+    }
+
+    if (text.includes('User') && (text.includes('cannot') || text.includes('Forbidden') || text.includes('(403)'))) {
+      return `Thực thi ${detail?.action_type_name || 'hành động'} trên dịch vụ "${cleanTargetName(detail?.target_name)}" thất bại [Lỗi 403 Forbidden]: ServiceAccount thiếu quyền can thiệp RBAC trong Kubernetes.`;
+    }
 
     const scaleMatch = text.match(
       /(?:[a-z0-9_-]+\/)?([a-z0-9_-]+)\s+scaled\s+\((scale_up|scale_down)\)\s+successfully\s+from\s+(\w+)\s+to\s+(\d+)\s+replicas(?:\s+in\s+'([^']+)')?/i
@@ -392,7 +418,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                         color: detail.incident_severity === 'CRITICAL' ? '#DC2626' : '#D97706',
                       }}
                     >
-                      MỨC ĐỘ: {detail.incident_severity}
+                      MỨC ĐỘ: {detail.incident_severity === 'CRITICAL' ? 'Khẩn cấp' : detail.incident_severity === 'HIGH' ? 'Cao' : detail.incident_severity === 'MEDIUM' ? 'Trung bình' : 'Thấp'}
                     </span>
                   )}
                 </div>
@@ -413,7 +439,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                       color: detail?.incident_status === 'RESOLVED' ? '#059669' : (detail?.incident_status === 'INVESTIGATING' ? '#D97706' : '#DC2626'),
                       marginTop: '2px'
                     }}>
-                      {detail?.incident_status || (isSucceeded ? 'RESOLVED' : 'OPEN')}
+                      {detail?.incident_status === 'RESOLVED' ? 'Đã giải quyết' : detail?.incident_status === 'INVESTIGATING' ? 'Đang điều tra' : (detail?.incident_status === 'OPEN' ? 'Đang mở' : (detail?.incident_status || (isSucceeded ? 'Đã giải quyết' : 'Đang mở')))}
                     </div>
                   </div>
 
@@ -421,7 +447,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                     <div style={{ gridColumn: 'span 2' }}>
                       <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Phân tích nguyên nhân gốc (RCA):</div>
                       <div style={{ fontSize: '0.8125rem', color: '#334155', marginTop: '2px', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                        {detail.incident_description}
+                        {translateRcaText(detail.incident_description)}
                       </div>
                     </div>
                   )}
@@ -430,7 +456,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                     <div style={{ gridColumn: 'span 2' }}>
                       <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Lập luận khuyến nghị của AI:</div>
                       <div style={{ fontSize: '0.8125rem', color: '#334155', marginTop: '2px', backgroundColor: '#F0FDF4', padding: '8px 12px', borderRadius: '6px', border: '1px solid #DCFCE7' }}>
-                        {detail.recommendation_reasoning}
+                        {translateRcaText(detail.recommendation_reasoning)}
                       </div>
                     </div>
                   )}

@@ -63,7 +63,7 @@ export interface ServiceEvaluationResult {
 export class TelemetryAggregatorService {
   private static lastBatchRestartCountByService = new Map<string, number>();
   private static lastScaleDownTriggerMsByService = new Map<string, number>();
-  private static readonly SCALE_DOWN_COOLDOWN_MS = 180_000;
+  private static readonly SCALE_DOWN_COOLDOWN_MS = 60_000;
   private static readonly SCALE_DOWN_MIN_REPLICAS = 2;
 
   /**
@@ -686,8 +686,11 @@ export class TelemetryAggregatorService {
     let rcaTriggerReason: string | undefined = undefined;
 
     const isDbCacheService = Boolean(
-      serviceId &&
-      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)/i.test(serviceId.trim())
+      (serviceId &&
+        /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd|cassandra|clickhouse|neo4j|couchdb|scylladb|database|db$|.*[-_]db)/i.test(
+          serviceId.trim()
+        )) ||
+      String(rcaContext.workload_type || '').toLowerCase() === 'statefulset'
     );
     const isBenignDbCacheState = Boolean(
       isDbCacheService &&
@@ -718,7 +721,7 @@ export class TelemetryAggregatorService {
     const currentReplicasForScaleDown =
       rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1;
     const workloadTypeLower = String(rcaContext.workload_type || '').toLowerCase();
-    const isSystemNamespace = ['kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage'].includes(
+    const isSystemNamespace = ['kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage', 'selfheal-system'].includes(
       String(rcaContext.namespace || '').toLowerCase()
     );
     const isKnownDaemonSet = [
@@ -731,6 +734,7 @@ export class TelemetryAggregatorService {
       'kube-controller-manager-minikube',
       'kube-scheduler-minikube',
       'storage-provisioner',
+      'selfheal-agent',
     ].includes(serviceId.toLowerCase());
     const isDaemonSetOrStateful =
       workloadTypeLower === 'daemonset' ||
@@ -743,7 +747,7 @@ export class TelemetryAggregatorService {
     const isIdleHealthyMetrics =
       !rcaContext.active_pod_issue &&
       (latestMetrics.cpu ?? 0) < 35 &&
-      (latestMetrics.ram ?? 0) < 60 &&
+      (latestMetrics.ram ?? 0) < 85 &&
       (latestMetrics.http_5xx_rate ?? 0) < 1;
     const lastScaleDownAt =
       this.lastScaleDownTriggerMsByService.get(serviceId) || 0;
@@ -751,7 +755,7 @@ export class TelemetryAggregatorService {
       Date.now() - lastScaleDownAt >= this.SCALE_DOWN_COOLDOWN_MS;
 
     const canTriggerSafeScaleDown = Boolean(
-      scaleDownRisk &&
+      (scaleDownRisk || isIdleHealthyMetrics) &&
         isStatelessDeployment &&
         currentReplicasForScaleDown > this.SCALE_DOWN_MIN_REPLICAS &&
         isIdleHealthyMetrics &&
@@ -767,10 +771,10 @@ export class TelemetryAggregatorService {
     } else if (hasHighGruRisk) {
       rcaTriggered = true;
       rcaTriggerReason = `GRU forecasted primary risk '${gruPrediction?.primary_risk}' with confidence ${gruPrediction?.confidence_score.toFixed(2)}`;
-    } else if (canTriggerSafeScaleDown && scaleDownRisk) {
+    } else if (canTriggerSafeScaleDown) {
       rcaTriggered = true;
       this.lastScaleDownTriggerMsByService.set(serviceId, Date.now());
-      rcaTriggerReason = `GRU forecasted SCALE_DOWN_CANDIDATE (${((scaleDownRisk.confidence ?? 0.9) * 100).toFixed(1)}%) with ${currentReplicasForScaleDown} replicas > min ${this.SCALE_DOWN_MIN_REPLICAS} and idle metrics`;
+      rcaTriggerReason = `SRE Policy detected surplus replicas (${currentReplicasForScaleDown} > min ${this.SCALE_DOWN_MIN_REPLICAS}) with sustained idle load (CPU: ${(latestMetrics.cpu ?? 0).toFixed(1)}% < 35%)`;
     }
 
     let rcaDiagnosis: RCAResult | null = null;
@@ -807,9 +811,9 @@ export class TelemetryAggregatorService {
           riskType = undefined;
           confidence = undefined;
         }
-      } else if (canTriggerSafeScaleDown && scaleDownRisk) {
+      } else if (canTriggerSafeScaleDown) {
         riskType = 'SCALE_DOWN_CANDIDATE';
-        confidence = scaleDownRisk.confidence ?? gruPrediction?.confidence_score ?? 0.90;
+        confidence = scaleDownRisk?.confidence ?? gruPrediction?.confidence_score ?? 0.88;
       } else if (
         gruPrediction?.primary_risk &&
         gruPrediction.primary_risk !== 'NONE' &&

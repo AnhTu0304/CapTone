@@ -27,9 +27,9 @@ docker compose ps
 echo.
 echo =======================================================
 echo CAC DUONG DAN TRUY CAP:
-echo - Frontend:     http://localhost:3000
-echo - Main Backend: http://localhost:5000/api/v1/health
-echo - AI Backend:   http://localhost:8000/docs
+echo - Frontend UI:      http://localhost:3005 (hoac http://localhost:8090)
+echo - Main Backend API: http://localhost:5005/api/v1/health
+echo - AI Backend Docs:  http://localhost:8005/docs
 echo =======================================================
 echo.
 echo Nhan bat ky phim nao de dong cua so nay (cac dich vu van chay ngam)...

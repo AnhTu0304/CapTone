@@ -541,57 +541,14 @@ export const DashboardProvider = ({ children, onNavigate }) => {
         params.organization_id = orgId;
       }
 
-      // Lấy danh sách pods cụm để đối chiếu tự lành
-      let clusterPods = [];
-      if (clusterId && !clusterId.startsWith('org-')) {
-        try {
-          clusterPods = await podService.getPodsByCluster(clusterId);
-        } catch {
-          clusterPods = [];
-        }
-      }
-
       const data = await selfHealingService.getApprovals(params);
       const items = data?.items || (Array.isArray(data) ? data : []);
-      const now = Date.now();
-      let activeCount = 0;
-      for (const item of items) {
-        const reqTime = new Date(item.requested_at || 0).getTime();
-        const isStale = (now - reqTime) > 15 * 60 * 1000;
-        const isIncidentResolved = item.incident_status === 'RESOLVED' || item.incident_status === 'CLOSED';
-
-        const rawTarget = item.target_name || item.target_id || '';
-        const cleanTarget = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim().toLowerCase();
-
-        let isWorkloadSelfHealed = false;
-        if (Array.isArray(clusterPods) && clusterPods.length > 0 && cleanTarget) {
-          const matching = clusterPods.filter((p) => {
-            const pName = String(p.name || '').toLowerCase();
-            return pName.includes(cleanTarget);
-          });
-          if (matching.length > 0) {
-            const allRunning = matching.every((p) => {
-              const pStatus = String(p.status || p.phase || '').toLowerCase();
-              return pStatus === 'running' || pStatus === 'succeeded';
-            });
-            if (allRunning) isWorkloadSelfHealed = true;
-          }
-        }
-
-        if (isStale || isIncidentResolved || isWorkloadSelfHealed) {
-          const actionId = item.healing_action_id || item.id;
-          if (actionId) {
-            selfHealingService.rejectAction(
-              actionId,
-              isWorkloadSelfHealed
-                ? 'Hệ thống tự động hủy: Dịch vụ đã tự phục hồi ổn định (Auto-recovered)'
-                : 'Hệ thống tự động hủy: Yêu cầu đã quá hạn hoặc sự cố đã giải quyết'
-            ).catch(() => {});
-          }
-        } else {
-          activeCount++;
-        }
-      }
+      // Chỉ đếm các yêu cầu đang thực sự chờ phê duyệt (PENDING)
+      // Tuyệt đối không tự động hủy hành động từ Context polling
+      const activeCount = items.filter((item) => {
+        const itemStatus = String(item.status || item.approval_status || '').toUpperCase();
+        return itemStatus === 'PENDING';
+      }).length;
       setPendingApprovalsCount(activeCount);
     } catch {
       setPendingApprovalsCount(0);

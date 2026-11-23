@@ -135,15 +135,15 @@ export const AgentsPage = () => {
       return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
     }
     const { protocol, hostname, port } = window.location;
-    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '443') {
-      return `${protocol}//${hostname}:8100`;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '8090') {
+      return `${protocol}//${hostname}:8090`;
     }
     return window.location.origin;
   };
   const originUrl = getInstallerOrigin();
   const psCommand = `irm ${originUrl}/agent/install.ps1 | iex`;
   const bashCommand = `curl -sSL ${originUrl}/agent/install.sh | bash`;
-  const helmCommand = `helm repo add selfheal http://localhost/agent/charts
+  const helmCommand = `helm repo add selfheal ${originUrl}/agent/charts
 helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
   --namespace selfheal-system \\
   --create-namespace \\

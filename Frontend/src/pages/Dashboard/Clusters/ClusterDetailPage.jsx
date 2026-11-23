@@ -359,16 +359,13 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   };
 
   const getInstallerOrigin = () => {
-    if (typeof window === 'undefined') return 'http://localhost';
-    if (process.env.REACT_APP_INSTALLER_URL) {
-      return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
-    }
+    if (typeof window === 'undefined') return 'http://localhost:8090';
     if (process.env.REACT_APP_INSTALLER_URL) {
       return process.env.REACT_APP_INSTALLER_URL.replace(/\/+$/, '');
     }
     const { protocol, hostname, port } = window.location;
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '80' && port !== '8090') {
-      return `${protocol}//${hostname}`;
+      return `${protocol}//${hostname}:8090`;
     }
     return window.location.origin;
   };

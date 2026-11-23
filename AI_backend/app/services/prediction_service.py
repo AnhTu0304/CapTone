@@ -75,6 +75,8 @@ class PredictionService:
             self.thresholds = {risk: self.threshold for risk in self.risk_names}
         if any(not 0.0 <= value <= 1.0 for value in self.thresholds.values()):
             raise ValueError("Checkpoint per-risk thresholds must be between 0 and 1")
+        if "scale_down_candidate" in self.thresholds:
+            self.thresholds["scale_down_candidate"] = 0.70
         self.public_thresholds = {
             PUBLIC_RISKS[risk]: round(self.thresholds[risk], 4)
             for risk in self.risk_names
@@ -110,6 +112,14 @@ class PredictionService:
         for index, model_risk in enumerate(self.risk_names):
             confidence = float(probabilities[index])
             public_risk = PUBLIC_RISKS[model_risk]
+            if public_risk == "SCALE_DOWN_CANDIDATE" and sequence:
+                recent_pts = sequence[-min(6, len(sequence)):]
+                avg_cpu = sum(p.cpu for p in recent_pts) / len(recent_pts)
+                avg_5xx = sum(p.http_5xx_rate for p in recent_pts) / len(recent_pts)
+                last_rep = recent_pts[-1].replica_count
+                if last_rep > 2 and avg_cpu < 35.0 and avg_5xx < 1.0:
+                    surplus_ratio = min(1.0, (last_rep - 2) / 4.0)
+                    confidence = max(confidence, round(0.78 + 0.18 * surplus_ratio, 4))
             detected_risk = confidence >= self.thresholds[model_risk]
             risk_outputs[public_risk] = HeadPrediction(
                 confidence=round(confidence, 6),

@@ -66,6 +66,12 @@ healingActionRoutes.put('/policies/:id', devopsOrAdmin, HealingActionController.
 // PATCH /api/v1/healing/policies/:id/toggle - Toggle policy active state
 healingActionRoutes.patch('/policies/:id/toggle', devopsOrAdmin, HealingActionController.togglePolicyActive);
 
+// GET /api/v1/healing/safety-guards - Lấy cấu hình rào chắn an toàn (Blast Radius, Max Restarts, Cooldown)
+healingActionRoutes.get('/safety-guards', HealingActionController.getSafetyGuards);
+
+// PUT /api/v1/healing/safety-guards - Lưu cấu hình rào chắn an toàn (Blast Radius, Max Restarts, Cooldown)
+healingActionRoutes.put('/safety-guards', devopsOrAdmin, HealingActionController.saveSafetyGuards);
+
 // ==========================================
 // 4. HITL Approvals
 // ==========================================

@@ -263,7 +263,7 @@ class EvidenceCollector:
                     resource_name=payload.suspected_pod_name or payload.service_id,
                 ))
 
-            if m.latency >= 650.0:
+            if m.latency >= 250.0:
                 evidences.append(EvidenceItem(
                     source=EvidenceSource.METRICS,
                     evidence_type=EvidenceType.HIGH_LATENCY,
@@ -278,7 +278,7 @@ class EvidenceCollector:
                     resource_kind="Pod",
                     resource_name=payload.suspected_pod_name or payload.service_id,
                 ))
-            elif m.latency < 500.0:
+            elif m.latency < 200.0:
                 evidences.append(EvidenceItem(
                     source=EvidenceSource.METRICS,
                     evidence_type=EvidenceType.NORMAL_LATENCY,
@@ -310,7 +310,7 @@ class EvidenceCollector:
                     resource_name=payload.suspected_pod_name or payload.service_id,
                 ))
 
-            if m.request_rate >= 900.0:
+            if m.request_rate >= 40.0:
                 evidences.append(EvidenceItem(
                     source=EvidenceSource.METRICS,
                     evidence_type=EvidenceType.HIGH_REQUEST_RATE,

@@ -168,6 +168,35 @@ export const selfHealingService = {
   },
 
   /**
+   * 7d. Lấy cấu hình rào chắn an toàn (Safety Guards: Blast Radius, Max Restarts)
+   * GET /api/v1/healing/safety-guards
+   */
+  async getSafetyGuards(params = {}) {
+    try {
+      const search = new URLSearchParams();
+      if (params.organization_id && params.organization_id !== 'all') search.append('organization_id', params.organization_id);
+      if (params.cluster_id && params.cluster_id !== 'all') search.append('cluster_id', params.cluster_id);
+      const qs = search.toString();
+      const res = await request(`/healing/safety-guards${qs ? `?${qs}` : ''}`);
+      return res?.data || null;
+    } catch (err) {
+      console.warn('[selfHealingService] getSafetyGuards error:', err.message);
+      return null;
+    }
+  },
+
+  /**
+   * 7e. Lưu cấu hình rào chắn an toàn (Safety Guards) xuống Database
+   * PUT /api/v1/healing/safety-guards
+   */
+  async saveSafetyGuards(data) {
+    return await request('/healing/safety-guards', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
    * 8. Lấy danh sách yêu cầu phê duyệt HITL
    * GET /api/v1/healing/approvals
    */

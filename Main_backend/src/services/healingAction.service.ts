@@ -579,6 +579,168 @@ export class HealingActionService {
   }
 
   /**
+   * Helper: Khởi tạo bộ 7 chính sách tự phục hồi chuẩn cho một Tổ chức (Organization)
+   */
+  public static async seedDefaultPoliciesForOrg(orgId: string, createdBy?: string, client?: any): Promise<void> {
+    if (!orgId) return;
+    const db = client || pool;
+
+    const DEFAULT_STANDARD_POLICIES = [
+      {
+        name: 'POL-REPLACE-UNSTABLE-POD',
+        description: 'Tự động tính điểm và thay thế Pod bị crash loop hoặc OOMKilled liên tục',
+        trigger_type: 'Kernel eBPF Probe',
+        risk_type: 'Tự phục hồi AI',
+        execution_mode: 'AUTO',
+        risk_level: 'LOW',
+        confidence_threshold: 0.55,
+        cooldown_seconds: 60,
+        requires_approval: false,
+        is_active: true,
+        action_code: 'REPLACE_POD',
+      },
+      {
+        name: 'POL-BLOCK-MALICIOUS-IP',
+        description: 'Chặn IP tấn công bất thường bằng eBPF/iptables',
+        trigger_type: 'Kernel eBPF Probe',
+        risk_type: 'Disruptive',
+        execution_mode: 'AUTO',
+        risk_level: 'HIGH',
+        confidence_threshold: 0.95,
+        cooldown_seconds: 60,
+        requires_approval: false,
+        is_active: true,
+        action_code: 'BLOCK_IP_TEMP',
+      },
+      {
+        name: 'POL-DRAIN-UNHEALTHY-NODE',
+        description: 'Di tản workload và cô lập Node vật lý bị lỗi phần cứng',
+        trigger_type: 'Kernel eBPF Probe',
+        risk_type: 'Disruptive',
+        execution_mode: 'MANUAL',
+        risk_level: 'CRITICAL',
+        confidence_threshold: 0.95,
+        cooldown_seconds: 60,
+        requires_approval: true,
+        is_active: true,
+        action_code: 'DRAIN_NODE',
+      },
+      {
+        name: 'POL-SCALE-OUT-TRAFFIC',
+        description: 'Tự động mở rộng bản sao Pod khi quá tải lưu lượng đột biến',
+        trigger_type: 'Metric Threshold',
+        risk_type: 'Non-Destructive',
+        execution_mode: 'AUTO',
+        risk_level: 'LOW',
+        confidence_threshold: 0.45,
+        cooldown_seconds: 60,
+        requires_approval: false,
+        is_active: true,
+        action_code: 'SCALE_REPLICAS',
+      },
+      {
+        name: 'POL-RESTART-CRASHED-POD',
+        description: 'Tự động khởi động lại Pod bị treo hoặc crash liveness probe',
+        trigger_type: 'Kernel eBPF Probe',
+        risk_type: 'State-Preserving',
+        execution_mode: 'AUTO',
+        risk_level: 'LOW',
+        confidence_threshold: 0.55,
+        cooldown_seconds: 60,
+        requires_approval: false,
+        is_active: true,
+        action_code: 'RESTART_POD',
+      },
+      {
+        name: 'POL-CLEANUP-DISK-TEMP',
+        description: 'Dọn dẹp dung lượng disk tạm thời trong thư mục /tmp',
+        trigger_type: 'Metric Threshold',
+        risk_type: 'Non-Destructive',
+        execution_mode: 'AUTO',
+        risk_level: 'LOW',
+        confidence_threshold: 0.75,
+        cooldown_seconds: 60,
+        requires_approval: false,
+        is_active: true,
+        action_code: 'CLEANUP_TEMP_FILES',
+      },
+      {
+        name: 'POL-ROLLBACK-HTTP5XX',
+        description: 'Hoàn nguyên phiên bản khi tỷ lệ HTTP 5xx vượt 5%',
+        trigger_type: 'AI Prediction',
+        risk_type: 'Disruptive',
+        execution_mode: 'MANUAL',
+        risk_level: 'HIGH',
+        confidence_threshold: 0.90,
+        cooldown_seconds: 60,
+        requires_approval: true,
+        is_active: true,
+        action_code: 'ROLLBACK_DEPLOYMENT',
+      },
+    ];
+
+    try {
+      const actionTypesRes = await db.query('SELECT id, code FROM healing_action_types;');
+      const actionMap = new Map<string, string>();
+      for (const row of actionTypesRes.rows) {
+        actionMap.set(row.code, row.id);
+      }
+
+      const envId = null; // Chính sách mặc định tiêu chuẩn áp dụng toàn bộ tổ chức (environment_id = NULL)
+
+      for (const pol of DEFAULT_STANDARD_POLICIES) {
+        const actTypeId = actionMap.get(pol.action_code);
+        if (!actTypeId) continue;
+
+        const existing = await db.query(
+          'SELECT id FROM healing_policies WHERE organization_id = $1 AND name = $2 AND deleted_at IS NULL LIMIT 1;',
+          [orgId, pol.name]
+        );
+        if (existing.rows.length > 0) continue;
+
+        const polInsert = await db.query(
+          `INSERT INTO healing_policies (
+            organization_id, environment_id, name, description, trigger_type, risk_type,
+            execution_mode, risk_level, confidence_threshold, cooldown_seconds, max_retries,
+            requires_approval, is_active, created_by, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7::execution_mode, $8::risk_level, $9, $10, 1,
+            $11, $12, $13, NOW(), NOW()
+          )
+          RETURNING id;`,
+          [
+            orgId,
+            envId,
+            pol.name,
+            pol.description,
+            pol.trigger_type,
+            pol.risk_type,
+            pol.execution_mode,
+            pol.risk_level,
+            pol.confidence_threshold,
+            pol.cooldown_seconds,
+            pol.requires_approval,
+            pol.is_active,
+            createdBy || null,
+          ]
+        );
+
+        const polId = polInsert.rows[0]?.id;
+        if (polId) {
+          await db.query(
+            `INSERT INTO policy_actions (policy_id, action_type_id, priority, is_enabled, configuration, created_at)
+             VALUES ($1, $2, 1, true, '{}'::jsonb, NOW());`,
+            [polId, actTypeId]
+          );
+        }
+      }
+    } catch (seedErr: any) {
+      console.warn(`[HealingActionService] seedDefaultPoliciesForOrg failed for ${orgId}:`, seedErr?.message || seedErr);
+    }
+  }
+
+  /**
    * 8. List policies
    */
   public static async getPolicies(filters: {
@@ -597,7 +759,13 @@ export class HealingActionService {
         filters.allowed_org_ids = validation.allowedOrgIds;
       }
     }
-    return await HealingActionModel.findPolicies(filters);
+
+    let policies = await HealingActionModel.findPolicies(filters);
+    if ((!policies || policies.length === 0) && filters.organization_id && filters.organization_id.toUpperCase() !== 'ALL') {
+      await this.seedDefaultPoliciesForOrg(filters.organization_id, user?.id);
+      policies = await HealingActionModel.findPolicies(filters);
+    }
+    return policies;
   }
 
   /**
@@ -1055,5 +1223,121 @@ export class HealingActionService {
       }
     }
     return await HealingActionModel.getAnalytics(targetOrg, clusterId);
+  }
+
+  /**
+   * 13. Lấy cấu hình rào chắn an toàn (Safety Guards: Blast Radius, Max Restarts, Cooldown)
+   */
+  public static async getSafetyGuards(orgId?: string, clusterId?: string) {
+    const defaultGuards = {
+      blast_radius_threshold: 45,
+      max_restarts: 2,
+      restart_time_window: 15,
+      approval_timeout: 30,
+      cooldown_period: 1,
+      global_mode: 'AUTONOMOUS',
+    };
+
+    if (!orgId) return defaultGuards;
+
+    try {
+      let query = `
+        SELECT blast_radius_threshold, max_restarts, restart_time_window, approval_timeout, cooldown_period, global_mode, cluster_id, organization_id
+        FROM cluster_safety_guards
+        WHERE organization_id = $1
+      `;
+      const params: any[] = [orgId];
+
+      if (clusterId && clusterId !== 'all') {
+        query += ` AND (cluster_id = $2::uuid OR cluster_id IS NULL) ORDER BY cluster_id NULLS LAST LIMIT 1`;
+        params.push(clusterId);
+      } else {
+        query += ` ORDER BY cluster_id NULLS LAST LIMIT 1`;
+      }
+
+      const res = await pool.query(query, params);
+      if (res.rows.length > 0) {
+        const row = res.rows[0];
+        return {
+          blast_radius_threshold: Number(row.blast_radius_threshold) || 45,
+          max_restarts: Number(row.max_restarts) || 2,
+          restart_time_window: Number(row.restart_time_window) || 15,
+          approval_timeout: Number(row.approval_timeout) || 30,
+          cooldown_period: Number(row.cooldown_period) || 1,
+          global_mode: row.global_mode || 'AUTONOMOUS',
+          cluster_id: row.cluster_id,
+          organization_id: row.organization_id,
+        };
+      }
+    } catch (err: any) {
+      console.warn('[HealingActionService] Lỗi nạp safety guards từ DB:', err?.message || err);
+    }
+
+    return defaultGuards;
+  }
+
+  /**
+   * 14. Lưu cấu hình rào chắn an toàn (Safety Guards) xuống Database
+   */
+  public static async saveSafetyGuards(
+    orgId: string,
+    clusterId?: string,
+    envId?: string,
+    data?: any,
+    user?: any,
+    reqContext?: IAuditRequestContext
+  ) {
+    if (!orgId) {
+      throw new ApiError(400, 'Mã tổ chức không hợp lệ');
+    }
+
+    const blastRadiusThreshold = Math.min(100, Math.max(5, Number(data?.blast_radius_threshold || 45)));
+    const maxRestarts = Math.max(1, Number(data?.max_restarts || 2));
+    const restartTimeWindow = Math.max(1, Number(data?.restart_time_window || 15));
+    const approvalTimeout = Math.max(5, Number(data?.approval_timeout || 30));
+    const cooldownPeriod = Math.max(1, Number(data?.cooldown_period || 1));
+    const rawMode = String(data?.global_mode || '').toUpperCase();
+    let globalMode = 'AUTONOMOUS';
+    if (['SUPERVISED', 'SEMI_AUTONOMOUS'].includes(rawMode)) {
+      globalMode = 'SUPERVISED';
+    } else if (['AUDIT', 'AUDIT_ONLY'].includes(rawMode)) {
+      globalMode = 'AUDIT';
+    } else if (rawMode === 'AUTONOMOUS') {
+      globalMode = 'AUTONOMOUS';
+    }
+
+    const validClusterId = clusterId && clusterId !== 'all' ? clusterId : null;
+    const validEnvId = envId && envId !== 'all' ? envId : null;
+
+    const query = `
+      INSERT INTO cluster_safety_guards (
+        organization_id, cluster_id, environment_id, blast_radius_threshold, max_restarts,
+        restart_time_window, approval_timeout, cooldown_period, global_mode, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      ON CONFLICT (organization_id, cluster_id) DO UPDATE SET
+        blast_radius_threshold = EXCLUDED.blast_radius_threshold,
+        max_restarts = EXCLUDED.max_restarts,
+        restart_time_window = EXCLUDED.restart_time_window,
+        approval_timeout = EXCLUDED.approval_timeout,
+        cooldown_period = EXCLUDED.cooldown_period,
+        global_mode = EXCLUDED.global_mode,
+        environment_id = COALESCE(EXCLUDED.environment_id, cluster_safety_guards.environment_id),
+        updated_at = NOW()
+      RETURNING *;
+    `;
+
+    const res = await pool.query(query, [
+      orgId,
+      validClusterId,
+      validEnvId,
+      blastRadiusThreshold,
+      maxRestarts,
+      restartTimeWindow,
+      approvalTimeout,
+      cooldownPeriod,
+      globalMode,
+    ]);
+
+    return res.rows[0];
   }
 }

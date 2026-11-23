@@ -153,6 +153,13 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
 
   let text = String(rawMsg).trim();
 
+  // 0. Safety Guard Blocked namespace
+  if (text.includes('Safety Guard Blocked') || text.includes('protected Kubernetes system namespace')) {
+    const nsMatch = text.match(/Namespace '([^']+)'/i);
+    const ns = nsMatch ? nsMatch[1] : (resolvedNs || 'hệ thống');
+    return `Thực thi ${actionFriendlyName} trên "${targetName}" bị chặn: Namespace "${ns}" là hạ tầng hệ thống cốt lõi của Kubernetes, không được phép can thiệp tự động`;
+  }
+
   // 1. RBAC 403 Forbidden
   const rbacMatch = text.match(
     /User\??\s*"([^"\\]+)\??"\s+cannot\s+(\w+)\s+resource\s+\??"([^"\\]+)\??"(?:\s+in API group\s+\??"([^"\\]*)\??")?(?:\s+in the namespace\s+\??"([^"\\]+)\??")?/i
@@ -428,9 +435,21 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     title = title.replace(/\s{2,}/g, ' ').trim();
     if (!title.endsWith('.')) title += '.';
 
-    const cleanErr = item.error_message
+    let cleanErr = item.error_message
       ? item.error_message.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':').replace(/Post-Action Verification Failed:?\s*/gi, '').replace(/\s{2,}/g, ' ').trim()
       : null;
+
+    if (cleanErr) {
+      if (cleanErr.includes('Safety Guard Blocked') || cleanErr.includes('protected Kubernetes system namespace')) {
+        const nsMatch = cleanErr.match(/Namespace '([^']+)'/i);
+        const ns = nsMatch ? nsMatch[1] : (resolvedNs || 'selfheal-system');
+        cleanErr = `Rào chắn an toàn K8s đã chặn: Namespace '${ns}' là phân vùng hệ thống được bảo vệ, nghiêm cấm AI can thiệp tự động.`;
+      } else if (cleanErr.includes('Auto-recovered') || cleanErr.includes('tự phục hồi ổn định')) {
+        cleanErr = `Hệ thống tự động hủy: Dịch vụ đã tự phục hồi ổn định.`;
+      } else if (cleanErr.includes('User') && (cleanErr.includes('cannot') || cleanErr.includes('Forbidden') || cleanErr.includes('(403)'))) {
+        cleanErr = `Lỗi phân quyền RBAC 403 Forbidden: ServiceAccount không đủ thẩm quyền can thiệp tài nguyên.`;
+      }
+    }
 
     return {
       id: shortId,

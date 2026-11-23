@@ -14,6 +14,7 @@ import { OrganizationRoleModel } from '../models/organizationRole.model';
 import { OrganizationMemberModel } from '../models/organizationMember.model';
 import { IPaginatedResult } from '../models/user.model';
 import { RedisCacheService } from './redisCache.service';
+import { HealingActionService } from './healingAction.service';
 
 /**
  * Hàm sinh chuỗi slug URL chuẩn hóa từ tên tổ chức (hỗ trợ tiếng Việt)
@@ -102,6 +103,32 @@ export class OrganizationService {
         });
         assignedRoleCode = role.code;
       }
+
+      // 5. Tự động khởi tạo Môi trường mặc định (Production Kubernetes)
+      const envCode = `env-${finalSlug}`;
+      await client.query(
+        `INSERT INTO environments (
+          organization_id, name, code, environment_type, description, status, created_by, created_at, updated_at
+        ) VALUES (
+          $1, 'Production Kubernetes', $2, 'PRODUCTION', 'Môi trường vận hành mặc định', 'ACTIVE', $3, NOW(), NOW()
+        ) ON CONFLICT DO NOTHING;`,
+        [org.id, envCode, userId]
+      );
+
+      // 6. Tự động khởi tạo Cấu hình cảnh báo mặc định (Organization Alert Settings)
+      await client.query(
+        `INSERT INTO organization_alert_settings (
+          organization_id, critical_email_enabled, notify_on_no_action, notify_on_healing_failed,
+          extra_emails, cooldown_minutes, created_at, updated_at
+        ) VALUES (
+          $1, true, true, true,
+          '[]'::jsonb, 15, NOW(), NOW()
+        ) ON CONFLICT (organization_id) DO NOTHING;`,
+        [org.id]
+      );
+
+      // 7. Tự động khởi tạo 7 Chính sách Tự Phục Hồi chuẩn (Standard Self-Healing Policies)
+      await HealingActionService.seedDefaultPoliciesForOrg(org.id, userId, client);
 
       await client.query('COMMIT');
 

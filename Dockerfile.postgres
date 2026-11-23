@@ -1,0 +1,5 @@
+FROM postgres:16-alpine
+
+# Copy database initialization SQL into entrypoint directory
+# When container starts for the first time, PostgreSQL automatically runs all .sql files in /docker-entrypoint-initdb.d/
+COPY database_init.sql /docker-entrypoint-initdb.d/01_database_init.sql

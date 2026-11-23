@@ -409,4 +409,62 @@ export class HealingActionController {
     }
   }
 
+  /**
+   * GET /api/v1/healing/safety-guards
+   * Lấy cấu hình rào chắn an toàn (Blast Radius, Max Restarts, Cooldown, HITL timeout)
+   */
+  public static async getSafetyGuards(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const organization_id = (req.query.organization_id as string) || user?.organization_id;
+      const cluster_id = req.query.cluster_id as string | undefined;
+
+      const guards = await HealingActionService.getSafetyGuards(organization_id, cluster_id);
+      return ApiResponse.success(res, 'Lấy cấu hình rào chắn an toàn thành công', guards, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/v1/healing/safety-guards
+   * Cập nhật cấu hình rào chắn an toàn
+   */
+  public static async saveSafetyGuards(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user;
+      const {
+        organization_id = user?.organization_id,
+        cluster_id,
+        environment_id,
+        blast_radius_threshold,
+        max_restarts,
+        restart_time_window,
+        approval_timeout,
+        cooldown_period,
+        global_mode,
+      } = req.body;
+
+      const saved = await HealingActionService.saveSafetyGuards(
+        organization_id,
+        cluster_id,
+        environment_id,
+        {
+          blast_radius_threshold,
+          max_restarts,
+          restart_time_window,
+          approval_timeout,
+          cooldown_period,
+          global_mode,
+        },
+        user,
+        AuditService.extractRequestContext(req)
+      );
+
+      return ApiResponse.success(res, 'Cập nhật cấu hình rào chắn an toàn thành công', saved, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }

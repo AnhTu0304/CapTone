@@ -48,12 +48,27 @@ export const PoliciesPage = () => {
   const isClusterOnline = currentEnv?.agentStatus === 'ONLINE';
   const clusterKey = currentEnv?.id ? `cluster_${currentEnv.id}` : `cluster_${clusterName}`;
 
+  const normalizeGlobalMode = (m) => {
+    const up = String(m || '').toUpperCase();
+    if (['SUPERVISED', 'SEMI_AUTONOMOUS'].includes(up)) return 'SUPERVISED';
+    if (['AUDIT', 'AUDIT_ONLY'].includes(up)) return 'AUDIT';
+    return 'AUTONOMOUS';
+  };
+
   // Helper: Retrieve cluster-specific safety guards
   const getGuardsForCluster = useCallback((key, isOnline, cName) => {
     const saved = localStorage.getItem(`selfheal_guards_${key}`);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          globalMode: normalizeGlobalMode(parsed.globalMode || 'AUTONOMOUS'),
+          blastRadiusThreshold: parsed.blastRadiusThreshold || 45,
+          maxRestarts: parsed.maxRestarts || 2,
+          restartTimeWindow: parsed.restartTimeWindow || 15,
+          approvalTimeout: parsed.approvalTimeout || 30,
+          cooldownPeriod: parsed.cooldownPeriod ? Math.min(parsed.cooldownPeriod, 3) : 1,
+        };
       } catch (e) {
         // ignore
       }
@@ -65,12 +80,12 @@ export const PoliciesPage = () => {
         try {
           const parsed = JSON.parse(legacy);
           return {
-            globalMode: parsed.globalMode || 'AUTONOMOUS',
-            blastRadiusThreshold: parsed.blastRadiusThreshold || 25,
-            maxRestarts: parsed.maxRestarts || 5,
+            globalMode: normalizeGlobalMode(parsed.globalMode || 'AUTONOMOUS'),
+            blastRadiusThreshold: parsed.blastRadiusThreshold || 45,
+            maxRestarts: parsed.maxRestarts || 2,
             restartTimeWindow: parsed.restartTimeWindow || 15,
-            approvalTimeout: parsed.approvalTimeout || 20,
-            cooldownPeriod: parsed.cooldownPeriod || 5,
+            approvalTimeout: parsed.approvalTimeout || 30,
+            cooldownPeriod: parsed.cooldownPeriod ? Math.min(parsed.cooldownPeriod, 3) : 1,
           };
         } catch (e) {
           // ignore
@@ -78,21 +93,21 @@ export const PoliciesPage = () => {
       }
       return {
         globalMode: 'AUTONOMOUS',
-        blastRadiusThreshold: 25,
-        maxRestarts: 5,
+        blastRadiusThreshold: 45,
+        maxRestarts: 2,
         restartTimeWindow: 15,
-        approvalTimeout: 20,
-        cooldownPeriod: 5,
+        approvalTimeout: 30,
+        cooldownPeriod: 1,
       };
     }
-    // Default for offline / pending clusters (like vcxv)
+    // Default for offline / pending clusters
     return {
-      globalMode: 'AUDIT',
-      blastRadiusThreshold: 30,
-      maxRestarts: 3,
+      globalMode: 'AUTONOMOUS',
+      blastRadiusThreshold: 45,
+      maxRestarts: 2,
       restartTimeWindow: 15,
-      approvalTimeout: 20,
-      cooldownPeriod: 5,
+      approvalTimeout: 30,
+      cooldownPeriod: 1,
     };
   }, []);
 
@@ -183,13 +198,46 @@ export const PoliciesPage = () => {
     try {
       const activeOrgId = currentOrg?.id;
       const activeEnvId = currentEnv?.environment_id || currentEnv?.clusterId || currentEnv?.id;
-      const res = await selfHealingService.getPolicies({
+      let res = await selfHealingService.getPolicies({
         organization_id: activeOrgId,
         environment_id: activeEnvId,
       });
-      const items = Array.isArray(res) ? res : (res?.items || []);
+      let items = Array.isArray(res) ? res : (res?.items || []);
+      // Fallback: Nếu query theo clusterId/environmentId trả về rỗng (do cluster mới hoặc cache cũ), tải toàn bộ chính sách theo organization_id
+      if (items.length === 0 && activeOrgId) {
+        res = await selfHealingService.getPolicies({
+          organization_id: activeOrgId,
+        });
+        items = Array.isArray(res) ? res : (res?.items || []);
+      }
       const basePolicies = items.map(mapBackendPolicyToUI);
       setIsUsingLiveDb(true);
+
+      if (items.length > 0) {
+        const cooldownItem = items.find((it) => it.cooldown_seconds != null);
+        if (cooldownItem && cooldownItem.cooldown_seconds) {
+          const dbCooldownMin = Math.max(1, Math.round(Number(cooldownItem.cooldown_seconds) / 60));
+          setCooldownPeriod(dbCooldownMin);
+        }
+      }
+
+      // Nạp cấu hình Rào chắn an toàn (Blast Radius, Max Restarts, Cooldown) trực tiếp từ Database
+      try {
+        const serverGuards = await selfHealingService.getSafetyGuards({
+          organization_id: activeOrgId,
+          cluster_id: currentEnv?.id,
+        });
+        if (serverGuards) {
+          if (serverGuards.blast_radius_threshold != null) setBlastRadiusThreshold(Number(serverGuards.blast_radius_threshold));
+          if (serverGuards.max_restarts != null) setMaxRestarts(Number(serverGuards.max_restarts));
+          if (serverGuards.restart_time_window != null) setRestartTimeWindow(Number(serverGuards.restart_time_window));
+          if (serverGuards.approval_timeout != null) setApprovalTimeout(Number(serverGuards.approval_timeout));
+          if (serverGuards.cooldown_period != null) setCooldownPeriod(Number(serverGuards.cooldown_period));
+          if (serverGuards.global_mode) setGlobalMode(normalizeGlobalMode(serverGuards.global_mode));
+        }
+      } catch (guardErr) {
+        console.warn('[PoliciesPage] Lỗi nạp safety guards từ server:', guardErr);
+      }
 
       // Check per-cluster saved policy overrides
       const savedPoliciesRaw = localStorage.getItem(`selfheal_policies_${clusterKey}`);
@@ -333,12 +381,12 @@ export const PoliciesPage = () => {
         await selfHealingService.updatePolicyConfig(id, {
           is_active: newEnabled,
         });
+        toastSuccess(`Đã ${newEnabled ? 'bật' : 'tắt'} quy tắc "${target.name}" thành công!`, 'Cập Nhật Quy Tắc');
       } catch (err) {
         console.warn('Lỗi cập nhật trạng thái bật/tắt chính sách:', err.message);
+        toastError('Lỗi cập nhật trạng thái quy tắc: ' + (err.message || 'Lỗi server'));
       }
     }
-    setHasUnsavedChanges(true);
-    setSaveSuccess(false);
   };
 
   const handleToggleHitl = async (id) => {
@@ -367,12 +415,12 @@ export const PoliciesPage = () => {
           requires_approval: newHitl,
           execution_mode: newHitl ? 'MANUAL' : 'AUTO',
         });
+        toastSuccess(`Quy tắc "${target.name}" đã chuyển sang chế độ ${newHitl ? 'Bắt Buộc Duyệt (HITL)' : 'Tự Động Chạy'}!`, 'Cổng Duyệt HITL');
       } catch (err) {
         console.warn('Lỗi cập nhật chế độ HITL chính sách:', err.message);
+        toastError('Lỗi cập nhật chế độ HITL: ' + (err.message || 'Lỗi server'));
       }
     }
-    setHasUnsavedChanges(true);
-    setSaveSuccess(false);
   };
 
   const handleSaveSettings = async () => {
@@ -401,21 +449,39 @@ export const PoliciesPage = () => {
     });
     localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(clusterMap));
 
-    if (isUsingLiveDb && policies.length > 0) {
+    if (isUsingLiveDb) {
       try {
-        await Promise.all(
-          policies.map((p) =>
-            selfHealingService.updatePolicyConfig(p.id, {
-              is_active: p.enabled,
-              requires_approval: p.hitlRequired,
-              execution_mode: p.hitlRequired ? 'MANUAL' : 'AUTO',
-              cooldown_seconds: cooldownPeriod * 60,
-              max_retries: maxRestarts,
-            })
-          )
-        );
+        // 1. Lưu cấu hình Rào chắn an toàn (Blast Radius, Max Restarts, Cooldown, Mode) xuống Database
+        await selfHealingService.saveSafetyGuards({
+          organization_id: currentOrg?.id,
+          cluster_id: currentEnv?.id,
+          environment_id: currentEnv?.environment_id,
+          blast_radius_threshold: blastRadiusThreshold,
+          max_restarts: maxRestarts,
+          restart_time_window: restartTimeWindow,
+          approval_timeout: approvalTimeout,
+          cooldown_period: cooldownPeriod,
+          global_mode: globalMode,
+        });
+
+        // 2. Cập nhật từng policy
+        if (policies.length > 0) {
+          await Promise.all(
+            policies.map((p) =>
+              selfHealingService.updatePolicyConfig(p.id, {
+                is_active: p.enabled,
+                requires_approval: p.hitlRequired,
+                execution_mode: p.hitlRequired ? 'MANUAL' : 'AUTO',
+                cooldown_seconds: cooldownPeriod * 60,
+                max_retries: maxRestarts,
+              })
+            )
+          );
+        }
+        toastSuccess('Đã lưu cấu hình rào chắn an toàn và chính sách tự phục hồi thành công!', 'Lưu Cấu Hình');
       } catch (err) {
         console.warn('Lỗi lưu cấu hình an toàn xuống DB:', err.message);
+        toastError('Lỗi lưu cấu hình an toàn: ' + (err.message || 'Lỗi kết nối'));
       }
     }
 
@@ -423,7 +489,7 @@ export const PoliciesPage = () => {
     setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);
-    }, 3000);
+    }, 4000);
   };
 
   const handleAddRule = async (e) => {
@@ -1190,6 +1256,8 @@ export const PoliciesPage = () => {
                       opacity: canManagePolicies ? 1 : 0.6,
                     }}
                   >
+                    <option value={1}>1 phút</option>
+                    <option value={2}>2 phút</option>
                     <option value={3}>3 phút</option>
                     <option value={5}>5 phút</option>
                     <option value={10}>10 phút</option>

@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # SelfHeal Agent Installer for Windows PowerShell
 # AI-Driven Proactive Self-Healing Infrastructure for SMEs
 # ==============================================================================
@@ -133,11 +133,11 @@ if (-not $ServerUrl) {
             $ServerUrl = $envUrl
         } else {
             $ServerUrl = if ($currentContext -like "*minikube*") {
-                "ws://host.minikube.internal:5000/api/v1/agent/connect"
+                "ws://host.minikube.internal:5005/api/v1/agent/connect"
             } elseif ($currentContext -like "*docker*") {
-                "ws://host.docker.internal:5000/api/v1/agent/connect"
+                "ws://host.docker.internal:5005/api/v1/agent/connect"
             } else {
-                "ws://localhost:5000/api/v1/agent/connect"
+                "ws://localhost:5005/api/v1/agent/connect"
             }
         }
     }

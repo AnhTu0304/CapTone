@@ -239,7 +239,7 @@ class RecommendationAgent:
             else:
                 action = "SCALE_REPLICAS"
                 base_rep = desired_rep if (desired_rep is not None and desired_rep >= 2) else 2
-                target_replicas = max(1, base_rep - 1)
+                target_replicas = max(2, base_rep - 1)
                 reason = f"Chỉ số tải ở mức thấp kéo dài; thu hẹp số lượng replica (về {target_replicas} replica) để tối ưu hóa tài nguyên"
         elif cause == "database_cache_utilization":
             action = "NO_ACTION"
@@ -339,6 +339,7 @@ class RecommendationAgent:
             "SCALE_REPLICAS" in blocked_set
             and "RESTART_POD" not in blocked_set
             and not explicit_cb_early
+            and cause != "underutilized"
         ):
             action = "RESTART_POD"
             reason = (
@@ -385,6 +386,28 @@ class RecommendationAgent:
                 if cause == "database_cache_utilization"
                 else "Phát hiện lỗi dịch vụ phụ thuộc thượng nguồn (Dependency Failure); không thực hiện can thiệp tự động (Restart/Replace/Scale) trên workload này để bảo vệ an toàn hệ thống."
             )
+        elif cause == "underutilized":
+            is_daemonset = (
+                workload_type_lower == "daemonset"
+                or any(
+                    getattr(getattr(p, "controller", None), "owner_kind", "").lower() == "daemonset"
+                    or getattr(getattr(p, "controller", None), "workload_type", "").lower() == "daemonset"
+                    for p in (getattr(kubernetes, "all_pods", None) or [])
+                )
+                or any(k in target_name_lower for k in ["node-exporter", "kube-proxy", "kindnet", "calico", "flannel", "cilium", "storage-provisioner"])
+            )
+            if is_daemonset:
+                action = "NO_ACTION"
+                reason = "Workload là DaemonSet hoặc thành phần hạ tầng cố định theo Node; không thể thu hẹp số lượng Pod (SCALE_REPLICAS). Duy trì trạng thái vận hành hiện tại."
+            elif desired_rep is not None and desired_rep <= 2:
+                action = "NO_ACTION"
+                target_replicas = desired_rep
+                reason = "Số lượng bản sao đã ở ngưỡng tối thiểu an toàn (2 Pods); hệ thống duy trì trạng thái ổn định, không thu hẹp thêm."
+            else:
+                action = "SCALE_REPLICAS"
+                base_rep = desired_rep if (desired_rep is not None and desired_rep >= 2) else 2
+                target_replicas = max(2, base_rep - 1)
+                reason = f"Chỉ số tải ở mức thấp kéo dài; thu hẹp số lượng replica (về {target_replicas} replica) để tối ưu hóa tài nguyên"
 
         # ========================================================
         # BẬC THANG CẤP 3: Sau khi REPLACE_POD cũng thất bại -> Node Recovery (DRAIN_NODE) hoặc Circuit Breaker (NO_ACTION)

@@ -53,6 +53,8 @@ const METRIC_CONFIGS = [
   { key: 'latency', label: 'Độ trễ (ms)', unit: 'ms' },
   { key: 'request_rate', label: 'Lưu lượng (Req/s)', unit: 'req/s' },
   { key: 'error_5xx', label: 'Lỗi 5xx (%)', unit: '%' },
+  { key: 'pod_restart_count', label: 'Khởi động lại (Lần)', unit: 'lần' },
+  { key: 'replica_count', label: 'Bản sao Pod', unit: 'pod' },
 ];
 
 export const OverviewPage = () => {
@@ -352,7 +354,7 @@ export const OverviewPage = () => {
                 const directInputs = [];
                 metricsSeq.forEach((pt, idx) => {
                   const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
                     if (pt[mName] !== undefined) {
                       directInputs.push({
                         id: `seq-init-${currentServiceTarget}-${idx}-${mName}`,
@@ -391,7 +393,7 @@ export const OverviewPage = () => {
                 const directInputs = [];
                 pred.sequence.forEach((pt, idx) => {
                   const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
                     if (pt[mName] !== undefined) {
                       directInputs.push({
                         id: `seq-${pred.id}-${idx}-${mName}`,
@@ -557,7 +559,7 @@ export const OverviewPage = () => {
               const directInputs = [];
               bp.points.forEach((pt, idx) => {
                 const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
                   if (pt[mName] !== undefined) {
                     directInputs.push({
                       id: `live-${sId}-${idx}-${mName}`,
@@ -605,7 +607,7 @@ export const OverviewPage = () => {
               const directInputs = [];
               newPred.sequence.forEach((pt, idx) => {
                 const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx']) {
+                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
                   if (pt[mName] !== undefined) {
                     directInputs.push({
                       id: `ws-${predId}-${idx}-${mName}`,
@@ -862,13 +864,18 @@ export const OverviewPage = () => {
           latency: 0,
           request_rate: 0,
           error_5xx: 0,
+          pod_restart_count: 0,
+          replica_count: 1,
         });
       }
 
       const entry = map.get(key);
       const mName = item.metric_name?.toLowerCase();
       const val = parseFloat(item.metric_value) || 0;
-      const targetKey = mName === 'http_5xx_rate' ? 'error_5xx' : mName;
+      let targetKey = mName;
+      if (mName === 'http_5xx_rate') targetKey = 'error_5xx';
+      else if (mName === 'restarts' || mName === 'restart_count' || mName === 'pod_restart_count') targetKey = 'pod_restart_count';
+      else if (mName === 'replicas' || mName === 'pod_count' || mName === 'replica_count') targetKey = 'replica_count';
 
       if (targetKey && entry[targetKey] !== undefined) {
         entry[targetKey] = val;
@@ -891,19 +898,19 @@ export const OverviewPage = () => {
   const seriesSummaries = useMemo(() => {
     if (timesteps.length === 0) return [];
     return METRIC_CONFIGS.map((cfg) => {
-      const vals = timesteps.map((t) => Number(t[cfg.key] || 0));
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
+      const vals = timesteps.map((t) => Number(t[cfg.key] || 0)).filter((v) => !isNaN(v));
+      const min = vals.length > 0 ? Math.min(...vals) : 0;
+      const max = vals.length > 0 ? Math.max(...vals) : 0;
       const sum = vals.reduce((a, b) => a + b, 0);
-      const avg = sum / (vals.length || 1);
-      const latest = vals[vals.length - 1] ?? 0;
+      const avg = vals.length > 0 ? sum / vals.length : 0;
+      const latest = vals.length > 0 ? (vals[vals.length - 1] ?? 0) : 0;
       return {
         key: cfg.key,
         label: cfg.label,
-        min: min.toFixed(2),
-        max: max.toFixed(2),
-        avg: avg.toFixed(2),
-        latest: latest.toFixed(2),
+        min: Number(min || 0).toFixed(2),
+        max: Number(max || 0).toFixed(2),
+        avg: Number(avg || 0).toFixed(2),
+        latest: Number(latest || 0).toFixed(2),
       };
     });
   }, [timesteps]);
@@ -954,7 +961,15 @@ export const OverviewPage = () => {
           (targetLower === 'opentelemetry-collector' && podName.startsWith('otel-collector'));
       }
 
-      const isAlive = !['Failed', 'Unknown', 'Completed', 'Succeeded'].includes(p.phase);
+      const isTerminating =
+        String(p.status || '').toLowerCase() === 'terminating' ||
+        String(p.phase || '').toLowerCase() === 'terminating' ||
+        Boolean(p.deleted_at) ||
+        Boolean(p.deletion_timestamp);
+
+      const isAlive =
+        !isTerminating &&
+        !['Failed', 'Unknown', 'Completed', 'Succeeded'].includes(p.phase);
       return isMatch && isAlive;
     });
 
@@ -976,10 +991,10 @@ export const OverviewPage = () => {
         ? Number(nodeTelemetry.replica_count)
         : null;
 
-    // Ưu tiên số Pods thời gian thực (liveReplica) từ chuỗi viễn trắc đo trực tiếp trên cụm K8s
-    const podsCount = (liveReplica !== null && liveReplica !== undefined && liveReplica > 0)
-      ? liveReplica
-      : (matchedPods.length > 0 ? matchedPods.length : 0);
+    // Ưu tiên số Pods Running thực tế từ K8s (loại trừ Pod đang Terminating/xóa)
+    const podsCount = matchedPods.length > 0
+      ? matchedPods.length
+      : ((liveReplica !== null && liveReplica !== undefined && liveReplica > 0) ? liveReplica : 0);
     const nodesCount = activeNodeNames.length > 0 ? activeNodeNames.length : (podsCount > 0 ? Math.min(podsCount, totalClusterNodes) : 0);
 
     return {
@@ -1137,22 +1152,34 @@ export const OverviewPage = () => {
       if (norm === 'SCALE_REPLICAS' || norm === 'SCALE_DOWN' || norm === 'SCALE_UP') {
         const rep = item?.result?.details?.replicas ?? item?.details?.replicas ?? item?.result?.params?.target_replicas ?? item?.target_replicas;
         const curRep = item?.result?.details?.current_replicas ?? item?.details?.current_replicas ?? item?.result?.params?.current_replicas ?? item?.current_replicas;
-        const ctxText = `${item?.result?.message || ''} ${item?.incident_title || ''} ${item?.reason || ''} ${item?.reasoning || ''}`.toLowerCase();
+        // Chỉ xét ngữ cảnh hành động trực tiếp (loại trừ incident_title cũ để tránh nhiễu lịch sử)
+        const directActionText = `${item?.result?.message || ''} ${item?.reason || ''} ${item?.reasoning || ''} ${item?.policy_name || ''} ${item?.details?.strategy || ''}`.toLowerCase();
         let isDown =
           norm === 'SCALE_DOWN' ||
-          ctxText.includes('scale_down') ||
-          ctxText.includes('underutilized') ||
-          ctxText.includes('thu hẹp') ||
-          ctxText.includes('thu nhỏ') ||
-          ctxText.includes('dư thừa');
+          directActionText.includes('scale_down') ||
+          directActionText.includes('scale-down') ||
+          directActionText.includes('scale down') ||
+          directActionText.includes('scale_in') ||
+          directActionText.includes('scale-in') ||
+          directActionText.includes('scale in') ||
+          directActionText.includes('underutilized') ||
+          directActionText.includes('thu hẹp') ||
+          directActionText.includes('thu nhỏ') ||
+          directActionText.includes('dư thừa');
         let isUp =
           norm === 'SCALE_UP' ||
-          ctxText.includes('scale_up') ||
-          ctxText.includes('quá tải') ||
-          ctxText.includes('cpu_overload') ||
-          ctxText.includes('traffic');
+          directActionText.includes('scale_up') ||
+          directActionText.includes('scale-up') ||
+          directActionText.includes('scale up') ||
+          directActionText.includes('scale_out') ||
+          directActionText.includes('scale-out') ||
+          directActionText.includes('scale out') ||
+          directActionText.includes('quá tải') ||
+          directActionText.includes('cpu_overload') ||
+          directActionText.includes('mở rộng') ||
+          directActionText.includes('traffic');
 
-        if (rep !== undefined && rep !== null && curRep !== undefined && curRep !== null) {
+        if (rep !== undefined && rep !== null && curRep !== undefined && curRep !== null && !isNaN(Number(rep)) && !isNaN(Number(curRep))) {
           if (Number(rep) < Number(curRep)) {
             isDown = true;
             isUp = false;
@@ -1160,7 +1187,9 @@ export const OverviewPage = () => {
             isUp = true;
             isDown = false;
           }
-        } else if (isDown) {
+        } else if (isUp && !isDown) {
+          isDown = false;
+        } else if (isDown && !isUp) {
           isUp = false;
         }
 
@@ -1296,10 +1325,96 @@ export const OverviewPage = () => {
     const totalCount = sortedMerged.length;
     const startStepIndex = 1;
 
-    const actionTimeline = sortedMerged.map((item, idx) => ({
-      ...item,
-      stepIndex: startStepIndex + idx,
-    }));
+    let prevRepTrack = null;
+    const actionTimeline = sortedMerged.map((item, idx) => {
+      let finalLabel = item.actionLabelVi;
+      const rawCode =
+        item.action_code ||
+        item.action_type_code ||
+        item.action_name ||
+        item.action_type_name ||
+        item.result?.action ||
+        item.display_action_name;
+      const norm = String(rawCode || '').trim().toUpperCase().replace(/\s+/g, '_');
+      if (norm === 'SCALE_REPLICAS' || norm === 'SCALE_DOWN' || norm === 'SCALE_UP') {
+        const rep =
+          item?.result?.details?.replicas ??
+          item?.details?.replicas ??
+          item?.result?.params?.target_replicas ??
+          item?.target_replicas;
+        const curRep =
+          item?.result?.details?.current_replicas ??
+          item?.details?.current_replicas ??
+          item?.result?.params?.current_replicas ??
+          item?.current_replicas;
+
+        // Chỉ kiểm tra ngữ cảnh trực tiếp của hành động này (loại trừ incident_title để không bị dính nhãn sự cố cũ)
+        const directActionText = `${item?.result?.message || ''} ${item?.reason || ''} ${item?.reasoning || ''} ${item?.policy_name || ''} ${item?.details?.strategy || ''}`.toLowerCase();
+        const isExplicitDown =
+          norm === 'SCALE_DOWN' ||
+          directActionText.includes('scale_down') ||
+          directActionText.includes('scale-down') ||
+          directActionText.includes('scale down') ||
+          directActionText.includes('scale_in') ||
+          directActionText.includes('scale-in') ||
+          directActionText.includes('scale in') ||
+          directActionText.includes('underutilized') ||
+          directActionText.includes('thu hẹp') ||
+          directActionText.includes('thu nhỏ') ||
+          directActionText.includes('dư thừa');
+        const isExplicitUp =
+          norm === 'SCALE_UP' ||
+          directActionText.includes('scale_up') ||
+          directActionText.includes('scale-up') ||
+          directActionText.includes('scale up') ||
+          directActionText.includes('scale_out') ||
+          directActionText.includes('scale-out') ||
+          directActionText.includes('scale out') ||
+          directActionText.includes('quá tải') ||
+          directActionText.includes('cpu_overload') ||
+          directActionText.includes('mở rộng') ||
+          directActionText.includes('traffic');
+
+        if (rep !== undefined && rep !== null) {
+          const numRep = Number(rep);
+          // Ưu tiên 1: So sánh với curRep nếu có
+          if (curRep !== undefined && curRep !== null && !isNaN(Number(curRep)) && Number(curRep) !== numRep) {
+            const numCurRep = Number(curRep);
+            if (numRep < numCurRep) {
+              finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+            } else {
+              finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+            }
+          }
+          // Ưu tiên 2: So sánh theo tiến trình thời gian với số Pod của bước trước (prevRepTrack)
+          else if (prevRepTrack !== null && !isNaN(prevRepTrack) && numRep !== prevRepTrack) {
+            if (numRep < prevRepTrack) {
+              finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+            } else {
+              finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+            }
+          }
+          // Ưu tiên 3: Nếu là bước đầu tiên hoặc số Pod không đổi, xét từ khóa hành động trực tiếp
+          else if (isExplicitUp && !isExplicitDown) {
+            finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+          } else if (isExplicitDown && !isExplicitUp) {
+            finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+          } else if (numRep >= 3) {
+            finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+          } else {
+            finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+          }
+
+          prevRepTrack = numRep;
+        }
+      }
+
+      return {
+        ...item,
+        actionLabelVi: finalLabel,
+        stepIndex: startStepIndex + idx,
+      };
+    });
 
     // Thống kê Hậu kiểm 60s tính trên chính actionTimeline đã ghép đầy đủ kết quả xác minh của ĐÚNG dịch vụ đang chọn
     const succeededCount = actionTimeline.filter((a) => a.isVerifiedRecovered).length;
