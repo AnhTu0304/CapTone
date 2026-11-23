@@ -79,7 +79,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-captone_db}
       AI_BACKEND_URL: http://ai-backend:8000
-      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_min_32_characters}
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_32_characters_long}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-dev_only_totp_encryption_key_minimum_32_characters}
       JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_key_minimum_32_characters_long_12345}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
@@ -129,7 +129,7 @@ services:
     environment:
       PORT: 8000
       APP_ENV: ${APP_ENV:-development}
-      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_min_32_characters}
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_32_characters_long}
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
       OTEL_SERVICE_NAME: selfheal-ai-service
       OTEL_SERVICE_VERSION: "1.0.0"

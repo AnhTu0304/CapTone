@@ -83,4 +83,30 @@ describe('Google OAuth API Suite (/api/v1/auth/google)', () => {
       AuthService.verifyGoogleToken = originalVerify;
     }
   });
+
+  test('4. POST /api/v1/auth/google returns 503 when upstream Google OAuth API fails with network error', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = (async (input: any, init?: any) => {
+      if (String(input).includes('googleapis.com')) {
+        const err: any = new Error('fetch failed');
+        err.cause = { code: 'ECONNRESET' };
+        throw err;
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
+    try {
+      const res = await originalFetch(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: 'ya29.mock_access_token_value' }),
+      });
+      const body = (await res.json()) as any;
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(body.success, false);
+      assert.match(body.message, /Không thể kết nối.*Google/i);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

@@ -123,6 +123,8 @@ export const AuthProvider = ({ children }) => {
 
   // Khôi phục phiên đăng nhập khi tải ứng dụng (chỉ dùng HttpOnly refresh cookie + Double-Submit CSRF)
   useEffect(() => {
+    let isActive = true;
+
     const restoreSession = async () => {
       try {
         localStorage.removeItem(TOKEN_KEY);
@@ -130,6 +132,7 @@ export const AuthProvider = ({ children }) => {
       const hasCsrfCookie = Boolean(getCsrfTokenFromCookie());
 
       if (!hasCsrfCookie) {
+        if (!isActive) return;
         setUser(null);
         setToken(null);
         setLoading(false);
@@ -143,6 +146,7 @@ export const AuthProvider = ({ children }) => {
         if (!activeToken) {
           throw new Error('Không thể khôi phục access token');
         }
+        if (!isActive) return;
 
         setAuthToken(activeToken);
         setToken(activeToken);
@@ -155,6 +159,7 @@ export const AuthProvider = ({ children }) => {
             const refreshed = await authService.refreshSession();
             activeToken = refreshed?.data?.token || null;
             if (!activeToken) throw profileErr;
+            if (!isActive) return;
             setAuthToken(activeToken);
             setToken(activeToken);
             profile = await authService.getProfile(activeToken);
@@ -168,6 +173,7 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem(TOKEN_KEY);
         } catch {}
 
+        if (!isActive) return;
         if (profile) {
           if (profile.full_name) profile.full_name = cleanFullName(profile.full_name);
           if (profile.fullName) profile.fullName = cleanFullName(profile.fullName);
@@ -175,14 +181,20 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem(USER_KEY, JSON.stringify(profile));
         }
       } catch (err) {
+        if (!isActive) return;
         console.warn('Phiên đăng nhập hết hạn hoặc không hợp lệ:', err.message);
         clearLocalAuthState();
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     };
 
     restoreSession();
+    return () => {
+      isActive = false;
+    };
   }, [clearLocalAuthState]);
 
   // Hàm Đăng nhập

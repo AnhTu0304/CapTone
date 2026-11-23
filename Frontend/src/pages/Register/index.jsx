@@ -147,11 +147,6 @@ export const RegisterPage = ({ onNavigate }) => {
       process.env.REACT_APP_GOOGLE_CLIENT_ID ||
       '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com';
 
-    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
-      window.location.hostname = 'localhost';
-      return;
-    }
-
     if (!window.google?.accounts?.oauth2) {
       setLoading(true);
       let attempts = 0;

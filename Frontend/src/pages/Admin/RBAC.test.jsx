@@ -98,7 +98,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
   });
 
   describe('2. RouteRenderer Guard & 403 Forbidden Access Denied', () => {
-    test('2.1. Viewer CAN access /admin overview page', () => {
+    test('2.1. Viewer is BLOCKED from /admin overview page with 403', () => {
       const authVal = createAuthContextValue(['VIEWER']);
 
       render(
@@ -109,7 +109,9 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
         </ToastProvider>
       );
 
-      expect(screen.getByTestId('mock-admin-overview')).toBeInTheDocument();
+      expect(screen.queryByTestId('mock-admin-overview')).not.toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page-code')).toHaveTextContent('403');
     });
 
     test('2.2. Viewer is BLOCKED from /admin/users with 403 Access Denied', () => {
@@ -124,7 +126,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     });
 
     test('2.3. Viewer is BLOCKED from /admin/incidents with 403 Access Denied', () => {
@@ -139,10 +141,10 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-incidents')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     });
 
-    test('2.4. DevOps CAN access /admin/incidents', () => {
+    test('2.4. DevOps is BLOCKED from /admin/incidents with 403 Access Denied', () => {
       const authVal = createAuthContextValue(['DEVOPS']);
 
       render(
@@ -153,22 +155,23 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
         </ToastProvider>
       );
 
-      expect(screen.getByTestId('mock-admin-incidents')).toBeInTheDocument();
+      expect(screen.queryByTestId('mock-admin-incidents')).not.toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     });
 
-    test('2.5. DevOps is BLOCKED from /admin/users with 403 User Management Forbidden', () => {
-      const authVal = createAuthContextValue(['DEVOPS']);
+    test('2.5. User (normal account) is BLOCKED from /admin and /admin/users with 403', () => {
+      const authVal = createAuthContextValue(['USER']);
 
       render(
         <ToastProvider>
           <AuthContext.Provider value={authVal}>
-            <RouteRenderer currentPath="/admin/users" />
+            <RouteRenderer currentPath="/admin" />
           </AuthContext.Provider>
         </ToastProvider>
       );
 
-      expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Không Có Quyền Quản (Lý Người Dùng|Trị Hệ Thống)/i)).toBeInTheDocument();
+      expect(screen.queryByTestId('mock-admin-overview')).not.toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     });
 
     test('2.6. Admin CAN access /admin/users', () => {
@@ -185,10 +188,21 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       expect(screen.getByTestId('mock-admin-users')).toBeInTheDocument();
     });
 
-    test('2.7. [SEC-01] SME_OWNER is BLOCKED from /admin/users (Access Denied)', () => {
+    test('2.7. [SEC-01] SME_OWNER is BLOCKED from /admin and /admin/users with 403 (never redirected to Dashboard)', () => {
       const authVal = createAuthContextValue(['SME_OWNER']);
 
-      render(
+      const { rerender } = render(
+        <ToastProvider>
+          <AuthContext.Provider value={authVal}>
+            <RouteRenderer currentPath="/admin" />
+          </AuthContext.Provider>
+        </ToastProvider>
+      );
+
+      expect(screen.queryByTestId('mock-dashboard')).not.toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
+
+      rerender(
         <ToastProvider>
           <AuthContext.Provider value={authVal}>
             <RouteRenderer currentPath="/admin/users" />
@@ -197,7 +211,7 @@ describe('Frontend RBAC Suite (Admin, DevOps, Viewer)', () => {
       );
 
       expect(screen.queryByTestId('mock-admin-users')).not.toBeInTheDocument();
-      expect(screen.getByText(/403 — Quyền Hạn Dành Riêng Cho Quản Trị Nền Tảng/i)).toBeInTheDocument();
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     });
   });
 });

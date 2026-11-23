@@ -13,11 +13,15 @@
 
 import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
 
-const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
+const localApiHost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? window.location.hostname
+    : '127.0.0.1';
+const rawApiUrl = process.env.REACT_APP_API_URL || `http://${localApiHost}:5005/api/v1`;
 export const API_BASE_URL = rawApiUrl
-  .replace('//localhost:5000', '//127.0.0.1:5005')
-  .replace('//localhost:5005', '//127.0.0.1:5005')
-  .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
+  .replace(/\/\/(localhost|127\.0\.0\.1):5000\b/, `//${localApiHost}:5005`)
+  .replace(/\/\/(localhost|127\.0\.0\.1):5005\b/, `//${localApiHost}:5005`);
 
 let currentActiveOrgId = null;
 let currentSwitchAbortController = null;
@@ -303,10 +307,12 @@ export const request = async (endpoint, options = {}) => {
     const error = new Error(errorMsg);
     error.status = response.status;
     error.data = errorData;
-    if (response.status === 503 && typeof window !== 'undefined') {
+    const emitStatuses = new Set([403, 429, 500, 503]);
+    const shouldEmit401 = response.status === 401 && !isPublicOrGlobalEndpoint(endpoint);
+    if ((emitStatuses.has(response.status) || shouldEmit401) && typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('selfheal:http-status', {
-          detail: { status: 503, endpoint, message: errorMsg },
+          detail: { status: response.status, endpoint, message: errorMsg },
         })
       );
     }

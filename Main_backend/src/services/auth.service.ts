@@ -35,7 +35,14 @@ async function fetchGoogleJwks(forceRefresh = false): Promise<any[]> {
     if (!forceRefresh && cachedGoogleJwks && cachedGoogleJwks.expiresAt > now) {
         return cachedGoogleJwks.keys;
     }
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    let res: Response;
+    try {
+        res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    } catch (err: any) {
+        const reason = err?.cause?.code || err?.message || 'network_error';
+        console.error('[AuthService] Lỗi kết nối Google JWKS:', reason);
+        throw new ApiError(503, 'Không thể kết nối tới dịch vụ xác thực Google. Vui lòng kiểm tra kết nối mạng hoặc proxy máy chủ.');
+    }
     if (!res.ok) {
         throw new Error(`Failed to fetch Google JWKS: HTTP ${res.status}`);
     }
@@ -395,26 +402,35 @@ await UserModel.updateLastLogin(user.id);
         }
 
         // 2. Google OAuth2 Access Token -> bắt buộc đối chiếu tokeninfo (kiểm tra aud & email_verified)
+        let infoRes: Response;
         try {
-            const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`);
-            if (infoRes.ok) {
-                const info = (await infoRes.json()) as any;
-                const audMatches = info.aud === config.googleClientId || info.azp === config.googleClientId;
-                const emailVerified = info.email_verified === true || info.email_verified === 'true';
-                if (audMatches && emailVerified && info.email) {
+            infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`);
+        } catch (err: any) {
+            const reason = err?.cause?.code || err?.message || 'network_error';
+            console.error('[AuthService] Lỗi kết nối Google OAuth2 API:', reason);
+            throw new ApiError(503, 'Không thể kết nối tới dịch vụ xác thực Google. Vui lòng kiểm tra kết nối mạng hoặc proxy máy chủ.');
+        }
+
+        if (infoRes.ok) {
+            const info = (await infoRes.json()) as any;
+            const audMatches = info.aud === config.googleClientId || info.azp === config.googleClientId;
+            const emailVerified = info.email_verified === true || info.email_verified === 'true';
+            if (audMatches && emailVerified && info.email) {
+                let profile: any = {};
+                try {
                     const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                         headers: { Authorization: `Bearer ${token}` },
                     });
-                    const profile = userRes.ok ? ((await userRes.json()) as any) : {};
-                    return {
-                        email: info.email,
-                        name: profile.name || info.email.split('@')[0],
-                        picture: profile.picture,
-                    };
+                    if (userRes.ok) profile = await userRes.json();
+                } catch {
+                    // userinfo chỉ để lấy tên/avatar bổ sung; không làm hỏng đăng nhập khi tokeninfo đã xác thực
                 }
+                return {
+                    email: info.email,
+                    name: profile.name || info.email.split('@')[0],
+                    picture: profile.picture,
+                };
             }
-        } catch {
-            // Lỗi kết nối Google API
         }
 
         throw new ApiError(401, 'Xác thực Google không thành công hoặc mã token đã hết hạn');

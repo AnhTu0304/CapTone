@@ -178,10 +178,21 @@ describe('Error Routing (404, 403, 503) & Missing Route Warning Alert', () => {
       </ToastProvider>
     );
 
-    expect(screen.getByTestId('mock-admin-layout')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-public-layout')).toBeInTheDocument();
     expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     expect(screen.getByTestId('forbidden-page-code')).toHaveTextContent('403');
     expect(screen.getByText(/403 — Không Có Quyền/i)).toBeInTheDocument();
+
+    rerender(
+      <ToastProvider>
+        <AuthContext.Provider value={makeAuthValue(['ADMIN'])}>
+          <RouteRenderer currentPath="/admin/roles" onNavigate={jest.fn()} />
+        </AuthContext.Provider>
+      </ToastProvider>
+    );
+
+    expect(screen.getByTestId('mock-admin-layout')).toBeInTheDocument();
+    expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
 
     rerender(
       <ToastProvider>
@@ -193,6 +204,20 @@ describe('Error Routing (404, 403, 503) & Missing Route Warning Alert', () => {
 
     expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
     expect(screen.getByText(/403 — Không Có Quyền Truy Cập/i)).toBeInTheDocument();
+  });
+
+  test('Non-admin navigating to unknown /admin/* route gets 403 Forbidden before 404 NotFound', () => {
+    render(
+      <ToastProvider>
+        <AuthContext.Provider value={makeAuthValue(['SME_OWNER'])}>
+          <RouteRenderer currentPath="/admin/khong-ton-tai" onNavigate={jest.fn()} />
+        </AuthContext.Provider>
+      </ToastProvider>
+    );
+
+    expect(screen.getByTestId('mock-public-layout')).toBeInTheDocument();
+    expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
+    expect(screen.queryByTestId('status-page-404')).not.toBeInTheDocument();
   });
 
   test('Direct /404 route renders NotFoundPage cleanly without missing-route warning toast', () => {
@@ -208,7 +233,7 @@ describe('Error Routing (404, 403, 503) & Missing Route Warning Alert', () => {
     expect(screen.queryByText(/Cảnh báo chuyển trang/i)).not.toBeInTheDocument();
   });
 
-  test('Direct /503 route renders ServiceUnavailablePage (503) and HTTP 503 response switches App to 503 alert view', async () => {
+  test('Direct /503 route renders ServiceUnavailablePage (503) and HTTP 503 / 429 / 403 admin responses switch App to corresponding status views', async () => {
     const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: false,
       status: 503,
@@ -229,5 +254,65 @@ describe('Error Routing (404, 403, 503) & Missing Route Warning Alert', () => {
     expect(screen.getByTestId('status-page-503-code')).toHaveTextContent('503');
     expect(screen.getByText(/Cảnh báo dịch vụ — 503/i)).toBeInTheDocument();
     expect(window.location.pathname).toBe('/503');
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      json: async () => ({ message: 'Quá nhiều yêu cầu' }),
+    });
+
+    await act(async () => {
+      await expect(request('/health')).rejects.toThrow('Quá nhiều yêu cầu');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status-page-429')).toBeInTheDocument();
+    });
+    expect(window.location.pathname).toBe('/429');
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      json: async () => ({ message: 'Không có quyền quản trị' }),
+    });
+
+    await act(async () => {
+      await expect(request('/admin/overview')).rejects.toThrow('Không có quyền quản trị');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
+    });
+    expect(window.location.pathname).toBe('/403');
+  });
+
+  test('Unauthenticated access to protected paths (/dashboard, /admin, /portal, /onboarding) switches to 401 UnauthorizedPage', () => {
+    const unauthValue = {
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      loading: false,
+      isSuperAdmin: () => false,
+      isAdmin: () => false,
+      isOwner: () => false,
+      isDevOps: () => false,
+      isViewer: () => false,
+    };
+
+    for (const protectedPath of ['/dashboard', '/admin', '/portal', '/onboarding']) {
+      const { unmount } = render(
+        <ToastProvider>
+          <AuthContext.Provider value={unauthValue}>
+            <RouteRenderer currentPath={protectedPath} onNavigate={jest.fn()} />
+          </AuthContext.Provider>
+        </ToastProvider>
+      );
+      expect(screen.getByTestId('mock-public-layout')).toBeInTheDocument();
+      expect(screen.getByTestId('status-page-401')).toBeInTheDocument();
+      expect(screen.getByTestId('status-page-401-code')).toHaveTextContent('401');
+      unmount();
+    }
   });
 });

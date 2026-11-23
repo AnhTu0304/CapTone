@@ -152,7 +152,6 @@ export const RouteRenderer = ({
   const isSuperAdmin = auth?.isSuperAdmin ? auth.isSuperAdmin(user) : false;
   const isSystemAdmin = auth?.isAdmin ? auth.isAdmin(user) : false;
   const isOwnerUser = auth?.isOwner ? auth.isOwner(user) : false;
-  const isViewerUser = auth?.isViewer ? auth.isViewer(user) : false;
   const isDevOpsUser = auth?.isDevOps ? auth.isDevOps(user) : false;
 
   const isProtectedPath =
@@ -166,11 +165,34 @@ export const RouteRenderer = ({
     path.startsWith('/dashboard') ||
     path.startsWith('/admin');
 
+  if (isProtectedPath && authLoading) {
+    return (
+      <div
+        data-testid="auth-loading-guard"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#64748B',
+          fontSize: '0.875rem',
+        }}
+      >
+        Đang xác thực phiên làm việc...
+      </div>
+    );
+  }
+
   if (isProtectedPath && !authLoading && !isAuthenticated) {
     return (
-      <AuthLayout onNavigate={onNavigate}>
-        <LoginPage onNavigate={onNavigate} />
-      </AuthLayout>
+      <PublicLayout currentPath={path} onNavigate={onNavigate}>
+        <UnauthorizedPage
+          onNavigate={onNavigate}
+          warnPath={currentPath}
+          warnTitle="Cảnh báo xác thực — 401"
+          warnMessage={`Bạn cần đăng nhập để truy cập "${currentPath}".`}
+        />
+      </PublicLayout>
     );
   }
 
@@ -198,8 +220,8 @@ export const RouteRenderer = ({
     );
   }
 
-  // Handle profile routes (unify into Personal Portal Profile)
-  if (path === '/dashboard/profile' || path === '/profile' || path === '/admin/profile') {
+  // Handle profile routes (unify into Personal Portal Profile; /admin/profile stays gated by /admin guard below)
+  if (path === '/dashboard/profile' || path === '/profile') {
     return <PersonalPortalPage currentPath="/portal/profile" onNavigate={onNavigate} />;
   }
 
@@ -267,51 +289,25 @@ export const RouteRenderer = ({
     return <DashboardPage currentPath="/dashboard/notifications" onNavigate={onNavigate} />;
   }
 
-  // Handle all admin routes
+  // Handle all admin routes (chỉ ADMIN / SUPER_ADMIN mới được phép truy cập /admin/*)
   if (path.startsWith('/admin')) {
+    if (!isSuperAdmin && !isSystemAdmin) {
+      return (
+        <PublicLayout currentPath={path} onNavigate={onNavigate}>
+          <ForbiddenPage
+            onNavigate={onNavigate}
+            warnPath={currentPath}
+            warnTitle="Cảnh báo phân quyền — 403"
+            warnMessage="Khu vực Quản trị Hệ thống (/admin) chỉ dành riêng cho Quản trị viên Nền tảng (Admin / Super Admin). Vui lòng sử dụng Bàn điều khiển Doanh nghiệp (/dashboard)."
+            title="403 — Không Có Quyền Truy Cập Quản Trị"
+            message="Khu vực Quản trị Hệ thống (/admin) chỉ dành riêng cho Quản trị viên Nền tảng (Admin / Super Admin). Tài khoản người dùng và thành viên tổ chức vui lòng thao tác tại Bàn điều khiển Doanh nghiệp."
+          />
+        </PublicLayout>
+      );
+    }
+
     let adminContent = null;
-
-    if (!isSuperAdmin && !isSystemAdmin && !isOwnerUser && !isDevOpsUser && !isViewerUser) {
-      return (
-        <ForbiddenPage
-          onNavigate={onNavigate}
-          redirectPath="/portal"
-          title="403 — Không Có Quyền Truy Cập Quản Trị"
-          message="Tài khoản của bạn không có quyền truy cập khu vực quản trị."
-        />
-      );
-    }
-
-    const activeRole = auth?.activeRole;
-    const isAdminRole = activeRole === 'ADMIN';
-    const isSmeOwnerRole = activeRole === 'SME_OWNER';
-
-    // SME_OWNER truy cập /admin sẽ điều hướng sang Bàn điều khiển Doanh nghiệp (/dashboard)
-    if (isSmeOwnerRole && (path === '/admin' || path === '/admin/overview')) {
-      return <DashboardPage currentPath="/dashboard" onNavigate={onNavigate} />;
-    }
-
-    if (isSmeOwnerRole && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/') || path === '/admin/users' || path === '/admin/members')) {
-      return (
-        <ForbiddenPage
-          onNavigate={onNavigate}
-          redirectPath="/dashboard"
-          title="403 — Quyền Hạn Dành Riêng Cho Quản Trị Nền Tảng"
-          message="Chức năng quản trị toàn sàn (Roles, Settings, Companies) dành riêng cho Quản trị viên Tối cao và Quản trị viên Vận hành. Chủ Doanh Nghiệp (SME Owner) quản trị tổ chức tại Bàn điều khiển Doanh nghiệp."
-        />
-      );
-    }
-
-    if (isDevOpsUser && (path.startsWith('/admin/roles') || path === '/admin/settings' || path.startsWith('/admin/system-settings') || path === '/admin/companies' || path.startsWith('/admin/companies/') || path === '/admin/users')) {
-      return (
-        <ForbiddenPage
-          onNavigate={onNavigate}
-          redirectPath="/dashboard"
-          title="403 — Không Có Quyền Quản Trị Hệ Thống"
-          message="Tài khoản DevOps chỉ có quyền vận hành kỹ thuật và hạ tầng, không có quyền quản lý người dùng, tổ chức hay thay đổi cài đặt hệ thống."
-        />
-      );
-    }
+    const isAdminRole = !isSuperAdmin && isSystemAdmin;
 
     // Rào cản bảo vệ (RBAC): Phân quyền vai trò (Roles) và Cấu hình hệ thống (System Settings) dành riêng cho Quản trị viên Tối cao
     const isRestrictedForAdmin =
@@ -334,32 +330,14 @@ export const RouteRenderer = ({
           }
         />
       );
+    } else if (path === '/admin/profile') {
+      return <PersonalPortalPage currentPath="/portal/profile" onNavigate={onNavigate} />;
     } else if (path === '/admin/activity') {
       adminContent = <AdminUserActivityPage onNavigate={onNavigate} />;
     } else if (path === '/admin/account-settings') {
       adminContent = <AdminAccountSettingsPage onNavigate={onNavigate} />;
     } else if (path === '/admin/settings' || path === '/admin/system-settings') {
       adminContent = <AdminSystemSettingsPage onNavigate={onNavigate} />;
-    } else if (isViewerUser && path !== '/admin' && path !== '/admin/overview' && path !== '/admin/profile') {
-      adminContent = (
-        <ForbiddenPage
-          embedded
-          onNavigate={onNavigate}
-          redirectPath="/admin"
-          title="403 — Không Có Quyền Truy Cập"
-          message="Tài khoản Viewer chỉ được xem Bàn điều khiển tổng quan. Bạn không được truy cập các trang chức năng, xem dữ liệu chi tiết, quản lý User, xem logs/metrics, AI Prediction/RCA, incident history, thực hiện remediation, phê duyệt hành động hoặc thay đổi cấu hình."
-        />
-      );
-    } else if (isDevOpsUser && (path === '/admin/users' || path === '/admin/members')) {
-      adminContent = (
-        <ForbiddenPage
-          embedded
-          onNavigate={onNavigate}
-          redirectPath="/admin"
-          title="403 — Không Có Quyền Quản Lý Người Dùng"
-          message="Tài khoản DevOps không có quyền quản lý tài khoản người dùng hoặc gán quyền hệ thống. Quyền này dành riêng cho Quản trị viên (Admin)."
-        />
-      );
     } else if (path === '/admin' || path === '/admin/overview') {
       adminContent = <OverviewPage onNavigate={onNavigate} />;
     } else if (path === '/admin/companies' || path === '/admin/organizations') {

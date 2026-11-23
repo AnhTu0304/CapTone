@@ -282,4 +282,58 @@ describe('Sprint C Phase 2 — Frontend Refresh Token & Logout Lifecycle (Test #
     expect(getAuthToken()).toBe('rehydrated-access-token');
     expect(localStorage.getItem('selfheal_auth_token')).toBeNull();
   });
+
+  test('18e. StrictMode double-mount on page reload coalesces into a single POST /auth/refresh without triggering reuse detection', async () => {
+    setCookie('selfheal_csrf_token', 'csrf-strict-mode');
+
+    let refreshCount = 0;
+    global.fetch.mockImplementation(async (url) => {
+      if (String(url).includes('/auth/refresh')) {
+        refreshCount += 1;
+        await new Promise((r) => setTimeout(r, 15));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: { token: 'strict-mode-token' },
+          }),
+        };
+      }
+      if (String(url).includes('/users/profile')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              id: 'u-1',
+              email: 'strict@acme.local',
+              full_name: 'Strict User',
+              system_roles: ['USER'],
+            },
+          }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const Probe = () => {
+      const { isAuthenticated, loading } = useAuth();
+      if (loading) return <div data-testid="loading">loading</div>;
+      return <div data-testid="state">{isAuthenticated ? 'AUTH' : 'GUEST'}</div>;
+    };
+
+    render(
+      <React.StrictMode>
+        <AuthProvider>
+          <Probe />
+        </AuthProvider>
+      </React.StrictMode>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('AUTH'));
+    expect(refreshCount).toBe(1);
+    expect(getAuthToken()).toBe('strict-mode-token');
+  });
 });
