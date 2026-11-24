@@ -115,11 +115,15 @@ class PredictionService:
             if public_risk == "SCALE_DOWN_CANDIDATE" and sequence:
                 recent_pts = sequence[-min(6, len(sequence)):]
                 avg_cpu = sum(p.cpu for p in recent_pts) / len(recent_pts)
+                max_cpu = max(p.cpu for p in recent_pts)
+                avg_lat = sum(p.latency for p in recent_pts) / len(recent_pts)
                 avg_5xx = sum(p.http_5xx_rate for p in recent_pts) / len(recent_pts)
                 last_rep = recent_pts[-1].replica_count
-                if last_rep > 2 and avg_cpu < 35.0 and avg_5xx < 1.0:
+                if last_rep > 2 and avg_cpu < 35.0 and max_cpu < 55.0 and avg_lat < 250.0 and avg_5xx < 1.0:
                     surplus_ratio = min(1.0, (last_rep - 2) / 4.0)
                     confidence = max(confidence, round(0.78 + 0.18 * surplus_ratio, 4))
+                else:
+                    confidence = min(confidence, 0.02)
             detected_risk = confidence >= self.thresholds[model_risk]
             risk_outputs[public_risk] = HeadPrediction(
                 confidence=round(confidence, 6),

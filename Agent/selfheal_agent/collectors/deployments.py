@@ -55,6 +55,8 @@ class DeploymentSummary:
         selector: Optional[dict[str, str]] = None,
         creation_timestamp: Optional[str] = None,
         observed_at: Optional[str] = None,
+        version: Optional[str] = None,
+        image: Optional[str] = None,
     ) -> None:
         self.name = name
         self.namespace = namespace
@@ -72,6 +74,8 @@ class DeploymentSummary:
         self.selector = selector if selector is not None else {}
         self.creation_timestamp = creation_timestamp
         self.observed_at = observed_at or datetime.now(timezone.utc).isoformat()
+        self.version = version or labels.get("app.kubernetes.io/version") or "v1.0.0"
+        self.image = image or ""
 
         (
             self.status,
@@ -178,6 +182,7 @@ class DeploymentsCollector:
         self.last_error: Optional[str] = None
         self.active_anomalies: dict[str, str] = {}
         self.known_deployments: dict[str, tuple[str, str]] = {}
+        self.known_versions: dict[str, tuple[str, int]] = {}
 
     def _record_api_error(self, err: Exception, operation: str, duration_sec: float = 0.0) -> None:
         if isinstance(err, ApiException):
@@ -217,6 +222,26 @@ class DeploymentsCollector:
         selector_obj = getattr(spec, "selector", None) if spec is not None else None
         raw_match_labels = getattr(selector_obj, "match_labels", None) if selector_obj is not None else None
         selector = dict(raw_match_labels) if isinstance(raw_match_labels, dict) else {}
+
+        # Extract version and image from pod template annotations / container env / image tag
+        dep_version: Optional[str] = None
+        dep_image: Optional[str] = None
+        tmpl = getattr(spec, "template", None) if spec is not None else None
+        tmpl_meta = getattr(tmpl, "metadata", None) if tmpl is not None else None
+        tmpl_ann = getattr(tmpl_meta, "annotations", None) if tmpl_meta is not None else None
+        if isinstance(tmpl_ann, dict):
+            dep_version = _opt_str(tmpl_ann.get("app.kubernetes.io/version"))
+        tmpl_spec = getattr(tmpl, "spec", None) if tmpl is not None else None
+        containers = getattr(tmpl_spec, "containers", None) if tmpl_spec is not None else None
+        if containers and len(containers) > 0:
+            c0 = containers[0]
+            dep_image = _opt_str(getattr(c0, "image", None))
+            for env_item in (getattr(c0, "env", None) or []):
+                if getattr(env_item, "name", None) == "APP_VERSION" and getattr(env_item, "value", None):
+                    dep_version = str(env_item.value)
+                    break
+            if not dep_version and dep_image and ":" in dep_image:
+                dep_version = dep_image.split(":")[-1]
 
         status_obj = getattr(dep, "status", None)
         if status_obj is None:
@@ -265,6 +290,8 @@ class DeploymentsCollector:
             selector=selector,
             creation_timestamp=creation_ts,
             observed_at=observed_at,
+            version=dep_version,
+            image=dep_image,
         )
 
     def list_deployments(
@@ -329,6 +356,30 @@ class DeploymentsCollector:
             seen_uids.add(uid)
             self.known_deployments[uid] = (dep.namespace, dep.name)
 
+            prev_ver_gen = self.known_versions.get(uid)
+            cur_ver_gen = (dep.version, dep.generation)
+            if prev_ver_gen is not None and prev_ver_gen != cur_ver_gen:
+                prev_v, prev_g = prev_ver_gen
+                events.append(
+                    AgentK8sEventData(
+                        service_id=dep.name,
+                        pod_id=uid,
+                        pod_name=dep.name,
+                        status=dep.status,
+                        timestamp=now_iso,
+                        event=K8sEventDetail(
+                            type="Normal",
+                            reason="DeploymentRollout",
+                            message=(
+                                f"Deployment '{dep.namespace}/{dep.name}' rolled out version '{dep.version}' "
+                                f"(previous='{prev_v}', generation={prev_g}->{dep.generation}, image='{dep.image}', "
+                                f"ready={dep.ready_replicas}/{dep.desired_replicas})."
+                            ),
+                        ),
+                    )
+                )
+            self.known_versions[uid] = cur_ver_gen
+
             if not dep.is_healthy and dep.anomaly_reason:
                 prev_reason = self.active_anomalies.get(uid)
                 if prev_reason != dep.anomaly_reason:
@@ -343,8 +394,11 @@ class DeploymentsCollector:
                             event=K8sEventDetail(
                                 type="Warning",
                                 reason=dep.anomaly_reason,
-                                message=dep.anomaly_message
-                                or f"Deployment '{dep.namespace}/{dep.name}' is {dep.status}.",
+                                message=(
+                                    f"Deployment '{dep.namespace}/{dep.name}' [version: {dep.version}, rev: #{dep.generation}] "
+                                    f"has insufficient available replicas (desired={dep.desired_replicas}, "
+                                    f"ready={dep.ready_replicas}, available={dep.available_replicas})."
+                                ),
                             ),
                         )
                     )
@@ -361,8 +415,9 @@ class DeploymentsCollector:
                             type="Normal",
                             reason="DeploymentRecovered",
                             message=(
-                                f"Deployment '{dep.namespace}/{dep.name}' recovered from {prev_reason} "
-                                f"to {dep.status} (ready={dep.ready_replicas}/{dep.desired_replicas}, "
+                                f"Deployment '{dep.namespace}/{dep.name}' [version: {dep.version}, rev: #{dep.generation}] "
+                                f"recovered from {prev_reason} to {dep.status} "
+                                f"(ready={dep.ready_replicas}/{dep.desired_replicas}, "
                                 f"available={dep.available_replicas}/{dep.desired_replicas})."
                             ),
                         ),

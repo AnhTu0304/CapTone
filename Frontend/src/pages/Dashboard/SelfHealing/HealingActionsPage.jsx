@@ -91,6 +91,19 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
         detail: `K8s Agent đã thực thi khởi động lại Pod của dịch vụ "${targetName}" tại namespace "${ns}" để giải phóng tài nguyên bị treo.`,
       };
     }
+    if (code === 'BLOCK_IP_TEMP' || code === 'TEMPORARY_IP_BLOCK') {
+      const blockedIp =
+        item.result?.details?.blocked_ip ||
+        item.result?.params?.ip ||
+        item.params?.ip ||
+        (rawMsg.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0]);
+      return {
+        title: blockedIp
+          ? `Đã chặn địa chỉ IP ${blockedIp} truy cập vào dịch vụ "${targetName}" thành công`
+          : `Đã kích hoạt chặn IP tạm thời cho dịch vụ "${targetName}" thành công`,
+        detail: (cleanDetail && !cleanDetail.includes('Self-healing mitigate action')) ? cleanDetail : `K8s NetworkPolicy đã thiết lập cô lập IP tấn công bảo vệ workload "${targetName}" tại namespace "${ns}".`,
+      };
+    }
     const cleanDetail = String(rawMsg || '')
       .replace(/\s*\(Post-Action Verification Failed\):?/gi, ':')
       .replace(/Post-Action Verification Failed:?\s*/gi, '')

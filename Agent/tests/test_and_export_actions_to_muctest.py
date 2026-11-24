@@ -270,7 +270,7 @@ async def run_action_test(test_def, agent):
     # 5. Write to D:/NCKH/muctest
     out_file = OUTPUT_DIR / test_def["file_name"]
     with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(full_report, f, ensure_ascii=False, indent=2)
+        json.dump(full_report, f, ensure_ascii=False, indent=2, default=str)
 
     print(f"✅ Đã kiểm tra xong hành động: {action_type:<22} -> File: {test_def['file_name']}")
     return full_report
@@ -291,6 +291,10 @@ async def main():
     
     # Mock K8s API instances to test true logic branches
     agent.apps_v1 = MagicMock()
+    mock_dep = MagicMock()
+    mock_dep.spec.selector.match_labels = {"app": "ecommerce-order-service"}
+    agent.apps_v1.read_namespaced_deployment.return_value = mock_dep
+
     agent.core_v1 = MagicMock()
     agent.networking_v1 = MagicMock()
 

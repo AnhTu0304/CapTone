@@ -254,12 +254,44 @@ class CauseEvaluator:
             or "deploy" in e.description.lower()
             for e in valid_evs
         )
-        has_degraded_rollout = bool(
+        has_version_change = bool(
             kubernetes_raw
             and kubernetes_raw.deployment
             and kubernetes_raw.deployment.version
             and kubernetes_raw.deployment.previous_version
             and kubernetes_raw.deployment.version != kubernetes_raw.deployment.previous_version
+        )
+        has_5xx_regression = bool(
+            has_version_change
+            and (
+                EvidenceType.HIGH_HTTP_5XX_RATE in ev_types
+                or (payload and payload.metrics and (payload.metrics.http_5xx_rate or 0.0) >= 5.0)
+            )
+        )
+        if has_5xx_regression:
+            dep_ver = kubernetes_raw.deployment.version
+            prev_ver = kubernetes_raw.deployment.previous_version
+            rate_5xx = payload.metrics.http_5xx_rate if (payload and payload.metrics) else 100.0
+            for_items = [
+                f"Phát hiện lỗi hồi quy HTTP 5xx ({rate_5xx:.1f}%) ngay trên bản triển khai mới '{dep_ver}' (phiên bản ổn định trước đó: '{prev_ver}')",
+                *[e.description for e in valid_evs if e.evidence_type == EvidenceType.HIGH_HTTP_5XX_RATE],
+            ]
+            return CauseEvaluationResult(
+                cause_code="deployment_failure",
+                cause_label=self.CAUSE_LABELS["deployment_failure"],
+                cause_label_vi=self.CAUSE_LABELS_VI["deployment_failure"],
+                evidence_status="CONFIRMED",
+                confidence=0.95,
+                evidence_for=for_items[:5],
+                evidence_against=[],
+                missing_evidence=[],
+                related_risks=related_risks,
+                symptoms=symptoms,
+                explanation=f"Bản phát hành mới '{dep_ver}' gây lỗi hồi quy nghiệp vụ (HTTP 5xx = {rate_5xx:.1f}%). Cần hoàn nguyên (ROLLBACK_DEPLOYMENT) về bản ổn định '{prev_ver}'.",
+            )
+
+        has_degraded_rollout = bool(
+            has_version_change
             and kubernetes_raw.deployment.available_replicas is not None
             and kubernetes_raw.deployment.desired_replicas is not None
             and kubernetes_raw.deployment.available_replicas < kubernetes_raw.deployment.desired_replicas
@@ -318,13 +350,13 @@ class CauseEvaluator:
                 cause_label=self.CAUSE_LABELS["storage_exhaustion"],
                 cause_label_vi=self.CAUSE_LABELS_VI["storage_exhaustion"],
                 evidence_status="PROBABLE",
-                confidence=0.75,
+                confidence=0.88,
                 evidence_for=for_items,
                 evidence_against=[],
                 missing_evidence=["Chưa ghi nhận lỗi I/O ghi đĩa thất bại trong logs"],
                 related_risks=related_risks,
                 symptoms=symptoms,
-                explanation="Dung lượng ổ đĩa lưu trữ chạm ngưỡng cảnh báo nghiêm trọng (>= 90%).",
+                explanation="Dung lượng ổ đĩa lưu trữ chạm ngưỡng cảnh báo nghiêm trọng (>= 85%).",
             )
 
         # ----------------------------------------------------

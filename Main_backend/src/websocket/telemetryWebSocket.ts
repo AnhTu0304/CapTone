@@ -69,16 +69,14 @@ export function initTelemetryWebSocket(server: HttpServer): WebSocketServer {
         }
 
         // Dev fallback when token is missing or expired in local browser storage (strictly disabled in test and production)
-        if (!dbUser && process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK === 'true') {
-          const fallbackUser =
-            (await UserModel.findFullByEmail('phamthaisang1710@gmail.com')) ||
-            (await UserModel.findFullByEmail('phamthais@gmail.com'));
+        if (!dbUser && process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK === 'true' && process.env.DEV_FALLBACK_EMAIL) {
+          const fallbackUser = await UserModel.findFullByEmail(process.env.DEV_FALLBACK_EMAIL);
           if (fallbackUser) {
             dbUser = {
               id: fallbackUser.id,
               status: 'ACTIVE',
               deleted_at: null,
-              roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'],
+              roles: Array.isArray((fallbackUser as any).roles) ? (fallbackUser as any).roles : ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'],
             };
           }
         }

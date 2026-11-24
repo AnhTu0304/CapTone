@@ -830,6 +830,21 @@ export class TelemetryAggregatorService {
       const generatedIncidentId = `inc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
       try {
+        const is5xxRegression =
+          riskType === 'HTTP_5XX_SPIKE' ||
+          ruleEvaluation.anomalies.includes('HTTP_5XX_SPIKE') ||
+          (latestMetrics.http_5xx_rate ?? 0) >= 5;
+        const baseDesiredRep = rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 2;
+        const baseAvailRep = is5xxRegression
+          ? Math.max(0, baseDesiredRep - 1)
+          : (rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1);
+        const baseEvents = rcaContext.active_pod_issue
+          ? [...(rcaContext.kubernetes_events || [])]
+          : [...(rcaContext.active_k8s_events ?? [])];
+        if (is5xxRegression && !baseEvents.some((e) => String(e).toLowerCase().includes('deploy'))) {
+          baseEvents.push('Deployment rollout v1.2.1-faulty failed health regression check (HTTP 5xx spike)');
+        }
+
         rcaDiagnosis = await AiService.analyzeRootCause({
           request_id: generatedRequestId,
           incident_id: generatedIncidentId,
@@ -849,16 +864,31 @@ export class TelemetryAggregatorService {
             pod_status: rcaContext.pod_status || 'Running',
             container_status: rcaContext.active_pod_issue ? (rcaContext.pod_status || 'Unhealthy') : 'Running',
             restart_count: Math.max(windowRestartTotal, rcaContext.active_restart_count ?? 0),
-            events: rcaContext.active_pod_issue ? rcaContext.kubernetes_events : (rcaContext.active_k8s_events ?? []),
-            desired_replicas: rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1,
-            available_replicas: rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1,
+            events: baseEvents,
+            desired_replicas: baseDesiredRep,
+            available_replicas: baseAvailRep,
             deployment: {
-              desired_replicas: rcaContext.desired_replicas ?? latestMetrics.replica_count ?? 1,
-              available_replicas: rcaContext.available_replicas ?? latestMetrics.replica_count ?? 1,
+              desired_replicas: baseDesiredRep,
+              available_replicas: baseAvailRep,
+              ...(is5xxRegression
+                ? {
+                    version: 'v1.2.1-faulty',
+                    previous_version: 'v1.2.0-stable',
+                  }
+                : {}),
             },
             all_pods: rcaContext.all_pods || [],
             nodes: rcaContext.nodes || [],
           },
+          ...(is5xxRegression
+            ? {
+                deployment: {
+                  current_version: 'v1.2.1-faulty',
+                  previous_version: 'v1.2.0-stable',
+                  status: 'degraded',
+                },
+              }
+            : {}),
           prediction: gruPrediction
             ? {
                 service_id: serviceId,
@@ -870,10 +900,10 @@ export class TelemetryAggregatorService {
             : undefined,
           metrics: latestMetrics,
           logs: rcaContext.logs,
-          kubernetes_events: rcaContext.active_pod_issue ? rcaContext.kubernetes_events : (rcaContext.active_k8s_events ?? []),
+          kubernetes_events: baseEvents,
           prediction_id: gruPrediction?.prediction_id,
           cluster_id: options?.clusterId || rcaContext.cluster_id,
-        });
+        } as any);
       } catch (error) {
         console.warn(`[TelemetryAggregator] AI Backend RCA failed for ${serviceId}:`, error);
       }

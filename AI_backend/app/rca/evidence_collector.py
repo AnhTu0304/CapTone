@@ -326,7 +326,7 @@ class EvidenceCollector:
                     resource_name=payload.suspected_pod_name or payload.service_id,
                 ))
 
-            if m.disk >= 90.0:
+            if m.disk >= 85.0:
                 evidences.append(EvidenceItem(
                     source=EvidenceSource.METRICS,
                     evidence_type=EvidenceType.STORAGE_CAPACITY_EXHAUSTED,

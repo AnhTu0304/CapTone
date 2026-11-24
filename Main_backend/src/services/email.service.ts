@@ -112,6 +112,14 @@ export class EmailService {
     const transporter = this.getTransporter();
     if (!transporter) return;
 
+    // Lọc bỏ các email thử nghiệm / dummy domain không có thật để chống lỗi bounce 550 Mail Delivery Subsystem
+    const toStr = String(mailOptions.to || '').toLowerCase().trim();
+    const DUMMY_DOMAINS = ['@selfheal.com', '@selfheal.local', '@example.com', '@test.com', '@dummy.com'];
+    if (DUMMY_DOMAINS.some((d) => toStr.endsWith(d) || toStr.includes(d))) {
+      console.log(`ℹ️ [EMAIL] Bỏ qua gửi email thật tới địa chỉ thử nghiệm / dummy domain: ${mailOptions.to}`);
+      return;
+    }
+
     let attempt = 0;
     const maxRetries = 1;
 

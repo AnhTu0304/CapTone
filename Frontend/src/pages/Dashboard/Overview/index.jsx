@@ -1145,10 +1145,65 @@ export const OverviewPage = () => {
       TEMPORARY_IP_BLOCK: 'Chặn IP tạm thời',
     };
 
+    const extractBlockedIp = (item) => {
+      if (!item) return null;
+      let ip =
+        item?.result?.details?.blocked_ip ||
+        item?.details?.blocked_ip ||
+        item?.result?.params?.ip ||
+        item?.result?.params?.source_ip ||
+        item?.result?.params?.blocked_ip ||
+        item?.params?.ip ||
+        item?.params?.source_ip ||
+        item?.params?.blocked_ip ||
+        item?.result?.blocked_ip ||
+        item?.blocked_ip ||
+        (item?.result?.details?.ip_cidr ? String(item.result.details.ip_cidr).split('/')[0] : null);
+
+      if (!ip) {
+        const combined = [
+          item?.result?.message,
+          item?.message,
+          item?.incident_title,
+          item?.title,
+          item?.description,
+          item?.incident_description,
+          item?.reason,
+          item?.reasoning,
+          item?.policy_name,
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const match = combined.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+        if (match) {
+          ip = match[0];
+        } else {
+          const dashMatch = combined.match(/\bblock-ip-(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\b/);
+          if (dashMatch) {
+            ip = `${dashMatch[1]}.${dashMatch[2]}.${dashMatch[3]}.${dashMatch[4]}`;
+          }
+        }
+      }
+      return ip ? String(ip).trim() : null;
+    };
+
     const translateActionVi = (raw, item = null) => {
       if (!raw) return 'Hành động tự phục hồi';
       const str = String(raw).trim();
       const norm = str.toUpperCase().replace(/\s+/g, '_');
+
+      if (
+        norm === 'BLOCK_IP_TEMP' ||
+        norm === 'TEMPORARY_IP_BLOCK' ||
+        norm === 'BLOCK_IP' ||
+        norm === 'IP_BLOCK' ||
+        norm.includes('BLOCK_IP') ||
+        str.toLowerCase().includes('chặn ip')
+      ) {
+        const ip = extractBlockedIp(item);
+        return ip ? `Chặn IP (${ip})` : 'Chặn IP tạm thời';
+      }
+
       if (norm === 'SCALE_REPLICAS' || norm === 'SCALE_DOWN' || norm === 'SCALE_UP') {
         const rep = item?.result?.details?.replicas ?? item?.details?.replicas ?? item?.result?.params?.target_replicas ?? item?.target_replicas;
         const curRep = item?.result?.details?.current_replicas ?? item?.details?.current_replicas ?? item?.result?.params?.current_replicas ?? item?.current_replicas;
@@ -1406,6 +1461,18 @@ export const OverviewPage = () => {
           }
 
           prevRepTrack = numRep;
+        }
+      } else if (
+        norm === 'BLOCK_IP_TEMP' ||
+        norm === 'TEMPORARY_IP_BLOCK' ||
+        norm === 'BLOCK_IP' ||
+        norm === 'IP_BLOCK' ||
+        norm.includes('BLOCK_IP') ||
+        String(finalLabel || '').toLowerCase().includes('chặn ip')
+      ) {
+        const ip = extractBlockedIp(item);
+        if (ip) {
+          finalLabel = `Chặn IP (${ip})`;
         }
       }
 

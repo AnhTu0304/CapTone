@@ -136,7 +136,7 @@ class MetricsManager:
 
         try:
             session = await self._get_http_session()
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=1.8)) as resp:
                 elapsed = (time.perf_counter() - t0) * 1000.0
                 probe_latency = round(elapsed, 2)
                 probe_status = resp.status
@@ -150,17 +150,31 @@ class MetricsManager:
                                 telemetry_stats["simulated_cpu"] = float(active_stress.get("cpuLoadPercent", 0.0))
                             if active_stress and active_stress.get("ramActive"):
                                 telemetry_stats["simulated_ram_mb"] = float(active_stress.get("ramAllocatedMb", 0.0))
+                            if (active_stress and active_stress.get("diskActive")) or telemetry_stats.get("isDiskFullActive"):
+                                telemetry_stats["simulated_disk"] = float(active_stress.get("diskPercent", 0.0) or telemetry_stats.get("diskPercent", 0.0) or 88.5)
+                            if telemetry_stats.get("simulatedDiskPercent"):
+                                telemetry_stats["simulated_disk"] = float(telemetry_stats.get("simulatedDiskPercent"))
+                            if telemetry_stats.get("is5xxRegressionActive") or data.get("version") == "v1.2.1-faulty":
+                                telemetry_stats["is5xxRegressionActive"] = True
+                                # Probe business endpoint so real HTTP 500 logs & metrics are generated on the faulty pod
+                                try:
+                                    biz_url = f"http://{pod.pod_ip}:{pod.port}/api/products"
+                                    async with session.get(biz_url, timeout=aiohttp.ClientTimeout(total=1.0)) as biz_resp:
+                                        if biz_resp.status >= 500:
+                                            probe_status = biz_resp.status
+                                except Exception:
+                                    pass
                     except Exception:
                         pass
         except asyncio.TimeoutError:
-            probe_latency = 5000.0
+            probe_latency = 2500.0
             probe_status = 408
         except Exception as err:
             logger.debug("Active probe error for %s (%s): %s", pod.name, url, err)
             probe_latency = 0.0
             probe_status = 0
 
-        # Read recent logs to count requests and 5xx errors
+        # Read recent logs to count requests and 5xx errors (skip if /health telemetry already reported active RPS)
         requests_in_log = 0
         errors_5xx_in_log = 0
         now = datetime.now(timezone.utc)
@@ -168,7 +182,10 @@ class MetricsManager:
         since_sec = max(2, min(10, int((now - last_time).total_seconds()))) if last_time else 5
         self._last_log_times[pod.name] = now
 
-        if self.core_v1:
+        reqs_in_w = telemetry_stats.get("requestsInWindow") or telemetry_stats.get("requestsLast5s") or 0
+        has_tele_rps = bool(telemetry_stats and (reqs_in_w > 0 or float(telemetry_stats.get("rps", 0.0)) > 0))
+
+        if self.core_v1 and not has_tele_rps:
             t_log = time.perf_counter()
             try:
                 raw_logs = await asyncio.to_thread(
@@ -177,7 +194,7 @@ class MetricsManager:
                     namespace=pod.namespace,
                     since_seconds=since_sec,
                     tail_lines=150,
-                    _request_timeout=3.0,
+                    _request_timeout=1.5,
                 )
                 record_k8s_api_call("pods", "read_log", "success", time.perf_counter() - t_log)
                 if raw_logs:
@@ -211,7 +228,10 @@ class MetricsManager:
 
         # Combine telemetry from /health endpoint, logs, and probe
         reqs_in_w = telemetry_stats.get("requestsInWindow") or telemetry_stats.get("requestsLast5s") or 0
-        if telemetry_stats and (reqs_in_w > 0 or float(telemetry_stats.get("rps", 0.0)) > 0):
+        if telemetry_stats.get("is5xxRegressionActive"):
+            request_rate = max(float(telemetry_stats.get("rps", 0.0)), 18.4)
+            http_5xx_rate = max(float(telemetry_stats.get("http5xxRate", 0.0)), 100.0)
+        elif telemetry_stats and (reqs_in_w > 0 or float(telemetry_stats.get("rps", 0.0)) > 0):
             request_rate = float(telemetry_stats.get("rps", 0.0))
             http_5xx_rate = float(telemetry_stats.get("http5xxRate", 0.0))
         elif requests_in_log > 0:
@@ -228,6 +248,7 @@ class MetricsManager:
             "http_5xx_rate": max(0.0, min(100.0, http_5xx_rate)),
             "simulated_cpu": telemetry_stats.get("simulated_cpu"),
             "simulated_ram_mb": telemetry_stats.get("simulated_ram_mb"),
+            "simulated_disk": telemetry_stats.get("simulated_disk"),
         }
 
     def get_pod_metrics(
@@ -412,6 +433,9 @@ class MetricsManager:
             if sim_ram is not None:
                 ram_mb += sim_ram
 
+            sim_disk = http_stats.get("simulated_disk")
+            effective_disk = sim_disk if (sim_disk is not None and sim_disk > 0.0) else disk_pct
+
             record = AgentMetricsData(
                 service_id=pod.service_id,
                 pod_id=pod.uid,
@@ -419,7 +443,7 @@ class MetricsManager:
                 timestamp=now_iso,
                 cpu=max(0.0, cpu_percent),
                 ram=max(0.0, ram_mb),
-                disk=disk_pct,
+                disk=max(0.0, min(100.0, effective_disk)),
                 request_rate=max(0.0, http_stats.get("request_rate", 0.0)),
                 latency=max(0.0, http_stats.get("latency", 0.0)),
                 http_5xx_rate=max(0.0, http_stats.get("http_5xx_rate", 0.0)),

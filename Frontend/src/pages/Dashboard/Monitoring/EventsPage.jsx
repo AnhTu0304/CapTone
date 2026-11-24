@@ -19,18 +19,29 @@ import {
 import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
 import { K8sEventSeverityBadge } from '../../../components/dashboard/K8sEventSeverityBadge';
-import { EventDetailModal } from '../../../components/dashboard/EventDetailModal';
+import {
+  EventDetailModal,
+  translateK8sEventMessageVi,
+  translateK8sEventReasonVi,
+} from '../../../components/dashboard/EventDetailModal';
 
 const PRESET_REASONS = [
   { id: 'all', label: 'Tất cả Lý do' },
+  { id: 'DeploymentRecovered', label: 'DeploymentRecovered (Phục hồi Deployment)' },
+  { id: 'DeploymentRollout', label: 'DeploymentRollout (Triển khai phiên bản mới)' },
+  { id: 'MinimumReplicasUnavailable', label: 'MinimumReplicasUnavailable (Thiếu bản sao khả dụng)' },
+  { id: 'ScalingReplicaSet', label: 'ScalingReplicaSet (Co giãn bản sao)' },
+  { id: 'SuccessfulCreate', label: 'SuccessfulCreate (Khởi tạo Pod mới)' },
+  { id: 'SuccessfulDelete', label: 'SuccessfulDelete (Xóa / Thu hồi Pod)' },
+  { id: 'Scheduled', label: 'Scheduled (Đã lập lịch vào Node)' },
   { id: 'OOMKilled', label: 'OOMKilled (Hết bộ nhớ RAM)' },
   { id: 'CrashLoopBackOff', label: 'CrashLoopBackOff (Vòng lặp lỗi khởi động)' },
   { id: 'BackOff', label: 'BackOff (Chờ khởi động lại)' },
   { id: 'FailedScheduling', label: 'FailedScheduling (Không thể lập lịch Pod)' },
   { id: 'Unhealthy', label: 'Unhealthy (Thất bại Probe kiểm tra)' },
-  { id: 'Killing', label: 'Killing (Đang chấm dứt Container)' },
+  { id: 'Killing', label: 'Killing (Đang dừng Container)' },
+  { id: 'Error', label: 'Error (Container dừng do lỗi)' },
   { id: 'NodeReady', label: 'NodeReady (Node sẵn sàng)' },
-  { id: 'ScalingReplicaSet', label: 'ScalingReplicaSet (Co giãn bản sao)' },
   { id: 'Pulled', label: 'Pulled (Đã tải Container Image)' },
   { id: 'Created', label: 'Created (Đã tạo Container)' },
   { id: 'Started', label: 'Started (Đã khởi chạy Container)' },
@@ -84,8 +95,8 @@ export const getDisplayNamespace = (ev) => {
   if (!ev) return 'default';
   if (ev.namespace && ev.namespace !== 'default') return ev.namespace;
   if (ev.metadata?.namespace && ev.metadata.namespace !== 'default') return ev.metadata.namespace;
-  // Trích xuất namespace từ message nếu có dạng pod 'namespace/pod-name'
-  const match = typeof ev.message === 'string' ? ev.message.match(/pod ['"]([^/'"\s]+)\//) : null;
+  // Trích xuất namespace từ message nếu có dạng pod 'namespace/pod-name' hoặc Deployment 'namespace/name'
+  const match = typeof ev.message === 'string' ? ev.message.match(/(?:pod|Deployment)\s+['"]([^/'"\s]+)\//i) : null;
   if (match && match[1]) return match[1];
   return ev.namespace || ev.metadata?.namespace || 'default';
 };
@@ -168,7 +179,8 @@ export const EventsPage = () => {
     PRESET_REASONS.forEach((r) => map.set(r.id, r));
     events.forEach((ev) => {
       if (ev.reason && !map.has(ev.reason)) {
-        map.set(ev.reason, { id: ev.reason, label: ev.reason });
+        const reasonVi = translateK8sEventReasonVi(ev.reason);
+        map.set(ev.reason, { id: ev.reason, label: reasonVi ? `${ev.reason} (${reasonVi})` : ev.reason });
       }
     });
     return Array.from(map.values());
@@ -902,7 +914,8 @@ export const EventsPage = () => {
                 events.map((ev) => {
                   const isWarning = isWarningEvent(ev.event_type);
                   const isExpanded = expandedRowId === ev.id;
-                  const messageText = ev.message || '';
+                  const messageText = translateK8sEventMessageVi(ev.message || '');
+                  const reasonVi = translateK8sEventReasonVi(ev.reason);
                   const isLongMessage = messageText.length > 120;
 
                   return (
@@ -938,9 +951,14 @@ export const EventsPage = () => {
                           <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.78rem', color: '#0F172A' }}>
                             {ev.reason}
                           </div>
+                          {reasonVi && (
+                            <div style={{ fontSize: '0.71rem', fontWeight: 600, color: '#059669', marginTop: '1px' }}>
+                              {reasonVi}
+                            </div>
+                          )}
                           {ev.source_component && (
                             <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>
-                              by {ev.source_component}
+                              bởi {ev.source_component}
                             </div>
                           )}
                         </td>

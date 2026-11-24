@@ -254,9 +254,19 @@ class RecommendationAgent:
                 "không thực hiện can thiệp tự động (Restart/Replace/Scale) trên workload này để bảo vệ an toàn hệ thống."
             )
         elif cause == "application_failure":
-            if kubernetes.deployment and kubernetes.restart_count == 0:
-                action = "RESTART_DEPLOYMENT"
-                reason = "Lỗi ứng dụng xảy ra phân tán trên nhiều replica; khuyến nghị rolling restart toàn bộ deployment"
+            has_prev_version = bool(
+                kubernetes
+                and kubernetes.deployment
+                and getattr(kubernetes.deployment, "previous_version", None)
+                and getattr(kubernetes.deployment, "version", None)
+                and kubernetes.deployment.previous_version != kubernetes.deployment.version
+            )
+            if has_prev_version:
+                action = "ROLLBACK_DEPLOYMENT"
+                reason = f"Phát hiện lỗi HTTP 5xx diện rộng trên phiên bản '{kubernetes.deployment.version}'; đề xuất hoàn nguyên (ROLLBACK_DEPLOYMENT) về phiên bản ổn định '{kubernetes.deployment.previous_version}'"
+            elif kubernetes.deployment and kubernetes.restart_count == 0:
+                action = "ROLLBACK_DEPLOYMENT"
+                reason = "Lỗi ứng dụng HTTP 5xx xảy ra đồng loạt trên các replica của Deployment; đề xuất hoàn nguyên phiên bản ổn định (ROLLBACK_DEPLOYMENT)"
             elif kubernetes.restart_count > 0:
                 action = "RESTART_POD"
                 reason = "Lỗi ứng dụng trùng khớp với Pod đang không khỏe mạnh; khuyến nghị khởi động lại Pod"
@@ -305,7 +315,15 @@ class RecommendationAgent:
 
         explicit_cb_early = bool(action_history and action_history.circuit_breaker_tripped)
         prev_cause_norm = (previous_rca_root_cause or "").lower().strip()
-        escalatable_causes = {"unstable_pod", "memory_exhaustion", "application_failure", "service_degradation"}
+        escalatable_causes = {
+            "unstable_pod",
+            "memory_exhaustion",
+            "application_failure",
+            "service_degradation",
+            "cpu_saturation",
+            "traffic_overload",
+            "insufficient_replicas",
+        }
         
         # Check if there is valid evidence indicating the fault is specifically tied to the pod
         has_pod_failure_evidence = (

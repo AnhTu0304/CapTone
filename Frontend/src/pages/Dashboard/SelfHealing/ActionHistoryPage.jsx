@@ -364,7 +364,17 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     else if (upperCode.includes('REPLACE')) actionFriendlyName = 'Thay thế Pod';
     else if (upperCode.includes('ROLLBACK')) actionFriendlyName = 'Khôi phục bản phát hành trước';
     else if (upperCode.includes('CLEANUP')) actionFriendlyName = 'Dọn dẹp tài nguyên';
-    else if (upperCode.includes('BLOCK')) actionFriendlyName = 'Chặn IP bất thường';
+    else if (upperCode.includes('BLOCK')) {
+      const blockedIp =
+        item.result?.details?.blocked_ip ||
+        item.result?.params?.ip ||
+        item.params?.ip ||
+        item.result?.params?.source_ip ||
+        item.params?.source_ip ||
+        (item.result?.message && item.result.message.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0]) ||
+        (item.incident_title && item.incident_title.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0]);
+      actionFriendlyName = blockedIp ? `Chặn IP (${blockedIp})` : 'Chặn IP bất thường';
+    }
     else if (upperCode.includes('NO_ACTION')) actionFriendlyName = 'Giám sát an toàn';
 
     const rawMsg = String(item.result?.message || item.error_message || '');

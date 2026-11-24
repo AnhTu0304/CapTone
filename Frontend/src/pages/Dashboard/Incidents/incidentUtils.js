@@ -58,8 +58,10 @@ export const ACTION_DISPLAY_NAMES_VI = {
   ROLLBACK_DEPLOYMENT: 'Khôi phục bản phát hành trước',
   CLEANUP_STORAGE: 'Dọn dẹp lưu trữ',
   CLEANUP_TEMP_FILES: 'Dọn dẹp tệp tạm',
-  TEMPORARY_IP_BLOCK: 'Chặn tạm thời IP nguồn',
-  BLOCK_IP_TEMP: 'Chặn tạm thời IP nguồn',
+  TEMPORARY_IP_BLOCK: 'Chặn IP tạm thời',
+  BLOCK_IP_TEMP: 'Chặn IP tạm thời',
+  BLOCK_IP: 'Chặn IP',
+  IP_BLOCK: 'Chặn IP',
   NO_ACTION: 'Giám sát an toàn',
 };
 

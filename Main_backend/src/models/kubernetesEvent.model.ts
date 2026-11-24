@@ -246,7 +246,9 @@ export class KubernetesEventModel {
         conditions.push(`(
           e.resource_type ILIKE $${paramIdx}
           OR e.reason ILIKE '%Deploy%'
+          OR e.reason ILIKE 'ScalingReplicaSet'
           OR e.message ILIKE '%Deployment%'
+          OR e.message ILIKE '%replica set%'
         )`);
         params.push(rType);
         paramIdx++;

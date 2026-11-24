@@ -152,16 +152,19 @@ class OpenAIRCAService:
         consecutive_failures = payload.action_history.consecutive_failures if payload.action_history else 0
         prev_act_norm = (payload.previous_action or "").upper().strip().replace(" ", "_")
 
-        # Bậc thang Cấp 2: Nếu RESTART_POD thất bại (consecutive_failures < 2) -> Leo thang lên REPLACE_POD
+        # Bậc thang Cấp 2: Nếu RESTART_POD thất bại -> Leo thang lên REPLACE_POD
         if (
             (prev_act_norm in {"RESTART_POD", "RESTART_DEPLOYMENT"} and payload.previous_action_result in {"FAILED", "PARTIAL"})
-            or (consecutive_failures == 1 and "RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
-        ) and "REPLACE_POD" not in blocked_set and consecutive_failures < 2:
-            if result.recommendation.action in {"RESTART_POD", "RESTART_DEPLOYMENT", "NO_ACTION"}:
+            or ("RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
+        ) and "REPLACE_POD" not in blocked_set and not (payload.action_history and payload.action_history.circuit_breaker_tripped):
+            if fallback_recommendation is not None and fallback_recommendation.action == "REPLACE_POD":
+                result.recommendation.action = "REPLACE_POD"
+                result.recommendation.reason = fallback_recommendation.reason
+            elif result.recommendation.action in {"RESTART_POD", "RESTART_DEPLOYMENT", "SCALE_REPLICAS", "NO_ACTION"} and result.root_cause.cause != "UNKNOWN":
                 result.recommendation.action = "REPLACE_POD"
                 result.recommendation.reason = (
-                    f"Hành động {payload.previous_action or 'RESTART_POD'} ở Cấp 1 có kết quả hậu kiểm là {payload.previous_action_result or 'FAILED'}; "
-                    "hệ thống phân tích RCA lại trên dữ liệu mới và leo thang lên Cấp 2: REPLACE_POD (xóa đích danh Pod lỗi để tạo container mới tinh)."
+                    f"Hành động {payload.previous_action or 'RESTART_POD'} ở bước trước có kết quả hậu kiểm là {payload.previous_action_result or 'FAILED'}; "
+                    "hệ thống phân tích RCA lại trên dữ liệu mới và leo thang lên REPLACE_POD (xóa đích danh Pod lỗi để tạo container mới tinh)."
                 )
 
         # Bậc thang Cấp 3: Circuit Breaker & Node Recovery Enforcement
@@ -176,6 +179,8 @@ class OpenAIRCAService:
             ):
                 result.recommendation.action = "DRAIN_NODE"
                 result.recommendation.reason = fallback_recommendation.reason
+            elif result.recommendation.action == "REPLACE_POD" and "REPLACE_POD" not in blocked_set and not (ah and ah.circuit_breaker_tripped):
+                pass
             elif (ah and (ah.consecutive_failures >= 2 or ah.circuit_breaker_tripped)) or (
                 prev_act_norm == "REPLACE_POD" and payload.previous_action_result in {"FAILED", "PARTIAL"}
             ):
@@ -196,6 +201,16 @@ class OpenAIRCAService:
                 )
 
         action = result.recommendation.action
+        if (
+            fallback_recommendation is not None
+            and fallback_recommendation.action in {"ROLLBACK_DEPLOYMENT", "CLEANUP_STORAGE"}
+            and fallback_recommendation.action not in blocked_set
+            and prev_act_norm != fallback_recommendation.action
+        ):
+            result.recommendation.action = fallback_recommendation.action
+            result.recommendation.reason = fallback_recommendation.reason
+            result.recommendation.priority = "HIGH"
+            action = fallback_recommendation.action
         if action == "ROLLBACK_DEPLOYMENT" and payload.deployment is None:
             result.recommendation = RecommendationResult(
                 action="NO_ACTION",

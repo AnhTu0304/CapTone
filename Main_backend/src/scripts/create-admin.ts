@@ -3,9 +3,9 @@ import { Pool } from 'pg';
 import { config } from '../config/env';
 
 async function seedAdmin() {
-  const email = 'phamthaisang1710@gmail.com';
-  const fullName = 'Phạm Thái Sang';
-  const rawPassword = 'AdminPassword123@';
+  const email = process.env.INITIAL_ADMIN_EMAIL || 'admin@selfheal.io';
+  const fullName = process.env.INITIAL_ADMIN_NAME || 'Quản Trị Viên Hệ Thống';
+  const rawPassword = process.env.INITIAL_ADMIN_PASSWORD || 'AdminPassword123@';
 
   console.log(`🚀 Đang khởi tạo tài khoản Quản trị viên (Admin) cho: ${email}...`);
 

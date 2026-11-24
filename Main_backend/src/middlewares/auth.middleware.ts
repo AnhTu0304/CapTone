@@ -13,19 +13,17 @@ import { recordAuthFailure } from '../telemetry/metrics';
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK === 'true') {
+    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_FALLBACK === 'true' && process.env.DEV_FALLBACK_EMAIL) {
       try {
-        const devUser =
-          (await UserModel.findFullByEmail('phamthaisang1710@gmail.com')) ||
-          (await UserModel.findFullByEmail('phamthais@gmail.com'));
+        const devUser = await UserModel.findFullByEmail(process.env.DEV_FALLBACK_EMAIL);
         if (devUser) {
           (req as any).user = {
             id: devUser.id,
             userId: devUser.id,
             email: devUser.email,
             status: devUser.status,
-            roles: ['SUPER_ADMIN', 'ADMIN'],
-            systemRoles: ['SYSTEM_ADMIN'],
+            roles: Array.isArray((devUser as any).roles) ? (devUser as any).roles : ['SUPER_ADMIN', 'ADMIN'],
+            systemRoles: Array.isArray((devUser as any).system_roles) ? (devUser as any).system_roles : ['SYSTEM_ADMIN'],
             organizations: [],
           };
           return next();

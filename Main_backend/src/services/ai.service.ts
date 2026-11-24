@@ -1050,8 +1050,14 @@ export class AiService {
         const sevRank: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
         const curSevUpper = String(existingIncident.severity || 'HIGH').toUpperCase();
         const newSevUpper = String(incidentSeverity || 'HIGH').toUpperCase();
-        const nextSeverity =
-          (sevRank[newSevUpper] || 0) >= (sevRank[curSevUpper] || 0) ? newSevUpper : curSevUpper;
+        const isScaleDownOpt =
+          incidentType === 'SCALE_DOWN_CANDIDATE' ||
+          String(aiResponse.root_cause?.cause || '').toLowerCase().includes('underutilized');
+        const nextSeverity = isScaleDownOpt
+          ? 'LOW'
+          : (sevRank[newSevUpper] || 0) >= (sevRank[curSevUpper] || 0)
+            ? newSevUpper
+            : curSevUpper;
 
         await client.query(
           `UPDATE incidents

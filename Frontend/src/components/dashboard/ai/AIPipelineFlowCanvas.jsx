@@ -30,10 +30,65 @@ import {
   Layers,
 } from 'lucide-react';
 
-const translateActionToVi = (rawAction) => {
+const extractBlockedIp = (item) => {
+  if (!item) return null;
+  let ip =
+    item?.result?.details?.blocked_ip ||
+    item?.details?.blocked_ip ||
+    item?.result?.params?.ip ||
+    item?.result?.params?.source_ip ||
+    item?.result?.params?.blocked_ip ||
+    item?.params?.ip ||
+    item?.params?.source_ip ||
+    item?.params?.blocked_ip ||
+    item?.result?.blocked_ip ||
+    item?.blocked_ip ||
+    (item?.result?.details?.ip_cidr ? String(item.result.details.ip_cidr).split('/')[0] : null);
+
+  if (!ip) {
+    const combined = [
+      item?.result?.message,
+      item?.message,
+      item?.incident_title,
+      item?.title,
+      item?.description,
+      item?.incident_description,
+      item?.reason,
+      item?.reasoning,
+      item?.policy_name,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const match = combined.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+    if (match) {
+      ip = match[0];
+    } else {
+      const dashMatch = combined.match(/\bblock-ip-(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})\b/);
+      if (dashMatch) {
+        ip = `${dashMatch[1]}.${dashMatch[2]}.${dashMatch[3]}.${dashMatch[4]}`;
+      }
+    }
+  }
+  return ip ? String(ip).trim() : null;
+};
+
+const translateActionToVi = (rawAction, item = null) => {
   if (!rawAction) return '';
   const trimmed = String(rawAction).trim();
   const normalizedCode = trimmed.toUpperCase().replace(/[\s-]+/g, '_');
+
+  if (
+    normalizedCode === 'BLOCK_IP_TEMP' ||
+    normalizedCode === 'TEMPORARY_IP_BLOCK' ||
+    normalizedCode === 'BLOCK_IP' ||
+    normalizedCode === 'IP_BLOCK' ||
+    normalizedCode.includes('BLOCK_IP') ||
+    trimmed.toLowerCase().includes('chặn ip')
+  ) {
+    const ip = extractBlockedIp(item);
+    return ip ? `Chặn IP (${ip})` : 'Chặn IP tạm thời';
+  }
+
   if (ACTION_DISPLAY_NAMES_VI[normalizedCode]) {
     return normalizedCode === 'NO_ACTION'
       ? `${ACTION_DISPLAY_NAMES_VI[normalizedCode]} (Ngắt mạch)`
@@ -572,7 +627,16 @@ export const AIPipelineFlowCanvas = ({
         : action.threshold;
 
       const isOomSuppressed = isBenignDbCacheState && action.riskKey === 'OOM';
-      const isExceeded = isAgentConnected && Boolean(prediction) && probValue >= effectiveThreshold && !isOomSuppressed;
+      const curReplicaNum = parseFloat(liveMetrics.replica_count?.latest) || podCount || 1;
+      const curCpuNum = parseFloat(liveMetrics.cpu?.latest) || 0;
+      const curLatNum = parseFloat(liveMetrics.latency?.latest) || 0;
+      const isScaleDownSuppressed =
+        action.riskKey === 'SCALE_DOWN_CANDIDATE' &&
+        (curReplicaNum <= 2 || curCpuNum >= 40 || curLatNum >= 250);
+      if (isScaleDownSuppressed) {
+        probValue = 0;
+      }
+      const isExceeded = isAgentConnected && Boolean(prediction) && probValue >= effectiveThreshold && !isOomSuppressed && !isScaleDownSuppressed;
       const percentVal = probValue * 100;
 
       const displayPercentText = (!isAgentConnected || !prediction)
@@ -876,6 +940,19 @@ export const AIPipelineFlowCanvas = ({
     riskInfo: riskProbabilities[action.riskKey] || { prob: 0, isTriggered: false, thresholdPercent: Math.round(action.threshold * 100), probPercent: '0%' },
   }));
   const triggeredRisksList = allRiskEvaluations.filter((r) => r.riskInfo.isTriggered);
+  const isScaleDownOnlyRisk =
+    triggeredRisksList.length === 1 && triggeredRisksList[0].riskKey === 'SCALE_DOWN_CANDIDATE';
+  const incCauseRawStr = String(
+    latestIncident?.cause || latestIncident?.root_cause || latestIncident?.title || ''
+  ).toLowerCase();
+  const isScaleDownIncident =
+    incCauseRawStr.includes('underutilized') ||
+    incCauseRawStr.includes('dư thừa') ||
+    incCauseRawStr.includes('thu hẹp') ||
+    incCauseRawStr.includes('scale_down') ||
+    incCauseRawStr.includes('scale down');
+  const isScaleDownOptimization = isAgentConnected && (isScaleDownOnlyRisk || isScaleDownIncident);
+
   const topRiskEval = [...allRiskEvaluations].sort((a, b) => {
     if (a.riskInfo.isTriggered !== b.riskInfo.isTriggered) return a.riskInfo.isTriggered ? -1 : 1;
     return (b.riskInfo.prob || 0) - (a.riskInfo.prob || 0);
@@ -889,13 +966,14 @@ export const AIPipelineFlowCanvas = ({
         const c2x = CENTER_OUT_PORT.x + (endPort.x - CENTER_OUT_PORT.x) * 0.52;
         const pathD = `M ${CENTER_OUT_PORT.x} ${CENTER_OUT_PORT.y} C ${c1x} ${CENTER_OUT_PORT.y}, ${c2x} ${endPort.y}, ${endPort.x} ${endPort.y}`;
         const riskInfo = riskProbabilities[action.riskKey] || { prob: 0, isTriggered: false };
+        const isOptNode = action.riskKey === 'SCALE_DOWN_CANDIDATE';
 
         return {
           id: `edge-out-${action.id}`,
           pathD,
           startPort: CENTER_OUT_PORT,
           endPort,
-          color: riskInfo.isTriggered ? '#EF4444' : '#10B981',
+          color: riskInfo.isTriggered ? (isOptNode ? '#0284C7' : '#EF4444') : '#10B981',
           isTriggered: riskInfo.isTriggered,
           riskProb: riskInfo.prob,
         };
@@ -906,7 +984,7 @@ export const AIPipelineFlowCanvas = ({
           pathD: `M ${CENTER_OUT_PORT.x} ${CENTER_OUT_PORT.y} L ${RIGHT_X} ${MAIN_MID_Y}`,
           startPort: CENTER_OUT_PORT,
           endPort: { x: RIGHT_X, y: MAIN_MID_Y },
-          color: triggeredRisksList.length > 0 ? '#EF4444' : '#10B981',
+          color: triggeredRisksList.length > 0 ? (isScaleDownOnlyRisk ? '#0284C7' : '#EF4444') : '#10B981',
           isTriggered: isAgentConnected && triggeredRisksList.length > 0,
           riskProb: topRiskEval?.riskInfo?.prob || 0,
         },
@@ -967,7 +1045,11 @@ export const AIPipelineFlowCanvas = ({
   const isAuditActive =
     isAgentConnected &&
     (isCircuitBreakerTripped || (pipelineContext?.totalPoliciesCount > 0 && pipelineContext?.activePoliciesCount === 0));
-  const hasUnrecoveredStep = isAgentConnected && actionTimeline.some((s) => s.isFailedOrUnrecovered);
+  const latestTimelineStep = actionTimeline.length > 0 ? actionTimeline[actionTimeline.length - 1] : null;
+  const hasUnrecoveredStep =
+    isAgentConnected &&
+    !isScaleDownOptimization &&
+    Boolean(latestTimelineStep?.isFailedOrUnrecovered);
   const isVerifyActive = isVerifyingInProgress;
 
   // 3. Đường cong Bezier từ Cột 3 hội tụ vào Cột 4 (Multi-Agent RCA Hub)
@@ -980,11 +1062,12 @@ export const AIPipelineFlowCanvas = ({
         const c2x = startPort.x + (RCA_IN_PORT.x - startPort.x) * 0.5;
         const pathD = `M ${startPort.x} ${startPort.y} C ${c1x} ${startPort.y}, ${c2x} ${RCA_IN_PORT.y}, ${RCA_IN_PORT.x} ${RCA_IN_PORT.y}`;
         const riskInfo = riskProbabilities[action.riskKey] || { prob: 0, isTriggered: false };
+        const isOptNode = action.riskKey === 'SCALE_DOWN_CANDIDATE';
         return {
           id: `edge-rca-in-${action.id}`,
           pathD,
           isTriggered: riskInfo.isTriggered,
-          color: riskInfo.isTriggered ? '#EF4444' : '#CBD5E1',
+          color: riskInfo.isTriggered ? (isOptNode ? '#0284C7' : '#EF4444') : '#CBD5E1',
         };
       })
     : [
@@ -992,7 +1075,7 @@ export const AIPipelineFlowCanvas = ({
           id: 'edge-rca-in-summary',
           pathD: `M ${RIGHT_X + RIGHT_W} ${MAIN_MID_Y} L ${RCA_IN_PORT.x} ${RCA_IN_PORT.y}`,
           isTriggered: isAgentConnected && triggeredRisksList.length > 0,
-          color: triggeredRisksList.length > 0 ? '#EF4444' : '#CBD5E1',
+          color: triggeredRisksList.length > 0 ? (isScaleDownOnlyRisk ? '#0284C7' : '#EF4444') : '#CBD5E1',
         },
       ];
 
@@ -1423,7 +1506,7 @@ export const AIPipelineFlowCanvas = ({
               : []),
             {
               label: 'Đề xuất khắc phục',
-              value: rawRecAction ? translateActionToVi(rawRecAction) : 'Đang tổng hợp đề xuất',
+              value: rawRecAction ? translateActionToVi(rawRecAction, latestRecommendation) : 'Đang tổng hợp đề xuất',
             },
           ]
         : [
@@ -2802,17 +2885,17 @@ export const AIPipelineFlowCanvas = ({
                 gap: '6px',
                 padding: '3px 10px',
                 borderRadius: '16px',
-                backgroundColor: isRiskDetected ? '#FEE2E2' : '#E0F2FE',
-                color: isRiskDetected ? '#991B1B' : '#0369A1',
+                backgroundColor: isScaleDownOptimization ? '#E0F2FE' : isRiskDetected ? '#FEE2E2' : '#E0F2FE',
+                color: isScaleDownOptimization ? '#0369A1' : isRiskDetected ? '#991B1B' : '#0369A1',
                 fontSize: '0.6875rem',
                 fontWeight: 700,
                 fontFamily: 'var(--font-mono)',
                 marginTop: '6px',
               }}
             >
-              <span>Điểm rủi ro tổng:</span>
+              <span>{isScaleDownOptimization ? 'Chỉ số tối ưu:' : 'Điểm rủi ro tổng:'}</span>
               <strong style={{ fontSize: '0.75rem' }}>
-                {rawRiskScore.toFixed(4)} ({isPredictionHealthy ? 'HEALTHY' : (prediction?.status || (isAgentConnected ? 'HEALTHY' : 'DISCONNECTED'))})
+                {rawRiskScore.toFixed(4)} ({isScaleDownOptimization ? 'SCALE_DOWN_OPT' : isPredictionHealthy ? 'HEALTHY' : (prediction?.status || (isAgentConnected ? 'HEALTHY' : 'DISCONNECTED'))})
               </strong>
             </div>
           </div>
@@ -2846,6 +2929,15 @@ export const AIPipelineFlowCanvas = ({
             thresholdPercent: Math.round(action.threshold * 100),
             probPercent: '0%',
           };
+          const isOptNode = action.riskKey === 'SCALE_DOWN_CANDIDATE';
+          const trigBorderColor = isOptNode ? '#7DD3FC' : '#FCA5A5';
+          const trigShadow = isOptNode
+            ? '0 4px 12px rgba(2, 132, 199, 0.14)'
+            : '0 4px 12px rgba(239, 68, 68, 0.14)';
+          const trigIconBg = isOptNode ? '#E0F2FE' : '#FEF2F2';
+          const trigIconBorder = isOptNode ? '#BAE6FD' : '#FECACA';
+          const trigAccent = isOptNode ? '#0284C7' : '#EF4444';
+          const trigTextColor = isOptNode ? '#0369A1' : '#DC2626';
 
           return (
             <div
@@ -2860,11 +2952,11 @@ export const AIPipelineFlowCanvas = ({
                 top: `${nodeY}px`,
                 width: `${RIGHT_W}px`,
                 height: `${RIGHT_H}px`,
-                backgroundColor: '#FFFFFF',
+                backgroundColor: riskInfo.isTriggered && isOptNode ? '#F0F9FF' : '#FFFFFF',
                 borderRadius: '9px',
-                border: `1.5px solid ${pinnedInspector?.id === `risk:${action.id}` ? '#2563EB' : riskInfo.isTriggered ? '#FCA5A5' : '#E2E8F0'}`,
+                border: `1.5px solid ${pinnedInspector?.id === `risk:${action.id}` ? '#2563EB' : riskInfo.isTriggered ? trigBorderColor : '#E2E8F0'}`,
                 boxShadow: riskInfo.isTriggered
-                  ? '0 4px 12px rgba(239, 68, 68, 0.14)'
+                  ? trigShadow
                   : '0 2px 6px rgba(15, 23, 42, 0.04)',
                 display: 'flex',
                 alignItems: 'center',
@@ -2875,22 +2967,26 @@ export const AIPipelineFlowCanvas = ({
                 transition: 'border-color 0.15s, box-shadow 0.15s',
               }}
             >
-              {/* Icon Checkmark xanh hoặc Cảnh báo đỏ */}
+              {/* Icon Checkmark xanh, Tối ưu xanh dương hoặc Cảnh báo đỏ */}
               <div
                 style={{
                   width: '26px',
                   height: '26px',
                   borderRadius: '50%',
-                  backgroundColor: riskInfo.isTriggered ? '#FEF2F2' : '#F0FDF4',
-                  border: `1px solid ${riskInfo.isTriggered ? '#FECACA' : '#BBF7D0'}`,
+                  backgroundColor: riskInfo.isTriggered ? trigIconBg : '#F0FDF4',
+                  border: `1px solid ${riskInfo.isTriggered ? trigIconBorder : '#BBF7D0'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: riskInfo.isTriggered ? '#EF4444' : '#10B981',
+                  color: riskInfo.isTriggered ? trigAccent : '#10B981',
                   flexShrink: 0,
                 }}
               >
-                {riskInfo.isTriggered ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+                {riskInfo.isTriggered ? (
+                  isOptNode ? <Sparkles size={14} /> : <AlertTriangle size={14} />
+                ) : (
+                  <CheckCircle2 size={14} />
+                )}
               </div>
 
               {/* Thông tin 2 dòng khớp chính xác bảng Hồ Sơ Xác Suất Rủi Ro */}
@@ -2901,7 +2997,7 @@ export const AIPipelineFlowCanvas = ({
                   style={{
                     fontSize: '0.6875rem',
                     fontWeight: 700,
-                    color: riskInfo.isTriggered ? '#DC2626' : '#1E293B',
+                    color: riskInfo.isTriggered ? trigTextColor : '#1E293B',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -2923,13 +3019,13 @@ export const AIPipelineFlowCanvas = ({
                     lineHeight: 1.2,
                   }}
                 >
-                  <span style={{ color: riskInfo.isTriggered ? '#EF4444' : '#64748B' }}>
+                  <span style={{ color: riskInfo.isTriggered ? trigAccent : '#64748B' }}>
                     Ngưỡng: {riskInfo.thresholdPercent}%
                   </span>
                   <strong
                     style={{
                       fontWeight: 700,
-                      color: riskInfo.isTriggered ? '#DC2626' : '#10B981',
+                      color: riskInfo.isTriggered ? trigTextColor : '#10B981',
                     }}
                   >
                     {riskInfo.probPercent}
@@ -2948,8 +3044,8 @@ export const AIPipelineFlowCanvas = ({
                     width: '10px',
                     height: '10px',
                     borderRadius: '50%',
-                    backgroundColor: riskInfo.isTriggered ? '#EF4444' : '#FFFFFF',
-                    border: `2px solid ${riskInfo.isTriggered ? '#EF4444' : '#94A3B8'}`,
+                    backgroundColor: riskInfo.isTriggered ? trigAccent : '#FFFFFF',
+                    border: `2px solid ${riskInfo.isTriggered ? trigAccent : '#94A3B8'}`,
                     zIndex: 12,
                   }}
                 />
@@ -3143,33 +3239,39 @@ export const AIPipelineFlowCanvas = ({
                     padding: '2px 7px',
                     borderRadius: '999px',
                     backgroundColor:
-                      openServiceIncidentsCount > 0
-                        ? '#FEE2E2'
-                        : isBenignDbCacheState
-                          ? '#ECFDF5'
-                          : isRcaActive
-                            ? '#EDE9FE'
-                            : '#ECFDF5',
+                      isScaleDownOptimization
+                        ? '#E0F2FE'
+                        : openServiceIncidentsCount > 0
+                          ? '#FEE2E2'
+                          : isBenignDbCacheState
+                            ? '#ECFDF5'
+                            : isRcaActive
+                              ? '#EDE9FE'
+                              : '#ECFDF5',
                     color:
-                      openServiceIncidentsCount > 0
-                        ? '#DC2626'
-                        : isBenignDbCacheState
-                          ? '#059669'
-                          : isRcaActive
-                            ? '#6D28D9'
-                            : '#059669',
+                      isScaleDownOptimization
+                        ? '#0369A1'
+                        : openServiceIncidentsCount > 0
+                          ? '#DC2626'
+                          : isBenignDbCacheState
+                            ? '#059669'
+                            : isRcaActive
+                              ? '#6D28D9'
+                              : '#059669',
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {openServiceIncidentsCount > 0
-                    ? `${openServiceIncidentsCount} Sự cố OPEN`
-                    : isBenignDbCacheState
-                      ? '🟢 Bộ đệm an toàn'
-                      : isRcaActive
-                        ? `Đang thu thập [${currentActiveStep || 12}/12]`
-                        : lastResolvedIncident
-                          ? '🟢 Đã ổn định'
-                          : '🟢 Hoạt động tối ưu'}
+                  {isScaleDownOptimization
+                    ? '♻️ Đang tối ưu Pod'
+                    : openServiceIncidentsCount > 0
+                      ? `${openServiceIncidentsCount} Sự cố OPEN`
+                      : isBenignDbCacheState
+                        ? '🟢 Bộ đệm an toàn'
+                        : isRcaActive
+                          ? `Đang thu thập [${currentActiveStep || 12}/12]`
+                          : lastResolvedIncident
+                            ? '🟢 Đã ổn định'
+                            : '🟢 Hoạt động tối ưu'}
                 </span>
               </div>
 
@@ -3250,8 +3352,8 @@ export const AIPipelineFlowCanvas = ({
                   style={{
                     padding: '8px 10px',
                     borderRadius: '9px',
-                    backgroundColor: openServiceIncidentsCount > 0 ? '#FEF2F2' : '#F0FDF4',
-                    border: `1px solid ${openServiceIncidentsCount > 0 ? '#FECACA' : '#BBF7D0'}`,
+                    backgroundColor: isScaleDownOptimization ? '#F0F9FF' : openServiceIncidentsCount > 0 ? '#FEF2F2' : '#F0FDF4',
+                    border: `1px solid ${isScaleDownOptimization ? '#BAE6FD' : openServiceIncidentsCount > 0 ? '#FECACA' : '#BBF7D0'}`,
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '4px',
@@ -3261,7 +3363,20 @@ export const AIPipelineFlowCanvas = ({
                     <span style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
                       Nguyên nhân gốc (Root Cause)
                     </span>
-                    {latestIncident?.severity && openServiceIncidentsCount > 0 ? (
+                    {isScaleDownOptimization ? (
+                      <span
+                        style={{
+                          fontSize: '0.5625rem',
+                          fontWeight: 800,
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          backgroundColor: '#E0F2FE',
+                          color: '#0369A1',
+                        }}
+                      >
+                        TỐI ƯU HÓA
+                      </span>
+                    ) : latestIncident?.severity && openServiceIncidentsCount > 0 ? (
                       <span
                         style={{
                           fontSize: '0.5625rem',
@@ -3302,7 +3417,7 @@ export const AIPipelineFlowCanvas = ({
                     style={{
                       fontSize: '0.7rem',
                       fontWeight: 700,
-                      color: openServiceIncidentsCount > 0 ? '#B91C1C' : '#15803D',
+                      color: isScaleDownOptimization ? '#0369A1' : openServiceIncidentsCount > 0 ? '#B91C1C' : '#15803D',
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -3347,7 +3462,8 @@ export const AIPipelineFlowCanvas = ({
                           ? translateActionToVi(
                               latestRecommendation?.action ||
                                 latestRecommendation?.action_code ||
-                                latestRecommendation?.recommendation
+                                latestRecommendation?.recommendation,
+                              latestRecommendation
                             )
                           : null) ||
                         (isBenignDbCacheState
@@ -3369,7 +3485,8 @@ export const AIPipelineFlowCanvas = ({
                         ? translateActionToVi(
                             latestRecommendation?.action ||
                               latestRecommendation?.action_code ||
-                              latestRecommendation?.recommendation
+                              latestRecommendation?.recommendation,
+                            latestRecommendation
                           )
                         : null) ||
                         (isBenignDbCacheState
@@ -3651,7 +3768,8 @@ export const AIPipelineFlowCanvas = ({
                             latestAutoAction.action_type_name ||
                             latestAutoAction.action_type_code ||
                             latestAutoAction.action_name ||
-                            latestAutoAction.action_code
+                            latestAutoAction.action_code,
+                          latestAutoAction
                         ) || 'Hành động tự phục hồi'
                       : 'Tự động Scale / Restart Pod'}
                   </div>
