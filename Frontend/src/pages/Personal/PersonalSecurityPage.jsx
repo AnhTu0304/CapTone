@@ -1348,9 +1348,50 @@ export const PersonalSecurityPage = () => {
               </h3>
             </div>
 
-            <p style={{ fontSize: '0.8125rem', color: '#64748B', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+            <p style={{ fontSize: '0.8125rem', color: '#64748B', lineHeight: 1.5, margin: '0 0 14px 0' }}>
               Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi mật khẩu thông thường.
             </p>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label
+                htmlFor="disable-2fa-credential"
+                style={{
+                  display: 'block',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  color: '#334155',
+                  marginBottom: '6px',
+                }}
+              >
+                Mật khẩu tài khoản hoặc Mã OTP 2FA (6 số)
+              </label>
+              <input
+                id="disable-2fa-credential"
+                type="password"
+                value={disablePassword}
+                onChange={(e) => {
+                  setDisablePassword(e.target.value);
+                  if (disableError) setDisableError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isDisabling) {
+                    handleConfirmDisable2FA(e);
+                  }
+                }}
+                placeholder="Nhập mật khẩu hoặc mã OTP 6 số..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${disableError ? '#FCA5A5' : '#CBD5E1'}`,
+                  fontSize: '0.8125rem',
+                  color: '#0F172A',
+                  outline: 'none',
+                }}
+              />
+            </div>
 
             {disableError && (
               <div

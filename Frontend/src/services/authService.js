@@ -3,7 +3,7 @@
  * Kết nối trực tiếp với Main Backend Node.js Express (cổng 5000)
  */
 
-import { API_BASE_URL } from './apiClient';
+import { API_BASE_URL, refreshAccessTokenSingleFlight } from './apiClient';
 
 const CSRF_COOKIE_NAME = 'selfheal_csrf_token';
 
@@ -231,33 +231,13 @@ export const authService = {
    * Không bao giờ lưu refresh token vào localStorage/sessionStorage.
    */
   async refreshSession() {
-    const headers = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
-    const csrf = getCsrfTokenFromCookie();
-    if (csrf) {
-      headers['X-CSRF-Token'] = csrf;
-    }
-
-    const res = await safeFetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers,
-    });
-
-    let data = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
-    }
-
-    if (!res.ok) {
-      const err = new Error(data?.message || 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-      err.status = res.status;
+    const token = await refreshAccessTokenSingleFlight();
+    if (!token) {
+      const err = new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      err.status = 401;
       throw err;
     }
-    return data;
+    return { success: true, data: { token } };
   },
 
   /**

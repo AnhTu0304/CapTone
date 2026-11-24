@@ -114,6 +114,14 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
       return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
     }
 
+    // Chặn tài khoản PENDING hoặc token chỉ dành cho xác thực email truy cập các API khác
+    const isVerificationEndpoint =
+      req.originalUrl?.includes('/auth/send-verification') || req.originalUrl?.includes('/auth/verify-email');
+    if ((dbUser.status === 'PENDING' || (decoded as any).purpose === 'email_verification') && !isVerificationEndpoint) {
+      recordAuthFailure('jwt', 'user_inactive');
+      return next(new ApiError(403, 'Tài khoản chưa xác thực email. Vui lòng hoàn tất xác thực OTP.'));
+    }
+
     // Kiểm tra token_version chống sử dụng lại access token sau đổi/đặt lại mật khẩu hoặc logout-all
     if (
       typeof decoded.tv === 'number' &&

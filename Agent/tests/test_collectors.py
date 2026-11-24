@@ -131,3 +131,67 @@ def test_logs_collector_and_redaction() -> None:
     assert logs[2].level == "error"
     assert "secret123" not in logs[2].message
     assert "[REDACTED]" in logs[2].message
+
+
+def test_pod_summary_preserves_https_probe_scheme_and_metrics_manager_uses_it() -> None:
+    import asyncio
+    from selfheal_agent.collectors.pods import PodsCollector
+    from selfheal_agent.telemetry.metrics import MetricsManager
+
+    mock_pod = MagicMock()
+    mock_pod.metadata.name = "tls-service-0"
+    mock_pod.metadata.namespace = "default"
+    mock_pod.metadata.uid = "uid-tls-0"
+    mock_pod.metadata.labels = {"app": "tls-service"}
+    mock_pod.metadata.creation_timestamp = None
+    mock_pod.metadata.deletion_timestamp = None
+    mock_pod.status.phase = "Running"
+    mock_pod.status.pod_ip = "10.244.0.8"
+    mock_pod.status.host_ip = "192.168.49.2"
+    mock_pod.status.qos_class = "Burstable"
+    mock_pod.status.start_time = None
+    mock_pod.status.container_statuses = []
+    mock_pod.status.init_container_statuses = []
+
+    container = MagicMock()
+    container.image = "example/tls:1.0"
+    container.resources.limits = {}
+    port_obj = MagicMock()
+    port_obj.container_port = 10250
+    port_obj.name = "https"
+    container.ports = [port_obj]
+    container.liveness_probe.http_get.path = "/healthz"
+    container.liveness_probe.http_get.port = "https"
+    container.liveness_probe.http_get.scheme = "HTTPS"
+    container.readiness_probe = None
+    mock_pod.spec.node_name = "minikube"
+    mock_pod.spec.containers = [container]
+
+    summary = PodsCollector(MagicMock())._parse_pod(mock_pod)
+    assert summary.port == 10250
+    assert summary.health_path == "/healthz"
+    assert summary.health_scheme == "https"
+
+    captured: dict[str, object] = {}
+
+    class FakeResp:
+        status = 200
+        async def json(self):
+            return {}
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeSession:
+        closed = False
+        def get(self, url, **kwargs):
+            captured["url"] = url
+            captured["kwargs"] = kwargs
+            return FakeResp()
+
+    mgr = MetricsManager(custom_objects=None)
+    mgr._http_session = FakeSession()
+    asyncio.run(mgr.probe_pod_http(summary))
+    assert captured["url"] == "https://10.244.0.8:10250/healthz"
+    assert captured["kwargs"].get("ssl") is False

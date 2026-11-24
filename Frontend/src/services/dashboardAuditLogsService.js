@@ -249,6 +249,7 @@ export const fetchOrgAuditLogs = async (
   if (filters.action && filters.action !== 'ALL') params.set('action', filters.action);
   if (filters.status && filters.status !== 'ALL') params.set('status', filters.status);
   if (filters.role && filters.role !== 'ALL') params.set('role', filters.role);
+  if (filters.actor_type && filters.actor_type !== 'ALL') params.set('actor_type', filters.actor_type);
   if (filters.cluster_id && filters.cluster_id !== 'ALL') params.set('cluster_id', filters.cluster_id);
   if (filters.service_name && filters.service_name !== 'ALL') params.set('service_name', filters.service_name);
   if (filters.search) params.set('search', filters.search);
@@ -259,6 +260,9 @@ export const fetchOrgAuditLogs = async (
   if (filters.start_date && filters.end_date) {
     startDate = filters.start_date;
     endDate = filters.end_date;
+  } else if (filters.timeFilterMode === 'all') {
+    startDate = null;
+    endDate = null;
   } else if (filters.timeFilterMode === 'today') {
     const [y, m, d] = getLocalTodayStr().split('-').map(Number);
     startDate = new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();

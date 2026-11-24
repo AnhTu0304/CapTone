@@ -19,14 +19,15 @@ describe('Sprint B SB-05 Frontend Security Tests', () => {
     sessionStorage.clear();
   });
 
-  test('SB05-F01: Unauthenticated user accessing /dashboard, /portal, or /admin renders LoginPage', () => {
+  test('SB05-F01: Unauthenticated user accessing /dashboard, /portal, or /admin renders 401 UnauthorizedPage', () => {
     localStorage.setItem('selfheal_mock_profile_v1', JSON.stringify({ systemRole: 'SUPER_ADMIN' }));
     render(
       <AuthProvider>
         <RouteRenderer currentPath="/dashboard" onNavigate={jest.fn()} />
       </AuthProvider>
     );
-    expect(screen.getByTestId('mock-login')).toBeInTheDocument();
+    expect(screen.getByTestId('status-page-401')).toBeInTheDocument();
+    expect(screen.getByTestId('status-page-401-code')).toHaveTextContent('401');
     expect(screen.queryByTestId('mock-dashboard')).not.toBeInTheDocument();
   });
 

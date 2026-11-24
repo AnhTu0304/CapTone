@@ -521,4 +521,42 @@ describe('AuditLogsPage Real Data & Time Filter', () => {
     expect(screen.getByText('AUD-SVC-2')).toBeInTheDocument();
     expect(screen.getByText('AUD-POL-1')).toBeInTheDocument();
   });
+
+  it('forwards role, status, and search filters to backend API and offers quick recovery on empty today result', async () => {
+    mockOrgContext.currentEnv = { id: 'cls-1', name: 'k8s-cmu-cluster' };
+    fetchOrgAuditLogs.mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      pageSize: 5000,
+      totalPages: 1,
+    });
+
+    render(<AuditLogsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Không tìm thấy bản ghi kiểm toán nào')).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: 'Xem tháng này' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem cả năm' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem toàn công ty' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tháng này' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Agent K8s' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thành Công' }));
+
+    await waitFor(() => {
+      expect(fetchOrgAuditLogs).toHaveBeenLastCalledWith(
+        'org-1',
+        expect.objectContaining({
+          cluster_id: 'cls-1',
+          role: 'AGENT',
+          status: 'SUCCESS',
+          timeFilterMode: 'month',
+        }),
+        { page: 1, pageSize: 5000 }
+      );
+    });
+  });
 });

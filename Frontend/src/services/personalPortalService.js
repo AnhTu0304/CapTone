@@ -804,10 +804,12 @@ export const personalPortalService = {
     return res.data;
   },
 
-  async disable2FA(password = '') {
+  async disable2FA(passwordOrCode = '') {
+    const trimmed = typeof passwordOrCode === 'string' ? passwordOrCode.trim() : '';
+    const payload = /^\d{6}$/.test(trimmed) ? { code: trimmed } : { password: passwordOrCode };
     const res = await request('/auth/2fa/disable', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(payload),
     });
     if (!res || !res.success) {
       throw new Error(res?.message || 'Không thể vô hiệu hóa 2FA');

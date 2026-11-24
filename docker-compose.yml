@@ -55,6 +55,8 @@ services:
       dockerfile: Dockerfile
     container_name: captone-main-backend
     restart: unless-stopped
+    env_file:
+      - ./Main_backend/.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +82,7 @@ services:
       DB_NAME: ${DB_NAME:-captone_db}
       DB_POOL_MAX: ${DB_POOL_MAX:-50}
       AI_BACKEND_URL: http://ai-backend:8000
-      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_min_32_characters}
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_32_characters_long}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-dev_only_totp_encryption_key_minimum_32_characters}
       JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_key_minimum_32_characters_long_12345}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
@@ -136,7 +138,7 @@ services:
     environment:
       PORT: 8000
       APP_ENV: ${APP_ENV:-development}
-      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_min_32_characters}
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_32_characters_long}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-30}

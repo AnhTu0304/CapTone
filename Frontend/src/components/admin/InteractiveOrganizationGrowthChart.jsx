@@ -1,4 +1,12 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import {
+  createChart,
+  AreaSeries,
+  LineSeries,
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+} from 'lightweight-charts';
 import {
   TrendingUp,
   Building2,
@@ -6,26 +14,33 @@ import {
   Cpu,
   Server,
   Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  Filter,
   Layers,
-  ArrowRight,
-  Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
+
+const SERIES_CONFIG = [
+  { key: 'companies', label: 'Doanh Nghiệp', color: '#059669', unit: 'DN' },
+  { key: 'users', label: 'Người Dùng', color: '#2563EB', unit: 'ND' },
+  { key: 'agents', label: 'Agent eBPF', color: '#7C3AED', unit: 'Agents' },
+  { key: 'clusters', label: 'Cụm K8s', color: '#D97706', unit: 'Cụm' },
+];
+
+const formatTickByMode = (time, mode) => {
+  if (typeof time !== 'string') return '';
+  const [year, month, day] = time.split('-');
+  if (!year || !month || !day) return time;
+  if (mode === 'year') return year;
+  if (mode === 'month') return `T${month}/${year.slice(-2)}`;
+  return `${day}/${month}`;
+};
 
 /**
  * InteractiveOrganizationGrowthChart
- * Biểu đồ biến thiên động hỗ trợ cả 4 trụ cột hệ thống SelfAI kết nối 100% dữ liệu thực:
- * 1. Doanh Nghiệp (Companies)
- * 2. Người Dùng (Users)
- * 3. Tác Tử eBPF (Agents)
- * 4. Cụm Kubernetes (Clusters)
  *
- * Hỗ trợ chọn thời gian tự do:
- * - Theo Ngày: Cho phép chọn khoảng ngày từ Date Picker HTML5 (Từ ngày -> Đến ngày) hoặc phím tắt (7N, 14N, 30N, 90N)
- * - Theo Tháng: Cho phép chọn Năm cụ thể và các Quý / khoảng tháng
- * - Theo Năm: Cho phép chọn khoảng dải năm tùy ý (Từ năm ... Đến năm ...)
+ * Biểu đồ tăng trưởng đa chiều toàn nền tảng sử dụng `lightweight-charts` v5:
+ * - Hỗ trợ 3 chế độ thời gian: Theo Ngày / Theo Tháng / Theo Năm
+ * - 2 thang đo: Thang % Tăng Trưởng (normalized) & Số Tuyệt Đối (absolute)
+ * - Bật/tắt độc lập 4 chuỗi (Doanh nghiệp, Người dùng, Agent eBPF, Cụm K8s) & Mục tiêu KPI
  */
 export const InteractiveOrganizationGrowthChart = ({
   kpiData = {},
@@ -35,178 +50,148 @@ export const InteractiveOrganizationGrowthChart = ({
   className = '',
   height = 280,
 }) => {
-  // Current real KPIs from backend/database
-  const realCompanies = kpiData?.companies?.total ?? statistics?.summary?.total_organizations ?? 1;
-  const activeCompanies = kpiData?.companies?.active ?? statistics?.summary?.active_organizations ?? 1;
-  const realUsers = kpiData?.users?.total ?? 2;
-  const activeUsers = kpiData?.users?.active ?? 2;
-  const realAgents = kpiData?.agents?.total ?? statistics?.summary?.total_agents ?? 1;
-  const onlineAgents = kpiData?.agents?.online ?? statistics?.summary?.online_agents ?? 1;
-  const realClusters = kpiData?.clusters?.total ?? statistics?.summary?.total_clusters ?? 1;
-  const healthyClusters = kpiData?.clusters?.healthy ?? statistics?.summary?.connected_clusters ?? 1;
+  const realCompanies = kpiData?.companies?.total ?? statistics?.summary?.totalOrganizations ?? 12;
+  const activeCompanies = kpiData?.companies?.active ?? statistics?.summary?.activeOrganizations ?? 10;
+  const realUsers = kpiData?.users?.total ?? statistics?.summary?.totalUsers ?? 148;
+  const activeUsers = kpiData?.users?.active ?? statistics?.summary?.activeUsers ?? 132;
+  const realAgents = kpiData?.agents?.total ?? 24;
+  const onlineAgents = kpiData?.agents?.online ?? 22;
+  const realClusters = kpiData?.clusters?.total ?? 8;
+  const healthyClusters = kpiData?.clusters?.healthy ?? 8;
 
-  // Mode: 'day' | 'month' | 'year'
-  const [timeMode, setTimeMode] = useState('month');
-
-  // Series Toggles: 4 Core Entities + KPI Target
+  const [timeMode, setTimeMode] = useState('month'); // 'day' | 'month' | 'year'
   const [showCompanies, setShowCompanies] = useState(true);
   const [showUsers, setShowUsers] = useState(true);
   const [showAgents, setShowAgents] = useState(true);
   const [showClusters, setShowClusters] = useState(true);
   const [showTarget, setShowTarget] = useState(true);
-
-  // View mode: 'normalized' (tỷ lệ % tăng trưởng) | 'absolute' (số thực tế)
   const [scaleMode, setScaleMode] = useState('normalized'); // 'normalized' | 'absolute'
 
-  // Dynamic real date defaults
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const thirtyDaysAgoStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 29);
-    return d.toISOString().slice(0, 10);
-  }, []);
+  const today = useMemo(() => new Date(), []);
+  const todayStr = today.toISOString().slice(0, 10);
+  const thirtyDaysAgoStr = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 
-  // --- Date Picker States for 'day' mode ---
   const [startDate, setStartDate] = useState(thirtyDaysAgoStr);
   const [endDate, setEndDate] = useState(todayStr);
-
-  // --- States for 'month' mode ---
   const [selectedYear, setSelectedYear] = useState('2026');
-  const [selectedQuarter, setSelectedQuarter] = useState('ALL'); // 'ALL' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
-
-  // --- States for 'year' mode ---
+  const [selectedQuarter, setSelectedQuarter] = useState('ALL');
   const [startYear, setStartYear] = useState('2023');
   const [endYear, setEndYear] = useState('2026');
 
-  // Hover state for interactive crosshair & tooltip
-  const [hoverIndex, setHoverIndex] = useState(null);
-  const svgRef = useRef(null);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
-  // --- Generate dynamic dataset based on user picker filters and real backend stats ---
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  const seriesRefs = useRef({ companies: null, users: null, agents: null, clusters: null });
+  const priceLineRef = useRef(null);
+  const pointsByTimeRef = useRef(new Map());
+  const timeModeRef = useRef(timeMode);
+
+  useEffect(() => {
+    timeModeRef.current = timeMode;
+  }, [timeMode]);
+
   const dataset = useMemo(() => {
-    // 1. DAY MODE: Generate daily points between startDate and endDate
     if (timeMode === 'day') {
       const start = new Date(startDate || thirtyDaysAgoStr);
       const end = new Date(endDate || todayStr);
-
       let diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
-      if (diffDays < 1) diffDays = 1;
+      if (!Number.isFinite(diffDays) || diffDays < 1) diffDays = 1;
       if (diffDays > 365) diffDays = 365;
 
-      const points = [];
       const baseComp = Math.max(1, Math.round(realCompanies * 0.7));
       const baseUsr = Math.max(1, Math.round(realUsers * 0.7));
       const baseAgt = Math.max(1, Math.round(realAgents * 0.7));
       const baseCls = Math.max(1, Math.round(realClusters * 0.7));
+      const points = [];
 
       for (let i = 0; i <= diffDays; i++) {
         const currentDate = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-        const dayStr = currentDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+        const isoTime = currentDate.toISOString().slice(0, 10);
         const fullDateStr = currentDate.toLocaleDateString('vi-VN', {
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',
         });
-
         const progress = diffDays > 0 ? i / diffDays : 1;
-        const compVal = Math.round(baseComp + progress * (realCompanies - baseComp));
-        const userVal = Math.round(baseUsr + progress * (realUsers - baseUsr));
-        const agtVal = Math.round(baseAgt + progress * (realAgents - baseAgt));
-        const clsVal = Math.round(baseCls + progress * (realClusters - baseCls));
 
         points.push({
-          label: dayStr,
+          time: isoTime,
+          label: currentDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
           fullDate: `Ngày ${fullDateStr}`,
-          companies: Math.max(1, compVal),
-          users: Math.max(1, userVal),
-          agents: Math.max(1, agtVal),
-          clusters: Math.max(1, clsVal),
-          newCompanies: i === diffDays ? (realCompanies - baseComp) : 0,
-          newUsers: i === diffDays ? (realUsers - baseUsr) : 0,
+          companies: Math.max(1, Math.round(baseComp + progress * (realCompanies - baseComp))),
+          users: Math.max(1, Math.round(baseUsr + progress * (realUsers - baseUsr))),
+          agents: Math.max(1, Math.round(baseAgt + progress * (realAgents - baseAgt))),
+          clusters: Math.max(1, Math.round(baseCls + progress * (realClusters - baseCls))),
         });
       }
 
       return {
         points,
-        periodLabel: `Từ ${start.toLocaleDateString('vi-VN')} đến ${end.toLocaleDateString('vi-VN')} (${points.length} Ngày)`,
         targetLine: 90,
-        targetText: 'CHỈ TIÊU VẬN HÀNH 100% SẴN SÀNG',
+        targetText: 'Chỉ tiêu vận hành 90% SLA',
       };
     }
 
-    // 2. MONTH MODE: Generate 12 months (or filtered quarter) of selectedYear
     if (timeMode === 'month') {
       const year = parseInt(selectedYear, 10) || 2026;
-      let monthRange = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
-      if (selectedQuarter === 'Q1') monthRange = [1, 2, 3];
-      else if (selectedQuarter === 'Q2') monthRange = [4, 5, 6];
-      else if (selectedQuarter === 'Q3') monthRange = [7, 8, 9];
-      else if (selectedQuarter === 'Q4') monthRange = [10, 11, 12];
-
+      const quarterMonths = {
+        ALL: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        Q1: [1, 2, 3],
+        Q2: [4, 5, 6],
+        Q3: [7, 8, 9],
+        Q4: [10, 11, 12],
+      };
+      const monthRange = quarterMonths[selectedQuarter] || quarterMonths.ALL;
       const yearMult = year === 2026 ? 1 : year === 2025 ? 0.75 : year === 2024 ? 0.5 : 0.3;
 
       const points = monthRange.map((m) => {
         const mStr = m < 10 ? `0${m}` : `${m}`;
         const ratio = m / 12;
-
-        const compVal = Math.max(1, Math.round(realCompanies * (0.5 + 0.5 * ratio) * yearMult));
-        const usrVal = Math.max(1, Math.round(realUsers * (0.5 + 0.5 * ratio) * yearMult));
-        const agtVal = Math.max(1, Math.round(realAgents * (0.5 + 0.5 * ratio) * yearMult));
-        const clsVal = Math.max(1, Math.round(realClusters * (0.5 + 0.5 * ratio) * yearMult));
-
         return {
+          time: `${year}-${mStr}-01`,
           label: `T${mStr}/${String(year).slice(-2)}`,
           fullDate: `Tháng ${mStr}/${year}`,
-          companies: compVal,
-          users: usrVal,
-          agents: agtVal,
-          clusters: clsVal,
-          newCompanies: Math.round(compVal * 0.1),
-          newUsers: Math.round(usrVal * 0.1),
+          companies: Math.max(1, Math.round(realCompanies * (0.5 + 0.5 * ratio) * yearMult)),
+          users: Math.max(1, Math.round(realUsers * (0.5 + 0.5 * ratio) * yearMult)),
+          agents: Math.max(1, Math.round(realAgents * (0.5 + 0.5 * ratio) * yearMult)),
+          clusters: Math.max(1, Math.round(realClusters * (0.5 + 0.5 * ratio) * yearMult)),
         };
       });
 
       return {
         points,
-        periodLabel: `Năm ${year} ${selectedQuarter !== 'ALL' ? `• ${selectedQuarter}` : '• Toàn bộ 12 Tháng'}`,
         targetLine: 85,
-        targetText: `MỤC TIÊU VẬN HÀNH NĂM ${year}: 100% SLA`,
+        targetText: `Mục tiêu KPI ${year} (${selectedQuarter === 'ALL' ? '85%' : selectedQuarter})`,
       };
     }
 
-    // 3. YEAR MODE: Generate years from startYear to endYear
     const sYear = parseInt(startYear, 10) || 2023;
-    const eYear = parseInt(endYear, 10) || 2026;
+    const eYear = Math.max(sYear, parseInt(endYear, 10) || 2026);
+    const totalYears = Math.max(1, eYear - sYear);
     const points = [];
 
-    const totalYears = Math.max(1, eYear - sYear);
     for (let y = sYear; y <= eYear; y++) {
       const progress = (y - sYear) / totalYears;
       const mult = 0.4 + 0.6 * progress;
-
-      const compVal = Math.max(1, Math.round(realCompanies * mult));
-      const usrVal = Math.max(1, Math.round(realUsers * mult));
-      const agtVal = Math.max(1, Math.round(realAgents * mult));
-      const clsVal = Math.max(1, Math.round(realClusters * mult));
-
       points.push({
+        time: `${y}-01-01`,
         label: `${y}`,
         fullDate: `Năm ${y}`,
-        companies: compVal,
-        users: usrVal,
-        agents: agtVal,
-        clusters: clsVal,
-        newCompanies: Math.round(compVal * 0.2),
-        newUsers: Math.round(usrVal * 0.2),
+        companies: Math.max(1, Math.round(realCompanies * mult)),
+        users: Math.max(1, Math.round(realUsers * mult)),
+        agents: Math.max(1, Math.round(realAgents * mult)),
+        clusters: Math.max(1, Math.round(realClusters * mult)),
       });
     }
 
     return {
       points,
-      periodLabel: `Khoảng năm: ${sYear} - ${eYear} (${points.length} Năm)`,
       targetLine: 80,
-      targetText: 'KẾ HOẠCH NĂM 2026: 100% HẠ TẦNG TỰ TRỊ',
+      targetText: 'Mục tiêu tự trị 80%',
     };
   }, [
     timeMode,
@@ -226,76 +211,245 @@ export const InteractiveOrganizationGrowthChart = ({
 
   const points = dataset.points;
 
-  // Chart dimensions
-  const padding = { top: 25, right: 30, bottom: 35, left: 45 };
-  const width = 800;
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
+  const maxValues = useMemo(
+    () => ({
+      companies: Math.max(...points.map((p) => p.companies), 1),
+      users: Math.max(...points.map((p) => p.users), 1),
+      agents: Math.max(...points.map((p) => p.agents), 1),
+      clusters: Math.max(...points.map((p) => p.clusters), 1),
+    }),
+    [points]
+  );
 
-  // Calculate maximum values for normalization
-  const maxValues = useMemo(() => {
-    const maxComp = Math.max(...points.map((p) => p.companies), 1);
-    const maxUsr = Math.max(...points.map((p) => p.users), 1);
-    const maxAgt = Math.max(...points.map((p) => p.agents), 1);
-    const maxCls = Math.max(...points.map((p) => p.clusters), 1);
-    return { maxComp, maxUsr, maxAgt, maxCls };
-  }, [points]);
+  // Initialize lightweight-charts instance once on mount
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
 
-  // Coordinates
-  const getX = (index) => padding.left + (index / Math.max(1, points.length - 1)) * chartWidth;
+    const chart = createChart(container, {
+      width: container.clientWidth || 800,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: '#FFFFFF' },
+        textColor: '#64748B',
+        fontFamily: 'inherit',
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: '#F1F5F9', style: LineStyle.Dotted },
+        horzLines: { color: '#E2E8F0', style: LineStyle.Dashed },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: '#94A3B8', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#0F172A' },
+        horzLine: { color: '#CBD5E1', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#0F172A' },
+      },
+      rightPriceScale: {
+        borderColor: '#E2E8F0',
+        scaleMargins: { top: 0.14, bottom: 0.08 },
+      },
+      timeScale: {
+        borderColor: '#E2E8F0',
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        tickMarkFormatter: (time) => formatTickByMode(time, timeModeRef.current),
+      },
+      localization: {
+        timeFormatter: (time) => {
+          const point = pointsByTimeRef.current.get(time);
+          return point ? point.fullDate : formatTickByMode(time, timeModeRef.current);
+        },
+      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+    });
 
-  // Map each series value to SVG Y position (0% - 100% relative height)
-  const getYCompanies = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxComp : val / Math.max(maxValues.maxComp, 10);
-    return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
-  };
+    const companiesSeries = chart.addSeries(AreaSeries, {
+      lineColor: '#059669',
+      topColor: 'rgba(5, 150, 105, 0.24)',
+      bottomColor: 'rgba(5, 150, 105, 0.02)',
+      lineWidth: 2.5,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
+    const usersSeries = chart.addSeries(LineSeries, {
+      color: '#2563EB',
+      lineWidth: 2.5,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
+    const agentsSeries = chart.addSeries(LineSeries, {
+      color: '#7C3AED',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
+    const clustersSeries = chart.addSeries(LineSeries, {
+      color: '#D97706',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
 
-  const getYUsers = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxUsr : val / Math.max(maxValues.maxUsr, 10);
-    return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
-  };
+    chartRef.current = chart;
+    seriesRefs.current = {
+      companies: companiesSeries,
+      users: usersSeries,
+      agents: agentsSeries,
+      clusters: clustersSeries,
+    };
 
-  const getYAgents = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxAgt : val / Math.max(maxValues.maxAgt, 10);
-    return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
-  };
+    const handleCrosshairMove = (param) => {
+      if (!param || !param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+        setHoveredPoint(null);
+        return;
+      }
+      const point = pointsByTimeRef.current.get(param.time);
+      if (!point) {
+        setHoveredPoint(null);
+        return;
+      }
+      setHoveredPoint(point);
+      setTooltipPos({ x: param.point.x, y: param.point.y });
+    };
 
-  const getYClusters = (val) => {
-    const ratio = scaleMode === 'normalized' ? val / maxValues.maxCls : val / Math.max(maxValues.maxCls, 10);
-    return padding.top + chartHeight - Math.min(1, Math.max(0, ratio)) * chartHeight;
-  };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
 
-  // SVG polylines & areas
-  const compPoints = points.map((d, i) => `${getX(i)},${getYCompanies(d.companies)}`).join(' ');
-  const userPoints = points.map((d, i) => `${getX(i)},${getYUsers(d.users)}`).join(' ');
-  const agentPoints = points.map((d, i) => `${getX(i)},${getYAgents(d.agents)}`).join(' ');
-  const clusterPoints = points.map((d, i) => `${getX(i)},${getYClusters(d.clusters)}`).join(' ');
-
-  const compArea = `${getX(0)},${getYCompanies(0)} ${compPoints} ${getX(points.length - 1)},${getYCompanies(0)}`;
-  const userArea = `${getX(0)},${getYUsers(0)} ${userPoints} ${getX(points.length - 1)},${getYUsers(0)}`;
-
-  // Handle Mouse Move for vertical crosshair
-  const handleMouseMove = (e) => {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const relativeX = (mouseX / rect.width) * width;
-
-    if (relativeX < padding.left || relativeX > width - padding.right) {
-      setHoverIndex(null);
-      return;
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const nextWidth = Math.floor(entry.contentRect.width);
+          if (nextWidth > 0) {
+            chart.resize(nextWidth, height);
+          }
+        }
+      });
+      resizeObserver.observe(container);
     }
 
-    const ratio = (relativeX - padding.left) / chartWidth;
-    const idx = Math.round(ratio * (points.length - 1));
-    setHoverIndex(Math.max(0, Math.min(points.length - 1, idx)));
-  };
+    return () => {
+      if (resizeObserver) resizeObserver.disconnect();
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      chart.remove();
+      chartRef.current = null;
+      priceLineRef.current = null;
+      seriesRefs.current = { companies: null, users: null, agents: null, clusters: null };
+    };
+  }, [height]);
 
-  const handleMouseLeave = () => {
-    setHoverIndex(null);
-  };
+  // Update series data, price format & KPI target line without recreating chart
+  useEffect(() => {
+    const chart = chartRef.current;
+    const { companies, users, agents, clusters } = seriesRefs.current;
+    if (!chart || !companies || !users || !agents || !clusters) return;
 
-  const activePoint = hoverIndex !== null ? points[hoverIndex] : points[points.length - 1] || {};
+    const mapByTime = new Map();
+    points.forEach((p) => mapByTime.set(p.time, p));
+    pointsByTimeRef.current = mapByTime;
+
+    const toValue = (raw, maxVal) =>
+      scaleMode === 'normalized' ? Math.round((raw / maxVal) * 1000) / 10 : raw;
+
+    companies.setData(points.map((p) => ({ time: p.time, value: toValue(p.companies, maxValues.companies) })));
+    users.setData(points.map((p) => ({ time: p.time, value: toValue(p.users, maxValues.users) })));
+    agents.setData(points.map((p) => ({ time: p.time, value: toValue(p.agents, maxValues.agents) })));
+    clusters.setData(points.map((p) => ({ time: p.time, value: toValue(p.clusters, maxValues.clusters) })));
+
+    const priceFormat =
+      scaleMode === 'normalized'
+        ? { type: 'custom', formatter: (val) => `${Math.round(val)}%`, minMove: 1 }
+        : { type: 'price', precision: 0, minMove: 1 };
+
+    [companies, users, agents, clusters].forEach((s) => s.applyOptions({ priceFormat }));
+
+    chart.timeScale().applyOptions({
+      tickMarkFormatter: (time) => formatTickByMode(time, timeMode),
+    });
+    chart.timeScale().fitContent();
+  }, [points, maxValues, scaleMode, timeMode]);
+
+  // Sync series visibility toggles
+  useEffect(() => {
+    const { companies, users, agents, clusters } = seriesRefs.current;
+    if (!companies) return;
+    companies.applyOptions({ visible: showCompanies });
+    users.applyOptions({ visible: showUsers });
+    agents.applyOptions({ visible: showAgents });
+    clusters.applyOptions({ visible: showClusters });
+  }, [showCompanies, showUsers, showAgents, showClusters]);
+
+  // Sync KPI Target priceLine (cleanly placed on right axis, zero chart-line overlap)
+  useEffect(() => {
+    const companies = seriesRefs.current.companies;
+    if (!companies) return;
+
+    if (priceLineRef.current && typeof companies.removePriceLine === 'function') {
+      companies.removePriceLine(priceLineRef.current);
+      priceLineRef.current = null;
+    }
+
+    if (showTarget && typeof companies.createPriceLine === 'function') {
+      const targetPrice =
+        scaleMode === 'normalized'
+          ? dataset.targetLine
+          : Math.round((maxValues.companies * dataset.targetLine) / 100);
+
+      priceLineRef.current = companies.createPriceLine({
+        price: targetPrice,
+        color: '#DC2626',
+        lineWidth: 1.5,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: dataset.targetText,
+      });
+    }
+  }, [showTarget, scaleMode, dataset.targetLine, dataset.targetText, maxValues.companies]);
+
+  const activePoint = hoveredPoint || points[points.length - 1] || {};
+
+  const toggleItems = [
+    {
+      key: 'companies',
+      active: showCompanies,
+      toggle: () => setShowCompanies((v) => !v),
+      color: '#059669',
+      bg: 'rgba(5, 150, 105, 0.12)',
+      Icon: Building2,
+      text: `Doanh Nghiệp (${activePoint.companies ?? realCompanies})`,
+    },
+    {
+      key: 'users',
+      active: showUsers,
+      toggle: () => setShowUsers((v) => !v),
+      color: '#2563EB',
+      bg: 'rgba(37, 99, 235, 0.12)',
+      Icon: Users,
+      text: `Người Dùng (${activePoint.users ?? realUsers})`,
+    },
+    {
+      key: 'agents',
+      active: showAgents,
+      toggle: () => setShowAgents((v) => !v),
+      color: '#7C3AED',
+      bg: 'rgba(139, 92, 246, 0.12)',
+      Icon: Cpu,
+      text: `Agent eBPF (${activePoint.agents ?? realAgents})`,
+    },
+    {
+      key: 'clusters',
+      active: showClusters,
+      toggle: () => setShowClusters((v) => !v),
+      color: '#D97706',
+      bg: 'rgba(217, 119, 6, 0.12)',
+      Icon: Server,
+      text: `Cụm K8s (${activePoint.clusters ?? realClusters})`,
+    },
+  ];
+
+  const containerWidth = containerRef.current?.clientWidth || 800;
+  const tooltipLeft = Math.min(Math.max(12, tooltipPos.x + 14), Math.max(12, containerWidth - 236));
+  const tooltipTop = Math.max(8, Math.min(tooltipPos.y - 20, height - 150));
 
   return (
     <div
@@ -309,7 +463,7 @@ export const InteractiveOrganizationGrowthChart = ({
         boxShadow: 'var(--dash-shadow-xs)',
       }}
     >
-      {/* 1. HEADER BAR: Title, Subtitle, Time Range Modes & Scale Switcher */}
+      {/* 1. HEADER BAR */}
       <div
         style={{
           display: 'flex',
@@ -322,49 +476,39 @@ export const InteractiveOrganizationGrowthChart = ({
           borderBottom: '1px solid #F1F5F9',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(5, 150, 105, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <TrendingUp size={17} color="#059669" />
+          </div>
+          <div>
+            <h3
               style={{
-                width: '30px',
-                height: '30px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(5, 150, 105, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                fontSize: '1rem',
+                fontWeight: 800,
+                color: 'var(--dash-text-primary)',
+                letterSpacing: '-0.01em',
+                margin: 0,
               }}
             >
-              <TrendingUp size={17} color="#059669" />
-            </div>
-            <div>
-              <h3
-                style={{
-                  fontSize: '1rem',
-                  fontWeight: 800,
-                  color: 'var(--dash-text-primary)',
-                  letterSpacing: '-0.01em',
-                  margin: 0,
-                }}
-              >
-                {title}
-              </h3>
-              <p
-                style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--dash-text-secondary)',
-                  margin: '2px 0 0 0',
-                }}
-              >
-                {subtitle}
-              </p>
-            </div>
+              {title}
+            </h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
+              {subtitle}
+            </p>
           </div>
         </div>
 
-        {/* Top-Right: Mode Tabs & Scale Toggle */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-          {/* Main Time Tabs: Theo Ngày / Theo Tháng / Theo Năm */}
           <div
             style={{
               display: 'flex',
@@ -401,10 +545,9 @@ export const InteractiveOrganizationGrowthChart = ({
             ))}
           </div>
 
-          {/* Scale mode: Normalized % vs Counts */}
           <button
             type="button"
-            onClick={() => setScaleMode(scaleMode === 'normalized' ? 'absolute' : 'normalized')}
+            onClick={() => setScaleMode((m) => (m === 'normalized' ? 'absolute' : 'normalized'))}
             title="Chuyển chế độ hiển thị chuẩn hóa % so sánh hoặc số thực tế"
             style={{
               display: 'inline-flex',
@@ -426,7 +569,7 @@ export const InteractiveOrganizationGrowthChart = ({
         </div>
       </div>
 
-      {/* 2. DYNAMIC DATE / FILTER PICKER BAR */}
+      {/* 2. FILTER PICKER & SERIES TOGGLE BAR */}
       <div
         style={{
           display: 'flex',
@@ -441,292 +584,196 @@ export const InteractiveOrganizationGrowthChart = ({
           marginBottom: '16px',
         }}
       >
-        {/* Dynamic Controls depending on 'day', 'month', or 'year' */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.75rem', fontWeight: 700 }}>
             <Calendar size={15} color="#059669" />
             <span>Khoảng Thời Gian:</span>
           </div>
 
-          {/* CASE 1: THEO NGÀY -> DATE RANGE PICKER HTML5 */}
           {timeMode === 'day' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Từ:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    fontFamily: 'inherit',
-                    backgroundColor: '#FFFFFF',
-                    color: 'var(--dash-text-primary)',
+              <input
+                type="date"
+                aria-label="Từ ngày"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.75rem',
+                  backgroundColor: '#FFFFFF',
+                }}
+              />
+              <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>→</span>
+              <input
+                type="date"
+                aria-label="Đến ngày"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.75rem',
+                  backgroundColor: '#FFFFFF',
+                }}
+              />
+              {[
+                { label: '7N', days: 7 },
+                { label: '14N', days: 14 },
+                { label: '30N', days: 30 },
+                { label: '90N', days: 90 },
+              ].map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => {
+                    const end = new Date();
+                    const start = new Date(end.getTime() - (p.days - 1) * 24 * 60 * 60 * 1000);
+                    setEndDate(end.toISOString().slice(0, 10));
+                    setStartDate(start.toISOString().slice(0, 10));
                   }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Đến:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
                   style={{
-                    padding: '4px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    fontFamily: 'inherit',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #CBD5E1',
                     backgroundColor: '#FFFFFF',
-                    color: 'var(--dash-text-primary)',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    color: '#475569',
+                    cursor: 'pointer',
                   }}
-                />
-              </div>
-
-              {/* Quick shortcut pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '4px' }}>
-                {[
-                  { label: '7N', days: 7 },
-                  { label: '14N', days: 14 },
-                  { label: '30N', days: 30 },
-                  { label: '90N', days: 90 },
-                ].map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => {
-                      const end = new Date();
-                      const start = new Date(end.getTime() - (p.days - 1) * 24 * 60 * 60 * 1000);
-                      setEndDate(end.toISOString().slice(0, 10));
-                      setStartDate(start.toISOString().slice(0, 10));
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      border: '1px solid #CBD5E1',
-                      backgroundColor: '#FFFFFF',
-                      fontSize: '0.6875rem',
-                      fontWeight: 700,
-                      color: '#475569',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           )}
 
-          {/* CASE 2: THEO THÁNG -> SELECT YEAR & QUARTER PICKER */}
           {timeMode === 'month' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Chọn Năm:</span>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    backgroundColor: '#FFFFFF',
-                    color: '#059669',
-                  }}
-                >
-                  <option value="2026">Năm 2026 (Hiện tại)</option>
-                  <option value="2025">Năm 2025</option>
-                  <option value="2024">Năm 2024</option>
-                  <option value="2023">Năm 2023</option>
-                </select>
-              </div>
+              <select
+                aria-label="Chọn Năm"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  backgroundColor: '#FFFFFF',
+                  color: '#059669',
+                }}
+              >
+                <option value="2026">Năm 2026 (Hiện tại)</option>
+                <option value="2025">Năm 2025</option>
+                <option value="2024">Năm 2024</option>
+                <option value="2023">Năm 2023</option>
+              </select>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Phân Kỳ Tháng:</span>
-                <select
-                  value={selectedQuarter}
-                  onChange={(e) => setSelectedQuarter(e.target.value)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <option value="ALL">Toàn Bộ 12 Tháng (T1 - T12)</option>
-                  <option value="Q1">Quý 1 (Tháng 1 - Tháng 3)</option>
-                  <option value="Q2">Quý 2 (Tháng 4 - Tháng 6)</option>
-                  <option value="Q3">Quý 3 (Tháng 7 - Tháng 9)</option>
-                  <option value="Q4">Quý 4 (Tháng 10 - Tháng 12)</option>
-                </select>
-              </div>
+              <select
+                aria-label="Phân Kỳ Tháng"
+                value={selectedQuarter}
+                onChange={(e) => setSelectedQuarter(e.target.value)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <option value="ALL">Toàn Bộ 12 Tháng (T1 - T12)</option>
+                <option value="Q1">Quý 1 (Tháng 1 - Tháng 3)</option>
+                <option value="Q2">Quý 2 (Tháng 4 - Tháng 6)</option>
+                <option value="Q3">Quý 3 (Tháng 7 - Tháng 9)</option>
+                <option value="Q4">Quý 4 (Tháng 10 - Tháng 12)</option>
+              </select>
             </div>
           )}
 
-          {/* CASE 3: THEO NĂM -> SELECT RANGE OF YEARS */}
           {timeMode === 'year' && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Từ Năm:</span>
-                <select
-                  value={startYear}
-                  onChange={(e) => setStartYear(e.target.value)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <option value="2023">2023</option>
-                  <option value="2024">2024</option>
-                  <option value="2025">2025</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Đến Năm:</span>
-                <select
-                  value={endYear}
-                  onChange={(e) => setEndYear(e.target.value)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--dash-border)',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    backgroundColor: '#FFFFFF',
-                    color: '#059669',
-                  }}
-                >
-                  <option value="2026">2026 (Hiện tại)</option>
-                  <option value="2025">2025</option>
-                  <option value="2024">2024</option>
-                </select>
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+              <select
+                aria-label="Từ Năm"
+                value={startYear}
+                onChange={(e) => setStartYear(e.target.value)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <option value="2023">2023</option>
+                <option value="2024">2024</option>
+                <option value="2025">2025</option>
+              </select>
+              <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>→</span>
+              <select
+                aria-label="Đến Năm"
+                value={endYear}
+                onChange={(e) => setEndYear(e.target.value)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--dash-border)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  backgroundColor: '#FFFFFF',
+                  color: '#059669',
+                }}
+              >
+                <option value="2026">2026 (Hiện tại)</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+              </select>
             </div>
           )}
         </div>
 
-        {/* 4 CORE ENTITY TOGGLES (SERIES SWITCHES) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
-          {/* Series 1: Company */}
+          {toggleItems.map(({ key, active, toggle, color, bg, Icon, text }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={toggle}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 9px',
+                backgroundColor: active ? bg : '#FFFFFF',
+                border: active ? `1px solid ${color}` : '1px solid #CBD5E1',
+                color: active ? color : '#94A3B8',
+                borderRadius: '6px',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color }} />
+              <Icon size={12} />
+              <span>{text}</span>
+            </button>
+          ))}
+
           <button
             type="button"
-            onClick={() => setShowCompanies(!showCompanies)}
+            onClick={() => setShowTarget((v) => !v)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '5px',
               padding: '4px 9px',
-              backgroundColor: showCompanies ? 'rgba(5, 150, 105, 0.12)' : '#FFFFFF',
-              border: showCompanies ? '1px solid #059669' : '1px solid #CBD5E1',
-              color: showCompanies ? '#059669' : '#94A3B8',
-              borderRadius: '6px',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#059669' }} />
-            <Building2 size={12} />
-            <span>Doanh Nghiệp ({activePoint.companies || realCompanies})</span>
-          </button>
-
-          {/* Series 2: Users */}
-          <button
-            type="button"
-            onClick={() => setShowUsers(!showUsers)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '4px 9px',
-              backgroundColor: showUsers ? 'rgba(37, 99, 235, 0.12)' : '#FFFFFF',
-              border: showUsers ? '1px solid #2563EB' : '1px solid #CBD5E1',
-              color: showUsers ? '#2563EB' : '#94A3B8',
-              borderRadius: '6px',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
-            <Users size={12} />
-            <span>Người Dùng ({activePoint.users?.toLocaleString() || realUsers})</span>
-          </button>
-
-          {/* Series 3: Agents */}
-          <button
-            type="button"
-            onClick={() => setShowAgents(!showAgents)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '4px 9px',
-              backgroundColor: showAgents ? 'rgba(139, 92, 246, 0.12)' : '#FFFFFF',
-              border: showAgents ? '1px solid #8B5CF6' : '1px solid #CBD5E1',
-              color: showAgents ? '#7C3AED' : '#94A3B8',
-              borderRadius: '6px',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#8B5CF6' }} />
-            <Cpu size={12} />
-            <span>Agent eBPF ({activePoint.agents || realAgents})</span>
-          </button>
-
-          {/* Series 4: Clusters */}
-          <button
-            type="button"
-            onClick={() => setShowClusters(!showClusters)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '4px 9px',
-              backgroundColor: showClusters ? 'rgba(217, 119, 6, 0.12)' : '#FFFFFF',
-              border: showClusters ? '1px solid #D97706' : '1px solid #CBD5E1',
-              color: showClusters ? '#D97706' : '#94A3B8',
-              borderRadius: '6px',
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#D97706' }} />
-            <Server size={12} />
-            <span>Cụm K8s ({activePoint.clusters || realClusters})</span>
-          </button>
-
-          {/* Target Threshold */}
-          <button
-            type="button"
-            onClick={() => setShowTarget(!showTarget)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 9px',
-              backgroundColor: showTarget ? '#FEF2F2' : '#FFFFFF',
-              border: showTarget ? '1px solid #F87171' : '1px solid #CBD5E1',
+              backgroundColor: showTarget ? 'rgba(220, 38, 38, 0.08)' : '#FFFFFF',
+              border: showTarget ? '1px solid #DC2626' : '1px solid #CBD5E1',
               color: showTarget ? '#DC2626' : '#94A3B8',
               borderRadius: '6px',
               fontSize: '0.6875rem',
@@ -740,379 +787,51 @@ export const InteractiveOrganizationGrowthChart = ({
         </div>
       </div>
 
-      {/* 3. SVG CHART AREA WITH CROSSHAIR & TOOLTIP */}
-      <div
-        style={{ width: '100%', position: 'relative', cursor: 'crosshair', userSelect: 'none' }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      >
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
-          style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
-        >
-          <defs>
-            {/* Emerald Gradient for Companies */}
-            <linearGradient id="multiCompGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#059669" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="#059669" stopOpacity="0.0" />
-            </linearGradient>
+      {/* 3. LIGHTWEIGHT CHARTS CANVAS CONTAINER + FLOATING TOOLTIP */}
+      <div style={{ position: 'relative', width: '100%', height: `${height}px` }}>
+        <div
+          ref={containerRef}
+          data-testid="growth-lightweight-chart"
+          style={{ width: '100%', height: '100%' }}
+        />
 
-            {/* Blue Gradient for Users */}
-            <linearGradient id="multiUserGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-
-          {/* Grid lines (0, 25, 50, 75, 100%) */}
-          {[0, 25, 50, 75, 100].map((val) => {
-            const y = padding.top + chartHeight - (val / 100) * chartHeight;
-            return (
-              <g key={val}>
-                <line
-                  x1={padding.left}
-                  y1={y}
-                  x2={width - padding.right}
-                  y2={y}
-                  stroke={val === 0 ? '#CBD5E1' : '#F1F5F9'}
-                  strokeWidth="1"
-                  strokeDasharray={val === 0 ? 'none' : '3 3'}
-                />
-                <text
-                  x={padding.left - 8}
-                  y={y + 3}
-                  textAnchor="end"
-                  fontFamily="monospace"
-                  fontSize="10"
-                  fill="#94A3B8"
-                >
-                  {scaleMode === 'normalized' ? `${val}%` : val}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* KPI Target Reference Line */}
-          {showTarget && (
-            <g>
-              <line
-                x1={padding.left}
-                y1={padding.top + chartHeight - (dataset.targetLine / 100) * chartHeight}
-                x2={width - padding.right}
-                y2={padding.top + chartHeight - (dataset.targetLine / 100) * chartHeight}
-                stroke="#DC2626"
-                strokeWidth="1.5"
-                strokeDasharray="4 4"
-                strokeOpacity="0.85"
-              />
-              <rect
-                x={width - padding.right - 210}
-                y={padding.top + chartHeight - (dataset.targetLine / 100) * chartHeight - 10}
-                width="210"
-                height="20"
-                rx="4"
-                fill="#FEF2F2"
-                stroke="#FECACA"
-                strokeWidth="1"
-              />
-              <text
-                x={width - padding.right - 105}
-                y={padding.top + chartHeight - (dataset.targetLine / 100) * chartHeight + 4}
-                textAnchor="middle"
-                fontFamily="monospace"
-                fontSize="9"
-                fontWeight="700"
-                fill="#B91C1C"
-              >
-                {dataset.targetText}
-              </text>
-            </g>
-          )}
-
-          {/* SERIES 1: COMPANIES (Emerald Area + Line) */}
-          {showCompanies && (
-            <>
-              <polygon points={compArea} fill="url(#multiCompGrad)" />
-              <polyline
-                fill="none"
-                stroke="#059669"
-                strokeWidth="2.5"
-                points={compPoints}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </>
-          )}
-
-          {/* SERIES 2: USERS (Blue Area + Line) */}
-          {showUsers && (
-            <>
-              <polygon points={userArea} fill="url(#multiUserGrad)" />
-              <polyline
-                fill="none"
-                stroke="#2563EB"
-                strokeWidth="2.2"
-                points={userPoints}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </>
-          )}
-
-          {/* SERIES 3: AGENTS (Violet Line) */}
-          {showAgents && (
-            <polyline
-              fill="none"
-              stroke="#8B5CF6"
-              strokeWidth="2.2"
-              points={agentPoints}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={scaleMode === 'normalized' ? 'none' : '4 2'}
-            />
-          )}
-
-          {/* SERIES 4: CLUSTERS (Amber Line) */}
-          {showClusters && (
-            <polyline
-              fill="none"
-              stroke="#D97706"
-              strokeWidth="2.2"
-              points={clusterPoints}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-
-          {/* X Axis Time Labels */}
-          {points.map((d, i) => {
-            const shouldShow =
-              points.length <= 15
-                ? true
-                : points.length <= 31
-                ? i % 3 === 0 || i === points.length - 1
-                : i % Math.ceil(points.length / 10) === 0 || i === points.length - 1;
-
-            if (!shouldShow) return null;
-
-            return (
-              <text
-                key={i}
-                x={getX(i)}
-                y={height - 10}
-                textAnchor="middle"
-                fontFamily="monospace"
-                fontSize="10"
-                fill="#64748B"
-              >
-                {d.label}
-              </text>
-            );
-          })}
-
-          {/* Crosshair indicator when hovering */}
-          {hoverIndex !== null && (
-            <g>
-              <line
-                x1={getX(hoverIndex)}
-                y1={padding.top}
-                x2={getX(hoverIndex)}
-                y2={height - padding.bottom}
-                stroke="#0F172A"
-                strokeWidth="1.5"
-                strokeDasharray="2 2"
-              />
-              {showCompanies && (
-                <circle
-                  cx={getX(hoverIndex)}
-                  cy={getYCompanies(activePoint.companies)}
-                  r="5"
-                  fill="#FFFFFF"
-                  stroke="#059669"
-                  strokeWidth="2.5"
-                />
-              )}
-              {showUsers && (
-                <circle
-                  cx={getX(hoverIndex)}
-                  cy={getYUsers(activePoint.users)}
-                  r="5"
-                  fill="#FFFFFF"
-                  stroke="#2563EB"
-                  strokeWidth="2.5"
-                />
-              )}
-              {showAgents && (
-                <circle
-                  cx={getX(hoverIndex)}
-                  cy={getYAgents(activePoint.agents)}
-                  r="4.5"
-                  fill="#FFFFFF"
-                  stroke="#8B5CF6"
-                  strokeWidth="2.5"
-                />
-              )}
-              {showClusters && (
-                <circle
-                  cx={getX(hoverIndex)}
-                  cy={getYClusters(activePoint.clusters)}
-                  r="4.5"
-                  fill="#FFFFFF"
-                  stroke="#D97706"
-                  strokeWidth="2.5"
-                />
-              )}
-            </g>
-          )}
-        </svg>
-
-        {/* Floating Tooltip Box */}
-        {hoverIndex !== null && (
+        {hoveredPoint && (
           <div
+            data-testid="growth-chart-tooltip"
             style={{
               position: 'absolute',
-              top: '12px',
-              left: `${Math.min(Math.max((getX(hoverIndex) / width) * 100, 18), 72)}%`,
-              transform: 'translateX(-50%)',
-              backgroundColor: '#0F172A',
-              color: '#FFFFFF',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+              left: `${tooltipLeft}px`,
+              top: `${tooltipTop}px`,
+              width: '220px',
+              backgroundColor: 'rgba(15, 23, 42, 0.94)',
+              color: '#F8FAFC',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              fontSize: '0.75rem',
+              boxShadow: '0 10px 25px rgba(15, 23, 42, 0.25)',
               pointerEvents: 'none',
-              zIndex: 30,
-              minWidth: '240px',
-              border: '1px solid rgba(255,255,255,0.15)',
+              zIndex: 10,
             }}
           >
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.6875rem',
-                color: '#94A3B8',
-                marginBottom: '8px',
-                borderBottom: '1px solid rgba(255,255,255,0.12)',
-                paddingBottom: '4px',
-                display: 'flex',
-                justifyContent: 'space-between',
-              }}
-            >
-              <span>MỐC THỜI GIAN:</span>
-              <strong style={{ color: '#F8FAFC' }}>{activePoint.fullDate}</strong>
+            <div style={{ fontWeight: 700, color: '#E2E8F0', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: '4px' }}>
+              {hoveredPoint.fullDate}
             </div>
-
-            {/* 1. Companies */}
-            {showCompanies && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.75rem',
-                  marginBottom: '4px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#34D399' }}>
-                  <Building2 size={13} />
-                  <span>Doanh Nghiệp:</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontWeight: 800, color: '#34D399' }}>{activePoint.companies} Tổ chức</span>
-                </div>
+            {SERIES_CONFIG.map((s) => (
+              <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#CBD5E1' }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: s.color }} />
+                  {s.label}
+                </span>
+                <span style={{ fontWeight: 700, color: '#FFFFFF' }}>
+                  {hoveredPoint[s.key]?.toLocaleString('vi-VN')} {s.unit}
+                </span>
               </div>
-            )}
-
-            {/* 2. Users */}
-            {showUsers && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.75rem',
-                  marginBottom: '4px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#60A5FA' }}>
-                  <Users size={13} />
-                  <span>Người Dùng:</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontWeight: 800, color: '#60A5FA' }}>
-                    {activePoint.users?.toLocaleString()} Users
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* 3. Agents */}
-            {showAgents && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.75rem',
-                  marginBottom: '4px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#C084FC' }}>
-                  <Cpu size={13} />
-                  <span>Tác Tử eBPF:</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontWeight: 800, color: '#C084FC' }}>{activePoint.agents} Tác tử</span>
-                </div>
-              </div>
-            )}
-
-            {/* 4. Clusters */}
-            {showClusters && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.75rem',
-                  marginBottom: '4px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#FBBF24' }}>
-                  <Server size={13} />
-                  <span>Cụm K8s:</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontWeight: 800, color: '#FBBF24' }}>{activePoint.clusters} Cụm</span>
-                </div>
-              </div>
-            )}
-
-            {/* Status evaluation */}
-            <div
-              style={{
-                marginTop: '8px',
-                paddingTop: '6px',
-                borderTop: '1px solid rgba(255,255,255,0.1)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.625rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                color: '#34D399',
-              }}
-            >
-              <span>TRẠNG THÁI HỆ THỐNG:</span>
-              <span style={{ fontWeight: 700 }}>100% SẴN SÀNG</span>
-            </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* 4. METRIC BREAKDOWN FOOTER (4 SUMMARY CARDS FOR ALL 4 CORE PILLARS) */}
+      {/* 4. METRIC BREAKDOWN FOOTER (4 SUMMARY CARDS) */}
       <div
         style={{
           marginTop: '16px',
@@ -1123,7 +842,6 @@ export const InteractiveOrganizationGrowthChart = ({
           gap: '12px',
         }}
       >
-        {/* Card 1: Companies */}
         <div
           style={{
             padding: '10px 14px',
@@ -1146,7 +864,6 @@ export const InteractiveOrganizationGrowthChart = ({
           </div>
         </div>
 
-        {/* Card 2: Users */}
         <div
           style={{
             padding: '10px 14px',
@@ -1169,7 +886,6 @@ export const InteractiveOrganizationGrowthChart = ({
           </div>
         </div>
 
-        {/* Card 3: Agents */}
         <div
           style={{
             padding: '10px 14px',
@@ -1192,7 +908,6 @@ export const InteractiveOrganizationGrowthChart = ({
           </div>
         </div>
 
-        {/* Card 4: Clusters */}
         <div
           style={{
             padding: '10px 14px',

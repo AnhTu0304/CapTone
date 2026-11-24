@@ -15,6 +15,8 @@ export const PixelStatusPage = ({
   testId = 'pixel-status-page',
   embedded = false,
   warnPath = null,
+  warnTitle = null,
+  warnMessage = null,
 }) => {
   const { warning } = useToast();
   const lastWarnedPathRef = useRef(null);
@@ -23,10 +25,10 @@ export const PixelStatusPage = ({
     if (!warnPath || lastWarnedPathRef.current === warnPath) return;
     lastWarnedPathRef.current = warnPath;
     warning(
-      `Đường dẫn "${warnPath}" không tồn tại trên hệ thống hoặc đã bị di chuyển.`,
-      `Cảnh báo chuyển trang — ${code || '404'}`
+      warnMessage || `Đường dẫn "${warnPath}" không tồn tại trên hệ thống hoặc đã bị di chuyển.`,
+      warnTitle || `Cảnh báo chuyển trang — ${code || '404'}`
     );
-  }, [warnPath, code, warning]);
+  }, [warnPath, warnTitle, warnMessage, code, warning]);
 
   const displayCode = statusLabel || code;
   const stageStyle = backgroundSrc

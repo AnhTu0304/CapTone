@@ -334,10 +334,12 @@ export const request = async (endpoint, options = {}) => {
     const error = new Error(errorMsg);
     error.status = response.status;
     error.data = errorData;
-    if (response.status === 503 && typeof window !== 'undefined') {
+    const emitStatuses = new Set([403, 429, 500, 503]);
+    const shouldEmit401 = response.status === 401 && !isPublicOrGlobalEndpoint(endpoint);
+    if ((emitStatuses.has(response.status) || shouldEmit401) && typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('selfheal:http-status', {
-          detail: { status: 503, endpoint, message: errorMsg },
+          detail: { status: response.status, endpoint, message: errorMsg },
         })
       );
     }

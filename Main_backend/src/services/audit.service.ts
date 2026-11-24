@@ -433,7 +433,14 @@ export class AuditService {
     }
 
     if (filter.search) {
+      const rawSearch = String(filter.search).trim();
+      const strippedAuditId = rawSearch.replace(/^AUD-0*/i, '');
+      const hasAuditPrefix = /^AUD-/i.test(rawSearch) && strippedAuditId.length > 0;
+      const idParamIdx = hasAuditPrefix ? paramIndex + 1 : paramIndex;
+
       conditions.push(`(
+        a.id::text ILIKE $${paramIndex} OR
+        ${hasAuditPrefix ? `a.id::text ILIKE $${idParamIdx} OR` : ''}
         a.action ILIKE $${paramIndex} OR
         a.description ILIKE $${paramIndex} OR
         a.reason_code ILIKE $${paramIndex} OR
@@ -461,8 +468,12 @@ export class AuditService {
         a.metadata->>'service_id' ILIKE $${paramIndex} OR
         a.metadata->>'executed_by' ILIKE $${paramIndex}
       )`);
-      values.push(`%${filter.search}%`);
+      values.push(`%${rawSearch}%`);
       paramIndex++;
+      if (hasAuditPrefix) {
+        values.push(`%${strippedAuditId}%`);
+        paramIndex++;
+      }
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

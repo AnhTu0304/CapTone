@@ -31,7 +31,7 @@ const AuthContext = createContext(null);
 const TOKEN_KEY = 'selfheal_auth_token';
 const USER_KEY = 'selfheal_auth_user';
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(() => {
     try {
@@ -45,6 +45,7 @@ export const AuthProvider = ({ children }) => {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [pendingVerificationToken, setPendingVerificationToken] = useState(null);
 
   const clearLocalAuthState = useCallback(() => {
     clearAuthToken();
@@ -68,6 +69,7 @@ export const AuthProvider = ({ children }) => {
     } catch {}
     setToken(null);
     setUser(null);
+    setPendingVerificationToken(null);
   }, []);
 
   // Lắng nghe sự kiện đồng bộ đa Tab & cùng Tab (Đăng xuất / Thu hồi phiên / Refresh token / Đăng nhập)
@@ -123,6 +125,8 @@ export const AuthProvider = ({ children }) => {
 
   // Khôi phục phiên đăng nhập khi tải ứng dụng (chỉ dùng HttpOnly refresh cookie + Double-Submit CSRF)
   useEffect(() => {
+    let isActive = true;
+
     const restoreSession = async () => {
       try {
         localStorage.removeItem(TOKEN_KEY);
@@ -130,6 +134,7 @@ export const AuthProvider = ({ children }) => {
       const hasCsrfCookie = Boolean(getCsrfTokenFromCookie());
 
       if (!hasCsrfCookie) {
+        if (!isActive) return;
         setUser(null);
         setToken(null);
         setLoading(false);
@@ -143,6 +148,7 @@ export const AuthProvider = ({ children }) => {
         if (!activeToken) {
           throw new Error('Không thể khôi phục access token');
         }
+        if (!isActive) return;
 
         setAuthToken(activeToken);
         setToken(activeToken);
@@ -155,6 +161,7 @@ export const AuthProvider = ({ children }) => {
             const refreshed = await authService.refreshSession();
             activeToken = refreshed?.data?.token || null;
             if (!activeToken) throw profileErr;
+            if (!isActive) return;
             setAuthToken(activeToken);
             setToken(activeToken);
             profile = await authService.getProfile(activeToken);
@@ -168,6 +175,7 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem(TOKEN_KEY);
         } catch {}
 
+        if (!isActive) return;
         if (profile) {
           if (profile.full_name) profile.full_name = cleanFullName(profile.full_name);
           if (profile.fullName) profile.fullName = cleanFullName(profile.fullName);
@@ -175,14 +183,20 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem(USER_KEY, JSON.stringify(profile));
         }
       } catch (err) {
+        if (!isActive) return;
         console.warn('Phiên đăng nhập hết hạn hoặc không hợp lệ:', err.message);
         clearLocalAuthState();
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     };
 
     restoreSession();
+    return () => {
+      isActive = false;
+    };
   }, [clearLocalAuthState]);
 
   // Hàm Đăng nhập
@@ -316,18 +330,31 @@ export const AuthProvider = ({ children }) => {
 
     const res = await authService.register({ email, password, full_name });
     const receivedToken = res?.data?.token;
+    const newUser = res?.data?.user || {
+      email,
+      full_name,
+      system_roles: ['USER'],
+      status: 'PENDING',
+    };
+
+    const requiresVerification = Boolean(
+      res?.data?.requires_verification || newUser?.status === 'PENDING'
+    );
+
+    if (requiresVerification) {
+      clearAuthToken();
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem(USER_KEY);
+      setPendingVerificationToken(receivedToken || null);
+      return newUser;
+    }
 
     if (receivedToken) {
       clearAuthToken();
       setAuthToken(receivedToken);
       setToken(receivedToken);
     }
-
-    const newUser = res?.data?.user || {
-      email,
-      full_name,
-      system_roles: ['USER'],
-    };
 
     setUser(newUser);
     localStorage.setItem(USER_KEY, JSON.stringify(newUser));
@@ -336,19 +363,34 @@ export const AuthProvider = ({ children }) => {
 
   // Hàm Xác thực mã OTP Email
   const verifyEmail = useCallback(async (code) => {
-    const res = await authService.verifyEmail(code, token);
-    if (user) {
+    const activeVerifyToken = pendingVerificationToken || token;
+    const res = await authService.verifyEmail(code, activeVerifyToken);
+    const verifiedToken = res?.data?.token;
+    const verifiedUser = res?.data?.user;
+
+    if (verifiedToken) {
+      clearAuthToken();
+      setAuthToken(verifiedToken);
+      setToken(verifiedToken);
+    }
+
+    if (verifiedUser) {
+      setUser(verifiedUser);
+      localStorage.setItem(USER_KEY, JSON.stringify(verifiedUser));
+    } else if (user) {
       const updatedUser = { ...user, email_verified_at: new Date().toISOString(), status: 'ACTIVE' };
       setUser(updatedUser);
       localStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
     }
+
+    setPendingVerificationToken(null);
     return res;
-  }, [token, user]);
+  }, [pendingVerificationToken, token, user]);
 
   // Hàm Gửi lại mã OTP xác thực Email
   const resendVerification = useCallback(async () => {
-    return await authService.resendVerification(token);
-  }, [token]);
+    return await authService.resendVerification(pendingVerificationToken || token);
+  }, [pendingVerificationToken, token]);
 
   // Hàm Đăng xuất (thu hồi refresh session trên server + xóa HttpOnly cookie + dọn sạch state)
   const logout = useCallback(async () => {
@@ -534,7 +576,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

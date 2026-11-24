@@ -770,12 +770,17 @@ export const AuditLogsPage = () => {
     setLoadError(null);
     try {
       const orgId = currentOrg?.id || null;
+      const trimmedSearch = debouncedSearch.trim();
       const requestFilters = {
         timeFilterMode,
         selectedDate,
         selectedMonth,
         selectedYear,
         ...(activeClusterId ? { cluster_id: activeClusterId } : {}),
+        ...(selectedService !== 'ALL' ? { service_name: selectedService } : {}),
+        ...(selectedRole !== 'ALL' ? { role: selectedRole } : {}),
+        ...(selectedStatus !== 'ALL' ? { status: selectedStatus } : {}),
+        ...(trimmedSearch ? { search: trimmedSearch } : {}),
       };
 
       const firstPageRes = await fetchOrgAuditLogs(
@@ -818,7 +823,19 @@ export const AuditLogsPage = () => {
         setIsLoading(false);
       }
     }
-  }, [currentOrg?.id, activeClusterId, timeFilterMode, selectedDate, selectedMonth, selectedYear, toastError]);
+  }, [
+    currentOrg?.id,
+    activeClusterId,
+    timeFilterMode,
+    selectedDate,
+    selectedMonth,
+    selectedYear,
+    selectedService,
+    selectedRole,
+    selectedStatus,
+    debouncedSearch,
+    toastError,
+  ]);
 
   // Chuẩn hóa danh sách theo Thời gian và Cụm K8s đang kích hoạt
   const timeAndClusterLogs = useMemo(() => {
@@ -962,7 +979,7 @@ export const AuditLogsPage = () => {
     loadAuditData();
   }, [loadAuditData]);
 
-  // Export CSV
+  // Export CSV (xuất toàn bộ bản ghi khớp bộ lọc hiện tại)
   const handleExportCsv = () => {
     const headers = [
       'Mã Bản Ghi',
@@ -977,7 +994,7 @@ export const AuditLogsPage = () => {
       'Địa Chỉ IP',
       'Trạng Thái',
     ];
-    const rows = logs.map((log) => [
+    const rows = filteredLogs.map((log) => [
       log.id,
       log.timestamp,
       log.actor,
@@ -996,11 +1013,11 @@ export const AuditLogsPage = () => {
     setTimeout(() => setExportNotice(false), 3000);
   };
 
-  // Export JSON
+  // Export JSON (xuất toàn bộ bản ghi khớp bộ lọc hiện tại)
   const handleExportJson = () => {
-    exportToJson(`so-cai-kiem-toan-${currentOrg?.slug || 'org'}.json`, logs);
+    exportToJson(`so-cai-kiem-toan-${currentOrg?.slug || 'org'}.json`, filteredLogs);
     setExportNotice(true);
-    toastSuccess(`Đã xuất ${logs.length} bản ghi kiểm toán định dạng JSON!`, 'Xuất Dữ Liệu');
+    toastSuccess(`Đã xuất ${filteredLogs.length} bản ghi kiểm toán định dạng JSON!`, 'Xuất Dữ Liệu');
     setTimeout(() => setExportNotice(false), 3000);
   };
 
@@ -2157,7 +2174,72 @@ export const AuditLogsPage = () => {
                   <td colSpan={6} style={{ padding: '44px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <ScrollText size={32} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
                     <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Không tìm thấy bản ghi kiểm toán nào</div>
-                    <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</div>
+                    <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>Thử thay đổi bộ lọc, mở rộng khoảng thời gian hoặc từ khóa tìm kiếm</div>
+                    <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '14px' }}>
+                      {timeFilterMode === 'today' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilterMode('month');
+                            setPage(1);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            backgroundColor: '#FFFFFF',
+                            color: '#0F172A',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Xem tháng này
+                        </button>
+                      )}
+                      {timeFilterMode !== 'year' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimeFilterMode('year');
+                            setPage(1);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            backgroundColor: '#FFFFFF',
+                            color: '#0F172A',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Xem cả năm
+                        </button>
+                      )}
+                      {scopeMode === 'cluster' && headerClusterId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScopeMode('all');
+                            setPage(1);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #059669',
+                            backgroundColor: '#ECFDF5',
+                            color: '#047857',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Xem toàn công ty
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (

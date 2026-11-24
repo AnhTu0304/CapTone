@@ -35,7 +35,14 @@ async function fetchGoogleJwks(forceRefresh = false): Promise<any[]> {
     if (!forceRefresh && cachedGoogleJwks && cachedGoogleJwks.expiresAt > now) {
         return cachedGoogleJwks.keys;
     }
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    let res: Response;
+    try {
+        res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    } catch (err: any) {
+        const reason = err?.cause?.code || err?.message || 'network_error';
+        console.error('[AuthService] Lỗi kết nối Google JWKS:', reason);
+        throw new ApiError(503, 'Không thể kết nối tới dịch vụ xác thực Google. Vui lòng kiểm tra kết nối mạng hoặc proxy máy chủ.');
+    }
     if (!res.ok) {
         throw new Error(`Failed to fetch Google JWKS: HTTP ${res.status}`);
     }
@@ -78,40 +85,75 @@ export class AuthService {
     }
 
     // 1. Đăng ký tài khoản mới
-    public static async register(data: IRegisterDto): Promise<IAuthResult> {
-        const existing = await UserModel.findByEmail(data.email.toLowerCase().trim());
-        if (existing) {
-            throw new ApiError(409, 'Email này đã được sử dụng');
-        }
+    private static generateVerificationToken(user: { id: string; email: string }): string {
+        return jwt.sign(
+            {
+                id: user.id,
+                email: user.email,
+                status: 'PENDING',
+                typ: 'access',
+                purpose: 'email_verification',
+            },
+            config.jwt.secret,
+            { expiresIn: '30m' }
+        );
+    }
+
+    // 1. Đăng ký tài khoản mới (tạo trạng thái PENDING, bắt buộc xác thực OTP qua email)
+    public static async register(data: IRegisterDto): Promise<IAuthResult & { requires_verification?: boolean }> {
+        const cleanEmail = data.email.toLowerCase().trim();
+        const existing = await UserModel.findFullByEmail(cleanEmail);
 
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(data.password, salt);
 
-        const newUser = await UserModel.create({
-            email: data.email.toLowerCase().trim(),
-            password_hash: passwordHash,
-            full_name: data.full_name.trim(),
-            status: 'ACTIVE',
+        let targetUser: any;
+        if (existing) {
+            if (existing.status === 'PENDING' && !existing.email_verified_at) {
+                const updated = await UserModel.updatePendingRegistration(existing.id, {
+                    full_name: data.full_name.trim(),
+                    password_hash: passwordHash,
+                });
+                targetUser = updated || existing;
+                targetUser.system_roles = await UserModel.getUserSystemRoles(existing.id);
+                if (!targetUser.system_roles?.length) {
+                    await SystemRoleService.assignRole(existing.id, 'USER').catch(() => {});
+                    targetUser.system_roles = ['USER'];
+                }
+            } else {
+                throw new ApiError(409, 'Email này đã được sử dụng');
+            }
+        } else {
+            targetUser = await UserModel.create({
+                email: cleanEmail,
+                password_hash: passwordHash,
+                full_name: data.full_name.trim(),
+                status: 'PENDING',
+            });
+
+            // Mặc định gán vai trò 'USER' cho tài khoản mới đăng ký
+            try {
+                await SystemRoleService.assignRole(targetUser.id, 'USER');
+                targetUser.system_roles = ['USER'];
+            } catch (roleError) {
+                console.warn('Không thể gán vai trò mặc định USER khi đăng ký:', (roleError as Error).message);
+            }
+        }
+
+        targetUser.organization_roles = [];
+        targetUser.has_organization = false;
+
+        const verificationToken = await this.createEmailVerificationToken(targetUser.id);
+
+        // Gửi email xác thực (không trả OTP trong HTTP response)
+        EmailQueue.enqueueVerification(targetUser.email, verificationToken, targetUser.full_name).catch((err) => {
+            console.warn('[AuthService] Không thể đưa email xác thực vào hàng đợi:', (err as Error).message);
         });
 
-        // Mặc định gán vai trò 'USER' cho tài khoản mới đăng ký
-        try {
-            await SystemRoleService.assignRole(newUser.id, 'USER');
-            newUser.system_roles = ['USER'];
-        } catch (roleError) {
-            console.warn('Không thể gán vai trò mặc định USER khi đăng ký:', (roleError as Error).message);
-        }
-        newUser.organization_roles = [];
-        newUser.has_organization = false;
-
-        const verificationToken = await this.createEmailVerificationToken(newUser.id);
-        
-        // Gửi email xác thực (không trả OTP trong HTTP response)
-        EmailQueue.enqueueVerification(newUser.email, verificationToken, newUser.full_name).catch(() => {});
-
-        return { 
-            user: newUser, 
-            token: this.generateToken(newUser, newUser.system_roles || ['USER']),
+        return {
+            user: targetUser,
+            token: this.generateVerificationToken(targetUser),
+            requires_verification: true,
         };
     }
 
@@ -178,15 +220,16 @@ export class AuthService {
             throw new ApiError(401, 'Email hoặc mật khẩu không chính xác');
         }
 
-        // 2.2. Kiểm tra tài khoản bị tạm khóa / ngừng hoạt động
+        // 2.2. Kiểm tra tài khoản bị tạm khóa / ngừng hoạt động hoặc chưa xác thực email
         if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
             throw new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động');
         }
 
-        // Tự động chuyển PENDING sang ACTIVE nếu có tài khoản cũ chưa kích hoạt
-        if (user.status === 'PENDING') {
-            await UserModel.updateStatus(user.id, 'ACTIVE');
-            user.status = 'ACTIVE';
+        if (user.status === 'PENDING' || !user.email_verified_at) {
+            throw new ApiError(
+                403,
+                'Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư để nhập mã OTP hoặc đăng ký lại để nhận mã mới.'
+            );
         }
 
                 // 2.3. Kiem tra Xac thuc 2 yeu to (2FA)
@@ -230,7 +273,7 @@ await UserModel.updateLastLogin(user.id);
     }
 
     // 3. Xác thực Email bằng mã xác thực (Code/Token nhận được từ email)
-    public static async verifyEmail(rawCode: string, userId?: string): Promise<{ email: string; verified_at: Date }> {
+    public static async verifyEmail(rawCode: string, userId?: string): Promise<{ email: string; verified_at: Date; token?: string; user?: any }> {
         if (!rawCode || typeof rawCode !== 'string') {
             throw new ApiError(400, 'Vui lòng cung cấp mã xác thực được gửi về email của bạn');
         }
@@ -302,9 +345,39 @@ await UserModel.updateLastLogin(user.id);
             throw new ApiError(404, 'Không tìm thấy người dùng sở hữu mã xác thực này');
         }
 
+        const fullUser = await UserModel.findFullByEmail(activatedUser.email);
+        const userIdResolved = fullUser?.id || tokenRecord.user_id;
+        const systemRoles = await UserModel.getUserSystemRoles(userIdResolved);
+        const orgRoles = await UserModel.getUserOrganizations(userIdResolved);
+        const primarySystemRole = resolvePrimarySystemRole(systemRoles);
+        const authStatus = await UserModel.findAuthStatus(userIdResolved);
+        const accessToken = this.generateToken(
+            {
+                id: userIdResolved,
+                email: activatedUser.email,
+                status: fullUser?.status || 'ACTIVE',
+                token_version: authStatus?.token_version ?? 1,
+            },
+            systemRoles
+        );
+
         return {
             email: activatedUser.email,
             verified_at: activatedUser.email_verified_at,
+            token: accessToken,
+            user: {
+                id: userIdResolved,
+                email: activatedUser.email,
+                full_name: fullUser?.full_name || '',
+                avatar_url: fullUser?.avatar_url || null,
+                status: fullUser?.status || 'ACTIVE',
+                email_verified_at: activatedUser.email_verified_at,
+                system_roles: systemRoles,
+                systemRole: primarySystemRole,
+                system_role: primarySystemRole,
+                has_organization: orgRoles.length > 0,
+                organization_roles: orgRoles,
+            },
         };
     }
 
@@ -395,26 +468,35 @@ await UserModel.updateLastLogin(user.id);
         }
 
         // 2. Google OAuth2 Access Token -> bắt buộc đối chiếu tokeninfo (kiểm tra aud & email_verified)
+        let infoRes: Response;
         try {
-            const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`);
-            if (infoRes.ok) {
-                const info = (await infoRes.json()) as any;
-                const audMatches = info.aud === config.googleClientId || info.azp === config.googleClientId;
-                const emailVerified = info.email_verified === true || info.email_verified === 'true';
-                if (audMatches && emailVerified && info.email) {
+            infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`);
+        } catch (err: any) {
+            const reason = err?.cause?.code || err?.message || 'network_error';
+            console.error('[AuthService] Lỗi kết nối Google OAuth2 API:', reason);
+            throw new ApiError(503, 'Không thể kết nối tới dịch vụ xác thực Google. Vui lòng kiểm tra kết nối mạng hoặc proxy máy chủ.');
+        }
+
+        if (infoRes.ok) {
+            const info = (await infoRes.json()) as any;
+            const audMatches = info.aud === config.googleClientId || info.azp === config.googleClientId;
+            const emailVerified = info.email_verified === true || info.email_verified === 'true';
+            if (audMatches && emailVerified && info.email) {
+                let profile: any = {};
+                try {
                     const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                         headers: { Authorization: `Bearer ${token}` },
                     });
-                    const profile = userRes.ok ? ((await userRes.json()) as any) : {};
-                    return {
-                        email: info.email,
-                        name: profile.name || info.email.split('@')[0],
-                        picture: profile.picture,
-                    };
+                    if (userRes.ok) profile = await userRes.json();
+                } catch {
+                    // userinfo chỉ để lấy tên/avatar bổ sung; không làm hỏng đăng nhập khi tokeninfo đã xác thực
                 }
+                return {
+                    email: info.email,
+                    name: profile.name || info.email.split('@')[0],
+                    picture: profile.picture,
+                };
             }
-        } catch {
-            // Lỗi kết nối Google API
         }
 
         throw new ApiError(401, 'Xác thực Google không thành công hoặc mã token đã hết hạn');
