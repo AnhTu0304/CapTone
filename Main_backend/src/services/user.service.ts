@@ -14,6 +14,7 @@ import {
 import { OrganizationModel } from '../models/organization.model';
 import { AuthModel } from '../models/auth.model';
 import { AuthService } from './auth.service';
+import { RefreshTokenService } from './refreshToken.service';
 import { EmailQueue } from './emailQueue.service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -334,33 +335,19 @@ export class UserService {
         const newHash = await bcrypt.hash(data.new_password, salt);
 
         await UserModel.updatePassword(userId, newHash);
+        await RefreshTokenService.revokeAllUserSessions(userId, 'PASSWORD_CHANGED');
     }
 
     // 5. Gửi email xác thực cho người dùng hiện tại (dành cho User tự gửi từ profile)
-    public static async sendVerificationEmailForUser(userId: string): Promise<{ email: string; token: string; code: string }> {
+    public static async sendVerificationEmailForUser(userId: string): Promise<{ email: string; sent: boolean }> {
         if (!userId || !UUID_REGEX.test(userId.trim())) {
             throw new ApiError(400, 'Định dạng ID người dùng không hợp lệ');
         }
 
-        const user = await UserModel.findBasicById(userId.trim());
-        if (!user) {
-            throw new ApiError(404, 'Không tìm thấy người dùng');
-        }
-
-        if (user.email_verified_at) {
-            throw new ApiError(400, 'Tài khoản này đã được xác thực email trước đó rồi');
-        }
-
-        // Tạo mã xác thực mới
-        const token = await AuthService.createEmailVerificationToken(user.id);
-
-        // Gửi email xác thực
-        await EmailQueue.enqueueVerification(user.email, token, user.full_name);
-
+        const result = await AuthService.sendVerificationEmail(userId.trim());
         return {
-            email: user.email,
-            code: token,
-            token,
+            email: result.email,
+            sent: result.sent,
         };
     }
 
@@ -430,6 +417,10 @@ export class UserService {
             throw new ApiError(500, 'Cập nhật trạng thái người dùng thất bại');
         }
 
+        if (status === 'SUSPENDED') {
+            await RefreshTokenService.revokeAllUserSessions(targetUserId.trim(), 'ACCOUNT_DISABLED');
+        }
+
         updatedUser.system_roles = targetRoles;
         return updatedUser;
     }
@@ -444,6 +435,8 @@ export class UserService {
         if (affected === 0) {
             throw new ApiError(404, 'Không tìm thấy người dùng để xóa');
         }
+
+        await RefreshTokenService.revokeAllUserSessions(userId.trim(), 'ACCOUNT_DELETED');
     }
 
     // 9. Lấy nhật ký hoạt động cá nhân của người dùng từ audit_logs (bao gồm cả hoạt động trong Organization của họ)

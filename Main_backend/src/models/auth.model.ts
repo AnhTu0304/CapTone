@@ -28,6 +28,10 @@ export interface IJwtPayload {
     email: string;
     status: UserStatus;
     roles?: string[];
+    jti?: string;
+    sid?: string;
+    tv?: number;
+    typ?: string;
     iat?: number;
     exp?: number;
 }
@@ -40,7 +44,6 @@ export interface IAuthResult {
     token?: string;
     require_2fa?: boolean;
     temp_token?: string;
-    verification_token?: string;
 }
 
 /**
@@ -79,8 +82,7 @@ export interface IEmailVerificationToken {
  */
 export interface ISendVerificationResult {
     email: string;
-    code: string;
-    token?: string;
+    sent: boolean;
     require_2fa?: boolean;
     temp_token?: string;
 }
@@ -145,14 +147,15 @@ export class AuthModel {
     }
 
     /**
-     * Đánh dấu token đã được sử dụng thành công
+     * Đánh dấu token đã được sử dụng thành công (Atomic single-use)
      */
-    public static async markTokenVerified(tokenId: string, client?: PoolClient): Promise<void> {
+    public static async markTokenVerified(tokenId: string, client?: PoolClient): Promise<boolean> {
         const db = client || pool;
-        await db.query(
-            'UPDATE email_verification_tokens SET verified_at = NOW() WHERE id = $1',
+        const res = await db.query(
+            'UPDATE email_verification_tokens SET verified_at = NOW() WHERE id = $1 AND verified_at IS NULL RETURNING id',
             [tokenId]
         );
+        return res.rows.length > 0;
     }
 
     /**
@@ -176,7 +179,9 @@ export class AuthModel {
         const db = client || pool;
         const userUpdate = await db.query<IUser>(
             `UPDATE users 
-             SET email_verified_at = NOW(), status = 'ACTIVE', updated_at = NOW()
+             SET email_verified_at = NOW(),
+                 status = CASE WHEN status = 'SUSPENDED' THEN status ELSE 'ACTIVE' END,
+                 updated_at = NOW()
              WHERE id = $1 AND deleted_at IS NULL
              RETURNING email, email_verified_at`,
             [userId]
@@ -186,5 +191,44 @@ export class AuthModel {
             email: userUpdate.rows[0].email,
             email_verified_at: userUpdate.rows[0].email_verified_at as Date,
         };
+    }
+
+    public static async deletePendingPasswordResetTokens(userId: string, client?: PoolClient): Promise<void> {
+        const db = client || pool;
+        await db.query(
+            'DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL',
+            [userId]
+        );
+    }
+
+    public static async createPasswordResetToken(
+        userId: string,
+        tokenHash: string,
+        expiresAt: Date,
+        client?: PoolClient
+    ): Promise<void> {
+        const db = client || pool;
+        await db.query(
+            `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
+             VALUES ($1, $2, $3, NOW())`,
+            [userId, tokenHash, expiresAt]
+        );
+    }
+
+    public static async consumePasswordResetToken(
+        tokenHash: string,
+        client?: PoolClient
+    ): Promise<{ id: string; user_id: string } | null> {
+        const db = client || pool;
+        const res = await db.query<{ id: string; user_id: string }>(
+            `UPDATE password_reset_tokens
+             SET used_at = NOW()
+             WHERE token_hash = $1
+               AND used_at IS NULL
+               AND expires_at > NOW()
+             RETURNING id, user_id`,
+            [tokenHash]
+        );
+        return res.rows[0] || null;
     }
 }

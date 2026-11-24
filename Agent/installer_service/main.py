@@ -24,13 +24,18 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Allow CORS for dashboard integration if needed
+# Strict CORS allowlist (forbids wildcard '*' when allow_credentials=True)
+allowed_origins = [
+    o.strip()
+    for o in (settings.CORS_ORIGINS or "").split(",")
+    if o.strip() and o.strip() != "*"
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "HEAD", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 # Include distribution router

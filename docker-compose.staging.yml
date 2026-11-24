@@ -1,0 +1,232 @@
+# ============================================================================
+# Isolated Full-Stack Staging Docker Compose (Sprint C -> D)
+# Uses isolated container names, volumes, and network (zero overlap with captone-*).
+# Enforces PostgreSQL TLS (verify-full), Edge HTTPS/WSS (:443 ssl), authenticated Redis,
+# least-privilege selfheal_app, and loopback-only host port bindings.
+#
+# Pre-flight:
+#   ./scripts/certs/generate-pg-certs.sh ./certs/postgres 70 ./certs/ca
+#   ./scripts/certs/generate-edge-certs.sh ./certs/edge
+#   docker compose -f docker-compose.staging.yml up -d --build
+# ============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: selfheal-staging-postgres
+    restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/etc/postgresql/certs/server.crt"
+      - "-c"
+      - "ssl_key_file=/etc/postgresql/certs/server.key"
+      - "-c"
+      - "ssl_ca_file=/etc/postgresql/certs/ca.crt"
+      - "-c"
+      - "ssl_min_protocol_version=TLSv1.2"
+      - "-c"
+      - "hba_file=/etc/postgresql/certs/pg_hba.conf"
+    environment:
+      POSTGRES_USER: ${DB_MIGRATOR_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set for staging}
+      POSTGRES_DB: ${DB_NAME:-aiselfhealing_staging}
+    expose:
+      - "5432"
+    ports:
+      - "127.0.0.1:${STAGING_DB_PORT:-5438}:5432"
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+      - ./certs/postgres:/etc/postgresql/certs:ro
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "PGSSLMODE=verify-full PGSSLROOTCERT=/etc/postgresql/certs/ca.crt pg_isready -h 127.0.0.1 -U ${DB_MIGRATOR_USER:-postgres} -d ${DB_NAME:-aiselfhealing_staging}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - selfheal-staging-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: selfheal-staging-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set for staging}"]
+    volumes:
+      - staging_redis_data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"${REDIS_PASSWORD}\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - selfheal-staging-network
+
+  main-backend:
+    build:
+      context: ./Main_backend
+      dockerfile: Dockerfile
+    container_name: selfheal-staging-main-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./certs/postgres/ca.crt:/etc/postgresql/certs/ca.crt:ro
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      APP_ENV: staging
+      API_PREFIX: /api/v1
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_APP_USER:-selfheal_app}
+      DB_PASSWORD: ${DB_APP_PASSWORD:?DB_APP_PASSWORD must be set for staging}
+      DB_NAME: ${DB_NAME:-aiselfhealing_staging}
+      DB_SSL_MODE: verify-full
+      DB_SSL_CA_PATH: /etc/postgresql/certs/ca.crt
+      DB_SSL_REQUIRE_STRICT: "true"
+      TRUST_PROXY_HOPS: "1"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set for staging}
+      REDIS_ENABLED: "true"
+      AI_BACKEND_URL: http://ai-backend:8000
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:?must be set}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?must be set}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?must be set}
+      JWT_SECRET: ${JWT_SECRET:?must be set}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      REFRESH_TOKEN_PEPPER: ${REFRESH_TOKEN_PEPPER:?must be set}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://localhost:18443,https://127.0.0.1:18443,https://localhost}
+      CLIENT_URL: ${CLIENT_URL:-https://127.0.0.1:18443}
+      OTEL_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${STAGING_BACKEND_PORT:-5008}:5000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:5000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - selfheal-staging-network
+
+  ai-backend:
+    build:
+      context: ./AI_backend
+      dockerfile: Dockerfile
+    container_name: selfheal-staging-ai-backend
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      APP_ENV: staging
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:?must be set}
+      OTEL_ENABLED: "false"
+    expose:
+      - "8000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - selfheal-staging-network
+
+  selfheal-frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: selfheal-staging-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    expose:
+      - "80"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - selfheal-staging-network
+
+  installer-service:
+    build:
+      context: ./Agent/installer_service
+      dockerfile: Dockerfile
+    container_name: selfheal-staging-installer-service
+    restart: unless-stopped
+    environment:
+      PORT: 8100
+      HOST: 0.0.0.0
+      APP_ENV: staging
+      AGENT_VERSION: "1.0.0"
+      DOCKER_IMAGE: "captone-agent:1.0.0"
+      BACKEND_WS_URL: ${STAGING_BACKEND_WS_URL:-wss://localhost:18443/api/v1/agent/connect}
+    expose:
+      - "8100"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - selfheal-staging-network
+
+  nginx-proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: selfheal-staging-nginx-proxy
+    restart: unless-stopped
+    depends_on:
+      main-backend:
+        condition: service_healthy
+      ai-backend:
+        condition: service_healthy
+      selfheal-frontend:
+        condition: service_started
+      installer-service:
+        condition: service_healthy
+    volumes:
+      - ./certs/edge:/etc/nginx/certs:ro
+    ports:
+      - "127.0.0.1:${STAGING_HTTP_PORT:-18090}:80"
+      - "127.0.0.1:${STAGING_HTTPS_PORT:-18443}:443"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - selfheal-staging-network
+
+volumes:
+  staging_postgres_data:
+    driver: local
+  staging_redis_data:
+    driver: local
+
+networks:
+  selfheal-staging-network:
+    driver: bridge

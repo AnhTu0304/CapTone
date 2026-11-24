@@ -1,6 +1,25 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { authService } from '../services/authService';
+import { authService, getCsrfTokenFromCookie } from '../services/authService';
 import multiTabSync, { SYNC_EVENTS } from '../services/multiTabSync';
+import {
+  setActiveOrganizationId,
+  cancelPendingRequests,
+  setAuthToken,
+  clearAuthToken,
+} from '../services/apiClient';
+
+const clearTenantContextStorage = () => {
+  try {
+    cancelPendingRequests();
+    setActiveOrganizationId(null);
+    localStorage.removeItem('selfheal_active_org_id');
+    localStorage.removeItem('selfheal_active_org_name');
+    localStorage.removeItem('selfheal_active_org_role');
+    localStorage.removeItem('selfheal_active_cluster_id');
+    localStorage.removeItem('selfheal_active_cluster_name');
+    localStorage.removeItem('selfheal_active_env_name');
+  } catch {}
+};
 
 const cleanFullName = (name) => {
   if (!name || typeof name !== 'string') return name;
@@ -13,7 +32,7 @@ const TOKEN_KEY = 'selfheal_auth_token';
 const USER_KEY = 'selfheal_auth_user';
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || null);
+  const [token, setToken] = useState(null);
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem(USER_KEY);
@@ -26,46 +45,129 @@ export const AuthProvider = ({ children }) => {
     }
   });
   const [loading, setLoading] = useState(true);
-  // Lắng nghe sự kiện đồng bộ đa Tab (Đăng xuất / Thu hồi phiên / Đăng nhập)
+
+  const clearLocalAuthState = useCallback(() => {
+    clearAuthToken();
+    clearTenantContextStorage();
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem('selfheal_mock_profile_v1');
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('selfheal_profile_') || k.startsWith('selfheal_mock_profile')) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch {}
+    try {
+      sessionStorage.removeItem('selfheal_onboarding_state_v1');
+      sessionStorage.removeItem('selfheal_onboarding_state_guest');
+      Object.keys(sessionStorage).forEach((k) => {
+        if (k.startsWith('selfheal_onboarding_state_')) sessionStorage.removeItem(k);
+      });
+    } catch {}
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  // Lắng nghe sự kiện đồng bộ đa Tab & cùng Tab (Đăng xuất / Thu hồi phiên / Refresh token / Đăng nhập)
   useEffect(() => {
     const unsubLogout = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGOUT, () => {
-      setToken(null);
-      setUser(null);
+      clearLocalAuthState();
     });
     const unsubRevoke = multiTabSync.subscribe(SYNC_EVENTS.SESSION_REVOKED, () => {
-      setToken(null);
-      setUser(null);
+      clearLocalAuthState();
     });
-    const unsubLogin = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGIN, () => {
-      const savedToken = localStorage.getItem(TOKEN_KEY);
-      const savedUser = localStorage.getItem(USER_KEY);
-      if (savedToken) {
-        setToken(savedToken);
+    const unsubLogin = multiTabSync.subscribe(SYNC_EVENTS.AUTH_LOGIN, async () => {
+      // Tab khác đăng nhập -> dùng HttpOnly refresh cookie để lấy access token trong bộ nhớ
+      if (getCsrfTokenFromCookie()) {
         try {
-          if (savedUser) setUser(JSON.parse(savedUser));
+          const refreshed = await authService.refreshSession();
+          const nextToken = refreshed?.data?.token;
+          if (nextToken) {
+            setAuthToken(nextToken);
+            setToken(nextToken);
+            const savedUser = localStorage.getItem(USER_KEY);
+            if (savedUser) setUser(JSON.parse(savedUser));
+          }
         } catch {}
       }
     });
+
+    const onTokenRefreshed = (ev) => {
+      const nextToken = ev?.detail?.token;
+      if (nextToken) {
+        setAuthToken(nextToken);
+        setToken(nextToken);
+      }
+    };
+    const onSameTabRevoked = () => {
+      clearLocalAuthState();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('selfheal:access-token-refreshed', onTokenRefreshed);
+      window.addEventListener('selfheal:session-revoked', onSameTabRevoked);
+    }
+
     return () => {
       unsubLogout();
       unsubRevoke();
       unsubLogin();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('selfheal:access-token-refreshed', onTokenRefreshed);
+        window.removeEventListener('selfheal:session-revoked', onSameTabRevoked);
+      }
     };
-  }, []);
+  }, [clearLocalAuthState]);
 
-
-  // Khôi phục phiên đăng nhập khi tải ứng dụng
+  // Khôi phục phiên đăng nhập khi tải ứng dụng (chỉ dùng HttpOnly refresh cookie + Double-Submit CSRF)
   useEffect(() => {
     const restoreSession = async () => {
-      const savedToken = localStorage.getItem(TOKEN_KEY);
-      if (!savedToken) {
+      try {
+        localStorage.removeItem(TOKEN_KEY);
+      } catch {}
+      const hasCsrfCookie = Boolean(getCsrfTokenFromCookie());
+
+      if (!hasCsrfCookie) {
         setUser(null);
+        setToken(null);
         setLoading(false);
         return;
       }
 
       try {
-        const profile = await authService.getProfile(savedToken);
+        const refreshed = await authService.refreshSession();
+        let activeToken = refreshed?.data?.token || null;
+
+        if (!activeToken) {
+          throw new Error('Không thể khôi phục access token');
+        }
+
+        setAuthToken(activeToken);
+        setToken(activeToken);
+
+        let profile = null;
+        try {
+          profile = await authService.getProfile(activeToken);
+        } catch (profileErr) {
+          if (hasCsrfCookie) {
+            const refreshed = await authService.refreshSession();
+            activeToken = refreshed?.data?.token || null;
+            if (!activeToken) throw profileErr;
+            setAuthToken(activeToken);
+            setToken(activeToken);
+            profile = await authService.getProfile(activeToken);
+          } else {
+            throw profileErr;
+          }
+        }
+
+        // Xóa legacy access token khỏi localStorage sau khi đã chuyển sang mô hình in-memory + HttpOnly refresh cookie
+        try {
+          localStorage.removeItem(TOKEN_KEY);
+        } catch {}
+
         if (profile) {
           if (profile.full_name) profile.full_name = cleanFullName(profile.full_name);
           if (profile.fullName) profile.fullName = cleanFullName(profile.fullName);
@@ -74,17 +176,14 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (err) {
         console.warn('Phiên đăng nhập hết hạn hoặc không hợp lệ:', err.message);
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        setToken(null);
-        setUser(null);
+        clearLocalAuthState();
       } finally {
         setLoading(false);
       }
     };
 
     restoreSession();
-  }, []);
+  }, [clearLocalAuthState]);
 
   // Hàm Đăng nhập
   const login = useCallback(async ({ email, password }) => {
@@ -98,8 +197,10 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Không nhận được mã xác thực token từ máy chủ');
     }
 
+    clearTenantContextStorage();
+    clearAuthToken();
+    setAuthToken(receivedToken);
     setToken(receivedToken);
-    localStorage.setItem(TOKEN_KEY, receivedToken);
 
     // Lấy thông tin chi tiết đầy đủ (gồm họ tên, vai trò system_roles)
     let profile = null;
@@ -135,8 +236,10 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Không nhận được mã xác thực token từ máy chủ');
     }
 
+    clearTenantContextStorage();
+    clearAuthToken();
+    setAuthToken(receivedToken);
     setToken(receivedToken);
-    localStorage.setItem(TOKEN_KEY, receivedToken);
 
     let profile = null;
     try {
@@ -170,8 +273,10 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Không nhận được mã xác thực token từ máy chủ');
     }
 
+    clearTenantContextStorage();
+    clearAuthToken();
+    setAuthToken(receivedToken);
     setToken(receivedToken);
-    localStorage.setItem(TOKEN_KEY, receivedToken);
 
     let profile = res?.data?.user;
     if (!profile) {
@@ -213,8 +318,9 @@ export const AuthProvider = ({ children }) => {
     const receivedToken = res?.data?.token;
 
     if (receivedToken) {
+      clearAuthToken();
+      setAuthToken(receivedToken);
       setToken(receivedToken);
-      localStorage.setItem(TOKEN_KEY, receivedToken);
     }
 
     const newUser = res?.data?.user || {
@@ -244,36 +350,29 @@ export const AuthProvider = ({ children }) => {
     return await authService.resendVerification(token);
   }, [token]);
 
-  // Hàm Đăng xuất
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem('selfheal_active_org_id');
-    localStorage.removeItem('selfheal_active_org_name');
-    localStorage.removeItem('selfheal_active_org_role');
-    localStorage.removeItem('selfheal_active_cluster_id');
-    localStorage.removeItem('selfheal_active_cluster_name');
-    localStorage.removeItem('selfheal_active_env_name');
-    sessionStorage.removeItem('admin_access_token');
-    localStorage.removeItem('selfheal_mock_profile_v1');
+  // Hàm Đăng xuất (thu hồi refresh session trên server + xóa HttpOnly cookie + dọn sạch state)
+  const logout = useCallback(async () => {
+    const currentToken = token;
     try {
-      Object.keys(localStorage).forEach((k) => {
-        if (k.startsWith('selfheal_profile_') || k.startsWith('selfheal_mock_profile')) {
-          localStorage.removeItem(k);
-        }
-      });
-    } catch {}
+      await authService.logout(currentToken);
+    } catch {
+      // Không chặn đăng xuất cục bộ nếu mạng gián đoạn
+    } finally {
+      clearLocalAuthState();
+      multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGOUT);
+    }
+  }, [token, clearLocalAuthState]);
+
+  // Hàm Đăng xuất toàn bộ thiết bị
+  const logoutAll = useCallback(async () => {
+    const currentToken = token;
     try {
-      sessionStorage.removeItem('selfheal_onboarding_state_v1');
-      sessionStorage.removeItem('selfheal_onboarding_state_guest');
-      Object.keys(sessionStorage).forEach((k) => {
-        if (k.startsWith('selfheal_onboarding_state_')) sessionStorage.removeItem(k);
-      });
-    } catch {}
-    setToken(null);
-    setUser(null);
-    multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGOUT);
-  }, []);
+      await authService.logoutAll(currentToken);
+    } finally {
+      clearLocalAuthState();
+      multiTabSync.broadcast(SYNC_EVENTS.AUTH_LOGOUT);
+    }
+  }, [token, clearLocalAuthState]);
 
   // Tiện ích lấy chữ cái viết tắt đại diện (Initials)
   const getInitials = useCallback((name) => {
@@ -353,23 +452,6 @@ export const AuthProvider = ({ children }) => {
       return 'USER';
     }
 
-    // Fallback cho tài khoản mẫu mock profile
-    try {
-      const raw = localStorage.getItem('selfheal_mock_profile_v1');
-      if (raw) {
-        const mock = JSON.parse(raw);
-        const orgRole = String(mock.organizationRole || '').toUpperCase();
-        const sysRole = String(mock.systemRole || '').toUpperCase();
-        if (sysRole.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
-        if (sysRole.includes('ADMIN')) return 'ADMIN';
-        if (orgRole.includes('DEVOPS')) return 'DEVOPS';
-        if (orgRole.includes('VIEWER')) return 'VIEWER';
-        if (orgRole.includes('OWNER') || orgRole.includes('CHỦ')) return 'SME_OWNER';
-      }
-    } catch {
-      // Ignore
-    }
-
     return 'USER';
   }, []);
 
@@ -435,6 +517,7 @@ export const AuthProvider = ({ children }) => {
     verifyEmail,
     resendVerification,
     logout,
+    logoutAll,
     getInitials,
     getUserRoles,
     isSuperAdmin,

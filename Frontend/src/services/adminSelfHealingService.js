@@ -17,7 +17,7 @@ import { selfHealingService } from './selfHealingService';
  * @property {'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'} riskLevel - Mức độ rủi ro
  * @property {'AUTONOMOUS' | 'HITL_GATE' | 'MANUAL'} executionMode - Chế độ thực thi
  * @property {'APPROVED' | 'AWAITING_APPROVAL' | 'REJECTED' | 'PRE_APPROVED_BY_POLICY'} approvalStatus - Trạng thái phê duyệt
- * @property {'SUCCEEDED' | 'EXECUTING' | 'FAILED' | 'ROLLED_BACK'} executionStatus - Trạng thái thực thi
+ * @property {'COMPLETED' | 'EXECUTING' | 'FAILED' | 'ROLLED_BACK'} executionStatus - Trạng thái thực thi
  * @property {string} requestedBy - Thực thể yêu cầu (ví dụ: 'MAPE-K Planner v2.4')
  * @property {string} executedBy - Thực thể thực thi (ví dụ: 'K8s Self-Healing Controller v1.4')
  * @property {string} requestedTime - Thời gian ghi nhận yêu cầu
@@ -80,7 +80,7 @@ const MOCK_HEALING_ACTIONS = [
     riskLevel: 'LOW',
     executionMode: 'AUTONOMOUS',
     approvalStatus: 'PRE_APPROVED_BY_POLICY',
-    executionStatus: 'SUCCEEDED',
+    executionStatus: 'COMPLETED',
     requestedBy: 'MAPE-K Autonomous Planner v2.4',
     executedBy: 'K8s Self-Healing Controller v1.4',
     requestedTime: '30/09/2026 14:15:42',
@@ -120,7 +120,7 @@ const MOCK_HEALING_ACTIONS = [
     riskLevel: 'MEDIUM',
     executionMode: 'AUTONOMOUS',
     approvalStatus: 'APPROVED',
-    executionStatus: 'SUCCEEDED',
+    executionStatus: 'COMPLETED',
     requestedBy: 'Health Synthetics Prober',
     executedBy: 'K8s Rolling Rollout Operator',
     requestedTime: '30/09/2026 13:10:00',
@@ -140,7 +140,7 @@ const MOCK_HEALING_ACTIONS = [
     riskLevel: 'LOW',
     executionMode: 'AUTONOMOUS',
     approvalStatus: 'PRE_APPROVED_BY_POLICY',
-    executionStatus: 'SUCCEEDED',
+    executionStatus: 'COMPLETED',
     requestedBy: 'MAPE-K Workload Predictive Model',
     executedBy: 'Kubernetes HPA Controller',
     requestedTime: '30/09/2026 12:00:20',
@@ -160,7 +160,7 @@ const MOCK_HEALING_ACTIONS = [
     riskLevel: 'CRITICAL',
     executionMode: 'HITL_GATE',
     approvalStatus: 'APPROVED',
-    executionStatus: 'SUCCEEDED',
+    executionStatus: 'COMPLETED',
     requestedBy: 'eBPF Hardware Failure Watcher',
     executedBy: 'Safe Eviction Drain Manager',
     requestedTime: '30/09/2026 09:15:00',
@@ -375,7 +375,7 @@ export const getHealingActions = async (filters = {}) => {
         riskLevel: act.risk_level || 'LOW',
         executionMode: act.execution_mode === 'AUTO' ? 'AUTONOMOUS' : 'MANUAL',
         approvalStatus: act.approval_status || 'APPROVED',
-        executionStatus: act.execution_status || 'SUCCEEDED',
+        executionStatus: act.execution_status || 'COMPLETED',
         requestedBy: act.requested_by_email || 'Autonomous Policy Engine',
         executedBy: act.executed_by_email || act.result?.executed_by_agent || 'K8s Self-Healing Agent',
         requestedTime: act.requested_at ? new Date(act.requested_at).toLocaleString('vi-VN') : '',

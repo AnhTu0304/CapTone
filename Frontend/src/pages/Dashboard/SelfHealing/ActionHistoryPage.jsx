@@ -382,7 +382,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
 
     const isWaitingApproval =
-      item.execution_status !== 'SUCCEEDED' &&
+      item.execution_status !== 'COMPLETED' &&
       item.execution_status !== 'FAILED' &&
       item.execution_status !== 'CANCELLED' &&
       (item.approval_status === 'PENDING' ||
@@ -392,7 +392,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     let resultText = 'Thành công (100%)';
     let verified = '';
     let effectiveMttr = mttrSec;
-    let effectiveStatus = item.execution_status || 'SUCCEEDED';
+    let effectiveStatus = item.execution_status || 'COMPLETED';
 
     if (isWaitingApproval) {
       resultText = 'Chờ duyệt HITL';
@@ -416,7 +416,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       verified = '';
       effectiveMttr = '-';
       effectiveStatus = 'CANCELLED';
-    } else if (item.execution_status === 'SUCCEEDED') {
+    } else if (item.execution_status === 'COMPLETED') {
       const hasVerificationFailed =
         item.verification?.verification_result === false ||
         String(item.error_message || '').toLowerCase().includes('hậu kiểm thất bại') ||
@@ -432,7 +432,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         resultText = 'Thành công (100%)';
         const rawVer = item.verification?.verification_type || '';
         verified = rawVer === 'K8S_POST_HEALING_PROBE' ? 'Đã xác thực K8s Probe' : (rawVer || 'Đã xác thực an toàn');
-        effectiveStatus = 'SUCCEEDED';
+        effectiveStatus = 'COMPLETED';
         if (title.toLowerCase().includes('chờ phê duyệt')) {
           title = `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
         }
@@ -705,7 +705,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         ? a.rawItem.attempts[0].duration_ms / 1000
         : (parseFloat(a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
       totalSec += dur;
-      if (a.status === 'SUCCEEDED' || a.executionStatus === 'SUCCEEDED') succeededCount++;
+      if (a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED') succeededCount++;
     });
     return {
       totalActions: total,
@@ -1632,7 +1632,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 </tr>
               ) : (
                 paginatedHistory.map((rec) => {
-                  const isSucceeded = rec.status === 'SUCCEEDED';
+                  const isSucceeded = rec.status === 'COMPLETED';
                   const isCancelled = rec.status === 'CANCELLED';
                   const isFailed = rec.status === 'FAILED';
                   const isPending = rec.status === 'PENDING' || (rec.result && rec.result.includes('Chờ duyệt'));

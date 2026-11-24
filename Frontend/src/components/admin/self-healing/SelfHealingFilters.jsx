@@ -133,7 +133,7 @@ export const SelfHealingFilters = ({
             }}
           >
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="SUCCEEDED">Thành Công</option>
+            <option value="COMPLETED">Thành Công</option>
             <option value="EXECUTING">Đang Thi Hành</option>
             <option value="FAILED">Thất Bại</option>
             <option value="ROLLED_BACK">Đã Hoàn Nguyên</option>

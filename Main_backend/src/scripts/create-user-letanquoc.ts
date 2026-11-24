@@ -1,21 +1,22 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
 import { config } from '../config/env';
+import { buildPgPoolConfig } from '../config/database';
 
 async function createSuperAdmin() {
-  const email = 'letanquoc@gmail.com';
-  const fullName = 'Lê Tấn Quốc (Super Admin)';
-  const rawPassword = 'Tanquoc123@';
+  const email = (process.env.SEED_SUPERADMIN_EMAIL || 'letanquoc@gmail.com').toLowerCase().trim();
+  const fullName = process.env.SEED_SUPERADMIN_NAME || 'Lê Tấn Quốc (Super Admin)';
+  const envPassword = process.env.SEED_SUPERADMIN_PASSWORD?.trim();
+  if (config.isProduction && (!envPassword || envPassword.length < 12)) {
+    throw new Error('FATAL SECURITY ERROR: SEED_SUPERADMIN_PASSWORD (min 12 chars) must be provided in production');
+  }
+  const rawPassword = envPassword || crypto.randomBytes(18).toString('base64url');
+  const targetDb = process.env.SEED_TARGET_DB || config.db.database;
 
-  console.log(`🚀 Bắt đầu tạo tài khoản Super Admin cho: ${email} (tài khoản: letanquoc)...`);
+  console.log(`🚀 Bắt đầu tạo tài khoản Super Admin cho: ${email}...`);
 
-  const pool = new Pool({
-    host: config.db.host,
-    port: config.db.port,
-    user: config.db.user,
-    password: config.db.password,
-    database: 'aiselfheal',
-  });
+  const pool = new Pool(buildPgPoolConfig('migrator', { database: targetDb }));
 
   try {
     const client = await pool.connect();
@@ -85,7 +86,7 @@ async function createSuperAdmin() {
     console.log('🎉 KHỞI TẠO TÀI KHOẢN SUPER ADMIN THÀNH CÔNG:');
     console.log(`👤 Tài khoản (Username): letanquoc`);
     console.log(`📧 Email đăng nhập:      ${email}`);
-    console.log(`🔑 Mật khẩu (Password):  ${rawPassword}`);
+    console.log(`🔑 Mật khẩu (Password):  [REDACTED - set via SEED_SUPERADMIN_PASSWORD]`);
     console.log(`👑 Vai trò hệ thống:     SUPER_ADMIN & ADMIN`);
     console.log(`🛡️ Trạng thái:           ACTIVE (Đã xác thực & kích hoạt)`);
     console.log('================================================================\n');

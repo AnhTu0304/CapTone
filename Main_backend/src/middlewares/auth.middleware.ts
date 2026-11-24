@@ -5,6 +5,7 @@ import { ApiError } from '../utils/apiError';
 import { IJwtPayload, UserModel } from '../models/user.model';
 import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { recordAuthFailure } from '../telemetry/metrics';
+import { runWithDbContext } from '../config/dbContext';
 
 /**
  * Middleware kiểm tra và giải mã JWT Access Token
@@ -26,7 +27,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
             systemRoles: Array.isArray((devUser as any).system_roles) ? (devUser as any).system_roles : ['SYSTEM_ADMIN'],
             organizations: [],
           };
-          return next();
+          return runWithDbContext({ scope: 'AUTH', userId: devUser.id }, () => next());
         }
       } catch (e) {
         // Fallback
@@ -81,6 +82,11 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     return next(new ApiError(401, 'Token thiếu thông tin xác thực bắt buộc (id, email)'));
   }
 
+  if (decoded.typ && decoded.typ !== 'access') {
+    recordAuthFailure('jwt', 'invalid_token');
+    return next(new ApiError(401, 'Loại token không hợp lệ cho truy cập API'));
+  }
+
   // 1. Kiểm tra nhanh claim tĩnh trong token
   if (decoded.status === 'SUSPENDED' || decoded.status === 'INACTIVE') {
     recordAuthFailure('jwt', 'user_inactive');
@@ -106,6 +112,16 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     if (dbUser.status === 'SUSPENDED' || dbUser.status === 'INACTIVE') {
       recordAuthFailure('jwt', 'user_inactive');
       return next(new ApiError(403, 'Tài khoản đã bị tạm khóa hoặc ngừng hoạt động'));
+    }
+
+    // Kiểm tra token_version chống sử dụng lại access token sau đổi/đặt lại mật khẩu hoặc logout-all
+    if (
+      typeof decoded.tv === 'number' &&
+      typeof dbUser.token_version === 'number' &&
+      decoded.tv !== dbUser.token_version
+    ) {
+      recordAuthFailure('jwt', 'invalid_token');
+      return next(new ApiError(401, 'Phiên đăng nhập đã bị thu hồi. Vui lòng đăng nhập lại.'));
     }
 
     // Đồng bộ trạng thái thực tế và danh sách vai trò hoạt động mới nhất từ CSDL vào request
@@ -143,5 +159,5 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
   }
 
   (req as any).user = decoded;
-  return next();
+  return runWithDbContext({ scope: 'AUTH', userId: decoded.id }, () => next());
 };

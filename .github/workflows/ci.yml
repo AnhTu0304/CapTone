@@ -59,7 +59,12 @@ jobs:
       - name: Validate docker-compose.yml and docker-compose.prod.yml syntax
         env:
           DB_PASSWORD: ci_dummy_db_password
+          REDIS_PASSWORD: ci_dummy_redis_password
           JWT_SECRET: ci_dummy_jwt_secret_minimum_32_characters_long
+          REFRESH_TOKEN_PEPPER: ci_dummy_refresh_pepper_minimum_32_chars_long
+          AI_INTERNAL_HMAC_SECRET: ci_dummy_hmac_secret_minimum_32_characters_long
+          TOTP_ENCRYPTION_KEY: ci_dummy_totp_key_minimum_32_characters_long
+          DATA_ENCRYPTION_KEY: ci_dummy_data_key_minimum_32_characters_long
         run: |
           docker compose -f docker-compose.yml config -q
           docker compose -f docker-compose.prod.yml config -q
@@ -119,6 +124,9 @@ jobs:
       REDIS_PORT: 6379
       REDIS_ENABLED: "true"
       JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_99999
+      REFRESH_TOKEN_PEPPER: ci_test_refresh_token_pepper_minimum_32_chars_long
+      AI_INTERNAL_HMAC_SECRET: ci_test_internal_hmac_secret_min_32_chars_long
+      TOTP_ENCRYPTION_KEY: ci_test_totp_encryption_key_min_32_chars_long
       OTEL_ENABLED: "false"
 
     steps:

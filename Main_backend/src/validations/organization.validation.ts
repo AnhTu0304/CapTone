@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { isValidSafeWebhookUrl } from '../utils/urlSafety';
+import { isMaskedSecretSentinel } from '../utils/cryptoVault';
 
 /**
  * Regex kiểm tra slug URL hợp lệ (chỉ chữ thường, số và dấu gạch ngang)
@@ -139,7 +141,17 @@ export const updateOrgAlertSettingsSchema = z.object({
       .min(1, 'Thời gian chống spam tối thiểu là 1 phút')
       .max(1440, 'Thời gian chống spam tối đa là 1440 phút (24 giờ)')
       .optional(),
-    slack_webhook_url: z.string().trim().max(1000).nullable().optional().or(z.literal('')),
+    slack_webhook_url: z
+      .string()
+      .trim()
+      .max(1000)
+      .refine(
+        (val) => !val || isMaskedSecretSentinel(val) || isValidSafeWebhookUrl(val),
+        { message: 'Slack Webhook URL phải là liên kết HTTPS hợp lệ từ hooks.slack.com' }
+      )
+      .nullable()
+      .optional()
+      .or(z.literal('')),
     slack_channel: z.string().trim().max(100).nullable().optional().or(z.literal('')),
     pagerduty_key: z.string().trim().max(255).nullable().optional().or(z.literal('')),
   }),

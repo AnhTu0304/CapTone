@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { request, setActiveOrganizationId, cancelPendingRequests } from '../../../services/apiClient';
+import { request, setActiveOrganizationId, cancelPendingRequests, getAuthToken } from '../../../services/apiClient';
 import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 
 import { clusterService } from '../../../services/clusterService';
@@ -10,6 +10,13 @@ import { getStoredNotifications, saveStoredNotifications } from '../../../mocks/
 import { useToast } from '../../../context/ToastContext';
 
 const DashboardContext = createContext(null);
+
+const readActiveToken = () =>
+  (typeof getAuthToken === 'function' ? getAuthToken() : null) ||
+  sessionStorage.getItem('admin_access_token') ||
+  localStorage.getItem('admin_access_token') ||
+  localStorage.getItem('selfheal_auth_token') ||
+  localStorage.getItem('token');
 
 const normalizeNotification = (item) => {
   const isRead = item.read !== undefined ? Boolean(item.read) : !Boolean(item.unread);
@@ -272,11 +279,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     setIsLoadingOrgs(true);
     setOrgError(null);
     try {
-      const token =
-        sessionStorage.getItem('admin_access_token') ||
-        localStorage.getItem('admin_access_token') ||
-        localStorage.getItem('selfheal_auth_token') ||
-        localStorage.getItem('token');
+      const token = readActiveToken();
       if (!token) {
         setIsLoadingOrgs(false);
         return;
@@ -415,11 +418,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const token =
-        sessionStorage.getItem('admin_access_token') ||
-        localStorage.getItem('admin_access_token') ||
-        localStorage.getItem('selfheal_auth_token') ||
-        localStorage.getItem('token');
+      const token = readActiveToken();
       if (!token) return;
 
       const res = await request('/users/me/notifications?limit=30');
@@ -460,11 +459,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   }, [isAutoRefresh]);
 
   const syncMarkAllNotificationsReadApi = () => {
-    const token =
-      sessionStorage.getItem('admin_access_token') ||
-      localStorage.getItem('admin_access_token') ||
-      localStorage.getItem('selfheal_auth_token') ||
-      localStorage.getItem('token');
+    const token = readActiveToken();
     if (token) {
       request('/users/me/notifications/read-all', { method: 'PATCH' }).catch(() => {});
     }
@@ -480,11 +475,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
   };
 
   const toggleNotificationRead = (id, forcedReadState) => {
-    const token =
-      sessionStorage.getItem('admin_access_token') ||
-      localStorage.getItem('admin_access_token') ||
-      localStorage.getItem('selfheal_auth_token') ||
-      localStorage.getItem('token');
+    const token = readActiveToken();
     const currentItem = notifications.find((n) => n.id === id);
     const currentRead = currentItem
       ? currentItem.read !== undefined
@@ -572,7 +563,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       const items = res?.data?.items || res?.items || (Array.isArray(res?.data) ? res.data : []);
       const nowMs = Date.now();
       const activeCount = items.filter((item) => {
-        if (!item || item.status === 'RESOLVED' || item.healing_status === 'SUCCEEDED') return false;
+        if (!item || item.status === 'RESOLVED' || item.healing_status === 'COMPLETED') return false;
         let recAction = item.recommendation || '';
         if (!recAction && item.analysis_result) {
           try {

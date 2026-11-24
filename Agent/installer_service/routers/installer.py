@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -54,26 +55,54 @@ def calculate_sha256(file_path: Path) -> str:
     return sha256.hexdigest()
 
 
-def resolve_backend_url(request: Request) -> str:
-    """Determine the WebSocket backend URL based on config or request headers.
+_HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$")
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.\-:]{1,256}$")
+_CLUSTER_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{0,128}$")
 
-    Priority:
-    1. Explicit BACKEND_WS_URL from environment / settings.
-    2. Derived from incoming request's Host / X-Forwarded-Host header.
-    3. Empty string (falls back to client-side local cluster discovery).
-    """
+
+def sanitize_installer_token(token: str | None) -> str:
+    if not token or not token.strip():
+        return ""
+    candidate = token.strip()
+    if not _TOKEN_RE.fullmatch(candidate):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent token format")
+    return candidate
+
+
+def sanitize_cluster_id(cluster_id: str | None) -> str:
+    if not cluster_id or not cluster_id.strip():
+        return ""
+    candidate = cluster_id.strip()
+    if not _CLUSTER_ID_RE.fullmatch(candidate):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid cluster_id format")
+    return candidate
+
+
+def resolve_backend_url(request: Request) -> str:
+    """Determine the WebSocket backend URL from trusted config or validated proxy host header."""
     if settings.BACKEND_WS_URL and settings.BACKEND_WS_URL.strip():
         return settings.BACKEND_WS_URL.strip()
 
-    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    forwarded_host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").strip().lower()
+    forwarded_host = forwarded_host.split(",")[0].strip()
+    if not forwarded_host or not _HOST_RE.fullmatch(forwarded_host):
+        return ""
+
+    clean_host = forwarded_host.split(":")[0]
+    if clean_host in ["localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal"]:
+        return ""
+
+    allowed_hosts = [
+        h.strip().lower()
+        for h in (getattr(settings, "ALLOWED_PUBLIC_HOSTS", "") or "").split(",")
+        if h.strip()
+    ]
+    if allowed_hosts and clean_host not in allowed_hosts and forwarded_host not in allowed_hosts:
+        return ""
+
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").split(",")[0].strip().lower()
     ws_proto = "wss" if proto == "https" else "ws"
-
-    clean_host = forwarded_host.split(":")[0].strip().lower()
-    if clean_host and clean_host not in ["localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal"]:
-        return f"{ws_proto}://{forwarded_host}/api/v1/agent/connect"
-
-    return ""
+    return f"{ws_proto}://{forwarded_host}/api/v1/agent/connect"
 
 
 def generate_kubernetes_manifest(
@@ -281,8 +310,8 @@ async def get_bash_installer(request: Request, token: str | None = None):
     if ws_url:
         content = content.replace('CONFIGURED_SERVER_URL="__SELFHEAL_BACKEND_URL__"', f'CONFIGURED_SERVER_URL="{ws_url}"')
 
-    if token and token.strip():
-        clean_token = token.strip().replace('"', '').replace('`', '').replace('$', '').replace('\n', '')
+    clean_token = sanitize_installer_token(token)
+    if clean_token:
         content = content.replace('CONFIGURED_TOKEN="__SELFHEAL_TOKEN__"', f'CONFIGURED_TOKEN="{clean_token}"')
 
     docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
@@ -314,8 +343,8 @@ async def get_powershell_installer(request: Request, token: str | None = None):
     if ws_url:
         content = content.replace('$CONFIGURED_SERVER_URL = "__SELFHEAL_BACKEND_URL__"', f'$CONFIGURED_SERVER_URL = "{ws_url}"')
 
-    if token and token.strip():
-        clean_token = token.strip().replace('"', '').replace('`', '').replace('$', '').replace('\n', '')
+    clean_token = sanitize_installer_token(token)
+    if clean_token:
         content = content.replace('$CONFIGURED_TOKEN = "__SELFHEAL_TOKEN__"', f'$CONFIGURED_TOKEN = "{clean_token}"')
 
     docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
@@ -338,9 +367,10 @@ async def get_powershell_installer(request: Request, token: str | None = None):
 async def get_k8s_install_manifest(request: Request, token: str | None = None, cluster_id: str | None = None):
     """Returns a full Kubernetes manifest with Token & Server URL dynamically embedded."""
     ws_url = resolve_backend_url(request)
-    clean_token = token.strip().replace('"', '').replace('\n', '') if token else "YOUR_AGENT_TOKEN"
+    clean_token = sanitize_installer_token(token) or "YOUR_AGENT_TOKEN"
+    clean_cluster_id = sanitize_cluster_id(cluster_id)
     docker_img = settings.DOCKER_IMAGE.strip() if settings.DOCKER_IMAGE else "ghcr.io/selfheal-ai/selfheal-agent:1.0.0"
-    content = generate_kubernetes_manifest(ws_url, clean_token, docker_img, cluster_id or "")
+    content = generate_kubernetes_manifest(ws_url, clean_token, docker_img, clean_cluster_id)
 
     return Response(
         content=content,

@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/user.controller';
+import { AuthController } from '../controllers/auth.controller';
 import { authenticateToken } from '../middlewares/auth.middleware';
 import { requireRoles, requireSelfOrAdmin } from '../middlewares/rbac.middleware';
-import { sensitiveOpRateLimiter } from '../middlewares/rateLimit.middleware';
+import { authRateLimiter, sensitiveOpRateLimiter } from '../middlewares/rateLimit.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import { 
   updateProfileSchema,
@@ -10,7 +11,8 @@ import {
   userIdParamSchema, 
   userQuerySchema, 
   changePasswordSchema,
-  updateUserStatusSchema
+  updateUserStatusSchema,
+  verifyEmailSchema
 } from '../validations';
 
 import { SystemRoleController } from '../controllers/systemRole.controller';
@@ -62,8 +64,8 @@ router.post('/change-password', sensitiveOpRateLimiter, validate(changePasswordS
 // [POST] /api/v1/users/send-verification -> Người dùng tự yêu cầu gửi lại email xác thực
 router.post('/send-verification', sensitiveOpRateLimiter, UserController.sendVerificationEmail);
 
-// [POST] /api/v1/users/verify-email -> Xác thực email bằng chính Token đăng nhập của người dùng (Không cần thuộc tính trong JSON)
-router.post('/verify-email', UserController.verifyEmailByAuthToken);
+// [POST] /api/v1/users/verify-email -> Xác thực email bắt buộc qua mã OTP (chống tự kích hoạt không cần OTP)
+router.post('/verify-email', authRateLimiter, validate(verifyEmailSchema), AuthController.verifyEmail);
 
 // [PATCH] /api/v1/users/:id/verify-email -> Kích hoạt xác thực email người dùng theo ID (Quản trị viên ADMIN / SUPER_ADMIN)
 router.patch('/:id/verify-email', requireRoles('ADMIN', 'SUPER_ADMIN'), validate(userIdParamSchema), UserController.verifyEmailById);
@@ -99,6 +101,14 @@ router.put(
   validate(userIdParamSchema),
   validate(updateUserStatusSchema),
   UserController.updateUserStatus
+);
+
+// [POST] /api/v1/users/:id/revoke-sessions -> Thu hồi toàn bộ phiên của người dùng (ADMIN / SUPER_ADMIN)
+router.post(
+  '/:id/revoke-sessions',
+  requireRoles('ADMIN', 'SUPER_ADMIN'),
+  validate(userIdParamSchema),
+  UserController.revokeUserSessions
 );
 
 export { router as userRoutes };

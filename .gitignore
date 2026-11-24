@@ -17,3 +17,15 @@ venv/
 skills-lock.json
 scratch/
 dist/
+
+# Sprint C Phase 3: Certificates, Private Keys & Backups (NEVER commit)
+certs/
+backups/
+*.key
+*.pem
+*.crt
+*.csr
+*.srl
+*.enc
+*.sha256
+k8s/secrets.local.yaml

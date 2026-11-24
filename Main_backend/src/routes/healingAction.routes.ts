@@ -5,11 +5,12 @@ import { requireRoles } from '../middlewares/rbac.middleware';
 
 const healingActionRoutes = Router();
 
-// GET /api/v1/healing/approvals/quick-approve?token=...
-// Đặt TRƯỚC authenticateToken vì người dùng click từ Email không có Authorization header
-// GET /api/v1/healing/approvals/quick-approve?token=... & quick-reject?token=...
-healingActionRoutes.get('/approvals/quick-approve', HealingActionController.quickApproveFromEmail);
-healingActionRoutes.get('/approvals/quick-reject', HealingActionController.quickRejectFromEmail);
+// GET /api/v1/healing/approvals/quick-approve?token=... renders safe POST confirmation page
+// POST /api/v1/healing/approvals/quick-approve executes approval atomically (prevents scanner prefetch mutation)
+healingActionRoutes.get('/approvals/quick-approve', HealingActionController.quickApprovePrompt);
+healingActionRoutes.post('/approvals/quick-approve', HealingActionController.quickApproveFromEmail);
+healingActionRoutes.get('/approvals/quick-reject', HealingActionController.quickRejectPrompt);
+healingActionRoutes.post('/approvals/quick-reject', HealingActionController.quickRejectFromEmail);
 
 // Toàn bộ các API Healing Actions yêu cầu xác thực JWT
 healingActionRoutes.use(authenticateToken);
@@ -46,8 +47,8 @@ healingActionRoutes.patch('/actions/:id/status', devopsOrAdmin, HealingActionCon
 // GET /api/v1/healing/action-types - List action types
 healingActionRoutes.get('/action-types', HealingActionController.getActionTypes);
 
-// PUT /api/v1/healing/action-types/:id - Update action type
-healingActionRoutes.put('/action-types/:id', devopsOrAdmin, HealingActionController.updateActionType);
+// PUT /api/v1/healing/action-types/:id - Update action type (chỉ System SUPER_ADMIN / System ADMIN)
+healingActionRoutes.put('/action-types/:id', requireRoles('SUPER_ADMIN', 'ADMIN'), HealingActionController.updateActionType);
 
 // ==========================================
 // 3. Self-Healing Policies

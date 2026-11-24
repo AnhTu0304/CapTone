@@ -1,6 +1,7 @@
 import { config } from '../config/env';
 import { ApiError } from '../utils/apiError';
 import { AiModelRegistryModel, AIModelRecord } from '../models/aiModelRegistry.model';
+import { buildAiInternalAuthHeaders } from '../utils/internalAuth';
 
 export class AiModelRegistryService {
   /**
@@ -36,6 +37,7 @@ export class AiModelRegistryService {
     try {
       const response = await fetch(targetUrl, {
         method: 'POST',
+        headers: buildAiInternalAuthHeaders('POST', '/api/v1/model/upload', fileBuffer),
         body: formData,
         signal: AbortSignal.timeout(60000), // 60s timeout for full test benchmark
       });
@@ -121,10 +123,14 @@ export class AiModelRegistryService {
   private static async hotReloadAiBackend(filename: string): Promise<any> {
     const targetUrl = `${config.aiBackendUrl}/api/v1/model/switch`;
     try {
+      const switchBody = JSON.stringify({ filename });
       const response = await fetch(targetUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAiInternalAuthHeaders('POST', '/api/v1/model/switch', switchBody),
+        },
+        body: switchBody,
         signal: AbortSignal.timeout(10000),
       });
 

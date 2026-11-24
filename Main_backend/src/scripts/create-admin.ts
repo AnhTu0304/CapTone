@@ -1,27 +1,30 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { Pool } from 'pg';
 import { config } from '../config/env';
+import { buildPgPoolConfig } from '../config/database';
 
 async function seedAdmin() {
-  const email = process.env.INITIAL_ADMIN_EMAIL || 'admin@selfheal.io';
-  const fullName = process.env.INITIAL_ADMIN_NAME || 'Quản Trị Viên Hệ Thống';
-  const rawPassword = process.env.INITIAL_ADMIN_PASSWORD || 'AdminPassword123@';
+  const email = (process.env.SEED_ADMIN_EMAIL || process.env.INITIAL_ADMIN_EMAIL || 'phamthaisang1710@gmail.com').toLowerCase().trim();
+  const fullName = process.env.SEED_ADMIN_NAME || process.env.INITIAL_ADMIN_NAME || 'Phạm Thái Sang';
+  const envPassword = process.env.SEED_ADMIN_PASSWORD?.trim() || process.env.INITIAL_ADMIN_PASSWORD?.trim();
+  if (config.isProduction && (!envPassword || envPassword.length < 12)) {
+    throw new Error('FATAL SECURITY ERROR: SEED_ADMIN_PASSWORD (min 12 chars) must be provided in production');
+  }
+  const rawPassword = envPassword || 'AdminPassword123@';
 
   console.log(`🚀 Đang khởi tạo tài khoản Quản trị viên (Admin) cho: ${email}...`);
 
-  const databases = ['captone_db', 'aiselfheal'];
+  const databases = (process.env.SEED_TARGET_DBS || 'aiselfhealing_test')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(rawPassword, salt);
 
   for (const dbName of databases) {
-    const pool = new Pool({
-      host: config.db.host,
-      port: config.db.port,
-      user: config.db.user,
-      password: config.db.password,
-      database: dbName,
-    });
+    const pool = new Pool(buildPgPoolConfig('migrator', { database: dbName }));
 
     try {
       const client = await pool.connect();
@@ -73,7 +76,7 @@ async function seedAdmin() {
   console.log('\n================================================================');
   console.log('🎉 TẠO TÀI KHOẢN ADMIN THÀNH CÔNG VỚI THÔNG TIN:');
   console.log(`📧 Email:      ${email}`);
-  console.log(`🔑 Mật khẩu:   ${rawPassword}`);
+  console.log(`🔑 Mật khẩu:   [REDACTED - set via SEED_ADMIN_PASSWORD]`);
   console.log(`👑 Vai trò:    SUPER_ADMIN & ADMIN`);
   console.log(`🛡️ Trạng thái: ACTIVE (Đã kích hoạt & xác thực email)`);
   console.log('================================================================\n');

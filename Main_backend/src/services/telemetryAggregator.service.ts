@@ -1,5 +1,6 @@
 import { TelemetryBufferService } from './telemetryBuffer.service';
 import { pool } from '../config/database';
+import { runWithTenantContext, isValidUuid } from '../config/dbContext';
 import { ApiError } from '../utils/apiError';
 import { GRUMetricPoint } from '../schemas/ai.schema';
 import { RuleEngineService } from './ruleEngine.service';
@@ -89,7 +90,13 @@ export class TelemetryAggregatorService {
     // Ưu tiên đọc từ In-Memory Buffer (RAM / Redis) nếu không có startTime lịch sử
     let points: GRUMetricPoint[] = [];
     if (!options?.startTime) {
-      points = await TelemetryBufferService.getDisplayPoints(serviceId, bucketSeconds, limit);
+      points = await TelemetryBufferService.getDisplayPoints(
+        serviceId,
+        bucketSeconds,
+        limit,
+        options?.organizationId,
+        options?.clusterId
+      );
     }
     if (points.length === 0) {
       points = await MetricModel.aggregateByService(serviceId, bucketSeconds, limit, {
@@ -160,7 +167,7 @@ export class TelemetryAggregatorService {
       const latestHealRes = await pool.query(
         `SELECT MAX(completed_at) AS latest_completed_at
          FROM healing_actions
-         WHERE execution_status = 'SUCCEEDED'
+         WHERE execution_status = 'COMPLETED'
            AND completed_at >= NOW() - interval '30 minutes'
            AND (
              LOWER(COALESCE(target_name, '')) = ANY($1)
@@ -615,7 +622,7 @@ export class TelemetryAggregatorService {
     }
 
     // Convert monotonic cumulative pod_restart_count into per-step non-negative deltas
-    const stateKey = `${options?.clusterId || 'default'}:${serviceId}`;
+    const stateKey = `${options?.organizationId || 'default'}:${options?.clusterId || 'default'}:${serviceId}`;
     const prevRawRestart = TelemetryAggregatorService.lastBatchRestartCountByService.get(stateKey);
     const stepDeltas: number[] = [];
     for (let i = 0; i < sequence.length; i++) {
@@ -935,80 +942,103 @@ export class TelemetryAggregatorService {
     organizationId?: string,
     options?: { lite?: boolean }
   ) {
+    if (!organizationId || !isValidUuid(organizationId)) {
+      throw new Error('TelemetryAggregatorService.getLiveSummaryData requires explicit valid organizationId');
+    }
     const isLite = Boolean(options?.lite);
 
-    const sequencePromise = TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
-      bucketSeconds: 5,
-      limit: isLite ? 12 : 20,
-      fillPadding: false,
-      clusterId,
-      organizationId,
-    });
+    return await runWithTenantContext(organizationId, null, async () => {
+      const sequencePromise = TelemetryAggregatorService.getServiceMetricsSequence(serviceId, {
+        bucketSeconds: 5,
+        limit: isLite ? 12 : 20,
+        fillPadding: false,
+        clusterId,
+        organizationId,
+      });
 
-    const latestNodeMetricPromise = pool
-      .query(
-        `WITH latest_per_node AS (
-           SELECT DISTINCT ON (node_name)
-             node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
-           FROM node_metrics
-           WHERE ($1::text IS NULL OR cluster_id = $1::text)
-             AND collected_at > NOW() - INTERVAL '3 minutes'
-           ORDER BY node_name, collected_at DESC, id DESC
-         )
-         SELECT 
-           'cluster' AS node_name,
-           ROUND((SUM((cpu_usage_percent / 100.0) * COALESCE(cpu_cores, 12)) / NULLIF(SUM(COALESCE(cpu_cores, 12)), 0) * 100.0)::numeric, 1)::float AS cpu_usage_percent,
-           SUM(COALESCE(cpu_cores, 12))::int AS cpu_cores,
-           SUM(COALESCE(ram_total_bytes, 8163258368))::bigint AS ram_total_bytes,
-           SUM(COALESCE(ram_used_bytes, 0))::bigint AS ram_used_bytes,
-           ROUND((SUM(COALESCE(ram_used_bytes, 0)) / NULLIF(SUM(COALESCE(ram_total_bytes, 8163258368)), 0) * 100.0)::numeric, 1)::float AS ram_usage_percent,
-           ROUND(AVG(COALESCE(disk_usage_percent, 4))::numeric, 1)::float AS disk_usage_percent,
-           MAX(collected_at) AS collected_at,
-           COUNT(*)::int AS nodes_count
-         FROM latest_per_node`,
-        [clusterId || null]
-      )
-      .then((r) => {
-        if (r.rows.length > 0 && r.rows[0].nodes_count > 0) {
-          return r.rows[0];
-        }
-        return null;
-      })
-      .catch(() => null);
+      const latestNodeMetricPromise = pool
+        .query(
+          `WITH latest_per_node AS (
+             SELECT DISTINCT ON (node_name)
+               node_name, cpu_usage_percent, cpu_cores, ram_total_bytes, ram_used_bytes, ram_usage_percent, disk_usage_percent, collected_at
+             FROM node_metrics
+             WHERE organization_id = $2::uuid
+               AND ($1::text IS NULL OR cluster_id = $1::text)
+               AND collected_at > NOW() - INTERVAL '3 minutes'
+             ORDER BY node_name, collected_at DESC, id DESC
+           )
+           SELECT 
+             'cluster' AS node_name,
+             ROUND((SUM((cpu_usage_percent / 100.0) * COALESCE(cpu_cores, 12)) / NULLIF(SUM(COALESCE(cpu_cores, 12)), 0) * 100.0)::numeric, 1)::float AS cpu_usage_percent,
+             SUM(COALESCE(cpu_cores, 12))::int AS cpu_cores,
+             SUM(COALESCE(ram_total_bytes, 8163258368))::bigint AS ram_total_bytes,
+             SUM(COALESCE(ram_used_bytes, 0))::bigint AS ram_used_bytes,
+             ROUND((SUM(COALESCE(ram_used_bytes, 0)) / NULLIF(SUM(COALESCE(ram_total_bytes, 8163258368)), 0) * 100.0)::numeric, 1)::float AS ram_usage_percent,
+             ROUND(AVG(COALESCE(disk_usage_percent, 4))::numeric, 1)::float AS disk_usage_percent,
+             MAX(collected_at) AS collected_at,
+             COUNT(*)::int AS nodes_count
+           FROM latest_per_node`,
+          [clusterId || null, organizationId]
+        )
+        .then((r) => {
+          if (r.rows.length > 0 && r.rows[0].nodes_count > 0) {
+            return r.rows[0];
+          }
+          return null;
+        })
+        .catch(() => null);
 
-    const [
-      sequence,
-      latestNodeMetric,
-      agents,
-      rawMetrics,
-      logs,
-      events,
-      incidents,
-      recommendations,
-      predictions,
-    ] = isLite
-      ? [
-          await sequencePromise,
-          await latestNodeMetricPromise,
-          [],
-          [],
-          [],
-          [],
-          [],
-          [],
-          [],
-        ]
-      : await Promise.all([
-          sequencePromise,
-          latestNodeMetricPromise,
-          AgentModel.listAll(),
-          MetricModel.getRecentRaw(10),
-          LogModel.getRecent(30),
-          KubernetesEventModel.getRecent(20),
-          IncidentModel.getRecent(10),
-          RecommendationModel.getRecent(10, clusterId),
-          AiPredictionModel.getRecent(5),
-        ]);
+      const [
+        sequence,
+        latestNodeMetric,
+        agents,
+        rawMetrics,
+        logs,
+        events,
+        incidents,
+        recommendations,
+        predictions,
+      ] = isLite
+        ? [
+            await sequencePromise,
+            await latestNodeMetricPromise,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+          ]
+        : await Promise.all([
+            sequencePromise,
+            latestNodeMetricPromise,
+            AgentModel.listAll(organizationId),
+            pool
+              .query(
+                `SELECT * FROM agent_metrics WHERE organization_id = $1::uuid ${clusterId ? 'AND cluster_id::text = $2' : ''} ORDER BY collected_at DESC LIMIT 10`,
+                clusterId ? [organizationId, clusterId] : [organizationId]
+              )
+              .then((r) => r.rows),
+            LogModel.queryLogs({
+              allowedOrgIds: [organizationId],
+              clusterId,
+              limit: 30,
+            }).then((r: any) => r?.items || r?.data || []),
+            KubernetesEventModel.queryEvents({
+              allowedOrgIds: [organizationId],
+              clusterId,
+              limit: 20,
+            }).then((r: any) => r?.items || r?.data || []),
+            IncidentModel.getRecent(10, undefined, organizationId),
+            RecommendationModel.getRecent(10, clusterId, undefined, organizationId),
+            AiPredictionModel.findMany({
+              organization_id: organizationId,
+              cluster_id: clusterId,
+              limit: 5,
+              offset: 0,
+            }).then((r: any) => r?.items || r?.predictions || []),
+          ]);
 
     const latestPoint = sequence.length > 0 
       ? sequence[sequence.length - 1] 
@@ -1045,6 +1075,7 @@ export class TelemetryAggregatorService {
       predictions,
       timestamp: new Date().toISOString(),
     };
+    });
   }
 
   /**

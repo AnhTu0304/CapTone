@@ -71,7 +71,7 @@ async def test_resolves_helm_deployment_by_label_and_suffix():
     call_kwargs = agent.apps_v1.patch_namespaced_deployment.call_args.kwargs
     assert call_kwargs["name"] == "prometheus-kube-prometheus-operator"
     assert call_kwargs["namespace"] == "monitoring"
-    assert captured["data"]["status"] == "SUCCEEDED"
+    assert captured["data"]["status"] == "COMPLETED"
     assert captured["data"]["details"]["namespace"] == "monitoring"
     assert captured["data"]["details"]["target"] == "prometheus-kube-prometheus-operator"
 

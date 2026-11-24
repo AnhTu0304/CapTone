@@ -9,16 +9,33 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:postgres
     container_name: captone-postgres
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/etc/postgresql/certs/server.crt"
+      - "-c"
+      - "ssl_key_file=/etc/postgresql/certs/server.key"
+      - "-c"
+      - "ssl_ca_file=/etc/postgresql/certs/ca.crt"
+      - "-c"
+      - "ssl_min_protocol_version=TLSv1.2"
+      - "-c"
+      - "hba_file=/etc/postgresql/certs/pg_hba.conf"
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_USER: ${DB_MIGRATOR_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       POSTGRES_DB: ${DB_NAME:-captone_db}
-    ports:
-      - "${DB_PORT:-5433}:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ${PG_CERTS_DIR:-./certs/postgres}:/etc/postgresql/certs:ro
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-captone_db}"]
+      test: ["CMD-SHELL", "PGSSLMODE=verify-full PGSSLROOTCERT=/etc/postgresql/certs/ca.crt pg_isready -h 127.0.0.1 -U ${DB_MIGRATOR_USER:-postgres} -d ${DB_NAME:-captone_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,11 +46,20 @@ services:
     image: redis:7-alpine
     container_name: captone-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
     volumes:
       - redis_data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"${REDIS_PASSWORD}\" redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -44,6 +70,10 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:main-backend
     container_name: captone-main-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,17 +89,25 @@ services:
       API_PREFIX: /api/v1
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      DB_USER: ${DB_USER:-selfheal_app}
+      DB_PASSWORD: ${DB_APP_PASSWORD:-${DB_PASSWORD:?DB_PASSWORD must be set in .env}}
       DB_NAME: ${DB_NAME:-captone_db}
       DB_POOL_MAX: ${DB_POOL_MAX:-50}
+      DB_SSL_MODE: ${DB_SSL_MODE:-prefer}
+      DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-/etc/postgresql/certs/ca.crt}
+      DB_SSL_REQUIRE_STRICT: ${DB_SSL_REQUIRE_STRICT:-false}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
       REDIS_CACHE_TTL: ${REDIS_CACHE_TTL:-300}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       AI_BACKEND_URL: http://ai-backend:8000
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:?AI_INTERNAL_HMAC_SECRET (min 32 chars) must be set in .env}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY (min 32 chars) must be set in .env}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?DATA_ENCRYPTION_KEY (min 32 chars) must be set in .env}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET (min 32 chars) must be set in .env}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -77,19 +115,23 @@ services:
       AGENT_HEARTBEAT_TIMEOUT_SECONDS: ${AGENT_HEARTBEAT_TIMEOUT_SECONDS:-45}
       AGENT_STATUS_CHECK_INTERVAL_SECONDS: ${AGENT_STATUS_CHECK_INTERVAL_SECONDS:-15}
       RULE_ENGINE_INTERVAL_MS: ${RULE_ENGINE_INTERVAL_MS:-5000}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://demo.giahungtrieu.net:8090,http://112.78.1.150:8090,http://localhost:3000,http://localhost:3001}
+      REFRESH_TOKEN_PEPPER: ${REFRESH_TOKEN_PEPPER:-dev_only_refresh_pepper_32_chars}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://demo.giahungtrieu.net:8090,http://112.78.1.150:8090,http://localhost:3000,http://localhost:3001,http://localhost:3005,http://127.0.0.1:8090,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3005,https://demo.giahungtrieu.net}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <noreply@selfheal.io>}
-      CLIENT_URL: ${CLIENT_URL:-http://demo.giahungtrieu.net:8090}
+      CLIENT_URL: ${CLIENT_URL:-https://demo.giahungtrieu.net}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-selfheal-backend}
       OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-1.0.0}
       OTEL_SERVICE_NAMESPACE: ${OTEL_SERVICE_NAMESPACE:-selfheal-system}
       DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-production}
+    volumes:
+      - ${PG_CA_CERT_FILE:-./certs/postgres/ca.crt}:/etc/postgresql/certs/ca.crt:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1"]
       interval: 30s
@@ -103,8 +145,14 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:ai-backend
     container_name: captone-ai-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       PORT: 8000
+      APP_ENV: production
+      AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:?AI_INTERNAL_HMAC_SECRET (min 32 chars) must be set in .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-30}
@@ -128,6 +176,8 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:frontend
     container_name: selfheal_platform_web
     restart: always
+    security_opt:
+      - no-new-privileges:true
     environment:
       - NODE_ENV=production
     healthcheck:
@@ -143,6 +193,10 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:installer-service
     container_name: captone-installer-service
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       PORT: 8100
       HOST: 0.0.0.0
@@ -162,6 +216,8 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:nginx-proxy
     container_name: captone-reverse-proxy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - main-backend
       - installer-service
@@ -170,6 +226,8 @@ services:
     ports:
       - "${WEB_PORT:-8090}:80"
       - "443:443"
+    volumes:
+      - ${EDGE_CERTS_DIR:-./certs/edge}:/etc/nginx/certs:ro
     networks:
       - captone-network
 

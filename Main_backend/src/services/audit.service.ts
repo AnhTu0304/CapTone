@@ -2,7 +2,9 @@ import { Request } from 'express';
 import crypto from 'crypto';
 import net from 'net';
 import { pool } from '../config/database';
+import { getDbContext, runWithDbContext } from '../config/dbContext';
 import { ApiError } from '../utils/apiError';
+import { redactSensitiveString } from '../utils/logSanitizer';
 import {
   AuditAction,
   AuditReasonCode,
@@ -12,7 +14,8 @@ import {
   IAuditLogFilter,
 } from '../models/auditLog.model';
 
-const SENSITIVE_KEYS_REGEX = /password|token|secret|authorization|cookie|jwt|credential|private_key|api_?key/i;
+const SENSITIVE_KEYS_REGEX =
+  /password|passwd|token|secret|authorization|cookie|set-cookie|jwt|credential|private_key|api_?key|pagerduty|webhook|backup_codes|encryption_key|pepper|totp|hmac|csrf|otp|passphrase/i;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface IAuditRequestContext {
@@ -27,6 +30,9 @@ export class AuditService {
    * Khử thông tin nhạy cảm (Redaction) đệ quy khỏi object trước khi ghi vào audit log
    */
   public static redactSensitiveData(data: any): any {
+    if (typeof data === 'string') {
+      return redactSensitiveString(data);
+    }
     if (!data || typeof data !== 'object') {
       return data;
     }
@@ -47,6 +53,8 @@ export class AuditService {
         cleaned[key] = isNaN(value.getTime()) ? null : value.toISOString();
       } else if (value && typeof value === 'object') {
         cleaned[key] = this.redactSensitiveData(value);
+      } else if (typeof value === 'string') {
+        cleaned[key] = redactSensitiveString(value);
       } else {
         cleaned[key] = value;
       }
@@ -174,25 +182,35 @@ export class AuditService {
         JSON.stringify(sanitizedMetadata),
       ];
 
-      const res = await pool.query(query, values);
-      const inserted = res.rows[0] as IAuditLog;
-      if (inserted) {
-        const hash = this.computeSha256(inserted);
-        try {
-          await pool.query(
-            `UPDATE audit_logs SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{sha256}', $1::jsonb) WHERE id = $2`,
-            [JSON.stringify(hash), inserted.id]
-          );
-        } catch (hashErr) {
-          console.warn('[AuditService] Cảnh báo cập nhật sha256 metadata:', hashErr);
+      const runAuditWrite = async () => {
+        const res = await pool.query(query, values);
+        const inserted = res.rows[0] as IAuditLog;
+        if (inserted) {
+          const hash = this.computeSha256(inserted);
+          try {
+            await pool.query(
+              `UPDATE audit_logs SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{sha256}', $1::jsonb) WHERE id = $2`,
+              [JSON.stringify(hash), inserted.id]
+            );
+          } catch (hashErr) {
+            console.warn('[AuditService] Cảnh báo cập nhật sha256 metadata:', hashErr);
+          }
+          if (inserted.metadata && typeof inserted.metadata === 'object') {
+            inserted.metadata.sha256 = hash;
+          } else {
+            inserted.metadata = { sha256: hash };
+          }
         }
-        if (inserted.metadata && typeof inserted.metadata === 'object') {
-          inserted.metadata.sha256 = hash;
-        } else {
-          inserted.metadata = { sha256: hash };
-        }
+        return inserted;
+      };
+
+      const activeCtx = getDbContext();
+      // Platform/auth audit logs (organization_id IS NULL) executed outside a tenant/admin context
+      // need SYSTEM DB context to satisfy audit_logs FORCE RLS under least-privilege selfheal_app.
+      if (!values[0] && (!activeCtx || activeCtx.scope === 'NONE' || activeCtx.scope === 'AUTH')) {
+        return await runWithDbContext({ scope: 'SYSTEM', userId: values[1] || null }, runAuditWrite);
       }
-      return inserted;
+      return await runAuditWrite();
     } catch (error: any) {
       // Ghi cảnh báo ra console, không làm sập luồng nghiệp vụ chính
       console.warn('[AuditService] Không thể ghi audit log:', error?.message || error);

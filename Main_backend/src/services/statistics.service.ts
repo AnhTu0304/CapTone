@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import { runWithDbContext, runWithTenantContext } from '../config/dbContext';
 import { redisClient, isRedisReady } from '../config/redis';
 import { ApiError } from '../utils/apiError';
 import { OverviewStatisticsQuery } from '../validations/statistics.validation';
@@ -156,6 +157,17 @@ export class StatisticsService {
       ? targetOrgIds.map((_, i) => `$${i + 1}`).join(', ')
       : '';
 
+    const execQueryWithScope = <T>(fn: () => Promise<T>): Promise<T> => {
+      if (effectiveScopeType === 'PLATFORM') {
+        return runWithDbContext({ scope: 'PLATFORM_ADMIN', userId: currentUser?.id || currentUser?.userId || null }, fn);
+      }
+      if (targetOrgIds.length === 1) {
+        return runWithTenantContext(targetOrgIds[0], currentUser?.id || currentUser?.userId || null, fn);
+      }
+      return fn();
+    };
+
+    return await execQueryWithScope(async () => {
     // A. Query Core KPIs: Organizations, Clusters, Agents
     let kpiQuery: string;
     let kpiParams: any[] = [];
@@ -243,11 +255,11 @@ export class StatisticsService {
     const remQuery = `
       SELECT
         COUNT(*)::int AS total,
-        COUNT(CASE WHEN ha.execution_status = 'SUCCEEDED' THEN 1 END)::int AS succeeded,
+        COUNT(CASE WHEN ha.execution_status = 'COMPLETED' THEN 1 END)::int AS succeeded,
         COUNT(CASE WHEN ha.execution_status = 'FAILED' THEN 1 END)::int AS failed,
-        COUNT(CASE WHEN ha.execution_status IN ('PENDING', 'QUEUED', 'RUNNING') THEN 1 END)::int AS in_progress,
+        COUNT(CASE WHEN ha.execution_status IN ('PENDING', 'RUNNING') THEN 1 END)::int AS in_progress,
         CASE 
-          WHEN COUNT(*) > 0 THEN ROUND((COUNT(CASE WHEN ha.execution_status = 'SUCCEEDED' THEN 1 END)::numeric / COUNT(*)::numeric) * 100, 1)
+          WHEN COUNT(*) > 0 THEN ROUND((COUNT(CASE WHEN ha.execution_status = 'COMPLETED' THEN 1 END)::numeric / COUNT(*)::numeric) * 100, 1)
           ELSE 100.0
         END AS success_rate,
         COALESCE(ROUND(AVG(CASE WHEN ha.completed_at IS NOT NULL AND ha.started_at IS NOT NULL AND EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) < 300 THEN EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) END)::numeric, 1), 1.2) AS avg_duration_sec
@@ -305,7 +317,7 @@ export class StatisticsService {
 
     if (hasOrgFilter) {
       const actOrgs = targetOrgIds.map(() => `$${pIdx++}`).join(', ');
-      actConds.push(`(al.organization_id IN (${actOrgs}) OR al.organization_id IS NULL)`);
+      actConds.push(`al.organization_id IN (${actOrgs})`);
       actParams.push(...targetOrgIds);
     }
 
@@ -411,6 +423,7 @@ export class StatisticsService {
     }
 
     return response;
+    });
   }
 
   private static getEmptyStatsResponse(

@@ -123,17 +123,17 @@ export class AdminAnalyticsService {
            JOIN organizations o ON e.organization_id = o.id AND o.deleted_at IS NULL
            WHERE p.deleted_at IS NULL AND o.${cumOrgCond}) AS total_pods,
         (SELECT COUNT(DISTINCT a.id)::int FROM agents a
-           JOIN clusters c ON a.cluster_id = c.id AND c.deleted_at IS NULL
+           JOIN clusters c ON a.cluster_id::text = c.id::text AND c.deleted_at IS NULL
            JOIN environments e ON c.environment_id = e.id AND e.deleted_at IS NULL
            JOIN organizations o ON e.organization_id = o.id AND o.deleted_at IS NULL
            WHERE a.revoked_at IS NULL AND a.status = 'ONLINE' AND o.${cumOrgCond}) AS online_agents,
         (SELECT COUNT(DISTINCT a.id)::int FROM agents a
-           JOIN clusters c ON a.cluster_id = c.id AND c.deleted_at IS NULL
+           JOIN clusters c ON a.cluster_id::text = c.id::text AND c.deleted_at IS NULL
            JOIN environments e ON c.environment_id = e.id AND e.deleted_at IS NULL
            JOIN organizations o ON e.organization_id = o.id AND o.deleted_at IS NULL
            WHERE a.revoked_at IS NULL AND o.${cumOrgCond}) AS total_agents,
         (SELECT COUNT(*)::int FROM healing_actions WHERE ${cumUserCond}) AS total_heal,
-        (SELECT COUNT(*)::int FROM healing_actions WHERE execution_status::text IN ('SUCCESS', 'SUCCEEDED', 'COMPLETED') AND ${cumUserCond}) AS success_heal;
+        (SELECT COUNT(*)::int FROM healing_actions WHERE execution_status = 'COMPLETED' AND ${cumUserCond}) AS success_heal;
     `;
     const kpiRes = await pool.query(kpiQuery);
     const kpiRow = kpiRes.rows[0] || {};
@@ -302,7 +302,7 @@ export class AdminAnalyticsService {
       LEFT JOIN clusters c ON e.id = c.environment_id AND c.deleted_at IS NULL
       LEFT JOIN nodes n ON c.id = n.cluster_id
       LEFT JOIN pods p ON c.id = p.cluster_id AND p.deleted_at IS NULL
-      LEFT JOIN agents a ON c.id = a.cluster_id AND a.revoked_at IS NULL
+      LEFT JOIN agents a ON c.id::text = a.cluster_id::text AND a.revoked_at IS NULL
       WHERE ${whereClause}
       GROUP BY o.id, o.name, o.status, o.created_at
       ORDER BY o.created_at DESC

@@ -8,15 +8,15 @@ const router = Router({ mergeParams: true });
 
 router.use(authenticateToken);
 
-router.get('/:nodeId/metrics', NodeController.getNodeMetrics);
-router.get('/:nodeId/timeseries', NodeController.getNodeTimeseries);
-
 router.use((req, res, next) => {
   if (!req.params.clusterId && !req.params.orgId && !(req as any).orgMember) {
     return requireRoles('SUPER_ADMIN', 'SYSTEM_ADMIN', 'ADMIN')(req, res, next);
   }
   next();
 });
+
+router.get('/:nodeId/metrics', NodeController.getNodeMetrics);
+router.get('/:nodeId/timeseries', NodeController.getNodeTimeseries);
 
 router.get('/', NodeController.getNodes);
 

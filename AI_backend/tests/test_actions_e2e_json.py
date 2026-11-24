@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 import pytest
-from fastapi.testclient import TestClient
+from tests.hmac_client import SignedTestClient as TestClient
 
 from app.main import app
 

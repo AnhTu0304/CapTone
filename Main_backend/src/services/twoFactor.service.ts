@@ -4,8 +4,46 @@ import bcrypt from 'bcryptjs';
 import { TwoFactorModel, IBackupCodeItem } from '../models/twoFactor.model';
 import { UserModel } from '../models/user.model';
 import { ApiError } from '../utils/apiError';
+import { config } from '../config/env';
+import { redisClient, isRedisReady } from '../config/redis';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const TOTP_CIPHER_PREFIX = 'v1:';
+const MEMORY_USED_TOTP_STEPS = new Map<string, number>();
+
+function deriveTotpAesKey(): Buffer {
+    return crypto.createHash('sha256').update(config.totpEncryptionKey).digest();
+}
+
+export function encryptTotpSecret(plainSecret: string): string {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', deriveTotpAesKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(plainSecret, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `${TOTP_CIPHER_PREFIX}${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+export function decryptTotpSecret(storedSecret: string): string {
+    if (!storedSecret || typeof storedSecret !== 'string' || !storedSecret.startsWith(TOTP_CIPHER_PREFIX)) {
+        throw new ApiError(500, 'Dữ liệu bí mật 2FA không hợp lệ hoặc chưa được mã hóa (v1:)');
+    }
+    const parts = storedSecret.slice(TOTP_CIPHER_PREFIX.length).split(':');
+    if (parts.length !== 3) {
+        throw new ApiError(500, 'Dữ liệu bí mật 2FA không hợp lệ');
+    }
+    const [ivHex, tagHex, cipherHex] = parts;
+    const decipher = crypto.createDecipheriv(
+        'aes-256-gcm',
+        deriveTotpAesKey(),
+        Buffer.from(ivHex, 'hex')
+    );
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(cipherHex, 'hex')),
+        decipher.final(),
+    ]);
+    return decrypted.toString('utf8');
+}
 
 function bufferToBase32(buffer: Buffer): string {
     let bits = 0;
@@ -62,14 +100,14 @@ function computeTOTP(secretBuffer: Buffer, timeStep: number): string {
     return (binary % 1000000).toString().padStart(6, '0');
 }
 
-export function verifyTOTPCode(secretBase32: string, token: string, window: number = 1): boolean {
+export function verifyTOTPCodeWithStep(secretBase32: string, token: string, window: number = 1): number | null {
     const cleanToken = token ? token.toString().trim() : '';
     if (!cleanToken || cleanToken.length !== 6 || !/^\d{6}$/.test(cleanToken)) {
-        return false;
+        return null;
     }
     try {
         const secretBuffer = base32ToBuffer(secretBase32);
-        if (secretBuffer.length === 0) return false;
+        if (secretBuffer.length === 0) return null;
 
         const now = Math.floor(Date.now() / 1000);
         const currentStep = Math.floor(now / 30);
@@ -78,13 +116,34 @@ export function verifyTOTPCode(secretBase32: string, token: string, window: numb
             const step = currentStep + i;
             const expected = computeTOTP(secretBuffer, step);
             if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(cleanToken))) {
-                return true;
+                return step;
             }
         }
     } catch {
+        return null;
+    }
+    return null;
+}
+
+export function verifyTOTPCode(secretBase32: string, token: string, window: number = 1): boolean {
+    return verifyTOTPCodeWithStep(secretBase32, token, window) !== null;
+}
+
+async function claimTotpStep(userId: string, timeStep: number): Promise<boolean> {
+    const key = `totp_used:${userId}:${timeStep}`;
+    if (isRedisReady()) {
+        const res = await redisClient.set(key, '1', 'EX', 90, 'NX');
+        return res === 'OK';
+    }
+    const now = Date.now();
+    for (const [k, exp] of MEMORY_USED_TOTP_STEPS.entries()) {
+        if (exp <= now) MEMORY_USED_TOTP_STEPS.delete(k);
+    }
+    if (MEMORY_USED_TOTP_STEPS.has(key)) {
         return false;
     }
-    return false;
+    MEMORY_USED_TOTP_STEPS.set(key, now + 90_000);
+    return true;
 }
 
 export class TwoFactorService {
@@ -113,6 +172,11 @@ export class TwoFactorService {
      * Khởi tạo thiết lập 2FA: Sinh secret key, QR Code Data URL và 8 mã dự phòng (backup codes)
      */
     public static async setup(userId: string, email: string) {
+        const existing = await TwoFactorModel.findByUserId(userId);
+        if (existing && existing.is_enabled) {
+            throw new ApiError(409, 'Xác thực 2 yếu tố (2FA) đang được kích hoạt. Vui lòng tắt 2FA trước khi thiết lập lại.');
+        }
+
         // Sinh ngẫu nhiên 20 byte cho TOTP secret (160-bit chuẩn RFC 6238)
         const secretBuffer = crypto.randomBytes(20);
         const secret = bufferToBase32(secretBuffer);
@@ -146,8 +210,9 @@ export class TwoFactorService {
             });
         }
 
-        // Lưu vào cơ sở dữ liệu ở trạng thái chưa kích hoạt (is_enabled = FALSE)
-        await TwoFactorModel.upsertSecret(userId, secret, backupCodeItems);
+        // Mã hóa secret TOTP bằng AES-256-GCM trước khi lưu CSDL
+        const encryptedSecret = encryptTotpSecret(secret);
+        await TwoFactorModel.upsertSecret(userId, encryptedSecret, backupCodeItems);
 
         return {
             secret,
@@ -166,9 +231,14 @@ export class TwoFactorService {
             throw new ApiError(400, 'Chưa có cấu hình 2FA để kích hoạt. Vui lòng tạo mã QR trước.');
         }
 
-        const isValid = verifyTOTPCode(record.secret_key, code);
-        if (!isValid) {
+        const plainSecret = decryptTotpSecret(record.secret_key);
+        const matchedStep = verifyTOTPCodeWithStep(plainSecret, code);
+        if (matchedStep === null) {
             throw new ApiError(400, 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.');
+        }
+        const firstUse = await claimTotpStep(userId, matchedStep);
+        if (!firstUse) {
+            throw new ApiError(400, 'Mã xác thực 2FA đã được sử dụng, vui lòng đợi mã tiếp theo.');
         }
 
         await TwoFactorModel.enable(userId);
@@ -179,17 +249,29 @@ export class TwoFactorService {
     }
 
     /**
-     * Vô hiệu hóa 2FA: Có thể yêu cầu mật khẩu để xác minh an toàn
+     * Vô hiệu hóa 2FA: Bắt buộc xác thực lại bằng mật khẩu HOẶC mã 2FA/backup hiện tại
      */
-    public static async disable(userId: string, password?: string) {
-        if (password) {
+    public static async disable(userId: string, password?: string, code?: string) {
+        const hasPassword = typeof password === 'string' && password.length > 0;
+        const hasCode = typeof code === 'string' && code.trim().length > 0;
+
+        if (!hasPassword && !hasCode) {
+            throw new ApiError(400, 'Vui lòng cung cấp mật khẩu tài khoản hoặc mã 2FA hợp lệ để vô hiệu hóa 2FA');
+        }
+
+        if (hasPassword) {
             const user = await UserModel.findByIdWithPassword(userId);
             if (!user) {
                 throw new ApiError(404, 'Không tìm thấy người dùng');
             }
-            const isMatch = await bcrypt.compare(password, user.password_hash || '');
+            const isMatch = user.password_hash ? await bcrypt.compare(password!, user.password_hash) : false;
             if (!isMatch) {
-                throw new ApiError(400, 'Mật khẩu tài khoản không chính xác');
+                throw new ApiError(401, 'Mật khẩu tài khoản không chính xác');
+            }
+        } else {
+            const codeCheck = await this.verifyLoginCode(userId, code!);
+            if (!codeCheck.success) {
+                throw new ApiError(401, 'Mã xác thực 2FA không chính xác hoặc đã được sử dụng');
             }
         }
 
@@ -201,7 +283,7 @@ export class TwoFactorService {
     }
 
     /**
-     * Kiểm tra mã đăng nhập (chấp nhận cả mã OTP 6 số hoặc một trong các mã backup 8 ký tự)
+     * Kiểm tra mã đăng nhập (chấp nhận cả mã OTP 6 số có chống replay hoặc mã backup 8 ký tự)
      */
     public static async verifyLoginCode(userId: string, inputCode: string): Promise<{ success: boolean; usedBackupCode: boolean }> {
         const record = await TwoFactorModel.findByUserId(userId);
@@ -211,10 +293,15 @@ export class TwoFactorService {
 
         const clean = inputCode ? inputCode.trim() : '';
 
-        // 1. Thử xác thực như mã TOTP 6 số
+        // 1. Thử xác thực như mã TOTP 6 số + chống sử dụng lại cùng bước thời gian
         if (/^\d{6}$/.test(clean)) {
-            const isTotpValid = verifyTOTPCode(record.secret_key, clean);
-            if (isTotpValid) {
+            const plainSecret = decryptTotpSecret(record.secret_key);
+            const matchedStep = verifyTOTPCodeWithStep(plainSecret, clean);
+            if (matchedStep !== null) {
+                const claimed = await claimTotpStep(userId, matchedStep);
+                if (!claimed) {
+                    return { success: false, usedBackupCode: false };
+                }
                 return { success: true, usedBackupCode: false };
             }
         }

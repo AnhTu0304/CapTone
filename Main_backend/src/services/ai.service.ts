@@ -17,6 +17,7 @@ import {
   recordExternalCall,
   withBackendSpan,
 } from '../telemetry/metrics';
+import { buildAiInternalAuthHeaders } from '../utils/internalAuth';
 
 export interface AiBackendHealth {
   status: string;
@@ -313,23 +314,27 @@ export class AiService {
       async () => {
         const startHr = process.hrtime.bigint();
         try {
-          const headers = injectTraceContext({ 'Content-Type': 'application/json' });
+          const predictBody = JSON.stringify({
+            service_id: input.service_id,
+            sequence: input.sequence.map((pt) => ({
+              cpu: Math.min(100, Math.max(0, Number(pt.cpu || 0))),
+              ram: Math.min(100, Math.max(0, Number(pt.ram || 0))),
+              disk: Math.min(100, Math.max(0, Number(pt.disk || 0))),
+              request_rate: Math.max(0, Number(pt.request_rate || 0)),
+              latency: Math.max(0, Number(pt.latency || 0)),
+              http_5xx_rate: Math.min(100, Math.max(0, Number(pt.http_5xx_rate || 0))),
+              pod_restart_count: Math.max(0, Number(pt.pod_restart_count || 0)),
+              replica_count: Math.max(1, Number(pt.replica_count || 1)),
+            })),
+          });
+          const headers = injectTraceContext({
+            'Content-Type': 'application/json',
+            ...buildAiInternalAuthHeaders('POST', '/api/v1/predict', predictBody),
+          });
           const response = await fetch(targetUrl, {
             method: 'POST',
             headers,
-            body: JSON.stringify({
-              service_id: input.service_id,
-              sequence: input.sequence.map((pt) => ({
-                cpu: Math.min(100, Math.max(0, Number(pt.cpu || 0))),
-                ram: Math.min(100, Math.max(0, Number(pt.ram || 0))),
-                disk: Math.min(100, Math.max(0, Number(pt.disk || 0))),
-                request_rate: Math.max(0, Number(pt.request_rate || 0)),
-                latency: Math.max(0, Number(pt.latency || 0)),
-                http_5xx_rate: Math.min(100, Math.max(0, Number(pt.http_5xx_rate || 0))),
-                pod_restart_count: Math.max(0, Number(pt.pod_restart_count || 0)),
-                replica_count: Math.max(1, Number(pt.replica_count || 1)),
-              })),
-            }),
+            body: predictBody,
             signal: AbortSignal.timeout(6000),
           });
           const dur = Number(process.hrtime.bigint() - startHr) / 1e9;
@@ -556,7 +561,7 @@ export class AiService {
           `SELECT h.id, act.code AS action_code, h.target_name, h.completed_at
            FROM healing_actions h
            LEFT JOIN healing_action_types act ON act.id = h.action_type_id
-           WHERE h.execution_status = 'SUCCEEDED'
+           WHERE h.execution_status = 'COMPLETED'
              AND h.completed_at IS NOT NULL
              AND h.completed_at <= NOW() - interval '20 seconds'
              AND h.completed_at >= NOW() - interval '60 minutes'
@@ -674,7 +679,7 @@ export class AiService {
             ORDER BY rv_inner.verified_at DESC
             LIMIT 1
           ) rv ON true
-          WHERE h.execution_status IN ('SUCCEEDED', 'FAILED')
+          WHERE h.execution_status IN ('COMPLETED', 'FAILED')
             AND COALESCE(h.completed_at, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
             AND (
               LOWER(COALESCE(h.target_name, '')) = ANY($1)
@@ -701,7 +706,7 @@ export class AiService {
 
           let mappedStatus: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'UNKNOWN' | null = null;
           if (row.execution_status === 'FAILED' || row.verification_result === false) mappedStatus = 'FAILED';
-          else if (row.execution_status === 'SUCCEEDED' && row.verification_result !== false) mappedStatus = 'SUCCESS';
+          else if (row.execution_status === 'COMPLETED' && row.verification_result !== false) mappedStatus = 'SUCCESS';
 
           if (mappedCode && mappedStatus) {
             prevAction = mappedCode;
@@ -776,7 +781,7 @@ export class AiService {
             const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
             if (isFailed) {
               consecutiveFailures++;
-            } else if (r.execution_status === 'SUCCEEDED' && r.verification_result !== false) {
+            } else if (r.execution_status === 'COMPLETED' && r.verification_result !== false) {
               break;
             }
           }
@@ -806,7 +811,7 @@ export class AiService {
               executed_at: r.started_at || r.completed_at,
               result: (r.execution_status === 'FAILED' || r.verification_result === false)
                 ? 'FAILED'
-                : (r.execution_status === 'SUCCEEDED' ? 'SUCCESS' : 'PARTIAL'),
+                : (r.execution_status === 'COMPLETED' ? 'SUCCESS' : 'PARTIAL'),
               execution_status: r.execution_status,
               verification_result: typeof r.verification_details === 'object' && r.verification_details !== null
                 ? JSON.stringify(r.verification_details)
@@ -897,11 +902,15 @@ export class AiService {
       async () => {
         const startHr = process.hrtime.bigint();
         try {
-          const headers = injectTraceContext({ 'Content-Type': 'application/json' });
+          const rcaBody = JSON.stringify(rcaPayload);
+          const headers = injectTraceContext({
+            'Content-Type': 'application/json',
+            ...buildAiInternalAuthHeaders('POST', '/api/v1/rca', rcaBody),
+          });
           const response = await fetch(targetUrl, {
             method: 'POST',
             headers,
-            body: JSON.stringify(rcaPayload),
+            body: rcaBody,
             signal: AbortSignal.timeout(25000),
           });
           const dur = Number(process.hrtime.bigint() - startHr) / 1e9;

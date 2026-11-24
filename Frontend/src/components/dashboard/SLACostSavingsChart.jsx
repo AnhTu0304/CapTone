@@ -289,7 +289,7 @@ export const SLACostSavingsChart = ({
               ? subtitle
               : isAutoMode
                 ? 'Đánh giá tốc độ phục hồi sự cố trung bình (MTTR giây) và tỷ lệ can thiệp tự động (AUTO)'
-                : 'Theo dõi diễn biến số lượng hành động xử lý theo ngày/tháng và tỷ lệ thành công thực tế (SUCCEEDED vs FAILED vs CANCELLED)'}
+                : 'Theo dõi diễn biến số lượng hành động xử lý theo ngày/tháng và tỷ lệ thành công thực tế (COMPLETED vs FAILED vs CANCELLED)'}
           </p>
         </div>
 
@@ -812,7 +812,7 @@ export const SLACostSavingsChart = ({
                   <strong>{hoveredData.total} tác vụ</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#34D399' }}>• Thành công (SUCCEEDED):</span>
+                  <span style={{ color: '#34D399' }}>• Thành công (COMPLETED):</span>
                   <strong style={{ color: '#34D399' }}>{hoveredData.succeeded}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>

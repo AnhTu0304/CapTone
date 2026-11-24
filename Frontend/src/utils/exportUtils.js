@@ -6,7 +6,11 @@ export const exportToCsv = (filename, headers, rows) => {
   try {
     const escapeCell = (val) => {
       if (val === null || val === undefined) return '""';
-      const str = String(val).replace(/"/g, '""');
+      let raw = String(val);
+      if (/^[=+\-@\t\r]/.test(raw)) {
+        raw = `'${raw}`;
+      }
+      const str = raw.replace(/"/g, '""');
       return `"${str}"`;
     };
 

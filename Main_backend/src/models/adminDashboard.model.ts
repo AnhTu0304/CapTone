@@ -146,7 +146,7 @@ export class AdminDashboardModel {
     const healingQuery = `
       SELECT 
         COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE execution_status = 'SUCCEEDED')::int AS succeeded
+        COUNT(*) FILTER (WHERE execution_status = 'COMPLETED')::int AS succeeded
       FROM healing_actions;
     `;
 
@@ -197,7 +197,7 @@ export class AdminDashboardModel {
         (SELECT count(*)::int FROM agents WHERE status = 'OFFLINE') as offline_agents,
         (SELECT count(*)::int FROM agents WHERE status = 'PENDING') as pending_agents,
         (SELECT count(*)::int FROM healing_actions) as total_healing_actions,
-        (SELECT count(*)::int FROM healing_actions WHERE execution_status = 'SUCCEEDED') as succeeded_healing_actions,
+        (SELECT count(*)::int FROM healing_actions WHERE execution_status = 'COMPLETED') as succeeded_healing_actions,
         (SELECT count(*)::int FROM clusters WHERE deleted_at IS NULL) as total_clusters,
         (SELECT count(*)::int FROM organizations WHERE deleted_at IS NULL) as total_organizations,
         (SELECT COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(resolved_at, created_at) - detected_at)))::numeric, 0), 45) 
@@ -220,7 +220,7 @@ export class AdminDashboardModel {
         count(*) FILTER (WHERE a.status = 'ONLINE')::int as online_agents,
         MAX(a.last_seen_at) as last_seen_at
       FROM agents a
-      LEFT JOIN clusters c ON c.id = a.cluster_id
+      LEFT JOIN clusters c ON c.id::text = a.cluster_id::text
       GROUP BY c.id, c.name, a.cluster_id
       HAVING count(*) FILTER (WHERE a.status = 'OFFLINE') > 0
       ORDER BY offline_agents DESC;
@@ -243,7 +243,7 @@ export class AdminDashboardModel {
         a.last_seen_at,
         COALESCE(c.name, 'minikube') as cluster_name
       FROM agents a
-      LEFT JOIN clusters c ON c.id = a.cluster_id
+      LEFT JOIN clusters c ON c.id::text = a.cluster_id::text
       WHERE a.status = 'OFFLINE'
       ORDER BY a.last_seen_at DESC NULLS LAST
       LIMIT $1;

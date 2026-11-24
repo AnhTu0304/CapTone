@@ -9,7 +9,7 @@ export const avatarSchema = z
   .refine(
     (val) => {
       if (!val) return true;
-      if (val.startsWith('http://') || val.startsWith('https://')) {
+      if (val.startsWith('https://')) {
         try {
           new URL(val);
           return true;
@@ -17,7 +17,7 @@ export const avatarSchema = z
           return false;
         }
       }
-      if (val.startsWith('data:image/')) {
+      if (/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(val)) {
         return true;
       }
       return false;

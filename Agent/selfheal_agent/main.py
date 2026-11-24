@@ -2,10 +2,12 @@
 
 import asyncio
 from datetime import datetime, timezone
+import ipaddress
 import logging
 import re
 import signal
 import sys
+import threading
 import time
 from typing import Any, Optional
 from aiohttp import web
@@ -49,6 +51,76 @@ from selfheal_agent.heartbeat import AgentHeartbeatClient, HeartbeatState
 
 logger = logging.getLogger("selfheal_agent.main")
 
+ALLOWED_HEALING_ACTIONS = {
+    "RESTART_POD", "ROLLOUT_RESTART", "RESTART_DEPLOYMENT", "RESTART POD", "RESTART DEPLOYMENT",
+    "REPLACE_POD", "REPLACE POD",
+    "SCALE_REPLICAS", "SCALE_DEPLOYMENT", "SCALE REPLICAS",
+    "ROLLBACK_DEPLOYMENT", "ROLLBACK", "ROLLBACK DEPLOYMENT",
+    "CLEANUP_STORAGE", "CLEANUP_DISK", "CLEANUP STORAGE",
+    "DRAIN_NODE", "CORDON_AND_DRAIN", "DRAIN NODE",
+    "TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK",
+    "UNBLOCK_IP", "REMOVE_IP_BLOCK", "DELETE_IP_BLOCK",
+    "NO_ACTION", "NO ACTION",
+}
+PROTECTED_NAMESPACES = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system"}
+ACTION_REPLAY_TTL_SECONDS = 3600
+
+
+_PROTECTED_IP_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("::/128"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("ff00::/8"),
+)
+
+
+def _validate_block_ip_target(raw_ip: Any) -> tuple[str, str, str]:
+    """Validate and normalize an external IP/CIDR target for NetworkPolicy blocking."""
+    if not isinstance(raw_ip, str) or not raw_ip.strip():
+        raise ValueError("IP blocking requires a valid non-empty IP or CIDR parameter")
+    clean_ip = raw_ip.strip()
+    try:
+        network = ipaddress.ip_network(clean_ip, strict=False) if "/" in clean_ip else ipaddress.ip_network(ipaddress.ip_address(clean_ip))
+    except ValueError as err:
+        raise ValueError(f"Invalid IP or CIDR target '{clean_ip}': {err}") from err
+
+    if network.version == 4 and network.prefixlen < 24:
+        raise ValueError(f"Refusing overly broad IPv4 CIDR '{clean_ip}' (minimum prefix /24)")
+    if network.version == 6 and network.prefixlen < 64:
+        raise ValueError(f"Refusing overly broad IPv6 CIDR '{clean_ip}' (minimum prefix /64)")
+    if any(network.overlaps(protected) for protected in _PROTECTED_IP_NETWORKS if protected.version == network.version):
+        raise ValueError(f"Refusing to block protected/internal IP range '{clean_ip}'")
+
+    raw_slug = re.sub(r"[^a-z0-9-]+", "-", clean_ip.lower()).strip("-")
+    policy_name = f"block-ip-{raw_slug}"[:63].rstrip("-")
+    return clean_ip, str(network), policy_name
+
+
+def _parse_action_expiry(cmd_params: dict[str, Any]) -> Optional[float]:
+    raw_exp = cmd_params.get("expires_at")
+    if raw_exp is None:
+        return None
+    if isinstance(raw_exp, (int, float)):
+        return float(raw_exp)
+    if isinstance(raw_exp, str) and raw_exp.strip():
+        try:
+            dt = datetime.fromisoformat(raw_exp.strip().replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except ValueError as err:
+            raise ValueError(f"Invalid expires_at format: {err}") from err
+    raise ValueError("Invalid expires_at parameter")
+
 
 class AgentService:
     """Coordinates Agent collection tasks, health probes, and WebSocket transport."""
@@ -79,6 +151,8 @@ class AgentService:
 
         self._tasks: list[asyncio.Task[None]] = []
         self._is_running = False
+        self._action_replay_lock = threading.Lock()
+        self._seen_action_ids: dict[str, float] = {}
 
     def _init_k8s(self) -> None:
         """Initialize Kubernetes API client wrapper."""
@@ -188,13 +262,69 @@ class AgentService:
     def _execute_action_sync(self, message: ExecuteActionPayload) -> ActionResultMessage:
 
         cmd = message.data
-        action_id = cmd.action_id
+        action_id = str(cmd.action_id or "").strip()
         action_type = (cmd.action_type or "").upper().strip().replace(" ", "_")
         target_name = cmd.target_name or "sme-order-service"
         if (len(target_name) == 36 and "-" in target_name) or target_name.startswith("c0000"):
             target_name = "sme-order-service"
         namespace = cmd.namespace or "default"
-        cmd_params = cmd.params or {}
+        cmd_params = cmd.params if isinstance(cmd.params, dict) else {}
+
+        def _reject_action(reason: str) -> ActionResultMessage:
+            logger.warning("🛡️ [SelfHealing Security Guard] Rejected action_id=%s type=%s: %s", action_id, action_type, reason)
+            record_remediation_execution(
+                action_type=action_type or "UNKNOWN",
+                workload_kind="Rejected",
+                status="failed",
+                duration_seconds=0.001,
+            )
+            return ActionResultMessage(
+                data=ActionResultData(
+                    action_id=action_id,
+                    status="FAILED",
+                    message=reason,
+                    duration_ms=100,
+                    details={
+                        "error": reason,
+                        "target": target_name,
+                        "namespace": namespace,
+                        "action_type": action_type,
+                    },
+                )
+            )
+
+        if not action_id:
+            return _reject_action("Missing action_id for remediation execution")
+        if action_type not in ALLOWED_HEALING_ACTIONS:
+            return _reject_action(f"Unsupported or disallowed healing action_type '{action_type}'")
+
+        is_no_action = action_type in {"NO_ACTION", "NO ACTION"}
+        if not is_no_action and not getattr(self.config, "ENABLE_HEALING_ACTIONS", False):
+            return _reject_action("Healing action execution disabled (ENABLE_HEALING_ACTIONS=false)")
+        if not is_no_action and namespace in PROTECTED_NAMESPACES:
+            return _reject_action(
+                f"Safety Guard Blocked: Namespace '{namespace}' is a protected Kubernetes system namespace and cannot be modified automatically."
+            )
+
+        try:
+            expires_at = _parse_action_expiry(cmd_params)
+        except ValueError as exp_err:
+            return _reject_action(str(exp_err))
+
+        now_epoch = time.time()
+        if expires_at is not None and now_epoch > expires_at:
+            return _reject_action(f"Remediation action '{action_id}' expired")
+
+        replay_lock = getattr(self, "_action_replay_lock", None)
+        seen_ids = getattr(self, "_seen_action_ids", None)
+        if replay_lock is not None and seen_ids is not None:
+            with replay_lock:
+                expired_keys = [k for k, exp in seen_ids.items() if exp <= now_epoch]
+                for k in expired_keys:
+                    seen_ids.pop(k, None)
+                if action_id in seen_ids:
+                    return _reject_action(f"Duplicate or replayed action_id '{action_id}' rejected")
+                seen_ids[action_id] = now_epoch + ACTION_REPLAY_TTL_SECONDS
 
         with start_agent_span(
             "agent.remediation.execute",
@@ -483,7 +613,7 @@ class AgentService:
                 namespace,
             )
 
-            status = "SUCCEEDED"
+            status = "COMPLETED"
             details: dict[str, Any] = {
                 "target": target_name,
                 "workload_kind": workload_kind_label,
@@ -495,8 +625,7 @@ class AgentService:
             start_t = time.perf_counter()
 
             try:
-                protected_namespaces = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system"}
-                if namespace in protected_namespaces and action_type not in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
+                if namespace in PROTECTED_NAMESPACES and action_type not in {"NO_ACTION", "NO ACTION"}:
                     raise ValueError(
                         f"Safety Guard Blocked: Namespace '{namespace}' is a protected Kubernetes system namespace and cannot be modified automatically."
                     )
@@ -869,10 +998,8 @@ class AgentService:
                     logger.info("✅ %s", msg_str)
 
                 elif action_type in ["TEMPORARY_IP_BLOCK", "BLOCK_IP_TEMP", "BLOCK_IP", "IP_BLOCK", "BLOCK_SUSPICIOUS_IP", "TEMPORARY IP BLOCK"]:
-                    raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or "203.0.113.10"
-                    clean_ip = str(raw_ip).strip()
-                    ip_cidr = clean_ip if "/" in clean_ip else (f"{clean_ip}/128" if ":" in clean_ip else f"{clean_ip}/32")
-                    policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+                    raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip")
+                    clean_ip, ip_cidr, policy_name = _validate_block_ip_target(raw_ip)
                     target_ns = namespace or "default"
                     duration_minutes = (cmd.params or {}).get("duration_minutes") or 15
 
@@ -888,7 +1015,7 @@ class AgentService:
                     if getattr(self, "apps_v1", None):
                         try:
                             dep = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=target_ns)
-                            if dep.spec and dep.spec.selector and dep.spec.selector.match_labels:
+                            if dep.spec and dep.spec.selector and isinstance(dep.spec.selector.match_labels, dict) and dep.spec.selector.match_labels:
                                 target_pod_labels = dep.spec.selector.match_labels
                         except Exception:
                             pass
@@ -967,9 +1094,8 @@ class AgentService:
                         status = "FAILED"
 
                 elif action_type in ["UNBLOCK_IP", "REMOVE_IP_BLOCK", "DELETE_IP_BLOCK"]:
-                    raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip") or ""
-                    clean_ip = str(raw_ip).strip()
-                    policy_name = f"block-ip-{clean_ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+                    raw_ip = (cmd.params or {}).get("ip") or (cmd.params or {}).get("source_ip")
+                    clean_ip, _, policy_name = _validate_block_ip_target(raw_ip)
                     target_ns = namespace or "default"
                     details["strategy"] = "k8s_native_unblock"
                     details["unblocked_ip"] = clean_ip
@@ -999,9 +1125,7 @@ class AgentService:
                     logger.info("🛡️ %s", msg_str)
 
                 else:
-                    details["strategy"] = "generic_action"
-                    msg_str = f"Action '{action_type}' processed successfully on {target_name}"
-                    logger.info("✅ %s", msg_str)
+                    raise ValueError(f"Unsupported or disallowed healing action type: '{action_type}'")
 
                 elapsed_sec = max(0.001, time.perf_counter() - start_t)
                 duration_ms = int(elapsed_sec * 1000)
@@ -1024,7 +1148,7 @@ class AgentService:
             record_remediation_execution(
                 action_type=action_type or "UNKNOWN",
                 workload_kind=workload_kind_label,
-                status="success" if status == "SUCCEEDED" else "failed",
+                status="success" if status == "COMPLETED" else "failed",
                 duration_seconds=max(0.001, duration_ms / 1000.0),
             )
 

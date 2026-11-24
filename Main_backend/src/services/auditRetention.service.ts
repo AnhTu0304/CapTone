@@ -1,4 +1,4 @@
-import { pool } from '../config/database';
+import { pool, withSystemTx } from '../config/database';
 import { AuditService } from './audit.service';
 
 export interface IRetentionStats {
@@ -53,7 +53,7 @@ export class AuditRetentionService {
       FROM audit_logs;
     `;
 
-    const res = await pool.query(query, [cutoffDate]);
+    const res = await withSystemTx((client) => client.query(query, [cutoffDate]));
     const row = res.rows[0] || {};
 
     return {
@@ -111,7 +111,7 @@ export class AuditRetentionService {
         );
       `;
 
-      const res = await pool.query(deleteSql, [cutoffDate, batchSize]);
+      const res = await withSystemTx((client) => client.query(deleteSql, [cutoffDate, batchSize]));
       const deletedInBatch = res.rowCount || 0;
       totalPurged += deletedInBatch;
 
@@ -129,21 +129,23 @@ export class AuditRetentionService {
 
     // Ghi nhận sự kiện audit log cho việc thực thi Data Retention
     if (totalPurged > 0) {
-      AuditService.record({
-        user_id: options?.executedByUserId || null,
-        actor_type: options?.executedByUserId ? 'USER' : 'SYSTEM',
-        action: 'SYSTEM_AUDIT_PURGED',
-        resource_type: 'AUDIT_LOGS',
-        resource_id: null,
-        status: 'SUCCESS',
-        description: `Đã dọn dẹp ${totalPurged} bản ghi audit logs cũ hơn ${days} ngày (trước ${cutoffDate.toISOString()})`,
-        metadata: {
-          purged_count: totalPurged,
-          retention_days: days,
-          cutoff_date: cutoffDate.toISOString(),
-          batches_executed: batches,
-          execution_time_ms: executionTimeMs,
-        },
+      await withSystemTx(async () => {
+        await AuditService.record({
+          user_id: options?.executedByUserId || null,
+          actor_type: options?.executedByUserId ? 'USER' : 'SYSTEM',
+          action: 'SYSTEM_AUDIT_PURGED',
+          resource_type: 'AUDIT_LOGS',
+          resource_id: null,
+          status: 'SUCCESS',
+          description: `Đã dọn dẹp ${totalPurged} bản ghi audit logs cũ hơn ${days} ngày (trước ${cutoffDate.toISOString()})`,
+          metadata: {
+            purged_count: totalPurged,
+            retention_days: days,
+            cutoff_date: cutoffDate.toISOString(),
+            batches_executed: batches,
+            execution_time_ms: executionTimeMs,
+          },
+        });
       }).catch((err) => {
         console.error('[AuditRetentionService] Lỗi khi ghi nhận audit event cho purge:', err.message);
       });

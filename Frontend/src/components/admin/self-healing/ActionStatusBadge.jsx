@@ -87,9 +87,9 @@ export const ApprovalStatusBadge = ({ status = 'APPROVED' }) => {
   }
 };
 
-export const ExecutionStatusBadge = ({ status = 'SUCCEEDED' }) => {
+export const ExecutionStatusBadge = ({ status = 'COMPLETED' }) => {
   switch (status) {
-    case 'SUCCEEDED':
+    case 'COMPLETED':
       return (
         <span
           style={{
