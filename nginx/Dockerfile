@@ -1,7 +1,12 @@
 FROM nginx:alpine
 
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf /etc/nginx/nginx.https.conf
+COPY nginx.http.conf /etc/nginx/nginx.http.conf
+COPY nginx.http.conf /etc/nginx/nginx.conf
+COPY 10-select-nginx-mode.sh /docker-entrypoint.d/10-select-nginx-mode.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.d/10-select-nginx-mode.sh && \
+    chmod +x /docker-entrypoint.d/10-select-nginx-mode.sh
 
 EXPOSE 80 443
 

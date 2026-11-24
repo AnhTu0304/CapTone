@@ -563,7 +563,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       const items = res?.data?.items || res?.items || (Array.isArray(res?.data) ? res.data : []);
       const nowMs = Date.now();
       const activeCount = items.filter((item) => {
-        if (!item || item.status === 'RESOLVED' || item.healing_status === 'COMPLETED') return false;
+        if (!item || item.status === 'RESOLVED' || item.healing_status === 'COMPLETED' || item.healing_status === 'SUCCEEDED') return false;
         let recAction = item.recommendation || '';
         if (!recAction && item.analysis_result) {
           try {

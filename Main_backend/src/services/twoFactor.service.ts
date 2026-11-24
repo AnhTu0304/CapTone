@@ -147,6 +147,18 @@ async function claimTotpStep(userId: string, timeStep: number): Promise<boolean>
 }
 
 export class TwoFactorService {
+    private static async resolveSecretForVerification(userId: string, storedSecret: string): Promise<string> {
+        if (storedSecret && typeof storedSecret === 'string' && !storedSecret.startsWith(TOTP_CIPHER_PREFIX)) {
+            const cleaned = storedSecret.trim().toUpperCase().replace(/\s+/g, '');
+            if (/^[A-Z2-7=]{16,128}$/.test(cleaned)) {
+                const encrypted = encryptTotpSecret(cleaned);
+                await TwoFactorModel.updateSecretKey(userId, encrypted).catch(() => {});
+                return cleaned;
+            }
+        }
+        return decryptTotpSecret(storedSecret);
+    }
+
     /**
      * Lấy trạng thái 2FA của người dùng
      */
@@ -231,7 +243,7 @@ export class TwoFactorService {
             throw new ApiError(400, 'Chưa có cấu hình 2FA để kích hoạt. Vui lòng tạo mã QR trước.');
         }
 
-        const plainSecret = decryptTotpSecret(record.secret_key);
+        const plainSecret = await this.resolveSecretForVerification(userId, record.secret_key);
         const matchedStep = verifyTOTPCodeWithStep(plainSecret, code);
         if (matchedStep === null) {
             throw new ApiError(400, 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.');
@@ -295,7 +307,7 @@ export class TwoFactorService {
 
         // 1. Thử xác thực như mã TOTP 6 số + chống sử dụng lại cùng bước thời gian
         if (/^\d{6}$/.test(clean)) {
-            const plainSecret = decryptTotpSecret(record.secret_key);
+            const plainSecret = await this.resolveSecretForVerification(userId, record.secret_key);
             const matchedStep = verifyTOTPCodeWithStep(plainSecret, clean);
             if (matchedStep !== null) {
                 const claimed = await claimTotpStep(userId, matchedStep);

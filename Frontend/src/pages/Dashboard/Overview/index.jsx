@@ -1328,9 +1328,14 @@ export const OverviewPage = () => {
         (merged.incident_id && resolvedIncidentIds.has(merged.incident_id)) ||
         isIncidentResolved;
 
+      const agentDoneStatus = String(merged?.result?.agent_status || '').toUpperCase();
+      const isAgentAwaitingVerify =
+        execStatus === 'RUNNING' && (agentDoneStatus === 'COMPLETED' || agentDoneStatus === 'SUCCEEDED');
+      const isExecCompleted = execStatus === 'SUCCEEDED' || execStatus === 'COMPLETED';
+
       const isVerifiedRecovered =
         verResult === true ||
-        (verResult === null && execStatus === 'SUCCEEDED' && !isRecentAction && isActionIncidentResolved);
+        (verResult === null && isExecCompleted && !isRecentAction && isActionIncidentResolved);
 
       const isFailedOrUnrecovered =
         execStatus === 'FAILED' ||
@@ -1338,11 +1343,11 @@ export const OverviewPage = () => {
 
       const isVerifying =
         verResult === null &&
-        execStatus === 'SUCCEEDED' &&
+        (isExecCompleted || isAgentAwaitingVerify) &&
         !isVerifiedRecovered &&
         !isFailedOrUnrecovered;
 
-      const isRunning = execStatus === 'RUNNING';
+      const isRunning = execStatus === 'RUNNING' && !isAgentAwaitingVerify;
       const d = ts ? new Date(ts) : null;
       // Hiển thị cả ngày và giờ (dd/MM/yyyy HH:mm:ss) theo đúng yêu cầu
       const timeStr = d
@@ -1494,7 +1499,7 @@ export const OverviewPage = () => {
       [...actionTimeline].reverse().find((a) => a.isVerifiedRecovered || a.isFailedOrUnrecovered || a.isVerifying) || null;
     const effectiveLatestAutoAction =
       latestAutoAction ||
-      [...actionTimeline].reverse().find((a) => ['AUTO', 'AUTONOMOUS', ''].includes(String(a.execution_mode || '').toUpperCase())) ||
+      [...actionTimeline].reverse().find((a) => ['AUTO', 'AUTOMATIC', 'AUTONOMOUS', ''].includes(String(a.execution_mode || '').toUpperCase())) ||
       null;
 
     // Phân tích bằng chứng thật từ rca_analyses.analysis_result cho 4 tác tử ở Cột 04 (không dùng chữ cứng)

@@ -3,11 +3,7 @@
  * Kết nối trực tiếp với Main Backend Node.js Express (cổng 5000)
  */
 
-const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
-const API_BASE_URL = rawApiUrl
-  .replace('//localhost:5000', '//127.0.0.1:5005')
-  .replace('//localhost:5005', '//127.0.0.1:5005')
-  .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
+import { API_BASE_URL } from './apiClient';
 
 const CSRF_COOKIE_NAME = 'selfheal_csrf_token';
 

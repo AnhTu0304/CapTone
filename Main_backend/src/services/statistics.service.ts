@@ -255,11 +255,11 @@ export class StatisticsService {
     const remQuery = `
       SELECT
         COUNT(*)::int AS total,
-        COUNT(CASE WHEN ha.execution_status = 'COMPLETED' THEN 1 END)::int AS succeeded,
+        COUNT(CASE WHEN ha.execution_status IN ('COMPLETED', 'SUCCEEDED') THEN 1 END)::int AS succeeded,
         COUNT(CASE WHEN ha.execution_status = 'FAILED' THEN 1 END)::int AS failed,
         COUNT(CASE WHEN ha.execution_status IN ('PENDING', 'RUNNING') THEN 1 END)::int AS in_progress,
         CASE 
-          WHEN COUNT(*) > 0 THEN ROUND((COUNT(CASE WHEN ha.execution_status = 'COMPLETED' THEN 1 END)::numeric / COUNT(*)::numeric) * 100, 1)
+          WHEN COUNT(*) > 0 THEN ROUND((COUNT(CASE WHEN ha.execution_status IN ('COMPLETED', 'SUCCEEDED') THEN 1 END)::numeric / COUNT(*)::numeric) * 100, 1)
           ELSE 100.0
         END AS success_rate,
         COALESCE(ROUND(AVG(CASE WHEN ha.completed_at IS NOT NULL AND ha.started_at IS NOT NULL AND EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) < 300 THEN EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) END)::numeric, 1), 1.2) AS avg_duration_sec

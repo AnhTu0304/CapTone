@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
-import { getWsTicket, getAuthToken } from '../../../services/apiClient';
+import { getWsTicket, getAuthToken, resolveBackendWsHost } from '../../../services/apiClient';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import {
   Zap,
@@ -66,7 +66,7 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
 
   // 3. Parse generic English success message
   const successMatch = rawMsg.match(/Self-healing mitigate action '([^']+)' executed successfully on ([^.]+)\.?/i);
-  if (successMatch || item.execution_status === 'COMPLETED') {
+  if (successMatch || item.execution_status === 'COMPLETED' || item.execution_status === 'SUCCEEDED') {
     const code = (successMatch ? successMatch[1] : actionCode || '').toUpperCase();
     if (code === 'NO_ACTION') {
       return {
@@ -322,13 +322,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
       try {
         const isSecure = window.location.protocol === 'https:';
         const protocol = isSecure ? 'wss:' : 'ws:';
-        let host = window.location.host;
-        if (['3000', '3001', '3002', '3003', '3004', '3005'].includes(window.location.port)) {
-          const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-            ? '127.0.0.1'
-            : window.location.hostname;
-          host = `${targetHost}:5005`;
-        }
+        const host = resolveBackendWsHost();
         const token = getAuthToken();
         if (!token) return;
         const ticket = await getWsTicket();
@@ -415,7 +409,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
   const recentStats = useMemo(() => {
     const total = recentActions.length;
-    const succeeded = recentActions.filter((a) => a.executionStatus === 'SUCCEEDED').length;
+    const succeeded = recentActions.filter((a) => a.executionStatus === 'COMPLETED' || a.executionStatus === 'SUCCEEDED').length;
     const failed = recentActions.filter((a) => a.executionStatus === 'FAILED').length;
     const rate = total > 0 ? Math.round((succeeded / total) * 100) : 100;
     return { total, succeeded, failed, rate };
@@ -954,7 +948,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {recentActions.map((act) => {
-              const isSuccess = act.executionStatus === 'COMPLETED';
+              const isSuccess = act.executionStatus === 'COMPLETED' || act.executionStatus === 'SUCCEEDED';
               const isFailed = act.executionStatus === 'FAILED';
               const badgeBg = isSuccess ? '#ECFDF5' : isFailed ? '#FEF2F2' : '#F1F5F9';
               const badgeColor = isSuccess ? '#047857' : isFailed ? '#DC2626' : '#64748B';

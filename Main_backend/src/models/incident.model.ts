@@ -305,7 +305,7 @@ export class IncidentModel {
           SELECT count(*)::int
           FROM healing_actions ha_succ_cnt
           WHERE ha_succ_cnt.incident_id = i.id
-            AND ha_succ_cnt.execution_status = 'COMPLETED'
+            AND ha_succ_cnt.execution_status IN ('COMPLETED', 'SUCCEEDED')
             AND NOT EXISTS (
               SELECT 1 FROM recovery_verifications rv_sf
               WHERE rv_sf.healing_action_id = ha_succ_cnt.id
@@ -523,7 +523,7 @@ export class IncidentModel {
           SELECT count(*)::int
           FROM healing_actions ha_succ_cnt
           WHERE ha_succ_cnt.incident_id = i.id
-            AND ha_succ_cnt.execution_status = 'COMPLETED'
+            AND ha_succ_cnt.execution_status IN ('COMPLETED', 'SUCCEEDED')
             AND NOT EXISTS (
               SELECT 1 FROM recovery_verifications rv_sf
               WHERE rv_sf.healing_action_id = ha_succ_cnt.id
@@ -709,7 +709,7 @@ export class IncidentModel {
           let latestCycleStart = 0;
           for (let k = 0; k < histRes.rows.length - 1; k++) {
             const h = histRes.rows[k];
-            const wasOk = h.verification_result === true || String(h.execution_status || '').toUpperCase() === 'SUCCEEDED';
+            const wasOk = h.verification_result === true || ['SUCCEEDED', 'COMPLETED'].includes(String(h.execution_status || '').toUpperCase());
             if (wasOk) {
               latestCycleStart = k + 1;
             }
@@ -760,7 +760,7 @@ export class IncidentModel {
           }
 
           const isFailed = String(item.execution_status || '').toUpperCase() === 'FAILED' || item.verification_result === false;
-          const isVerifiedOk = item.verification_result === true || (isIncResolved && String(item.execution_status || '').toUpperCase() === 'COMPLETED' && !isFailed);
+          const isVerifiedOk = item.verification_result === true || (isIncResolved && ['COMPLETED', 'SUCCEEDED'].includes(String(item.execution_status || '').toUpperCase()) && !isFailed);
 
           if (!isIncResolved && isCurrNoAction && !isFailed) {
             // Khi Circuit Breaker đang ngắt mạch (NO_ACTION), chỉ hiển thị các bậc thất bại đã dẫn đến ngắt mạch

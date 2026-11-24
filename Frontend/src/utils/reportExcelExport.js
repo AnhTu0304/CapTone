@@ -1156,10 +1156,11 @@ export const exportReportsToExcel = async ({
       ]);
       styleTableHeaderRow(hRow);
       (actionRows || []).forEach((item, idx) => {
+        const isCompletedOk = item.executionStatus === 'COMPLETED' || item.executionStatus === 'SUCCEEDED';
         const detailText =
           item.failureReason ||
           item.resultSummary ||
-          (item.executionStatus === 'COMPLETED' ? 'Thành công' : '—');
+          (isCompletedOk ? 'Thành công' : '—');
         const verifyText =
           item.verificationResult === null || item.verificationResult === undefined
             ? '—'
@@ -1180,7 +1181,7 @@ export const exportReportsToExcel = async ({
           item.executionStatus || '',
           item.durationSeconds ?? '—',
           verifyText,
-          item.reasonCategory || (item.executionStatus === 'COMPLETED' ? 'Thành công' : '—'),
+          item.reasonCategory || (isCompletedOk ? 'Thành công' : '—'),
           detailText,
         ]);
         styleDataRow(row, idx, { 11: 'center', 12: 'right', 13: 'center' });
@@ -1189,7 +1190,7 @@ export const exportReportsToExcel = async ({
           bold: true,
           color: {
             argb:
-              item.executionStatus === 'COMPLETED'
+              isCompletedOk
                 ? 'FF047857'
                 : item.executionStatus === 'FAILED'
                   ? 'FFB91C1C'

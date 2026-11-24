@@ -1,4 +1,4 @@
-import { pool } from '../config/database';
+import { pool, resolveSkippedExecutionStatus } from '../config/database';
 import { enterOrUpdateDbContext } from '../config/dbContext';
 import { Request, Response } from 'express';
 import { AiService } from '../services/ai.service';
@@ -695,7 +695,7 @@ export class AiController {
       const requiresHitlApproval =
         !isNoAction && (['HIGH', 'CRITICAL'].includes(riskLevelUpper) || requiresApprovalByDefault);
       const approvalStatus = requiresHitlApproval ? 'PENDING' : 'APPROVED';
-      const initialExecStatus = isNoAction ? 'SKIPPED' : 'PENDING';
+      const initialExecStatus = isNoAction ? await resolveSkippedExecutionStatus() : 'PENDING';
 
       // Concurrency Lock: Prevent simultaneous RUNNING actions on the same target (Resolves DEF-04 concurrency bug: 2 actions RUNNING at 01:41:35)
       if (!isNoAction) {

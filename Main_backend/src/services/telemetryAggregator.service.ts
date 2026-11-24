@@ -167,7 +167,7 @@ export class TelemetryAggregatorService {
       const latestHealRes = await pool.query(
         `SELECT MAX(completed_at) AS latest_completed_at
          FROM healing_actions
-         WHERE execution_status = 'COMPLETED'
+         WHERE execution_status IN ('COMPLETED', 'SUCCEEDED')
            AND completed_at >= NOW() - interval '30 minutes'
            AND (
              LOWER(COALESCE(target_name, '')) = ANY($1)

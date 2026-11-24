@@ -563,8 +563,8 @@ export class ReportModel {
         SELECT 
           COUNT(DISTINCT i.id) AS total_incidents,
           COUNT(DISTINCT CASE WHEN i.status = 'RESOLVED' THEN i.id END) AS resolved_incidents,
-          COUNT(DISTINCT CASE WHEN ha.execution_status = 'COMPLETED' THEN ha.id END) AS resolved_actions,
-          COUNT(DISTINCT CASE WHEN ha.execution_mode = 'AUTO' AND ha.execution_status = 'COMPLETED' THEN ha.id END) AS auto_actions,
+          COUNT(DISTINCT CASE WHEN ha.execution_status IN ('COMPLETED', 'SUCCEEDED') THEN ha.id END) AS resolved_actions,
+          COUNT(DISTINCT CASE WHEN ha.execution_mode::text IN ('AUTO', 'AUTOMATIC') AND ha.execution_status IN ('COMPLETED', 'SUCCEEDED') THEN ha.id END) AS auto_actions,
           COUNT(DISTINCT CASE WHEN i.severity = 'CRITICAL' THEN i.id END) AS critical_count,
           COUNT(DISTINCT CASE WHEN i.severity = 'HIGH' THEN i.id END) AS high_count,
           COUNT(DISTINCT CASE WHEN i.severity = 'MEDIUM' THEN i.id END) AS medium_count,
@@ -630,7 +630,7 @@ export class ReportModel {
           SELECT
             COALESCE(NULLIF(TRIM(ha.target_name), ''), 'unknown-service') AS svc_name,
             COUNT(ha.id) AS total_actions,
-            COUNT(*) FILTER (WHERE ha.execution_status = 'COMPLETED') AS succeeded_actions,
+            COUNT(*) FILTER (WHERE ha.execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded_actions,
             COUNT(*) FILTER (WHERE ha.execution_status = 'FAILED') AS failed_actions,
             COUNT(*) FILTER (WHERE ha.execution_status = 'CANCELLED') AS cancelled_actions,
             BOOL_OR(i.severity = 'CRITICAL') AS has_critical,
@@ -957,13 +957,13 @@ export class ReportModel {
           SELECT 
             ${groupExpr} as bucket_key,
             COUNT(DISTINCT i.id) as incident_count,
-            COUNT(DISTINCT CASE WHEN ha.execution_status = 'COMPLETED' THEN ha.id END) as healed_count,
+            COUNT(DISTINCT CASE WHEN ha.execution_status IN ('COMPLETED', 'SUCCEEDED') THEN ha.id END) as healed_count,
             COUNT(DISTINCT CASE WHEN ha.execution_status = 'FAILED' THEN ha.id END) as failed_actions,
             COUNT(DISTINCT CASE WHEN ha.execution_status = 'CANCELLED' THEN ha.id END) as cancelled_actions,
             COUNT(DISTINCT CASE WHEN ha.execution_status = 'PENDING' THEN ha.id END) as pending_actions,
             COUNT(DISTINCT ha.id) as total_actions,
             COUNT(DISTINCT CASE WHEN i.status = 'RESOLVED' THEN i.id END) as resolved_count,
-            COUNT(DISTINCT CASE WHEN ha.execution_mode = 'AUTO' AND ha.execution_status = 'COMPLETED' THEN ha.id END) as auto_count,
+            COUNT(DISTINCT CASE WHEN ha.execution_mode::text IN ('AUTO', 'AUTOMATIC') AND ha.execution_status IN ('COMPLETED', 'SUCCEEDED') THEN ha.id END) as auto_count,
             AVG(CASE 
               WHEN ha.completed_at IS NOT NULL AND ha.started_at IS NOT NULL 
                    AND EXTRACT(EPOCH FROM (ha.completed_at - ha.started_at)) BETWEEN 0 AND 600
@@ -1305,16 +1305,16 @@ export class ReportModel {
         `${enrichedCte}
         SELECT
           COUNT(*) AS total_actions,
-          COUNT(*) FILTER (WHERE execution_status = 'COMPLETED') AS succeeded_actions,
+          COUNT(*) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded_actions,
           COUNT(*) FILTER (WHERE execution_status = 'FAILED') AS failed_actions,
           COUNT(*) FILTER (WHERE execution_status = 'CANCELLED') AS cancelled_actions,
           COUNT(*) FILTER (WHERE execution_status = 'PENDING') AS pending_actions,
-          COUNT(*) FILTER (WHERE execution_mode = 'AUTO') AS auto_total,
-          COUNT(*) FILTER (WHERE execution_mode = 'AUTO' AND execution_status = 'COMPLETED') AS auto_succeeded,
+          COUNT(*) FILTER (WHERE execution_mode::text IN ('AUTO', 'AUTOMATIC')) AS auto_total,
+          COUNT(*) FILTER (WHERE execution_mode::text IN ('AUTO', 'AUTOMATIC') AND execution_status IN ('COMPLETED', 'SUCCEEDED')) AS auto_succeeded,
           COUNT(*) FILTER (WHERE execution_mode = 'MANUAL') AS manual_total,
-          COUNT(*) FILTER (WHERE execution_mode = 'MANUAL' AND execution_status = 'COMPLETED') AS manual_succeeded,
-          AVG(duration_seconds) FILTER (WHERE execution_status = 'COMPLETED' AND duration_seconds BETWEEN 0 AND 600) AS avg_exec_s,
-          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_seconds) FILTER (WHERE execution_status = 'COMPLETED' AND duration_seconds IS NOT NULL) AS median_exec_s,
+          COUNT(*) FILTER (WHERE execution_mode = 'MANUAL' AND execution_status IN ('COMPLETED', 'SUCCEEDED')) AS manual_succeeded,
+          AVG(duration_seconds) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED') AND duration_seconds BETWEEN 0 AND 600) AS avg_exec_s,
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_seconds) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED') AND duration_seconds IS NOT NULL) AS median_exec_s,
           COUNT(*) FILTER (WHERE verification_result IS NOT NULL) AS verified_count,
           COUNT(*) FILTER (WHERE verification_result = TRUE) AS verified_ok_count
         FROM enriched_actions;`,
@@ -1377,13 +1377,13 @@ export class ReportModel {
         SELECT
           ${trendExpr} AS bucket_key,
           COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE execution_status = 'COMPLETED') AS succeeded,
+          COUNT(*) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded,
           COUNT(*) FILTER (WHERE execution_status = 'FAILED') AS failed,
           COUNT(*) FILTER (WHERE execution_status = 'CANCELLED') AS cancelled,
           COUNT(*) FILTER (WHERE execution_status = 'PENDING') AS pending,
-          COUNT(*) FILTER (WHERE execution_mode = 'AUTO') AS auto_count,
+          COUNT(*) FILTER (WHERE execution_mode::text IN ('AUTO', 'AUTOMATIC')) AS auto_count,
           COUNT(*) FILTER (WHERE execution_mode = 'MANUAL') AS manual_count,
-          AVG(duration_seconds) FILTER (WHERE execution_status = 'COMPLETED' AND duration_seconds BETWEEN 0 AND 600) AS avg_dur
+          AVG(duration_seconds) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED') AND duration_seconds BETWEEN 0 AND 600) AS avg_dur
         FROM enriched_actions
         GROUP BY 1
         ORDER BY 1 ASC;`,
@@ -1400,11 +1400,11 @@ export class ReportModel {
             ELSE MAX(execution_mode)
           END AS execution_mode,
           COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE execution_status = 'COMPLETED') AS succeeded,
+          COUNT(*) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded,
           COUNT(*) FILTER (WHERE execution_status = 'FAILED') AS failed,
           COUNT(*) FILTER (WHERE execution_status = 'CANCELLED') AS cancelled,
           COUNT(*) FILTER (WHERE execution_status = 'PENDING') AS pending,
-          AVG(duration_seconds) FILTER (WHERE execution_status = 'COMPLETED' AND duration_seconds BETWEEN 0 AND 600) AS avg_dur
+          AVG(duration_seconds) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED') AND duration_seconds BETWEEN 0 AND 600) AS avg_dur
         FROM enriched_actions
         GROUP BY actor_key, actor_name, actor_type
         ORDER BY total DESC;`,
@@ -1417,7 +1417,7 @@ export class ReportModel {
           action_code,
           MAX(action_name) AS action_name,
           COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE execution_status = 'COMPLETED') AS succeeded,
+          COUNT(*) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded,
           COUNT(*) FILTER (WHERE execution_status = 'FAILED') AS failed,
           COUNT(*) FILTER (WHERE execution_status = 'CANCELLED') AS cancelled,
           COUNT(*) FILTER (WHERE execution_status = 'PENDING') AS pending
@@ -1573,8 +1573,13 @@ export class ReportModel {
     }
 
     if (status && status !== 'ALL') {
-      historyParams.push(String(status).toUpperCase());
-      hConds.push(`execution_status = $${historyParams.length}`);
+      const upperStatus = String(status).toUpperCase();
+      if (upperStatus === 'COMPLETED') {
+        hConds.push(`execution_status::text IN ('COMPLETED', 'SUCCEEDED')`);
+      } else {
+        historyParams.push(upperStatus);
+        hConds.push(`execution_status = $${historyParams.length}`);
+      }
     }
 
     if (incidentType && incidentType !== 'ALL') {

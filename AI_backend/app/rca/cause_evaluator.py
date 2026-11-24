@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -562,9 +563,10 @@ class CauseEvaluator:
         # ----------------------------------------------------
         # 6. EVALUATE: TRAFFIC_OVERLOAD
         # ----------------------------------------------------
+        traffic_req_threshold = float(os.getenv("TRAFFIC_OVERLOAD_REQ_RATE", "900.0"))
         has_high_req_rate = (
             EvidenceType.HIGH_REQUEST_RATE in ev_types
-            or (payload and payload.metrics and payload.metrics.request_rate >= 40.0)
+            or (payload and payload.metrics and payload.metrics.request_rate >= traffic_req_threshold)
         )
         if has_high_req_rate:
             for_items = [

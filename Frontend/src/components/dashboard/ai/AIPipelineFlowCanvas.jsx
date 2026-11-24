@@ -110,7 +110,7 @@ const translateActionToVi = (rawAction, item = null) => {
 
 const translateExecutionStatusVi = (status) => {
   const s = String(status || '').toUpperCase();
-  if (s === 'SUCCEEDED') return 'Thành công';
+  if (s === 'SUCCEEDED' || s === 'COMPLETED') return 'Thành công';
   if (s === 'FAILED') return 'Thất bại';
   if (s === 'RUNNING') return 'Đang thực thi';
   if (s === 'PENDING') return 'Đang chờ';
@@ -1026,19 +1026,20 @@ export const AIPipelineFlowCanvas = ({
   const isRcaActive = isAgentConnected && (openServiceIncidentsCount > 0 || (isRiskDetected && !isBenignDbCacheState));
   const isPolicyActive = isAgentConnected && (isRcaActive || Boolean(latestRecommendation));
   const autoActionStatus = isAgentConnected ? String(latestAutoAction?.execution_status || '').toUpperCase() : '';
+  const isAutoActionDone = autoActionStatus === 'SUCCEEDED' || autoActionStatus === 'COMPLETED';
   const isAutoActionInProgress =
     isAgentConnected &&
     (autoActionStatus === 'RUNNING' ||
       (!isCircuitBreakerTripped &&
         openServiceIncidentsCount > 0 &&
-        ['AUTO', 'AUTONOMOUS'].includes(String(latestAutoAction?.execution_mode || '').toUpperCase()) &&
-        autoActionStatus !== 'SUCCEEDED' &&
+        ['AUTO', 'AUTOMATIC', 'AUTONOMOUS'].includes(String(latestAutoAction?.execution_mode || '').toUpperCase()) &&
+        !isAutoActionDone &&
         autoActionStatus !== 'FAILED'));
   const isHitlActive = isAgentConnected && pendingApprovalsCount > 0;
   const isAutoActionActive =
     !isHitlActive &&
     (isAutoActionInProgress ||
-      (!isCircuitBreakerTripped && openServiceIncidentsCount > 0 && autoActionStatus === 'SUCCEEDED'));
+      (!isCircuitBreakerTripped && openServiceIncidentsCount > 0 && isAutoActionDone));
   const isVerifyingInProgress =
     isAgentConnected && (recoveryStats.runningCount > 0 || recoveryStats.verifyingCount > 0);
   const isAutoActive = isAutoActionActive;

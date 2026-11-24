@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -310,7 +311,8 @@ class EvidenceCollector:
                     resource_name=payload.suspected_pod_name or payload.service_id,
                 ))
 
-            if m.request_rate >= 40.0:
+            traffic_req_threshold = float(os.getenv("TRAFFIC_OVERLOAD_REQ_RATE", "900.0"))
+            if m.request_rate >= traffic_req_threshold:
                 evidences.append(EvidenceItem(
                     source=EvidenceSource.METRICS,
                     evidence_type=EvidenceType.HIGH_REQUEST_RATE,

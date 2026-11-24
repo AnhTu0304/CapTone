@@ -383,6 +383,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
 
     const isWaitingApproval =
       item.execution_status !== 'COMPLETED' &&
+      item.execution_status !== 'SUCCEEDED' &&
       item.execution_status !== 'FAILED' &&
       item.execution_status !== 'CANCELLED' &&
       (item.approval_status === 'PENDING' ||
@@ -416,7 +417,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       verified = '';
       effectiveMttr = '-';
       effectiveStatus = 'CANCELLED';
-    } else if (item.execution_status === 'COMPLETED') {
+    } else if (item.execution_status === 'COMPLETED' || item.execution_status === 'SUCCEEDED') {
       const hasVerificationFailed =
         item.verification?.verification_result === false ||
         String(item.error_message || '').toLowerCase().includes('hậu kiểm thất bại') ||
@@ -627,6 +628,8 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       if (selectedStatus !== 'ALL') {
         if (selectedStatus === 'PENDING') {
           if (item.status !== 'PENDING' && !item.result?.includes('Chờ duyệt')) return false;
+        } else if (selectedStatus === 'SUCCEEDED' || selectedStatus === 'COMPLETED') {
+          if (item.status !== 'SUCCEEDED' && item.status !== 'COMPLETED') return false;
         } else if (item.status !== selectedStatus) {
           return false;
         }
@@ -705,7 +708,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         ? a.rawItem.attempts[0].duration_ms / 1000
         : (parseFloat(a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
       totalSec += dur;
-      if (a.status === 'COMPLETED' || a.executionStatus === 'COMPLETED') succeededCount++;
+      if (a.status === 'COMPLETED' || a.status === 'SUCCEEDED' || a.executionStatus === 'COMPLETED' || a.executionStatus === 'SUCCEEDED') succeededCount++;
     });
     return {
       totalActions: total,
@@ -1632,7 +1635,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 </tr>
               ) : (
                 paginatedHistory.map((rec) => {
-                  const isSucceeded = rec.status === 'COMPLETED';
+                  const isSucceeded = rec.status === 'COMPLETED' || rec.status === 'SUCCEEDED';
                   const isCancelled = rec.status === 'CANCELLED';
                   const isFailed = rec.status === 'FAILED';
                   const isPending = rec.status === 'PENDING' || (rec.result && rec.result.includes('Chờ duyệt'));

@@ -4,7 +4,7 @@ import { HitlNotificationService } from './hitlNotification.service';
 import { CriticalIncidentNotificationService } from './criticalIncidentNotification.service';
 import { TelemetryAggregatorService } from './telemetryAggregator.service';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
-import { pool } from '../config/database';
+import { pool, resolveAutoExecutionMode } from '../config/database';
 import { RCAResult } from './ai.service';
 import { WorkloadModel } from '../models';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
@@ -61,6 +61,7 @@ export class TelemetryPipelineService {
                      '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
                    )
                WHERE h.execution_status = 'RUNNING'
+                 AND COALESCE(h.result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')
                  AND COALESCE(h.started_at, h.created_at) < NOW() - INTERVAL '60 seconds'
                  AND EXISTS (SELECT 1 FROM environments e WHERE e.id = h.environment_id AND e.organization_id = $1::uuid);`,
               [row.id]
@@ -403,9 +404,9 @@ export class TelemetryPipelineService {
          JOIN environments e ON e.id = h.environment_id
          WHERE e.organization_id = $3::uuid
            AND (
-             (h.execution_status = 'RUNNING' AND h.result->>'agent_status' = 'COMPLETED'
+             (h.execution_status = 'RUNNING' AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED')
               AND COALESCE((h.result->>'agent_completed_at')::timestamptz, h.started_at, NOW()) <= NOW() - interval '30 seconds')
-             OR (h.execution_status = 'COMPLETED' AND h.completed_at IS NOT NULL AND h.completed_at <= NOW() - interval '30 seconds' AND h.completed_at >= NOW() - interval '60 minutes')
+             OR (h.execution_status IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at IS NOT NULL AND h.completed_at <= NOW() - interval '30 seconds' AND h.completed_at >= NOW() - interval '60 minutes')
            )
            AND (
              LOWER(COALESCE(h.target_name, '')) = ANY($1)
@@ -494,7 +495,7 @@ export class TelemetryPipelineService {
            AND NOT EXISTS (
              SELECT 1 FROM healing_actions ha
              WHERE ha.incident_id = i.id
-               AND ha.execution_status = 'COMPLETED'
+               AND ha.execution_status IN ('COMPLETED', 'SUCCEEDED')
                AND ha.completed_at > NOW() - interval '30 seconds'
            )
            AND NOT EXISTS (
@@ -512,7 +513,7 @@ export class TelemetryPipelineService {
                  SELECT 1 FROM healing_actions ha_win
                  WHERE ha_win.incident_id = i.id
                    AND ha_win.completed_at > ha_fail.completed_at
-                   AND ha_win.execution_status = 'COMPLETED'
+                   AND ha_win.execution_status IN ('COMPLETED', 'SUCCEEDED')
                )
            )
          RETURNING i.id, i.title, i.target_name;`,
@@ -722,7 +723,7 @@ export class TelemetryPipelineService {
              LOWER(COALESCE(h.target_name, '')) = ANY($1)
              OR ($4::uuid IS NOT NULL AND h.target_id = $4::uuid)
            )
-           AND (h.action_type_id = $2 OR h.execution_status IN ('PENDING', 'RUNNING') OR (h.execution_status = 'COMPLETED' AND h.completed_at >= NOW() - interval '35 seconds'))
+           AND (h.action_type_id = $2 OR h.execution_status IN ('PENDING', 'RUNNING') OR (h.execution_status IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at >= NOW() - interval '35 seconds'))
            AND (
              (h.approval_status = 'PENDING' AND h.execution_status = 'PENDING')
              OR (h.execution_status = 'RUNNING')
@@ -740,7 +741,7 @@ export class TelemetryPipelineService {
           await pool.query(`UPDATE healing_actions SET requested_at = NOW() WHERE id = $1;`, [act.id]);
         } else if (act.execution_status === 'RUNNING') {
           console.log(`⏳ [PolicyEngine] '${canonicalTargetName}' đang trong quá trình thực thi ${policy.action_name} (ID: ${act.id}). Bỏ qua.`);
-        } else if (act.execution_status === 'COMPLETED') {
+        } else if (act.execution_status === 'COMPLETED' || act.execution_status === 'SUCCEEDED') {
           console.log(`⏳ [PolicyEngine] '${canonicalTargetName}' vừa thực hiện ${policy.action_name} trên K8s và đang trong cửa sổ Cooldown / Hậu kiểm (${cooldownSec}s, hoàn tất lúc: ${act.completed_at}). Chờ xác minh 12 điểm viễn trắc tiếp theo.`);
           if (rca.recommendation_id) {
             await pool.query(
@@ -859,7 +860,7 @@ export class TelemetryPipelineService {
                OR LOWER(COALESCE(ha.target_name, '')) = LOWER($2)
            )
            AND ha.created_at >= NOW() - ($3 || ' minutes')::interval
-           AND ha.execution_status IN ('RUNNING', 'SUCCEEDED', 'PENDING');`,
+           AND ha.execution_status IN ('RUNNING', 'SUCCEEDED', 'COMPLETED', 'PENDING');`,
           [targetNamespace, canonicalTargetName, restartWindowMin]
         );
         const alreadyAffected = parseInt(recentInterventionsRes.rows[0]?.affected_count || '0', 10);
@@ -996,7 +997,8 @@ export class TelemetryPipelineService {
       console.log(`   - AI Confidence: ${(confidence * 100).toFixed(1)}% >= Threshold: ${(threshold * 100).toFixed(1)}%`);
       recordRemediationAction(policy.action_code || 'RESTART_POD', 'triggered');
 
-      // Insert record into healing_actions with status 'RUNNING' and approval 'APPROVED'
+      const autoExecMode = await resolveAutoExecutionMode();
+      // Insert record into healing_actions with status 'PENDING' and approval 'APPROVED'
       const insertActQuery = `
         INSERT INTO healing_actions (
           incident_id,
@@ -1017,7 +1019,7 @@ export class TelemetryPipelineService {
           result
         ) VALUES (
           $1, $2, $3, $4, $5,
-          'WORKLOAD', $6::uuid, $7, 'LOW'::risk_level, 'AUTOMATIC'::execution_mode, 'APPROVED'::approval_status,
+          'WORKLOAD', $6::uuid, $7, 'LOW'::risk_level, $9::execution_mode, 'APPROVED'::approval_status,
           'PENDING'::execution_status, NULL, NOW(), NULL,
           $8::jsonb
         ) RETURNING id;
@@ -1043,6 +1045,7 @@ export class TelemetryPipelineService {
         validTargetWorkloadId,
         canonicalTargetName,
         JSON.stringify(initialResult),
+        autoExecMode,
       ]);
 
       const actionId = actInsert.rows[0].id;

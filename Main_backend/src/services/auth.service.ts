@@ -195,7 +195,7 @@ export class AuthService {
             const tempToken = jwt.sign(
                 { tempUserId: user.id, email: user.email, purpose: '2fa_login' },
                 config.jwt.secret,
-                { expiresIn: '5m' }
+                { expiresIn: '10m' }
             );
             return {
                 id: user.id,

@@ -2206,7 +2206,7 @@ export const ReportsPage = () => {
                 </tr>
               ) : (
                 actionRows.map((row) => {
-                  const isOk = row.executionStatus === 'COMPLETED';
+                  const isOk = row.executionStatus === 'COMPLETED' || row.executionStatus === 'SUCCEEDED';
                   const isFail = row.executionStatus === 'FAILED';
                   const isCancel = row.executionStatus === 'CANCELLED';
 

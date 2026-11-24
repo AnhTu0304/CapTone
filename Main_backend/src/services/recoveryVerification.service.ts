@@ -270,8 +270,8 @@ export class RecoveryVerificationService {
     } else {
       actionQuery += `
         AND (
-          (h.execution_status = 'RUNNING' AND h.result->>'agent_status' = 'COMPLETED')
-          OR (h.execution_status = 'COMPLETED' AND h.completed_at IS NOT NULL AND h.completed_at >= NOW() - interval '60 minutes')
+          (h.execution_status = 'RUNNING' AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED'))
+          OR (h.execution_status IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at IS NOT NULL AND h.completed_at >= NOW() - interval '60 minutes')
         )
         AND NOT EXISTS (
           SELECT 1 FROM recovery_verifications rv

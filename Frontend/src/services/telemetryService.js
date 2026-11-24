@@ -4,13 +4,7 @@
  * Connects directly to Main Backend (/api/v1/telemetry) with automatic fallback.
  */
 
-import { getAuthToken, getActiveOrganizationId, request, getWsTicket } from './apiClient';
-
-const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
-const API_BASE_URL = rawApiUrl
-  .replace('//localhost:5000', '//127.0.0.1:5005')
-  .replace('//localhost:5005', '//127.0.0.1:5005')
-  .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
+import { getAuthToken, getActiveOrganizationId, request, getWsTicket, API_BASE_URL, resolveBackendWsHost } from './apiClient';
 
 const getHeaders = () => {
   const token = getAuthToken();
@@ -764,14 +758,8 @@ export const telemetryService = {
       try {
         const isSecure = window.location.protocol === 'https:';
         const protocol = isSecure ? 'wss:' : 'ws:';
-        // Connect to port 5000 if running locally on port 3000, else window.location.host
-        let host = window.location.host;
-        if (['3000', '3001', '3002', '3003', '3004', '3005'].includes(window.location.port)) {
-          const targetHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-            ? '127.0.0.1'
-            : window.location.hostname;
-          host = `${targetHost}:5005`;
-        }
+        // Connect to port 5005 matching browser hostname when running locally on ports 3000-3005, else window.location.host
+        const host = resolveBackendWsHost();
         const token = getAuthToken();
         if (!token) return;
         const ticket = await getWsTicket();

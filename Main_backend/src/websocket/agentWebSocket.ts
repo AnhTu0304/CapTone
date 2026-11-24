@@ -400,7 +400,7 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
           case 'action_result': {
             const { action_id, status, message: rawMessage, duration_ms, details } = msg.data;
             const actionTypeMetric = String(details?.action || 'RESTART_POD').toUpperCase();
-            const isCompleted = status === 'COMPLETED';
+            const isCompleted = status === 'COMPLETED' || status === 'SUCCEEDED';
             recordRemediationAction(actionTypeMetric, isCompleted ? 'succeeded' : 'failed');
             recordRemediationDuration(
               actionTypeMetric,

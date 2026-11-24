@@ -561,7 +561,7 @@ export class AiService {
           `SELECT h.id, act.code AS action_code, h.target_name, h.completed_at
            FROM healing_actions h
            LEFT JOIN healing_action_types act ON act.id = h.action_type_id
-           WHERE h.execution_status = 'COMPLETED'
+           WHERE h.execution_status IN ('COMPLETED', 'SUCCEEDED')
              AND h.completed_at IS NOT NULL
              AND h.completed_at <= NOW() - interval '20 seconds'
              AND h.completed_at >= NOW() - interval '60 minutes'
@@ -679,7 +679,7 @@ export class AiService {
             ORDER BY rv_inner.verified_at DESC
             LIMIT 1
           ) rv ON true
-          WHERE h.execution_status IN ('COMPLETED', 'FAILED')
+          WHERE h.execution_status IN ('COMPLETED', 'SUCCEEDED', 'FAILED')
             AND COALESCE(h.completed_at, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
             AND (
               LOWER(COALESCE(h.target_name, '')) = ANY($1)
@@ -706,7 +706,7 @@ export class AiService {
 
           let mappedStatus: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'UNKNOWN' | null = null;
           if (row.execution_status === 'FAILED' || row.verification_result === false) mappedStatus = 'FAILED';
-          else if (row.execution_status === 'COMPLETED' && row.verification_result !== false) mappedStatus = 'SUCCESS';
+          else if ((row.execution_status === 'COMPLETED' || row.execution_status === 'SUCCEEDED') && row.verification_result !== false) mappedStatus = 'SUCCESS';
 
           if (mappedCode && mappedStatus) {
             prevAction = mappedCode;
@@ -781,7 +781,7 @@ export class AiService {
             const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
             if (isFailed) {
               consecutiveFailures++;
-            } else if (r.execution_status === 'COMPLETED' && r.verification_result !== false) {
+            } else if ((r.execution_status === 'COMPLETED' || r.execution_status === 'SUCCEEDED') && r.verification_result !== false) {
               break;
             }
           }
@@ -811,7 +811,7 @@ export class AiService {
               executed_at: r.started_at || r.completed_at,
               result: (r.execution_status === 'FAILED' || r.verification_result === false)
                 ? 'FAILED'
-                : (r.execution_status === 'COMPLETED' ? 'SUCCESS' : 'PARTIAL'),
+                : (r.execution_status === 'COMPLETED' || r.execution_status === 'SUCCEEDED' ? 'SUCCESS' : 'PARTIAL'),
               execution_status: r.execution_status,
               verification_result: typeof r.verification_details === 'object' && r.verification_details !== null
                 ? JSON.stringify(r.verification_details)

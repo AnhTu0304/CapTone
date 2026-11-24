@@ -14,10 +14,41 @@
 import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
 
 const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1';
-export const API_BASE_URL = rawApiUrl
-  .replace('//localhost:5000', '//127.0.0.1:5005')
-  .replace('//localhost:5005', '//127.0.0.1:5005')
-  .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
+
+/**
+ * Align local dev API URL hostname with browser hostname (`localhost` vs `127.0.0.1`)
+ * so SameSite cookies (refresh + CSRF double-submit) share the same origin host across ports.
+ * @param {string} [url]
+ * @returns {string}
+ */
+export const resolveApiBaseUrl = (url = rawApiUrl) => {
+  const normalized = String(url || '/api/v1')
+    .replace('//localhost:5000', '//localhost:5005')
+    .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
+
+  if (typeof window !== 'undefined') {
+    const pageHost = window.location?.hostname;
+    if (pageHost === 'localhost' || pageHost === '127.0.0.1') {
+      return normalized.replace(/\/\/(?:localhost|127\.0\.0\.1):5005/, `//${pageHost}:5005`);
+    }
+  }
+  return normalized;
+};
+
+/**
+ * Resolve backend host:port for WebSocket connections from local CRA dev servers (ports 3000-3005),
+ * preserving the active browser hostname (`localhost` vs `127.0.0.1`).
+ * @returns {string}
+ */
+export const resolveBackendWsHost = () => {
+  if (typeof window === 'undefined') return 'localhost:5005';
+  if (['3000', '3001', '3002', '3003', '3004', '3005'].includes(window.location.port)) {
+    return `${window.location.hostname}:5005`;
+  }
+  return window.location.host;
+};
+
+export const API_BASE_URL = resolveApiBaseUrl(rawApiUrl);
 
 let currentActiveOrgId = null;
 let currentSwitchAbortController = null;
@@ -350,6 +381,8 @@ export const getWsTicket = async () => {
 
 const apiClient = {
   API_BASE_URL,
+  resolveApiBaseUrl,
+  resolveBackendWsHost,
   getAuthToken,
   setAuthToken,
   clearAuthToken,

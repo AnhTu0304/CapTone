@@ -43,7 +43,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
     };
   }, [actionId]);
 
-  const isSucceeded = detail?.execution_status === 'COMPLETED';
+  const isSucceeded = detail?.execution_status === 'COMPLETED' || detail?.execution_status === 'SUCCEEDED';
   const isFailed = detail?.execution_status === 'FAILED';
   const isCancelled = detail?.execution_status === 'CANCELLED';
   const isWaitingApproval = !isSucceeded && !isFailed && !isCancelled && (

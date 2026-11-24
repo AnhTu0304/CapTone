@@ -1,7 +1,7 @@
 import { AuditService, IAuditRequestContext } from './audit.service';
 import { SystemRoleService } from './systemRole.service';
 import { AuditAction } from '../models/auditLog.model';
-import { pool } from '../config/database';
+import { pool, resolveSkippedExecutionStatus } from '../config/database';
 import { HealingActionModel, IHealingActionFilter } from '../models/healingAction.model';
 import { ApiError } from '../utils/apiError';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
@@ -234,7 +234,7 @@ export class HealingActionService {
     if (action.approval_status === 'REJECTED') {
       throw new ApiError(403, 'Hành động này đã bị từ chối phê duyệt, không thể thực thi');
     }
-    if (!['APPROVED', 'AUTO_APPROVED'].includes(String(action.approval_status || '').toUpperCase())) {
+    if (!['APPROVED', 'AUTO_APPROVED', 'NOT_REQUIRED'].includes(String(action.approval_status || '').toUpperCase())) {
       throw new ApiError(403, 'Hành động chưa được phê duyệt qua cổng HITL, không thể thực thi');
     }
     if (action.execution_status !== 'PENDING') {
@@ -318,14 +318,15 @@ export class HealingActionService {
     const timeoutMs = Math.max(50, Number(options?.timeoutMs ?? 60000));
 
     if (actionCode === 'NO_ACTION') {
-      console.log(`🛡️ [HealingActionService] Action is NO_ACTION (Circuit Breaker). Marking SKIPPED without Agent dispatch.`);
+      const skippedStatus = await resolveSkippedExecutionStatus();
+      console.log(`🛡️ [HealingActionService] Action is NO_ACTION (Circuit Breaker). Marking ${skippedStatus} without Agent dispatch.`);
       await pool.query(
-        `UPDATE execution_attempts SET status = 'SKIPPED'::execution_status, completed_at = NOW(), duration_ms = 0 WHERE id = $1 AND status = 'RUNNING';`,
-        [attemptId]
+        `UPDATE execution_attempts SET status = $2::execution_status, completed_at = NOW(), duration_ms = 0 WHERE id = $1 AND status = 'RUNNING';`,
+        [attemptId, skippedStatus]
       ).catch(() => {});
       const skippedRes = await pool.query(
-        `UPDATE healing_actions SET execution_status = 'SKIPPED'::execution_status, completed_at = NOW(), result = COALESCE(result, '{}'::jsonb) || '{"status":"SKIPPED","message":"NO_ACTION circuit breaker"}'::jsonb WHERE id = $1 RETURNING *;`,
-        [actionId]
+        `UPDATE healing_actions SET execution_status = $2::execution_status, completed_at = NOW(), result = COALESCE(result, '{}'::jsonb) || '{"status":"SKIPPED","message":"NO_ACTION circuit breaker"}'::jsonb WHERE id = $1 RETURNING *;`,
+        [actionId, skippedStatus]
       );
       if (skippedRes.rows[0]) result.action = skippedRes.rows[0];
     } else if (!action.environment_id || !action.cluster_id) {
@@ -434,7 +435,7 @@ export class HealingActionService {
     // Ghi sổ cái kiểm toán bất biến (Immutable Audit Log)
     try {
       const actStatus = result.action?.execution_status || 'COMPLETED';
-      const isSuccess = actStatus === 'COMPLETED';
+      const isSuccess = actStatus === 'COMPLETED' || actStatus === 'SUCCEEDED';
       await AuditService.record({
         organization_id: action.organization_id || null,
         user_id: user?.id || (executedBy && !executedBy.includes('@') && executedBy.length > 30 ? executedBy : null),
@@ -501,7 +502,7 @@ export class HealingActionService {
       }
     }
 
-    const completedStatuses = ['COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
+    const completedStatuses = ['COMPLETED', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'SKIPPED'];
     if (completedStatuses.includes(action.execution_status)) {
       throw new ApiError(
         400,

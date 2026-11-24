@@ -146,7 +146,7 @@ export class AdminDashboardModel {
     const healingQuery = `
       SELECT 
         COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE execution_status = 'COMPLETED')::int AS succeeded
+        COUNT(*) FILTER (WHERE execution_status IN ('COMPLETED', 'SUCCEEDED'))::int AS succeeded
       FROM healing_actions;
     `;
 
@@ -197,7 +197,7 @@ export class AdminDashboardModel {
         (SELECT count(*)::int FROM agents WHERE status = 'OFFLINE') as offline_agents,
         (SELECT count(*)::int FROM agents WHERE status = 'PENDING') as pending_agents,
         (SELECT count(*)::int FROM healing_actions) as total_healing_actions,
-        (SELECT count(*)::int FROM healing_actions WHERE execution_status = 'COMPLETED') as succeeded_healing_actions,
+        (SELECT count(*)::int FROM healing_actions WHERE execution_status IN ('COMPLETED', 'SUCCEEDED')) as succeeded_healing_actions,
         (SELECT count(*)::int FROM clusters WHERE deleted_at IS NULL) as total_clusters,
         (SELECT count(*)::int FROM organizations WHERE deleted_at IS NULL) as total_organizations,
         (SELECT COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(resolved_at, created_at) - detected_at)))::numeric, 0), 45) 

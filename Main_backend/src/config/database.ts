@@ -457,3 +457,54 @@ export const getDbHealth = async (): Promise<{
     return { status: `ERROR: ${safeMsg}`, serverTime: null, error: safeMsg };
   }
 };
+
+let cachedExecutionModeLabels: string[] | null = null;
+let cachedExecutionStatusLabels: string[] | null = null;
+
+export async function getExecutionModeLabels(): Promise<string[]> {
+  if (cachedExecutionModeLabels) return cachedExecutionModeLabels;
+  try {
+    const res = await origPoolQuery(
+      `SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = 'execution_mode';`
+    );
+    const labels = (res?.rows || []).map((r: any) => String(r.enumlabel).toUpperCase());
+    if (labels.length > 0) {
+      cachedExecutionModeLabels = labels;
+      return labels;
+    }
+  } catch {
+    // Fallback cleanly when offline or mocked
+  }
+  return ['MANUAL', 'AUTO'];
+}
+
+export async function resolveAutoExecutionMode(): Promise<'AUTO' | 'AUTOMATIC'> {
+  const labels = await getExecutionModeLabels();
+  if (labels.includes('AUTO')) return 'AUTO';
+  if (labels.includes('AUTOMATIC')) return 'AUTOMATIC';
+  return 'AUTO';
+}
+
+export async function resolveSemiAutoExecutionMode(): Promise<'MANUAL' | 'SEMI_AUTOMATIC'> {
+  const labels = await getExecutionModeLabels();
+  return labels.includes('SEMI_AUTOMATIC') ? 'SEMI_AUTOMATIC' : 'MANUAL';
+}
+
+export async function resolveSkippedExecutionStatus(): Promise<'SKIPPED' | 'CANCELLED'> {
+  if (!cachedExecutionStatusLabels) {
+    try {
+      const res = await origPoolQuery(
+        `SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = 'execution_status';`
+      );
+      const labels = (res?.rows || []).map((r: any) => String(r.enumlabel).toUpperCase());
+      if (labels.length > 0) {
+        cachedExecutionStatusLabels = labels;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  const labels =
+    cachedExecutionStatusLabels || ['PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'COMPLETED'];
+  return labels.includes('SKIPPED') ? 'SKIPPED' : 'CANCELLED';
+}

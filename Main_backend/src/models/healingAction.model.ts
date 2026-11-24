@@ -1,6 +1,11 @@
 import { HitlNotificationService } from '../services/hitlNotification.service';
 import { PoolClient } from 'pg';
-import { pool } from '../config/database';
+import {
+  pool,
+  resolveAutoExecutionMode,
+  resolveSemiAutoExecutionMode,
+  resolveSkippedExecutionStatus,
+} from '../config/database';
 import { ApiError } from '../utils/apiError';
 
 export interface IHealingActionFilter {
@@ -491,9 +496,9 @@ export class HealingActionModel {
     const rawExecMode = String(data.execution_mode || 'MANUAL').toUpperCase();
     const executionMode =
       rawExecMode === 'AUTO' || rawExecMode === 'AUTOMATIC' || rawExecMode === 'AUTONOMOUS'
-        ? 'AUTOMATIC'
+        ? await resolveAutoExecutionMode()
         : rawExecMode === 'SEMI_AUTOMATIC'
-          ? 'SEMI_AUTOMATIC'
+          ? await resolveSemiAutoExecutionMode()
           : 'MANUAL';
     const isHighRisk = riskLevel === 'HIGH' || riskLevel === 'CRITICAL';
     let typeRequiresApproval = false;
@@ -526,7 +531,7 @@ export class HealingActionModel {
 
     if ((data as any).approval_status) {
       const reqApp = String((data as any).approval_status).toUpperCase();
-      if (!['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED'].includes(reqApp)) {
+      if (!['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'NOT_REQUIRED'].includes(reqApp)) {
         throw new ApiError(400, `Trạng thái phê duyệt không hợp lệ: ${(data as any).approval_status}`);
       }
     }
@@ -541,7 +546,7 @@ export class HealingActionModel {
     // Require HITL by default whenever status/mode/policy do not prove safe LOW/MEDIUM autonomous policy
     const explicitAutoAllowed =
       !isHighRisk &&
-      executionMode === 'AUTOMATIC' &&
+      ['AUTO', 'AUTOMATIC', 'AUTONOMOUS'].includes(executionMode) &&
       !typeRequiresApproval &&
       (data as any).requires_approval === false &&
       (!data.policy_id || policyAllowsAuto) &&
@@ -679,7 +684,7 @@ export class HealingActionModel {
         await client.query('ROLLBACK');
         throw new ApiError(403, 'Hành động này đã bị từ chối phê duyệt, không thể thực thi');
       }
-      if (!['APPROVED', 'AUTO_APPROVED'].includes(String(action.approval_status || '').toUpperCase())) {
+      if (!['APPROVED', 'AUTO_APPROVED', 'NOT_REQUIRED'].includes(String(action.approval_status || '').toUpperCase())) {
         await client.query('ROLLBACK');
         throw new ApiError(403, 'Hành động chưa được phê duyệt (HITL Gate), không thể thực thi');
       }
@@ -697,7 +702,7 @@ export class HealingActionModel {
              executed_by = COALESCE((SELECT id FROM users WHERE id::text = $2 LIMIT 1), executed_by),
              result = jsonb_set(COALESCE(result, '{}'::jsonb), '{status}', '"RUNNING"'::jsonb)
          WHERE id = $1
-           AND approval_status::text IN ('APPROVED', 'AUTO_APPROVED')
+           AND approval_status::text IN ('APPROVED', 'AUTO_APPROVED', 'NOT_REQUIRED')
            AND execution_status = 'PENDING'
          RETURNING *;`,
         [actionId, executedBy || null]
@@ -757,42 +762,15 @@ export class HealingActionModel {
     try {
       await client.query('BEGIN');
 
-      if (attemptId) {
-        await client.query(
-          `UPDATE execution_attempts
-           SET status = 'FAILED'::execution_status,
-               completed_at = NOW(),
-               duration_ms = GREATEST(0, COALESCE(duration_ms, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW()))) * 1000)::bigint)),
-               error_message = $2,
-               response_payload = $3::jsonb
-           WHERE id = $1 AND status = 'RUNNING';`,
-          [attemptId, errorMessage, JSON.stringify({ error: errorMessage, ...(details || {}) })]
-        );
-      } else {
-        await client.query(
-          `UPDATE execution_attempts
-           SET status = 'FAILED'::execution_status,
-               completed_at = NOW(),
-               duration_ms = GREATEST(0, COALESCE(duration_ms, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW()))) * 1000)::bigint)),
-               error_message = $2,
-               response_payload = $3::jsonb
-           WHERE id = (
-             SELECT id FROM execution_attempts
-             WHERE healing_action_id = $1 AND status = 'RUNNING'
-             ORDER BY attempt_number DESC
-             LIMIT 1
-           );`,
-          [actionId, errorMessage, JSON.stringify({ error: errorMessage, ...(details || {}) })]
-        );
-      }
-
       const updRes = await client.query(
         `UPDATE healing_actions
          SET execution_status = 'FAILED'::execution_status,
              completed_at = COALESCE(completed_at, NOW()),
              error_message = $2,
              result = COALESCE(result, '{}'::jsonb) || $3::jsonb
-         WHERE id = $1 AND execution_status = 'RUNNING'
+         WHERE id = $1
+           AND execution_status = 'RUNNING'
+           AND COALESCE(result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')
          RETURNING *;`,
         [
           actionId,
@@ -805,6 +783,37 @@ export class HealingActionModel {
           }),
         ]
       );
+
+      if (updRes.rows.length > 0) {
+        if (attemptId) {
+          await client.query(
+            `UPDATE execution_attempts
+             SET status = 'FAILED'::execution_status,
+                 completed_at = NOW(),
+                 duration_ms = GREATEST(0, COALESCE(duration_ms, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW()))) * 1000)::bigint)),
+                 error_message = $2,
+                 response_payload = $3::jsonb
+             WHERE id = $1 AND status = 'RUNNING';`,
+            [attemptId, errorMessage, JSON.stringify({ error: errorMessage, ...(details || {}) })]
+          );
+        } else {
+          await client.query(
+            `UPDATE execution_attempts
+             SET status = 'FAILED'::execution_status,
+                 completed_at = NOW(),
+                 duration_ms = GREATEST(0, COALESCE(duration_ms, FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW()))) * 1000)::bigint)),
+                 error_message = $2,
+                 response_payload = $3::jsonb
+             WHERE id = (
+               SELECT id FROM execution_attempts
+               WHERE healing_action_id = $1 AND status = 'RUNNING'
+               ORDER BY attempt_number DESC
+               LIMIT 1
+             );`,
+            [actionId, errorMessage, JSON.stringify({ error: errorMessage, ...(details || {}) })]
+          );
+        }
+      }
 
       await client.query('COMMIT');
       return updRes.rows[0] || null;
@@ -846,7 +855,7 @@ export class HealingActionModel {
       }
 
       const attRes = await client.query(
-        `SELECT 1 FROM execution_attempts WHERE healing_action_id = $1 AND status = 'COMPLETED' LIMIT 1;`,
+        `SELECT 1 FROM execution_attempts WHERE healing_action_id = $1 AND status IN ('COMPLETED', 'SUCCEEDED') LIMIT 1;`,
         [actionId]
       );
       const hasCompletedAttempt = attRes.rows.length > 0;
@@ -927,7 +936,7 @@ export class HealingActionModel {
     const action = await this.findActionById(actionId);
     if (!action) throw new Error('Không tìm thấy hành động tự phục hồi để hủy bỏ');
 
-    const completedStatuses = ['COMPLETED', 'FAILED', 'CANCELLED', 'SKIPPED'];
+    const completedStatuses = ['COMPLETED', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'SKIPPED'];
     if (completedStatuses.includes(action.execution_status)) {
       throw new Error(`Hành động đã kết thúc với trạng thái ${action.execution_status}, không thể hủy bỏ`);
     }
@@ -1014,10 +1023,11 @@ export class HealingActionModel {
     if (!validStatuses.includes(normalizedStatus)) {
       throw new ApiError(400, `Trạng thái thực thi không hợp lệ: ${status}`);
     }
+    const dbStatus = normalizedStatus === 'SKIPPED' ? await resolveSkippedExecutionStatus() : normalizedStatus;
 
     const evidenceGuardSql =
       normalizedStatus === 'COMPLETED'
-        ? `AND EXISTS (SELECT 1 FROM execution_attempts ea WHERE ea.healing_action_id = h.id AND ea.status = 'COMPLETED')
+        ? `AND EXISTS (SELECT 1 FROM execution_attempts ea WHERE ea.healing_action_id = h.id AND ea.status IN ('COMPLETED', 'SUCCEEDED'))
            AND EXISTS (SELECT 1 FROM recovery_verifications rv WHERE rv.healing_action_id = h.id AND rv.verification_result = true)`
         : '';
 
@@ -1048,7 +1058,7 @@ export class HealingActionModel {
 
     const params: any[] = [
       actionId,
-      normalizedStatus,
+      dbStatus,
       errorMessage || null,
       result ? JSON.stringify(result) : null,
     ];
@@ -1847,7 +1857,7 @@ export class HealingActionModel {
     const summarySql = `
       SELECT 
         count(*) AS total_actions,
-        count(*) FILTER (WHERE h.execution_status = 'COMPLETED') AS succeeded_actions,
+        count(*) FILTER (WHERE h.execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded_actions,
         count(*) FILTER (WHERE h.execution_status = 'FAILED') AS failed_actions,
         COALESCE(AVG(EXTRACT(EPOCH FROM (h.completed_at - h.started_at))) FILTER (WHERE h.completed_at IS NOT NULL AND h.started_at IS NOT NULL), 2.4) AS avg_duration_seconds
       FROM healing_actions h

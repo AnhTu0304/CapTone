@@ -99,4 +99,14 @@ export class TwoFactorModel {
         const result = await pool.query(query, [userId, JSON.stringify(backupCodes)]);
         return (result.rowCount ?? 0) > 0;
     }
+
+    public static async updateSecretKey(userId: string, secretKey: string): Promise<boolean> {
+        const query = `
+            UPDATE user_two_factor
+            SET secret_key = $2, updated_at = NOW()
+            WHERE user_id = $1;
+        `;
+        const result = await pool.query(query, [userId, secretKey]);
+        return (result.rowCount ?? 0) > 0;
+    }
 }

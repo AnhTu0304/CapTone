@@ -39,16 +39,20 @@ export const config = {
     connectionTimeoutMillis: 10000,
     sslMode: (
       process.env.DB_SSL_MODE ||
-      (process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'staging' ? 'verify-full' : 'disable')
+      ((process.env.DB_SSL_REQUIRE_STRICT !== undefined
+        ? process.env.DB_SSL_REQUIRE_STRICT === 'true'
+        : (process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'staging'))
+        ? 'verify-full'
+        : 'disable')
     ).trim().toLowerCase(),
     sslCaPath: process.env.DB_SSL_CA_PATH || '',
     sslCa: process.env.DB_SSL_CA || '',
     sslCertPath: process.env.DB_SSL_CERT_PATH || '',
     sslKeyPath: process.env.DB_SSL_KEY_PATH || '',
     sslRequireStrict:
-      process.env.DB_SSL_REQUIRE_STRICT === 'true' ||
-      process.env.NODE_ENV === 'production' ||
-      process.env.APP_ENV === 'staging',
+      process.env.DB_SSL_REQUIRE_STRICT !== undefined
+        ? process.env.DB_SSL_REQUIRE_STRICT === 'true'
+        : (process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'staging'),
   },
   dbMigrator: {
     user: process.env.DB_MIGRATOR_USER || process.env.DB_USER || 'postgres',
@@ -94,7 +98,10 @@ export const config = {
     maxLifetimeDays: process.env.REFRESH_TOKEN_MAX_LIFETIME_DAYS ? parseInt(process.env.REFRESH_TOKEN_MAX_LIFETIME_DAYS, 10) : 30,
     cookieName: 'selfheal_refresh_token',
     csrfCookieName: 'selfheal_csrf_token',
-    cookieSecure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
+    cookieSecure:
+      process.env.COOKIE_SECURE !== undefined
+        ? process.env.COOKIE_SECURE === 'true'
+        : process.env.NODE_ENV === 'production',
     cookieSameSite: 'Lax' as const,
   },
 

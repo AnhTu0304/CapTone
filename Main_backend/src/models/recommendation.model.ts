@@ -1,5 +1,10 @@
 import { PoolClient } from 'pg';
-import { pool } from '../config/database';
+import {
+  pool,
+  resolveAutoExecutionMode,
+  resolveSemiAutoExecutionMode,
+  resolveSkippedExecutionStatus,
+} from '../config/database';
 import { ApiError } from '../utils/apiError';
 
 
@@ -469,12 +474,12 @@ export class RecommendationModel {
     const rawMode = String(data.execution_mode || 'MANUAL').toUpperCase();
     const safeMode =
       rawMode === 'AUTO' || rawMode === 'AUTOMATIC' || rawMode === 'AUTONOMOUS'
-        ? 'AUTOMATIC'
+        ? await resolveAutoExecutionMode()
         : rawMode === 'SEMI_AUTOMATIC'
-          ? 'SEMI_AUTOMATIC'
+          ? await resolveSemiAutoExecutionMode()
           : 'MANUAL';
 
-    const validApprovalStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED'];
+    const validApprovalStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'NOT_REQUIRED'];
     const requestedApproval = data.approval_status ? String(data.approval_status).toUpperCase() : 'PENDING';
     if (!validApprovalStatuses.includes(requestedApproval)) {
       throw new ApiError(400, `Trạng thái phê duyệt không hợp lệ: ${data.approval_status}`);
@@ -489,7 +494,8 @@ export class RecommendationModel {
       throw new ApiError(400, `Trạng thái thực thi không hợp lệ: ${data.execution_status}`);
     }
     // Never default missing status fields to COMPLETED or allow COMPLETED without prior evidence at creation
-    const safeStatus = normalizedExec === 'COMPLETED' ? 'PENDING' : normalizedExec;
+    const rawSafeStatus = normalizedExec === 'COMPLETED' ? 'PENDING' : normalizedExec;
+    const safeStatus = rawSafeStatus === 'SKIPPED' ? await resolveSkippedExecutionStatus() : rawSafeStatus;
 
     const safeResult = typeof data.result === 'object' ? JSON.stringify(data.result) : (data.result || '{}');
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
