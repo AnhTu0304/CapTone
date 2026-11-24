@@ -1602,6 +1602,8 @@ export class ReportModel {
     }
 
     const hWhere = hConds.join(' AND ');
+    const limitParamIdx = historyParams.length + 1;
+    const offsetParamIdx = historyParams.length + 2;
     const [historyCountRes, historyRowsRes] = await Promise.all([
       pool.query(
         `${enrichedCte} SELECT COUNT(*) AS total FROM enriched_actions WHERE ${hWhere};`,
@@ -1613,8 +1615,8 @@ export class ReportModel {
         FROM enriched_actions
         WHERE ${hWhere}
         ORDER BY created_at DESC
-        LIMIT ${safeLimit} OFFSET ${offset};`,
-        historyParams
+        LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx};`,
+        [...historyParams, safeLimit, offset]
       ),
     ]);
 

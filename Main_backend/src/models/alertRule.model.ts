@@ -270,7 +270,10 @@ export class AlertRuleModel {
       threshold_value: 'ar.threshold_value',
       metric_type: 'ar.metric_type',
     };
-    const sortCol = allowedSortFields[filters.sort_by || 'created_at'] || 'ar.created_at';
+    const sortKey = String(filters.sort_by || 'created_at');
+    const sortCol = Object.prototype.hasOwnProperty.call(allowedSortFields, sortKey)
+      ? allowedSortFields[sortKey]
+      : 'ar.created_at';
     const sortOrder = filters.order === 'asc' ? 'ASC' : 'DESC';
 
     // Data query

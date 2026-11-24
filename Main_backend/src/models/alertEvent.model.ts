@@ -490,7 +490,10 @@ export class AlertEventModel {
       created_at: 'ae.created_at',
       occurrence_count: 'ae.occurrence_count',
     };
-    const sortCol = allowedSortFields[filters.sort_by || 'last_seen_at'] || 'ae.last_seen_at';
+    const sortKey = String(filters.sort_by || 'last_seen_at');
+    const sortCol = Object.prototype.hasOwnProperty.call(allowedSortFields, sortKey)
+      ? allowedSortFields[sortKey]
+      : 'ae.last_seen_at';
     const sortOrder = filters.order === 'asc' ? 'ASC' : 'DESC';
 
     const dataQuery = `
@@ -700,7 +703,10 @@ export class AlertEventModel {
       created_at: 'ae.created_at',
       duration: 'ae.resolved_at',
     };
-    const sortCol = sortFieldMap[filters.sortBy || 'first_detected_at'] || 'ae.first_detected_at';
+    const sortKey = String(filters.sortBy || 'first_detected_at');
+    const sortCol = Object.prototype.hasOwnProperty.call(sortFieldMap, sortKey)
+      ? sortFieldMap[sortKey]
+      : 'ae.first_detected_at';
     const sortDir = (filters.sortOrder || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const dataQuery = `
