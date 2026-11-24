@@ -125,6 +125,7 @@ export interface RCAResult {
   historical_context_used?: boolean;
   similar_incident_ids?: boolean | string[];
   target?: TargetContext;
+  organization_id?: string | null;
   environment_id: string;
   cluster_id?: string | null;
   workload_id?: string | null;
@@ -1140,6 +1141,7 @@ export class AiService {
             recommendation: aiResponse.recommendation,
             explanation: aiResponse.explanation,
             target: aiResponse.target,
+            organization_id: organizationId,
             environment_id: environmentId,
             cluster_id: clusterId,
             workload_id: workloadId,
@@ -1229,6 +1231,7 @@ export class AiService {
           name: aiResponse.recommendation.target_name || rcaPayload.pod_id || input.service_id,
           id: aiResponse.recommendation.target_id || workloadId || undefined,
         },
+        organization_id: organizationId,
         environment_id: environmentId,
         cluster_id: clusterId,
         workload_id: workloadId,

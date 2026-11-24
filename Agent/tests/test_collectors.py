@@ -195,3 +195,48 @@ def test_pod_summary_preserves_https_probe_scheme_and_metrics_manager_uses_it() 
     asyncio.run(mgr.probe_pod_http(summary))
     assert captured["url"] == "https://10.244.0.8:10250/healthz"
     assert captured["kwargs"].get("ssl") is False
+
+
+def test_probe_pod_http_preserves_reported_app_latency_and_rps() -> None:
+    import asyncio
+    from selfheal_agent.telemetry.metrics import MetricsManager
+
+    summary = PodSummary(
+        name="ecommerce-store-app-abc-123",
+        namespace="test-lab",
+        uid="uid-ecom-1",
+        service_id="ecommerce-store-app",
+        phase="Running",
+        pod_ip="10.244.0.12",
+        port=8080,
+        health_path="/health",
+    )
+
+    class FakeStatsResp:
+        status = 200
+        async def json(self):
+            return {
+                "status": "UP",
+                "metrics": {
+                    "rps": 10.6,
+                    "requestsInWindow": 53,
+                    "avgLatencyMs": 5005,
+                    "http5xxRate": 0.0,
+                },
+            }
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeStatsSession:
+        closed = False
+        def get(self, url, **kwargs):
+            return FakeStatsResp()
+
+    mgr = MetricsManager(custom_objects=None)
+    mgr._http_session = FakeStatsSession()
+    result = asyncio.run(mgr.probe_pod_http(summary))
+    assert result["request_rate"] == 10.6
+    assert result["latency"] >= 5005.0
+    assert result["http_5xx_rate"] == 0.0

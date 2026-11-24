@@ -78,6 +78,14 @@ describe('IncidentModel Honesty Queries', () => {
         assert.ok(sql.includes('cluster_node_count'), 'SQL must compute cluster_node_count');
         assert.ok(sql.includes('ai_predictions') && sql.includes('pred'), 'SQL must join ai_predictions');
       }
+      const reconcilerQueries = executedSql.filter((q) => /UPDATE\s+healing_actions/i.test(q));
+      assert.strictEqual(reconcilerQueries.length, 2, 'Expected findMany and findById timeout reconcilers');
+      for (const rSql of reconcilerQueries) {
+        assert.ok(
+          rSql.includes("COALESCE(result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')"),
+          'Timeout reconciler must never fail actions already COMPLETED by K8s Agent awaiting recovery verification'
+        );
+      }
     });
   }
 

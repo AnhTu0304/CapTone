@@ -208,6 +208,7 @@ export class IncidentModel {
                '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
              ) 
          WHERE execution_status = 'RUNNING' 
+           AND COALESCE(result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')
            AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds';`
       );
     } catch (reconcileErr) {
@@ -655,6 +656,7 @@ export class IncidentModel {
                    '"Timeout waiting for agent execution callback (> 60s); marked FAILED by automated reconciler"'::jsonb
                  ) 
              WHERE execution_status = 'RUNNING' 
+               AND COALESCE(result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')
                AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds'
                AND (incident_id = $1 OR ($2::text IS NOT NULL AND (target_name = $2 OR target_name ILIKE $2 || '%')));`,
             [row.id, targetServiceFilter]

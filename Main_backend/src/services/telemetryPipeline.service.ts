@@ -347,7 +347,10 @@ export class TelemetryPipelineService {
             });
 
             await TelemetryPipelineService.evaluatePolicyAndTriggerAutonomousHealing(
-              result.rca_diagnosis,
+              {
+                ...result.rca_diagnosis,
+                organization_id: result.rca_diagnosis.organization_id || batchOrgId,
+              },
               normalizedServiceId
             );
           } else if (!result.rca_triggered && (result.rule_evaluation?.anomalies?.length ?? 0) === 0) {

@@ -141,6 +141,7 @@ export class TelemetryAggregatorService {
       logLimit?: number;
       eventLimit?: number;
       organizationId?: string;
+      latestMetrics?: GRUMetricPoint;
     }
   ): Promise<RcaContext> {
     const clusterId = options?.clusterId;
@@ -221,13 +222,17 @@ export class TelemetryAggregatorService {
     });
 
     // 2.3 Latest aggregated metrics point (if available)
-    const recentMetrics = await this.getServiceMetricsSequence(serviceId, {
-      bucketSeconds: 5,
-      limit: 1,
-      fillPadding: false,
-      clusterId,
-    });
-    const latestMetrics = recentMetrics.length > 0 ? recentMetrics[0] : undefined;
+    let latestMetrics = options?.latestMetrics;
+    if (!latestMetrics) {
+      const recentMetrics = await this.getServiceMetricsSequence(serviceId, {
+        bucketSeconds: 5,
+        limit: 1,
+        fillPadding: false,
+        clusterId,
+        organizationId: options?.organizationId,
+      });
+      latestMetrics = recentMetrics.length > 0 ? recentMetrics[0] : undefined;
+    }
 
     // 2.4 Query actual target Pod info & all workload pods with live container readiness
     let podId: string | undefined = undefined;
@@ -356,11 +361,11 @@ export class TelemetryAggregatorService {
         const combinedLogAndEventText = `${formattedEvents.join(' ')} ${formattedLogs.join(' ')}`;
         const hasPrimaryMention = /PRIMARY/i.test(combinedLogAndEventText);
 
-        // Query latest CPU/RAM per pod from metrics table to populate Pod Capacity Headroom
-        const podMetricsMap = new Map<string, { cpu: number; ram: number; request_rate: number }>();
+        // Query latest CPU/RAM/latency per pod from metrics table to populate Pod Capacity Headroom
+        const podMetricsMap = new Map<string, { cpu: number; ram: number; request_rate: number; latency: number }>();
         try {
           const recentMetricsRes = await pool.query(
-            `SELECT DISTINCT ON (pod_id) pod_id, cpu, ram, request_rate
+            `SELECT DISTINCT ON (pod_id) pod_id, cpu, ram, request_rate, latency
              FROM agent_metrics
              WHERE service_id = $1
                AND collected_at >= NOW() - INTERVAL '15 minutes'
@@ -373,6 +378,7 @@ export class TelemetryAggregatorService {
                 cpu: Number(mRow.cpu || 0),
                 ram: Number(mRow.ram || 0),
                 request_rate: Number(mRow.request_rate || 0),
+                latency: Number(mRow.latency || 0),
               });
             }
           }
@@ -427,6 +433,7 @@ export class TelemetryAggregatorService {
             cpu_usage_pct: pMetrics ? pMetrics.cpu : (latestMetrics ? Number(latestMetrics.cpu || 0) : undefined),
             ram_usage_pct: pMetrics ? pMetrics.ram : (latestMetrics ? Number(latestMetrics.ram || 0) : undefined),
             request_rate: pMetrics ? pMetrics.request_rate : (latestMetrics ? Number(latestMetrics.request_rate || 0) : undefined),
+            latency_ms: pMetrics ? pMetrics.latency : (latestMetrics ? Number(latestMetrics.latency || 0) : undefined),
           };
         });
 
@@ -673,7 +680,9 @@ export class TelemetryAggregatorService {
 
     const rcaContextPromise = this.buildRcaContext(serviceId, {
       clusterId: options?.clusterId,
+      organizationId: options?.organizationId,
       windowMinutes,
+      latestMetrics,
     });
 
     const [gruPrediction, rcaContext] = await Promise.all([gruPromise, rcaContextPromise]);

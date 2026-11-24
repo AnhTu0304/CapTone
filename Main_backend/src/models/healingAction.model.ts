@@ -70,6 +70,7 @@ export class HealingActionModel {
               '{timeout}', 'true'::jsonb
             )
         WHERE execution_status = 'RUNNING' 
+          AND COALESCE(result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')
           AND started_at < NOW() - INTERVAL '60 seconds'
       `);
     } catch {}

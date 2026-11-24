@@ -248,9 +248,20 @@ class MetricsManager:
             request_rate = 0.2
             http_5xx_rate = 100.0 if probe_status in {500, 502, 503} else 0.0
 
+        reported_latency = 0.0
+        if telemetry_stats:
+            raw_lat = telemetry_stats.get("avgLatencyMs")
+            if raw_lat is None:
+                raw_lat = telemetry_stats.get("latency")
+            if raw_lat is not None:
+                try:
+                    reported_latency = float(raw_lat)
+                except (TypeError, ValueError):
+                    reported_latency = 0.0
+
         return {
             "request_rate": max(0.0, request_rate),
-            "latency": max(0.0, probe_latency),
+            "latency": max(0.0, probe_latency, reported_latency),
             "http_5xx_rate": max(0.0, min(100.0, http_5xx_rate)),
             "simulated_cpu": telemetry_stats.get("simulated_cpu"),
             "simulated_ram_mb": telemetry_stats.get("simulated_ram_mb"),
