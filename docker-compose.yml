@@ -55,6 +55,8 @@ services:
       dockerfile: Dockerfile
     container_name: captone-main-backend
     restart: unless-stopped
+    env_file:
+      - ./Main_backend/.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,12 +86,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_key_minimum_32_characters_long_12345}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8090,http://localhost:3000,http://localhost:3001,http://localhost:3005,http://127.0.0.1:8090,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3005,http://demo.giahungtrieu.net:8090,http://112.78.1.150:8090}
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <noreply@selfheal.io>}
       CLIENT_URL: ${CLIENT_URL:-http://demo.giahungtrieu.net:8090}
       OTEL_ENABLED: ${OTEL_ENABLED:-true}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-selfheal-backend}

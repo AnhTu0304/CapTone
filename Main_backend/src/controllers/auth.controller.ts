@@ -39,14 +39,19 @@ export class AuthController {
       }
 
       const result = await AuthService.register({ email, password, full_name });
-      if (result.user?.id) {
+      if (result.user?.id && !result.requires_verification) {
         const session = await RefreshTokenService.createSession(result.user.id, {
           ipAddress: req.ip || req.socket.remoteAddress || null,
           userAgent: req.headers['user-agent'] || null,
         });
         setAuthCookies(res, session.rawRefreshToken, session.csrfToken, req);
       }
-      return ApiResponse.success(res, 'Đăng ký tài khoản thành công', result, 201);
+      return ApiResponse.success(
+        res,
+        'Đăng ký thành công. Vui lòng kiểm tra email để nhập mã xác thực OTP.',
+        result,
+        201
+      );
     } catch (error) {
       next(error);
     }
@@ -346,6 +351,14 @@ export class AuthController {
           </body>
           </html>
         `);
+      }
+
+      if (!isBrowserRequest && result.user?.id) {
+        const session = await RefreshTokenService.createSession(result.user.id, {
+          ipAddress: req.ip || req.socket.remoteAddress || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+        setAuthCookies(res, session.rawRefreshToken, session.csrfToken, req);
       }
 
       return ApiResponse.success(res, 'Xác thực email thành công! Tài khoản của bạn đã được kích hoạt', result, 200);

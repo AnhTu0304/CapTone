@@ -155,7 +155,7 @@ describe('Error Routing (404, 403, 503) & Missing Route Warning Alert', () => {
     expect(screen.getByText(/Cảnh báo chuyển trang/i)).toBeInTheDocument();
   });
 
-  test('Onboarding non-existent route renders NotFoundPage with warning', () => {
+  test('Legacy /onboarding/* routes redirect directly to Personal Portal without OnboardingPage', () => {
     render(
       <ToastProvider>
         <AuthContext.Provider value={makeAuthValue(['USER'])}>
@@ -165,8 +165,7 @@ describe('Error Routing (404, 403, 503) & Missing Route Warning Alert', () => {
     );
 
     expect(screen.queryByTestId('mock-onboarding-page')).not.toBeInTheDocument();
-    expect(screen.getByTestId('status-page-404')).toBeInTheDocument();
-    expect(screen.getByText(/Cảnh báo chuyển trang/i)).toBeInTheDocument();
+    expect(screen.getByTestId('mock-portal-dashboard')).toBeInTheDocument();
   });
 
   test('RBAC 403 guards in both /admin and /dashboard use Scenic ForbiddenPage (403) while preserving 403 title contract', () => {

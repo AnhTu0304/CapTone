@@ -32,20 +32,31 @@ if (typeof window !== 'undefined') {
 }
 
 // Mock lightweight-charts v5 ESM package for Jest / jsdom environment
-jest.mock('lightweight-charts', () => ({
-  createChart: jest.fn(() => ({
-    addSeries: jest.fn(() => ({
-      setData: jest.fn(),
-      update: jest.fn(),
-    })),
+const createMockChart = () => ({
+  addSeries: jest.fn(() => ({
+    setData: jest.fn(),
+    update: jest.fn(),
     applyOptions: jest.fn(),
-    remove: jest.fn(),
-    subscribeCrosshairMove: jest.fn(),
-    unsubscribeCrosshairMove: jest.fn(),
-    timeScale: () => ({
-      fitContent: jest.fn(),
-    }),
+    createPriceLine: jest.fn(() => ({ applyOptions: jest.fn() })),
+    removePriceLine: jest.fn(),
+    priceScale: jest.fn(() => ({ applyOptions: jest.fn() })),
   })),
+  applyOptions: jest.fn(),
+  resize: jest.fn(),
+  remove: jest.fn(),
+  subscribeCrosshairMove: jest.fn(),
+  unsubscribeCrosshairMove: jest.fn(),
+  priceScale: jest.fn(() => ({ applyOptions: jest.fn() })),
+  timeScale: () => ({
+    fitContent: jest.fn(),
+    applyOptions: jest.fn(),
+    subscribeVisibleLogicalRangeChange: jest.fn(),
+    unsubscribeVisibleLogicalRangeChange: jest.fn(),
+  }),
+});
+
+jest.mock('lightweight-charts', () => ({
+  createChart: jest.fn(createMockChart),
   AreaSeries: 'AreaSeriesDefinition',
   LineSeries: 'LineSeriesDefinition',
   HistogramSeries: 'HistogramSeriesDefinition',
@@ -56,6 +67,13 @@ jest.mock('lightweight-charts', () => ({
   CrosshairMode: { Normal: 0, Magnet: 1 },
   LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
 }));
+
+beforeEach(() => {
+  const lwc = require('lightweight-charts');
+  if (lwc.createChart && typeof lwc.createChart.mockImplementation === 'function') {
+    lwc.createChart.mockImplementation(createMockChart);
+  }
+});
 
 // Mock Three.js for Jest / jsdom environment
 jest.mock('three', () => {

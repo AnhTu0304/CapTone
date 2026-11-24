@@ -42,49 +42,10 @@ test('renders 3D Infrastructure Dashboard and metrics', () => {
   expect(screen.getByText(/Được xây dựng cho hạ tầng doanh nghiệp vừa và nhỏ \(SME\) dựa trên Kubernetes/i)).toBeInTheDocument();
 });
 
-test('renders Onboarding Step 1: Create Organization in Vietnamese', () => {
+test('redirects legacy /onboarding paths to Personal Portal (/portal)', () => {
   window.history.pushState({}, '', '/onboarding/organization');
   render(<App />);
-  expect(screen.getByText(/Tạo tổ chức của bạn/i)).toBeInTheDocument();
-  expect(screen.getByText(/Tên Tổ Chức/i)).toBeInTheDocument();
-  expect(screen.getByText(/Định Danh Slug Tổ Chức/i)).toBeInTheDocument();
-  expect(screen.getByText(/Tiếp tục sang Môi trường/i)).toBeInTheDocument();
-});
-
-test('renders Onboarding Step 2: Create Environment in Vietnamese', () => {
-  window.history.pushState({}, '', '/onboarding/environment');
-  render(<App />);
-  expect(screen.getByText(/Tạo môi trường giám sát/i)).toBeInTheDocument();
-  expect(screen.getByText(/Tên Môi Trường/i)).toBeInTheDocument();
-  expect(screen.getByText(/Loại Môi Trường/i)).toBeInTheDocument();
-  expect(screen.getByText(/Tiếp tục sang Kubernetes/i)).toBeInTheDocument();
-});
-
-test('renders Onboarding Step 3: Connect Kubernetes with RBAC notice in Vietnamese', () => {
-  window.history.pushState({}, '', '/onboarding/kubernetes');
-  render(<App />);
-  expect(screen.getByText(/Kết nối môi trường Kubernetes/i)).toBeInTheDocument();
-  expect(screen.getByText(/Đăng ký Cụm máy chủ/i)).toBeInTheDocument();
-  expect(screen.getByText(/Khởi tạo Token Tác tử/i)).toBeInTheDocument();
-  expect(screen.getByText(/Cài đặt Tác tử SelfHeal/i)).toBeInTheDocument();
-  expect(screen.getByText(/Chính sách Zero Cluster-Admin/i)).toBeInTheDocument();
-});
-
-test('renders Onboarding Step 4: Verify Agent and Diagnostics in Vietnamese', () => {
-  window.history.pushState({}, '', '/onboarding/verify-agent');
-  render(<App />);
-  expect(screen.getByText(/Xác thực Tác tử SelfHeal/i)).toBeInTheDocument();
-  expect(screen.getByText(/CỔNG KẾT NỐI SOCKET/i)).toBeInTheDocument();
-  expect(screen.getByText(/Thông báo Hiệu chuẩn Dữ liệu AI/i)).toBeInTheDocument();
-  expect(screen.getByText(/Xử lý sự cố kết nối Tác tử/i)).toBeInTheDocument();
-});
-
-test('renders Onboarding Step 5: Setup Complete in Vietnamese', () => {
-  window.history.pushState({}, '', '/onboarding/complete');
-  render(<App />);
-  expect(screen.getByText(/Môi trường của bạn đã sẵn sàng/i)).toBeInTheDocument();
-  expect(screen.getByText(/Đi tới Bảng điều khiển/i)).toBeInTheDocument();
-  expect(screen.getByText(/Đọc Tài liệu Hướng dẫn/i)).toBeInTheDocument();
+  expect(screen.queryByText(/Tạo tổ chức của bạn/i)).not.toBeInTheDocument();
 });
 
 test('renders Register Page: Create your account', () => {
@@ -189,16 +150,7 @@ test('renders Dashboard Infrastructure (/dashboard/infrastructure) and Workloads
   expect(screen.getByText(/payment-gateway/i)).toBeInTheDocument();
 });
 
-test('Onboarding Complete Step Go to Dashboard button navigates to /dashboard', () => {
-  window.history.pushState({}, '', '/onboarding/complete');
-  render(<App />);
-  const goToDashboardBtn = screen.getByText(/Đi tới Bảng điều khiển/i);
-  expect(goToDashboardBtn).toBeInTheDocument();
-  act(() => {
-    fireEvent.click(goToDashboardBtn);
-  });
-  expect(window.location.pathname).toBe('/dashboard');
-});
+
 
 test('renders Monitoring Metrics Page (/dashboard/monitoring/metrics) with React chart and node table', () => {
   window.history.pushState({}, '', '/dashboard/monitoring/metrics');

@@ -145,7 +145,7 @@ export const Footer = ({ onNavigate }) => {
             <a href="/login" onClick={(e) => handleLinkClick(e, '/login')} className="footer-link">
               BẮT ĐẦU NGAY
             </a>
-            <a href="/onboarding/verify-agent" onClick={(e) => handleLinkClick(e, '/onboarding/verify-agent')} className="footer-link">
+            <a href="/dashboard/agents" onClick={(e) => handleLinkClick(e, '/dashboard/agents')} className="footer-link">
               CÀI ĐẶT TÁC TỬ
             </a>
             <a href="/about" onClick={(e) => handleLinkClick(e, '/about')} className="footer-link">

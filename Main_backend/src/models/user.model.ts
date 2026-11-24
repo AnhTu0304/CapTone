@@ -361,6 +361,25 @@ export class UserModel {
     }
 
     /**
+     * Cập nhật lại thông tin cho tài khoản đang ở trạng thái PENDING (chưa xác thực email) khi đăng ký lại
+     */
+    public static async updatePendingRegistration(
+        userId: string,
+        data: { full_name: string; password_hash: string },
+        client?: PoolClient
+    ): Promise<IUserResponse | null> {
+        const db = client || pool;
+        const sql = `
+          UPDATE users
+          SET full_name = $1, password_hash = $2, updated_at = NOW()
+          WHERE id = $3 AND status = 'PENDING' AND email_verified_at IS NULL AND deleted_at IS NULL
+          RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
+        `;
+        const result = await db.query<IUserResponse>(sql, [data.full_name, data.password_hash, userId]);
+        return result.rows[0] || null;
+    }
+
+    /**
      * Cập nhật thông tin profile
      */
     public static async updateProfile(

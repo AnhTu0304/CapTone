@@ -8,7 +8,6 @@ import LoginPage from '../pages/Login';
 import RegisterPage from '../pages/Register';
 import ForgotPasswordPage from '../pages/ForgotPassword';
 import ResetPasswordPage from '../pages/ResetPassword';
-import OnboardingPage from '../pages/Onboarding';
 import DashboardPage from '../pages/Dashboard';
 import PublicLayout from '../layouts/PublicLayout';
 import AuthLayout from '../layouts/AuthLayout';
@@ -48,16 +47,6 @@ import {
   MaintenancePage,
 } from '../pages/Error/StatusPages';
 import { useAuth } from '../context/AuthContext';
-
-const VALID_ONBOARDING_PATHS = new Set([
-  '/onboarding',
-  '/onboarding/',
-  '/onboarding/organization',
-  '/onboarding/environment',
-  '/onboarding/kubernetes',
-  '/onboarding/verify-agent',
-  '/onboarding/complete',
-]);
 
 export const ROUTES = {
   HOME: '/',
@@ -230,21 +219,9 @@ export const RouteRenderer = ({
     return <PersonalPortalPage currentPath={path} onNavigate={onNavigate} />;
   }
 
-  // Handle all onboarding routes
+  // Legacy onboarding paths now route directly to Personal Portal
   if (path.startsWith('/onboarding')) {
-    if (!VALID_ONBOARDING_PATHS.has(path)) {
-      return (
-        <PublicLayout currentPath={path} onNavigate={onNavigate}>
-          <NotFoundPage
-            onNavigate={onNavigate}
-            warnPath={currentPath}
-            title="404 — Không tìm thấy bước thiết lập"
-            message={`Đường dẫn "${currentPath}" không tồn tại trong quy trình khởi tạo hệ thống.`}
-          />
-        </PublicLayout>
-      );
-    }
-    return <OnboardingPage currentPath={path} onNavigate={onNavigate} />;
+    return <PersonalPortalPage currentPath="/portal" onNavigate={onNavigate} />;
   }
 
   // Handle all dashboard routes (User / Owner Portal với phân cấp RBAC động theo tenant role)

@@ -45,6 +45,7 @@ export const AuthProvider = ({ children }) => {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [pendingVerificationToken, setPendingVerificationToken] = useState(null);
 
   const clearLocalAuthState = useCallback(() => {
     clearAuthToken();
@@ -68,6 +69,7 @@ export const AuthProvider = ({ children }) => {
     } catch {}
     setToken(null);
     setUser(null);
+    setPendingVerificationToken(null);
   }, []);
 
   // Lắng nghe sự kiện đồng bộ đa Tab & cùng Tab (Đăng xuất / Thu hồi phiên / Refresh token / Đăng nhập)
@@ -328,18 +330,31 @@ export const AuthProvider = ({ children }) => {
 
     const res = await authService.register({ email, password, full_name });
     const receivedToken = res?.data?.token;
+    const newUser = res?.data?.user || {
+      email,
+      full_name,
+      system_roles: ['USER'],
+      status: 'PENDING',
+    };
+
+    const requiresVerification = Boolean(
+      res?.data?.requires_verification || newUser?.status === 'PENDING'
+    );
+
+    if (requiresVerification) {
+      clearAuthToken();
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem(USER_KEY);
+      setPendingVerificationToken(receivedToken || null);
+      return newUser;
+    }
 
     if (receivedToken) {
       clearAuthToken();
       setAuthToken(receivedToken);
       setToken(receivedToken);
     }
-
-    const newUser = res?.data?.user || {
-      email,
-      full_name,
-      system_roles: ['USER'],
-    };
 
     setUser(newUser);
     localStorage.setItem(USER_KEY, JSON.stringify(newUser));
@@ -348,19 +363,34 @@ export const AuthProvider = ({ children }) => {
 
   // Hàm Xác thực mã OTP Email
   const verifyEmail = useCallback(async (code) => {
-    const res = await authService.verifyEmail(code, token);
-    if (user) {
+    const activeVerifyToken = pendingVerificationToken || token;
+    const res = await authService.verifyEmail(code, activeVerifyToken);
+    const verifiedToken = res?.data?.token;
+    const verifiedUser = res?.data?.user;
+
+    if (verifiedToken) {
+      clearAuthToken();
+      setAuthToken(verifiedToken);
+      setToken(verifiedToken);
+    }
+
+    if (verifiedUser) {
+      setUser(verifiedUser);
+      localStorage.setItem(USER_KEY, JSON.stringify(verifiedUser));
+    } else if (user) {
       const updatedUser = { ...user, email_verified_at: new Date().toISOString(), status: 'ACTIVE' };
       setUser(updatedUser);
       localStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
     }
+
+    setPendingVerificationToken(null);
     return res;
-  }, [token, user]);
+  }, [pendingVerificationToken, token, user]);
 
   // Hàm Gửi lại mã OTP xác thực Email
   const resendVerification = useCallback(async () => {
-    return await authService.resendVerification(token);
-  }, [token]);
+    return await authService.resendVerification(pendingVerificationToken || token);
+  }, [pendingVerificationToken, token]);
 
   // Hàm Đăng xuất (thu hồi refresh session trên server + xóa HttpOnly cookie + dọn sạch state)
   const logout = useCallback(async () => {

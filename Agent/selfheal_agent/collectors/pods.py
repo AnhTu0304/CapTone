@@ -173,6 +173,7 @@ class PodSummary:
         port: int = 8080,
         health_path: str = "/health",
         *,
+        health_scheme: str = "http",
         restart_count: Optional[int] = None,
         status: Optional[str] = None,
         is_healthy: Optional[bool] = None,
@@ -200,6 +201,7 @@ class PodSummary:
         self.pod_ip = pod_ip
         self.port = port
         self.health_path = health_path
+        self.health_scheme = health_scheme
         self.host_ip = host_ip
         self.qos_class = qos_class
         self.image = image or ""
@@ -411,6 +413,7 @@ class PodsCollector:
         mem_limit = 0.0
         port = 8080
         health_path = "/health"
+        health_scheme = "http"
 
         spec_containers = getattr(spec, "containers", None) if spec else None
         if spec_containers:
@@ -425,8 +428,11 @@ class PodsCollector:
                 ports = getattr(c, "ports", None)
                 if ports and len(ports) > 0:
                     cp = _opt_int(getattr(ports[0], "container_port", None))
+                    cp_name = (_opt_str(getattr(ports[0], "name", None)) or "").lower()
                     if cp:
                         port = cp
+                    if cp_name == "https" or port in (443, 8443, 10250):
+                        health_scheme = "https"
                 for probe_attr in ("liveness_probe", "readiness_probe"):
                     probe = getattr(c, probe_attr, None)
                     http_get = getattr(probe, "http_get", None) if probe else None
@@ -434,8 +440,13 @@ class PodsCollector:
                     if p_path:
                         health_path = p_path
                         p_port = _opt_int(getattr(http_get, "port", None))
+                        p_scheme = (_opt_str(getattr(http_get, "scheme", None)) or "").upper()
                         if p_port:
                             port = p_port
+                        if p_scheme == "HTTPS" or port in (443, 8443, 10250):
+                            health_scheme = "https"
+                        elif p_scheme == "HTTP":
+                            health_scheme = "http"
                         break
 
         status_obj = getattr(pod, "status", None)
@@ -476,6 +487,7 @@ class PodsCollector:
             pod_ip=pod_ip,
             port=port,
             health_path=health_path,
+            health_scheme=health_scheme,
             host_ip=host_ip,
             qos_class=qos_class,
             image=image,

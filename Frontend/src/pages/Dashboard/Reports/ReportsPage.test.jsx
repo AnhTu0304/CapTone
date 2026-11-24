@@ -48,7 +48,6 @@ jest.mock('../../../utils/reportExcelExport', () => ({
   exportReportsToExcel: jest.fn().mockResolvedValue({ fileName: 'report.xlsx', sheetNames: ['TongQuan'] }),
 }));
 
-jest.mock('../../../components/dashboard/SLACostSavingsChart', () => () => <div data-testid="sla-trend-chart" />);
 jest.mock('../../../components/dashboard/IncidentSeverityBreakdown', () => () => <div data-testid="severity-chart" />);
 jest.mock('../../../components/dashboard/ActionActorBreakdownChart', () => () => <div data-testid="actor-chart" />);
 jest.mock('../../../components/dashboard/ErrorActionMatrixChart', () => () => <div data-testid="matrix-chart" />);
@@ -196,6 +195,7 @@ describe('ReportsPage Cluster Header Sync & K8s Service Filter', () => {
     expect(screen.getByText('Cụm K8s: fyuyu', { selector: 'span' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'fyuyu' })).toHaveAttribute('aria-pressed', 'true');
     expect(await screen.findByText('477 action')).toBeInTheDocument();
+    expect(screen.queryByText(/Cam Kết & Xu Hướng SLA Uptime/i)).not.toBeInTheDocument();
 
     // Switching cluster on TopHeader immediately re-queries using new cluster
     mockDashboardContext.currentEnv = {
@@ -271,6 +271,7 @@ describe('ReportsPage Cluster Header Sync & K8s Service Filter', () => {
     const { rerender } = render(<ReportsPage />);
 
     expect(await screen.findByText('477 action')).toBeInTheDocument();
+    expect(screen.queryByText(/Cam Kết & Xu Hướng SLA Uptime/i)).not.toBeInTheDocument();
 
     const serviceSelect = screen.getByLabelText('Lọc theo dịch vụ K8s');
     const optionLabels = Array.from(serviceSelect.querySelectorAll('option')).map((o) => o.textContent);
@@ -339,6 +340,7 @@ describe('ReportsPage Cluster Header Sync & K8s Service Filter', () => {
       );
     });
     expect(await screen.findByText('477 action')).toBeInTheDocument();
+    expect(screen.queryByText(/Cam Kết & Xu Hướng SLA Uptime/i)).not.toBeInTheDocument();
 
     // Select service again then switch cluster on header: service must reset to ALL BEFORE querying new cluster
     fetchOrganizationSLAReport.mockResolvedValueOnce(buildMockReport({ totalActions: 177 }));

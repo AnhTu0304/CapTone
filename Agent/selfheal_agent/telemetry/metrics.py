@@ -128,7 +128,13 @@ class MetricsManager:
         if not pod.pod_ip or pod.phase != "Running":
             return {"request_rate": 0.0, "latency": 0.0, "http_5xx_rate": 0.0}
 
-        url = f"http://{pod.pod_ip}:{pod.port}{pod.health_path}"
+        scheme = (getattr(pod, "health_scheme", None) or "").lower()
+        if not scheme:
+            scheme = "https" if pod.port in (443, 8443, 10250) else "http"
+        url = f"{scheme}://{pod.pod_ip}:{pod.port}{pod.health_path}"
+        request_kwargs: dict[str, Any] = {"timeout": aiohttp.ClientTimeout(total=5.0)}
+        if scheme == "https":
+            request_kwargs["ssl"] = False
         t0 = time.perf_counter()
         probe_latency = 0.0
         probe_status = 200
@@ -136,7 +142,7 @@ class MetricsManager:
 
         try:
             session = await self._get_http_session()
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+            async with session.get(url, **request_kwargs) as resp:
                 elapsed = (time.perf_counter() - t0) * 1000.0
                 probe_latency = round(elapsed, 2)
                 probe_status = resp.status
