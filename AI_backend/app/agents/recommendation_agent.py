@@ -265,8 +265,8 @@ class RecommendationAgent:
                 action = "ROLLBACK_DEPLOYMENT"
                 reason = f"Phát hiện lỗi HTTP 5xx diện rộng trên phiên bản '{kubernetes.deployment.version}'; đề xuất hoàn nguyên (ROLLBACK_DEPLOYMENT) về phiên bản ổn định '{kubernetes.deployment.previous_version}'"
             elif kubernetes.deployment and kubernetes.restart_count == 0:
-                action = "ROLLBACK_DEPLOYMENT"
-                reason = "Lỗi ứng dụng HTTP 5xx xảy ra đồng loạt trên các replica của Deployment; đề xuất hoàn nguyên phiên bản ổn định (ROLLBACK_DEPLOYMENT)"
+                action = "RESTART_DEPLOYMENT"
+                reason = "Lỗi ứng dụng xảy ra phân tán trên nhiều replica; khuyến nghị rolling restart toàn bộ deployment"
             elif kubernetes.restart_count > 0:
                 action = "RESTART_POD"
                 reason = "Lỗi ứng dụng trùng khớp với Pod đang không khỏe mạnh; khuyến nghị khởi động lại Pod"
