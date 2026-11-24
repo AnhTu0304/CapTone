@@ -257,29 +257,35 @@ async function main() {
 
   // 5. EXPLAIN ANALYZE on PostgreSQL
   console.log('\n🔬 5. Phân tích chi tiết EXPLAIN ANALYZE trên PostgreSQL:');
-  const explain1 = await pool.query(`
+  const explain1 = await pool.query(
+    `
     EXPLAIN (ANALYZE, BUFFERS)
     SELECT am.id, am.service_id, am.pod_id, am.cpu, am.ram, am.collected_at
     FROM agent_metrics am
-    WHERE am.organization_id = '${benchOrgId}'::uuid
+    WHERE am.organization_id = $1::uuid
       AND am.service_id = 'order-service'
       AND am.collected_at >= NOW() - INTERVAL '24 hours'
     ORDER BY am.collected_at DESC, am.id DESC
     LIMIT 50;
-  `);
+  `,
+    [benchOrgId]
+  );
   console.log('--- Kế hoạch thực thi truy vấn Range 24h + Service Filter ---');
   explain1.rows.forEach((r) => console.log('  ' + r['QUERY PLAN']));
 
-  const explain2 = await pool.query(`
+  const explain2 = await pool.query(
+    `
     EXPLAIN (ANALYZE, BUFFERS)
     SELECT am.id, am.service_id, am.pod_id, am.cpu, am.ram, am.collected_at
     FROM agent_metrics am
-    WHERE am.organization_id = '${benchOrgId}'::uuid
-      AND (am.collected_at < '${deepSeed.rows[0].collected_at.toISOString()}'::timestamptz 
-           OR (am.collected_at = '${deepSeed.rows[0].collected_at.toISOString()}'::timestamptz AND am.id < '${deepSeed.rows[0].id}'))
+    WHERE am.organization_id = $1::uuid
+      AND (am.collected_at < $2::timestamptz
+           OR (am.collected_at = $2::timestamptz AND am.id < $3))
     ORDER BY am.collected_at DESC, am.id DESC
     LIMIT 50;
-  `);
+  `,
+    [benchOrgId, deepSeed.rows[0].collected_at.toISOString(), deepSeed.rows[0].id]
+  );
   console.log('\n--- Kế hoạch thực thi Keyset Cursor Pagination ---');
   explain2.rows.forEach((r) => console.log('  ' + r['QUERY PLAN']));
 

@@ -746,7 +746,7 @@ export class EmailService {
       <div style="max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
         <div style="background:${priorityBg}; padding:24px; color:#ffffff;">
           <div style="display:inline-block; font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,0.2); letter-spacing:0.05em; text-transform:uppercase;">
-            ${priorityBadge} • ${payload.broadcastCode}
+            ${priorityBadge} • ${this.escapeHtml(payload.broadcastCode)}
           </div>
           <h2 style="margin:12px 0 0; font-size:20px; font-weight:800; line-height:1.4;">${this.escapeHtml(payload.title)}</h2>
         </div>
@@ -847,7 +847,7 @@ export class EmailService {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Yêu Cầu Phê Duyệt Tự Phục Hồi - ${hitlCode}</title>
+      <title>Yêu Cầu Phê Duyệt Tự Phục Hồi - ${esc(hitlCode)}</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; color: #1e293b; }
         .wrapper { max-width: 640px; margin: 30px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }

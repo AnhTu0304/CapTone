@@ -13,6 +13,27 @@ const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Schema kiểm tra URL website an toàn (chặn javascript:, data:, vbscript:)
+ */
+export const safeWebsiteSchema = z
+  .string()
+  .trim()
+  .url('Website phải là URL hợp lệ')
+  .refine(
+    (val) => {
+      try {
+        const parsed = new URL(val);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Website chỉ chấp nhận giao thức http:// hoặc https://' }
+  )
+  .optional()
+  .or(z.literal(''));
+
+/**
  * Schema kiểm tra dữ liệu khi TẠO MỚI TỔ CHỨC
  */
 export const createOrganizationSchema = z.object({
@@ -35,7 +56,7 @@ export const createOrganizationSchema = z.object({
     // Profile mở rộng
     email: z.string().trim().email('Email liên hệ không hợp lệ').optional().or(z.literal('')),
     phone: z.string().trim().max(30, 'Số điện thoại không vượt quá 30 ký tự').optional(),
-    website: z.string().trim().url('Website phải là URL hợp lệ').optional().or(z.literal('')),
+    website: safeWebsiteSchema,
     address: z.string().trim().optional(),
     city: z.string().trim().max(100, 'Thành phố không vượt quá 100 ký tự').optional(),
     country: z.string().trim().max(100, 'Quốc gia không vượt quá 100 ký tự').optional(),
@@ -56,7 +77,7 @@ export const updateOrganizationSchema = z.object({
       // Profile mở rộng
       email: z.string().trim().email('Email liên hệ không hợp lệ').optional().or(z.literal('')),
       phone: z.string().trim().max(30).optional(),
-      website: z.string().trim().url('Website phải là URL hợp lệ').optional().or(z.literal('')),
+      website: safeWebsiteSchema,
       address: z.string().trim().optional(),
       city: z.string().trim().max(100).optional(),
       country: z.string().trim().max(100).optional(),

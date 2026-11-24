@@ -12,8 +12,9 @@ RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 # Copy source code
 COPY . .
 
-# Build production bundle
+# Build production bundle (disable CRA inline runtime script to enforce strict CSP without 'unsafe-inline')
 ENV NODE_ENV=production
+ENV INLINE_RUNTIME_CHUNK=false
 RUN npm run build
 
 # Stage 2: Serve with Production Nginx
