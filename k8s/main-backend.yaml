@@ -15,7 +15,8 @@ data:
   DB_USER: "postgres"
   DB_PASSWORD: "postgres"
   DB_POOL_MAX: "20"
-  DB_SSL: "false"
+  DB_SSL_REQUIRE_STRICT: "false"
+  DB_SSL_MODE: "disable"
   REDIS_HOST: "103.166.182.26"
   REDIS_PORT: "6380"
   REDIS_ENABLED: "true"
@@ -24,6 +25,8 @@ data:
   JWT_EXPIRES_IN: "7d"
   AI_INTERNAL_HMAC_SECRET: "dev_only_ai_internal_hmac_secret_32_characters_long"
   TOTP_ENCRYPTION_KEY: "dev_only_totp_encryption_key_minimum_32_characters"
+  REFRESH_TOKEN_PEPPER: "dev_only_refresh_token_pepper_32_characters_long"
+  DATA_ENCRYPTION_KEY: "dev_only_data_encryption_key_32_characters_long"
   OTEL_ENABLED: "false"
 ---
 apiVersion: apps/v1
@@ -78,7 +81,7 @@ spec:
             httpGet:
               path: /api/v1/health
               port: 5000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
@@ -86,7 +89,7 @@ spec:
             httpGet:
               path: /api/v1/health
               port: 5000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 2
