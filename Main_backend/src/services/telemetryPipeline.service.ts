@@ -10,7 +10,10 @@ import { WorkloadModel } from '../models';
 import { dispatchHealingActionToAgent } from '../websocket/agentWebSocket';
 import { recordBackgroundJob, recordRemediationAction } from '../telemetry/metrics';
 import { RecoveryVerificationService } from './recoveryVerification.service';
-import { isExcludedSystemService } from '../utils/systemServiceFilter';
+import {
+  isDatabaseCacheWorkload,
+  isInfrastructureControlPlaneWorkload,
+} from '../utils/systemServiceFilter';
 import { HealingActionModel } from '../models/healingAction.model';
 import { isValidUuid, runWithTenantContext } from '../config/dbContext';
 
@@ -265,6 +268,12 @@ export class TelemetryPipelineService {
       this.lastEvaluatedBucketTimestamp[lockKey] = freshBatch.latestTimeBucket || new Date();
       delete this.urgentReasonByService[lockKey];
 
+      // Không chạy AI Prediction / RCA / Auto-Healing trên hạ tầng lõi K8s & monitoring stack
+      // (nhưng vẫn giữ stream metrics 12 điểm phía trên để hiển thị Overview)
+      if (isInfrastructureControlPlaneWorkload(normalizedServiceId)) {
+        return;
+      }
+
       const batchPointsSnapshot = [...freshBatch.points];
       const displayPointsSnapshot = [...displayPoints];
 
@@ -422,14 +431,14 @@ export class TelemetryPipelineService {
         [targetAliasesLower, validTargetWorkloadId, scopedOrgId]
       );
       const seq = Array.isArray(providedSequence) ? providedSequence : [];
-      const seqViolations: string[] = [];
-      for (let idx = 0; idx < seq.length; idx++) {
-        const evalSample = RecoveryVerificationService.evaluateSampleHealth(seq[idx]);
-        if (!evalSample.healthy) {
-          seqViolations.push(`Sample ${idx + 1}: ${evalSample.violations.join(', ')}`);
-        }
-      }
-      const batchActuallyHealthy = seq.length >= 12 && seqViolations.length === 0;
+      const isDbCacheTarget =
+        isDatabaseCacheWorkload(canonicalTargetName) || isDatabaseCacheWorkload(serviceId);
+      const seqEval = RecoveryVerificationService.evaluateSequenceRecovery(seq, {
+        isDatabaseWorkload: isDbCacheTarget,
+        baselineRestartCount: seq.length > 0 ? Number(seq[0]?.pod_restart_count ?? 0) : 0,
+      });
+      const seqViolations = seqEval.violations;
+      const batchActuallyHealthy = seq.length >= 12 && seqEval.healthy;
 
       for (const succRow of unverifiedSuccRes.rows) {
         const tsCheck = RecoveryVerificationService.validateTimestampSequence(seq);

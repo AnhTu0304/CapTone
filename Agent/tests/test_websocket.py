@@ -131,3 +131,65 @@ async def test_unauthorized_token_triggers_fatal_halt() -> None:
     finally:
         server.close()
         await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_header_auth_skips_duplicate_auth_payload() -> None:
+    """When server pre-authenticates via HTTP upgrade headers and enforces 4003 on re-auth,
+    client must NOT send a duplicate {'type': 'auth'} payload."""
+    received_types: list[str] = []
+
+    async def strict_header_auth_backend(ws):
+        await ws.send(
+            json.dumps(
+                {
+                    "status": "authenticated",
+                    "message": "Agent authenticated via header",
+                    "agent": {"id": "agent-hdr-1", "name": "test-ebpf-agent"},
+                }
+            )
+        )
+        async for msg_str in ws:
+            data = json.loads(msg_str)
+            msg_type = data.get("type", "")
+            received_types.append(msg_type)
+            if msg_type == "auth":
+                await ws.close(code=4003, reason="Re-authentication forbidden")
+                return
+
+    server = await serve(strict_header_auth_backend, "127.0.0.1", 54325)
+
+    try:
+        config = AgentConfig(
+            AGENT_SERVER_URL="ws://127.0.0.1:54325/api/v1/agent/connect",
+            AGENT_TOKEN="cap_valid_header_token",
+            QUEUE_MAX_SIZE=10,
+        )
+        client = AgentWebSocketClient(config)
+        await client.send(
+            MetricsMessage(
+                data=AgentMetricsData(
+                    service_id="ecommerce-store-app",
+                    pod_id="pod-1",
+                    timestamp="2026-11-26T00:00:00Z",
+                    cpu=12.0,
+                    ram=45.0,
+                )
+            )
+        )
+        await client.start()
+
+        for _ in range(30):
+            if client.is_authenticated and "metrics" in received_types and len(client._queue) == 0:
+                break
+            await asyncio.sleep(0.1)
+
+        assert client.is_authenticated is True
+        assert "metrics" in received_types
+        assert "auth" not in received_types
+        assert len(client._queue) == 0
+
+        await client.stop()
+    finally:
+        server.close()
+        await server.wait_closed()

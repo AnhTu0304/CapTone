@@ -275,6 +275,10 @@ export class TelemetryAggregatorService {
            OR p.name LIKE $4
          )
            AND p.deleted_at IS NULL
+           AND COALESCE(p.phase, '') <> 'Succeeded'
+           AND COALESCE(p.status, '') NOT IN ('Succeeded', 'Completed')
+           AND p.name NOT LIKE '%-rs-init%'
+           AND p.name NOT LIKE '%-init-%'
            AND (p.observed_at >= NOW() - INTERVAL '5 minutes' OR p.observed_at IS NULL)`;
       const queryParams: any[] = [serviceId, canonicalName, `${serviceId}-%`, `${canonicalName}-%`];
       if (clusterId) {

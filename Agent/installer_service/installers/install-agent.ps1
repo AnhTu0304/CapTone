@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # SelfHeal Agent Installer for Windows PowerShell
 # AI-Driven Proactive Self-Healing Infrastructure for SMEs
 # ==============================================================================
@@ -9,7 +9,7 @@ param (
     [string]$Token = "",
     [string]$Namespace = "selfheal-system",
     [string]$AgentImage = "",
-    [string]$EnableHealing = "false",
+    [string]$EnableHealing = "true",
     [switch]$NonInteractive
 )
 
@@ -295,6 +295,8 @@ metadata:
     app.kubernetes.io/name: selfheal-agent
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: selfheal-agent
@@ -361,11 +363,11 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

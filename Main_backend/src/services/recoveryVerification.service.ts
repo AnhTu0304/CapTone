@@ -219,6 +219,97 @@ export class RecoveryVerificationService {
   }
 
   /**
+   * Evaluate a 12-point (60s) post-action telemetry sequence without failing on a single
+   * isolated early settling-window spike (e.g., transient pod-drain latency during SCALE_REPLICAS),
+   * while failing closed on tail instability, health-check failure, 5xx errors, or repeated anomalies.
+   */
+  public static evaluateSequenceRecovery(
+    samples: ITelemetrySample[],
+    options?: { isDatabaseWorkload?: boolean; baselineRestartCount?: number }
+  ): {
+    healthy: boolean;
+    violations: string[];
+    avgLatencyMs: number;
+  } {
+    const seq = Array.isArray(samples) ? samples : [];
+    if (seq.length === 0) {
+      return {
+        healthy: false,
+        violations: ['Không có dữ liệu viễn trắc hậu kiểm'],
+        avgLatencyMs: 0,
+      };
+    }
+
+    const baseRestart =
+      options?.baselineRestartCount !== undefined
+        ? options.baselineRestartCount
+        : Number(seq[0]?.pod_restart_count ?? 0);
+
+    const sampleViolations: { index: number; reasons: string[]; sample: ITelemetrySample }[] = [];
+    let latencySum = 0;
+
+    for (let idx = 0; idx < seq.length; idx++) {
+      const sample = seq[idx];
+      latencySum += Number(sample.latency ?? 0);
+      const evalSample = this.evaluateSampleHealth(sample, {
+        isDatabaseWorkload: options?.isDatabaseWorkload,
+        baselineRestartCount: baseRestart,
+      });
+      if (!evalSample.healthy) {
+        sampleViolations.push({
+          index: idx,
+          reasons: evalSample.violations,
+          sample,
+        });
+      }
+    }
+
+    const avgLatencyMs = latencySum / seq.length;
+    const allViolations = sampleViolations.map(
+      (v) => `Sample ${v.index + 1}: ${v.reasons.join(', ')}`
+    );
+
+    if (sampleViolations.length === 0) {
+      return { healthy: true, violations: [], avgLatencyMs };
+    }
+
+    // Allow strictly 1 isolated early transient latency/CPU blip in >=6-sample verification window
+    // ONLY when tail stabilization samples (last 3 points) are 100% healthy and no hard fault occurred.
+    const tailStart = Math.max(0, seq.length - 3);
+    const hasTailViolation = sampleViolations.some((v) => v.index >= tailStart);
+    const hasHardFault = sampleViolations.some((v) =>
+      v.reasons.some(
+        (r) =>
+          r.includes('HTTP 5xx') ||
+          r.includes('Health Check') ||
+          r.includes('không khỏe mạnh') ||
+          r.includes('Ổ đĩa') ||
+          (r.includes('RAM cạn kiệt') && !options?.isDatabaseWorkload)
+      )
+    );
+
+    if (
+      seq.length >= 6 &&
+      sampleViolations.length === 1 &&
+      !hasTailViolation &&
+      !hasHardFault &&
+      avgLatencyMs < 600
+    ) {
+      return {
+        healthy: true,
+        violations: [],
+        avgLatencyMs,
+      };
+    }
+
+    return {
+      healthy: false,
+      violations: allViolations,
+      avgLatencyMs,
+    };
+  }
+
+  /**
    * Core Adaptive Recovery Verification Engine:
    * Progressive multi-stage verification (3 -> 6 -> 12 samples)
    */
