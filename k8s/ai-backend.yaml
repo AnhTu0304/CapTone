@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-backend-config
+  namespace: default
+  labels:
+    app: captone-ai-backend
+data:
+  PORT: "8000"
+  APP_ENV: "production"
+  AI_INTERNAL_HMAC_SECRET: "dev_only_ai_internal_hmac_secret_32_characters_long"
+  OPENAI_MODEL: "gpt-4o-mini"
+  OPENAI_TIMEOUT_SECONDS: "30"
+  GRU_MODEL_PATH: "saved_models/gru_model_8feature_6rick_v1.pth"
+  TRAFFIC_OVERLOAD_REQ_RATE: "40.0"
+  OTEL_ENABLED: "false"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: captone-ai-backend
+  namespace: default
+  labels:
+    app: captone-ai-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: captone-ai-backend
+  template:
+    metadata:
+      labels:
+        app: captone-ai-backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ai-backend
+          image: captone-ai-backend:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: ai-backend-config
+          env:
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: captone-ai-backend-service
+  namespace: default
+  labels:
+    app: captone-ai-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: captone-ai-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
