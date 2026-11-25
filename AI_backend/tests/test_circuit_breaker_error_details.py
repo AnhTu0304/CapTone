@@ -187,3 +187,73 @@ def test_three_tier_escalation_restart_to_replace_to_drain_or_no_action():
     assert rec_tier3_cb.action_parameters.circuit_breaker_tripped is True
     assert len(rec_tier3_cb.action_parameters.manual_playbook) == 3
     assert "sme-order-service-abc" in rec_tier3_cb.action_parameters.manual_playbook[0]
+
+
+def test_scale_replicas_respects_blocked_actions_and_circuit_breaker_when_not_underutilized():
+    from app.schemas.kubernetes import NodeConditions, NodeInfo, PodInfo
+
+    agent = RecommendationAgent()
+    conclusion = RCAConclusion(
+        cause_code="cpu_saturation",
+        result=RootCauseResult(
+            cause="CPU saturation",
+            confidence=0.85,
+            severity="HIGH",
+        ),
+        evidence=["CPU overloaded"],
+        explanation="Pods saturated",
+    )
+    k8s = KubernetesData(
+        namespace="test-lab",
+        workload_name="mongodb",
+        workload_type="StatefulSet",
+        desired_replicas=2,
+        available_replicas=2,
+        all_pods=[
+            PodInfo(pod_name="mongodb-0", status="Running", ready=True, cpu_usage_pct=90.0),
+            PodInfo(pod_name="mongodb-1", status="Running", ready=True, cpu_usage_pct=88.0),
+        ],
+        nodes=[
+            NodeInfo(
+                node_name="minikube-m02",
+                status="Ready",
+                conditions=NodeConditions(Ready=True),
+                free_memory_bytes=6 * 1024 * 1024 * 1024,
+            )
+        ],
+    )
+
+    # 1. SCALE_REPLICAS failed -> must escalate to RESTART_POD, not repeat SCALE_REPLICAS
+    hist_scale_failed = ActionHistoryContext(
+        consecutive_failures=1,
+        circuit_breaker_tripped=False,
+        blocked_actions=["SCALE_REPLICAS"],
+        history=[ActionHistoryItem(action="SCALE_REPLICAS", result="FAILED", failure_reason="403 Forbidden")],
+    )
+    rec_escalated = agent.recommend(
+        conclusion=conclusion,
+        kubernetes=k8s,
+        historical=HistoricalContext(),
+        previous_action="SCALE_REPLICAS",
+        previous_action_result="FAILED",
+        action_history=hist_scale_failed,
+    )
+    assert rec_escalated.action == "RESTART_POD"
+
+    # 2. consecutive_failures >= 3 / circuit_breaker_tripped with SCALE_REPLICAS & RESTART_POD blocked -> NO_ACTION (Circuit Breaker)
+    hist_cb = ActionHistoryContext(
+        consecutive_failures=3,
+        circuit_breaker_tripped=True,
+        blocked_actions=["SCALE_REPLICAS", "RESTART_POD"],
+        history=[ActionHistoryItem(action="RESTART_POD", result="FAILED", failure_reason="403 Forbidden")],
+    )
+    rec_cb = agent.recommend(
+        conclusion=conclusion,
+        kubernetes=k8s,
+        historical=HistoricalContext(),
+        previous_action="RESTART_POD",
+        previous_action_result="FAILED",
+        action_history=hist_cb,
+    )
+    assert rec_cb.action == "NO_ACTION"
+    assert rec_cb.action_parameters.circuit_breaker_tripped is True

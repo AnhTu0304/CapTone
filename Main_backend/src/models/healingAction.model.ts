@@ -856,7 +856,7 @@ export class HealingActionModel {
       }
 
       const attRes = await client.query(
-        `SELECT 1 FROM execution_attempts WHERE healing_action_id = $1 AND status IN ('COMPLETED', 'SUCCEEDED') LIMIT 1;`,
+        `SELECT 1 FROM execution_attempts WHERE healing_action_id = $1 AND status::text IN ('COMPLETED', 'SUCCEEDED') LIMIT 1;`,
         [actionId]
       );
       const hasCompletedAttempt = attRes.rows.length > 0;
@@ -1028,7 +1028,7 @@ export class HealingActionModel {
 
     const evidenceGuardSql =
       normalizedStatus === 'COMPLETED'
-        ? `AND EXISTS (SELECT 1 FROM execution_attempts ea WHERE ea.healing_action_id = h.id AND ea.status IN ('COMPLETED', 'SUCCEEDED'))
+        ? `AND EXISTS (SELECT 1 FROM execution_attempts ea WHERE ea.healing_action_id = h.id AND ea.status::text IN ('COMPLETED', 'SUCCEEDED'))
            AND EXISTS (SELECT 1 FROM recovery_verifications rv WHERE rv.healing_action_id = h.id AND rv.verification_result = true)`
         : '';
 
@@ -1858,7 +1858,7 @@ export class HealingActionModel {
     const summarySql = `
       SELECT 
         count(*) AS total_actions,
-        count(*) FILTER (WHERE h.execution_status IN ('COMPLETED', 'SUCCEEDED')) AS succeeded_actions,
+        count(*) FILTER (WHERE h.execution_status::text IN ('COMPLETED', 'SUCCEEDED')) AS succeeded_actions,
         count(*) FILTER (WHERE h.execution_status = 'FAILED') AS failed_actions,
         COALESCE(AVG(EXTRACT(EPOCH FROM (h.completed_at - h.started_at))) FILTER (WHERE h.completed_at IS NOT NULL AND h.started_at IS NOT NULL), 2.4) AS avg_duration_seconds
       FROM healing_actions h

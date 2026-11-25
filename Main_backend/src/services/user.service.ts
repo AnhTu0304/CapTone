@@ -449,7 +449,7 @@ export class UserService {
         const offset = (page - 1) * limit;
 
         const conditions: string[] = [
-            "(a.user_id = $1 OR (a.target_type = 'USER' AND a.target_id = $1))",
+            "(a.user_id = $1::uuid OR (a.target_type = 'USER' AND a.target_id::text = $1::text))",
             "(a.action NOT LIKE 'ACCESS_DENIED_%')",
             "(a.action NOT LIKE 'REMEDIATION_%' AND a.action NOT LIKE 'CIRCUIT_BREAKER_%' AND a.action NOT LIKE 'AUTONOMOUS_HEALING_%')"
         ];
@@ -486,7 +486,7 @@ export class UserService {
             'COALESCE(a.metadata->>\'cluster_name\', c.name, NULL) AS cluster_name ' +
             'FROM audit_logs a ' +
             'LEFT JOIN organizations o ON o.id = a.organization_id ' +
-            'LEFT JOIN clusters c ON (c.id::text = a.metadata->>\'cluster_id\' OR (a.resource_type = \'CLUSTER\' AND c.id = a.resource_id)) ' +
+            'LEFT JOIN clusters c ON (c.id::text = a.metadata->>\'cluster_id\' OR (a.resource_type = \'CLUSTER\' AND c.id::text = a.resource_id::text)) ' +
             'WHERE ' + whereSql + ' ' +
             'ORDER BY a.created_at DESC ' +
             'LIMIT $' + limitIndex + ' OFFSET $' + offsetIndex;

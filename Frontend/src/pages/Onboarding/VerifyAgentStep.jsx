@@ -306,7 +306,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
 
   // Câu lệnh Script cài đặt tự động 100% qua URL (PowerShell & Bash)
   const scriptCommand = `# Dành cho Windows (PowerShell - 1 Dòng lệnh tải và chạy trực tiếp):
-irm "${origin}/agent/install.ps1?token=${encodeURIComponent(effectiveToken)}" | iex
+& ([scriptblock]::Create((irm "${origin}/agent/install.ps1?token=${encodeURIComponent(effectiveToken)}")))
 
 # Dành cho Linux / macOS (Bash - 1 Dòng lệnh tải và chạy trực tiếp):
 curl -fsSL "${origin}/agent/install.sh?token=${encodeURIComponent(effectiveToken)}" | bash`;

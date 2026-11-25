@@ -5,7 +5,12 @@ import { selfHealingService } from '../../../services/selfHealingService';
 import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
 import { dashboardStatisticsService } from '../../../services/dashboardStatisticsService';
-import { extractActiveK8sServices } from '../../../utils/k8sServiceFilter';
+import {
+  doesEntityMatchServiceTarget,
+  doesPodMatchServiceTarget,
+  doesRecordMatchServiceTarget,
+  extractActiveK8sServices,
+} from '../../../utils/k8sServiceFilter';
 import AIPipelineFlowCanvas from '../../../components/dashboard/ai/AIPipelineFlowCanvas';
 import {
   Server,
@@ -191,6 +196,8 @@ export const OverviewPage = () => {
     if (!isClusterOnline) return [];
     return extractActiveK8sServices(registeredWorkloads);
   }, [isClusterOnline, registeredWorkloads]);
+  const availableWorkloadsRef = useRef([]);
+  availableWorkloadsRef.current = availableWorkloads;
 
   // Khóa chặt dịch vụ đang chọn ngay khi danh sách workload sẵn sàng (ưu tiên dịch vụ đã lưu trong localStorage)
   useEffect(() => {
@@ -433,24 +440,16 @@ export const OverviewPage = () => {
 
             const tLower = (currentServiceTarget || '').toLowerCase().trim();
             if (!tLower) return;
+            const knownServices = availableWorkloadsRef.current;
             const matchingInc =
-              allList.find((inc) => {
-                const fields = [inc.target_name, inc.service_id, inc.workload_name, inc.title];
-                return (
+              allList.find(
+                (inc) =>
                   String(inc.status || '').toUpperCase() === 'OPEN' &&
-                  fields.some((f) => {
-                    const n = normalizeServiceName(String(f || '')).toLowerCase();
-                    return n === tLower || n.startsWith(`${tLower}-`) || n.endsWith(` on ${tLower}`) || n.endsWith(` trên ${tLower}`);
-                  })
-                );
-              }) ||
-              allList.find((inc) => {
-                const fields = [inc.target_name, inc.service_id, inc.workload_name, inc.title];
-                return fields.some((f) => {
-                  const n = normalizeServiceName(String(f || '')).toLowerCase();
-                  return n === tLower || n.startsWith(`${tLower}-`) || n.endsWith(` on ${tLower}`) || n.endsWith(` trên ${tLower}`);
-                });
-              });
+                  doesRecordMatchServiceTarget(inc, tLower, knownServices)
+              ) ||
+              allList.find((inc) =>
+                doesRecordMatchServiceTarget(inc, tLower, knownServices)
+              );
 
             if (matchingInc?.id) {
               aiService
@@ -736,33 +735,20 @@ export const OverviewPage = () => {
   // Dự báo mới nhất ĐÚNG của Service đang chọn (tuyệt đối không fallback sang service khác!)
   const displaySelectedPrediction = useMemo(() => {
     if (!predictions || predictions.length === 0) return null;
-    const targetLower = (currentServiceTarget || '').toLowerCase();
-    const found = predictions.find((p) => {
-      const wl = normalizeServiceName(p.workload_name || p.service_id).toLowerCase();
-      return wl === targetLower || wl.startsWith(`${targetLower}-`);
-    }) || null;
+    const knownServices = availableWorkloadsRef.current;
+    const found =
+      predictions.find((p) =>
+        doesEntityMatchServiceTarget(
+          p.workload_name || p.service_id,
+          currentServiceTarget,
+          knownServices
+        )
+      ) || null;
 
     if (!found) return null;
 
-    // Kiểm tra xem dịch vụ có sự cố nào ĐANG MỞ hay không
-    const matchesTarget = (raw) => {
-      if (!raw || !targetLower) return false;
-      const normalized = normalizeServiceName(String(raw)).toLowerCase();
-      if (!normalized) return false;
-      if (normalized === targetLower) return true;
-      // Tránh việc target 'prometheus' match luôn 'prometheus-node-exporter', 'prometheus-kube-state-metrics'
-      if (targetLower === 'prometheus' && (normalized.includes('node-exporter') || normalized.includes('operator') || normalized.includes('state-metrics'))) return false;
-      if (normalized.startsWith(`${targetLower}-`)) return true;
-      if (normalized.endsWith(` on ${targetLower}`) || normalized.endsWith(` trên ${targetLower}`)) return true;
-      return false;
-    };
-
-    const serviceIncidents = (incidents || []).filter(
-      (inc) =>
-        matchesTarget(inc.target_name) ||
-        matchesTarget(inc.service_id) ||
-        matchesTarget(inc.workload_name) ||
-        matchesTarget(inc.title)
+    const serviceIncidents = (incidents || []).filter((inc) =>
+      doesRecordMatchServiceTarget(inc, currentServiceTarget, knownServices)
     );
     const hasOpenIncidents = serviceIncidents.some((inc) =>
       ['OPEN', 'INVESTIGATING', 'AWAITING_APPROVAL'].includes(String(inc.status || '').toUpperCase())
@@ -927,39 +913,10 @@ export const OverviewPage = () => {
     const totalClusterNodes =
       Array.isArray(clusterInfo?.nodes) && clusterInfo.nodes.length > 0 ? clusterInfo.nodes.length : 1;
 
-    // Tìm các Pod thực tế thuộc dịch vụ đang chọn từ clusterInfo.pods (hỗ trợ toàn bộ 11 workloads K8s)
+    // Tìm các Pod thực tế thuộc dịch vụ đang chọn từ clusterInfo.pods
     const matchedPods = (clusterInfo?.pods || []).filter((p) => {
       if (!p || !p.name) return false;
-      const podName = String(p.name).toLowerCase();
-      const normalized = normalizeServiceName(String(p.name)).toLowerCase();
-      const svcId = String(p.service_id || '').toLowerCase();
-      const appLabel = String(p.labels?.app || '').toLowerCase();
-      const k8sApp = String(p.labels?.['k8s-app'] || '').toLowerCase();
-      const k8sName = String(p.labels?.['app.kubernetes.io/name'] || '').toLowerCase();
-
-      let isMatch = false;
-      if (targetLower === 'prometheus') {
-        // Chỉ khớp máy chủ Prometheus, tuyệt đối KHÔNG gộp node-exporter, operator hay state-metrics
-        isMatch = podName.includes('prometheus-prometheus-kube-prometheus-prometheus') ||
-                  (podName.startsWith('prometheus-') && !podName.includes('node-exporter') && !podName.includes('operator') && !podName.includes('state-metrics'));
-      } else if (targetLower === 'prometheus-node-exporter') {
-        isMatch = podName.includes('node-exporter');
-      } else if (targetLower === 'kube-state-metrics' || targetLower === 'prometheus-kube-state-metrics') {
-        isMatch = podName.includes('kube-state-metrics');
-      } else if (targetLower === 'kube-prometheus-stack-operator' || targetLower === 'prometheus-kube-prometheus-operator') {
-        isMatch = podName.includes('prometheus-operator') || podName.includes('stack-operator');
-      } else {
-        isMatch =
-          normalized === targetLower ||
-          normalized.startsWith(`${targetLower}-`) ||
-          podName.startsWith(`${targetLower}-`) ||
-          svcId === targetLower ||
-          appLabel === targetLower ||
-          k8sApp === targetLower ||
-          k8sName === targetLower ||
-          (targetLower === 'coredns' && (podName.startsWith('coredns') || k8sApp === 'kube-dns')) ||
-          (targetLower === 'opentelemetry-collector' && podName.startsWith('otel-collector'));
-      }
+      const isMatch = doesPodMatchServiceTarget(p, targetLower, availableWorkloads);
 
       const isTerminating =
         String(p.status || '').toLowerCase() === 'terminating' ||
@@ -1003,23 +960,15 @@ export const OverviewPage = () => {
       totalClusterNodes,
       nodeNames: activeNodeNames,
     };
-  }, [isClusterOnline, batchProgressMap, currentServiceTarget, clusterInfo, nodeTelemetry]);
+  }, [isClusterOnline, batchProgressMap, currentServiceTarget, clusterInfo, nodeTelemetry, availableWorkloads]);
 
   // Tổng hợp dữ liệu thực tế CÔ LẬP NGHIÊM NGẶT theo ĐÚNG dịch vụ đang chọn (tuyệt đối không lẫn dữ liệu dịch vụ khác!)
   const pipelineContext = useMemo(() => {
     const targetLower = (currentServiceTarget || '').toLowerCase().trim();
+    const knownServices = availableWorkloadsRef.current;
 
-    const matchesTarget = (raw) => {
-      if (!raw || !targetLower) return false;
-      const normalized = normalizeServiceName(String(raw)).toLowerCase();
-      if (!normalized) return false;
-      if (normalized === targetLower) return true;
-      // Tránh việc target 'prometheus' match luôn 'prometheus-node-exporter', 'prometheus-kube-state-metrics'
-      if (targetLower === 'prometheus' && (normalized.includes('node-exporter') || normalized.includes('operator') || normalized.includes('state-metrics'))) return false;
-      if (normalized.startsWith(`${targetLower}-`)) return true;
-      if (normalized.endsWith(` on ${targetLower}`) || normalized.endsWith(` trên ${targetLower}`)) return true;
-      return false;
-    };
+    const matchesTarget = (raw) =>
+      doesEntityMatchServiceTarget(raw, targetLower, knownServices);
 
     const resolveActionLabel = (act) =>
       act?.action_type_name ||
@@ -1030,12 +979,8 @@ export const OverviewPage = () => {
       act?.action ||
       'Hành động tự phục hồi';
 
-    const serviceIncidents = (incidents || []).filter(
-      (inc) =>
-        matchesTarget(inc.target_name) ||
-        matchesTarget(inc.service_id) ||
-        matchesTarget(inc.workload_name) ||
-        matchesTarget(inc.title)
+    const serviceIncidents = (incidents || []).filter((inc) =>
+      doesRecordMatchServiceTarget(inc, targetLower, knownServices)
     );
     const openServiceIncidents = serviceIncidents.filter((inc) =>
       ['OPEN', 'INVESTIGATING', 'AWAITING_APPROVAL'].includes(String(inc.status || '').toUpperCase())
@@ -1053,10 +998,13 @@ export const OverviewPage = () => {
     const serviceRecs = (recommendations || []).filter(
       (rec) =>
         (targetIncident?.id && rec.incident_id === targetIncident.id) ||
-        (matchesTarget(rec.target_name) ||
-          matchesTarget(rec.service_id) ||
-          matchesTarget(rec.workload_name) ||
-          matchesTarget(rec.incident_title))
+        doesRecordMatchServiceTarget(
+          rec,
+          targetLower,
+          knownServices,
+          ['service_id', 'workload_name', 'target_name'],
+          ['incident_title']
+        )
     );
     const latestRecommendation = serviceRecs[0] || null;
 
@@ -1084,11 +1032,14 @@ export const OverviewPage = () => {
     const serviceActions = (healingActions || [])
       .filter((act) => {
         const matches =
-          matchesTarget(act.target_name) ||
-          matchesTarget(act.service_id) ||
-          matchesTarget(act.workload_name) ||
-          matchesTarget(act.result?.target) ||
-          (activeOpenIncident?.id && act.incident_id === activeOpenIncident.id);
+          (activeOpenIncident?.id && act.incident_id === activeOpenIncident.id) ||
+          doesRecordMatchServiceTarget(
+            act,
+            targetLower,
+            knownServices,
+            ['service_id', 'workload_name', 'target_name', 'result.target'],
+            []
+          );
         if (!matches) return false;
         const actTs = act.completed_at || act.started_at || act.created_at;
         const actTsMs = actTs ? new Date(actTs).getTime() : 0;
@@ -1109,11 +1060,14 @@ export const OverviewPage = () => {
       .filter(
         (a) =>
           String(a.status || a.approval_status || '').toUpperCase() === 'PENDING' &&
-          (matchesTarget(a.target_name) ||
-            matchesTarget(a.service_id) ||
-            matchesTarget(a.workload_name) ||
-            matchesTarget(a.healing_action?.target_name) ||
-            (activeOpenIncident?.id && a.incident_id === activeOpenIncident.id))
+          ((activeOpenIncident?.id && a.incident_id === activeOpenIncident.id) ||
+            doesRecordMatchServiceTarget(
+              a,
+              targetLower,
+              knownServices,
+              ['service_id', 'workload_name', 'target_name', 'healing_action.target_name'],
+              []
+            ))
       )
       .map((a) => ({
         ...a,

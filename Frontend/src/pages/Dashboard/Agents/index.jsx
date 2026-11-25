@@ -141,7 +141,7 @@ export const AgentsPage = () => {
     return window.location.origin;
   };
   const originUrl = getInstallerOrigin();
-  const psCommand = `irm ${originUrl}/agent/install.ps1 | iex`;
+  const psCommand = `& ([scriptblock]::Create((irm ${originUrl}/agent/install.ps1)))`;
   const bashCommand = `curl -sSL ${originUrl}/agent/install.sh | bash`;
   const helmCommand = `helm repo add selfheal ${originUrl}/agent/charts
 helm upgrade --install selfheal-agent selfheal/selfheal-agent \\

@@ -378,6 +378,11 @@ export class AiPredictionModel {
 
         e.name AS environment_name,
 
+        COALESCE(
+          e.organization_id,
+          (SELECT inc.organization_id FROM incidents inc WHERE inc.prediction_id = p.id AND inc.organization_id IS NOT NULL LIMIT 1)
+        ) AS organization_id,
+
         p.cluster_id,
 
         c.name AS cluster_name,
@@ -459,6 +464,11 @@ export class AiPredictionModel {
         p.environment_id,
 
         e.name AS environment_name,
+
+        COALESCE(
+          e.organization_id,
+          (SELECT inc.organization_id FROM incidents inc WHERE inc.prediction_id = p.id AND inc.organization_id IS NOT NULL LIMIT 1)
+        ) AS organization_id,
 
         p.cluster_id,
 

@@ -460,9 +460,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     parseAnalysisPayload(incident?.analysis_result ?? incident?.analysisResult)
   );
   const [predictionInputs, setPredictionInputs] = useState([]);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(() =>
-    Boolean(incident?.rawId || incident?.id)
-  );
   const [expandedSymptomKeys, setExpandedSymptomKeys] = useState(new Set());
   const [isExpandedEvidenceList, setIsExpandedEvidenceList] = useState(false);
   const [expandedSymptoms, setExpandedSymptoms] = useState({});
@@ -528,13 +525,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     setParsedAnalysis(parseAnalysisPayload(incident?.analysis_result ?? incident?.analysisResult));
 
     if (!targetId) {
-      setIsLoadingDetail(false);
       return () => {
         isMounted = false;
       };
     }
 
-    setIsLoadingDetail(true);
     const initialPredId = incident?.predictionId || incident?.prediction_id;
 
     (async () => {
@@ -579,23 +574,23 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           }
         }
 
-        if (Array.isArray(initialInputs)) {
+        if (Array.isArray(initialInputs) && initialInputs.length > 0) {
           setPredictionInputs(initialInputs);
         } else {
-          const predId = detailData?.prediction_id || initialPredId;
-          if (predId) {
+          const predId = detailData?.prediction_id;
+          if (predId && predId !== initialPredId) {
             try {
               const inputs = await aiService.getPredictionInputs(predId);
               if (isMounted && Array.isArray(inputs)) {
                 setPredictionInputs(inputs);
               }
             } catch {}
+          } else if (Array.isArray(initialInputs)) {
+            setPredictionInputs(initialInputs);
           }
         }
       } catch (err) {
         console.warn('[RootCauseModal] Lỗi nạp chi tiết:', err);
-      } finally {
-        if (isMounted) setIsLoadingDetail(false);
       }
     })();
 
@@ -1831,7 +1826,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 </span>
                 <span style={{ color: '#CBD5E1' }}>&bull;</span>
                 <span>
-                  Cụm: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{isLoadingDetail ? 'Đang tải...' : (clusterDisplayName || 'Chưa xác định')}</strong>
+                  Cụm: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{clusterDisplayName || 'Chưa xác định'}</strong>
                 </span>
                 {detectedEngine && detectedEngine !== 'Chưa xác định' && (
                   <>
@@ -2013,32 +2008,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
         {/* Modal Body */}
         <div style={{ padding: '0 24px 16px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', flex: '1 1 auto' }}>
-          {isLoadingDetail ? (
-            <div
-              data-testid="rca-loading-state"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                padding: '64px 20px',
-                color: '#475569',
-                textAlign: 'center',
-                flex: '1 1 auto',
-              }}
-            >
-              <RefreshCw size={24} color="#059669" style={{ animation: 'rcaSpin 1s linear infinite' }} />
-              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                Đang tải dữ liệu phân tích RCA...
-              </div>
-              <div style={{ fontSize: '0.78125rem', color: '#64748B', maxWidth: '420px', lineHeight: 1.5 }}>
-                Đang đồng bộ chi tiết sự cố, bằng chứng xác thực và chuỗi viễn trắc đầu vào từ cơ sở dữ liệu.
-              </div>
-            </div>
-          ) : (
-            <>
-
           {/* TAB 1: OVERVIEW & PLAYBOOK */}
           {activeTab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '14px' }}>
@@ -2585,13 +2554,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                gap: '8px',
+                                gap: '10px',
                                 padding: '6px 0',
                                 position: 'relative',
                                 zIndex: 2,
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, flexWrap: 'wrap', rowGap: '4px' }}>
                                 <div
                                   style={{
                                     width: '22px',
@@ -2609,7 +2578,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 >
                                   {st.stepIndex}
                                 </div>
-                                <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#0F172A', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#0F172A', whiteSpace: 'normal', lineHeight: 1.35 }}>
                                   {st.actionName}
                                 </span>
                                 <span
@@ -2622,12 +2591,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                     color: st.statusBadge.color,
                                     border: `1px solid ${st.statusBadge.border}`,
                                     whiteSpace: 'nowrap',
+                                    flexShrink: 0,
                                   }}
                                 >
                                   {st.statusBadge.label}
                                 </span>
                               </div>
-                              <span style={{ fontSize: '0.68rem', color: '#64748B', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>
+                              <span style={{ fontSize: '0.68rem', color: '#64748B', flexShrink: 0, whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>
                                 {st.timeStr}
                               </span>
                             </div>
@@ -3140,7 +3110,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         color: '#64748B',
                       }}
                     >
-                      Chưa ghi nhận chuỗi viễn trắc đầu vào cho sự cố này trong cơ sở dữ liệu.
+                      Chưa ghi nhận chuỗi viễn trắc đầu vào cho sự cố này.
                     </div>
                   )}
                   {metricSummary && (
@@ -3259,8 +3229,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               </div>
             </div>
           )}
-            </>
-          )}
         </div>
 
         {/* Modal Footer */}
@@ -3292,7 +3260,6 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
-              disabled={isLoadingDetail}
               onClick={() => handleCopyText(
                 parsedAnalysis || {
                   request_id: requestId,
@@ -3324,8 +3291,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 fontSize: '0.78125rem',
                 fontWeight: 600,
                 color: '#475569',
-                cursor: isLoadingDetail ? 'not-allowed' : 'pointer',
-                opacity: isLoadingDetail ? 0.6 : 1,
+                cursor: 'pointer',
               }}
               title="Sao chép toàn bộ payload JSON dữ liệu phân tích RCA phục vụ kỹ thuật"
             >
@@ -3337,7 +3303,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               <button
                 type="button"
                 onClick={handleConfirmResolve}
-                disabled={isResolvingIncident || isLoadingDetail}
+                disabled={isResolvingIncident}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -3349,8 +3315,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   fontSize: '0.8125rem',
                   fontWeight: 700,
                   color: '#FFFFFF',
-                  cursor: isResolvingIncident || isLoadingDetail ? 'not-allowed' : 'pointer',
-                  opacity: isResolvingIncident || isLoadingDetail ? 0.7 : 1,
+                  cursor: isResolvingIncident ? 'not-allowed' : 'pointer',
+                  opacity: isResolvingIncident ? 0.7 : 1,
                   boxShadow: '0 1px 3px rgba(220, 38, 38, 0.25)',
                   transition: 'all 0.15s ease',
                 }}

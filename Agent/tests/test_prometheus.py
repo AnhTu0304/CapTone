@@ -67,3 +67,37 @@ async def test_metrics_manager_aggregation() -> None:
     assert m.http_5xx_rate == 0.02
     assert m.replica_count == 2
     assert m.pod_restart_count == 1
+
+
+@pytest.mark.asyncio
+async def test_metrics_manager_skips_succeeded_job_pods() -> None:
+    mock_custom = MagicMock()
+    mock_custom.list_namespaced_custom_object.return_value = {"items": []}
+
+    mock_prom = MagicMock(spec=PrometheusCollector)
+    mock_prom.collect_http_metrics = AsyncMock(return_value={})
+
+    manager = MetricsManager(mock_custom, mock_prom)
+    pods = [
+        PodSummary(
+            name="mongodb-rs-init-pzx5f",
+            namespace="test-lab",
+            uid="uid-init-1",
+            service_id="mongodb-init",
+            phase="Succeeded",
+            restarts=0,
+        ),
+        PodSummary(
+            name="mongodb-0",
+            namespace="test-lab",
+            uid="uid-mongo-0",
+            service_id="mongodb",
+            phase="Running",
+            restarts=0,
+        ),
+    ]
+
+    metrics = await manager.aggregate_metrics(pods, {"mongodb": 2}, "test-lab")
+
+    assert [m.service_id for m in metrics] == ["mongodb"]
+

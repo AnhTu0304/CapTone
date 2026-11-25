@@ -125,7 +125,7 @@ describe('RootCauseModal', () => {
     jest.clearAllMocks();
   });
 
-  it('prevents async text-flicker by showing loading state until detail and telemetry resolve', async () => {
+  it('renders immediately without blocking loading state even while detail and telemetry resolve asynchronously', async () => {
     const evDeferred = createDeferred();
     const detailDeferred = createDeferred();
     const inputsDeferred = createDeferred();
@@ -149,21 +149,18 @@ describe('RootCauseModal', () => {
       />
     );
 
-    expect(screen.getByTestId('rca-loading-state')).toBeInTheDocument();
-    expect(screen.queryByText(/Báo cáo SRE \(Tóm tắt\)/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Cảnh báo học sâu GRU/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText('Đang tải...').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('rca-loading-state')).not.toBeInTheDocument();
+    expect(screen.queryByText('Đang tải...')).not.toBeInTheDocument();
 
     evDeferred.resolve([]);
     detailDeferred.resolve(INC_DD0CCA2C_DETAIL);
     inputsDeferred.resolve(SAMPLE_TIMESTEPS);
 
     await waitFor(() => {
-      expect(screen.queryByTestId('rca-loading-state')).not.toBeInTheDocument();
+      expect(screen.getByText('fyuyu')).toBeInTheDocument();
     });
 
     expect(screen.getByText(/CPU đỉnh 0\.86%/)).toBeInTheDocument();
-    expect(screen.getAllByText(/Rủi ro: TRUNG BÌNH/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Cảnh báo học sâu GRU/i)).not.toBeInTheDocument();
   });
 

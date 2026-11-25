@@ -1333,7 +1333,7 @@ export class HealingActionService {
       const params: any[] = [orgId];
 
       if (clusterId && clusterId !== 'all') {
-        query += ` AND (cluster_id = $2::uuid OR cluster_id IS NULL) ORDER BY cluster_id NULLS LAST LIMIT 1`;
+        query += ` AND (cluster_id::text = $2::text OR cluster_id IS NULL) ORDER BY cluster_id NULLS LAST LIMIT 1`;
         params.push(clusterId);
       } else {
         query += ` ORDER BY cluster_id NULLS LAST LIMIT 1`;

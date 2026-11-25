@@ -3,6 +3,7 @@ import {
   RuleEvaluationResult,
   ProposedHealingAction,
 } from '../schemas/ruleEngine.schema';
+import { isDatabaseCacheWorkload } from '../utils/systemServiceFilter';
 
 export interface RuleThresholds {
   cpuScaleThreshold: number;
@@ -19,7 +20,7 @@ const DEFAULT_THRESHOLDS: RuleThresholds = {
   cpuScaleThreshold: 80.0,
   latencyScaleThreshold: 200.0,
   trafficRateThreshold: 70.0,
-  trafficMaxReplicas: 3,
+  trafficMaxReplicas: 4,
   ramCriticalThreshold: 85.0,
   podRestartThreshold: 3,
   http5xxThreshold: 5.0,
@@ -96,10 +97,7 @@ export class RuleEngineService {
 
     // Rule 3: Memory Pressure / OOM
     const hasOom = k8sText.includes('oomkilled') || k8sText.includes('out of memory');
-    const isDbCacheWorkload = Boolean(
-      service_id &&
-      /^(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd|cassandra|clickhouse|neo4j|couchdb|scylladb|database|db$|.*[-_]db)/i.test(service_id.trim())
-    );
+    const isDbCacheWorkload = isDatabaseCacheWorkload(service_id);
 
     if (hasOom) {
       triggeredRules.push(

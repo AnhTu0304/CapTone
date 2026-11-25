@@ -140,6 +140,7 @@ async def analyze_root_cause(
             payload.security,
             payload.security_policy,
             previous_rca_root_cause=payload.previous_rca_root_cause,
+            metrics=payload.metrics,
         )
 
         if openai_rca_service is not None:

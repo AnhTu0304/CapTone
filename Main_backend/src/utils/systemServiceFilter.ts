@@ -49,3 +49,17 @@ export function isExcludedSystemService(rawName?: string | null): boolean {
   // Option 3: Mở toàn bộ, không loại trừ bất kỳ dịch vụ/workload nào trên cụm K8s
   return false;
 }
+
+const DATABASE_WORKLOAD_PATTERN =
+  /^(?:mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd|cassandra|clickhouse|neo4j|couchdb|scylladb|database|db$|.*[-_]db)/i;
+
+/**
+ * Nhận diện workload cơ sở dữ liệu có cơ chế cấp phát RAM làm bộ nhớ đệm (WiredTiger / Buffer Pool).
+ * Loại trừ các Job khởi tạo một lần như mongodb-init.
+ */
+export function isDatabaseCacheWorkload(serviceName?: string | null): boolean {
+  if (!serviceName || typeof serviceName !== 'string') return false;
+  const trimmed = serviceName.trim();
+  if (!trimmed || /-init\b/i.test(trimmed)) return false;
+  return DATABASE_WORKLOAD_PATTERN.test(trimmed);
+}

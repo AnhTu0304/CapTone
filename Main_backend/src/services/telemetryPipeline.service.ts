@@ -409,7 +409,7 @@ export class TelemetryPipelineService {
            AND (
              (h.execution_status = 'RUNNING' AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED')
               AND COALESCE((h.result->>'agent_completed_at')::timestamptz, h.started_at, NOW()) <= NOW() - interval '30 seconds')
-             OR (h.execution_status IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at IS NOT NULL AND h.completed_at <= NOW() - interval '30 seconds' AND h.completed_at >= NOW() - interval '60 minutes')
+             OR (h.execution_status::text IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at IS NOT NULL AND h.completed_at <= NOW() - interval '30 seconds' AND h.completed_at >= NOW() - interval '60 minutes')
            )
            AND (
              LOWER(COALESCE(h.target_name, '')) = ANY($1)
@@ -498,7 +498,7 @@ export class TelemetryPipelineService {
            AND NOT EXISTS (
              SELECT 1 FROM healing_actions ha
              WHERE ha.incident_id = i.id
-               AND ha.execution_status IN ('COMPLETED', 'SUCCEEDED')
+               AND ha.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
                AND ha.completed_at > NOW() - interval '30 seconds'
            )
            AND NOT EXISTS (
@@ -516,7 +516,7 @@ export class TelemetryPipelineService {
                  SELECT 1 FROM healing_actions ha_win
                  WHERE ha_win.incident_id = i.id
                    AND ha_win.completed_at > ha_fail.completed_at
-                   AND ha_win.execution_status IN ('COMPLETED', 'SUCCEEDED')
+                   AND ha_win.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
                )
            )
          RETURNING i.id, i.title, i.target_name;`,
@@ -724,13 +724,23 @@ export class TelemetryPipelineService {
          WHERE e.organization_id = $5::uuid
            AND (
              LOWER(COALESCE(h.target_name, '')) = ANY($1)
-             OR ($4::uuid IS NOT NULL AND h.target_id = $4::uuid)
+             OR ($4::text IS NOT NULL AND h.target_id::text = $4::text)
            )
-           AND (h.action_type_id = $2 OR h.execution_status IN ('PENDING', 'RUNNING') OR (h.execution_status IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at >= NOW() - interval '35 seconds'))
+           AND (h.action_type_id = $2 OR h.execution_status::text IN ('PENDING', 'RUNNING') OR (h.execution_status::text IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at >= NOW() - interval '35 seconds'))
            AND (
              (h.approval_status = 'PENDING' AND h.execution_status = 'PENDING')
              OR (h.execution_status = 'RUNNING')
-             OR (h.completed_at >= NOW() - ($3 || ' seconds')::interval)
+             OR (
+               NOT (
+                 h.execution_status = 'FAILED'
+                 AND EXISTS (
+                   SELECT 1 FROM recovery_verifications rv
+                   WHERE rv.healing_action_id = h.id AND rv.verification_result = false
+                 )
+                 AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.started_at, h.created_at) < NOW() - interval '45 seconds'
+               )
+               AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.completed_at) >= NOW() - ($3 || ' seconds')::interval
+             )
            )
          ORDER BY h.created_at DESC 
          LIMIT 1;`,
@@ -863,7 +873,7 @@ export class TelemetryPipelineService {
                OR LOWER(COALESCE(ha.target_name, '')) = LOWER($2)
            )
            AND ha.created_at >= NOW() - ($3 || ' minutes')::interval
-           AND ha.execution_status IN ('RUNNING', 'SUCCEEDED', 'COMPLETED', 'PENDING');`,
+           AND ha.execution_status::text IN ('RUNNING', 'SUCCEEDED', 'COMPLETED', 'PENDING');`,
           [targetNamespace, canonicalTargetName, restartWindowMin]
         );
         const alreadyAffected = parseInt(recentInterventionsRes.rows[0]?.affected_count || '0', 10);

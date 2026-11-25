@@ -30,7 +30,7 @@ export const InstallationCodeBlock = ({
   const origin = getOrigin();
 
   const powershellCode = `# Cài đặt tự động SelfHeal Agent qua link chính thức (1-Liner PowerShell):
-irm "${origin}/agent/install.ps1?token=${encodeURIComponent(effectiveToken)}" | iex`;
+& ([scriptblock]::Create((irm "${origin}/agent/install.ps1?token=${encodeURIComponent(effectiveToken)}")))`;
 
   const bashCode = `# Cài đặt tự động SelfHeal Agent qua link chính thức (1-Liner cURL):
 curl -fsSL "${origin}/agent/install.sh?token=${encodeURIComponent(effectiveToken)}" | bash`;

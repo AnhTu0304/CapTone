@@ -28,4 +28,7 @@ backups/
 *.srl
 *.enc
 *.sha256
+*.pub
+sangfram*
+id_*
 k8s/secrets.local.yaml

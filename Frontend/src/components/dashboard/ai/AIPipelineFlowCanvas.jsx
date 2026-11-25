@@ -1641,13 +1641,25 @@ export const AIPipelineFlowCanvas = ({
     if (id === 'stage:verify') {
       const timelineRows =
         actionTimeline.length > 0
-          ? actionTimeline.slice(-4).map((step) => ({
-              label: `Bước #${step.stepIndex}: ${step.actionLabelVi}`,
-              value: step.verdictLabel,
-              subValue: step.timeStr,
-              highlight: step.isFailedOrUnrecovered,
-              isRecovered: step.isVerifiedRecovered,
-            }))
+          ? actionTimeline.slice(-4).map((step) => {
+              const failureReason = step.isFailedOrUnrecovered
+                ? String(
+                    step.error_message ||
+                      step.result?.error ||
+                      step.verification?.verification_details?.message ||
+                      step.verification_details?.message ||
+                      ''
+                  ).trim()
+                : '';
+              const shortReason = failureReason.length > 95 ? `${failureReason.slice(0, 92)}...` : failureReason;
+              return {
+                label: `Bước #${step.stepIndex}: ${step.actionLabelVi}`,
+                value: step.verdictLabel,
+                subValue: shortReason ? `${step.timeStr} • ${shortReason}` : step.timeStr,
+                highlight: step.isFailedOrUnrecovered,
+                isRecovered: step.isVerifiedRecovered,
+              };
+            })
           : [
               { label: 'Số hành động', value: '0 hành động (Hệ thống ổn định)' },
               { label: 'Trạng thái dịch vụ', value: openServiceIncidentsCount > 0 ? 'Đang có sự cố mở' : 'Ổn định (HEALTHY)' },
@@ -4148,7 +4160,7 @@ export const AIPipelineFlowCanvas = ({
                       {actionTimeline.slice(-3).map((step) => (
                         <div
                           key={step.id}
-                          title={`${step.actionLabelVi} • ${step.verdictLabel} (${step.timeStr})`}
+                          title={`${step.actionLabelVi} • ${step.verdictLabel} (${step.timeStr})${step.isFailedOrUnrecovered && (step.error_message || step.result?.error) ? ` — ${step.error_message || step.result?.error}` : ''}`}
                           style={{
                             padding: '4px 6px',
                             borderRadius: '7px',

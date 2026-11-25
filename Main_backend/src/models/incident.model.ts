@@ -306,7 +306,7 @@ export class IncidentModel {
           SELECT count(*)::int
           FROM healing_actions ha_succ_cnt
           WHERE ha_succ_cnt.incident_id = i.id
-            AND ha_succ_cnt.execution_status IN ('COMPLETED', 'SUCCEEDED')
+            AND ha_succ_cnt.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
             AND NOT EXISTS (
               SELECT 1 FROM recovery_verifications rv_sf
               WHERE rv_sf.healing_action_id = ha_succ_cnt.id
@@ -524,7 +524,7 @@ export class IncidentModel {
           SELECT count(*)::int
           FROM healing_actions ha_succ_cnt
           WHERE ha_succ_cnt.incident_id = i.id
-            AND ha_succ_cnt.execution_status IN ('COMPLETED', 'SUCCEEDED')
+            AND ha_succ_cnt.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
             AND NOT EXISTS (
               SELECT 1 FROM recovery_verifications rv_sf
               WHERE rv_sf.healing_action_id = ha_succ_cnt.id
@@ -658,7 +658,19 @@ export class IncidentModel {
              WHERE execution_status = 'RUNNING' 
                AND COALESCE(result->>'agent_status', '') NOT IN ('COMPLETED', 'SUCCEEDED')
                AND COALESCE(started_at, created_at) < NOW() - INTERVAL '60 seconds'
-               AND (incident_id = $1 OR ($2::text IS NOT NULL AND (target_name = $2 OR target_name ILIKE $2 || '%')));`,
+               AND (
+                 incident_id = $1
+                 OR (
+                   $2::text IS NOT NULL
+                   AND (
+                     target_name = $2
+                     OR target_name ~* (
+                       '^' || regexp_replace($2, '([.^$*+?()\\[\\]{}|\\\\])', '\\\\\\1', 'g')
+                       || '(-[0-9]+|-(?=.*[0-9])[a-z0-9]{4,12}-[a-z0-9]{2,5}|-(?=.*[0-9])[a-z0-9]{4,6})$'
+                     )
+                   )
+                 )
+               );`,
             [row.id, targetServiceFilter]
           );
         } catch (reconcileErr) {

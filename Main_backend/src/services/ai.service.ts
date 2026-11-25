@@ -12,12 +12,14 @@ import {
   EnvironmentModel,
   OrganizationModel,
 } from '../models';
+import { HealingActionModel } from '../models/healingAction.model';
 import {
   injectTraceContext,
   recordExternalCall,
   withBackendSpan,
 } from '../telemetry/metrics';
 import { buildAiInternalAuthHeaders } from '../utils/internalAuth';
+import { isDatabaseCacheWorkload } from '../utils/systemServiceFilter';
 
 export interface AiBackendHealth {
   status: string;
@@ -554,18 +556,34 @@ export class AiService {
     if (!prevAction || !prevActionResult) {
       try {
         // Post-Action Verification Failure Check:
-        // If a K8s command finished >= 20s ago (execution_status = 'SUCCEEDED') on an still-OPEN incident
-        // and no successful recovery_verification exists yet, the fact that RCA is triggered again means
-        // the Pod/service did NOT recover. Record verification_result = false and mark the action FAILED
-        // so the 3-tier escalation ladder (RESTART_POD -> REPLACE_POD -> DRAIN_NODE / NO_ACTION) advances.
+        // If a K8s command finished >= 35s ago (either legacy SUCCEEDED/COMPLETED or RUNNING awaiting verification
+        // with agent_status COMPLETED/SUCCEEDED) on a still-OPEN incident and no recovery_verification exists yet,
+        // the fact that RCA is triggered again means we MUST verify current health immediately:
+        // finalize RUNNING -> FAILED/COMPLETED so UI stops hanging on "Đang hậu kiểm" and feeds Re-RCA escalation!
         const unverifiedActRes = await pool.query(
-          `SELECT h.id, act.code AS action_code, h.target_name, h.completed_at
+          `SELECT h.id, h.execution_status, act.code AS action_code, h.target_name,
+                  COALESCE(
+                    h.completed_at,
+                    NULLIF(h.result->>'agent_completed_at', '')::timestamptz,
+                    h.started_at,
+                    h.created_at
+                  ) AS effective_completed_at
            FROM healing_actions h
            LEFT JOIN healing_action_types act ON act.id = h.action_type_id
-           WHERE h.execution_status IN ('COMPLETED', 'SUCCEEDED')
-             AND h.completed_at IS NOT NULL
-             AND h.completed_at <= NOW() - interval '20 seconds'
-             AND h.completed_at >= NOW() - interval '60 minutes'
+           WHERE (
+               (
+                 h.execution_status = 'RUNNING'
+                 AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED')
+                 AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.started_at, NOW()) <= NOW() - interval '35 seconds'
+                 AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
+               )
+               OR (
+                 h.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
+                 AND h.completed_at IS NOT NULL
+                 AND h.completed_at <= NOW() - interval '35 seconds'
+                 AND h.completed_at >= NOW() - interval '60 minutes'
+               )
+             )
              AND (
                LOWER(COALESCE(h.target_name, '')) = ANY($1)
                OR ($2::text IS NOT NULL AND (h.target_id::text = $2 OR LOWER(COALESCE(h.target_name, '')) = LOWER($2)))
@@ -574,7 +592,12 @@ export class AiService {
                SELECT 1 FROM recovery_verifications rv
                WHERE rv.healing_action_id = h.id
              )
-             AND h.completed_at > COALESCE((
+             AND COALESCE(
+               h.completed_at,
+               NULLIF(h.result->>'agent_completed_at', '')::timestamptz,
+               h.started_at,
+               h.created_at
+             ) > COALESCE((
                SELECT MAX(inc.resolved_at)
                FROM incidents inc
                WHERE inc.status = 'RESOLVED'
@@ -582,10 +605,25 @@ export class AiService {
                  AND inc.resolved_at >= NOW() - interval '60 minutes'
                  AND (LOWER(COALESCE(inc.target_name, '')) = ANY($1) OR ($2::text IS NOT NULL AND inc.target_id::text = $2))
              ), '1970-01-01'::timestamptz)
-           ORDER BY h.completed_at DESC
+           ORDER BY effective_completed_at DESC
            LIMIT 5;`,
           [targetAliasesLower, resolvedWorkloadId]
         );
+        const isDbCacheTarget =
+          isDatabaseCacheWorkload(input.service_id) ||
+          isDatabaseCacheWorkload(resolvedTarget?.targetName);
+        const hasOomSignal = (input.kubernetes_events || []).some((ev) =>
+          /oomkilled|out of memory/i.test(String(ev || ''))
+        );
+        const seqArr = Array.isArray(input.metric_sequence) ? input.metric_sequence : [];
+        const seqRestartDelta =
+          seqArr.length >= 2
+            ? Math.max(
+                0,
+                Math.max(...seqArr.map((p) => Number(p?.pod_restart_count ?? 0))) -
+                  Math.min(...seqArr.map((p) => Number(p?.pod_restart_count ?? 0)))
+              )
+            : Number(input.metrics.pod_restart_count ?? 0);
         for (const unv of unverifiedActRes.rows) {
           const metricParts: string[] = [];
           const latVal = Number((input.metrics as any).latency ?? 0);
@@ -599,15 +637,42 @@ export class AiService {
           if (err5xxVal > 0) metricParts.push(`Lỗi HTTP 5xx: ${err5xxVal}%`);
           if (diskVal >= 80) metricParts.push(`Disk: ${diskVal}%`);
           if (cpuVal >= 80) metricParts.push(`CPU quá tải: ${cpuVal}%`);
-          if (ramVal >= 90) metricParts.push(`RAM cạn kiệt: ${ramVal}%`);
-          if (restartCount > 0) metricParts.push(`Restart: ${restartCount} lần`);
+          if (ramVal >= 90 && !(isDbCacheTarget && seqRestartDelta === 0 && !hasOomSignal)) {
+            metricParts.push(`RAM cạn kiệt: ${ramVal}%`);
+          }
+          if (restartCount > 0 && (!isDbCacheTarget || seqRestartDelta > 0)) {
+            metricParts.push(`Restart: ${restartCount} lần`);
+          }
 
           const telemetrySnapshot = `CPU: ${cpuVal}%, RAM: ${ramVal}%, Restart: ${restartCount}`;
           const isHealthy = metricParts.length === 0;
-          const actCompletedAt = unv.completed_at ? new Date(unv.completed_at) : null;
+          const actCompletedAt = unv.effective_completed_at ? new Date(unv.effective_completed_at) : null;
           const actualDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
 
-          if (isHealthy) {
+          if (unv.execution_status === 'RUNNING') {
+            const verMsg = isHealthy
+              ? `Hậu kiểm thành công (Post-Action Verification Passed): Dịch vụ ${input.service_id} đã ổn định hoàn toàn (${telemetrySnapshot}).`
+              : `Hậu kiểm thất bại (Post-Action Verification Failed): Sau khi chạy ${unv.action_code || 'lệnh K8s'}, dịch vụ ${input.service_id} vẫn còn bất thường (${metricParts.join(', ')}; ${telemetrySnapshot}).`;
+            await HealingActionModel.finalizeRecoveryVerificationOutcome(unv.id, {
+              verificationType: 'K8S_POST_HEALING_PROBE',
+              verified: isHealthy,
+              statusBefore: { health: 'DEGRADED' },
+              statusAfter: { health: isHealthy ? 'HEALTHY' : 'STILL_DEGRADED', metrics: input.metrics },
+              details: {
+                status: isHealthy ? 'VERIFIED_HEALTHY' : 'VERIFICATION_FAILED',
+                message: verMsg,
+                reason: verMsg,
+                elapsed_since_completion_ms: actualDurationMs,
+              },
+              durationMs: actualDurationMs,
+              errorMessage: isHealthy ? undefined : verMsg,
+            }).catch(() => {});
+            console.log(
+              isHealthy
+                ? `✅ [PostActionVerification] Action ${unv.id} (${unv.action_code}) on '${input.service_id}' PASSED post-action verification.`
+                : `⚠️ [PostActionVerification] Action ${unv.id} (${unv.action_code}) on '${input.service_id}' FAILED post-action verification. Escalating in Re-RCA...`
+            );
+          } else if (isHealthy) {
             const passMsg = `Hậu kiểm thành công (Post-Action Verification Passed): Dịch vụ ${input.service_id} đã ổn định hoàn toàn (${telemetrySnapshot}).`;
             await pool.query(
               `INSERT INTO recovery_verifications (
@@ -680,7 +745,7 @@ export class AiService {
             ORDER BY rv_inner.verified_at DESC
             LIMIT 1
           ) rv ON true
-          WHERE h.execution_status IN ('COMPLETED', 'SUCCEEDED', 'FAILED')
+          WHERE h.execution_status::text IN ('COMPLETED', 'SUCCEEDED', 'FAILED')
             AND COALESCE(h.completed_at, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
             AND (
               LOWER(COALESCE(h.target_name, '')) = ANY($1)
@@ -787,12 +852,58 @@ export class AiService {
             }
           }
           const blockedActions: string[] = [];
-          const isCurrentlyHealthy = Number(input.metrics.cpu ?? 0) < 60 && Number((input.metrics as any).http_5xx_rate ?? 0) === 0;
+          const latMetric = Number((input.metrics as any).latency ?? 0);
+          const cpuMetric = Number(input.metrics.cpu ?? 0);
+          const ramMetric = Number(input.metrics.ram ?? 0);
+          const err5xxMetric = Number((input.metrics as any).http_5xx_rate ?? 0);
+          const reqRateMetric = Number((input.metrics as any).request_rate ?? 0);
+          const repCountMetric = Number((input.metrics as any).replica_count ?? 1);
+          const restartMetric = Number(input.metrics.pod_restart_count ?? 0);
+
+          const isCurrentlyHealthy =
+            cpuMetric < 60 &&
+            err5xxMetric === 0 &&
+            latMetric < 300 &&
+            ramMetric < 85;
+
+          // Count consecutive failed SCALE_REPLICAS attempts since last healthy/completed intervention
+          let recentScaleOutFailures = 0;
+          let hasDirectScaleExecError = false;
+          for (const r of actRes.rows) {
+            const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
+            if (!isFailed) {
+              if (r.execution_status === 'COMPLETED' || r.execution_status === 'SUCCEEDED') break;
+              continue;
+            }
+            if (r.action_code === 'SCALE_REPLICAS') {
+              const failedExecDirectly = r.execution_status === 'FAILED' && r.verification_result !== false;
+              if (failedExecDirectly) hasDirectScaleExecError = true;
+              recentScaleOutFailures++;
+            }
+          }
+
+          const hasActiveLoadSignal =
+            (reqRateMetric >= 30 || cpuMetric >= 35) &&
+            err5xxMetric < 5 &&
+            restartMetric === 0;
+          const canContinueStaircaseScaleOut =
+            !hasDirectScaleExecError &&
+            recentScaleOutFailures < 2 &&
+            hasActiveLoadSignal &&
+            repCountMetric < 5;
+
           for (const r of [...actRes.rows].reverse()) {
             const isFailed = r.execution_status === 'FAILED' || r.verification_result === false;
             if (isFailed && r.action_code) {
-              // Never block SCALE_REPLICAS if current metrics are healthy (safe scale-down scenario)
-              if (r.action_code === 'SCALE_REPLICAS' && isCurrentlyHealthy) continue;
+              const failedExecutionDirectly = r.execution_status === 'FAILED' && r.verification_result !== false;
+              // Unblock SCALE_REPLICAS only for healthy scale-down OR genuine multi-step staircase load scale-out (< 2 scale failures, no K8s/5xx/restart error)
+              if (
+                r.action_code === 'SCALE_REPLICAS' &&
+                !failedExecutionDirectly &&
+                (isCurrentlyHealthy || canContinueStaircaseScaleOut)
+              ) {
+                continue;
+              }
               if (!blockedActions.includes(r.action_code)) {
                 blockedActions.push(r.action_code);
               }
@@ -872,12 +983,18 @@ export class AiService {
         const podRes = await pool.query(
           `SELECT p.name FROM pods p 
            LEFT JOIN workloads w ON w.id = p.workload_id 
-           WHERE (w.name = $1 OR p.labels->>'app' = $1 OR p.labels->>'app.kubernetes.io/name' = $1 OR p.name LIKE $2)
+           WHERE (
+               w.name = $1
+               OR p.labels->>'app' = $1
+               OR p.labels->>'app.kubernetes.io/name' = $1
+               OR p.name ~* ('^' || regexp_replace($1, '([.^$*+?()\\[\\]{}|\\\\])', '\\\\\\1', 'g') || '(-[0-9]+|-(?=.*[0-9])[a-z0-9]{4,12}-[a-z0-9]{2,5}|-(?=.*[0-9])[a-z0-9]{4,6})$')
+             )
              AND p.deleted_at IS NULL
-             AND ($3::text IS NULL OR p.cluster_id::text = $3 OR p.cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $3 OR cluster_uid = $3 OR name = $3))
+             AND COALESCE(p.status, '') NOT IN ('Succeeded', 'Completed', 'Terminating')
+             AND ($2::text IS NULL OR p.cluster_id::text = $2 OR p.cluster_id::text IN (SELECT id::text FROM clusters WHERE id::text = $2 OR cluster_uid = $2 OR name = $2))
            ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC 
            LIMIT 1`,
-          [input.service_id, `${input.service_id}-%`, input.cluster_id || null]
+          [input.service_id, input.cluster_id || null]
         );
         if (podRes.rows.length > 0 && podRes.rows[0].name) {
           rcaPayload.pod_id = podRes.rows[0].name;

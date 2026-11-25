@@ -657,3 +657,193 @@ def test_case_15_nested_and_top_level_evidence_fields_identical():
     assert body["missing_evidence"] == body["root_cause"]["missing_evidence"]
     assert body["related_risks"] == body["root_cause"]["related_risks"]
     assert body["symptoms"] == body["root_cause"]["symptoms"]
+
+
+# ==============================================================================
+# TEST CASE 16 & 17: DATABASE WIREDTIGER CACHE GROWTH VS REAL DATABASE OOM
+# ==============================================================================
+def test_case_16_database_cache_growth_under_write_surge_not_restarted():
+    """16. MongoDB RAM tăng từ 78.2% -> 95.0% do tải ghi, không OOMKilled/log OOM/restart -> database_cache_utilization + NO_ACTION."""
+    from tests.hmac_client import SignedTestClient as TestClient
+    from app.main import app
+
+    ram_series = [78.2, 80.5, 83.0, 86.4, 89.1, 91.8, 93.2, 94.0, 94.5, 94.8, 95.0, 95.0]
+    metric_sequence = [
+        {
+            "cpu": 18.5,
+            "ram": r,
+            "disk": 12.0,
+            "latency": 35.0,
+            "request_rate": 0.4,
+            "http_5xx_rate": 0.0,
+            "pod_restart_count": 0,
+            "replica_count": 2,
+        }
+        for r in ram_series
+    ]
+    payload = {
+        "service_id": "mongodb",
+        "metrics": {
+            "cpu": 18.5,
+            "ram": 95.0,
+            "disk": 12.0,
+            "latency": 35.0,
+            "request_rate": 0.4,
+            "http_5xx_rate": 0.0,
+        },
+        "metric_sequence": metric_sequence,
+        "prediction": {
+            "service_id": "mongodb",
+            "threshold": 0.5875,
+            "detected_risks": [{"risk_type": "OOM", "confidence": 0.999}],
+            "risk_outputs": {
+                "CPU_OVERLOAD": {"confidence": 0.05},
+                "OOM": {"confidence": 0.999},
+                "DISK_FULL": {"confidence": 0.0},
+                "HIGH_LATENCY": {"confidence": 0.1},
+                "HTTP_5XX_SPIKE": {"confidence": 0.0},
+                "TRAFFIC_OVERLOAD": {"confidence": 0.1},
+            },
+            "overall_risk_score": 0.999,
+            "status": "RISK_DETECTED",
+        },
+        "kubernetes": {
+            "pod_name": "mongodb-0",
+            "workload_name": "mongodb",
+            "workload_type": "StatefulSet",
+            "pod_status": "Running",
+            "desired_replicas": 2,
+            "available_replicas": 2,
+            "restart_count": 0,
+            "events": [],
+        },
+        "logs": [],
+    }
+    with TestClient(app) as client:
+        response = client.post("/api/v1/rca", json=payload)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["root_cause"]["cause"] == "Database cache allocation (WiredTiger/Buffer Pool)"
+    assert body["recommendation"]["action"] == "NO_ACTION"
+
+
+def test_case_17_database_with_oom_log_still_triggers_memory_exhaustion(agent, metrics_agent, log_agent, kube_agent):
+    """17. Database có RAM 95% KÈM log Out of memory thật -> vẫn chẩn đoán memory_exhaustion."""
+    from app.schemas.prediction import GRUMetricPoint, HeadPrediction, RiskScore
+
+    metric_sequence = [
+        GRUMetricPoint(cpu=20.0, ram=75.0 + i * 2.0, disk=12.0, latency=30.0, request_rate=1.0, http_5xx_rate=0.0, pod_restart_count=0, replica_count=2)
+        for i in range(11)
+    ] + [GRUMetricPoint(cpu=20.0, ram=95.0, disk=12.0, latency=30.0, request_rate=1.0, http_5xx_rate=0.0, pod_restart_count=0, replica_count=2)]
+
+    payload = RCARequest(
+        service_id="mongodb",
+        metrics=MetricPoint(cpu=20.0, ram=95.0, disk=12.0, latency=30.0, request_rate=1.0, http_5xx_rate=0.0),
+        metric_sequence=metric_sequence,
+        logs=["[FATAL] Out of memory: unable to allocate cache bucket"],
+        kubernetes=KubernetesData(
+            pod_name="mongodb-0",
+            workload_name="mongodb",
+            workload_type="StatefulSet",
+            pod_status="Running",
+            restart_count=0,
+        ),
+    )
+    pred = PredictionResponse(
+        service_id="mongodb",
+        threshold=0.5875,
+        status="RISK_DETECTED",
+        overall_risk_score=0.95,
+        detected_risks=[RiskScore(risk_type="OOM", confidence=0.95)],
+        risk_outputs={
+            "CPU_OVERLOAD": HeadPrediction(confidence=0.05),
+            "OOM": HeadPrediction(confidence=0.95),
+            "DISK_FULL": HeadPrediction(confidence=0.0),
+            "HIGH_LATENCY": HeadPrediction(confidence=0.1),
+            "HTTP_5XX_SPIKE": HeadPrediction(confidence=0.0),
+            "TRAFFIC_OVERLOAD": HeadPrediction(confidence=0.1),
+        },
+    )
+    metrics_res = metrics_agent.analyze(payload.metrics)
+    logs_res = log_agent.analyze(payload.logs or [])
+    kube_res = kube_agent.analyze(payload.kubernetes)
+
+    conclusion = agent.analyze(
+        prediction=pred,
+        metrics=metrics_res,
+        logs=logs_res,
+        kubernetes=kube_res,
+        kubernetes_raw=payload.kubernetes,
+        payload=payload,
+    )
+    assert conclusion.cause_code == "memory_exhaustion"
+
+
+def test_case_18_database_historical_restarts_flat_sequence_remains_cache(agent, metrics_agent, log_agent, kube_agent):
+    """18. Database có restart cũ từ trước (chuỗi restart phẳng) + RAM cache tăng theo tải -> vẫn phân loại database_cache_utilization."""
+    from app.schemas.prediction import GRUMetricPoint, HeadPrediction, RiskScore
+
+    metric_sequence = [
+        GRUMetricPoint(
+            cpu=15.0 + i,
+            ram=78.0 + i * 1.5,
+            disk=12.0,
+            latency=40.0,
+            request_rate=1.0,
+            http_5xx_rate=0.0,
+            pod_restart_count=2,
+            replica_count=2,
+        )
+        for i in range(11)
+    ] + [
+        GRUMetricPoint(
+            cpu=45.0,
+            ram=95.0,
+            disk=12.0,
+            latency=60.0,
+            request_rate=2.0,
+            http_5xx_rate=0.0,
+            pod_restart_count=2,
+            replica_count=2,
+        )
+    ]
+
+    payload = RCARequest(
+        service_id="mongodb",
+        metrics=MetricPoint(cpu=45.0, ram=95.0, disk=12.0, latency=60.0, request_rate=2.0, http_5xx_rate=0.0, pod_restart_count=2, replica_count=2),
+        metric_sequence=metric_sequence,
+        logs=[],
+        kubernetes=KubernetesData(
+            pod_name="mongodb-0",
+            workload_name="mongodb",
+            workload_type="StatefulSet",
+            pod_status="Running",
+            restart_count=2,
+        ),
+    )
+    pred = PredictionResponse(
+        service_id="mongodb",
+        threshold=0.5875,
+        status="RISK_DETECTED",
+        overall_risk_score=0.99,
+        detected_risks=[RiskScore(risk_type="OOM", confidence=0.99)],
+        risk_outputs={
+            "CPU_OVERLOAD": HeadPrediction(confidence=0.1),
+            "OOM": HeadPrediction(confidence=0.99),
+            "DISK_FULL": HeadPrediction(confidence=0.0),
+            "HIGH_LATENCY": HeadPrediction(confidence=0.1),
+            "HTTP_5XX_SPIKE": HeadPrediction(confidence=0.0),
+            "TRAFFIC_OVERLOAD": HeadPrediction(confidence=0.1),
+        },
+    )
+    conclusion = agent.analyze(
+        prediction=pred,
+        metrics=metrics_agent.analyze(payload.metrics),
+        logs=log_agent.analyze(payload.logs or []),
+        kubernetes=kube_agent.analyze(payload.kubernetes),
+        kubernetes_raw=payload.kubernetes,
+        payload=payload,
+    )
+    assert conclusion.cause_code == "database_cache_utilization"
+
+

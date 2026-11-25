@@ -22,16 +22,24 @@ const rawApiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5005/api/v1
  * @returns {string}
  */
 export const resolveApiBaseUrl = (url = rawApiUrl) => {
-  const normalized = String(url || '/api/v1')
-    .replace('//localhost:5000', '//localhost:5005')
-    .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
-
   if (typeof window !== 'undefined') {
     const pageHost = window.location?.hostname;
+    // Khi chạy trên domain hoặc IP thực tế (không phải localhost dev),
+    // luôn gọi API tương đối qua Nginx reverse proxy (/api/v1) để không bị CSP và CORS chặn.
+    if (pageHost && pageHost !== 'localhost' && pageHost !== '127.0.0.1') {
+      return `${window.location.origin}/api/v1`;
+    }
     if (pageHost === 'localhost' || pageHost === '127.0.0.1') {
+      const normalized = String(url || '/api/v1')
+        .replace('//localhost:5000', '//localhost:5005')
+        .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
       return normalized.replace(/\/\/(?:localhost|127\.0\.0\.1):5005/, `//${pageHost}:5005`);
     }
   }
+
+  const normalized = String(url || '/api/v1')
+    .replace('//localhost:5000', '//localhost:5005')
+    .replace('//127.0.0.1:5000', '//127.0.0.1:5005');
   return normalized;
 };
 

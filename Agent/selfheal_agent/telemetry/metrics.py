@@ -363,6 +363,12 @@ class MetricsManager:
         if not pods:
             return []
 
+        # Skip terminated one-off Job pods (phase == "Succeeded") so completed Jobs
+        # do not emit baseline metrics or trigger false UNKNOWN incidents.
+        active_pods = [p for p in pods if getattr(p, "phase", None) != "Succeeded"]
+        if not active_pods:
+            return []
+
         metrics_map, node_metrics_map = await asyncio.gather(
             asyncio.to_thread(self.get_pod_metrics, namespace, monitor_all),
             asyncio.to_thread(self.get_node_metrics),
@@ -378,7 +384,7 @@ class MetricsManager:
         system_namespaces = {"kube-system", "kube-public", "kube-node-lease", "selfheal-system", "monitoring"}
         pods_to_probe = [
             pod
-            for pod in pods
+            for pod in active_pods
             if pod.name not in prom_data and (pod.namespace or "default") not in system_namespaces
         ]
         if pods_to_probe:
@@ -420,7 +426,7 @@ class MetricsManager:
         node_cpu_percent = round((total_node_cpu_milli / capacity_cpu_milli) * 100.0, 2) if capacity_cpu_milli > 0 else 0.0
         node_ram_percent = round((total_node_mem_bytes / capacity_mem_bytes) * 100.0, 2) if capacity_mem_bytes > 0 else 0.0
 
-        for pod in pods:
+        for pod in active_pods:
             usage = metrics_map.get(pod.name)
             if usage is not None:
                 cpu_m, mem_b = usage

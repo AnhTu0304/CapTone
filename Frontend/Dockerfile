@@ -15,6 +15,7 @@ COPY . .
 # Build production bundle (disable CRA inline runtime script to enforce strict CSP without 'unsafe-inline')
 ENV NODE_ENV=production
 ENV INLINE_RUNTIME_CHUNK=false
+ENV REACT_APP_API_URL=/api/v1
 RUN npm run build
 
 # Stage 2: Serve with Production Nginx

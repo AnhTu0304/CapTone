@@ -14,6 +14,7 @@ services:
       - "${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database_init.sql:/docker-entrypoint-initdb.d/01_database_init.sql:ro
     security_opt:
       - no-new-privileges:true
     healthcheck:

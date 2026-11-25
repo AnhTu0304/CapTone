@@ -375,7 +375,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     if (os === 'linux') {
       return `curl -fsSL "${origin}/agent/install.sh" | bash`;
     } else {
-      return `irm "${origin}/agent/install.ps1" | iex`;
+      return `& ([scriptblock]::Create((irm "${origin}/agent/install.ps1")))`;
     }
   };
 
@@ -1120,9 +1120,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                       <div>
                         <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600, marginBottom: '3px' }}>Windows (PowerShell):</div>
                         <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '8px 65px 8px 10px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                          <code>irm "{getInstallerOrigin()}/agent/uninstall.ps1" | iex</code>
+                          <code>&amp; ([scriptblock]::Create((irm "{getInstallerOrigin()}/agent/uninstall.ps1")))</code>
                           <button
-                            onClick={() => handleCopy(`irm "${getInstallerOrigin()}/agent/uninstall.ps1" | iex`, 'un_ps1')}
+                            onClick={() => handleCopy(`& ([scriptblock]::Create((irm "${getInstallerOrigin()}/agent/uninstall.ps1")))`, 'un_ps1')}
                             style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
                           >
                             {copiedField === 'un_ps1' ? 'Đã chép' : 'Sao chép'}

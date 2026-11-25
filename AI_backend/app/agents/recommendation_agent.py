@@ -6,6 +6,7 @@ from app.agents.historical_incident_agent import HistoricalContext, normalize_ca
 from app.agents.rca_agent import RCAConclusion, RootCauseAnalysisAgent
 from app.rca.capacity_evaluator import TwoTierScalingEngine
 from app.schemas.kubernetes import KubernetesAnalysisResult, KubernetesData
+from app.schemas.metrics import MetricPoint
 from app.schemas.rca import (
     Action,
     ActionHistoryContext,
@@ -156,6 +157,7 @@ class RecommendationAgent:
         security: SecurityContext | None = None,
         security_policy: SecurityPolicyContext | None = None,
         previous_rca_root_cause: str | None = None,
+        metrics: MetricPoint | None = None,
     ) -> RecommendationResult:
         historical = historical or HistoricalContext()
         cause = conclusion.cause_code
@@ -367,34 +369,97 @@ class RecommendationAgent:
 
         # Reassess an unsuccessful or partially successful non-escalated action (e.g., SCALE_REPLICAS).
         elif previous_action_result in {"FAILED", "PARTIAL"} and action == previous_action:
-            successful_retry = any(
-                (item.executed_action or item.recommended_action) == action
-                and item.action_result == "SUCCESS"
-                and normalize_cause(item.confirmed_root_cause or item.root_cause) == cause
-                for item in historical.incidents
+            scale_fail_count = sum(
+                1
+                for item in (action_history.history if action_history else [])
+                if str(getattr(item, "action", "") or "").upper() == "SCALE_REPLICAS"
+                and str(getattr(item, "result", "") or "").upper() == "FAILED"
             )
-            current_evidence = [
-                item for item in (getattr(conclusion, "evidence", None) or getattr(conclusion, "evidence_for", None) or [])
-                if not str(item).startswith("Similar incident")
-                and not str(item).startswith("Previous ")
-            ]
-            conf_score = getattr(conclusion, "confidence", None) or getattr(getattr(conclusion, "result", None), "confidence", 0.0)
-            strong_new_evidence = (
-                conf_score >= 0.75 and len(current_evidence) >= 2
+            direct_k8s_error_tokens = ("403", "forbidden", "not found", "timeout", "unsupported")
+            has_direct_scale_err = any(
+                token in f"{getattr(item, 'failure_reason', '') or ''} {getattr(item, 'verification_result', '') or ''}".lower()
+                for item in (action_history.history if action_history else [])
+                if str(getattr(item, "action", "") or "").upper() == "SCALE_REPLICAS"
+                for token in direct_k8s_error_tokens
             )
-            if not successful_retry and not strong_new_evidence:
-                action = "NO_ACTION"
-                reason = (
-                    f"Hành động {previous_action} trước đó có kết quả là {previous_action_result}; "
-                    "không ưu tiên lặp lại vì bằng chứng hiện tại chưa đủ mạnh để đảm bảo an toàn"
+            effective_current_rep = (
+                desired_rep
+                if (desired_rep is not None and desired_rep >= 1)
+                else (len(kubernetes.all_pods or []) or 1)
+            )
+            has_staircase_history = bool(
+                action_history and (action_history.history or action_history.blocked_actions)
+            )
+            is_clean_staircase_load = (
+                action == "SCALE_REPLICAS"
+                and not has_direct_scale_err
+                and max(scale_fail_count, 1) < 2
+                and target_replicas is not None
+                and target_replicas > effective_current_rep
+                and cause in {"traffic_overload", "cpu_saturation", "insufficient_replicas", "service_degradation"}
+                and (kubernetes.restart_count == 0)
+                and (not kubernetes.pod_status or kubernetes.pod_status == "Running")
+                and (metrics is None or metrics.http_5xx_rate < 5.0)
+                and has_staircase_history
+                and (
+                    cause in {"traffic_overload", "cpu_saturation", "insufficient_replicas"}
+                    or (metrics is not None and (metrics.request_rate >= 30.0 or metrics.cpu >= 35.0))
                 )
-            elif strong_new_evidence:
+            )
+            if is_clean_staircase_load:
                 reason = (
-                    f"Although previous {previous_action} result was {previous_action_result}, "
-                    f"strong current signals independently support this action under the new conditions "
-                    f"(Mặc dù hành động {previous_action} trước đó có kết quả là {previous_action_result}, "
-                    "nhưng nhiều tín hiệu mới ủng hộ mạnh mẽ hành động này trong điều kiện mới)"
+                    f"Lần SCALE_REPLICAS trước đã thực thi trên Kubernetes nhưng lưu lượng/tải vẫn tăng ({target_replicas} replicas được duyệt tiếp); "
+                    f"không phát hiện lỗi Pod hay HTTP 5xx nên tiếp tục mở rộng bậc thang lên {target_replicas} replicas."
                 )
+            elif action == "SCALE_REPLICAS" and has_staircase_history:
+                if "RESTART_POD" not in blocked_set and not explicit_cb_early:
+                    action = "RESTART_POD"
+                    reason = (
+                        "Mở rộng bản sao (SCALE_REPLICAS) trước đó chưa khắc phục được sự cố (đã chạm giới hạn thử scale, gặp lỗi K8s hoặc không thuộc kịch bản tải tăng thuần); "
+                        "chuyển sang hành động RESTART_POD để xử lý tiến trình."
+                    )
+                else:
+                    action = "NO_ACTION"
+                    reason = (
+                        "Không thể tiếp tục mở rộng bản sao (SCALE_REPLICAS) và hành động thay thế đã bị chặn; "
+                        "kích hoạt rào chắn Circuit Breaker (NO_ACTION)."
+                    )
+            else:
+                successful_retry = any(
+                    (item.executed_action or item.recommended_action) == action
+                    and item.action_result == "SUCCESS"
+                    and normalize_cause(item.confirmed_root_cause or item.root_cause) == cause
+                    for item in historical.incidents
+                )
+                current_evidence = [
+                    item for item in (getattr(conclusion, "evidence", None) or getattr(conclusion, "evidence_for", None) or [])
+                    if not str(item).startswith("Similar incident")
+                    and not str(item).startswith("Previous ")
+                ]
+                conf_score = getattr(conclusion, "confidence", None) or getattr(getattr(conclusion, "result", None), "confidence", 0.0)
+                strong_new_evidence = (
+                    conf_score >= 0.75 and len(current_evidence) >= 2
+                )
+                if not successful_retry and not strong_new_evidence:
+                    if action == "SCALE_REPLICAS" and has_staircase_history and "RESTART_POD" not in blocked_set and not explicit_cb_early:
+                        action = "RESTART_POD"
+                        reason = (
+                            "Mở rộng bản sao (SCALE_REPLICAS) trước đó chưa khắc phục được sự cố và không thuộc kịch bản tải tăng thuần; "
+                            "chuyển sang hành động RESTART_POD để xử lý tiến trình."
+                        )
+                    else:
+                        action = "NO_ACTION"
+                        reason = (
+                            f"Hành động {previous_action} trước đó có kết quả là {previous_action_result}; "
+                            "không ưu tiên lặp lại vì bằng chứng hiện tại chưa đủ mạnh để đảm bảo an toàn"
+                        )
+                elif strong_new_evidence:
+                    reason = (
+                        f"Although previous {previous_action} result was {previous_action_result}, "
+                        f"strong current signals independently support this action under the new conditions "
+                        f"(Mặc dù hành động {previous_action} trước đó có kết quả là {previous_action_result}, "
+                        "nhưng nhiều tín hiệu mới ủng hộ mạnh mẽ hành động này trong điều kiện mới)"
+                    )
 
         # Safeguard: Dependency failure or Database cache utilization must NEVER be escalated to restart/replace/scale target
         if cause in {"dependency_failure", "database_cache_utilization"}:
@@ -467,7 +532,7 @@ class RecommendationAgent:
             or consecutive_failures >= 3
         )
 
-        if (action_history or replace_failed) and action != "SCALE_REPLICAS":
+        if (action_history or replace_failed) and (action != "SCALE_REPLICAS" or cause != "underutilized"):
             explicit_cb = bool(action_history and action_history.circuit_breaker_tripped)
             
             # Additional Safety Checks for DRAIN_NODE (Audit 4)

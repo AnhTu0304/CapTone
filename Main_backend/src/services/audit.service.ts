@@ -331,7 +331,7 @@ export class AuditService {
     }
 
     if (filter.user_id) {
-      conditions.push(`(a.user_id = $${paramIndex} OR (a.target_type = 'USER' AND a.target_id = $${paramIndex}))`);
+      conditions.push(`(a.user_id = $${paramIndex}::uuid OR (a.target_type = 'USER' AND a.target_id::text = $${paramIndex}::text))`);
       values.push(filter.user_id);
       paramIndex++;
     }
@@ -408,7 +408,7 @@ export class AuditService {
     }
 
     if (filter.resource_id) {
-      conditions.push(`a.resource_id = $${paramIndex++}`);
+      conditions.push(`a.resource_id::text = $${paramIndex++}::text`);
       values.push(filter.resource_id);
     }
 
@@ -479,22 +479,22 @@ export class AuditService {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const entityJoinSql = `
-      LEFT JOIN agents ag ON ag.id = COALESCE(
+      LEFT JOIN agents ag ON ag.id::text = COALESCE(
         CASE
           WHEN a.metadata->>'agent_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN (a.metadata->>'agent_id')::uuid
+          THEN a.metadata->>'agent_id'
           ELSE NULL
         END,
         CASE
-          WHEN a.resource_type = 'AGENT' THEN a.resource_id
+          WHEN a.resource_type = 'AGENT' THEN a.resource_id::text
           ELSE NULL
         END,
         CASE
-          WHEN a.target_type = 'AGENT' THEN a.target_id
+          WHEN a.target_type = 'AGENT' THEN a.target_id::text
           ELSE NULL
         END
       )
-      LEFT JOIN healing_actions ha ON a.resource_type = 'HEALING_ACTION' AND ha.id = a.resource_id
+      LEFT JOIN healing_actions ha ON a.resource_type = 'HEALING_ACTION' AND ha.id::text = a.resource_id::text
       LEFT JOIN incidents i ON i.id = COALESCE(
         ha.incident_id,
         CASE
@@ -503,9 +503,9 @@ export class AuditService {
           ELSE NULL
         END
       )
-      LEFT JOIN pods pod ON a.resource_type = 'POD' AND pod.id = a.resource_id
+      LEFT JOIN pods pod ON a.resource_type = 'POD' AND pod.id::text = a.resource_id::text
       LEFT JOIN workloads pod_wl ON pod_wl.id = pod.workload_id
-      LEFT JOIN workloads wl ON a.target_type = 'WORKLOAD' AND wl.id = a.target_id
+      LEFT JOIN workloads wl ON a.target_type = 'WORKLOAD' AND wl.id::text = a.target_id::text
       LEFT JOIN clusters cl ON cl.id::text = COALESCE(
         CASE
           WHEN a.resource_type = 'CLUSTER' THEN a.resource_id::text
@@ -517,22 +517,22 @@ export class AuditService {
           ELSE NULL
         END,
         ag.cluster_id::text,
-        i.cluster_id,
+        i.cluster_id::text,
         pod.cluster_id::text,
         wl.cluster_id::text
       )
-      LEFT JOIN healing_policies hp ON hp.id = COALESCE(
+      LEFT JOIN healing_policies hp ON hp.id::text = COALESCE(
         CASE
-          WHEN a.resource_type = 'POLICY' THEN a.resource_id
+          WHEN a.resource_type = 'POLICY' THEN a.resource_id::text
           ELSE NULL
         END,
         CASE
           WHEN a.metadata->>'policy_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN (a.metadata->>'policy_id')::uuid
+          THEN a.metadata->>'policy_id'
           ELSE NULL
         END
       )
-      LEFT JOIN users tu ON a.target_type = 'USER' AND tu.id = a.target_id
+      LEFT JOIN users tu ON a.target_type = 'USER' AND tu.id::text = a.target_id::text
     `;
 
     // Đếm tổng số bản ghi

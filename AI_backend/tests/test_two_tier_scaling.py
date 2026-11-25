@@ -213,3 +213,101 @@ def test_recommendation_agent_two_tier_headroom_integration():
     rec = agent.recommend(conclusion=rca, kubernetes=k8s)
     assert rec.action == "NO_ACTION"
     assert "tải tăng cục bộ" in rec.reason
+
+
+def test_recommendation_agent_staircase_scale_out_vs_escalation():
+    """Scenario 10: Re-RCA distinguishes climbing staircase load (scale 3->4) from latency/403/5xx (escalate RESTART_POD)."""
+    from app.agents.historical_incident_agent import HistoricalContext
+    from app.schemas.metrics import MetricPoint
+    from app.schemas.rca import ActionHistoryContext, ActionHistoryItem
+
+    agent = RecommendationAgent()
+    k8s_3pods = KubernetesData(
+        namespace="test-lab",
+        workload_name="ecommerce-store-app",
+        workload_type="Deployment",
+        desired_replicas=3,
+        available_replicas=3,
+        pod_status="Running",
+        restart_count=0,
+        all_pods=[
+            PodInfo(pod_name="eco-1", status="Running", ready=True, cpu_usage_pct=85.0, request_rate=48.0),
+            PodInfo(pod_name="eco-2", status="Running", ready=True, cpu_usage_pct=84.0, request_rate=46.0),
+            PodInfo(pod_name="eco-3", status="Running", ready=True, cpu_usage_pct=82.0, request_rate=45.0),
+        ],
+        nodes=[
+            NodeInfo(node_name="minikube-m02", status="Ready", conditions=NodeConditions(Ready=True), free_memory_bytes=6 * 1024 * 1024 * 1024),
+        ],
+    )
+    hist_one_scale = ActionHistoryContext(
+        consecutive_failures=1,
+        circuit_breaker_tripped=False,
+        blocked_actions=[],
+        history=[ActionHistoryItem(action="SCALE_REPLICAS", result="FAILED", failure_reason="Hậu kiểm thất bại: CPU/RPS vẫn cao")],
+    )
+
+    # 10a. Staircase traffic flood (140 RPS, 0% 5xx, 1 prior scale) -> continues scaling 3 -> 4
+    rca_traffic = RCAConclusion(
+        result=RootCauseResult(cause="Traffic overload", confidence=0.88, severity="HIGH", evidence_status="CONFIRMED"),
+        evidence=["RPS reached 140/s", "All 3 pods at 84% CPU"],
+        cause_code="traffic_overload",
+        explanation="Staircase traffic continues climbing",
+    )
+    rec_scale_next = agent.recommend(
+        conclusion=rca_traffic,
+        kubernetes=k8s_3pods,
+        historical=HistoricalContext(),
+        previous_action="SCALE_REPLICAS",
+        previous_action_result="FAILED",
+        action_history=hist_one_scale,
+        metrics=MetricPoint(cpu=84.0, ram=45.0, disk=10.0, latency=350.0, request_rate=140.0, http_5xx_rate=0.0, pod_restart_count=0, replica_count=3),
+    )
+    assert rec_scale_next.action == "SCALE_REPLICAS"
+    assert rec_scale_next.action_parameters.target_replicas == 4
+
+    # 10b. Low-load pure latency bug (19 RPS, CPU 5%) -> escalates to RESTART_POD instead of scaling further
+    rca_latency = RCAConclusion(
+        result=RootCauseResult(cause="Service performance degradation", confidence=0.82, severity="HIGH", evidence_status="CONFIRMED"),
+        evidence=["Latency 3000ms", "Low CPU"],
+        cause_code="service_degradation",
+        explanation="Fixed latency bug",
+    )
+    k8s_low_load = k8s_3pods.model_copy(
+        update={
+            "all_pods": [
+                PodInfo(pod_name="eco-1", status="Running", ready=True, cpu_usage_pct=5.0, latency_ms=3000.0, request_rate=10.0),
+                PodInfo(pod_name="eco-2", status="Running", ready=True, cpu_usage_pct=4.0, latency_ms=3000.0, request_rate=9.0),
+            ]
+        }
+    )
+    rec_escalate = agent.recommend(
+        conclusion=rca_latency,
+        kubernetes=k8s_low_load,
+        historical=HistoricalContext(),
+        previous_action="SCALE_REPLICAS",
+        previous_action_result="FAILED",
+        action_history=hist_one_scale,
+        metrics=MetricPoint(cpu=5.0, ram=45.0, disk=10.0, latency=3000.0, request_rate=19.0, http_5xx_rate=0.0, pod_restart_count=0, replica_count=3),
+    )
+    assert rec_escalate.action == "RESTART_POD"
+
+    # 10c. After 2 failed scale-outs -> stops scaling and escalates to RESTART_POD
+    hist_two_scales = ActionHistoryContext(
+        consecutive_failures=2,
+        circuit_breaker_tripped=False,
+        blocked_actions=[],
+        history=[
+            ActionHistoryItem(action="SCALE_REPLICAS", result="FAILED", failure_reason="Hậu kiểm thất bại"),
+            ActionHistoryItem(action="SCALE_REPLICAS", result="FAILED", failure_reason="Hậu kiểm thất bại"),
+        ],
+    )
+    rec_after_two = agent.recommend(
+        conclusion=rca_traffic,
+        kubernetes=k8s_3pods,
+        historical=HistoricalContext(),
+        previous_action="SCALE_REPLICAS",
+        previous_action_result="FAILED",
+        action_history=hist_two_scales,
+        metrics=MetricPoint(cpu=84.0, ram=45.0, disk=10.0, latency=350.0, request_rate=200.0, http_5xx_rate=0.0, pod_restart_count=0, replica_count=4),
+    )
+    assert rec_after_two.action == "RESTART_POD"

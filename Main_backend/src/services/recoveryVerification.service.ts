@@ -2,6 +2,7 @@ import { pool } from '../config/database';
 import { WorkloadModel } from '../models';
 import { HealingActionModel } from '../models/healingAction.model';
 import { broadcastTelemetryToUi } from '../websocket/telemetryWebSocket';
+import { isDatabaseCacheWorkload } from '../utils/systemServiceFilter';
 
 export type VerificationStage = 'COOLDOWN' | 'INITIAL_CHECK' | 'STABILITY_CHECK' | 'EXTENDED_CHECK';
 
@@ -164,7 +165,10 @@ export class RecoveryVerificationService {
   /**
    * Health evaluation of an individual telemetry sample
    */
-  public static evaluateSampleHealth(sample: ITelemetrySample): {
+  public static evaluateSampleHealth(
+    sample: ITelemetrySample,
+    options?: { isDatabaseWorkload?: boolean; baselineRestartCount?: number }
+  ): {
     healthy: boolean;
     violations: string[];
   } {
@@ -175,9 +179,19 @@ export class RecoveryVerificationService {
     const latency = Number(sample.latency ?? 0);
     const err5xx = Number(sample.http_5xx_rate ?? 0);
     const reqRate = Number(sample.request_rate ?? 0);
+    const restarts = Number(sample.pod_restart_count ?? 0);
+    const restartDelta =
+      options?.baselineRestartCount !== undefined
+        ? Math.max(0, restarts - options.baselineRestartCount)
+        : restarts;
+    const isBenignDbRam =
+      Boolean(options?.isDatabaseWorkload) &&
+      restartDelta === 0 &&
+      sample.http_health_check !== false &&
+      sample.is_healthy !== false;
 
     if (cpu >= 90) violations.push(`CPU quá tải (${cpu}%)`);
-    if (ram >= 90) violations.push(`RAM cạn kiệt (${ram}%)`);
+    if (ram >= 90 && !isBenignDbRam) violations.push(`RAM cạn kiệt (${ram}%)`);
     if (disk >= 90) violations.push(`Ổ đĩa đầy (${disk}%)`);
     if (latency >= 600) violations.push(`Độ trễ quá cao (${Math.round(latency)}ms)`);
 
@@ -271,7 +285,7 @@ export class RecoveryVerificationService {
       actionQuery += `
         AND (
           (h.execution_status = 'RUNNING' AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED'))
-          OR (h.execution_status IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at IS NOT NULL AND h.completed_at >= NOW() - interval '60 minutes')
+          OR (h.execution_status::text IN ('COMPLETED', 'SUCCEEDED') AND h.completed_at IS NOT NULL AND h.completed_at >= NOW() - interval '60 minutes')
         )
         AND NOT EXISTS (
           SELECT 1 FROM recovery_verifications rv
@@ -411,9 +425,15 @@ export class RecoveryVerificationService {
     const lastSampleIso = tsCheck.lastSampleAt?.toISOString() || null;
 
     // Check health across samples
+    const isDbCacheTarget =
+      isDatabaseCacheWorkload(canonicalTargetName) || isDatabaseCacheWorkload(serviceId);
+    const baselineRestartCount = Number(rawSequence[0]?.pod_restart_count ?? 0);
     const allViolations: string[] = [];
     for (let i = 0; i < rawSequence.length; i++) {
-      const evalRes = this.evaluateSampleHealth(rawSequence[i]);
+      const evalRes = this.evaluateSampleHealth(rawSequence[i], {
+        isDatabaseWorkload: isDbCacheTarget,
+        baselineRestartCount,
+      });
       if (!evalRes.healthy) {
         allViolations.push(`Mẫu ${i + 1}: ${evalRes.violations.join(', ')}`);
       }

@@ -157,6 +157,73 @@ class CauseEvaluator:
                 explanation="Bằng chứng xác thực trực tiếp: Container bị Linux Kernel OOM-Killer tiêu diệt (OOMKilled).",
             )
 
+        # ----------------------------------------------------
+        # 1.1 EVALUATE: DATABASE_CACHE_UTILIZATION (BENIGN WIREDTIGER / BUFFER POOL)
+        # Check BEFORE heuristic RAM trend so heavy DB write/read cache growth without OOM/pressure/restarts
+        # does not falsely trigger RESTART_POD on databases (e.g., MongoDB WiredTiger cache).
+        # ----------------------------------------------------
+        target_service = (payload.service_id if payload else "") or ""
+        target_pod_name = getattr(kubernetes_raw, "pod_name", None) or getattr(kubernetes_raw, "workload_name", None) or ""
+        if not target_pod_name and kubernetes_raw and getattr(kubernetes_raw, "all_pods", None):
+            if len(kubernetes_raw.all_pods) > 0 and getattr(kubernetes_raw.all_pods[0], "pod_name", None):
+                target_pod_name = kubernetes_raw.all_pods[0].pod_name or ""
+        db_engine_regex = r"(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd|cassandra|clickhouse|neo4j|couchdb|scylladb)"
+        is_init_job = target_service.lower().endswith("-init") or "-rs-init" in target_pod_name.lower()
+        is_database_service = (not is_init_job) and bool(
+            re.search(db_engine_regex, target_service, re.IGNORECASE)
+            or re.search(db_engine_regex, target_pod_name, re.IGNORECASE)
+        )
+        db_restart_count = getattr(kubernetes_raw, "restart_count", 0) or 0
+        has_crashloop_ev = EvidenceType.CRASH_LOOP_BACKOFF in ev_types
+        has_probe_fail_ev = (
+            EvidenceType.LIVENESS_PROBE_FAILED in ev_types
+            or EvidenceType.READINESS_PROBE_FAILED in ev_types
+        )
+        pod_status_raw = getattr(kubernetes_raw, "pod_status", None)
+        is_db_pod_unhealthy = bool(pod_status_raw and pod_status_raw not in ("Running", "Succeeded"))
+        seq_points = (
+            getattr(payload, "metric_sequence", None)
+            or getattr(payload, "sequence", None)
+            or []
+        ) if payload else []
+        if len(seq_points) >= 2:
+            seq_restarts = [getattr(pt, "pod_restart_count", 0) or 0 for pt in seq_points]
+            has_recent_db_restart = max(seq_restarts) > min(seq_restarts)
+        else:
+            has_recent_db_restart = db_restart_count > 0
+
+        if (
+            is_database_service
+            and has_high_ram
+            and not has_oom_log
+            and not has_node_mem_press
+            and not has_recent_db_restart
+            and not is_db_pod_unhealthy
+            and not has_crashloop_ev
+            and not has_probe_fail_ev
+        ):
+            cache_name = "WiredTiger Cache (MongoDB)" if "mongo" in target_service.lower() else "Database Buffer Cache"
+            ram_pct_str = f"~{payload.metrics.ram:.1f}%" if (payload and payload.metrics and payload.metrics.ram) else "cao"
+            for_items = [
+                f"Mức sử dụng RAM {ram_pct_str} là cơ chế cấp phát bộ nhớ đệm tự nhiên ({cache_name})",
+                "Không ghi nhận sự kiện sập OOMKilled, không có lỗi nhật ký bộ nhớ, không có Node MemoryPressure và Restart = 0",
+            ]
+            if has_ram_trend:
+                for_items.append("Xu hướng RAM tăng theo lưu lượng ghi/đọc là mở rộng vùng đệm bình thường của CSDL")
+            return CauseEvaluationResult(
+                cause_code="database_cache_utilization",
+                cause_label=self.CAUSE_LABELS["database_cache_utilization"],
+                cause_label_vi=self.CAUSE_LABELS_VI["database_cache_utilization"],
+                evidence_status="CONFIRMED",
+                confidence=0.92,
+                evidence_for=for_items,
+                evidence_against=[],
+                missing_evidence=[],
+                related_risks=related_risks,
+                symptoms=symptoms,
+                explanation=f"Tiến trình cơ sở dữ liệu ({target_service or 'CSDL'}) tự động cấp phát và duy trì vùng đệm {cache_name} theo lưu lượng để tối ưu hóa tốc độ đọc ghi đĩa. Không phát hiện dấu hiệu OOM hay crash.",
+            )
+
         if has_high_ram and (has_ram_trend or has_oom_log or has_node_mem_press):
             for_items = [
                 e.description for e in valid_evs
@@ -175,40 +242,6 @@ class CauseEvaluator:
                 symptoms=symptoms,
                 explanation="Mức sử dụng RAM bão hòa ở ngưỡng nguy hiểm kèm xu hướng tăng dốc hoặc nhật ký cảnh báo bộ nhớ.",
             )
-
-        # ----------------------------------------------------
-        # 1.1 EVALUATE: DATABASE_CACHE_UTILIZATION (BENIGN WIREDTIGER / BUFFER POOL)
-        # ----------------------------------------------------
-        target_service = (payload.service_id if payload else "") or ""
-        target_pod_name = getattr(kubernetes_raw, "pod_name", None) or getattr(kubernetes_raw, "workload_name", None) or ""
-        if not target_pod_name and kubernetes_raw and getattr(kubernetes_raw, "all_pods", None):
-            if len(kubernetes_raw.all_pods) > 0 and getattr(kubernetes_raw.all_pods[0], "pod_name", None):
-                target_pod_name = kubernetes_raw.all_pods[0].pod_name or ""
-        is_database_service = bool(
-            re.search(r"(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)", target_service, re.IGNORECASE)
-            or re.search(r"(mongo|redis|postgres|mysql|mariadb|elasticsearch|etcd)", target_pod_name, re.IGNORECASE)
-        )
-        if has_high_ram and not has_oom_killed and not has_oom_log and not has_ram_trend and not has_node_mem_press:
-            if is_database_service:
-                cache_name = "WiredTiger Cache (MongoDB)" if "mongo" in target_service.lower() else "Database Buffer Cache"
-                ram_pct_str = f"~{payload.metrics.ram:.1f}%" if (payload and payload.metrics and payload.metrics.ram) else "cao"
-                for_items = [
-                    f"Mức sử dụng RAM {ram_pct_str} là cơ chế cấp phát bộ nhớ đệm tự nhiên ({cache_name})",
-                    "Không ghi nhận sự kiện sập OOMKilled, không có lỗi nhật ký bộ nhớ và đường xu hướng RAM ổn định",
-                ]
-                return CauseEvaluationResult(
-                    cause_code="database_cache_utilization",
-                    cause_label=self.CAUSE_LABELS["database_cache_utilization"],
-                    cause_label_vi=self.CAUSE_LABELS_VI["database_cache_utilization"],
-                    evidence_status="CONFIRMED",
-                    confidence=0.92,
-                    evidence_for=for_items,
-                    evidence_against=[],
-                    missing_evidence=[],
-                    related_risks=related_risks,
-                    symptoms=symptoms,
-                    explanation=f"Tiến trình cơ sở dữ liệu ({target_service or 'CSDL'}) tự động cấp phát và duy trì vùng đệm {cache_name} để tối ưu hóa tốc độ đọc ghi đĩa. Hệ thống hoàn toàn bình thường và không có nguy cơ tràn RAM.",
-                )
 
         # ----------------------------------------------------
         # 2. EVALUATE: DEPLOYMENT_FAILURE
