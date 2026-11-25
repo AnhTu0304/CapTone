@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: main-backend-config
+  namespace: default
+  labels:
+    app: captone-main-backend
+data:
+  PORT: "5000"
+  NODE_ENV: "production"
+  API_PREFIX: "/api/v1"
+  DB_HOST: "103.166.182.26"
+  DB_PORT: "5433"
+  DB_NAME: "captone_db"
+  DB_USER: "postgres"
+  DB_PASSWORD: "postgres"
+  DB_POOL_MAX: "20"
+  DB_SSL: "false"
+  REDIS_HOST: "103.166.182.26"
+  REDIS_PORT: "6380"
+  REDIS_ENABLED: "true"
+  AI_BACKEND_URL: "http://captone-ai-backend-service:8000"
+  JWT_SECRET: "dev_only_jwt_secret_key_minimum_32_characters_long_12345"
+  JWT_EXPIRES_IN: "7d"
+  AI_INTERNAL_HMAC_SECRET: "dev_only_ai_internal_hmac_secret_32_characters_long"
+  TOTP_ENCRYPTION_KEY: "dev_only_totp_encryption_key_minimum_32_characters"
+  OTEL_ENABLED: "false"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: captone-main-backend
+  namespace: default
+  labels:
+    app: captone-main-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: captone-main-backend
+  template:
+    metadata:
+      labels:
+        app: captone-main-backend
+    spec:
+      containers:
+        - name: main-backend
+          image: captone-main-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: main-backend-config
+          env:
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: captone-main-backend-service
+  namespace: default
+  labels:
+    app: captone-main-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: captone-main-backend
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      protocol: TCP
