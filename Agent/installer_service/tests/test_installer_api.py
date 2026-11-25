@@ -34,8 +34,27 @@ def test_get_powershell_installer(client: TestClient) -> None:
     assert resp.status_code == 200
     assert "text/plain" in resp.headers["content-type"]
     assert "attachment; filename=\"install-agent.ps1\"" in resp.headers.get("content-disposition", "")
+    # UTF-8 BOM (\ufeff) breaks PowerShell `irm ... | iex` and `[scriptblock]::Create(...)` when param() is present
+    assert not resp.text.startswith("\ufeff")
     assert "SelfHeal" in resp.text
     assert "kubectl" in resp.text
+
+
+def test_get_powershell_uninstaller_has_no_bom(client: TestClient) -> None:
+    resp = client.get("/agent/uninstall.ps1")
+    assert resp.status_code == 200
+    assert not resp.text.startswith("\ufeff")
+    assert "selfheal-agent" in resp.text
+
+
+def test_installer_injects_wss_for_https_forwarded_proto(client: TestClient) -> None:
+    headers = {"Host": "aisealhealing.io.vn", "X-Forwarded-Proto": "https"}
+    ps_resp = client.get("/agent/install.ps1", headers=headers)
+    sh_resp = client.get("/agent/install.sh", headers=headers)
+    assert ps_resp.status_code == 200
+    assert sh_resp.status_code == 200
+    assert '$CONFIGURED_SERVER_URL = "wss://aisealhealing.io.vn/api/v1/agent/connect"' in ps_resp.text
+    assert 'CONFIGURED_SERVER_URL="wss://aisealhealing.io.vn/api/v1/agent/connect"' in sh_resp.text
 
 
 def test_get_k8s_manifests(client: TestClient) -> None:

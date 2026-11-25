@@ -212,7 +212,7 @@ services:
       HOST: 0.0.0.0
       APP_ENV: production
       AGENT_VERSION: "1.0.0"
-      DOCKER_IMAGE: "captone-agent:1.0.0"
+      DOCKER_IMAGE: "${AGENT_DOCKER_IMAGE:-captone-agent:1.0.0}"
     ports:
       - "${INSTALLER_PORT:-8105}:8100"
     healthcheck:

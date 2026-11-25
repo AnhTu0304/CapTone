@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from fastapi.responses import FileResponse
 
 from installer_service.config import settings
 
@@ -303,8 +302,8 @@ spec:
 async def get_bash_installer(request: Request, token: str | None = None):
     """Returns the official SelfHeal Agent Bash installation script for Linux and macOS."""
     file_path = safe_resolve_script("install-agent.sh")
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    with open(file_path, "r", encoding="utf-8-sig") as f:
+        content = f.read().lstrip("\ufeff")
 
     ws_url = resolve_backend_url(request)
     if ws_url:
@@ -336,8 +335,9 @@ async def get_bash_installer(request: Request, token: str | None = None):
 async def get_powershell_installer(request: Request, token: str | None = None):
     """Returns the official SelfHeal Agent PowerShell installation script for Windows."""
     file_path = safe_resolve_script("install-agent.ps1")
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    # Strip UTF-8 BOM (\ufeff) so PowerShell `irm ... | iex` and `[scriptblock]::Create(...)` parse `param(...)` safely
+    with open(file_path, "r", encoding="utf-8-sig") as f:
+        content = f.read().lstrip("\ufeff")
 
     ws_url = resolve_backend_url(request)
     if ws_url:
@@ -405,11 +405,16 @@ async def get_k8s_standard_manifest(request: Request):
 async def get_bash_uninstaller():
     """Returns the clean removal script for SelfHeal Agent on Linux and macOS."""
     file_path = safe_resolve_script("uninstall-agent.sh")
-    return FileResponse(
-        path=file_path,
-        media_type="text/x-shellscript",
-        filename="uninstall-agent.sh",
-        headers={"Cache-Control": "no-cache"},
+    with open(file_path, "r", encoding="utf-8-sig") as f:
+        content = f.read().lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+    return Response(
+        content=content,
+        media_type="text/x-shellscript; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="uninstall-agent.sh"',
+            "Cache-Control": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -417,11 +422,16 @@ async def get_bash_uninstaller():
 async def get_powershell_uninstaller():
     """Returns the clean removal script for SelfHeal Agent on Windows."""
     file_path = safe_resolve_script("uninstall-agent.ps1")
-    return FileResponse(
-        path=file_path,
-        media_type="text/plain",
-        filename="uninstall-agent.ps1",
-        headers={"Cache-Control": "no-cache"},
+    with open(file_path, "r", encoding="utf-8-sig") as f:
+        content = f.read().lstrip("\ufeff")
+    return Response(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="uninstall-agent.ps1"',
+            "Cache-Control": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

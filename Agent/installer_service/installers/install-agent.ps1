@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # SelfHeal Agent Installer for Windows PowerShell
 # AI-Driven Proactive Self-Healing Infrastructure for SMEs
 # ==============================================================================
@@ -9,6 +9,7 @@ param (
     [string]$Token = "",
     [string]$Namespace = "selfheal-system",
     [string]$AgentImage = "",
+    [string]$EnableHealing = "false",
     [switch]$NonInteractive
 )
 
@@ -33,6 +34,9 @@ if (-not $kubectlCmd) {
 }
 
 $currentContext = (kubectl config current-context 2>$null)
+if ($currentContext) {
+    $currentContext = ($currentContext | Out-String).Trim()
+}
 if (-not $currentContext) {
     Write-Host "[ERROR] Khong the xac dinh Kubernetes context hien tai. Kiem tra file ~/.kube/config." -ForegroundColor Red
     exit 1
@@ -173,15 +177,23 @@ if (-not $Token) {
         $envToken = [System.Environment]::GetEnvironmentVariable("SELFHEAL_AGENT_TOKEN")
         if ($envToken) {
             $Token = $envToken
+        } elseif ($NonInteractive) {
+            Write-Host "[ERROR] NonInteractive mode yeu cau truyen -Token hoac SELFHEAL_AGENT_TOKEN." -ForegroundColor Red
+            exit 1
         } else {
             $securePass = Read-Host "Nhap Token do SelfHeal cap" -AsSecureString
             $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass)
-            $Token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+            try {
+                $Token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+            } finally {
+                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+            }
         }
     }
 }
 
-if (-not $Token -or $Token.Trim() -eq "") {
+$Token = if ($Token) { $Token.Trim() } else { "" }
+if ($Token -eq "") {
     Write-Host "[ERROR] Token khong duoc de trong! Dung qua trinh cai dat." -ForegroundColor Red
     exit 1
 }
@@ -321,7 +333,7 @@ spec:
             - name: LOG_LEVEL
               value: "INFO"
             - name: ENABLE_HEALING_ACTIONS
-              value: "false"
+              value: "$($EnableHealing.ToLower())"
             - name: HEALTH_PORT
               value: "8080"
             - name: PYTHONUNBUFFERED
@@ -380,7 +392,18 @@ Write-Host "--- Kiem tra trang thai Pod ---" -ForegroundColor Yellow
 Write-Host "  Khoi dong lai Pod de ap dung Token moi nhat..."
 kubectl rollout restart deployment/$releaseName --namespace $Namespace | Out-Null
 Write-Host "  Cho Pod khoi dong va san sang..."
-kubectl rollout status deployment/$releaseName --namespace $Namespace --timeout=60s
+$prevRolloutEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    cmd.exe /c "kubectl rollout status deployment/$releaseName --namespace $Namespace --timeout=90s" 2>&1 | Write-Host
+    $rolloutExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevRolloutEAP
+}
+if ($rolloutExit -ne 0) {
+    Write-Host "[CANH BAO] Pod chua chuyen sang Ready trong 90s (thuong do dang keo image hoac cho ket noi WebSocket den Server)." -ForegroundColor Yellow
+    kubectl get pods -n $Namespace -l app.kubernetes.io/name=selfheal-agent
+}
 
 Write-Host ""
 Write-Host "==============================================================================" -ForegroundColor Green
