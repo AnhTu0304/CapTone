@@ -160,7 +160,7 @@ export const config = {
   },
 
   // Google OAuth Config
-  googleClientId: process.env.GOOGLE_CLIENT_ID || '802339246705-ulhj3r1h5e2fk5mlvns21je14q722cva.apps.googleusercontent.com',
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '382317913247-5abqr8bdkm6si7en6asjeckrnnfgsas3.apps.googleusercontent.com',
 
   // OpenTelemetry Config
   otel: {
