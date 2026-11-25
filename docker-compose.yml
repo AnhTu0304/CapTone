@@ -86,6 +86,10 @@ services:
       AI_BACKEND_URL: http://ai-backend:8000
       AI_INTERNAL_HMAC_SECRET: ${AI_INTERNAL_HMAC_SECRET:-dev_only_ai_internal_hmac_secret_32_characters_long}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-dev_only_totp_encryption_key_minimum_32_characters}
+      REFRESH_TOKEN_PEPPER: ${REFRESH_TOKEN_PEPPER:-dev_only_refresh_token_pepper_minimum_32_characters_long}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-dev_only_data_encryption_key_minimum_32_characters_long}
+      DB_SSL_REQUIRE_STRICT: ${DB_SSL_REQUIRE_STRICT:-false}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
       JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_key_minimum_32_characters_long_12345}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
