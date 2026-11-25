@@ -22,8 +22,14 @@ RELEASE_NAME="selfheal-agent"
 AGENT_IMAGE="__SELFHEAL_DOCKER_IMAGE__"
 ENABLE_HEALING="true"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd || echo "")"
-HELM_CHART_DIR="${SCRIPT_DIR}/../deploy/helm/selfheal-agent"
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd || echo "")"
+fi
+HELM_CHART_DIR=""
+if [ -n "${SCRIPT_DIR}" ]; then
+  HELM_CHART_DIR="${SCRIPT_DIR}/../deploy/helm/selfheal-agent"
+fi
 
 echo -e "${CYAN}${BOLD}==============================================================================${NC}"
 echo -e "${RED}${BOLD}   ,~.${NC}"
@@ -82,7 +88,7 @@ if [ -z "${CURRENT_CONTEXT}" ]; then
 fi
 
 USE_HELM=false
-if command -v helm &> /dev/null && [ -d "${HELM_CHART_DIR}" ]; then
+if command -v helm &> /dev/null && [ -n "${HELM_CHART_DIR}" ] && [ -d "${HELM_CHART_DIR}" ]; then
   USE_HELM=true
 fi
 
@@ -137,13 +143,21 @@ if [ -z "${AGENT_TOKEN}" ]; then
     AGENT_TOKEN="${CONFIGURED_TOKEN}"
   elif [ -n "${SELFHEAL_AGENT_TOKEN:-}" ]; then
     AGENT_TOKEN="${SELFHEAL_AGENT_TOKEN}"
-  else
-    read -r -s -p "Nhập Token do SelfHeal cấp: " AGENT_TOKEN
+  elif [ -t 0 ]; then
+    read -r -s -p "Nhập Token do SelfHeal cấp: " AGENT_TOKEN || true
     echo ""
+  elif [ -r /dev/tty ]; then
+    # When executed via `curl ... | bash`, stdin is the pipe at EOF; read interactively from /dev/tty
+    read -r -s -p "Nhập Token do SelfHeal cấp: " AGENT_TOKEN </dev/tty || true
+    echo "" </dev/tty || echo ""
+  else
+    echo -e "${RED}[ERROR] Không có terminal tương tác (/dev/tty) để nhập Token! Hãy truyền --token <TOKEN> hoặc biến môi trường SELFHEAL_AGENT_TOKEN.${NC}"
+    exit 1
   fi
 fi
 
-if [ -z "${AGENT_TOKEN// }" ]; then
+AGENT_TOKEN="$(printf '%s' "${AGENT_TOKEN}" | tr -d '\r\n' | xargs)"
+if [ -z "${AGENT_TOKEN}" ]; then
   echo -e "${RED}[ERROR] Token không được để trống! Quá trình cài đặt dừng lại.${NC}"
   exit 1
 fi
@@ -244,6 +258,8 @@ metadata:
     app.kubernetes.io/name: selfheal-agent
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: selfheal-agent
@@ -310,11 +326,11 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -339,7 +355,10 @@ echo ""
 echo -e "${YELLOW}--- Kiểm tra trạng thái Pod ---${NC}"
 echo -e "  Chờ Pod khởi động và sẵn sàng..."
 kubectl rollout restart deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" >/dev/null 2>&1 || true
-kubectl rollout status deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" --timeout=60s
+if ! kubectl rollout status deployment/"${RELEASE_NAME}" --namespace "${AGENT_NAMESPACE}" --timeout=90s; then
+  echo -e "${YELLOW}[CẢNH BÁO] Pod chưa chuyển sang Ready trong 90s (thường do đang tải image hoặc chờ kết nối WebSocket đến Server).${NC}"
+  kubectl get pods -n "${AGENT_NAMESPACE}" -l app.kubernetes.io/name=selfheal-agent || true
+fi
 
 echo ""
 echo -e "${GREEN}${BOLD}==============================================================================${NC}"

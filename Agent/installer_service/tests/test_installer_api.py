@@ -26,6 +26,9 @@ def test_get_bash_installer(client: TestClient) -> None:
     assert "text/x-shellscript" in resp.headers["content-type"]
     assert "attachment; filename=\"install-agent.sh\"" in resp.headers.get("content-disposition", "")
     assert "#!/usr/bin/env bash" in resp.text
+    assert "${BASH_SOURCE[0]:-}" in resp.text
+    assert "/dev/tty" in resp.text
+    assert "cpu: 500m" in resp.text
     assert "SelfHeal" in resp.text
 
 
@@ -36,6 +39,8 @@ def test_get_powershell_installer(client: TestClient) -> None:
     assert "attachment; filename=\"install-agent.ps1\"" in resp.headers.get("content-disposition", "")
     # UTF-8 BOM (\ufeff) breaks PowerShell `irm ... | iex` and `[scriptblock]::Create(...)` when param() is present
     assert not resp.text.startswith("\ufeff")
+    assert '$EnableHealing = "true"' in resp.text
+    assert "cpu: 500m" in resp.text
     assert "SelfHeal" in resp.text
     assert "kubectl" in resp.text
 

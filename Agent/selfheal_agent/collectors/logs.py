@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import logging
+import re
 from typing import Literal, Optional
 from kubernetes import client
 
@@ -10,6 +11,16 @@ from selfheal_agent.telemetry.schemas import AgentLogData
 from selfheal_agent.utils.redaction import redact_sensitive_data
 
 logger = logging.getLogger("selfheal_agent.collectors.logs")
+
+_JSON_INFO_RE = re.compile(r'"s"\s*:\s*"(?:I|D)"')
+_ERROR_LOG_RE = re.compile(
+    r"(?<![a-z0-9_])(error|fatal|exception|crash|oom|oomkilled|panic|failed|traceback|critical|err)(?![a-z0-9_])",
+    re.IGNORECASE,
+)
+_WARN_LOG_RE = re.compile(
+    r"(?<![a-z0-9_])(warn|warning|timeout|retry|slow|backoff|unhealthy)(?![a-z0-9_])",
+    re.IGNORECASE,
+)
 
 
 class LogsCollector:
@@ -20,13 +31,13 @@ class LogsCollector:
         self._last_read_times: dict[str, datetime] = {}
 
     def _infer_level(self, line: str) -> Literal["error", "warn", "info"]:
-        lower = line.lower()
-        if any(
-            k in lower
-            for k in ("error", "fatal", "exception", "crash", "oom", "panic", "failed")
-        ):
+        # Routine MongoDB structured JSON info/debug entries ("s":"I") are informational even if metrics/query names match
+        if _JSON_INFO_RE.search(line):
+            return "info"
+        # Word-boundary regex avoids false positives such as CoreDNS 'NOERROR' matching 'error'
+        if _ERROR_LOG_RE.search(line):
             return "error"
-        if any(k in lower for k in ("warn", "warning", "timeout", "retry", "slow")):
+        if _WARN_LOG_RE.search(line):
             return "warn"
         return "info"
 

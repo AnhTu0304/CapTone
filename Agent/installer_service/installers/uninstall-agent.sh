@@ -31,7 +31,13 @@ echo -e "${RED}[LƯU Ý] Quá trình này sẽ xóa Agent khỏi cụm Kubernete
 echo -e "${YELLOW}Workload ứng dụng của công ty và dữ liệu trên SelfHeal Backend sẽ KHÔNG bị ảnh hưởng.${NC}"
 echo ""
 
-read -r -p "Bạn có chắc chắn muốn gỡ cài đặt SelfHeal Agent? (y/N): " CONFIRM
+if [ -t 0 ]; then
+  read -r -p "Bạn có chắc chắn muốn gỡ cài đặt SelfHeal Agent? (y/N): " CONFIRM || true
+elif [ -r /dev/tty ]; then
+  read -r -p "Bạn có chắc chắn muốn gỡ cài đặt SelfHeal Agent? (y/N): " CONFIRM </dev/tty || true
+else
+  CONFIRM=""
+fi
 if [[ ! "${CONFIRM}" =~ ^[yY](es)?$ ]]; then
   echo -e "${YELLOW}[CANCEL] Hủy bỏ thao tác gỡ cài đặt.${NC}"
   exit 0

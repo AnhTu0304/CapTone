@@ -186,11 +186,24 @@ class AgentWebSocketClient:
             ) as ws:
                 self._ws = ws
                 self._reconnect_attempt = 0
-                logger.info("Connected to WebSocket transport. Sending handshake payload...")
 
-                # Send explicit auth payload for backend fallback compatibility
-                auth_payload = AuthMessage(token=self.config.AGENT_TOKEN)
-                await ws.send(auth_payload.model_dump_json())
+                # Main Backend authenticates immediately via HTTP upgrade headers and emits {"status": "authenticated"}.
+                # Wait briefly for server-initiated handshake before falling back to first-message auth so we never
+                # trigger 4003 "Re-authentication on an already authenticated agent session is forbidden".
+                server_pre_authenticated = False
+                try:
+                    initial_frame = await asyncio.wait_for(ws.recv(), timeout=0.35)
+                    await self._handle_raw_message(initial_frame)
+                    server_pre_authenticated = self.is_authenticated
+                except asyncio.TimeoutError:
+                    server_pre_authenticated = False
+
+                if not server_pre_authenticated:
+                    logger.info("Connected to WebSocket transport. Sending handshake payload...")
+                    auth_payload = AuthMessage(token=self.config.AGENT_TOKEN)
+                    await ws.send(auth_payload.model_dump_json())
+                else:
+                    logger.info("Authenticated immediately via WebSocket upgrade headers.")
 
                 async for raw_message in ws:
                     await self._handle_raw_message(raw_message)

@@ -20,6 +20,7 @@ import {
 } from '../telemetry/metrics';
 import { buildAiInternalAuthHeaders } from '../utils/internalAuth';
 import { isDatabaseCacheWorkload } from '../utils/systemServiceFilter';
+import { RecoveryVerificationService } from './recoveryVerification.service';
 
 export interface AiBackendHealth {
   status: string;
@@ -625,27 +626,24 @@ export class AiService {
               )
             : Number(input.metrics.pod_restart_count ?? 0);
         for (const unv of unverifiedActRes.rows) {
-          const metricParts: string[] = [];
-          const latVal = Number((input.metrics as any).latency ?? 0);
-          const err5xxVal = Number((input.metrics as any).http_5xx_rate ?? 0);
-          const diskVal = Number((input.metrics as any).disk ?? 0);
           const cpuVal = Number(input.metrics.cpu ?? 0);
           const ramVal = Number(input.metrics.ram ?? 0);
           const restartCount = Number(input.metrics.pod_restart_count ?? 0);
 
-          if (latVal >= 300) metricParts.push(`Độ trễ: ${Math.round(latVal)}ms`);
-          if (err5xxVal > 0) metricParts.push(`Lỗi HTTP 5xx: ${err5xxVal}%`);
-          if (diskVal >= 80) metricParts.push(`Disk: ${diskVal}%`);
-          if (cpuVal >= 80) metricParts.push(`CPU quá tải: ${cpuVal}%`);
-          if (ramVal >= 90 && !(isDbCacheTarget && seqRestartDelta === 0 && !hasOomSignal)) {
-            metricParts.push(`RAM cạn kiệt: ${ramVal}%`);
-          }
-          if (restartCount > 0 && (!isDbCacheTarget || seqRestartDelta > 0)) {
-            metricParts.push(`Restart: ${restartCount} lần`);
-          }
+          const verificationCheck =
+            seqArr.length >= 3
+              ? RecoveryVerificationService.evaluateSequenceRecovery(seqArr as any[], {
+                  isDatabaseWorkload: isDbCacheTarget && !hasOomSignal,
+                  baselineRestartCount: Number(seqArr[0]?.pod_restart_count ?? 0),
+                })
+              : RecoveryVerificationService.evaluateSampleHealth(input.metrics as any, {
+                  isDatabaseWorkload: isDbCacheTarget && seqRestartDelta === 0 && !hasOomSignal,
+                  baselineRestartCount: restartCount,
+                });
 
+          const metricParts = verificationCheck.violations;
           const telemetrySnapshot = `CPU: ${cpuVal}%, RAM: ${ramVal}%, Restart: ${restartCount}`;
-          const isHealthy = metricParts.length === 0;
+          const isHealthy = verificationCheck.healthy;
           const actCompletedAt = unv.effective_completed_at ? new Date(unv.effective_completed_at) : null;
           const actualDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
 
@@ -1186,6 +1184,7 @@ export class AiService {
             ? newSevUpper
             : curSevUpper;
 
+        const isUnknownReRca = String(aiResponse.root_cause?.cause || '').toUpperCase() === 'UNKNOWN';
         await client.query(
           `UPDATE incidents
            SET occurrence_count = COALESCE(occurrence_count, 1) + 1,
@@ -1193,11 +1192,11 @@ export class AiService {
                detected_at = NOW(),
                target_name = COALESCE(target_name, $2),
                severity = $3,
-               title = $4,
-               description = $5,
+               title = CASE WHEN $6::boolean AND COALESCE(title, '') <> '' AND title NOT ILIKE 'UNKNOWN%' THEN title ELSE $4 END,
+               description = CASE WHEN $6::boolean AND COALESCE(description, '') <> '' THEN description ELSE $5 END,
                updated_at = NOW()
            WHERE id = $1;`,
-          [incidentId, input.service_id, nextSeverity, incidentTitle, aiResponse.explanation]
+          [incidentId, input.service_id, nextSeverity, incidentTitle, aiResponse.explanation, isUnknownReRca]
         );
 
         // Check if identical recommendation is already proposed for this incident

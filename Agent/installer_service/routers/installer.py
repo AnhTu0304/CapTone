@@ -213,6 +213,8 @@ metadata:
     app.kubernetes.io/component: monitoring-agent
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: selfheal-agent
@@ -278,11 +280,11 @@ spec:
             failureThreshold: 3
           resources:
             limits:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -46,7 +46,38 @@ const EXCLUDED_SYSTEM_PREFIXES = [
 ];
 
 export function isExcludedSystemService(rawName?: string | null): boolean {
-  // Option 3: Mở toàn bộ, không loại trừ bất kỳ dịch vụ/workload nào trên cụm K8s
+  // Option 3: Mở toàn bộ, không loại trừ bất kỳ dịch vụ/workload nào trên cụm K8s khỏi màn hình giám sát
+  return false;
+}
+
+const PROTECTED_SYSTEM_NAMESPACES = new Set([
+  'kube-system',
+  'kube-public',
+  'kube-node-lease',
+  'local-path-storage',
+  'selfheal-system',
+]);
+
+/**
+ * Nhận diện thành phần hạ tầng lõi Kubernetes / Monitoring Stack / Job khởi tạo 1 lần (-init).
+ * Vẫn cho phép thu thập telemetry để hiển thị Overview, nhưng chặn chạy AI/RCA/tạo Incident & Auto-Healing
+ * để không tạo cảnh báo giả (vd REPLACE_POD trên selfheal-agent hay RESTART_POD trên kube-apiserver).
+ */
+export function isInfrastructureControlPlaneWorkload(
+  rawName?: string | null,
+  namespace?: string | null
+): boolean {
+  const ns = String(namespace || '').trim().toLowerCase();
+  if (ns && PROTECTED_SYSTEM_NAMESPACES.has(ns)) return true;
+
+  if (!rawName || typeof rawName !== 'string') return false;
+  const normalized = rawName.trim().toLowerCase();
+  if (!normalized) return false;
+
+  if (EXCLUDED_SYSTEM_EXACT.has(normalized)) return true;
+  if (EXCLUDED_SYSTEM_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true;
+  if (/(?:-rs)?-init(?:\b|-[a-z0-9]+$)/i.test(normalized)) return true;
+
   return false;
 }
 
