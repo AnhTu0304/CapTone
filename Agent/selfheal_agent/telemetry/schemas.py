@@ -137,6 +137,12 @@ class LogMessage(BaseModel):
     data: AgentLogData
 
 
+class LogBatchMessage(BaseModel):
+    """Batched log envelope sent over WebSocket to minimize SQL roundtrips."""
+    type: Literal["log_batch"] = "log_batch"
+    data: list[AgentLogData]
+
+
 class K8sEventMessage(BaseModel):
     """Kubernetes event envelope sent over WebSocket."""
     type: Literal["k8s_event"] = "k8s_event"
@@ -179,6 +185,7 @@ OutgoingEnvelope = Union[
     MetricsMessage,
     NodeMetricsMessage,
     LogMessage,
+    LogBatchMessage,
     K8sEventMessage,
     K8sInventoryMessage,
     ActionResultMessage,

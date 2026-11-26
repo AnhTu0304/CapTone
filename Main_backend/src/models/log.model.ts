@@ -56,6 +56,67 @@ export interface ILogQueryResult {
 }
 
 export class LogModel {
+  private static readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  private static normalizeLogInsertParams(log: ILog): [
+    string | null,
+    string | null,
+    string | null,
+    string | null,
+    string,
+    string,
+    string,
+    Date,
+    string | null
+  ] {
+    let validClusterUuid: string | null = null;
+    let validServiceUuid: string | null = null;
+    let validNamespaceUuid: string | null = null;
+    let validPodUuid: string | null = null;
+    let metadataObj = log.metadata || {};
+
+    if (log.cluster_id && LogModel.UUID_REGEX.test(log.cluster_id)) {
+      validClusterUuid = log.cluster_id;
+    }
+
+    if (log.service_id) {
+      if (LogModel.UUID_REGEX.test(log.service_id)) {
+        validServiceUuid = log.service_id;
+      } else if (!metadataObj.service_id) {
+        metadataObj = { ...metadataObj, service_id: log.service_id };
+      }
+    }
+
+    if (log.namespace_id) {
+      if (LogModel.UUID_REGEX.test(log.namespace_id)) {
+        validNamespaceUuid = log.namespace_id;
+      } else if (!metadataObj.namespace) {
+        metadataObj = { ...metadataObj, namespace: log.namespace_id };
+      }
+    }
+
+    if (log.pod_id) {
+      if (LogModel.UUID_REGEX.test(log.pod_id)) {
+        validPodUuid = log.pod_id;
+      } else if (!metadataObj.pod_id && !metadataObj.pod_name) {
+        metadataObj = { ...metadataObj, pod_id: log.pod_id, pod_name: log.pod_id };
+      }
+    }
+
+    return [
+      validClusterUuid,
+      validNamespaceUuid,
+      validServiceUuid,
+      validPodUuid,
+      log.level.toUpperCase(),
+      log.message,
+      log.source || 'k8s-agent',
+      log.occurred_at,
+      Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : null,
+    ];
+  }
+
   /**
    * Insert raw log record
    */
@@ -68,72 +129,112 @@ export class LogModel {
       ) RETURNING id;
     `;
 
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let validClusterUuid: string | null = null;
-    let validServiceUuid: string | null = null;
-    let validNamespaceUuid: string | null = null;
-    let validPodUuid: string | null = null;
-    let metadataObj = log.metadata || {};
-
-    if (log.cluster_id && uuidRegex.test(log.cluster_id)) {
-      validClusterUuid = log.cluster_id;
-    }
-
-    if (log.service_id) {
-      if (uuidRegex.test(log.service_id)) {
-        validServiceUuid = log.service_id;
-      } else if (!metadataObj.service_id) {
-        metadataObj = { ...metadataObj, service_id: log.service_id };
-      }
-    }
-
-    if (log.namespace_id) {
-      if (uuidRegex.test(log.namespace_id)) {
-        validNamespaceUuid = log.namespace_id;
-      } else if (!metadataObj.namespace) {
-        metadataObj = { ...metadataObj, namespace: log.namespace_id };
-      }
-    }
-
-    if (log.pod_id) {
-      if (uuidRegex.test(log.pod_id)) {
-        validPodUuid = log.pod_id;
-      } else if (!metadataObj.pod_id && !metadataObj.pod_name) {
-        metadataObj = { ...metadataObj, pod_id: log.pod_id, pod_name: log.pod_id };
-      }
-    }
-
-    const res = await pool.query(query, [
-      validClusterUuid,
-      validNamespaceUuid,
-      validServiceUuid,
-      validPodUuid,
-      log.level.toUpperCase(),
-      log.message,
-      log.source || 'k8s-agent',
-      log.occurred_at,
-      Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : null,
-    ]);
-
+    const res = await pool.query(query, LogModel.normalizeLogInsertParams(log));
     return { id: res.rows[0].id };
   }
 
   /**
+   * Insert multiple log records in a single multi-row SQL roundtrip.
+   */
+  public static async createBatch(logs: ILog[]): Promise<Array<{ id: string | number }>> {
+    if (!logs || logs.length === 0) return [];
+    if (logs.length === 1) {
+      return [await LogModel.create(logs[0])];
+    }
+
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    let paramIdx = 1;
+
+    for (const item of logs) {
+      const tuple = LogModel.normalizeLogInsertParams(item);
+      placeholders.push(
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
+      );
+      values.push(...tuple);
+    }
+
+    const query = `
+      INSERT INTO logs (
+        cluster_id, namespace_id, service_id, pod_id, level, message, source, occurred_at, metadata
+      ) VALUES ${placeholders.join(', ')}
+      RETURNING id;
+    `;
+
+    const res = await pool.query(query, values);
+    return res.rows.map((r) => ({ id: r.id }));
+  }
+
+  /**
    * Query prioritized logs for RCA context (FATAL > ERROR > WARN > keywords > INFO)
+   * Uses UNION ALL across indexable branches instead of unindexed OR predicates.
    */
   public static async findPrioritizedByService(
     serviceId: string,
     windowMinutes: number = 30,
     limit: number = 30
   ): Promise<Array<{ level: string; message: string; occurred_at: Date; pod_id?: string }>> {
+    const safeLimit = Math.min(Math.max(1, Number(limit) || 30), 200);
+    const candidateLimit = Math.min(2000, Math.max(safeLimit * 25, 500));
     const query = `
-      WITH prioritized_logs AS (
+      WITH candidate_logs AS (
+        (
+          SELECT id, level, message, occurred_at, metadata->>'pod_id' AS pod_id
+          FROM logs
+          WHERE metadata->>'service_id' = $1
+            AND UPPER(level) IN ('FATAL', 'CRITICAL', 'ERROR', 'WARN', 'WARNING')
+            AND occurred_at >= NOW() - ($2 || ' minutes')::interval
+          ORDER BY occurred_at DESC
+          LIMIT $4
+        )
+        UNION ALL
+        (
+          SELECT id, level, message, occurred_at, metadata->>'pod_id' AS pod_id
+          FROM logs
+          WHERE metadata->>'service_id' = $1
+            AND occurred_at >= NOW() - ($2 || ' minutes')::interval
+          ORDER BY occurred_at DESC
+          LIMIT $4
+        )
+        UNION ALL
+        (
+          SELECT id, level, message, occurred_at, metadata->>'pod_id' AS pod_id
+          FROM logs
+          WHERE service_id = $1
+            AND occurred_at >= NOW() - ($2 || ' minutes')::interval
+          ORDER BY occurred_at DESC
+          LIMIT $4
+        )
+        UNION ALL
+        (
+          SELECT id, level, message, occurred_at, metadata->>'pod_id' AS pod_id
+          FROM logs
+          WHERE service_id IN (SELECT id::text FROM workloads WHERE name = $1 OR id::text = $1)
+            AND occurred_at >= NOW() - ($2 || ' minutes')::interval
+          ORDER BY occurred_at DESC
+          LIMIT $4
+        )
+        UNION ALL
+        (
+          SELECT id, level, message, occurred_at, metadata->>'pod_id' AS pod_id
+          FROM logs
+          WHERE pod_id IN (SELECT id FROM pods WHERE name LIKE $1 || '%')
+            AND occurred_at >= NOW() - ($2 || ' minutes')::interval
+          ORDER BY occurred_at DESC
+          LIMIT $4
+        )
+      ),
+      deduped_logs AS (
+        SELECT DISTINCT ON (id) id, level, message, occurred_at, pod_id
+        FROM candidate_logs
+      ),
+      prioritized_logs AS (
         SELECT 
           id,
           level,
           message,
           occurred_at,
-          metadata->>'pod_id' as pod_id,
+          pod_id,
           CASE 
             WHEN UPPER(level) IN ('FATAL', 'CRITICAL') THEN 1
             WHEN UPPER(level) = 'ERROR' THEN 2
@@ -141,14 +242,7 @@ export class LogModel {
             WHEN message ~* '(exception|timeout|oom|crash|connection error|killed|deadlock|fail)' THEN 4
             ELSE 5
           END AS priority_score
-        FROM logs
-        WHERE (
-          metadata->>'service_id' = $1 
-          OR service_id::text = $1
-          OR service_id::text IN (SELECT id::text FROM workloads WHERE name = $1 OR id::text = $1)
-          OR pod_id IN (SELECT id FROM pods WHERE name LIKE $1 || '%')
-        )
-        AND occurred_at >= NOW() - ($2 || ' minutes')::interval
+        FROM deduped_logs
       )
       SELECT level, message, occurred_at, pod_id
       FROM (
@@ -159,7 +253,7 @@ export class LogModel {
       ORDER BY occurred_at ASC;
     `;
 
-    const res = await pool.query(query, [serviceId, windowMinutes, limit]);
+    const res = await pool.query(query, [serviceId, windowMinutes, safeLimit, candidateLimit]);
     return res.rows;
   }
 
@@ -185,14 +279,14 @@ export class LogModel {
       const isUuid = uuidRegex.test(options.serviceId);
       if (isUuid) {
         conditions.push(`(
-          l.service_id::text = $${paramIdx} 
+          l.service_id = $${paramIdx} 
           OR l.metadata->>'service_id' = $${paramIdx}
         )`);
       } else {
         conditions.push(`(
           l.metadata->>'service_id' = $${paramIdx} 
-          OR l.service_id::text IN (SELECT id::text FROM services WHERE name = $${paramIdx})
-          OR l.service_id::text IN (SELECT id::text FROM workloads WHERE name = $${paramIdx})
+          OR l.service_id IN (SELECT id::text FROM services WHERE name = $${paramIdx})
+          OR l.service_id IN (SELECT id::text FROM workloads WHERE name = $${paramIdx})
         )`);
       }
       params.push(options.serviceId);
@@ -205,17 +299,17 @@ export class LogModel {
       const isUuid = uuidRegex.test(ns);
       if (isUuid) {
         conditions.push(`(
-          l.namespace_id::text = $${paramIdx}
+          l.namespace_id = $${paramIdx}::uuid
           OR l.metadata->>'namespace' = $${paramIdx}
           OR l.metadata->>'namespace_id' = $${paramIdx}
-          OR l.pod_id::text IN (SELECT id::text FROM pods WHERE namespace_id::text = $${paramIdx})
+          OR l.pod_id IN (SELECT id FROM pods WHERE namespace_id = $${paramIdx}::uuid)
         )`);
       } else {
         conditions.push(`(
-          l.namespace_id::text IN (SELECT id::text FROM namespaces WHERE name = $${paramIdx})
+          l.namespace_id IN (SELECT id FROM namespaces WHERE name = $${paramIdx})
           OR l.metadata->>'namespace' = $${paramIdx}
           OR l.metadata->>'namespace_id' = $${paramIdx}
-          OR l.pod_id::text IN (SELECT p.id::text FROM pods p JOIN namespaces ns ON p.namespace_id = ns.id WHERE ns.name = $${paramIdx})
+          OR l.pod_id IN (SELECT p.id FROM pods p JOIN namespaces ns ON p.namespace_id = ns.id WHERE ns.name = $${paramIdx})
         )`);
       }
       params.push(ns);
@@ -228,18 +322,18 @@ export class LogModel {
       const isUuid = uuidRegex.test(dep);
       if (isUuid) {
         conditions.push(`(
-          l.service_id::text = $${paramIdx}
+          l.service_id = $${paramIdx}
           OR l.metadata->>'service_id' = $${paramIdx}
           OR l.metadata->>'deployment' = $${paramIdx}
-          OR l.pod_id::text IN (SELECT id::text FROM pods WHERE workload_id::text = $${paramIdx})
+          OR l.pod_id IN (SELECT id FROM pods WHERE workload_id = $${paramIdx}::uuid)
         )`);
       } else {
         conditions.push(`(
           l.metadata->>'service_id' = $${paramIdx}
           OR l.metadata->>'deployment' = $${paramIdx}
           OR l.metadata->>'workload' = $${paramIdx}
-          OR l.service_id::text IN (SELECT id::text FROM workloads WHERE name = $${paramIdx})
-          OR l.pod_id::text IN (SELECT p.id::text FROM pods p JOIN workloads w ON p.workload_id = w.id WHERE w.name = $${paramIdx})
+          OR l.service_id IN (SELECT id::text FROM workloads WHERE name = $${paramIdx})
+          OR l.pod_id IN (SELECT p.id FROM pods p JOIN workloads w ON p.workload_id = w.id WHERE w.name = $${paramIdx})
         )`);
       }
       params.push(dep);
@@ -252,7 +346,7 @@ export class LogModel {
       const isUuid = uuidRegex.test(pod);
       if (isUuid) {
         conditions.push(`(
-          l.pod_id::text = $${paramIdx}
+          l.pod_id = $${paramIdx}::uuid
           OR l.metadata->>'pod_id' = $${paramIdx}
           OR l.metadata->>'pod_name' = $${paramIdx}
         )`);
@@ -260,7 +354,7 @@ export class LogModel {
         conditions.push(`(
           l.metadata->>'pod_id' = $${paramIdx}
           OR l.metadata->>'pod_name' = $${paramIdx}
-          OR l.pod_id::text IN (SELECT id::text FROM pods WHERE name = $${paramIdx})
+          OR l.pod_id IN (SELECT id FROM pods WHERE name = $${paramIdx})
         )`);
       }
       params.push(pod);
@@ -291,19 +385,19 @@ export class LogModel {
     }
 
     if (options.clusterId) {
-      conditions.push(`l.cluster_id::text = $${paramIdx++}`);
+      conditions.push(`l.cluster_id = $${paramIdx++}`);
       params.push(options.clusterId);
     }
 
     // Tenant Isolation Scope [S4][PB17] 3.5
     if (Array.isArray(options.allowedOrgIds) && options.allowedOrgIds.length > 0) {
       conditions.push(`(
-        l.cluster_id::text IN (
+        l.cluster_id IN (
           SELECT c.id::text FROM clusters c 
           JOIN environments env ON c.environment_id = env.id 
           WHERE env.organization_id = ANY($${paramIdx}::uuid[])
         )
-        OR l.service_id::text IN (
+        OR l.service_id IN (
           SELECT s.id::text FROM services s 
           JOIN clusters c ON s.cluster_id = c.id
           JOIN environments env ON c.environment_id = env.id 

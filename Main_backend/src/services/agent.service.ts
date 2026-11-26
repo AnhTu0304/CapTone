@@ -14,6 +14,7 @@ import {
   EnvironmentModel,
   ClusterModel,
 } from '../models';
+import type { ILog } from '../models/log.model';
 import { ApiError } from '../utils/apiError';
 import { AuditService, IAuditRequestContext } from './audit.service';
 import {
@@ -1125,131 +1126,222 @@ export class AgentService {
 
 
   /**
+   * Store Agent Logs with boundary validation, batch target resolution, and multi-row insert.
+   */
+  public static async storeLogsBatch(
+    agent: AuthenticatedAgent,
+    items: AgentLogPayload[]
+  ): Promise<Array<{ id: number | string; payload: AgentLogPayload }>> {
+    if (!items || items.length === 0) return [];
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const workloadCache = new Map<string, string | null>();
+    const serviceCache = new Map<string, string | null>();
+    const podCache = new Map<
+      string,
+      { podFk: string | null; podName: string | null; namespaceId: string | null; namespaceName: string | null }
+    >();
+    const nsCache = new Map<string, { id: string | null; name: string }>();
+
+    const preparedLogs: ILog[] = [];
+    const preparedMeta: Array<{
+      data: AgentLogPayload;
+      serviceFk: string | null;
+      namespaceId: string | null;
+      namespaceName: string;
+      podFk: string | null;
+      podName: string | null;
+      workloadName?: string;
+      safeLevel: string;
+      safeMessage: string;
+      occurredAt: Date;
+    }> = [];
+
+    for (const data of items) {
+      const rawDate = new Date(data.timestamp);
+      const occurredAt = isNaN(rawDate.getTime()) ? new Date() : rawDate;
+
+      let workloadName: string | undefined = workloadCache.get(data.service_id) ?? undefined;
+      if (!workloadCache.has(data.service_id)) {
+        const workload = await WorkloadModel.findByName(data.service_id);
+        workloadName = workload?.name || undefined;
+        workloadCache.set(data.service_id, workloadName || null);
+      }
+
+      let serviceFk: string | null = serviceCache.get(data.service_id) ?? null;
+      if (!serviceCache.has(data.service_id)) {
+        if (uuidRegex.test(data.service_id)) {
+          const sRes = await pool.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [data.service_id]);
+          serviceFk = sRes.rows[0]?.id || null;
+        } else {
+          const sRes = await pool.query('SELECT id FROM services WHERE name = $1 LIMIT 1', [data.service_id]);
+          serviceFk = sRes.rows[0]?.id || null;
+        }
+        serviceCache.set(data.service_id, serviceFk);
+      }
+
+      const safeLevel = (data.level || 'INFO').toUpperCase().slice(0, 50);
+      const safeMessage = data.message.slice(0, 65535);
+
+      let namespaceId: string | null = null;
+      let namespaceName: string | null = data.namespace || null;
+      let podFk: string | null = null;
+      let podName: string | null = null;
+
+      if (data.pod_id && data.pod_id !== 'unknown-pod') {
+        const cachedPod = podCache.get(data.pod_id);
+        if (cachedPod) {
+          podFk = cachedPod.podFk;
+          podName = cachedPod.podName;
+          namespaceId = cachedPod.namespaceId || namespaceId;
+          namespaceName = cachedPod.namespaceName || namespaceName;
+        } else {
+          let resolvedPod = {
+            podFk: null as string | null,
+            podName: null as string | null,
+            namespaceId: null as string | null,
+            namespaceName: null as string | null,
+          };
+          try {
+            const pRes = await pool.query(
+              'SELECT p.id, p.name, p.namespace_id, ns.name as namespace_name FROM pods p LEFT JOIN namespaces ns ON p.namespace_id = ns.id WHERE p.kubernetes_uid = $1 OR p.name = $1 OR p.id::text = $1 LIMIT 1',
+              [data.pod_id]
+            );
+            if (pRes.rows[0]) {
+              resolvedPod = {
+                podFk: pRes.rows[0].id,
+                podName: pRes.rows[0].name,
+                namespaceId: pRes.rows[0].namespace_id || null,
+                namespaceName: pRes.rows[0].namespace_name || null,
+              };
+            }
+          } catch {}
+          podCache.set(data.pod_id, resolvedPod);
+          podFk = resolvedPod.podFk;
+          podName = resolvedPod.podName;
+          namespaceId = resolvedPod.namespaceId || namespaceId;
+          namespaceName = resolvedPod.namespaceName || namespaceName;
+        }
+      }
+
+      if (!namespaceId && serviceFk) {
+        try {
+          const sRes = await pool.query(
+            'SELECT s.namespace_id, ns.name as namespace_name FROM services s LEFT JOIN namespaces ns ON s.namespace_id = ns.id WHERE s.id = $1 LIMIT 1',
+            [serviceFk]
+          );
+          if (sRes.rows[0]?.namespace_id) {
+            namespaceId = sRes.rows[0].namespace_id;
+            namespaceName = sRes.rows[0].namespace_name || namespaceName;
+          }
+        } catch {}
+      }
+
+      if (!namespaceId && agent.cluster_id) {
+        const nsTarget = namespaceName || 'default';
+        const nsKey = `${agent.cluster_id}:${nsTarget}`;
+        if (nsCache.has(nsKey)) {
+          const cachedNs = nsCache.get(nsKey)!;
+          namespaceId = cachedNs.id;
+          namespaceName = cachedNs.name;
+        } else {
+          let resolvedNsId: string | null = null;
+          let resolvedNsName = nsTarget;
+          try {
+            const nsRes = await pool.query(
+              'SELECT id, name FROM namespaces WHERE (cluster_id = $1::uuid OR cluster_id IS NULL) AND name = $2 LIMIT 1',
+              [agent.cluster_id, nsTarget]
+            );
+            if (nsRes.rows[0]) {
+              resolvedNsId = nsRes.rows[0].id;
+              resolvedNsName = nsRes.rows[0].name;
+            }
+          } catch {}
+          nsCache.set(nsKey, { id: resolvedNsId, name: resolvedNsName });
+          namespaceId = resolvedNsId;
+          namespaceName = resolvedNsName;
+        }
+      }
+
+      const finalNamespace = namespaceName || data.namespace || 'default';
+      preparedLogs.push({
+        cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 255) : null,
+        namespace_id: namespaceId,
+        service_id: serviceFk,
+        pod_id: podFk,
+        level: safeLevel,
+        message: safeMessage,
+        source: 'k8s-agent',
+        occurred_at: occurredAt,
+        metadata: {
+          service_id: data.service_id.slice(0, 100),
+          pod_id: (data.pod_id || 'unknown-pod').slice(0, 100),
+          pod_name: podName || (data.pod_id || 'unknown-pod').slice(0, 100),
+          namespace: finalNamespace,
+          deployment: workloadName,
+          agent_id: agent.id,
+        },
+      });
+      preparedMeta.push({
+        data,
+        serviceFk,
+        namespaceId,
+        namespaceName: finalNamespace,
+        podFk,
+        podName,
+        workloadName,
+        safeLevel,
+        safeMessage,
+        occurredAt,
+      });
+    }
+
+    const inserted = await LogModel.createBatch(preparedLogs);
+    const results: Array<{ id: number | string; payload: AgentLogPayload }> = [];
+
+    for (let i = 0; i < inserted.length; i++) {
+      const saved = inserted[i];
+      const meta = preparedMeta[i];
+      try {
+        LogStreamService.emitLog({
+          id: saved.id,
+          cluster_id: agent.cluster_id || null,
+          namespace_id: meta.namespaceId,
+          namespace: meta.namespaceName,
+          service_id: meta.serviceFk,
+          service_name: meta.data.service_id,
+          pod_id: meta.podFk,
+          pod_name: meta.podName || meta.data.pod_id,
+          level: meta.safeLevel,
+          message: meta.safeMessage,
+          source: 'k8s-agent',
+          occurred_at: meta.occurredAt.toISOString(),
+          metadata: {
+            service_id: meta.data.service_id.slice(0, 100),
+            pod_id: (meta.data.pod_id || 'unknown-pod').slice(0, 100),
+            pod_name: meta.podName || (meta.data.pod_id || 'unknown-pod').slice(0, 100),
+            namespace: meta.namespaceName,
+            deployment: meta.workloadName,
+            agent_id: agent.id,
+          },
+        });
+      } catch {}
+      results.push({ id: saved.id, payload: meta.data });
+    }
+
+    await AgentModel.touchLastSeen(agent.id);
+    return results;
+  }
+
+  /**
    * Store Agent Logs with boundary validation and sanitization
    */
   public static async storeLog(
     agent: AuthenticatedAgent,
     data: AgentLogPayload
   ): Promise<{ id: number | string }> {
-    const rawDate = new Date(data.timestamp);
-    const occurredAt = isNaN(rawDate.getTime()) ? new Date() : rawDate;
-
-    // Resolve workload_id and verify if service_id exists in services table (foreign key constraint)
-    let workloadId: string | null = null;
-    const workload = await WorkloadModel.findByName(data.service_id);
-    if (workload) {
-      workloadId = workload.id;
-    }
-
-    let serviceFk: string | null = null;
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidRegex.test(data.service_id)) {
-      const sRes = await pool.query('SELECT id FROM services WHERE id = $1 LIMIT 1', [data.service_id]);
-      if (sRes.rows[0]) serviceFk = sRes.rows[0].id;
-    } else {
-      const sRes = await pool.query('SELECT id FROM services WHERE name = $1 LIMIT 1', [data.service_id]);
-      if (sRes.rows[0]) serviceFk = sRes.rows[0].id;
-    }
-
-    const safeLevel = (data.level || 'INFO').toUpperCase().slice(0, 50);
-    const safeMessage = data.message.slice(0, 65535);
-
-    // Resolve namespace and pod
-    let namespaceId: string | null = null;
-    let namespaceName: string | null = data.namespace || null;
-    let podFk: string | null = null;
-    let podName: string | null = null;
-
-    if (data.pod_id && data.pod_id !== 'unknown-pod') {
-      try {
-        const pRes = await pool.query(
-          "SELECT p.id, p.name, p.namespace_id, ns.name as namespace_name FROM pods p LEFT JOIN namespaces ns ON p.namespace_id = ns.id WHERE p.kubernetes_uid = $1 OR p.name = $1 OR p.id::text = $1 LIMIT 1",
-          [data.pod_id]
-        );
-        if (pRes.rows[0]) {
-          podFk = pRes.rows[0].id;
-          podName = pRes.rows[0].name;
-          if (pRes.rows[0].namespace_id) {
-            namespaceId = pRes.rows[0].namespace_id;
-            namespaceName = pRes.rows[0].namespace_name || namespaceName;
-          }
-        }
-      } catch {}
-    }
-
-    if (!namespaceId && serviceFk) {
-      try {
-        const sRes = await pool.query(
-          "SELECT s.namespace_id, ns.name as namespace_name FROM services s LEFT JOIN namespaces ns ON s.namespace_id = ns.id WHERE s.id = $1 LIMIT 1",
-          [serviceFk]
-        );
-        if (sRes.rows[0]?.namespace_id) {
-          namespaceId = sRes.rows[0].namespace_id;
-          namespaceName = sRes.rows[0].namespace_name || namespaceName;
-        }
-      } catch {}
-    }
-
-    if (!namespaceId && agent.cluster_id) {
-      try {
-        const nsTarget = namespaceName || 'default';
-        const nsRes = await pool.query(
-          "SELECT id, name FROM namespaces WHERE (cluster_id = $1::uuid OR cluster_id IS NULL) AND name = $2 LIMIT 1",
-          [agent.cluster_id, nsTarget]
-        );
-        if (nsRes.rows[0]) {
-          namespaceId = nsRes.rows[0].id;
-          namespaceName = nsRes.rows[0].name;
-        }
-      } catch {}
-    }
-
-    const result = await LogModel.create({
-      cluster_id: agent.cluster_id ? agent.cluster_id.slice(0, 255) : null,
-      namespace_id: namespaceId,
-      service_id: serviceFk,
-      pod_id: podFk,
-      level: safeLevel,
-      message: safeMessage,
-      source: 'k8s-agent',
-      occurred_at: occurredAt,
-      metadata: {
-        service_id: data.service_id.slice(0, 100),
-        pod_id: (data.pod_id || 'unknown-pod').slice(0, 100),
-        pod_name: podName || (data.pod_id || 'unknown-pod').slice(0, 100),
-        namespace: namespaceName || data.namespace || 'default',
-        deployment: workload?.name || undefined,
-        agent_id: agent.id,
-      },
-    });
-
-    try {
-      LogStreamService.emitLog({
-        id: result.id,
-        cluster_id: agent.cluster_id || null,
-        namespace_id: namespaceId,
-        namespace: namespaceName || data.namespace || 'default',
-        service_id: serviceFk,
-        service_name: data.service_id,
-        pod_id: podFk,
-        pod_name: podName || data.pod_id,
-        level: safeLevel,
-        message: safeMessage,
-        source: 'k8s-agent',
-        occurred_at: occurredAt.toISOString(),
-        metadata: {
-          service_id: data.service_id.slice(0, 100),
-          pod_id: (data.pod_id || 'unknown-pod').slice(0, 100),
-          pod_name: podName || (data.pod_id || 'unknown-pod').slice(0, 100),
-          namespace: namespaceName || data.namespace || 'default',
-          deployment: workload?.name || undefined,
-          agent_id: agent.id,
-        },
-      });
-    } catch {}
-
-    await AgentModel.touchLastSeen(agent.id);
-    return result;
+    const savedList = await this.storeLogsBatch(agent, [data]);
+    return { id: savedList[0]?.id };
   }
 
   /**

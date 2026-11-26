@@ -93,6 +93,7 @@ export const BranchedPipelineSection = ({
     const emptyFlow = {
       isFlowActive: false,
       isSimulated: false,
+      isGatheringRcaContext: false,
       activeCauseObj: null,
       activeActionObj: null,
       secondaryActionObj: null,
@@ -115,6 +116,7 @@ export const BranchedPipelineSection = ({
         return {
           isFlowActive: true,
           isSimulated: true,
+          isGatheringRcaContext: false,
           activeCauseObj: causeObj,
           activeActionObj: actionObj,
           secondaryActionObj: secondaryObj,
@@ -147,14 +149,35 @@ export const BranchedPipelineSection = ({
         .map(([k]) => k)
     );
 
-    const hasLiveIncidentOrSignal =
-      openServiceIncidentsCount > 0 ||
+    // Chỉ bật luồng RCA -> Action -> Gate khi Backend thực sự có Sự cố OPEN / Phê duyệt HITL / Thực thi AUTO / Ngắt mạch AUDIT.
+    // Khi chỉ mới có cảnh báo GRU/Rule sớm (chưa mở Incident hoặc Action), giữ Stage 04B-07 ở trạng thái chờ giống Sơ đồ 1.
+    const hasLiveRiskOrRuleSignal =
       isRcaActive ||
-      isBenignDbCacheState ||
       liveTriggeredRules.size > 0 ||
       liveTriggeredRisks.size > 0;
 
-    if (!hasLiveIncidentOrSignal) {
+    const hasBackedFlow =
+      Boolean(latestIncident) ||
+      openServiceIncidentsCount > 0 ||
+      isBenignDbCacheState ||
+      isHitlActive ||
+      isAutoActionActive ||
+      isAuditActive ||
+      isCircuitBreakerTripped;
+
+    if (!hasBackedFlow) {
+      if (hasLiveRiskOrRuleSignal) {
+        return {
+          ...emptyFlow,
+          isGatheringRcaContext: true,
+          activeMetrics: liveWarnMetrics,
+          activeRules: liveTriggeredRules,
+          activeRisks: liveTriggeredRisks,
+          policyReasonVi:
+            'AI/Rule Engine vừa ghi nhận biến động và 4 Agent đang thu thập ngữ cảnh — Backend chưa tạo sự cố OPEN hay kích hoạt lệnh K8s.',
+          liveModeLabel: 'Dữ liệu thực (Live) • Đang gom RCA (0 sự cố)',
+        };
+      }
       return emptyFlow;
     }
 
@@ -162,11 +185,15 @@ export const BranchedPipelineSection = ({
     if (isBenignDbCacheState) {
       detectedCauseCode = 'database_cache_utilization';
     } else if (latestIncident) {
-      detectedCauseCode =
+      const rawIncCause =
         normalizeCauseCodeFromText(latestIncident.cause) ||
         normalizeCauseCodeFromText(latestIncident.root_cause) ||
-        normalizeCauseCodeFromText(latestIncident.title) ||
-        'unknown';
+        normalizeCauseCodeFromText(latestIncident.title);
+      const rawRecCause = normalizeCauseCodeFromText(latestRecommendation?.root_cause_type);
+      detectedCauseCode =
+        (!(isCircuitBreakerTripped || isAuditActive) && (!rawIncCause || rawIncCause === 'unknown') && rawRecCause
+          ? rawRecCause
+          : rawIncCause) || 'unknown';
     } else if (liveTriggeredRisks.has('OOM')) {
       detectedCauseCode = 'memory_exhaustion';
     } else if (liveTriggeredRisks.has('DISK_FULL') || liveTriggeredRules.has('R6')) {
@@ -1288,9 +1315,35 @@ export const BranchedPipelineSection = ({
               borderRadius: '999px',
               fontSize: '0.74rem',
               fontWeight: 800,
-              backgroundColor: isSimulating ? (isUnrecoveredLoop ? '#FEE2E2' : '#EDE9FE') : flowState.isFlowActive ? '#FEF2F2' : '#ECFDF5',
-              color: isSimulating ? (isUnrecoveredLoop ? '#DC2626' : '#6D28D9') : flowState.isFlowActive ? '#DC2626' : '#059669',
-              border: `1px solid ${isSimulating ? (isUnrecoveredLoop ? '#FCA5A5' : '#C4B5FD') : flowState.isFlowActive ? '#FCA5A5' : '#A7F3D0'}`,
+              backgroundColor: isSimulating
+                ? isUnrecoveredLoop
+                  ? '#FEE2E2'
+                  : '#EDE9FE'
+                : flowState.isFlowActive
+                  ? '#FEF2F2'
+                  : flowState.isGatheringRcaContext
+                    ? '#FFFBEB'
+                    : '#ECFDF5',
+              color: isSimulating
+                ? isUnrecoveredLoop
+                  ? '#DC2626'
+                  : '#6D28D9'
+                : flowState.isFlowActive
+                  ? '#DC2626'
+                  : flowState.isGatheringRcaContext
+                    ? '#B45309'
+                    : '#059669',
+              border: `1px solid ${
+                isSimulating
+                  ? isUnrecoveredLoop
+                    ? '#FCA5A5'
+                    : '#C4B5FD'
+                  : flowState.isFlowActive
+                    ? '#FCA5A5'
+                    : flowState.isGatheringRcaContext
+                      ? '#FDE68A'
+                      : '#A7F3D0'
+              }`,
             }}
           >
             {isSimulating ? <Play size={12} /> : <Activity size={12} />}
@@ -1819,6 +1872,10 @@ export const BranchedPipelineSection = ({
             ? 'Đã đối chiếu — Không có bất thường'
             : `Đã đối chiếu — ${ag.role}`;
 
+        const isAgCollectingOnly = Boolean(
+          flowState.isGatheringRcaContext && !flowState.isFlowActive && isAgentConnected && !isSimulating
+        );
+
         let subInfo = ag.detail;
         if (ag.id === 'metrics' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.metricsSub || ag.role;
         else if (ag.id === 'log' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.logSub || ag.role;
@@ -1838,14 +1895,14 @@ export const BranchedPipelineSection = ({
                 <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: ag.bg, border: `1px solid ${ag.border}`, color: ag.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><AgIcon size={15} /></div>
                 <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>{ag.name}</span>
               </div>
-              <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: isAgActive ? ag.bg : isAgCleanScanned ? '#F8FAFC' : '#F1F5F9', border: isAgCleanScanned ? '1px solid #E2E8F0' : 'none', color: isAgActive ? ag.color : '#64748B' }}>
-                {isAgActive ? 'Có bằng chứng' : isAgCleanScanned ? agCleanBadgeText : 'Chờ tín hiệu'}
+              <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: isAgActive ? ag.bg : isAgCollectingOnly ? '#FFFBEB' : isAgCleanScanned ? '#F8FAFC' : '#F1F5F9', border: isAgCollectingOnly ? '1px solid #FDE68A' : isAgCleanScanned ? '1px solid #E2E8F0' : 'none', color: isAgActive ? ag.color : isAgCollectingOnly ? '#B45309' : '#64748B' }}>
+                {isAgActive ? 'Có bằng chứng' : isAgCleanScanned ? agCleanBadgeText : isAgCollectingOnly ? 'Đang thu thập' : 'Chờ tín hiệu'}
               </span>
             </div>
 
             <div style={{ fontSize: '0.69rem', color: '#475569', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{subInfo}</div>
-            <div style={{ fontSize: '0.62rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: isAgActive ? ag.color : '#94A3B8' }}>
-              {isAgActive ? 'Bằng chứng hợp lệ → RootCauseAgent' : isAgCleanScanned ? agCleanFooterText : ag.role}
+            <div style={{ fontSize: '0.62rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: isAgActive ? ag.color : isAgCollectingOnly ? '#B45309' : '#94A3B8' }}>
+              {isAgActive ? 'Bằng chứng hợp lệ → RootCauseAgent' : isAgCleanScanned ? agCleanFooterText : isAgCollectingOnly ? 'Đang gom ngữ cảnh (Chờ mở Incident)' : ag.role}
             </div>
           </div>
         );
@@ -1892,12 +1949,12 @@ export const BranchedPipelineSection = ({
             <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>Chẩn Đoán Nguyên Nhân Gốc</div>
             <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>Hội tụ bằng chứng từ 4 Agent độc lập để xác định đúng 1/16 nguyên nhân gốc.</div>
           </div>
-          <div style={{ padding: '10px 12px', borderRadius: '10px', backgroundColor: flowState.activeCauseObj ? flowState.activeCauseObj.bg : '#F0FDF4', border: `1px solid ${flowState.activeCauseObj ? `${flowState.activeCauseObj.color}55` : '#BBF7D0'}` }}>
+          <div style={{ padding: '10px 12px', borderRadius: '10px', backgroundColor: flowState.activeCauseObj ? flowState.activeCauseObj.bg : flowState.isGatheringRcaContext ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${flowState.activeCauseObj ? `${flowState.activeCauseObj.color}55` : flowState.isGatheringRcaContext ? '#FDE68A' : '#BBF7D0'}` }}>
             <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              {isUnrecoveredLoop ? 'Re-RCA sau Action #1' : flowState.isSimulated ? 'Nguyên nhân đang mô phỏng' : flowState.isFlowActive ? 'Nguyên nhân thực tế' : 'Trạng thái hiện tại'}
+              {isUnrecoveredLoop ? 'Re-RCA sau Action #1' : flowState.isSimulated ? 'Nguyên nhân đang mô phỏng' : flowState.isFlowActive ? 'Nguyên nhân thực tế' : flowState.isGatheringRcaContext ? 'Đang gom ngữ cảnh (0 sự cố)' : 'Trạng thái hiện tại'}
             </div>
-            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: flowState.activeCauseObj?.color || '#15803D', marginTop: '3px' }}>
-              {flowState.activeCauseObj ? flowState.activeCauseObj.labelVi : 'Dịch vụ ổn định (0 lỗi)'}
+            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: flowState.activeCauseObj?.color || (flowState.isGatheringRcaContext ? '#B45309' : '#15803D'), marginTop: '3px' }}>
+              {flowState.activeCauseObj ? flowState.activeCauseObj.labelVi : flowState.isGatheringRcaContext ? 'Đang thu thập viễn trắc 4 Agent (Chưa chốt RCA)' : 'Dịch vụ ổn định (0 lỗi)'}
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', fontSize: '0.74rem', fontWeight: 800, color: '#7C3AED' }}>
