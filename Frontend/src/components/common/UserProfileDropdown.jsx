@@ -252,23 +252,32 @@ export const UserProfileDropdown = ({
         icon: FileText,
         path: '/admin/audit-logs',
       });
-      list.push({
-        id: 'settings',
-        label: 'Thiết Lập Hệ Thống',
-        icon: Settings,
-        path: '/admin/settings',
-      });
+      if (isSuperAdmin) {
+        list.push({
+          id: 'settings',
+          label: 'Thiết Lập Hệ Thống',
+          icon: Settings,
+          path: '/admin/settings',
+        });
+      } else {
+        list.push({
+          id: 'settings',
+          label: 'Cài Đặt Tài Khoản',
+          icon: Settings,
+          path: '/admin/account-settings',
+        });
+      }
     } else {
       list.push({
         id: 'settings',
         label: 'Cài Đặt Tài Khoản',
         icon: Settings,
-        path: '/dashboard/settings',
+        path: '/portal/preferences',
       });
     }
 
     return list;
-  }, [canAccessAdmin, variant]);
+  }, [canAccessAdmin, isSuperAdmin, variant]);
 
   const defaultLogoutText =
     logoutLabel || (variant === 'admin' ? 'Đăng Xuất Khỏi Admin' : 'Đăng Xuất Tài Khoản');

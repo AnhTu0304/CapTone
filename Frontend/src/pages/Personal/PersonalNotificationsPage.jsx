@@ -175,7 +175,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-            Notifications — Trung Tâm Thông Báo Cá Nhân
+            Trung Tâm Thông Báo Cá Nhân
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
             Xem thông báo lời mời Company, cảnh báo đăng nhập và cập nhật hệ thống. Bạn có {unreadCount} tin chưa đọc.

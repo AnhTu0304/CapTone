@@ -1,0 +1,144 @@
+@startuml
+title Hình 10 — Góc nhìn Phân bổ & Triển khai Hạ tầng (Allocation / Deployment View)
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 50
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam node {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #475569
+}
+skinparam component {
+  BackgroundColor<<Proxy>> #DBEAFE
+  BorderColor<<Proxy>> #2563EB
+  BackgroundColor<<Web>> #E0F2FE
+  BorderColor<<Web>> #0284C7
+  BackgroundColor<<Core>> #CCFBF1
+  BorderColor<<Core>> #0D9488
+  BackgroundColor<<AI>> #F3E8FF
+  BorderColor<<AI>> #7C3AED
+  BackgroundColor<<Edge>> #D1FAE5
+  BorderColor<<Edge>> #059669
+  BackgroundColor<<Obs>> #FEF9C3
+  BorderColor<<Obs>> #CA8A04
+  BackgroundColor<<Planned>> #F1F5F9
+  BorderColor<<Planned>> #64748B
+  BorderStyle<<Planned>> dashed
+}
+skinparam database {
+  BackgroundColor #FEF3C7
+  BorderColor #D97706
+}
+skinparam storage {
+  BackgroundColor #FFEDD5
+  BorderColor #C2410C
+  BackgroundColor<<Planned>> #F1F5F9
+  BorderColor<<Planned>> #64748B
+  BorderStyle<<Planned>> dashed
+}
+skinparam cloud {
+  BackgroundColor<<CF>> #FFEDD5
+  BorderColor<<CF>> #EA580C
+  BackgroundColor<<Ext>> #FCE7F3
+  BorderColor<<Ext>> #DB2777
+}
+
+' ==================== 1. CLIENT WORKSTATION ====================
+node "<&laptop> Client Workstation (PC / Laptop)\n[Production] Admin, SME Owner, DevOps, Viewer" as ClientHost {
+  [Web Browser (Chrome / Edge / Firefox)\nReact 19 SPA — https://aisealhealing.io.vn] <<Web>> as Browser
+}
+
+' ==================== 2. CLOUDFLARE EDGE ====================
+cloud "<&cloud> Cloudflare Edge Network [Production]\nDNS Proxy, WAF, DDoS Protection & SSL/TLS (:443)\nMask Origin IP (112.78.1.150)" <<CF>> as Cloudflare
+
+' ==================== 3. SME KUBERNETES CLUSTER (LEFT) ====================
+package "SME Target Kubernetes Cluster [Production]" {
+  node "K8s Control Plane (Master Node)" as K8sCP {
+    [kube-apiserver (:6443)\netcd, Scheduler, Controller] <<Edge>> as K8sAPI
+  }
+
+  node "K8s Worker Node(s) (K3s / MicroK8s / Cloud K8s)" as K8sWorker {
+    [selfheal-agent Pod/DaemonSet\nPython 3.11 + kubernetes>=31.0 + OTel SDK] <<Edge>> as AgentPod
+    [Business Pods & Workloads\nkubelet / cAdvisor (/sys/fs/cgroup)] <<Edge>> as Workloads
+    [Prometheus (:9090)\n& OTel Collector (:4318)] <<Obs>> as K8sObs
+  }
+}
+
+' ==================== 4. PRODUCTION VPS SERVER (CENTER) ====================
+node "<&hard-drive> Production VPS Server (112.78.1.150) [Production]\nDocker Engine | captone-network | Security: no-new-privileges:true" as VPSHost {
+
+  [<&shield> captone-reverse-proxy (Nginx Alpine)\nTLS 1.2/1.3, HSTS, CSP, Auth Rate-Limit 15r/m\nHost Port: 8090->80 | 8443->443] <<Proxy>> as Nginx
+
+  [captone-installer-service\nFastAPI | Host :8105 -> :8100] <<Proxy>> as Installer
+  [captone-main-backend\nNode.js 20 TS | Host :5005 -> :5000\nRAM JWT, 2FA, CSRF, RBAC, HMAC, OTel] <<Core>> as MainBE
+  [selfheal_platform_web\nNginx + React Build | Host :3005 -> :80] <<Web>> as WebSPA
+
+  [captone-ai-backend\nFastAPI + PyTorch GRU/RCA | Host :8005 -> :8000\nAuth: AI_INTERNAL_HMAC_SECRET + OTel] <<AI>> as AIBE
+  database "captone-redis\nRedis 7 AOF | :6380 -> :6379\nBuffer 12x8 & Locks" as Redis
+  database "captone-postgres\nPostgreSQL 16 (RLS + SHA-256 Audit)\nHost :5433 -> :5432" as Pg
+
+  storage "Vol: ./saved_models\n+ /etc/nginx/certs" as VolAI
+  storage "Vol: redis_data\n(/data AOF)" as VolRedis
+  storage "Vol: postgres_data\n(/var/lib/postgresql/data)" as VolPg
+}
+
+' ==================== 5. EXTERNAL CLOUD & PLANNED ROADMAP ====================
+cloud "<&globe> External Cloud Services [Production]\nResend Email / SMTP\nGoogle OAuth 2.0 (SSO)\nSlack Webhook (AES-256) & PagerDuty" <<Ext>> as ExtCloud
+
+node "Observability & Backup Extensions [Planned]" as PlannedZone {
+  [Central OTel Collector (:4318)\n& Grafana / Tempo [Planned]] <<Planned>> as CentralOTel
+  storage "Automated Off-site Backup\npg_dump -> S3 / MinIO [Planned]" <<Planned>> as BackupStore
+}
+
+' ==================== VERTICAL & ORTHOGONAL CONNECTORS ====================
+' Client -> Cloudflare -> Nginx
+Browser <-down-> Cloudflare : HTTPS / WSS (:443)
+Cloudflare <-down-> Nginx : HTTPS / WSS (:8443 / :8090)
+
+' K8s Cluster Internal & Outbound WSS
+K8sAPI <-down-> AgentPod : K8s API (:6443)
+Workloads -right-> K8sObs : Metrics :9090 / OTLP :4318
+K8sObs -up-> AgentPod : Query Prometheus (:9090)
+AgentPod <-right-> Cloudflare : Outbound WSS (:443)
+Installer .left.> AgentPod : Install Script (/agent/)
+
+' Nginx -> Internal Docker Network (captone-network)
+Nginx -left-> Installer : HTTP (:8100)
+Nginx -right-> WebSPA : Static SPA (:80)
+Nginx <-down-> MainBE : Proxy /api/ & WS (:5000)
+
+' Main Backend -> AI, Data, External
+MainBE <-down-> AIBE : Internal HTTP + HMAC (:8000)
+MainBE <-down-> Redis : TCP (:6379)
+MainBE <-down-> Pg : TCP + SQL RLS (:5432)
+MainBE <-down-> ExtCloud : HTTPS TLS (Resend, OAuth2, Slack)
+
+' Persistent Volumes & Planned Extensions
+AIBE -down-> VolAI : Mount RW
+Redis -down-> VolRedis : Mount RW
+Pg -down-> VolPg : Mount RW
+
+AIBE .down.> CentralOTel : OTLP/HTTP (:4318) [Planned]
+VolPg .down.> BackupStore : Scheduled Snapshot [Planned]
+
+' ==================== LEGEND ====================
+legend bottom center
+  |= Ký hiệu / Màu |= Trạng thái & Ý nghĩa |
+  |<#DBEAFE> / <#CCFBF1> / <#F3E8FF> / <#D1FAE5> | **Production (Implemented)**: Cloudflare, VPS 7 Docker Containers, K8s Control Plane & Worker Node |
+  |<#FEF9C3> Vàng sáng | **Observability**: Prometheus (:9090) & OpenTelemetry SDK/Collector (:4318) |
+  |<#FFEDD5> Cam nhạt | **Persistent Storage & Edge**: Docker Volumes (postgres_data, redis_data, saved_models) & Cloudflare |
+  |<#F1F5F9> Viền nét đứt [Planned] | **Planned (Roadmap)**: Central OTel/Grafana Host & Automated Off-site pg_dump Backup |
+  | **───▶ / ◀──▶** | Kết nối Production đang chạy thực tế |
+  | **- - -▶** | Cài đặt Agent (Install Script) & Luồng Planned |
+endlegend
+
+@enduml

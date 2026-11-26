@@ -54,8 +54,16 @@ export const profileService = {
         const res = await request('/users/me');
         if (res && res.data) {
           const remoteData = res.data;
+          const prev = getStoredProfile();
+          const resolvedHasPassword =
+            typeof remoteData.hasPassword === 'boolean'
+              ? remoteData.hasPassword
+              : typeof remoteData.has_password === 'boolean'
+                ? remoteData.has_password
+                : prev.hasPassword;
           const merged = {
-            ...getStoredProfile(),
+            ...prev,
+            ...(resolvedHasPassword !== undefined ? { hasPassword: resolvedHasPassword } : {}),
             fullName: remoteData.fullName || remoteData.full_name || '',
             email: remoteData.email || '',
             phone: remoteData.phone || '',

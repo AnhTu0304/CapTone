@@ -1,0 +1,84 @@
+@startuml
+title Hình 10 — Góc nhìn Phân bổ Hạ tầng (Allocation / Deployment View: Cloudflare, VPS & K8s Edge)
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam node {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+}
+skinparam component {
+  BackgroundColor<<Proxy>> #DBEAFE
+  BorderColor<<Proxy>> #2563EB
+  BackgroundColor<<Web>> #E0F2FE
+  BorderColor<<Web>> #0284C7
+  BackgroundColor<<Core>> #CCFBF1
+  BorderColor<<Core>> #0D9488
+  BackgroundColor<<AI>> #F3E8FF
+  BorderColor<<AI>> #7C3AED
+  BackgroundColor<<Edge>> #D1FAE5
+  BorderColor<<Edge>> #059669
+}
+skinparam database {
+  BackgroundColor #FEF3C7
+  BorderColor #D97706
+}
+skinparam cloud {
+  BackgroundColor<<CF>> #FFEDD5
+  BorderColor<<CF>> #EA580C
+  BackgroundColor<<Ext>> #FCE7F3
+  BorderColor<<Ext>> #DB2777
+}
+
+' ==================== 1. CLIENT WORKSTATION (PC / LAPTOP) ====================
+node "<&laptop> Client Workstation\n(PC / Laptop Quản trị & Kỹ sư)" as ClientHost {
+  [Web Browser\nChrome / Edge / Firefox\n(React 19 SPA)] <<Web>> as Browser
+}
+
+' ==================== 2. K8S WORKER NODE (LEFT) & CLOUDFLARE EDGE (CENTER) ====================
+node "<&layers> SME Kubernetes Worker Node\n(Cloud K8s / K3s / MicroK8s / Minikube)" as K8sHost {
+  [selfheal-agent Pod/DaemonSet\nPython 3.11 + kubernetes SDK] <<Edge>> as AgentPod
+  [<&cog> Target K8s API (:6443)\nKubelet, cAdvisor & Pods] <<Edge>> as K8sNode
+}
+
+cloud "<&cloud> Cloudflare Edge Network\nDNS Proxy, WAF, DDoS & SSL/TLS\n(Domain: aisealhealing.io.vn)" <<CF>> as Cloudflare
+
+' ==================== 3. PRODUCTION VPS SERVER (DOCKER COMPOSE) ====================
+node "<&hard-drive> Production VPS Server (Ubuntu / Linux)\nDocker Engine — Bridge Network: captone-network" as VPSHost {
+  [captone-installer-service\nFastAPI | :8105->8100] <<Proxy>> as InstallerCtr
+  [<&shield> captone-reverse-proxy\nNginx Gateway | :8090 / :8443] <<Proxy>> as NginxCtr
+  [selfheal_platform_web\nNginx + React Build | :3005->80] <<Web>> as WebCtr
+
+  [captone-main-backend\nNode.js 20 + Express/TS | :5005->5000] <<Core>> as MainCtr
+
+  [captone-ai-backend\nFastAPI + PyTorch GRU/RCA | :8005->8000\nVolume: ./saved_models] <<AI>> as AICtr
+  database "captone-redis\nRedis 7 | :6380->6379\nVolume: redis_data" as RedisCtr
+  database "captone-postgres\nPostgreSQL 16 (RLS) | :5433->5432\nVolume: postgres_data" as PgCtr
+}
+
+' ==================== 4. EXTERNAL CLOUD SERVICES (BOTTOM RIGHT) ====================
+cloud "<&globe> External Cloud Services\nResend Email / SMTP\nGoogle OAuth 2.0 (SSO)\nSlack Webhook & PagerDuty" <<Ext>> as ExtCloud
+
+' ==================== DEPLOYMENT & NETWORK CONNECTORS ====================
+Browser <-down-> Cloudflare : HTTPS / WSS (:443)
+K8sNode <-right-> AgentPod : K8s API (:6443)
+AgentPod <-right-> Cloudflare : Outbound WSS Telemetry & Cmd
+
+Cloudflare <-down-> NginxCtr : Origin HTTPS / WSS (:8443 / :8090)
+NginxCtr -left-> InstallerCtr : HTTP (:8100)
+InstallerCtr .up.> AgentPod : One-Liner Install Script
+NginxCtr -right-> WebCtr : Static SPA (:80)
+NginxCtr <-down-> MainCtr : Proxy /api/v1 & WS (:5000)
+
+MainCtr <-down-> AICtr : Internal HTTP + HMAC (:8000)
+MainCtr <-down-> RedisCtr : TCP (:6379)
+MainCtr <-down-> PgCtr : TCP + SQL RLS (:5432)
+MainCtr <-down-> ExtCloud : HTTPS / TLS (Resend, OAuth2, Slack)
+
+@enduml

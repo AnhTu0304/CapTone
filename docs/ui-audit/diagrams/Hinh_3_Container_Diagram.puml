@@ -1,0 +1,83 @@
+@startuml
+title Hình 3 — Container Diagram — APSIS / SelfHeal Platform
+top to bottom direction
+
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam component {
+  BackgroundColor<<Client>> #DBEAFE
+  BorderColor<<Client>> #2563EB
+  BackgroundColor<<Web>> #E0F2FE
+  BorderColor<<Web>> #0284C7
+  BackgroundColor<<Backend>> #CCFBF1
+  BorderColor<<Backend>> #0D9488
+  BackgroundColor<<AI>> #F3E8FF
+  BorderColor<<AI>> #7C3AED
+  BackgroundColor<<Edge>> #D1FAE5
+  BorderColor<<Edge>> #059669
+}
+skinparam database {
+  BackgroundColor #FEF3C7
+  BorderColor #D97706
+}
+skinparam cloud {
+  BackgroundColor #FCE7F3
+  BorderColor #DB2777
+}
+skinparam node {
+  BackgroundColor #E2E8F0
+  BorderColor #475569
+}
+skinparam actor {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+}
+
+' ==================== ACTORS ====================
+actor "Platform Users\n(Admin, SME Owner, DevOps, Viewer)\nBrowser (Chrome / Edge / Firefox)" as Users
+
+' ==================== TARGET K8S EDGE (LEFT COLUMN) ====================
+package "SME Target Kubernetes Cluster" {
+  [Kubernetes Edge Agent\nselfheal-agent (Python 3.11 Pod)\nkubernetes>=31.0 SDK + OTel] <<Edge>> as EdgeAgent
+  node "Kubernetes Target Cluster\nK8s API Server (:6443),\nWorker Nodes & Pods" as K8sCluster
+}
+
+' ==================== DOCKER PLATFORM HOST (CENTER) ====================
+package "Docker Compose Host (Network: captone-network)" {
+  [Agent Installer Container\ncaptone-installer-service\nFastAPI | Port: 8105->8100] <<Client>> as Installer
+  [Nginx Reverse Proxy\ncaptone-reverse-proxy\nPorts: 8090->80 / 8443->443] <<Client>> as Nginx
+  [Frontend Web Container\nselfheal_platform_web\nReact 19 SPA (Nginx) | 3005->80] <<Web>> as WebSPA
+
+  [Main Backend Container\ncaptone-main-backend\nNode.js 20 + Express/TS | 5005->5000] <<Backend>> as MainBE
+
+  [AI Engine Container\ncaptone-ai-backend\nFastAPI + PyTorch GRU + RCA | 8005->8000] <<AI>> as AIBE
+  database "Redis 7 Container\ncaptone-redis\n12x8 Buffer & Locks | 6380->6379" as Redis
+  database "PostgreSQL 16 Container\ncaptone-postgres\ncaptone_db (RLS + Audit) | 5433->5432" as Postgres
+}
+
+' ==================== EXTERNAL CLOUD (RIGHT) ====================
+cloud "External Cloud Services\nResend Email / SMTP,\nGoogle OAuth 2.0, Slack & PagerDuty" as External
+
+' ==================== CLEAN ORTHOGONAL CONNECTORS ====================
+Users <-down-> Nginx : HTTPS / WSS (:8443)
+Nginx -left-> Installer : GET Script (:8100)
+Nginx -right-> WebSPA : Static SPA (:80)
+Nginx <-down-> MainBE : Proxy /api/v1 & WS (:5000)
+
+Installer .left.> EdgeAgent : Deploy Script
+EdgeAgent <-right-> MainBE : WSS Telemetry & Cmd
+EdgeAgent <-down-> K8sCluster : K8s API (:6443)
+
+MainBE <-down-> AIBE : HTTP + HMAC (:8000)
+MainBE <-down-> Redis : Buffer & Locks (:6379)
+MainBE <-down-> Postgres : SQL + RLS (:5432)
+MainBE <-down-> External : Resend, OAuth2 & Slack
+
+@enduml

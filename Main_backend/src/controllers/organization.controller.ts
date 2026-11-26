@@ -297,16 +297,38 @@ export class OrganizationController {
       }
 
       const targets = Array.from(recipientMap.values());
-      let sentCount = 0;
+      if (targets.length === 0) {
+        return ApiResponse.error(
+          res,
+          'Không có địa chỉ email người nhận nào hợp lệ để gửi thử nghiệm.',
+          400
+        );
+      }
+
+      const sentRecipients: string[] = [];
+      const failedRecipients: Array<{ email: string; error: string }> = [];
+      let deliveryMode: 'smtp' | 'dev_console' | undefined;
+
       for (const target of targets) {
-        const ok = await EmailService.sendTestAlertEmail({
+        const result = await EmailService.sendTestAlertEmailWithResult({
           toEmail: target.email,
           recipientName: target.name,
           organizationName: org?.name || 'Tổ chức SME',
           triggeredByEmail: user?.email || user?.full_name || 'Admin',
         });
-        if (ok) sentCount++;
+        if (result.ok) {
+          sentRecipients.push(target.email);
+          deliveryMode = result.mode || deliveryMode;
+        } else {
+          failedRecipients.push({
+            email: target.email,
+            error: result.error || 'Không thể gửi email qua SMTP.',
+          });
+        }
       }
+
+      const sentCount = sentRecipients.length;
+      const failedCount = failedRecipients.length;
 
       AuditService.recordFromRequest(req, {
         organization_id: orgId,
@@ -317,15 +339,44 @@ export class OrganizationController {
         target_type: 'ORGANIZATION',
         target_id: orgId,
         description: `Gửi email kiểm tra kênh cảnh báo khẩn cấp tới ${sentCount}/${targets.length} địa chỉ`,
-        metadata: { recipients: targets.map((t) => t.email), sent_count: sentCount },
+        metadata: {
+          recipients: targets.map((t) => t.email),
+          sent_count: sentCount,
+          failed_count: failedCount,
+          errors: failedRecipients,
+        },
       }).catch(() => {});
+
+      if (sentCount === 0) {
+        return ApiResponse.error(
+          res,
+          failedRecipients[0]?.error || 'Gửi email thử nghiệm thất bại. Vui lòng kiểm tra cấu hình SMTP.',
+          502,
+          {
+            sent_count: 0,
+            failed_count: failedCount,
+            total_count: targets.length,
+            recipients: targets.map((t) => t.email),
+            failed_recipients: failedRecipients,
+          }
+        );
+      }
+
+      const statusMsg =
+        failedCount > 0
+          ? `Đã gửi email kiểm tra tới ${sentCount}/${targets.length} địa chỉ (${failedCount} thất bại)`
+          : `Đã gửi email kiểm tra cảnh báo tới ${sentCount}/${targets.length} địa chỉ`;
 
       return ApiResponse.success(
         res,
-        `Đã gửi email kiểm tra cảnh báo tới ${sentCount}/${targets.length} địa chỉ`,
+        statusMsg,
         {
           sent_count: sentCount,
-          recipients: targets.map((t) => t.email),
+          failed_count: failedCount,
+          total_count: targets.length,
+          recipients: sentRecipients,
+          failed_recipients: failedRecipients,
+          mode: deliveryMode || 'smtp',
         },
         200
       );

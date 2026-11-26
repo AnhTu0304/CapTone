@@ -40,6 +40,7 @@ export interface IUserOrgRole {
 }
 
 export type IUserResponse = Omit<IUser, 'password_hash'> & {
+    has_password?: boolean;
     system_roles?: string[];
     system_role?: string | null;
     systemRole?: string | null;
@@ -50,6 +51,8 @@ export type IUserResponse = Omit<IUser, 'password_hash'> & {
 export interface IUserProfileResponse {
     id: string;
     email: string;
+    has_password: boolean;
+    hasPassword: boolean;
     full_name: string;
     fullName: string;
     avatar_url: string | null;
@@ -134,7 +137,8 @@ export class UserModel {
     public static async findById(userId: string, client?: PoolClient): Promise<IUserResponse | null> {
         const db = client || pool;
         const querySql = `
-          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
+          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at,
+                 (password_hash IS NOT NULL AND password_hash <> '') AS has_password
           FROM users 
           WHERE id = $1 AND deleted_at IS NULL
           LIMIT 1
@@ -242,7 +246,8 @@ export class UserModel {
     public static async findFullByEmail(email: string, client?: PoolClient): Promise<IUserResponse | null> {
         const db = client || pool;
         const querySql = `
-          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at
+          SELECT id, email, full_name, avatar_url, phone, job_title, status, email_verified_at, last_login_at, created_at, updated_at,
+                 (password_hash IS NOT NULL AND password_hash <> '') AS has_password
           FROM users WHERE email = $1 AND deleted_at IS NULL LIMIT 1
         `;
         const result = await db.query<IUserResponse>(querySql, [email]);
@@ -347,7 +352,8 @@ export class UserModel {
         const insertSql = `
           INSERT INTO users (email, password_hash, full_name, avatar_url, status, email_verified_at)
           VALUES ($1, $2, $3, $4, $5, $6)
-          RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at
+          RETURNING id, email, full_name, avatar_url, status, email_verified_at, last_login_at, created_at, updated_at,
+                    (password_hash IS NOT NULL AND password_hash <> '') AS has_password
         `;
         const result = await db.query<IUserResponse>(insertSql, [
             data.email,

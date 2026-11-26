@@ -65,6 +65,8 @@ export class UserService {
         return {
             id: user.id,
             email: user.email,
+            has_password: Boolean(user.has_password),
+            hasPassword: Boolean(user.has_password),
             full_name: user.full_name,
             fullName: user.full_name,
             avatar_url: user.avatar_url || null,
@@ -317,16 +319,19 @@ export class UserService {
 
     // Đổi mật khẩu trong phần Cài đặt tài khoản
     public static async changePassword(userId: string, data: IChangePasswordDto): Promise<void> {
-        const currentHash = await UserModel.getPasswordHash(userId);
-        if (!currentHash) {
+        const user = await UserModel.findByIdWithPassword(userId);
+        if (!user) {
             throw new ApiError(404, 'Người dùng không tồn tại');
+        }
+        if (!user.password_hash) {
+            throw new ApiError(400, 'Tài khoản đăng nhập qua Google chưa thiết lập mật khẩu cục bộ');
         }
 
         if (data.old_password === data.new_password) {
             throw new ApiError(400, 'Mật khẩu mới không được trùng với mật khẩu cũ');
         }
 
-        const isMatch = await bcrypt.compare(data.old_password, currentHash);
+        const isMatch = await bcrypt.compare(data.old_password, user.password_hash);
         if (!isMatch) {
             throw new ApiError(400, 'Mật khẩu cũ không chính xác');
         }

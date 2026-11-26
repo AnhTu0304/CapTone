@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Save,
   BellRing,
-  Mail,
   AlertTriangle,
   Users
 } from 'lucide-react';
@@ -24,8 +23,6 @@ export const SettingsPage = () => {
   // Alert settings states synced with Backend (/api/v1/organizations/:id/alert-settings)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
-  const [testEmailResultMsg, setTestEmailResultMsg] = useState('');
 
   const [criticalEmailEnabled, setCriticalEmailEnabled] = useState(true);
   const [notifyOnNoAction, setNotifyOnNoAction] = useState(true);
@@ -33,7 +30,6 @@ export const SettingsPage = () => {
   const [cooldownMinutes, setCooldownMinutes] = useState(15);
   const [alertEmails, setAlertEmails] = useState('');
   const [defaultRecipients, setDefaultRecipients] = useState([]);
-  const [testTargetEmail, setTestTargetEmail] = useState('');
 
   const loadAlertSettings = useCallback(async (orgId) => {
     if (!orgId || String(orgId).startsWith('sandbox-') || orgId === 'org-empty') {
@@ -59,7 +55,6 @@ export const SettingsPage = () => {
   }, []);
 
   useEffect(() => {
-    setTestEmailResultMsg('');
     loadAlertSettings(currentOrg?.id);
   }, [currentOrg?.id, loadAlertSettings]);
 
@@ -120,42 +115,6 @@ export const SettingsPage = () => {
       toastError(err?.message || 'Không thể lưu cấu hình cảnh báo lúc này.', 'Lỗi Lưu Cài Đặt');
     } finally {
       setIsSavingSettings(false);
-    }
-  };
-
-  const handleSendTestAlertEmail = async () => {
-    if (!currentOrg?.id || String(currentOrg.id).startsWith('sandbox-') || currentOrg.id === 'org-empty') {
-      toastWarning('Vui lòng chọn một tổ chức thực tế trước khi gửi email thử nghiệm.', 'Chưa Chọn Tổ Chức');
-      return;
-    }
-    if (!canEditAlertSettings) {
-      toastError('Vai trò VIEWER chỉ có quyền xem cấu hình.', 'Không Đủ Thẩm Quyền');
-      return;
-    }
-
-    const cleanTarget = testTargetEmail.trim().toLowerCase();
-    if (cleanTarget && !EMAIL_VALIDATION_REGEX.test(cleanTarget)) {
-      toastError('Email nhận thử nghiệm không đúng định dạng.', 'Lỗi Nhập Liệu');
-      return;
-    }
-
-    setIsSendingTestEmail(true);
-    setTestEmailResultMsg('');
-    try {
-      const res = await aiService.sendOrgTestAlertEmail(currentOrg.id, cleanTarget || undefined);
-      const data = res?.data || res || {};
-      const recipients = Array.isArray(data.recipients) ? data.recipients : [];
-      const sentCount = data.sent_count ?? recipients.length;
-      const summary =
-        recipients.length > 0
-          ? `Đã gửi email thử nghiệm tới ${sentCount} địa chỉ: ${recipients.join(', ')}`
-          : `Đã thực hiện gửi email thử nghiệm (${sentCount} email).`;
-      setTestEmailResultMsg(summary);
-      toastSuccess(summary, 'Gửi Email Test Thành Công');
-    } catch (err) {
-      toastError(err?.message || 'Không thể gửi email kiểm tra. Vui lòng kiểm tra cấu hình SMTP.', 'Lỗi Gửi Email');
-    } finally {
-      setIsSendingTestEmail(false);
     }
   };
 
@@ -503,52 +462,8 @@ export const SettingsPage = () => {
           )}
         </div>
 
-        {/* Action Buttons: Save Alert Config & Test Email */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <input
-              type="email"
-              placeholder="Email nhận test (để trống = gửi tất cả người nhận)"
-              value={testTargetEmail}
-              disabled={!canEditAlertSettings}
-              onChange={(e) => setTestTargetEmail(e.target.value)}
-              style={{
-                width: '300px',
-                maxWidth: '100%',
-                height: '34px',
-                padding: '0 12px',
-                border: '1px solid #E2E8F0',
-                borderRadius: '10px',
-                backgroundColor: '#F8FAFC',
-                fontSize: '0.8rem',
-                color: '#0F172A',
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleSendTestAlertEmail}
-              disabled={!canEditAlertSettings || isSendingTestEmail}
-              style={{
-                height: '34px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '0 13px',
-                backgroundColor: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                borderRadius: '10px',
-                color: '#047857',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                cursor: !canEditAlertSettings || isSendingTestEmail ? 'not-allowed' : 'pointer',
-                opacity: !canEditAlertSettings || isSendingTestEmail ? 0.65 : 1,
-              }}
-            >
-              <Mail size={14} />
-              <span>{isSendingTestEmail ? 'Đang gửi Email Test...' : 'Gửi Email Test Cảnh Báo'}</span>
-            </button>
-          </div>
-
+        {/* Action Button: Save Alert Config */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
           <button
             type="button"
             onClick={handleSave}
@@ -574,26 +489,6 @@ export const SettingsPage = () => {
             <span>{isSavingSettings ? 'Đang lưu...' : 'Lưu Cấu Hình Cảnh Báo'}</span>
           </button>
         </div>
-
-        {testEmailResultMsg && (
-          <div
-            style={{
-              padding: '10px 14px',
-              backgroundColor: '#ECFDF5',
-              border: '1px solid #A7F3D0',
-              borderRadius: '10px',
-              color: '#047857',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <CheckCircle2 size={16} color="#059669" />
-            <span>{testEmailResultMsg}</span>
-          </div>
-        )}
       </div>
     </div>
   );

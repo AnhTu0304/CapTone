@@ -98,4 +98,23 @@ describe('personalPortalService Data Synchronization Suite', () => {
     expect(data.summary.pendingInvitations).toBe(0);
     expect(data.summary.unreadNotifs).toBe(0);
   });
+
+  test('TC06: changePassword gọi POST /users/change-password khi đã đăng nhập', async () => {
+    apiClient.getAuthToken.mockReturnValue('valid_user_jwt_token');
+    apiClient.request.mockResolvedValue({ success: true });
+
+    const ok = await personalPortalService.changePassword({
+      oldPassword: 'oldPassword123',
+      newPassword: 'newPassword123!',
+    });
+
+    expect(ok).toBe(true);
+    expect(apiClient.request).toHaveBeenCalledWith('/users/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        old_password: 'oldPassword123',
+        new_password: 'newPassword123!',
+      }),
+    });
+  });
 });

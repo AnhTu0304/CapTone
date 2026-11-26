@@ -1,0 +1,56 @@
+@startuml
+title Hình 4 — Sơ đồ Tuần tự Chu trình Tự phục hồi Khép kín (Sequence Diagram)
+autonumber
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 220
+
+skinparam participant {
+  BorderThickness 1.5
+}
+
+actor "SME Owner /\nDevOps" as Owner #EFF6FF
+participant "Frontend\n(React 19 SPA)" as SPA #DBEAFE
+participant "Main Backend\n(:5005->5000)" as MainBE #CCFBF1
+participant "AI Backend\n(GRU & RCA :8000)" as AIBE #F3E8FF
+database "PostgreSQL 16 (RLS)\n& Redis 7" as Store #FEF3C7
+participant "Edge Agent\n(Python 3.11)" as Agent #D1FAE5
+participant "Kubernetes Cluster\n(K8s API :6443)" as K8s #E2E8F0
+
+== Pha 1: Thu thập Telemetry & Dự báo Bất thường Chủ động (12x8 Multi-Head GRU) ==
+
+K8s -> Agent : Thu thập CPU/RAM/Network, Pod Logs & K8s Events
+Agent -> MainBE : WSS: Gửi luồng telemetry & Heartbeat 10s
+MainBE -> Store : Lưu đệm cửa sổ 12x8 trên Redis 7 & ghi metrics (RLS)
+MainBE -> AIBE : HTTP POST (HMAC-SHA256) gửi ma trận 12x8
+AIBE --> MainBE : Trả xác suất rủi ro Multi-Head GRU > ngưỡng cảnh báo
+
+== Pha 2: Chẩn đoán Nguyên nhân Gốc rễ (Multi-Agent RCA) & Đánh giá Chính sách ==
+
+MainBE -> AIBE : HTTP POST (HMAC-SHA256) phân tích RCA đa nguồn bằng chứng
+AIBE --> MainBE : Kết luận nguyên nhân gốc rễ (RCA) + Kịch bản khắc phục
+MainBE -> Store : Tạo Incident (OPEN) + kiểm tra Cooldown & Circuit Breaker
+MainBE -> SPA : Socket.IO: Đẩy cảnh báo sự cố + báo cáo RCA thời gian thực
+SPA -> Owner : Hiển thị chi tiết RCA & đề xuất khắc phục
+
+== Pha 3: Phê duyệt HITL (SME_OWNER), Thực thi Khắc phục & Kiểm toán SHA-256 ==
+
+alt Rủi ro thấp — Chính sách tự động (AUTO Mode)
+  MainBE -> Store : Cập nhật trạng thái sự cố sang HEALING
+else Rủi ro cao — Yêu cầu phê duyệt con người (HITL Mode)
+  MainBE -> SPA : Đẩy yêu cầu chờ duyệt (PENDING_APPROVAL) + gửi Resend / Slack
+  Owner -> SPA : SME Owner nhấn Approve (quyền HITL_APPROVE)
+  SPA -> MainBE : POST /api/v1/self-healing/approvals/:id/approve
+  MainBE -> Store : Xác thực quyền & chuyển trạng thái sang HEALING
+end
+
+MainBE -> Agent : WSS: Phát lệnh khắc phục đã ký (Restart / Scale / Rollback)
+Agent -> K8s : Gọi K8s API (:6443) thực thi & kiểm tra Readiness Probe
+K8s --> Agent : Xác nhận Pod/Workload đạt trạng thái Ready
+Agent --> MainBE : WSS: Báo cáo kết quả phục hồi thành công
+MainBE -> Store : Đóng Incident (RESOLVED) & niêm phong SHA-256 Audit Log
+MainBE -> SPA : Socket.IO: Cập nhật trạng thái hạ tầng ổn định lên Dashboard
+
+@enduml

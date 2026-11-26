@@ -92,8 +92,6 @@ services:
       DB_SSL_MODE: ${DB_SSL_MODE:-disable}
       JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_key_minimum_32_characters_long_12345}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       TELEMETRY_INGESTION_MODE: ${TELEMETRY_INGESTION_MODE:-MEMORY_BUFFER}
       AGENT_HEARTBEAT_TIMEOUT_SECONDS: ${AGENT_HEARTBEAT_TIMEOUT_SECONDS:-45}
       AGENT_STATUS_CHECK_INTERVAL_SECONDS: ${AGENT_STATUS_CHECK_INTERVAL_SECONDS:-15}
@@ -102,8 +100,6 @@ services:
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-"AI Self-Heal Support" <noreply@selfheal.io>}
       CLIENT_URL: ${CLIENT_URL:-https://aisealhealing.io.vn}
       OTEL_ENABLED: ${OTEL_ENABLED:-true}

@@ -268,4 +268,46 @@ describe('UserProfileDropdown Component - System Role Display Suite', () => {
     expect(screen.getByText('Phạm Thái Sang')).toBeInTheDocument();
     expect(screen.queryByText('Phạm Thái Sang (Super Admin)')).not.toBeInTheDocument();
   });
+
+  test('TC11: Điều hướng Cài Đặt Tài Khoản theo đúng role không vướng 403', () => {
+    const mockNavigate = jest.fn();
+
+    // VIEWER / DEVOPS / SME_OWNER -> /portal/preferences
+    mockCurrentUser = {
+      id: 'usr-viewer-11',
+      email: 'viewer@company.vn',
+      full_name: 'Người Xem',
+      system_roles: ['USER'],
+      organization_roles: ['VIEWER'],
+    };
+    const { rerender } = render(<UserProfileDropdown onNavigate={mockNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: /Menu hồ sơ/i }));
+    fireEvent.click(screen.getByText('Cài Đặt Tài Khoản'));
+    expect(mockNavigate).toHaveBeenCalledWith('/portal/preferences');
+
+    // SYSTEM_ADMIN -> /admin/account-settings (tránh 403 /admin/settings)
+    mockCurrentUser = {
+      id: 'usr-admin-11',
+      email: 'admin@selfheal.systems',
+      full_name: 'Admin Vận Hành',
+      system_roles: ['SYSTEM_ADMIN'],
+    };
+    rerender(<UserProfileDropdown onNavigate={mockNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: /Menu hồ sơ/i }));
+    expect(screen.queryByText('Thiết Lập Hệ Thống')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Cài Đặt Tài Khoản'));
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/account-settings');
+
+    // SUPER_ADMIN -> /admin/settings
+    mockCurrentUser = {
+      id: 'usr-super-11',
+      email: 'super@selfheal.systems',
+      full_name: 'Super Admin',
+      system_roles: ['SUPER_ADMIN'],
+    };
+    rerender(<UserProfileDropdown onNavigate={mockNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: /Menu hồ sơ/i }));
+    fireEvent.click(screen.getByText('Thiết Lập Hệ Thống'));
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/settings');
+  });
 });

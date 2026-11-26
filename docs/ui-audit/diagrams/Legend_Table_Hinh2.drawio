@@ -1,0 +1,139 @@
+<mxfile host="app.diagrams.net" modified="2026-11-26T10:42:00.000Z" agent="Antigravity-Architect" version="24.7.17" type="device">
+  <diagram id="legend-table-hinh-2" name="Legend Table">
+    <mxGraphModel dx="1100" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="500" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="tbl_legend" value="Legend — Chú thích Thành phần &amp; Liên kết (Hình 2: C&amp;C View)" style="shape=table;startSize=34;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;resizeLast=1;fillColor=#0f172a;fontColor=#ffffff;strokeColor=#334155;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="60" y="50" width="940" height="368" as="geometry" />
+        </mxCell>
+
+        <!-- Header Row -->
+        <mxCell id="r0" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=#e2e8f0;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#94a3b8;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="34" width="940" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="r0_c1" value="Ký hiệu / Màu" style="shape=partialRectangle;connectable=0;fillColor=#e2e8f0;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=12;fontColor=#0f172a;align=center;overflow=hidden;" vertex="1" parent="r0">
+          <mxGeometry width="180" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="r0_c2" value="Nhóm thành phần" style="shape=partialRectangle;connectable=0;fillColor=#e2e8f0;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=12;fontColor=#0f172a;align=center;overflow=hidden;" vertex="1" parent="r0">
+          <mxGeometry x="180" width="200" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="r0_c3" value="Thành phần &amp; Vai trò chi tiết (APSIS / SelfHeal)" style="shape=partialRectangle;connectable=0;fillColor=#e2e8f0;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=12;fontColor=#0f172a;align=center;overflow=hidden;" vertex="1" parent="r0">
+          <mxGeometry x="380" width="560" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- Row 1: Client & Edge Gateway -->
+        <mxCell id="r1" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="66" width="940" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r1_c1" value="Xanh dương (#DBEAFE)" style="shape=partialRectangle;connectable=0;fillColor=#dbeafe;strokeColor=#94a3b8;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#1e3a8a;align=center;overflow=hidden;" vertex="1" parent="r1">
+          <mxGeometry width="180" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r1_c2" value="Client &amp; Edge Gateway" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r1">
+          <mxGeometry x="180" width="200" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r1_c3" value="React 19 SPA (:3000), Nginx Reverse Proxy (:8090/:8443 TLS), Agent Installer (:8105-&gt;8100)" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r1">
+          <mxGeometry x="380" width="560" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Row 2: Control Plane Core -->
+        <mxCell id="r2" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="104" width="940" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r2_c1" value="Xanh ngọc (#CCFBF1)" style="shape=partialRectangle;connectable=0;fillColor=#ccfbf1;strokeColor=#94a3b8;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#134e4a;align=center;overflow=hidden;" vertex="1" parent="r2">
+          <mxGeometry width="180" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r2_c2" value="Control Plane Core" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r2">
+          <mxGeometry x="180" width="200" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r2_c3" value="Main Backend (:5005-&gt;5000): API &amp; RBAC Gateway, Telemetry &amp; WSS Hub, Rule &amp; HITL Engine" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r2">
+          <mxGeometry x="380" width="560" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Row 3: AI Intelligence -->
+        <mxCell id="r3" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="142" width="940" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r3_c1" value="Tím nhạt (#F3E8FF)" style="shape=partialRectangle;connectable=0;fillColor=#f3e8ff;strokeColor=#94a3b8;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#4c1d95;align=center;overflow=hidden;" vertex="1" parent="r3">
+          <mxGeometry width="180" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r3_c2" value="AI Intelligence" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r3">
+          <mxGeometry x="180" width="200" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r3_c3" value="AI Backend (:8000 Internal, HMAC-SHA256): Mô hình 12x8 Multi-Head GRU &amp; Multi-Agent RCA" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r3">
+          <mxGeometry x="380" width="560" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Row 4: Data Persistence -->
+        <mxCell id="r4" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="180" width="940" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r4_c1" value="Vàng cam (#FEF3C7)" style="shape=partialRectangle;connectable=0;fillColor=#fef3c7;strokeColor=#94a3b8;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#78350f;align=center;overflow=hidden;" vertex="1" parent="r4">
+          <mxGeometry width="180" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r4_c2" value="Data Persistence" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r4">
+          <mxGeometry x="180" width="200" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r4_c3" value="PostgreSQL 16 (:5433 - 41 bảng, RLS &amp; SHA-256 Audit Ledger) &amp; Redis 7 (:6380 - Buffer &amp; Locks)" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r4">
+          <mxGeometry x="380" width="560" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Row 5: External Cloud -->
+        <mxCell id="r5" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="218" width="940" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r5_c1" value="Hồng nhạt (#FCE7F3)" style="shape=partialRectangle;connectable=0;fillColor=#fce7f3;strokeColor=#94a3b8;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#831843;align=center;overflow=hidden;" vertex="1" parent="r5">
+          <mxGeometry width="180" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r5_c2" value="External Cloud" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r5">
+          <mxGeometry x="180" width="200" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r5_c3" value="Resend Email / SMTP, Google OAuth 2.0 (SSO), Slack Webhook &amp; PagerDuty" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r5">
+          <mxGeometry x="380" width="560" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Row 6: SME Target K8s Edge -->
+        <mxCell id="r6" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="256" width="940" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r6_c1" value="Xanh biển (#E0F2FE)" style="shape=partialRectangle;connectable=0;fillColor=#e0f2fe;strokeColor=#94a3b8;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0c4a6e;align=center;overflow=hidden;" vertex="1" parent="r6">
+          <mxGeometry width="180" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r6_c2" value="SME Target K8s Edge" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r6">
+          <mxGeometry x="180" width="200" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="r6_c3" value="Python Edge Agent (selfheal-agent, kubernetes SDK) &amp; Kubernetes Target Cluster (:6443)" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r6">
+          <mxGeometry x="380" width="560" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Row 7: Sync Flow -->
+        <mxCell id="r7" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=1;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="294" width="940" height="37" as="geometry" />
+        </mxCell>
+        <mxCell id="r7_c1" value="───▶  /  ◀──▶" style="shape=partialRectangle;connectable=0;fillColor=#f8fafc;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=12;fontColor=#0f172a;align=center;overflow=hidden;" vertex="1" parent="r7">
+          <mxGeometry width="180" height="37" as="geometry" />
+        </mxCell>
+        <mxCell id="r7_c2" value="Sync &amp; Real-Time Flow" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r7">
+          <mxGeometry x="180" width="200" height="37" as="geometry" />
+        </mxCell>
+        <mxCell id="r7_c3" value="Giao tiếp đồng bộ &amp; thời gian thực (HTTPS REST, Socket.IO, WSS Telemetry, SQL, HMAC, K8s API)" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r7">
+          <mxGeometry x="380" width="560" height="37" as="geometry" />
+        </mxCell>
+
+        <!-- Row 8: Async Flow -->
+        <mxCell id="r8" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#cbd5e1;top=0;left=0;right=0;bottom=0;" vertex="1" parent="tbl_legend">
+          <mxGeometry y="331" width="940" height="37" as="geometry" />
+        </mxCell>
+        <mxCell id="r8_c1" value="- - -▶" style="shape=partialRectangle;connectable=0;fillColor=#f8fafc;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=12;fontColor=#0f172a;align=center;overflow=hidden;" vertex="1" parent="r8">
+          <mxGeometry width="180" height="37" as="geometry" />
+        </mxCell>
+        <mxCell id="r8_c2" value="Async / Provisioning" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontStyle=1;fontSize=11.5;fontColor=#0f172a;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r8">
+          <mxGeometry x="180" width="200" height="37" as="geometry" />
+        </mxCell>
+        <mxCell id="r8_c3" value="Cấp phát kịch bản cài đặt Edge Agent một chạm &amp; gửi cảnh báo bất đồng bộ (Resend / Slack)" style="shape=partialRectangle;connectable=0;fillColor=#ffffff;top=0;left=0;bottom=0;right=0;fontSize=11.5;fontColor=#1e293b;align=left;spacingLeft=8;overflow=hidden;" vertex="1" parent="r8">
+          <mxGeometry x="380" width="560" height="37" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

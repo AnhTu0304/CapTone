@@ -1,0 +1,73 @@
+@startuml
+title Hình 1 — Sơ đồ Ngữ cảnh Hệ thống (System Context Diagram — APSIS / SelfHeal)
+left to right direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam nodesep 35
+skinparam ranksep 75
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam actor {
+  BackgroundColor #EFF6FF
+  BorderColor #0D9488
+  FontStyle bold
+}
+skinparam usecase {
+  BackgroundColor #0284C7
+  BorderColor #0369A1
+  FontColor #FFFFFF
+  FontStyle bold
+}
+skinparam cloud {
+  BackgroundColor<<Email>> #F3E8FF
+  BorderColor<<Email>> #7C3AED
+  BackgroundColor<<OAuth>> #FEF3C7
+  BorderColor<<OAuth>> #D97706
+  BackgroundColor<<Alert>> #FCE7F3
+  BorderColor<<Alert>> #DB2777
+}
+skinparam component {
+  BackgroundColor<<Edge>> #CCFBF1
+  BorderColor<<Edge>> #0D9488
+}
+skinparam node {
+  BackgroundColor #DBEAFE
+  BorderColor #2563EB
+}
+
+' ==================== LEFT: 5 USER ACTORS (2-TIER RBAC) ====================
+actor "SME Owner\n(HITL Approver)" as SMEOwner
+actor "Super Admin\n(Platform Root)" as SuperAdmin
+actor "Admin\n(Platform Ops)" as Admin
+actor "DevOps\n(Operator)" as DevOps
+actor "Viewer\n(Read-Only)" as Viewer
+
+' ==================== CENTER: SYSTEM BOUNDARY ====================
+usecase "AI-Driven Proactive\nSelf-Healing Infrastructure\nfor SMEs\n(APSIS / SelfHeal Platform)" as Core
+
+' ==================== RIGHT: EXTERNAL SERVICES & K8S EDGE ====================
+cloud "Email Service\n(Resend / SMTP)" <<Email>> as Resend
+cloud "Google OAuth 2.0\n(Identity Provider / SSO)" <<OAuth>> as OAuth
+cloud "On-Call Alerting\n(Slack Webhook & PagerDuty)" <<Alert>> as SlackPD
+
+[Kubernetes Edge Agent\n(Python 3.11 Pod / DaemonSet)] <<Edge>> as Agent
+node "Kubernetes Target Cluster\n(K8s API :6443, Nodes & Pods)" as K8s
+
+' ==================== CLEAN BIDIRECTIONAL FLOWS ====================
+SMEOwner <--> Core : In: Org, Cluster, Agent & HITL Approval\nOut: Dashboard, SLA Reports & Alerts
+SuperAdmin <--> Core : In: System Roles, AI Models & Config\nOut: System Info & Audit Ledger
+Admin <--> Core : In: User & Org Governance\nOut: Operation Result
+DevOps <--> Core : In: Policy Config, RCA & Healing Ops\nOut: Telemetry, Forecast & Result
+Viewer <--> Core : In: View Information\nOut: Read-Only Dashboard
+
+Core <--> Resend : Out: OTP, Invites, Alerts, HITL & Reports\nIn: Delivery & Sending Status
+Core <--> OAuth : Out: Verify OAuth2 ID Token\nIn: Verified User Profile
+Core --> SlackPD : Out: Critical Incident & Escalation Webhooks
+Core <--> Agent : Out: WSS Config & Signed Healing Cmd\nIn: WSS Telemetry, 10s Heartbeat & Result
+
+Agent <--> K8s : Out: K8s API (:6443) Collect & Remediate\nIn: Metrics, Logs, Events & Ready State
+
+@enduml

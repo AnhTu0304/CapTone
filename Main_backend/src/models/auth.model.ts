@@ -52,7 +52,8 @@ export interface IAuthResult {
 export interface ILoginResult {
     id: string;
     email: string;
-        full_name?: string;
+    has_password?: boolean;
+    full_name?: string;
     avatar_url?: string | null;
     avatarUrl?: string | null;
     token?: string;

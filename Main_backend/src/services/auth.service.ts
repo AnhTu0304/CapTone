@@ -195,6 +195,7 @@ export class AuthService {
         return {
             id: user.id,
             email: user.email,
+            has_password: Boolean(user.has_password),
             full_name: user.full_name,
             avatar_url: user.avatar_url || null,
             avatarUrl: user.avatar_url || null,
@@ -260,6 +261,7 @@ await UserModel.updateLastLogin(user.id);
         return {
             id: user.id,
             email: user.email,
+            has_password: true,
             full_name: user.full_name,
             avatar_url: user.avatar_url || null,
             avatarUrl: user.avatar_url || null,
@@ -569,6 +571,7 @@ await UserModel.updateLastLogin(user.id);
             user: {
                 id: user.id,
                 email: user.email,
+                has_password: Boolean(user.has_password),
                 full_name: user.full_name,
                 avatar_url: user.avatar_url,
                 status: user.status,

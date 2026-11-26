@@ -639,18 +639,45 @@ export class EmailService {
   }
 
   /**
-   * Gửi email thử nghiệm kiểm tra cấu hình kênh nhận cảnh báo khẩn cấp
+   * Chuẩn hóa lỗi SMTP thành thông điệp dễ hiểu cho người quản trị
    */
-  public static async sendTestAlertEmail(payload: {
+  private static formatSmtpError(error: any): string {
+    const rawMsg = String(error?.message || 'Lỗi kết nối máy chủ SMTP không xác định');
+    const code = String(error?.code || '');
+    const responseCode = Number(error?.responseCode || 0);
+
+    if (responseCode === 535 || rawMsg.includes('535') || rawMsg.includes('Invalid login') || rawMsg.includes('BadCredentials')) {
+      return 'Xác thực SMTP thất bại (535): Sai SMTP_USER hoặc App Password trong cấu hình backend (.env).';
+    }
+    if (['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ESOCKET', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)) {
+      return `Không thể kết nối tới máy chủ SMTP (${code}): ${rawMsg}`;
+    }
+    return rawMsg;
+  }
+
+  /**
+   * Gửi email thử nghiệm kèm chi tiết kết quả (ok, error, mode) để API phản hồi chính xác
+   */
+  public static async sendTestAlertEmailWithResult(payload: {
     toEmail: string;
     recipientName?: string;
     organizationName?: string;
     triggeredByEmail?: string;
-  }): Promise<boolean> {
+  }): Promise<{ ok: boolean; error?: string; skipped?: boolean; mode?: 'smtp' | 'dev_console' }> {
     const transporter = this.getTransporter();
     const clientUrl = (config.email.clientUrl || 'http://localhost:3002').replace(/\/+$/, '');
     const settingsUrl = `${clientUrl}/dashboard/settings`;
     const orgLabel = payload.organizationName || 'Tổ chức Quản trị';
+
+    const cleanTo = String(payload.toEmail || '').toLowerCase().trim();
+    const DUMMY_DOMAINS = ['@selfheal.com', '@selfheal.local', '@example.com', '@test.com', '@dummy.com'];
+    if (DUMMY_DOMAINS.some((d) => cleanTo.endsWith(d) || cleanTo.includes(d))) {
+      return {
+        ok: false,
+        skipped: true,
+        error: `Địa chỉ ${payload.toEmail} thuộc tên miền thử nghiệm nội bộ nên không thể gửi SMTP thật.`,
+      };
+    }
 
     if (!transporter) {
       console.log('\n============================================================');
@@ -658,7 +685,7 @@ export class EmailService {
       console.log(`➡️  Gửi tới: ${payload.toEmail}`);
       console.log(`🏢  Tổ chức: ${orgLabel} | Người kích hoạt: ${payload.triggeredByEmail || 'Admin'}`);
       console.log('============================================================\n');
-      return true;
+      return { ok: true, mode: 'dev_console' };
     }
 
     const htmlContent = `
@@ -692,11 +719,25 @@ export class EmailService {
         html: htmlContent,
       });
       console.log(`✅ [EMAIL TEST] Đã gửi email kiểm tra cảnh báo tới <${payload.toEmail}>`);
-      return true;
+      return { ok: true, mode: 'smtp' };
     } catch (error) {
+      const friendlyError = this.formatSmtpError(error);
       console.error(`❌ [EMAIL TEST ERROR] Gửi email kiểm tra tới ${payload.toEmail} thất bại:`, (error as Error).message);
-      return false;
+      return { ok: false, error: friendlyError };
     }
+  }
+
+  /**
+   * Gửi email thử nghiệm kiểm tra cấu hình kênh nhận cảnh báo khẩn cấp
+   */
+  public static async sendTestAlertEmail(payload: {
+    toEmail: string;
+    recipientName?: string;
+    organizationName?: string;
+    triggeredByEmail?: string;
+  }): Promise<boolean> {
+    const res = await this.sendTestAlertEmailWithResult(payload);
+    return res.ok;
   }
 
   /**

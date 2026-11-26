@@ -17,8 +17,23 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
+import { useAuth } from '../../context/AuthContext';
+import { profileService } from '../../services/profileService';
+
+const resolveHasPassword = (authUser, storedProfile) => {
+  if (typeof authUser?.has_password === 'boolean') return authUser.has_password;
+  if (typeof authUser?.hasPassword === 'boolean') return authUser.hasPassword;
+  if (typeof storedProfile?.hasPassword === 'boolean') return storedProfile.hasPassword;
+  return true;
+};
 
 export const PersonalSecurityPage = () => {
+  const { user } = useAuth() || {};
+  const [hasPassword, setHasPassword] = useState(() =>
+    resolveHasPassword(user, personalPortalService.getProfile?.())
+  );
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   // Password change state
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -47,10 +62,19 @@ export const PersonalSecurityPage = () => {
   const [backupCodes, setBackupCodes] = useState([]);
   const [copiedBackup, setCopiedBackup] = useState(false);
 
-  // Lấy trạng thái 2FA từ server khi tải trang
+  // Đồng bộ cờ hasPassword từ AuthContext & profile backend (/users/me)
+  useEffect(() => {
+    setHasPassword((prev) => {
+      if (typeof user?.has_password === 'boolean') return user.has_password;
+      if (typeof user?.hasPassword === 'boolean') return user.hasPassword;
+      return prev;
+    });
+  }, [user?.has_password, user?.hasPassword]);
+
+  // Lấy trạng thái 2FA & hồ sơ từ server khi tải trang
   useEffect(() => {
     let isMounted = true;
-    const fetch2FA = async () => {
+    const fetchSecurityMeta = async () => {
       try {
         if (personalPortalService.get2FAStatus) {
           const status = await personalPortalService.get2FAStatus();
@@ -61,8 +85,14 @@ export const PersonalSecurityPage = () => {
       } catch (err) {
         console.warn('Lỗi lấy trạng thái 2FA:', err);
       }
+      try {
+        const prof = await profileService.getProfile?.();
+        if (isMounted && typeof prof?.hasPassword === 'boolean') {
+          setHasPassword(prof.hasPassword);
+        }
+      } catch {}
     };
-    fetch2FA();
+    fetchSecurityMeta();
     return () => { isMounted = false; };
   }, []);
 
@@ -119,7 +149,7 @@ export const PersonalSecurityPage = () => {
   };
 
   // Handle password submit
-  const handlePasswordChange = (e) => {
+  const handlePasswordChange = async (e) => {
     e.preventDefault();
     setPasswordStatus({ success: false, message: '' });
 
@@ -132,8 +162,9 @@ export const PersonalSecurityPage = () => {
       return;
     }
 
+    setIsChangingPassword(true);
     try {
-      personalPortalService.changePassword({ oldPassword, newPassword });
+      await personalPortalService.changePassword({ oldPassword, newPassword });
       setPasswordStatus({ success: true, message: 'Đổi mật khẩu thành công! Hãy lưu lại mật khẩu mới.' });
       setOldPassword('');
       setNewPassword('');
@@ -141,6 +172,8 @@ export const PersonalSecurityPage = () => {
       setTimeout(() => setPasswordStatus({ success: false, message: '' }), 4000);
     } catch (err) {
       setPasswordStatus({ success: false, message: err.message || 'Lỗi khi đổi mật khẩu' });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -263,7 +296,7 @@ export const PersonalSecurityPage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
         <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-          Security — Bảo Mật Tài Khoản
+          Bảo Mật Tài Khoản
         </h2>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
           Thiết lập mật khẩu mạnh, kích hoạt xác thực hai yếu tố và quản lý các phiên đăng nhập đang hoạt động.
@@ -325,28 +358,79 @@ export const PersonalSecurityPage = () => {
                 Đổi Mật Khẩu Đăng Nhập
               </h3>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Khuyến nghị đổi mật khẩu tối thiểu 90 ngày một lần
+                {hasPassword ? 'Khuyến nghị đổi mật khẩu tối thiểu 90 ngày một lần' : 'Phương thức xác thực qua Google OAuth'}
               </p>
             </div>
           </div>
 
-          {passwordStatus.message && (
+          {!hasPassword ? (
             <div
               style={{
-                backgroundColor: passwordStatus.success ? '#ECFDF5' : '#FEF2F2',
-                border: `1px solid ${passwordStatus.success ? '#A7F3D0' : '#FCA5A5'}`,
-                color: passwordStatus.success ? '#065F46' : '#DC2626',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: '18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
               }}
             >
-              {passwordStatus.message}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z" />
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z" />
+                    <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z" />
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z" />
+                  </svg>
+                </span>
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
+                    Tài khoản được đăng nhập bằng Google
+                  </div>
+                  {user?.email && (
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '1px' }}>
+                      {user.email}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.55, margin: 0 }}>
+                Tài khoản của bạn đang được xác thực trực tiếp qua Google OAuth nên chưa thiết lập mật khẩu đăng nhập cục bộ. Vui lòng quản lý mật khẩu và bảo mật đăng nhập tại Cài đặt Tài khoản Google của bạn.
+              </p>
             </div>
-          )}
+          ) : (
+            <>
+              {passwordStatus.message && (
+                <div
+                  style={{
+                    backgroundColor: passwordStatus.success ? '#ECFDF5' : '#FEF2F2',
+                    border: `1px solid ${passwordStatus.success ? '#A7F3D0' : '#FCA5A5'}`,
+                    color: passwordStatus.success ? '#065F46' : '#DC2626',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {passwordStatus.message}
+                </div>
+              )}
 
-          <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Old Password */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
@@ -471,6 +555,7 @@ export const PersonalSecurityPage = () => {
 
             <button
               type="submit"
+              disabled={isChangingPassword}
               style={{
                 marginTop: '6px',
                 padding: '9px 16px',
@@ -480,7 +565,8 @@ export const PersonalSecurityPage = () => {
                 border: 'none',
                 fontSize: '0.8125rem',
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: isChangingPassword ? 'not-allowed' : 'pointer',
+                opacity: isChangingPassword ? 0.7 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -488,9 +574,11 @@ export const PersonalSecurityPage = () => {
               }}
             >
               <Lock size={15} />
-              <span>Cập Nhật Mật Khẩu</span>
+              <span>{isChangingPassword ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}</span>
             </button>
           </form>
+            </>
+          )}
         </div>
 
         {/* SECTION 2: TWO-FACTOR AUTHENTICATION (2FA) */}
@@ -1349,7 +1437,9 @@ export const PersonalSecurityPage = () => {
             </div>
 
             <p style={{ fontSize: '0.8125rem', color: '#64748B', lineHeight: 1.5, margin: '0 0 14px 0' }}>
-              Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi mật khẩu thông thường.
+              {hasPassword
+                ? 'Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi mật khẩu thông thường.'
+                : 'Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi xác thực Google.'}
             </p>
 
             <div style={{ marginBottom: '16px' }}>
@@ -1363,11 +1453,11 @@ export const PersonalSecurityPage = () => {
                   marginBottom: '6px',
                 }}
               >
-                Mật khẩu tài khoản hoặc Mã OTP 2FA (6 số)
+                {hasPassword ? 'Mật khẩu tài khoản hoặc Mã OTP 2FA (6 số)' : 'Mã OTP 2FA (6 số)'}
               </label>
               <input
                 id="disable-2fa-credential"
-                type="password"
+                type={hasPassword ? 'password' : 'text'}
                 value={disablePassword}
                 onChange={(e) => {
                   setDisablePassword(e.target.value);
@@ -1378,7 +1468,7 @@ export const PersonalSecurityPage = () => {
                     handleConfirmDisable2FA(e);
                   }
                 }}
-                placeholder="Nhập mật khẩu hoặc mã OTP 6 số..."
+                placeholder={hasPassword ? 'Nhập mật khẩu hoặc mã OTP 6 số...' : 'Nhập mã OTP 6 số từ ứng dụng xác thực...'}
                 autoFocus
                 style={{
                   width: '100%',

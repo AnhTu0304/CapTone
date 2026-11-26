@@ -23,10 +23,10 @@ export const PersonalHeader = ({
     if (currentPath.includes('/companies')) return 'Công Ty Của Tôi';
     if (currentPath.includes('/profile')) return 'Hồ Sơ Cá Nhân';
     if (currentPath.includes('/security')) return 'Bảo Mật Tài Khoản';
-    if (currentPath.includes('/preferences')) return 'Tùy Chỉnh Cá Nhân (Preferences)';
+    if (currentPath.includes('/preferences')) return 'Tùy Chỉnh Cá Nhân';
     if (currentPath.includes('/notifications')) return 'Trung Tâm Thông Báo';
     if (currentPath.includes('/activity')) return 'Lịch Sử Hoạt Động';
-    if (currentPath.includes('/help')) return 'Trợ Giúp & Hỗ Trợ (Help & Support)';
+    if (currentPath.includes('/help')) return 'Trợ Giúp & Hỗ Trợ';
     return 'Bảng Điều Khiển';
   };
 

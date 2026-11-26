@@ -744,12 +744,21 @@ export const personalPortalService = {
   },
 
   // ================= 4. SECURITY =================
-  changePassword({ oldPassword, newPassword }) {
+  async changePassword({ oldPassword, newPassword }) {
     if (!oldPassword || !newPassword) {
       throw new Error('Vui lòng điền đầy đủ mật khẩu cũ và mới');
     }
     if (newPassword.length < 8) {
       throw new Error('Mật khẩu mới phải có tối thiểu 8 ký tự');
+    }
+    if (oldPassword === newPassword) {
+      throw new Error('Mật khẩu mới không được trùng với mật khẩu cũ');
+    }
+    if (getAuthToken()) {
+      await request('/users/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      });
     }
     this.logActivity('PASSWORD_CHANGE', 'Đổi mật khẩu', 'Đã đổi mật khẩu đăng nhập thành công', 'SECURITY');
     return true;

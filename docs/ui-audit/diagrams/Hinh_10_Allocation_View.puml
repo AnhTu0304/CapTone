@@ -1,0 +1,83 @@
+@startuml
+title Hình 10 — Góc nhìn Phân bổ và Triển khai Hạ tầng (UML Deployment / Allocation View)
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam node {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+}
+skinparam artifact {
+  BackgroundColor #E0F2FE
+  BorderColor #0284C7
+}
+skinparam component {
+  BackgroundColor<<Proxy>> #DBEAFE
+  BorderColor<<Proxy>> #2563EB
+  BackgroundColor<<Web>> #E0F2FE
+  BorderColor<<Web>> #0284C7
+  BackgroundColor<<Core>> #CCFBF1
+  BorderColor<<Core>> #0D9488
+  BackgroundColor<<AI>> #F3E8FF
+  BorderColor<<AI>> #7C3AED
+  BackgroundColor<<Edge>> #D1FAE5
+  BorderColor<<Edge>> #059669
+}
+skinparam database {
+  BackgroundColor #FEF3C7
+  BorderColor #D97706
+}
+skinparam cloud {
+  BackgroundColor #FCE7F3
+  BorderColor #DB2777
+}
+
+' ==================== 1. CLIENT WORKSTATION ====================
+node "Client Workstation (PC / Laptop Kỹ sư)" as ClientHost {
+  artifact "Web Browser (Chrome / Edge / Firefox)\nReact 19 SPA Client" as Browser
+}
+
+' ==================== 2. TARGET K8S WORKER NODE (LEFT) ====================
+node "SME Kubernetes Cluster / Worker Nodes\n(Cloud K8s / K3s / MicroK8s / Minikube)" as K8sHost {
+  [selfheal-agent Pod/DaemonSet\nPython 3.11 + kubernetes>=31.0 SDK] <<Edge>> as AgentPod
+  artifact "Target K8s API (:6443), Kubelet,\ncAdvisor (/sys/fs/cgroup) & Workloads" as K8sNode
+}
+
+' ==================== 3. PLATFORM HOST / DOCKER SERVER (CENTER) ====================
+node "Platform Host — Docker Compose Server\n(Docker Bridge Network: captone-network)" as DockerHost {
+  [captone-installer-service\nFastAPI | 127.0.0.1:8105->8100] <<Proxy>> as InstallerCtr
+  [captone-reverse-proxy\nNginx TLS | 8090->80, 8443->443] <<Proxy>> as NginxCtr
+  [selfheal_platform_web\nNginx + React Build | 3005->80] <<Web>> as WebCtr
+
+  [captone-main-backend\nNode.js 20 + Express/TS | 5005->5000] <<Core>> as MainCtr
+
+  [captone-ai-backend\nFastAPI + PyTorch GRU/RCA | 8005->8000\nVolume: ./saved_models] <<AI>> as AICtr
+  database "captone-redis\nRedis 7 | 6380->6379\nVolume: redis_data" as RedisCtr
+  database "captone-postgres\nPostgreSQL 16 (RLS) | 5433->5432\nVolume: postgres_data" as PgCtr
+}
+
+' ==================== 4. EXTERNAL CLOUD SERVICES (RIGHT) ====================
+cloud "External Cloud Services\n- Resend Email / SMTP\n- Google OAuth 2.0 (SSO)\n- Slack Webhook & PagerDuty" as ExtCloud
+
+' ==================== DEPLOYMENT & NETWORK LINKS ====================
+Browser <-down-> NginxCtr : HTTPS / WSS (:8443)
+NginxCtr -left-> InstallerCtr : HTTP (:8100)
+NginxCtr -right-> WebCtr : HTTP (:80)
+NginxCtr <-down-> MainCtr : Proxy HTTP/WS (:5000)
+
+InstallerCtr .left.> AgentPod : One-Liner Install
+AgentPod <-right-> MainCtr : WSS (:8443->5000)
+AgentPod <-down-> K8sNode : K8s API (:6443)
+
+MainCtr <-down-> AICtr : Internal HTTP + HMAC (:8000)
+MainCtr <-down-> RedisCtr : TCP (:6379)
+MainCtr <-down-> PgCtr : TCP + RLS (:5432)
+MainCtr <-down-> ExtCloud : HTTPS / TLS
+
+@enduml
