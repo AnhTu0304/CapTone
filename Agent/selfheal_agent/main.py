@@ -40,6 +40,7 @@ from selfheal_agent.telemetry.schemas import (
     IncomingMessage,
     K8sEventMessage,
     K8sInventoryMessage,
+    LogBatchMessage,
     LogMessage,
     MetricsMessage,
     NodeMetricsMessage,
@@ -137,7 +138,11 @@ class AgentService:
         self.nodes_collector = NodesCollector(self.core_v1)
         self.node_resource_collector = NodeResourceCollector()
         self.events_collector = EventsCollector(self.core_v1)
-        self.logs_collector = LogsCollector(self.core_v1)
+        self.logs_collector = LogsCollector(
+            self.core_v1,
+            filter_infra_info=config.LOG_FILTER_INFRA_INFO,
+            drop_all_info=config.LOG_DROP_ALL_INFO,
+        )
 
         # Telemetry
         self.prom_collector = PrometheusCollector(config.PROMETHEUS_URL) if config.PROMETHEUS_URL else None
@@ -1276,8 +1281,11 @@ class AgentService:
                     self.config.MONITOR_ALL_NAMESPACES,
                 )
                 logs = await asyncio.to_thread(self.logs_collector.collect_pod_logs, pods)
-                for l in logs:
-                    await self.ws_client.send(LogMessage(data=l))
+                if len(logs) == 1:
+                    await self.ws_client.send(LogMessage(data=logs[0]))
+                elif logs:
+                    for idx in range(0, len(logs), 50):
+                        await self.ws_client.send(LogBatchMessage(data=logs[idx : idx + 50]))
                 record_monitoring_operation("logs", "success")
             except asyncio.CancelledError:
                 break

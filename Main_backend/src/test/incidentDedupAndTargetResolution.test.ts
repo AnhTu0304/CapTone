@@ -100,6 +100,21 @@ describe('Incident Deduplication, Rule 5 Delta Restarts & K8s Target Resolution'
     );
     assert.strictEqual(legacyMatch.id, 'inc-dedup-1');
     assert.ok(calls[1].sql.includes('OR target_id IS NULL'));
+
+    const clusterScopedMatch = await IncidentModel.findOpenIncident(
+      mockClient,
+      'env-1',
+      'wl-1',
+      'CPU_SATURATION',
+      1440,
+      'ecommerce-store-app',
+      '8ea9ecbf-c5c2-44b2-b149-0f496665c0b6'
+    );
+    assert.strictEqual(clusterScopedMatch.id, 'inc-dedup-1');
+    assert.ok(calls[2].sql.includes('cluster_id::text = $6::text'));
+    assert.ok(calls[2].sql.includes('incidents.cluster_id::text = c.id::text'));
+    assert.strictEqual(calls[2].params[4], 'ecommerce-store-app');
+    assert.strictEqual(calls[2].params[5], '8ea9ecbf-c5c2-44b2-b149-0f496665c0b6');
   });
 
   test('WorkloadModel.resolveK8sTarget resolves Helm release workload & non-default namespace from pod labels', async (t) => {

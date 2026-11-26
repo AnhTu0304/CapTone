@@ -330,6 +330,51 @@ export function initAgentWebSocket(server: HttpServer): WebSocketServer {
             break;
           }
 
+          case 'log_batch': {
+            const savedBatch = await AgentService.storeLogsBatch(ws.agent, msg.data);
+            const urgentTriggeredServices = new Set<string>();
+
+            for (const entry of savedBatch) {
+              broadcastTelemetryToUi({
+                type: 'log',
+                data: {
+                  ...entry.payload,
+                  id: entry.id,
+                  organization_id: ws.agent.organization_id,
+                  cluster_id: ws.agent.cluster_id,
+                  occurred_at: new Date().toISOString(),
+                },
+              });
+
+              const upperLevel = entry.payload.level.toUpperCase();
+              const isRoutineJsonInfo = entry.payload.message.includes('"s":"I"');
+              const isErrorLog = !isRoutineJsonInfo && ['ERROR', 'FATAL', 'CRITICAL'].includes(upperLevel);
+              const hasErrorKeywords =
+                !isRoutineJsonInfo &&
+                /(exception|timeout|oom|crash|connection error|killed|deadlock|fail)/i.test(entry.payload.message);
+
+              if ((isErrorLog || hasErrorKeywords) && !urgentTriggeredServices.has(entry.payload.service_id)) {
+                urgentTriggeredServices.add(entry.payload.service_id);
+                TelemetryPipelineService.triggerUrgentEvaluation(
+                  entry.payload.service_id,
+                  `Error log: ${entry.payload.message.slice(0, 70)}`,
+                  ws.agent.organization_id,
+                  ws.agent.cluster_id
+                );
+              }
+            }
+
+            ws.send(
+              JSON.stringify({
+                status: 'ack',
+                type: 'log_batch',
+                count: savedBatch.length,
+                timestamp: new Date().toISOString(),
+              })
+            );
+            break;
+          }
+
           case 'k8s_event': {
             const saved = await AgentService.storeK8sEvent(ws.agent, msg.data);
             console.log(`⚡ [REALTIME EVENT] [${ws.agent.name}] [${msg.data.event.type}] ${msg.data.event.reason}: ${msg.data.event.message.slice(0, 110)}`);

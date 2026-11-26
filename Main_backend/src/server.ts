@@ -9,6 +9,7 @@ import { initAgentWebSocket } from './websocket/agentWebSocket';
 import { initTelemetryWebSocket } from './websocket/telemetryWebSocket';
 import { TelemetryPipelineService } from './services/telemetryPipeline.service';
 import { EmailWorker } from './services/emailQueue.service';
+import { LogsRetentionService } from './services/logsRetention.service';
 
 const startServer = async () => {
   // Test connection to PostgreSQL before opening HTTP port
@@ -31,6 +32,8 @@ const startServer = async () => {
 
   // Start continuous AI Ingestion, Forecast & Partitioning Pipeline
   TelemetryPipelineService.startPipeline(10);
+  // Ensure logs indexes exist and start batched TTL cleanup (24h INFO / 7d WARN+ERROR)
+  LogsRetentionService.startScheduler();
 
   server.listen(config.port, () => {
     console.log(`🚀 Server is running on port ${config.port} in ${config.nodeEnv} mode`);
@@ -42,6 +45,7 @@ const startServer = async () => {
   // Graceful shutdown
   const shutdown = async () => {
     console.log('Received shutdown signal, closing server gracefully...');
+    LogsRetentionService.stopScheduler();
     TelemetryPipelineService.stopPipeline();
     await EmailWorker.stop();
     uiWss.close();

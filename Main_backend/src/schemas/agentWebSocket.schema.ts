@@ -367,6 +367,10 @@ export const AgentWsMessageSchema = z.discriminatedUnion('type', [
     data: AgentLogPayloadSchema,
   }),
   z.object({
+    type: z.literal('log_batch'),
+    data: z.array(AgentLogPayloadSchema).min(1).max(200),
+  }),
+  z.object({
     type: z.literal('k8s_event'),
     data: AgentK8sEventPayloadSchema,
   }),

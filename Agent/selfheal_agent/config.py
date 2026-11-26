@@ -69,6 +69,14 @@ class AgentConfig(BaseSettings):
         ge=1000,
         description="Log collection interval in milliseconds",
     )
+    LOG_FILTER_INFRA_INFO: bool = Field(
+        default=True,
+        description="Drop routine INFO logs from Kubernetes/platform infrastructure pods",
+    )
+    LOG_DROP_ALL_INFO: bool = Field(
+        default=False,
+        description="Optionally drop INFO logs from all workloads",
+    )
     K8S_NAMESPACE: str = Field(
         default="default",
         description="Kubernetes namespace to monitor (if not monitoring all namespaces)",

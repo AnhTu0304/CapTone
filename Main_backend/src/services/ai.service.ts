@@ -1165,7 +1165,8 @@ export class AiService {
         workloadId,
         incidentType,
         1440,
-        input.service_id
+        input.service_id,
+        clusterId
       );
 
       if (existingIncident) {

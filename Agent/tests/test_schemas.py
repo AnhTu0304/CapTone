@@ -11,6 +11,7 @@ from selfheal_agent.telemetry.schemas import (
     AuthMessage,
     ErrorPayload,
     K8sEventMessage,
+    LogBatchMessage,
     LogMessage,
     MetricsMessage,
 )
@@ -54,6 +55,33 @@ def test_log_message_serialization() -> None:
     assert dumped["type"] == "log"
     assert dumped["data"]["level"] == "error"
     assert "timed out" in dumped["data"]["message"]
+
+
+def test_log_batch_message_serialization() -> None:
+    items = [
+        AgentLogData(
+            service_id="ecommerce-store-app",
+            pod_id="pod-1",
+            namespace="test-lab",
+            timestamp="2026-10-20T12:00:00Z",
+            level="info",
+            message="Order completed",
+        ),
+        AgentLogData(
+            service_id="ecommerce-store-app",
+            pod_id="pod-1",
+            namespace="test-lab",
+            timestamp="2026-10-20T12:00:01Z",
+            level="error",
+            message="Unhandled DB error",
+        ),
+    ]
+    envelope = LogBatchMessage(data=items)
+    dumped = json.loads(envelope.model_dump_json())
+
+    assert dumped["type"] == "log_batch"
+    assert len(dumped["data"]) == 2
+    assert dumped["data"][1]["level"] == "error"
 
 
 def test_event_message_serialization() -> None:

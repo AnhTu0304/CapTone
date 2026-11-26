@@ -201,7 +201,7 @@ export function recordAuthFailure(
 }
 
 export function recordBackgroundJob(
-  jobName: 'telemetry_pipeline' | 'rule_engine' | 'agent_timeout' | 'audit_retention',
+  jobName: 'telemetry_pipeline' | 'rule_engine' | 'agent_timeout' | 'audit_retention' | 'logs_retention',
   status: 'success' | 'error',
   durationSeconds: number
 ): void {

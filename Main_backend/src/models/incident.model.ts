@@ -79,7 +79,8 @@ export class IncidentModel {
     targetId: string | null,
     incidentType: string,
     cooldownMinutes: number = 15,
-    targetName?: string | null
+    targetName?: string | null,
+    clusterId?: string | null
   ): Promise<any | null> {
     const conditions = [
       'environment_id = $1',
@@ -98,9 +99,27 @@ export class IncidentModel {
         OR ($2::text IS NOT NULL AND target_id::text = $2::text)
       )`);
       params.push(targetName.trim());
+      idx++;
     } else {
       conditions.push('incident_type = $3');
       conditions.push('($2::text IS NULL OR target_id::text = $2::text OR target_id IS NULL)');
+    }
+
+    if (clusterId && String(clusterId).trim().length > 0) {
+      conditions.push(`(
+        cluster_id::text = $${idx}::text
+        OR EXISTS (
+          SELECT 1 FROM clusters c
+          WHERE (c.id::text = $${idx}::text OR c.name = $${idx}::text OR c.cluster_uid = $${idx}::text)
+            AND (
+              incidents.cluster_id::text = c.id::text
+              OR incidents.cluster_id::text = c.name
+              OR (c.cluster_uid IS NOT NULL AND incidents.cluster_id::text = c.cluster_uid)
+            )
+        )
+      )`);
+      params.push(String(clusterId).trim());
+      idx++;
     }
 
     const query = `
