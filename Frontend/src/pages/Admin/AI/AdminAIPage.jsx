@@ -63,13 +63,13 @@ export const AdminAIPage = ({ currentSection = 'overview', onNavigate }) => {
     switch (currentSection) {
       case 'models':
         return {
-          title: 'Kho Mô Hình Học Máy (AI Model Registry)',
+          title: 'Kho Mô Hình Học Máy',
           desc: 'Quản lý phiên bản, khuôn khổ huấn luyện, trạng thái hoạt động và nguồn gốc dữ liệu của các mô hình AI/ML.',
           icon: Cpu,
         };
       case 'comparison':
         return {
-          title: 'Đánh Giá & So Sánh Mô Hình Trước / Sau (Model Version Comparison)',
+          title: 'Đánh Giá & So Sánh Mô Hình Trước / Sau',
           desc: 'Đối chiếu trực tiếp chỉ số hiệu năng phiên bản cũ vs phiên bản mới, kiểm soát trôi dữ liệu và lịch sử đánh giá.',
           icon: Scale,
         };
