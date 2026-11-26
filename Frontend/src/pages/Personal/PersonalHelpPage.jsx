@@ -90,7 +90,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
 
       {/* TAB 1: DOCUMENTATION */}
       {activeTab === 'docs' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px' }}>
+        <div className="portal-grid-sidebar" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px' }}>
           {/* Docs Sidebar / Table of Contents */}
           <div
             style={{
@@ -282,7 +282,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Search bar */}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 'min(100%, 220px)' }}>
               <Search
                 size={16}
                 color="#94A3B8"

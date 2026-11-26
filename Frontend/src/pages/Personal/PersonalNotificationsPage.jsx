@@ -248,7 +248,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
         </span>
 
         {/* Status Filter */}
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
           {[
             { id: 'ALL', label: `Tất cả (${notifications.length})` },
             { id: 'UNREAD', label: `Chưa đọc (${unreadCount})` },
@@ -286,6 +286,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
             fontSize: '0.75rem',
             backgroundColor: '#FFFFFF',
             outline: 'none',
+            maxWidth: '100%',
           }}
         >
           <option value="ALL">Tất cả loại thông báo</option>
@@ -303,21 +304,22 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
         {filtered.map((item) => {
           const typeConf = getTypeConfig(item.type);
           return (
-            <div
-              key={item.id}
-              style={{
-                backgroundColor: item.read ? '#FFFFFF' : '#F0FDF4',
-                borderRadius: '10px',
-                border: item.read ? '1px solid #E2E8F0' : '1px solid #A7F3D0',
-                padding: '16px 20px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '16px',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1 }}>
+              <div
+                key={item.id}
+                style={{
+                  backgroundColor: item.read ? '#FFFFFF' : '#F0FDF4',
+                  borderRadius: '10px',
+                  border: item.read ? '1px solid #E2E8F0' : '1px solid #A7F3D0',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '16px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1, minWidth: 'min(100%, 240px)' }}>
                 <div
                   style={{
                     width: '38px',

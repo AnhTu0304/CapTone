@@ -32,6 +32,7 @@ export const PersonalHeader = ({
 
   return (
     <header
+      className="portal-top-header"
       style={{
         height: '64px',
         backgroundColor: '#FFFFFF',
@@ -46,10 +47,11 @@ export const PersonalHeader = ({
       }}
     >
       {/* Left: Collapse Toggle + Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-        {/* Toggle Collapse */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+        {/* Toggle Collapse (Desktop / Tablet) */}
         <button
           type="button"
+          className="portal-collapse-toggle"
           onClick={onToggleCollapse}
           aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
           style={{
@@ -64,6 +66,7 @@ export const PersonalHeader = ({
             justifyContent: 'center',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
+            flexShrink: 0,
           }}
         >
           {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
@@ -74,17 +77,20 @@ export const PersonalHeader = ({
           <button
             type="button"
             onClick={onToggleMobileDrawer}
-            className="md:hidden"
+            className="portal-mobile-toggle"
+            aria-label="Mở menu điều hướng di động"
             style={{
               width: '36px',
               height: '36px',
               borderRadius: '9px',
               border: '1px solid #E2E8F0',
               backgroundColor: '#FFFFFF',
-              display: 'flex',
+              color: '#475569',
+              display: 'none',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             <Menu size={18} />
@@ -92,20 +98,33 @@ export const PersonalHeader = ({
         )}
 
         {/* Breadcrumb Info */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748B' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div
+            className="portal-breadcrumb-sub"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748B' }}
+          >
             <span>Trung Tâm Điều Khiển</span>
             <span>/</span>
             <span style={{ color: '#059669', fontWeight: 600 }}>{getPageTitle()}</span>
           </div>
-          <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
+          <div
+            style={{
+              fontSize: '0.9375rem',
+              fontWeight: 800,
+              color: '#0F172A',
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {getPageTitle()}
           </div>
         </div>
       </div>
 
       {/* Right Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         {/* Notifications Icon Button */}
         <button
           type="button"

@@ -176,6 +176,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
 
       {/* Tabs */}
       <div
+        className="portal-tabs-scroll"
         style={{
           display: 'flex',
           borderBottom: '1px solid #E2E8F0',
@@ -197,6 +198,8 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >
           <Building2 size={16} />
@@ -218,6 +221,8 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >
           <Mail size={16} />
@@ -249,7 +254,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               style={{
                 position: 'relative',
                 flex: 1,
-                minWidth: '240px',
+                minWidth: 'min(100%, 220px)',
               }}
             >
               <Search
@@ -298,9 +303,10 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
 
           {/* Company Cards Grid */}
           <div
+            className="portal-grid-cards"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
               gap: '16px',
             }}
           >
@@ -488,7 +494,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               </p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
+            <div className="portal-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: '16px' }}>
               {invitations.map((inv) => (
                 <div
                   key={inv.id}

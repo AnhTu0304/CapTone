@@ -200,7 +200,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '12px' }}>
+          <div className="portal-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '12px' }}>
             {pendingInvites.map((inv) => (
               <div
                 key={inv.id}
@@ -212,6 +212,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexWrap: 'wrap',
                   gap: '12px',
                 }}
               >
@@ -263,6 +264,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
 
       {/* 4 KPIs Row (4 cards 1 hàng) */}
       <div
+        className="portal-grid-4"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
@@ -433,7 +435,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
       </div>
 
       {/* Main Content Grid: Left (Company List) & Right (Recent Activity Feed) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: '20px' }}>
+      <div className="portal-grid-split" style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: '20px' }}>
         {/* Left Column: My Companies Quick Access */}
         <div
           style={{

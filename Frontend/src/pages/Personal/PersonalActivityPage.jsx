@@ -198,7 +198,7 @@ export const PersonalActivityPage = () => {
         }}
       >
         {/* Search */}
-        <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 'min(100%, 220px)' }}>
           <Search
             size={16}
             color="#94A3B8"
@@ -231,6 +231,7 @@ export const PersonalActivityPage = () => {
             fontSize: '0.8125rem',
             backgroundColor: '#FFFFFF',
             outline: 'none',
+            maxWidth: '100%',
           }}
         >
           <option value="ALL">Tất cả hành động ({totalItems || activities.length})</option>

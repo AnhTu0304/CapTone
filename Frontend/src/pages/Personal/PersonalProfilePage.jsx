@@ -227,7 +227,7 @@ export const PersonalProfilePage = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+      <form onSubmit={handleSubmit} className="portal-grid-asymmetric" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
         {/* Left Column: Avatar & Identity Overview Card */}
         <div
           style={{
@@ -378,7 +378,7 @@ export const PersonalProfilePage = () => {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="portal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label htmlFor="field-fullname" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                 Họ và Tên *

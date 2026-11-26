@@ -324,7 +324,7 @@ export const PersonalSecurityPage = () => {
       )}
 
       {/* Grid: Change Password & 2FA */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      <div className="portal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
         {/* SECTION 1: CHANGE PASSWORD */}
         <div
           style={{
@@ -1054,6 +1054,7 @@ export const PersonalSecurityPage = () => {
           }}
         >
           <div
+            className="portal-modal-card"
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '16px',
@@ -1134,13 +1135,15 @@ export const PersonalSecurityPage = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
               }}
             >
-              <div>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
                   Khóa thiết lập thủ công
                 </div>
-                <div style={{ fontSize: '0.8125rem', fontWeight: 700, fontFamily: 'monospace', color: '#0F172A', letterSpacing: '1px' }}>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 700, fontFamily: 'monospace', color: '#0F172A', letterSpacing: '1px', wordBreak: 'break-all' }}>
                   {setupData.secret}
                 </div>
               </div>

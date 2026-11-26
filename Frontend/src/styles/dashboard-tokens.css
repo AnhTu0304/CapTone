@@ -295,7 +295,8 @@ a:focus-visible,
 
 /* 3. Tablet (769px - 1024px) */
 @media (max-width: 1024px) and (min-width: 769px) {
-  .admin-main-viewport {
+  .admin-main-viewport,
+  .portal-main-viewport {
     padding: 20px !important;
   }
 
@@ -309,13 +310,29 @@ a:focus-visible,
   }
 }
 
+@media (max-width: 1024px) {
+  .portal-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .portal-grid-split,
+  .portal-grid-asymmetric,
+  .portal-grid-sidebar {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* 4. Mobile (<= 768px) */
 @media (max-width: 768px) {
-  .admin-desktop-sidebar {
+  .admin-desktop-sidebar,
+  .portal-desktop-sidebar,
+  .portal-collapse-toggle,
+  .portal-breadcrumb-sub {
     display: none !important;
   }
 
-  .admin-mobile-toggle {
+  .admin-mobile-toggle,
+  .portal-mobile-toggle {
     display: inline-flex !important;
   }
 
@@ -327,12 +344,28 @@ a:focus-visible,
     display: none !important;
   }
 
-  .admin-top-header {
+  .admin-top-header,
+  .portal-top-header {
     padding: 0 14px !important;
+    gap: 10px !important;
   }
 
-  .admin-main-viewport {
+  .admin-main-viewport,
+  .portal-main-viewport {
     padding: 14px 16px !important;
+  }
+
+  .portal-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .portal-grid-cards {
+    grid-template-columns: 1fr !important;
+  }
+
+  .portal-modal-card {
+    padding: 18px !important;
+    border-radius: 12px !important;
   }
 
   .dash-card {
@@ -345,6 +378,21 @@ a:focus-visible,
     padding: 10px 12px !important;
     font-size: 0.75rem !important;
   }
+}
+
+@media (max-width: 520px) {
+  .portal-grid-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.portal-tabs-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.portal-tabs-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 
