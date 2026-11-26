@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import BranchedPipelineSection from './BranchedPipelineSection';
 import {
   translateIncidentTitle,
   translateSeverity,
@@ -173,6 +174,16 @@ export const AIPipelineFlowCanvas = ({
     risks: false,
     branches: false,
   });
+  // Chuyển đổi giữa Sơ đồ 1 (Tổng quan) và Sơ đồ 2 (Rẽ nhánh chi tiết 01→07)
+  const [activeDiagram, setActiveDiagram] = useState('diagram1'); // 'diagram1' | 'diagram2'
+  // Trạng thái độc lập cho Sơ đồ 2 (không ảnh hưởng Sơ đồ 1)
+  const [d2TelemetryExpanded, setD2TelemetryExpanded] = useState(false);
+  const [d2RuleExpanded, setD2RuleExpanded] = useState(false);
+  const [d2RisksExpanded, setD2RisksExpanded] = useState(false);
+  const [d2CausesExpanded, setD2CausesExpanded] = useState(false);
+  const [d2ActionsExpanded, setD2ActionsExpanded] = useState(false);
+  const [d2SimulatedCause, setD2SimulatedCause] = useState(null);
+  const [d2VerifyOutcome, setD2VerifyOutcome] = useState('auto');
   const isTelemetryExpanded = !showExtendedPipeline || expandedGroups.telemetry;
   const isRuleExpanded = expandedGroups.rule;
   const isRisksExpanded = !showExtendedPipeline || expandedGroups.risks;
@@ -331,20 +342,21 @@ export const AIPipelineFlowCanvas = ({
     return () => ro.disconnect();
   }, []);
 
-  // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình (giữ cố định baseCanvasH để mở/đóng Rule Engine không bị giật khung nhìn)
-  const baseCanvasW = showExtendedPipeline ? 2195 : 1000;
-  const baseCanvasH = showExtendedPipeline ? 730 : 550;
+  // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình theo Sơ đồ đang hiển thị (Sơ đồ 1: 2240x760 | Sơ đồ 2 có 00 Service: 4090x1230)
+  const isDiagram2Active = showExtendedPipeline && activeDiagram === 'diagram2';
+  const baseCanvasW = showExtendedPipeline ? (isDiagram2Active ? 4090 : 2240) : 1000;
+  const baseCanvasH = showExtendedPipeline ? (isDiagram2Active ? 1230 : 760) : 550;
   const autoScale = useMemo(() => {
     if (!containerWidth) return 1;
     if (isFullScreen && containerHeight > 0) {
       const scaleW = (containerWidth - 36) / baseCanvasW;
       const scaleH = Math.max(containerHeight - topSafePadding - 32, 300) / baseCanvasH;
       const scale = Math.min(scaleW, scaleH);
-      const minScale = showExtendedPipeline ? 0.38 : 0.55;
+      const minScale = showExtendedPipeline ? (isDiagram2Active ? 0.14 : 0.28) : 0.55;
       return Math.min(Math.max(scale, minScale), 1.45);
     }
     return Math.min(Math.max(containerWidth / baseCanvasW, 0.65), 1.6);
-  }, [containerWidth, containerHeight, isFullScreen, baseCanvasW, baseCanvasH, showExtendedPipeline, topSafePadding]);
+  }, [containerWidth, containerHeight, isFullScreen, baseCanvasW, baseCanvasH, isDiagram2Active, showExtendedPipeline, topSafePadding]);
 
   // Ánh xạ chuẩn 8 chiều dữ liệu viễn trắc của mô hình GRU [12×8]
   const METRIC_CONFIGS = [
@@ -703,7 +715,7 @@ export const AIPipelineFlowCanvas = ({
     height: containerHeight,
   };
 
-  const MIN_VISUAL_SCALE = 0.25; // 25%
+  const MIN_VISUAL_SCALE = 0.12; // 12%
   const MAX_VISUAL_SCALE = 2.6;  // 260% — cho phép phóng to biểu đồ và từng thẻ siêu nét!
 
   // Phóng to / thu nhỏ neo đúng tâm điểm (con trỏ chuột khi lăn bánh xe, hoặc tâm khung nhìn khi bấm nút +/-)
@@ -765,39 +777,73 @@ export const AIPipelineFlowCanvas = ({
   }, [isFullScreen]);
 
   // Điều khiển Toolbar & Camera Focus (căn giữa vùng hiển thị sạch bên dưới 8 thẻ KPI nổi)
-  const computeFocusTransform = (mode) => {
+  const computeFocusTransform = (mode, targetDiagram = activeDiagram) => {
     const safeOffsetY = isFullScreen ? topSafePadding / 2 : 0;
+    const forDiagram2 = showExtendedPipeline && targetDiagram === 'diagram2';
+    const targetW = showExtendedPipeline ? (forDiagram2 ? 4090 : 2240) : 1000;
+    const targetH = showExtendedPipeline ? (forDiagram2 ? 1230 : 760) : 550;
     if (mode === 'all' || !showExtendedPipeline) {
       return { nextZoom: 1, nextPan: { x: 0, y: safeOffsetY } };
     }
     const usableW = Math.max(containerWidth - 24, 280);
     const usableH = Math.max(containerHeight - topSafePadding - 24, 200);
+    if (forDiagram2) {
+      if (mode === 'd2_front') {
+        const targetScale = Math.min(usableW / 1680, usableH / 1040, 1.0);
+        const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.25), MAX_VISUAL_SCALE / autoScale);
+        const effScale = nextZoom * autoScale;
+        const leftMarginPx = containerWidth <= 768 ? 8 : 18;
+        const focusCy = 540;
+        return {
+          nextZoom,
+          nextPan: {
+            x: leftMarginPx - containerWidth / 2 + (targetW / 2 - 16) * effScale,
+            y: (targetH / 2 - focusCy) * effScale + safeOffsetY,
+          },
+        };
+      }
+      if (mode === 'd2_branched') {
+        const targetScale = Math.min(usableW / 2280, usableH / 1060, 1.0);
+        const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.24), MAX_VISUAL_SCALE / autoScale);
+        const effScale = nextZoom * autoScale;
+        const leftMarginPx = containerWidth <= 768 ? 8 : 18;
+        const focusCy = 610;
+        return {
+          nextZoom,
+          nextPan: {
+            x: leftMarginPx - containerWidth / 2 + (targetW / 2 - 1860) * effScale,
+            y: (targetH / 2 - focusCy) * effScale + safeOffsetY,
+          },
+        };
+      }
+      return { nextZoom: 1, nextPan: { x: 0, y: safeOffsetY } };
+    }
     if (mode === 'gru') {
       // Neo sát lề trái (LEFT_X = 16 cách mép trái 18px) để không dư khoảng trắng bên trái, nhìn trọn từ 01 → 04/05 ngay lúc mở!
       const targetScale = Math.min(usableW / 1015, usableH / 700, 1.05);
       const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
-      const effectiveScale = nextZoom * autoScale;
+      const effScale = nextZoom * autoScale;
       const leftMarginPx = containerWidth <= 768 ? 8 : 18;
       const focusCy = 512;
       return {
         nextZoom,
         nextPan: {
-          x: leftMarginPx - containerWidth / 2 + (baseCanvasW / 2 - 16) * effectiveScale,
-          y: (baseCanvasH / 2 - focusCy) * effectiveScale + safeOffsetY,
+          x: leftMarginPx - containerWidth / 2 + (targetW / 2 - 16) * effScale,
+          y: (targetH / 2 - focusCy) * effScale + safeOffsetY,
         },
       };
     }
     // mode === 'healing': Neo sát lề trái từ Cột 04 (Multi-Agent RCA) → 05 (Policy) → 06 (AUTO/HITL/Audit) → 07 (Hậu kiểm)
     const targetScale = Math.min(usableW / 1165, usableH / 650, 1.02);
     const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.35), MAX_VISUAL_SCALE / autoScale);
-    const effectiveScale = nextZoom * autoScale;
+    const effScale = nextZoom * autoScale;
     const leftMarginPx = containerWidth <= 768 ? 8 : 20;
     const focusCy = 524;
     return {
       nextZoom,
       nextPan: {
-        x: leftMarginPx - containerWidth / 2 + (baseCanvasW / 2 - 1045) * effectiveScale,
-        y: (baseCanvasH / 2 - focusCy) * effectiveScale + safeOffsetY,
+        x: leftMarginPx - containerWidth / 2 + (targetW / 2 - 1045) * effScale,
+        y: (targetH / 2 - focusCy) * effScale + safeOffsetY,
       },
     };
   };
@@ -823,19 +869,26 @@ export const AIPipelineFlowCanvas = ({
     setZoom(nextZoom);
     setPan(nextPan);
   };
+  const handleSwitchDiagram = (diagramId) => {
+    hasUserMovedCameraRef.current = false;
+    setPinnedInspector(null);
+    setHoveredInspector(null);
+    setActiveDiagram(diagramId);
+    setActiveViewMode(diagramId === 'diagram2' ? 'all' : defaultViewMode);
+  };
   const handleReset = () => {
-    handleFocusView(showExtendedPipeline ? defaultViewMode : 'all');
+    handleFocusView(showExtendedPipeline ? (activeDiagram === 'diagram2' ? 'all' : defaultViewMode) : 'all');
   };
 
   // Tự động áp dụng góc nhìn mặc định (vừa khung các thẻ AI & Rule Engine) ngay khi đo xong kích thước khung & khi co giãn cửa sổ
   useEffect(() => {
     if (!hasMeasuredContainer || !showExtendedPipeline) return;
     if (hasUserMovedCameraRef.current) return;
-    const { nextZoom, nextPan } = computeFocusTransform(activeViewMode);
+    const { nextZoom, nextPan } = computeFocusTransform(activeViewMode, activeDiagram);
     setZoom(nextZoom);
     setPan(nextPan);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMeasuredContainer, containerWidth, containerHeight, autoScale, activeViewMode, showExtendedPipeline, topSafePadding]);
+  }, [hasMeasuredContainer, containerWidth, containerHeight, autoScale, activeViewMode, activeDiagram, showExtendedPipeline, topSafePadding]);
 
   // Tọa độ bố cục chuẩn: giữ cố định Y_SHIFT = 162 để khi mở/gập Rule Engine toàn bộ sơ đồ không bị nhảy vị trí!
   const Y_SHIFT = showExtendedPipeline ? 162 : 0;
@@ -1889,7 +1942,7 @@ export const AIPipelineFlowCanvas = ({
   const currentStepLabel = effectiveTimesteps[activeSweepIdx]?.stepLabel || `T${activeSweepIdx + 1}`;
 
   // Chiều cao tự thích ứng của khung Canvas để vừa khít 100% không bị tràn dọc
-  const canvasHeight = useMemo(() => Math.max(380, Math.round(baseCanvasH * autoScale)), [autoScale]);
+  const canvasHeight = useMemo(() => Math.max(380, Math.round(baseCanvasH * autoScale)), [baseCanvasH, autoScale]);
 
   // Nền lưới chấm đồng bộ 1:1 theo pan & zoom giống Google Stitch / Figma (dùng DUY NHẤT 1 background chung trên .dashboard-root-layout khi isFullScreen)
   const effectiveScale = zoom * autoScale;
@@ -1970,11 +2023,61 @@ export const AIPipelineFlowCanvas = ({
       >
         {showExtendedPipeline && (
           <>
-            {[
-              { id: 'gru', label: '1. AI & Rule Engine' },
-              { id: 'healing', label: '2. RCA & Tự phục hồi' },
-              { id: 'all', label: 'Toàn luồng' },
-            ].map((tab) => {
+            {/* Bộ chuyển nhanh giữa Sơ đồ 1 (Tổng quan) và Sơ đồ 2 (Rẽ nhánh 01→07) */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '2px',
+                borderRadius: '8px',
+                backgroundColor: '#F1F5F9',
+                border: '1px solid #CBD5E1',
+              }}
+            >
+              {[
+                { id: 'diagram1', label: 'Sơ đồ 1', testId: 'switch-diagram-1' },
+                { id: 'diagram2', label: 'Sơ đồ 2 (Rẽ nhánh)', testId: 'switch-diagram-2' },
+              ].map((dTab) => {
+                const isDiagSelected = activeDiagram === dTab.id;
+                return (
+                  <button
+                    key={dTab.id}
+                    type="button"
+                    data-testid={dTab.testId}
+                    onClick={() => handleSwitchDiagram(dTab.id)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: isDiagSelected ? (dTab.id === 'diagram2' ? '#7C3AED' : '#0F172A') : 'transparent',
+                      color: isDiagSelected ? '#FFFFFF' : '#475569',
+                      fontSize: '0.6875rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      boxShadow: isDiagSelected ? '0 1px 3px rgba(15, 23, 42, 0.2)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {dTab.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0', margin: '0 2px' }} />
+            {(activeDiagram === 'diagram2'
+              ? [
+                  { id: 'd2_front', label: '00 → 03 & Rule' },
+                  { id: 'd2_branched', label: '4 Agent → 16 RCA → 10 Action' },
+                  { id: 'all', label: 'Toàn Sơ đồ 2' },
+                ]
+              : [
+                  { id: 'gru', label: '1. AI & Rule Engine' },
+                  { id: 'healing', label: '2. RCA & Tự phục hồi' },
+                  { id: 'all', label: 'Toàn luồng' },
+                ]
+            ).map((tab) => {
               const isSelected = activeViewMode === tab.id;
               return (
                 <button
@@ -2126,6 +2229,8 @@ export const AIPipelineFlowCanvas = ({
           pointerEvents: 'auto',
         }}
       >
+        {(!showExtendedPipeline || activeDiagram === 'diagram1') && (
+          <>
         {/* Stage Header Pills phía trên các giai đoạn (nhấn vào pill đang mở để thu gọn nhanh) */}
         {showExtendedPipeline &&
           [
@@ -4561,7 +4666,110 @@ export const AIPipelineFlowCanvas = ({
                 Vòng lặp Hậu kiểm & Giám sát Liên tục (60s Closed-Loop Telemetry Feedback)
               </span>
             </div>
-</>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ============================================================ */}
+        {/* SƠ ĐỒ 2: TOÀN LUỒNG ĐẦY ĐỦ 01→07 + RẼ NHÁNH 4→16→10         */}
+        {/* ============================================================ */}
+        {showExtendedPipeline && activeDiagram === 'diagram2' && (
+          <BranchedPipelineSection
+            topOffset={18}
+              canvasWidth={baseCanvasW}
+              selectedService={selectedService}
+              isAgentConnected={isAgentConnected}
+              liveMetrics={liveMetrics}
+              riskProbabilities={riskProbabilities}
+              ruleEngineChecks={ruleEngineChecks}
+              latestIncident={latestIncident}
+              lastResolvedIncident={lastResolvedIncident}
+              openServiceIncidentsCount={openServiceIncidentsCount}
+              latestRecommendation={latestRecommendation}
+              latestAutoAction={latestAutoAction}
+              latestHitlApproval={latestHitlApproval}
+              isCircuitBreakerTripped={isCircuitBreakerTripped}
+              isBenignDbCacheState={isBenignDbCacheState}
+              isVerifyingInProgress={isVerifyingInProgress}
+              isRcaActive={isRcaActive}
+              isAutoActionActive={isAutoActionActive}
+              isHitlActive={isHitlActive}
+              isAuditActive={isAuditActive}
+              actionTimeline={actionTimeline}
+              recoveryStats={recoveryStats}
+              pipelineContext={pipelineContext}
+              podCount={podCount}
+              currentActiveStep={currentActiveStep}
+              totalSteps={totalSteps}
+              metricConfigs={METRIC_CONFIGS}
+              riskNodes={ACTION_OUTCOME_NODES}
+              effectiveTimesteps={effectiveTimesteps}
+              chartMaxY={chartMaxY}
+              yTicks={yTicks}
+              activeSweepIdx={activeSweepIdx}
+              currentStepLabel={currentStepLabel}
+              prediction={prediction}
+              rawRiskScore={rawRiskScore}
+              isPredictionHealthy={isPredictionHealthy}
+              isRiskDetected={isRiskDetected}
+              isScaleDownOptimization={isScaleDownOptimization}
+              topRiskEval={topRiskEval}
+              isTelemetryExpanded={d2TelemetryExpanded}
+              isRuleExpanded={d2RuleExpanded}
+              isRisksExpanded={d2RisksExpanded}
+              isCausesExpanded={d2CausesExpanded}
+              isActionsExpanded={d2ActionsExpanded}
+              onToggleTelemetry={(e) => {
+                if (e) e.stopPropagation();
+                didDragRef.current = false;
+                setD2TelemetryExpanded((prev) => !prev);
+              }}
+              onToggleRule={(e) => {
+                if (e) e.stopPropagation();
+                didDragRef.current = false;
+                setD2RuleExpanded((prev) => !prev);
+              }}
+              onToggleRisks={(e) => {
+                if (e) e.stopPropagation();
+                didDragRef.current = false;
+                setD2RisksExpanded((prev) => !prev);
+              }}
+              onToggleCauses={(e) => {
+                if (e) e.stopPropagation();
+                didDragRef.current = false;
+                setD2CausesExpanded((prev) => !prev);
+              }}
+              onToggleActions={(e) => {
+                if (e) e.stopPropagation();
+                didDragRef.current = false;
+                setD2ActionsExpanded((prev) => !prev);
+              }}
+              onToggleAllBranches={(expandAll) => {
+                didDragRef.current = false;
+                setD2TelemetryExpanded(expandAll);
+                setD2RuleExpanded(expandAll);
+                setD2RisksExpanded(expandAll);
+                setD2CausesExpanded(expandAll);
+                setD2ActionsExpanded(expandAll);
+              }}
+              simulatedCauseCode={d2SimulatedCause}
+              onSelectSimulatedCause={(code) => {
+                didDragRef.current = false;
+                setD2VerifyOutcome('auto');
+                setD2SimulatedCause((prev) => (prev === code ? null : code));
+              }}
+              onClearSimulation={() => {
+                didDragRef.current = false;
+                setD2VerifyOutcome('auto');
+                setD2SimulatedCause(null);
+              }}
+              verifyOutcomeMode={d2VerifyOutcome}
+              onChangeVerifyOutcome={(mode) => {
+                didDragRef.current = false;
+                setD2VerifyOutcome((prev) => (prev === mode ? 'auto' : mode));
+              }}
+            />
         )}
       </div>
 

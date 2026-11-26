@@ -282,7 +282,7 @@ export const AIComparisonView = () => {
             </div>
             <div>
               <h2 style={{ fontSize: '1.0625rem', fontWeight: 800, margin: 0, color: 'var(--dash-text-primary)' }}>
-                Đánh Giá & So Sánh Mô Hình Trước / Sau (Model Comparison)
+                Đánh Giá & So Sánh Mô Hình Trước / Sau
               </h2>
               <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
                 Đối chiếu định lượng đa chiều giữa hai phiên bản mô hình AI trên cùng tập kiểm chuẩn 3.000 mẫu holdout
