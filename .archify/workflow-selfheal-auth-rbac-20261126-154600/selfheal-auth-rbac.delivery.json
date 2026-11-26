@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "edbce931-2c4e-4e93-8ae6-9f4ee8c2d357",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\candidate.json",
+  "output": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\selfheal-auth-rbac.html",
+  "specification": {
+    "sha256": "6df076b68653034d8b6b9b4258a7a5d525b70cef1a88a2bc2f1453fd0cd59282",
+    "bytes": 4713
+  },
+  "artifact": {
+    "sha256": "b6fdae5755fd17646f0b50f056ee641db45d3011ba7ad8f149d48f0cb6c4c9e3",
+    "bytes": 943975
+  }
+}

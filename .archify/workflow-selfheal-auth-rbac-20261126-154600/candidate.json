@@ -1,0 +1,200 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Figure 6: Login, 2FA TOTP, Token Refresh & 2-Tier RBAC Workflow",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": ".archify/workflow-selfheal-auth-rbac-20261126-154600/selfheal-auth-rbac.html"
+  },
+  "lanes": [
+    {
+      "id": "client",
+      "label": "React 19 Auth UI & RAM Store"
+    },
+    {
+      "id": "gateway",
+      "label": "Main Backend Auth & CSRF Service"
+    },
+    {
+      "id": "security",
+      "label": "2FA TOTP & RBAC RouteRenderer",
+      "variant": "exception"
+    },
+    {
+      "id": "storage",
+      "label": "PostgreSQL 16 (RLS) & Redis 7"
+    }
+  ],
+  "phases": [
+    {
+      "id": "credentials",
+      "label": "1. Credentials / OAuth2",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "mfa_tokens",
+      "label": "2. 2FA & Token Issuance",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "rbac_routing",
+      "label": "3. 2-Tier RBAC Routing",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "enter_creds",
+    "verify_bcrypt",
+    "check_2fa",
+    "issue_tokens",
+    "load_profile",
+    "rbac_dispatch"
+  ],
+  "nodes": [
+    {
+      "id": "enter_creds",
+      "lane": "client",
+      "col": 0,
+      "type": "frontend",
+      "label": "Enter Email/Password",
+      "sublabel": "or Google OAuth2 Popup",
+      "tag": "/login"
+    },
+    {
+      "id": "verify_bcrypt",
+      "lane": "gateway",
+      "col": 1,
+      "type": "backend",
+      "label": "Verify Bcrypt & Status",
+      "sublabel": "Check ACTIVE & Rate Limit"
+    },
+    {
+      "id": "auth_failed",
+      "lane": "security",
+      "col": 1,
+      "type": "security",
+      "label": "401 / Account Locked",
+      "sublabel": "Record Failed Login Audit"
+    },
+    {
+      "id": "check_2fa",
+      "lane": "security",
+      "col": 2,
+      "type": "security",
+      "label": "Require 2FA TOTP?",
+      "sublabel": "6-Digit Authenticator / Backup",
+      "tag": "TOTP Gate"
+    },
+    {
+      "id": "issue_tokens",
+      "lane": "gateway",
+      "col": 3,
+      "type": "backend",
+      "label": "Issue Dual Tokens",
+      "sublabel": "RAM JWT + HttpOnly Refresh + CSRF",
+      "emphasis": true
+    },
+    {
+      "id": "persist_session",
+      "lane": "storage",
+      "col": 3,
+      "type": "database",
+      "label": "Store Refresh Hash",
+      "sublabel": "PG16 + Redis Revocation List"
+    },
+    {
+      "id": "load_profile",
+      "lane": "client",
+      "col": 4,
+      "type": "frontend",
+      "label": "Load Profile & Roles",
+      "sublabel": "System Roles + Org Roles",
+      "tag": "multiTabSync"
+    },
+    {
+      "id": "rbac_dispatch",
+      "lane": "security",
+      "col": 5,
+      "type": "security",
+      "label": "2-Tier RBAC Guard",
+      "sublabel": "Route to /portal, /dashboard or /admin",
+      "tag": "403 on Forbidden"
+    }
+  ],
+  "edges": [
+    {
+      "id": "a1",
+      "from": "enter_creds",
+      "to": "verify_bcrypt",
+      "label": "POST /auth/login",
+      "variant": "emphasis"
+    },
+    {
+      "id": "a2",
+      "from": "verify_bcrypt",
+      "to": "auth_failed",
+      "label": "invalid / suspended",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "a3",
+      "from": "verify_bcrypt",
+      "to": "check_2fa",
+      "label": "valid user",
+      "variant": "security"
+    },
+    {
+      "id": "a4",
+      "from": "check_2fa",
+      "to": "issue_tokens",
+      "label": "2FA verified / off",
+      "variant": "emphasis"
+    },
+    {
+      "id": "a5",
+      "from": "issue_tokens",
+      "to": "persist_session",
+      "label": "peppered hash",
+      "variant": "dashed"
+    },
+    {
+      "id": "a6",
+      "from": "issue_tokens",
+      "to": "load_profile",
+      "label": "access token in RAM",
+      "variant": "emphasis"
+    },
+    {
+      "id": "a7",
+      "from": "load_profile",
+      "to": "rbac_dispatch",
+      "label": "evaluate hierarchy",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Defense-in-Depth Session Model",
+      "items": [
+        "Short-lived JWT access token is stored strictly in RAM (never in localStorage) to prevent XSS token theft",
+        "Session restoration uses HttpOnly refresh cookies paired with X-CSRF-Token double-submit verification"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "2-Tier RBAC Hierarchy",
+      "items": [
+        "Platform System Roles: SUPER_ADMIN > ADMIN > USER",
+        "Tenant Organization Roles: SME_OWNER > DEVOPS > VIEWER (scoped via X-Organization-Id and PostgreSQL RLS)"
+      ]
+    }
+  ]
+}

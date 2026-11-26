@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Figure 1: APSIS / SelfHeal System Context Diagram",
+    "output": ".archify/architecture-selfheal-system-context-20261126-154600/selfheal-system-context.html",
+    "quality_profile": "showcase"
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "platform_admins",
+      "type": "external",
+      "label": "Super Admin & Admin",
+      "sublabel": "Platform Roles: AI Models, Users & Orgs",
+      "tag": "Platform (/admin)"
+    },
+    {
+      "id": "sme_owner",
+      "type": "external",
+      "label": "SME Owner",
+      "sublabel": "Org Role: Clusters, Agents & HITL Approver",
+      "tag": "HITL_APPROVE"
+    },
+    {
+      "id": "devops_viewer",
+      "type": "external",
+      "label": "DevOps & Viewer",
+      "sublabel": "Org Roles: Policy Config, RCA & Read-Only View",
+      "tag": "POLICY_MANAGE"
+    },
+    {
+      "id": "apsis_platform",
+      "type": "backend",
+      "label": "APSIS / SelfHeal Core Platform",
+      "sublabel": "Control Plane, 12x8 GRU AI, RCA & HITL Engine",
+      "tag": "System Boundary",
+      "emphasis": true
+    },
+    {
+      "id": "google_oauth",
+      "type": "security",
+      "label": "Google OAuth 2.0",
+      "sublabel": "External Identity Provider (SSO Login)",
+      "tag": "External IdP"
+    },
+    {
+      "id": "resend_email",
+      "type": "cloud",
+      "label": "Email Service (Resend)",
+      "sublabel": "OTP/2FA, Invites, Alerts, HITL & SLA Reports",
+      "tag": "Resend API / SMTP"
+    },
+    {
+      "id": "slack_pagerduty",
+      "type": "cloud",
+      "label": "Slack & PagerDuty",
+      "sublabel": "On-Call Escalation & Critical Incident Webhooks",
+      "tag": "On-Call Channels"
+    },
+    {
+      "id": "edge_agent",
+      "type": "messagebus",
+      "label": "Kubernetes Edge Agent",
+      "sublabel": "Python 3.11 Pod/DaemonSet (10s Heartbeat)",
+      "tag": "selfheal-agent"
+    },
+    {
+      "id": "k8s_cluster",
+      "type": "cloud",
+      "label": "SME Kubernetes Cluster",
+      "sublabel": "K8s API (:6443), Worker Nodes & Workloads",
+      "tag": "Target K8s"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "2-Tier RBAC User Actors",
+      "wraps": [
+        "platform_admins",
+        "sme_owner",
+        "devops_viewer"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "External Cloud Services & SME Target Edge",
+      "wraps": [
+        "google_oauth",
+        "resend_email",
+        "slack_pagerduty",
+        "edge_agent",
+        "k8s_cluster"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "admin-to-apsis",
+      "from": "platform_admins",
+      "to": "apsis_platform",
+      "label": "Governance & AI Models / System Info",
+      "variant": "security"
+    },
+    {
+      "id": "owner-to-apsis",
+      "from": "sme_owner",
+      "to": "apsis_platform",
+      "label": "Org, Agent Mgmt & HITL Approval / Alerts",
+      "variant": "emphasis"
+    },
+    {
+      "id": "devops-to-apsis",
+      "from": "devops_viewer",
+      "to": "apsis_platform",
+      "label": "Policy, RCA & Monitoring / Healing Result",
+      "variant": "emphasis"
+    },
+    {
+      "id": "apsis-to-google",
+      "from": "apsis_platform",
+      "to": "google_oauth",
+      "label": "Verify OAuth2 Token / Identity",
+      "variant": "security"
+    },
+    {
+      "id": "apsis-to-resend",
+      "from": "apsis_platform",
+      "to": "resend_email",
+      "label": "Alerts, HITL & Reports / Sending Status"
+    },
+    {
+      "id": "apsis-to-slack",
+      "from": "apsis_platform",
+      "to": "slack_pagerduty",
+      "label": "Critical Incident Webhooks"
+    },
+    {
+      "id": "apsis-to-agent",
+      "from": "apsis_platform",
+      "to": "edge_agent",
+      "label": "WSS Config & Signed Healing Commands",
+      "variant": "security"
+    },
+    {
+      "id": "agent-to-apsis",
+      "from": "edge_agent",
+      "to": "apsis_platform",
+      "label": "WSS Telemetry, Heartbeat & Exec Results",
+      "variant": "emphasis"
+    },
+    {
+      "id": "agent-to-k8s",
+      "from": "edge_agent",
+      "to": "k8s_cluster",
+      "label": "K8s API :6443 Telemetry & Remediation",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "2-Tier RBAC & Separation of Duties",
+      "items": [
+        "Platform Roles (Super Admin, Admin) manage global AI models, system settings, and tenant lifecycle",
+        "Organization Roles enforce Separation of Duties: DevOps configures policies (POLICY_MANAGE) while SME Owner holds exclusive high-risk approval authority (HITL_APPROVE)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "External Services & Edge Boundary",
+      "items": [
+        "Resend / SMTP delivers transactional emails (OTP/2FA, Org Invites, HITL Approval Requests, SLA Reports) and returns sending status",
+        "Google OAuth 2.0 provides SSO authentication; Slack Webhook & PagerDuty receive critical on-call escalations; Python Edge Agent bridges K8s API (:6443) via outbound WSS"
+      ]
+    }
+  ]
+}

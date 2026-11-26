@@ -371,7 +371,37 @@
     display: none !important;
   }
 
+  .header-auth-capsule {
+    display: none !important;
+  }
+
   .mobile-menu-toggle {
     display: flex !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-inner-box {
+    height: 58px;
+    padding: 0 16px;
+  }
+
+  .header-scrolled-wrapper {
+    top: 8px;
+    padding: 0 10px;
+  }
+
+  .header-scrolled-wrapper .header-inner-box {
+    height: 52px;
+    padding: 0 12px 0 16px;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+
+  .header-lang-btn {
+    min-height: 36px;
+    padding: 0 9px;
   }
 }

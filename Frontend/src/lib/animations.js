@@ -10,7 +10,8 @@ export const initPageFadeIn = (element) => {
   gsap.fromTo(
     element,
     { opacity: 0, y: 8 },
-    { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' }
+    // clearProps prevents stale inline transform from trapping position:fixed descendants
+    { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', clearProps: 'transform', overwrite: 'auto' }
   );
 };
 

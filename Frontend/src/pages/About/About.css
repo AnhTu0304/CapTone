@@ -268,8 +268,12 @@
 
 /* ================= RESPONSIVE ================= */
 @media (max-width: 768px) {
+  .about-sheet-section {
+    min-height: auto;
+  }
+
   .about-top-hero {
-    padding: 56px 20px 44px 20px;
+    padding: 40px 20px 32px 20px;
   }
 
   .about-hero-title {
@@ -277,7 +281,7 @@
   }
 
   .about-content-container {
-    padding: 40px 20px 80px 20px;
+    padding: 32px 20px 48px 20px;
   }
 
   .about-headline {
@@ -286,5 +290,35 @@
 
   .about-notebook-content {
     padding: 48px 20px 36px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .about-hero-title {
+    font-size: 1.95rem;
+  }
+
+  .about-cta-group {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .about-cta-group:hover .about-btn-primary,
+  .about-cta-group:hover .about-btn-secondary {
+    transform: none;
+  }
+
+  .about-btn-primary,
+  .about-btn-secondary {
+    width: 100%;
+    max-width: 280px;
+    clip-path: none;
+    border-radius: 4px;
+    padding: 0 20px;
+  }
+
+  .about-btn-secondary::before {
+    clip-path: none;
+    border-radius: 3px;
   }
 }

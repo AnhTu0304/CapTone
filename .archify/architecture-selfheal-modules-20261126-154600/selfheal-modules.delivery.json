@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "e045aa2f-5c8e-470b-93d4-20093e3b941a",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\AISelfHealing\\.archify\\architecture-selfheal-modules-20261126-154600\\candidate.json",
+  "output": "D:\\AISelfHealing\\.archify\\architecture-selfheal-modules-20261126-154600\\selfheal-modules.html",
+  "specification": {
+    "sha256": "b6a9d34f1a2c50fe8ebf7ec6202cb01841090c637b5a3c21981bc01afb458dbb",
+    "bytes": 4023
+  },
+  "artifact": {
+    "sha256": "3d0898471e4e3ff40d04a4db3f6dd9373ee2d4c339f9b6f76bac227fdb9dce2c",
+    "bytes": 944761
+  }
+}

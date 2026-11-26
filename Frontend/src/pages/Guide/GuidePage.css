@@ -358,7 +358,7 @@
   .guide-mobile-open-bar {
     display: block;
     position: sticky;
-    top: 60px;
+    top: 74px;
     z-index: 40;
     margin-bottom: 16px;
   }
@@ -374,6 +374,29 @@
 
 @media (max-width: 640px) {
   .guide-sheet-section {
-    padding: 24px 16px 64px 16px;
+    min-height: auto;
+    padding: 20px 16px 40px 16px;
+  }
+
+  .guide-mobile-open-bar {
+    top: 72px;
+  }
+
+  .notebook-right-content-col {
+    padding: 16px 14px;
+  }
+
+  .notebook-right-header-meta {
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+
+  .guide-content-title {
+    font-size: 1.35rem;
+  }
+
+  .guide-content-section {
+    margin-bottom: 36px;
   }
 }

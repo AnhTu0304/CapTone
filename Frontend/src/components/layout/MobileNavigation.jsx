@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { X, ArrowRight, LayoutDashboard, LogOut, ChevronDown, BookOpen, Scale, Mail, ShieldCheck, Share2, Info } from 'lucide-react';
 import Logo from '../common/Logo';
@@ -13,6 +14,26 @@ export const MobileNavigation = ({
   const { t } = useTranslation('common');
   const { user, isAuthenticated, logout, getInitials, getPrimaryRole } = useAuth();
   const [docsExpanded, setDocsExpanded] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Lock background scroll while mobile drawer is open and reset docs accordion on close
+  useEffect(() => {
+    if (!isOpen) {
+      setDocsExpanded(false);
+      return undefined;
+    }
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onCloseRef.current?.();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -23,26 +44,43 @@ export const MobileNavigation = ({
     { key: 'docs', label: t('mobileNav.nav.docs'), path: '/docs' },
   ];
 
-  return (
+  const drawerContent = (
     <div
+      onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: 'var(--bg-primary)',
-        animation: 'fadeIn 0.2s ease-out',
+        backgroundColor: 'rgba(17, 24, 39, 0.45)',
       }}
     >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('header.ariaMainNav')}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxHeight: 'min(82vh, 620px)',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'var(--bg-primary)',
+          borderBottom: '1px solid var(--border-strong)',
+          boxShadow: '0 12px 28px rgba(0, 0, 0, 0.16)',
+          overflow: 'hidden',
+        }}
+      >
       {/* Mobile Drawer Header */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px 20px',
+          padding: '12px 20px',
           borderBottom: '1px solid var(--border-default)',
+          flexShrink: 0,
         }}
       >
         <a
@@ -63,7 +101,11 @@ export const MobileNavigation = ({
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            padding: '6px',
+            minWidth: '44px',
+            minHeight: '44px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             color: 'var(--text-primary)',
           }}
         >
@@ -72,7 +114,7 @@ export const MobileNavigation = ({
       </div>
 
       {/* Nav links */}
-      <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, fontFamily: 'var(--font-body)' }}>
+      <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: '4px', minHeight: 0, overflowY: 'auto', fontFamily: 'var(--font-body)' }}>
         {navLinks.map((link) => {
           const isActive = currentPath === link.path;
           if (link.path === '/docs') {
@@ -198,11 +240,12 @@ export const MobileNavigation = ({
       {/* Bottom Actions */}
       <div
         style={{
-          padding: '20px',
+          padding: '16px 20px 20px',
           borderTop: '1px solid var(--border-default)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
+          gap: '10px',
+          flexShrink: 0,
         }}
       >
         {isAuthenticated && user ? (
@@ -378,8 +421,13 @@ export const MobileNavigation = ({
           </>
         )}
       </div>
+      </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(drawerContent, document.body)
+    : drawerContent;
 };
 
 export default MobileNavigation;

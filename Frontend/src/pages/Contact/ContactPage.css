@@ -491,6 +491,12 @@
     gap: 18px;
   }
 
+  .contact-input,
+  .contact-select,
+  .contact-textarea {
+    font-size: 1rem;
+  }
+
   .contact-btn-submit {
     width: 100%;
     clip-path: none;

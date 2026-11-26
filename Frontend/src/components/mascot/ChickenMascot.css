@@ -38,11 +38,11 @@
 @media (max-width: 640px) {
   .chicken-mascot-stage {
     max-width: 100%;
-    min-height: 310px;
-    padding: 8px 0;
+    min-height: 220px;
+    padding: 0;
   }
 
   .chicken-mascot-svg {
-    max-height: 340px;
+    max-height: 290px;
   }
 }

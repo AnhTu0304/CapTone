@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\candidate.json",
+    "sha256": "f00e18a09499e1ebf9035bf3727dcd93625ea0249c053812a3f53d18cc1cd48d",
+    "bytes": 3584
+  },
+  "artifact": {
+    "path": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\selfheal-system-context.html",
+    "sha256": "03d8f0d42925fc8e3840d98b9f9fe92a5a61040fd985b6ef0521d295f25bab12",
+    "bytes": 942248
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\selfheal-system-context.finalize.json",
+    "summaryReceipt": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\selfheal-system-context.finalize-summary.json",
+    "browserCheckReceipt": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\selfheal-system-context.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.2",
+    "availableVersion": "3.3.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-26T08:44:30.095Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 3633,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

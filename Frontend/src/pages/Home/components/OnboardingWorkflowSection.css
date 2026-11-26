@@ -470,7 +470,36 @@
   }
 }
 
+@media (max-width: 900px) {
+  .ows-header-flex {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .ows-header-left {
+    flex: none;
+    width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
+  .onboarding-workflow-section {
+    padding: 48px 0 24px 0;
+  }
+
+  .ows-header-container {
+    padding: 0 16px;
+  }
+
+  .ows-divider-container {
+    margin: 28px 0 0 0;
+  }
+
+  .ows-screen-box {
+    min-height: 160px;
+  }
+
   .ows-grid {
     grid-template-columns: 1fr;
     max-width: 440px;

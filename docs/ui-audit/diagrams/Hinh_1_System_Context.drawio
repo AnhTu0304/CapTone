@@ -1,0 +1,251 @@
+<mxfile host="app.diagrams.net" modified="2026-11-26T09:42:00.000Z" agent="Antigravity-Architect" version="24.7.17" type="device">
+  <diagram id="system-context-hinh-1" name="Hình 1 - System Context Diagram">
+    <mxGraphModel dx="1600" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="920" background="#0d1117" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ==================== LEFT ACTORS (5 RBAC ROLES) ==================== -->
+        <mxCell id="act_sme_owner" value="SME Owner" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#2dd4bf;fillColor=#0d1117;fontColor=#f8fafc;fontStyle=1;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="90" y="65" width="35" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="act_super_admin" value="Super Admin" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#2dd4bf;fillColor=#0d1117;fontColor=#f8fafc;fontStyle=1;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="90" y="235" width="35" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="act_admin" value="Admin" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#2dd4bf;fillColor=#0d1117;fontColor=#f8fafc;fontStyle=1;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="90" y="405" width="35" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="act_devops" value="DevOps" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#2dd4bf;fillColor=#0d1117;fontColor=#f8fafc;fontStyle=1;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="90" y="575" width="35" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="act_viewer" value="Viewer" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#2dd4bf;fillColor=#0d1117;fontColor=#f8fafc;fontStyle=1;fontSize=13;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="90" y="745" width="35" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== CENTRAL SYSTEM BOUNDARY ==================== -->
+        <mxCell id="core_system" value="AI-Driven Proactive&#xa;Self-Healing Infrastructure&#xa;for SMEs&#xa;(APSIS / SelfHeal)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#0284c7;strokeColor=#38bdf8;fontColor=#ffffff;fontStyle=1;fontSize=16;strokeWidth=2.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="300" width="330" height="250" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== RIGHT EXTERNAL & EDGE SYSTEMS ==================== -->
+        <mxCell id="ext_resend" value="Email Service&#xa;(Resend / SMTP)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e9d5ff;strokeColor=#a855f7;fontColor=#1e1b4b;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="60" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ext_google_oauth" value="Google OAuth 2.0&#xa;(Identity Provider / SSO)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#f59e0b;fontColor=#451a03;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="210" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ext_slack_pd" value="On-Call Alerting&#xa;(Slack Webhook &amp; PagerDuty)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7f3;strokeColor=#ec4899;fontColor=#500724;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="360" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_agent" value="Kubernetes&#xa;Edge Agent&#xa;(Python 3.11 Pod / DaemonSet)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ccfbf1;strokeColor=#14b8a6;fontColor=#042f2e;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="535" width="220" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="k8s_cluster" value="Kubernetes&#xa;Cluster&#xa;(K8s API :6443, Nodes &amp; Pods)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#bae6fd;strokeColor=#0284c7;fontColor=#082f49;fontStyle=1;fontSize=14;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="960" y="755" width="230" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== EDGES: ACTORS <-> CORE SYSTEM ==================== -->
+        <!-- 1. SME Owner -->
+        <mxCell id="e_sme_in" value="Org, Cluster, Agent Mgmt &amp; HITL Approval" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="145" y="75" as="sourcePoint" />
+            <mxPoint x="710" y="310" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="710" y="75" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_sme_out" value="Dashboard, SLA Reports &amp; Approval Alerts" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="675" y="325" as="sourcePoint" />
+            <mxPoint x="145" y="120" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="675" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 2. Super Admin -->
+        <mxCell id="e_sa_in" value="System Roles, AI Models &amp; Platform Config" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="145" y="245" as="sourcePoint" />
+            <mxPoint x="645" y="348" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="645" y="245" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_sa_out" value="System Info &amp; Audit Ledger" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="625" y="375" as="sourcePoint" />
+            <mxPoint x="145" y="290" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="625" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 3. Admin -->
+        <mxCell id="e_adm_in" value="User &amp; Organization Governance" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="145" y="410" as="sourcePoint" />
+            <mxPoint x="610" y="410" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_adm_out" value="Operation Result" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="455" as="sourcePoint" />
+            <mxPoint x="145" y="455" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 4. DevOps -->
+        <mxCell id="e_dev_in" value="Policy Config, RCA Investigation &amp; Healing Ops" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="145" y="585" as="sourcePoint" />
+            <mxPoint x="635" y="495" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="635" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_dev_out" value="Telemetry, AI Forecast, RCA &amp; Remediation Result" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="665" y="520" as="sourcePoint" />
+            <mxPoint x="145" y="630" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="665" y="630" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 5. Viewer -->
+        <mxCell id="e_view_in" value="View Information" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="145" y="755" as="sourcePoint" />
+            <mxPoint x="700" y="538" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="700" y="755" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_view_out" value="Read-Only Dashboard" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="735" y="546" as="sourcePoint" />
+            <mxPoint x="145" y="800" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="735" y="800" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ==================== EDGES: CORE SYSTEM <-> EXTERNAL SERVICES ==================== -->
+        <!-- 6. Resend Email -->
+        <mxCell id="e_resend_out" value="Send OTP, Invites, Alerts, HITL Requests &amp; Reports" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="835" y="308" as="sourcePoint" />
+            <mxPoint x="1310" y="85" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="835" y="85" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_resend_in" value="Delivery &amp; Sending Status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1310" y="130" as="sourcePoint" />
+            <mxPoint x="870" y="322" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="870" y="130" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 7. Google OAuth 2.0 -->
+        <mxCell id="e_oauth_out" value="Verify OAuth2 ID Token" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="905" y="345" as="sourcePoint" />
+            <mxPoint x="1310" y="235" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="905" y="235" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_oauth_in" value="Verified User Identity Profile" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1310" y="280" as="sourcePoint" />
+            <mxPoint x="925" y="370" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="925" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 8. Slack Webhook & PagerDuty -->
+        <mxCell id="e_slack_out" value="Dispatch Critical Incident &amp; Escalation Webhooks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="940" y="405" as="sourcePoint" />
+            <mxPoint x="1310" y="405" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 9. Kubernetes Edge Agent -->
+        <mxCell id="e_agent_cmd" value="WSS Config, Install Script &amp; Signed Healing Commands" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="925" y="485" as="sourcePoint" />
+            <mxPoint x="1310" y="535" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1420" y="485" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_agent_telemetry" value="WSS Metrics, Logs, Events, 10s Heartbeat &amp; Exec Results" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1310" y="585" as="sourcePoint" />
+            <mxPoint x="890" y="520" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="890" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 10. Edge Agent <-> Kubernetes Cluster -->
+        <mxCell id="e_k8s_actuate" value="K8s API (:6443) Collect Telemetry &amp; Execute Remediation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1390" y="635" as="sourcePoint" />
+            <mxPoint x="1190" y="785" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1390" y="785" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_k8s_state" value="Metrics, Pod Logs, K8s Events &amp; Readiness State" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#f8fafc;strokeWidth=1.8;fontColor=#f8fafc;labelBackgroundColor=#1e293b;fontSize=12;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1190" y="830" as="sourcePoint" />
+            <mxPoint x="1460" y="635" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1460" y="830" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

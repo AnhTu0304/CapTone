@@ -268,3 +268,36 @@
     display: none;
   }
 }
+
+@media (max-width: 640px) {
+  .human-control-section {
+    padding: 56px 0 24px 0;
+  }
+
+  .hcs-heading {
+    font-size: 1.65rem;
+  }
+
+  .hcs-subtitle {
+    font-size: 0.9375rem;
+  }
+
+  .hcs-cta-btn {
+    width: 100%;
+    max-width: 300px;
+    min-height: 44px;
+    clip-path: none;
+    border-radius: 4px;
+  }
+
+  .hcs-canvas-stage {
+    min-height: 280px;
+    height: 300px;
+  }
+
+  .hcs-polyhedron-svg {
+    right: 12px;
+    width: 96px;
+    height: 96px;
+  }
+}

@@ -1,0 +1,223 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MAPE-K Self-Healing & HITL Approval Workflow",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": ".archify/workflow-selfheal-mape-k-hitl-20261126-154300/selfheal-mape-k-hitl.html"
+  },
+  "lanes": [
+    {
+      "id": "edge",
+      "label": "K8s Edge Agent & Cluster"
+    },
+    {
+      "id": "ai",
+      "label": "AI Backend (PyTorch GRU & RCA)"
+    },
+    {
+      "id": "control",
+      "label": "Main Backend & Policy Engine"
+    },
+    {
+      "id": "hitl",
+      "label": "SME Owner HITL & Safety Gate",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "monitor_analyze",
+      "label": "1. Monitor & Analyze",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "plan_gate",
+      "label": "2. Plan & Safety Gate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "execute_verify",
+      "label": "3. Execute & Verify",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "telemetry",
+    "gru_predict",
+    "rca_engine",
+    "policy_match",
+    "hitl_gate",
+    "dispatch_cmd",
+    "k8s_execute",
+    "slo_verify"
+  ],
+  "nodes": [
+    {
+      "id": "telemetry",
+      "lane": "edge",
+      "col": 0,
+      "type": "messagebus",
+      "label": "Collect 12x8 Telemetry",
+      "sublabel": "CPU/RAM/Latency/5xx/Events",
+      "tag": "10s Poll"
+    },
+    {
+      "id": "gru_predict",
+      "lane": "ai",
+      "col": 1,
+      "type": "backend",
+      "label": "Multi-Head GRU",
+      "sublabel": "7 Risk Heads Forecast",
+      "tag": "F1 >= 85%"
+    },
+    {
+      "id": "rca_engine",
+      "lane": "ai",
+      "col": 2,
+      "type": "backend",
+      "label": "Multi-Agent RCA",
+      "sublabel": "Causal Evidence & Playbook"
+    },
+    {
+      "id": "policy_match",
+      "lane": "control",
+      "col": 2,
+      "type": "backend",
+      "label": "Policy & Circuit Breaker",
+      "sublabel": "Blast Radius + Cooldown",
+      "emphasis": true
+    },
+    {
+      "id": "hitl_gate",
+      "lane": "hitl",
+      "col": 3,
+      "type": "security",
+      "label": "HITL Approval Gate",
+      "sublabel": "SME Owner YAML Diff Review",
+      "tag": "Mandatory on Rollback/Drain"
+    },
+    {
+      "id": "rejected_abort",
+      "lane": "hitl",
+      "col": 4,
+      "type": "security",
+      "label": "Rejected / Circuit Trip",
+      "sublabel": "NO_ACTION & Alert SRE"
+    },
+    {
+      "id": "dispatch_cmd",
+      "lane": "control",
+      "col": 4,
+      "type": "backend",
+      "label": "Dispatch Healing Action",
+      "sublabel": "WSS Command + Audit Hash"
+    },
+    {
+      "id": "k8s_execute",
+      "lane": "edge",
+      "col": 4,
+      "type": "cloud",
+      "label": "Execute on K8s API",
+      "sublabel": "Restart / Scale / Rollback"
+    },
+    {
+      "id": "slo_verify",
+      "lane": "control",
+      "col": 5,
+      "type": "database",
+      "label": "60s SLO Verification",
+      "sublabel": "Close Incident (RESOLVED)",
+      "tag": "SHA-256 Sealed"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "telemetry",
+      "to": "gru_predict",
+      "label": "12x8 sequence",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "gru_predict",
+      "to": "rca_engine",
+      "label": "risk > threshold",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e3",
+      "from": "rca_engine",
+      "to": "policy_match",
+      "label": "RCA + action"
+    },
+    {
+      "id": "e4",
+      "from": "policy_match",
+      "to": "hitl_gate",
+      "label": "require HITL?",
+      "variant": "security"
+    },
+    {
+      "id": "e5",
+      "from": "policy_match",
+      "to": "dispatch_cmd",
+      "label": "auto low-risk",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "e6",
+      "from": "hitl_gate",
+      "to": "dispatch_cmd",
+      "label": "approved",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e7",
+      "from": "hitl_gate",
+      "to": "rejected_abort",
+      "label": "rejected / timeout",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e8",
+      "from": "dispatch_cmd",
+      "to": "k8s_execute",
+      "label": "WSS command",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e9",
+      "from": "k8s_execute",
+      "to": "slo_verify",
+      "label": "probe ready",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Closed-Loop MAPE-K",
+      "items": [
+        "Monitor (Edge Agent 12x8 telemetry) -> Analyze (Multi-Head GRU + RCA) -> Plan (Policy + HITL Gate) -> Execute (K8s API) -> Knowledge (60s SLO Verify & SHA-256 Audit)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "RBAC & Safety Locks",
+      "items": [
+        "SME_OWNER holds exclusive HITL_APPROVE permission; DEVOPS configures policies and can abort in-flight actions",
+        "Circuit Breaker trips to NO_ACTION on single-node drain risk, primary DB split-brain risk, or max retry exhaustion"
+      ]
+    }
+  ]
+}

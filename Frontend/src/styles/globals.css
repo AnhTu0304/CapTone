@@ -194,6 +194,13 @@ section > .container-custom::after {
   .container-custom {
     padding-left: var(--space-4);
     padding-right: var(--space-4);
+    border-left: none;
+    border-right: none;
+  }
+
+  section > .container-custom::before,
+  section > .container-custom::after {
+    display: none !important;
   }
 }
 

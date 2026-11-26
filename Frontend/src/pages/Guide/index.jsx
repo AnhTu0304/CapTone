@@ -229,14 +229,14 @@ export const GuidePage = () => {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 16px',
-              backgroundColor: 'rgba(61, 59, 79, 0.05)',
-              border: '1px solid rgba(61, 59, 79, 0.25)',
+              backgroundColor: '#EAEAEF',
+              border: '1px solid rgba(61, 59, 79, 0.28)',
               fontSize: '0.8125rem',
               fontWeight: 700,
               fontFamily: 'var(--font-mono)',
               color: 'var(--color-primary)',
               cursor: 'pointer',
-              boxShadow: 'none',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
             }}
           >
             <span>{t('toc.mobileToggle', { count: guideSections.length })}</span>
@@ -248,11 +248,14 @@ export const GuidePage = () => {
               style={{
                 marginTop: '8px',
                 backgroundColor: '#EEEEEE',
-                border: '1px solid rgba(61, 59, 79, 0.2)',
-                padding: '12px',
+                border: '1px solid rgba(61, 59, 79, 0.25)',
+                padding: '10px 12px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '6px',
+                maxHeight: '50vh',
+                overflowY: 'auto',
+                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
               }}
             >
               {guideSections.map((item) => (

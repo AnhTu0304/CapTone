@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import gsap from 'gsap';
 import { 
   UserPlus, 
   Building2, 
@@ -30,12 +31,15 @@ const STEP_LAYOUT = [
 export const OnboardingSequence3D = () => {
   const { t } = useTranslation('auth');
   const containerRef = useRef(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const tiltStageRef = useRef(null);
+  const quickTiltRef = useRef({ rx: null, ry: null });
   const [currentStep, setCurrentStep] = useState(1);
   const [phase, setPhase] = useState('steps'); // 'steps' | 'converging' | 'dashboard'
   const [selectedStep, setSelectedStep] = useState(null); // 1-7 or null
   const [isPaused, setIsPaused] = useState(false);
   const [isHoveringNode, setIsHoveringNode] = useState(false);
+  const selectedStepRef = useRef(selectedStep);
+  selectedStepRef.current = selectedStep;
 
   const translatedSteps = t('onboarding3d.steps', { returnObjects: true });
   const steps = STEP_LAYOUT.map((meta, idx) => ({
@@ -43,19 +47,39 @@ export const OnboardingSequence3D = () => {
     ...meta,
   }));
 
+  // GSAP quickTo animates 3D tilt directly on the compositor without React re-renders per mouse pixel
+  useEffect(() => {
+    const stageEl = tiltStageRef.current;
+    if (!stageEl) return undefined;
+    quickTiltRef.current = {
+      rx: gsap.quickTo(stageEl, 'rotationX', { duration: 0.25, ease: 'power3.out' }),
+      ry: gsap.quickTo(stageEl, 'rotationY', { duration: 0.25, ease: 'power3.out' }),
+    };
+    return () => {
+      gsap.killTweensOf(stageEl);
+    };
+  }, []);
+
   // Mouse parallax tracking
-  const handleMouseMove = (e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+  const handleMouseMove = useCallback((e) => {
+    const container = containerRef.current;
+    const { rx, ry } = quickTiltRef.current;
+    if (!container || !rx || !ry) return;
+    const rect = container.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
     const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2; // -1 to 1
     const y = ((e.clientY - rect.top) / rect.height - 0.5) * 2; // -1 to 1
-    setMousePos({ x, y });
-  };
+    const tiltFactor = selectedStepRef.current !== null ? 0.25 : 1;
+    rx(-y * 5 * tiltFactor);
+    ry(x * 7 * tiltFactor);
+  }, []);
 
-  const handleMouseLeave = () => {
-    setMousePos({ x: 0, y: 0 });
+  const handleMouseLeave = useCallback(() => {
+    const { rx, ry } = quickTiltRef.current;
+    if (rx) rx(0);
+    if (ry) ry(0);
     setIsHoveringNode(false);
-  };
+  }, []);
 
   // State Machine Timer Loop (Auto-play)
   useEffect(() => {
@@ -94,13 +118,19 @@ export const OnboardingSequence3D = () => {
   }, [phase, currentStep, isPaused, selectedStep, isHoveringNode]);
 
   // Click on a step node
-  const handleStepClick = (stepNum) => {
+  const handleStepClick = useCallback((stepNum) => {
     setSelectedStep(stepNum);
     setIsPaused(true);
-    if (phase !== 'steps') {
-      setPhase('steps');
-    }
-  };
+    setPhase((prev) => (prev !== 'steps' ? 'steps' : prev));
+  }, []);
+
+  const handleNodeMouseEnter = useCallback(() => {
+    setIsHoveringNode(true);
+  }, []);
+
+  const handleNodeMouseLeave = useCallback(() => {
+    setIsHoveringNode(false);
+  }, []);
 
   // Switch to next/previous step inside detail card
   const handleNextStep = () => {
@@ -123,11 +153,6 @@ export const OnboardingSequence3D = () => {
   const handleTogglePause = () => {
     setIsPaused((prev) => !prev);
   };
-
-  // 3D Tilt calculation (subtle when modal is open so text is perfectly readable)
-  const tiltFactor = selectedStep !== null ? 0.25 : 1;
-  const tiltX = -mousePos.y * 5 * tiltFactor;
-  const tiltY = mousePos.x * 7 * tiltFactor;
 
   const currentSelectedStepData = steps.find((s) => s.num === selectedStep);
 
@@ -262,6 +287,7 @@ export const OnboardingSequence3D = () => {
 
       {/* 3D Tilt Stage Wrapper */}
       <div
+        ref={tiltStageRef}
         className="tilt-stage-wrapper"
         style={{
           position: 'relative',
@@ -270,9 +296,8 @@ export const OnboardingSequence3D = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transform: `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`,
           transformStyle: 'preserve-3d',
-          transition: 'transform 0.2s cubic-bezier(0.2, 0, 0.35, 1)',
+          willChange: 'transform',
           zIndex: 5,
         }}
       >
@@ -296,9 +321,9 @@ export const OnboardingSequence3D = () => {
               isConverging={selectedStep === null && (phase === 'converging' || phase === 'dashboard')}
               x={step.x}
               y={step.y}
-              onClick={() => handleStepClick(step.num)}
-              onMouseEnter={() => setIsHoveringNode(true)}
-              onMouseLeave={() => setIsHoveringNode(false)}
+              onClick={handleStepClick}
+              onMouseEnter={handleNodeMouseEnter}
+              onMouseLeave={handleNodeMouseLeave}
             />
           );
         })}

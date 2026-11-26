@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "APSIS / SelfHeal Container & C&C Architecture",
+    "output": ".archify/architecture-selfheal-containers-20261126-154300/selfheal-containers.html",
+    "quality_profile": "showcase"
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "5 RBAC Roles",
+      "sublabel": "SuperAdmin / Admin / Owner / DevOps / Viewer",
+      "tag": "HTTPS + WSS"
+    },
+    {
+      "id": "nginx_proxy",
+      "type": "cloud",
+      "label": "Nginx Gateway",
+      "sublabel": "captone-reverse-proxy :8090 / :8443",
+      "tag": "SSL + Route"
+    },
+    {
+      "id": "react_spa",
+      "type": "frontend",
+      "label": "React 19 Web SPA",
+      "sublabel": "selfheal_platform_web :3005->80",
+      "tag": "Dual Theme UI"
+    },
+    {
+      "id": "main_backend",
+      "type": "backend",
+      "label": "Main Backend Gateway",
+      "sublabel": "Node.js Express TS :5005->5000",
+      "tag": "RBAC + MAPE-K",
+      "emphasis": true
+    },
+    {
+      "id": "ai_backend",
+      "type": "backend",
+      "label": "AI Inference & RCA",
+      "sublabel": "FastAPI + PyTorch GRU :8000",
+      "tag": "12x8 GRU + HMAC"
+    },
+    {
+      "id": "installer_svc",
+      "type": "backend",
+      "label": "Agent Installer Service",
+      "sublabel": "FastAPI Distribution :8105->8100",
+      "tag": "Helm / Script"
+    },
+    {
+      "id": "postgres_db",
+      "type": "database",
+      "label": "PostgreSQL 16",
+      "sublabel": "captone_db :5433->5432",
+      "tag": "41 Tables + RLS"
+    },
+    {
+      "id": "redis_cache",
+      "type": "database",
+      "label": "Redis 7 Cache",
+      "sublabel": "captone-redis :6380->6379",
+      "tag": "Session + Buffer"
+    },
+    {
+      "id": "email_smtp",
+      "type": "external",
+      "label": "Email & OAuth2",
+      "sublabel": "SMTP / SES / Google GSI",
+      "tag": "Alerts + OTP"
+    },
+    {
+      "id": "edge_agent",
+      "type": "messagebus",
+      "label": "SelfHeal Edge Agent",
+      "sublabel": "Python 3.11 DaemonSet",
+      "tag": "Telemetry + Actuator"
+    },
+    {
+      "id": "k8s_cluster",
+      "type": "cloud",
+      "label": "Kubernetes Cluster",
+      "sublabel": "K8s API :6443 & SME Workloads",
+      "tag": "Minikube / K3s"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "APSIS Core Platform (Docker Network: captone-network)",
+      "wraps": [
+        "nginx_proxy",
+        "react_spa",
+        "main_backend",
+        "ai_backend",
+        "installer_svc",
+        "postgres_db",
+        "redis_cache"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Customer Kubernetes Cluster Boundary",
+      "wraps": [
+        "edge_agent",
+        "k8s_cluster"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-to-nginx",
+      "from": "users",
+      "to": "nginx_proxy",
+      "label": "HTTPS :8443 / WSS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "nginx-to-spa",
+      "from": "nginx_proxy",
+      "to": "react_spa",
+      "label": "static SPA"
+    },
+    {
+      "id": "nginx-to-backend",
+      "from": "nginx_proxy",
+      "to": "main_backend",
+      "label": "/api/v1 + WS + SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "nginx-to-installer",
+      "from": "nginx_proxy",
+      "to": "installer_svc",
+      "label": "agent bootstrap",
+      "variant": "dashed"
+    },
+    {
+      "id": "backend-to-ai",
+      "from": "main_backend",
+      "to": "ai_backend",
+      "label": "HMAC REST :8000",
+      "variant": "security"
+    },
+    {
+      "id": "backend-to-pg",
+      "from": "main_backend",
+      "to": "postgres_db",
+      "label": "SQL + RLS :5432",
+      "variant": "security"
+    },
+    {
+      "id": "backend-to-redis",
+      "from": "main_backend",
+      "to": "redis_cache",
+      "label": "RESP :6379"
+    },
+    {
+      "id": "backend-to-email",
+      "from": "main_backend",
+      "to": "email_smtp",
+      "label": "SMTP / OAuth2",
+      "variant": "dashed"
+    },
+    {
+      "id": "agent-to-backend",
+      "from": "edge_agent",
+      "to": "main_backend",
+      "label": "WSS + Bearer Token",
+      "variant": "emphasis"
+    },
+    {
+      "id": "agent-to-k8s",
+      "from": "edge_agent",
+      "to": "k8s_cluster",
+      "label": "K8s API :6443",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "7-Container Control Plane",
+      "items": [
+        "Nginx reverse proxy terminates TLS (:8090/:8443) and routes to React 19 SPA, Main Backend, and Agent Installer",
+        "Main Backend (Node.js Express TS) enforces 6-tier RBAC, RAM JWT + HttpOnly refresh cookie + CSRF, and MAPE-K policy orchestration",
+        "AI Backend (FastAPI + PyTorch Multi-Head GRU) is internal-only on :8000 and protected by AI_INTERNAL_HMAC_SECRET"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Persistence & Telemetry",
+      "items": [
+        "PostgreSQL 16 (captone_db) stores 41 relational tables with Row-Level Security (RLS) and SHA-256 immutable audit logs",
+        "Redis 7 caches active sessions, token revocation blacklists, rate limits, and 12x8 telemetry windows"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Edge Kubernetes Loop",
+      "items": [
+        "SelfHeal Edge Agent (Python 3.11 DaemonSet) streams metrics, logs, and K8s events over WSS with zero inbound ports required",
+        "High-risk healing actions (ROLLBACK_DEPLOYMENT, DRAIN_NODE) enforce mandatory SME_OWNER HITL approval before execution"
+      ]
+    }
+  ]
+}

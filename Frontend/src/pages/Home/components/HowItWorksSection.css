@@ -415,3 +415,22 @@
     display: none;
   }
 }
+
+@media (max-width: 640px) {
+  .hiw-prediction-content {
+    padding: 40px 16px;
+  }
+
+  .hiw-content-container {
+    margin-top: 32px;
+    padding: 0 16px 16px;
+  }
+
+  .hiw-grid {
+    gap: 28px;
+  }
+
+  .hiw-screen {
+    min-height: 160px;
+  }
+}

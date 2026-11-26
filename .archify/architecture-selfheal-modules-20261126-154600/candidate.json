@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Figure 5: APSIS / SelfHeal 5-Layer Module Decomposition View",
+    "output": ".archify/architecture-selfheal-modules-20261126-154600/selfheal-modules.html",
+    "quality_profile": "showcase"
+  },
+  "layout": {
+    "mode": "auto"
+  },
+  "components": [
+    {
+      "id": "fe_portals",
+      "type": "frontend",
+      "label": "Portal & Dashboard Modules",
+      "sublabel": "Overview Canvas, Metrics, Logs SSE, Incidents, Reports",
+      "tag": "Frontend/src/pages"
+    },
+    {
+      "id": "fe_governance",
+      "type": "frontend",
+      "label": "Auth, Onboarding & HITL UI",
+      "sublabel": "RouteRenderer RBAC, PermissionGate, YAML Diff Modal",
+      "tag": "Frontend/src/components"
+    },
+    {
+      "id": "be_api_rbac",
+      "type": "security",
+      "label": "IAM, RBAC & Tenant Middleware",
+      "sublabel": "RAM JWT + HttpOnly Refresh + CSRF + RLS Context",
+      "tag": "Main_backend/src/middlewares"
+    },
+    {
+      "id": "be_orchestrator",
+      "type": "backend",
+      "label": "Telemetry, Incident & Policy Services",
+      "sublabel": "WS Gateway, Rule Engine, Circuit Breaker, Email Worker",
+      "tag": "Main_backend/src/services",
+      "emphasis": true
+    },
+    {
+      "id": "ai_gru_rca",
+      "type": "backend",
+      "label": "Multi-Head GRU & RCA Engine",
+      "sublabel": "12x8 Z-Score Normalizer, 7 Risk Heads, Causal Evidence",
+      "tag": "AI_backend/app"
+    },
+    {
+      "id": "agent_daemon",
+      "type": "messagebus",
+      "label": "Edge Collectors & Actuator",
+      "sublabel": "Node/Pod/Event Collectors, WSS Streamer, K8s Executor",
+      "tag": "Agent/selfheal_agent"
+    },
+    {
+      "id": "db_storage",
+      "type": "database",
+      "label": "PostgreSQL 16 & Redis 7 Adapters",
+      "sublabel": "41 RLS Tables, 31 SQL Migrations, SHA-256 Audit Ledger",
+      "tag": "Persistence Layer"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Presentation Layer (React 19 SPA)",
+      "wraps": [
+        "fe_portals",
+        "fe_governance"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Application & AI Intelligence Layers (Control Plane)",
+      "wraps": [
+        "be_api_rbac",
+        "be_orchestrator",
+        "ai_gru_rca"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "fe1-to-rbac",
+      "from": "fe_portals",
+      "to": "be_api_rbac",
+      "label": "REST / WS / SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "fe2-to-rbac",
+      "from": "fe_governance",
+      "to": "be_api_rbac",
+      "label": "JWT + X-CSRF-Token",
+      "variant": "security"
+    },
+    {
+      "id": "rbac-to-orch",
+      "from": "be_api_rbac",
+      "to": "be_orchestrator",
+      "label": "verified tenant context",
+      "variant": "security"
+    },
+    {
+      "id": "orch-to-ai",
+      "from": "be_orchestrator",
+      "to": "ai_gru_rca",
+      "label": "HMAC 12x8 + RCA call",
+      "variant": "security"
+    },
+    {
+      "id": "agent-to-orch",
+      "from": "agent_daemon",
+      "to": "be_orchestrator",
+      "label": "WSS telemetry & actions",
+      "variant": "emphasis"
+    },
+    {
+      "id": "orch-to-db",
+      "from": "be_orchestrator",
+      "to": "db_storage",
+      "label": "SQL Pool + Redis Buffer"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Layered Modularity",
+      "items": [
+        "Presentation Layer decouples Greptile public/onboarding views from Calm Operations SME/Admin workspaces",
+        "Application Layer separates Express controllers, RBAC middlewares, WebSocket gateway, and background workers"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "AI & Edge Isolation",
+      "items": [
+        "AI Intelligence Layer encapsulates PyTorch Multi-Head GRU checkpoints (.pth/.onnx) and causal RCA correlation",
+        "Edge Agent Layer uses Python 3.11 asyncio + official kubernetes client (>=31.0.0) with least-privilege K8s RBAC"
+      ]
+    }
+  ]
+}

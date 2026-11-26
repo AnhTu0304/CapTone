@@ -1,0 +1,200 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Figure 9: Kubernetes Cluster Onboarding & Edge Agent WSS Handshake",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": ".archify/workflow-selfheal-agent-onboarding-20261126-154600/selfheal-agent-onboarding.html"
+  },
+  "lanes": [
+    {
+      "id": "owner_ui",
+      "label": "SME Owner / DevOps Onboarding UI"
+    },
+    {
+      "id": "control",
+      "label": "Main Backend & Installer Service"
+    },
+    {
+      "id": "k8s_edge",
+      "label": "Customer K8s Cluster & Edge Agent"
+    },
+    {
+      "id": "security",
+      "label": "Token Auth & Heartbeat Monitor",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "tenant_setup",
+      "label": "1. Org, Env & Cluster Setup",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "token_deploy",
+      "label": "2. One-Time Token & Helm Deploy",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "handshake_stream",
+      "label": "3. WSS Handshake & Live Stream",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "create_org_env",
+    "register_cluster",
+    "issue_token",
+    "deploy_helm",
+    "wss_handshake",
+    "verify_token",
+    "stream_online"
+  ],
+  "nodes": [
+    {
+      "id": "create_org_env",
+      "lane": "owner_ui",
+      "col": 0,
+      "type": "frontend",
+      "label": "Steps 1-2: Org & Env",
+      "sublabel": "Check Slug + Select DEV/STAGING",
+      "tag": "/onboarding"
+    },
+    {
+      "id": "register_cluster",
+      "lane": "owner_ui",
+      "col": 1,
+      "type": "frontend",
+      "label": "Step 3: Register K8s",
+      "sublabel": "DNS-1123 Cluster Name & Provider"
+    },
+    {
+      "id": "issue_token",
+      "lane": "control",
+      "col": 2,
+      "type": "security",
+      "label": "Generate Agent Token",
+      "sublabel": "One-Time Raw Token (90d Expiry)",
+      "tag": "SHA-256 Stored",
+      "emphasis": true
+    },
+    {
+      "id": "deploy_helm",
+      "lane": "k8s_edge",
+      "col": 3,
+      "type": "cloud",
+      "label": "Step 4: Deploy DaemonSet",
+      "sublabel": "Helm / Script / Kubectl (:8100)",
+      "tag": "Zero Cluster-Admin"
+    },
+    {
+      "id": "wss_handshake",
+      "lane": "k8s_edge",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Initiate WSS Handshake",
+      "sublabel": "Bearer Agent Token + Heartbeat"
+    },
+    {
+      "id": "verify_token",
+      "lane": "security",
+      "col": 4,
+      "type": "security",
+      "label": "Validate Token Hash",
+      "sublabel": "Check Expiry & Revocation"
+    },
+    {
+      "id": "token_rejected",
+      "lane": "security",
+      "col": 5,
+      "type": "security",
+      "label": "Reject & Set OFFLINE",
+      "sublabel": "401 Unauthorized / Expired"
+    },
+    {
+      "id": "stream_online",
+      "lane": "control",
+      "col": 5,
+      "type": "backend",
+      "label": "Step 5: Cluster ONLINE",
+      "sublabel": "10s Heartbeat & MAPE-K Ready",
+      "tag": "Connected"
+    }
+  ],
+  "edges": [
+    {
+      "id": "o1",
+      "from": "create_org_env",
+      "to": "register_cluster",
+      "label": "context saved"
+    },
+    {
+      "id": "o2",
+      "from": "register_cluster",
+      "to": "issue_token",
+      "label": "POST /clusters & /agents",
+      "variant": "emphasis"
+    },
+    {
+      "id": "o3",
+      "from": "issue_token",
+      "to": "deploy_helm",
+      "label": "copy one-liner command",
+      "variant": "security"
+    },
+    {
+      "id": "o4",
+      "from": "deploy_helm",
+      "to": "wss_handshake",
+      "label": "pod Running (1/1)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "o5",
+      "from": "wss_handshake",
+      "to": "verify_token",
+      "label": "Bearer token",
+      "variant": "security"
+    },
+    {
+      "id": "o6",
+      "from": "verify_token",
+      "to": "token_rejected",
+      "label": "invalid / revoked",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "o7",
+      "from": "verify_token",
+      "to": "stream_online",
+      "label": "verified -> ONLINE",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "5-Step Guided Onboarding",
+      "items": [
+        "Walks SME Owner through Organization -> Environment -> K8s Cluster & Token -> Verify Agent -> Complete",
+        "Installer Service (:8100) serves one-liner PowerShell, Bash, Kubectl manifest, and Helm v3 charts"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Zero Inbound Port Security",
+      "items": [
+        "Edge Agent initiates outbound WSS to Control Plane with scoped K8s RBAC (core, apps, metrics.k8s.io, events.k8s.io)",
+        "Tokens can be rotated (90-day TTL) or revoked instantly from Cluster Detail or Admin Agent Console"
+      ]
+    }
+  ]
+}

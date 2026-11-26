@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\AISelfHealing\\.archify\\workflow-selfheal-mape-k-hitl-20261126-154300\\candidate.json",
+    "sha256": "90dfd38b9c16fc2a5277f20b566fb8f8225dc77cd88d2e1e1ebfe2fdbca52c05",
+    "bytes": 5107
+  },
+  "artifact": {
+    "path": "D:\\AISelfHealing\\.archify\\workflow-selfheal-mape-k-hitl-20261126-154300\\selfheal-mape-k-hitl.html",
+    "sha256": "79d9ba001d5940be6b2e12478c03fc679d31e94a2da0c939f250dceccebcf49e",
+    "bytes": 947243
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\AISelfHealing\\.archify\\workflow-selfheal-mape-k-hitl-20261126-154300\\selfheal-mape-k-hitl.finalize.json",
+    "summaryReceipt": "D:\\AISelfHealing\\.archify\\workflow-selfheal-mape-k-hitl-20261126-154300\\selfheal-mape-k-hitl.finalize-summary.json",
+    "browserCheckReceipt": "D:\\AISelfHealing\\.archify\\workflow-selfheal-mape-k-hitl-20261126-154300\\selfheal-mape-k-hitl.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.2",
+    "availableVersion": "3.3.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-26T08:44:30.095Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 3388,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

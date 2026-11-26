@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "sequence",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\candidate.json",
+    "sha256": "023423a297dfb450a18cc1da71af520d4dd4d7c64e552480133ad47d042b321d",
+    "bytes": 5497
+  },
+  "artifact": {
+    "path": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\selfheal-closed-loop.html",
+    "sha256": "672a2693b4863654760a356c2a3c804a1717898cc4551ed3eba610e2777c9599",
+    "bytes": 944091
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\selfheal-closed-loop.finalize.json",
+    "summaryReceipt": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\selfheal-closed-loop.finalize-summary.json",
+    "browserCheckReceipt": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\selfheal-closed-loop.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.2",
+    "availableVersion": "3.3.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-26T08:44:30.095Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 4395,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

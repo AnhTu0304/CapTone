@@ -119,4 +119,21 @@ describe('Header Component (Greptile CAD Alignment with Symmetrical Center Nav)'
     fireEvent.click(contactLink);
     expect(mockNavigate).toHaveBeenCalledWith('/contact');
   });
+
+  it('opens bounded mobile navigation dialog, locks body scroll, and closes on Escape', () => {
+    render(<Header />);
+
+    const openBtn = screen.getByLabelText(/Mở menu di động/i);
+    fireEvent.click(openBtn);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveStyle({ maxHeight: 'min(82vh, 620px)' });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('');
+  });
 });

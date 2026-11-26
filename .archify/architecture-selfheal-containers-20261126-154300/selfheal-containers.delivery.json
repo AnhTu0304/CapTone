@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "62a58f55-15b2-4e83-afaa-84fe0f44c888",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\AISelfHealing\\.archify\\architecture-selfheal-containers-20261126-154300\\candidate.json",
+  "output": "D:\\AISelfHealing\\.archify\\architecture-selfheal-containers-20261126-154300\\selfheal-containers.html",
+  "specification": {
+    "sha256": "78b43bc34d5b3bb358fd67c8e7060add2ae703e2e445ee4238592b7d127315b7",
+    "bytes": 5609
+  },
+  "artifact": {
+    "sha256": "c012ab27bceed2cf49599e06d06d9866a5af448a041aaddb3b8a4075598a8a99",
+    "bytes": 956020
+  }
+}

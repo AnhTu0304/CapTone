@@ -34,6 +34,10 @@ export const HexagonStepNode = ({
     if (onMouseLeave) onMouseLeave(e);
   };
 
+  const handleClick = () => {
+    if (onClick) onClick(stepNum);
+  };
+
   const getBorderColor = () => {
     if (isSelected) return 'var(--color-accent, #28E99F)';
     if (isHovered) return 'var(--color-accent, #28E99F)';
@@ -57,13 +61,6 @@ export const HexagonStepNode = ({
     return 'var(--text-muted, #6B7280)';
   };
 
-  const getBoxShadow = () => {
-    if (isSelected) return '0 0 24px rgba(40, 233, 159, 0.7), 0 0 8px #28E99F';
-    if (isHovered) return '0 0 18px rgba(40, 233, 159, 0.5)';
-    if (isActive) return '0 0 16px rgba(40, 233, 159, 0.4)';
-    return 'none';
-  };
-
   // 3D elevation and scale
   const zElevation = isSelected ? 40 : isHovered ? 30 : isActive ? 22 : 0;
   const scale = isSelected ? 1.15 : isHovered ? 1.1 : isActive ? 1.06 : 1;
@@ -75,7 +72,7 @@ export const HexagonStepNode = ({
   return (
     <div
       className={`hex-step-node ${isActive ? 'hex-active' : ''} ${isCompleted ? 'hex-completed' : ''} ${isSelected ? 'hex-selected' : ''}`}
-      onClick={onClick}
+      onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       role="button"
@@ -84,7 +81,7 @@ export const HexagonStepNode = ({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          if (onClick) onClick();
+          handleClick();
         }
       }}
       style={{
@@ -97,9 +94,10 @@ export const HexagonStepNode = ({
         height: '100px',
         transform: styleTransform,
         opacity: isConverging ? 0 : 1,
-        transition: isConverging 
-          ? 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)' 
-          : 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: isConverging
+          ? 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+          : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease',
+        willChange: 'transform',
         transformStyle: 'preserve-3d',
         zIndex: isSelected ? 30 : isHovered ? 25 : isActive ? 12 : 5,
         cursor: 'pointer',
@@ -117,9 +115,8 @@ export const HexagonStepNode = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: isSelected ? '3px' : '2px',
-          boxShadow: getBoxShadow(),
-          transition: 'all 0.3s ease',
+          padding: '2px',
+          transition: 'background-color 0.2s ease',
         }}
       >
         {/* Inner Hexagon Core */}
@@ -133,8 +130,7 @@ export const HexagonStepNode = ({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            backdropFilter: 'blur(8px)',
-            transition: 'background-color 0.25s ease',
+            transition: 'background-color 0.2s ease',
           }}
         >
           {/* Step Number Monospace Tag */}
@@ -199,22 +195,22 @@ export const HexagonStepNode = ({
             whiteSpace: 'nowrap',
             textOverflow: 'ellipsis',
             overflow: 'hidden',
-            backgroundColor: isSelected 
-              ? '#FFFFFF' 
-              : isHovered || isActive 
-                ? 'rgba(244, 245, 246, 0.95)' 
+            backgroundColor: isSelected
+              ? '#FFFFFF'
+              : isHovered || isActive
+                ? 'rgba(244, 245, 246, 0.95)'
                 : 'transparent',
-            padding: isSelected || isHovered || isActive ? '3px 8px' : '0',
-            border: isSelected 
-              ? '1px solid var(--color-accent, #28E99F)' 
-              : isHovered 
-                ? '1px dashed var(--color-accent, #28E99F)' 
-                : isActive 
-                  ? '1px solid rgba(40, 233, 159, 0.6)' 
-                  : 'none',
+            padding: '3px 8px',
+            border: isSelected
+              ? '1px solid var(--color-accent, #28E99F)'
+              : isHovered
+                ? '1px dashed var(--color-accent, #28E99F)'
+                : isActive
+                  ? '1px solid rgba(40, 233, 159, 0.6)'
+                  : '1px solid transparent',
             borderRadius: '4px',
             boxShadow: isSelected ? '0 2px 8px rgba(0, 0, 0, 0.08)' : 'none',
-            transition: 'all 0.25s ease',
+            transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
           }}
         >
           {title}
@@ -242,4 +238,4 @@ export const HexagonStepNode = ({
   );
 };
 
-export default HexagonStepNode;
+export default React.memo(HexagonStepNode);

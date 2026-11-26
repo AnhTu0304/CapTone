@@ -27,7 +27,7 @@ export const AUTH_INPUT_STYLE = {
   borderRadius: '6px',
   border: '1px solid #D1D5DB',
   backgroundColor: '#FFFFFF',
-  fontSize: '0.9375rem',
+  fontSize: '1rem',
   color: '#111827',
   fontFamily: 'var(--font-body)',
   outline: 'none',

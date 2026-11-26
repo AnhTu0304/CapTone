@@ -47,3 +47,31 @@
   color: #2563EB;
   text-decoration-color: #2563EB;
 }
+
+@media (max-width: 640px) {
+  .auth-right-pane h1 {
+    font-size: 1.55rem !important;
+  }
+
+  .register-otp-grid {
+    gap: 6px !important;
+  }
+
+  .register-otp-input {
+    width: 40px !important;
+    height: 46px !important;
+    font-size: 1.25rem !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .register-otp-grid {
+    gap: 4px !important;
+  }
+
+  .register-otp-input {
+    width: 36px !important;
+    height: 44px !important;
+    font-size: 1.15rem !important;
+  }
+}

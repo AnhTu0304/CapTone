@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "59834953-0ffb-4e0c-913c-581edbd96680",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\AISelfHealing\\.archify\\workflow-selfheal-agent-onboarding-20261126-154600\\candidate.json",
+  "output": "D:\\AISelfHealing\\.archify\\workflow-selfheal-agent-onboarding-20261126-154600\\selfheal-agent-onboarding.html",
+  "specification": {
+    "sha256": "11f5e52d94eff16622d6e36e463217bc931f5530a80965d5222ab80fbcc184ad",
+    "bytes": 4891
+  },
+  "artifact": {
+    "sha256": "96ce481054a458420c60d7128eeee844efd043bd08529adb305ae521de81cdc5",
+    "bytes": 945168
+  }
+}

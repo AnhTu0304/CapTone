@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "801e290d-407c-4d2b-b4bc-fe4514def52b",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\candidate.json",
+  "output": "D:\\AISelfHealing\\.archify\\architecture-selfheal-system-context-20261126-154600\\selfheal-system-context.html",
+  "specification": {
+    "sha256": "768501dd4b95b8614e3a1b9520a6091fe39454aa496005de16f48b77288c4ee7",
+    "bytes": 5094
+  },
+  "artifact": {
+    "sha256": "444fbd47264af43a8b107f6d0ca4817d13a3c09a69164a4fdddc0e1e34bfec7e",
+    "bytes": 952054
+  }
+}

@@ -68,24 +68,72 @@ export const AuthLayout = ({ children, onNavigate }) => {
 
       {/* Right side: Focused Auth Form */}
       <div
+        className="auth-right-pane"
         style={{
           flex: 1,
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '32px 24px',
           backgroundColor: '#FFFFFF',
+          minWidth: 0,
         }}
       >
+        <div
+          className="auth-mobile-topbar"
+          style={{
+            width: '100%',
+            maxWidth: '380px',
+            marginBottom: '12px',
+          }}
+        >
+          <a
+            href="/"
+            className="auth-link-muted"
+            onClick={(e) => {
+              e.preventDefault();
+              if (onNavigate) {
+                onNavigate('/');
+              } else {
+                window.history.pushState({}, '', '/');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              minHeight: '36px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.75rem',
+            }}
+          >
+            &larr; SelfHeal
+          </a>
+        </div>
         <div style={{ width: '100%', maxWidth: '380px' }}>
           {children}
         </div>
       </div>
 
       <style>{`
+        .auth-mobile-topbar {
+          display: none;
+        }
         @media (max-width: 840px) {
           .auth-left-pane {
             display: none !important;
+          }
+          .auth-mobile-topbar {
+            display: flex;
+            align-items: center;
+          }
+        }
+        @media (max-width: 640px) {
+          .auth-right-pane {
+            padding: 20px 16px 28px !important;
+            justify-content: flex-start !important;
           }
         }
       `}</style>

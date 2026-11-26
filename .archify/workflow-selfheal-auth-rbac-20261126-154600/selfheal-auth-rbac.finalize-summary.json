@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\candidate.json",
+    "sha256": "6df076b68653034d8b6b9b4258a7a5d525b70cef1a88a2bc2f1453fd0cd59282",
+    "bytes": 4713
+  },
+  "artifact": {
+    "path": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\selfheal-auth-rbac.html",
+    "sha256": "b6fdae5755fd17646f0b50f056ee641db45d3011ba7ad8f149d48f0cb6c4c9e3",
+    "bytes": 943975
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\selfheal-auth-rbac.finalize.json",
+    "summaryReceipt": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\selfheal-auth-rbac.finalize-summary.json",
+    "browserCheckReceipt": "D:\\AISelfHealing\\.archify\\workflow-selfheal-auth-rbac-20261126-154600\\selfheal-auth-rbac.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.2",
+    "availableVersion": "3.3.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-26T08:44:30.095Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2992,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

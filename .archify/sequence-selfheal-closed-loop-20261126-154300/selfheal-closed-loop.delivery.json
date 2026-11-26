@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "22163b7f-c315-436e-af1c-747521fd4ba7",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\candidate.json",
+  "output": "D:\\AISelfHealing\\.archify\\sequence-selfheal-closed-loop-20261126-154300\\selfheal-closed-loop.html",
+  "specification": {
+    "sha256": "023423a297dfb450a18cc1da71af520d4dd4d7c64e552480133ad47d042b321d",
+    "bytes": 5497
+  },
+  "artifact": {
+    "sha256": "672a2693b4863654760a356c2a3c804a1717898cc4551ed3eba610e2777c9599",
+    "bytes": 944091
+  }
+}

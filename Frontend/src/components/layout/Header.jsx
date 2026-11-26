@@ -469,10 +469,12 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: '6px',
+                  minWidth: '44px',
+                  minHeight: '44px',
                   color: 'var(--color-ink)',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 <Menu size={22} />

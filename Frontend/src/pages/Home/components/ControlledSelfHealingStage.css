@@ -410,7 +410,39 @@
 
 @media (max-width: 600px) {
   .csh-stage-root {
+    min-height: 310px;
     padding: 16px 8px;
+  }
+
+  .csh-robot-col {
+    width: 44%;
+  }
+
+  .csh-operator-col {
+    width: 52%;
+  }
+
+  .csh-robot-col .csh-sprite-stack {
+    height: 125px;
+  }
+
+  .csh-robot-col .csh-sprite-img {
+    max-height: 110px;
+  }
+
+  .csh-operator-col .csh-sprite-stack {
+    height: 165px;
+  }
+
+  .csh-operator-col .csh-sprite-img {
+    max-height: 150px;
+  }
+
+  .csh-pixel-dialog {
+    min-width: 0;
+    max-width: 94%;
+    padding: 8px 12px;
+    font-size: 0.72rem;
   }
 
   .csh-actor-label {

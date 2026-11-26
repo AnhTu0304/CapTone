@@ -138,8 +138,12 @@
 
 /* ================= RESPONSIVE ================= */
 @media (max-width: 768px) {
+  .privacy-sheet-section {
+    min-height: auto;
+  }
+
   .privacy-top-hero {
-    padding: 56px 20px 44px 20px;
+    padding: 40px 20px 32px 20px;
   }
 
   .privacy-hero-title {
@@ -147,7 +151,7 @@
   }
 
   .privacy-content-container {
-    padding: 40px 20px 80px 20px;
+    padding: 32px 20px 48px 20px;
   }
 
   .privacy-heading-1 {

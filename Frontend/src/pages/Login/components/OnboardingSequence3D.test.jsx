@@ -83,4 +83,23 @@ describe('OnboardingSequence3D Interactive Features', () => {
     fireEvent.click(toggleBtn);
     expect(toggleBtn).toHaveTextContent('TỰ ĐỘNG');
   });
+
+  it('handles pointer tilt and node hover transitions without breaking step interaction', () => {
+    const { container } = render(<OnboardingSequence3D />);
+    const root = container.querySelector('.onboarding-3d-root');
+    root.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 500 });
+
+    fireEvent.mouseMove(root, { clientX: 300, clientY: 125 });
+
+    const step1Button = screen.getByRole('button', { name: /Bước 1: Tạo tài khoản/i });
+    fireEvent.mouseEnter(step1Button);
+    expect(screen.getByText(/Click xem cách hoạt động/i)).toBeInTheDocument();
+
+    fireEvent.mouseLeave(step1Button);
+    expect(screen.queryByText(/Click xem cách hoạt động/i)).not.toBeInTheDocument();
+
+    fireEvent.mouseLeave(root);
+    fireEvent.click(step1Button);
+    expect(screen.getByRole('heading', { name: 'Tạo tài khoản', level: 3 })).toBeInTheDocument();
+  });
 });

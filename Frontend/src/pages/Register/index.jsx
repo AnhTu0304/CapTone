@@ -444,6 +444,7 @@ export const RegisterPage = ({ onNavigate }) => {
           </p>
 
           <div
+            className="register-otp-grid"
             style={{
               display: 'flex',
               justifyContent: 'center',
@@ -455,6 +456,7 @@ export const RegisterPage = ({ onNavigate }) => {
             {otp.map((digit, idx) => (
               <input
                 key={idx}
+                className="register-otp-input"
                 ref={(el) => (otpInputsRef.current[idx] = el)}
                 type="text"
                 inputMode="numeric"

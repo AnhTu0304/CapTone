@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Closed-Loop AI Prediction, RCA, HITL Approval & Self-Healing Sequence",
+    "output": ".archify/sequence-selfheal-closed-loop-20261126-154300/selfheal-closed-loop.html",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    {
+      "id": "owner",
+      "type": "external",
+      "label": "SME Owner / DevOps",
+      "sublabel": "Operator & HITL Approver"
+    },
+    {
+      "id": "spa",
+      "type": "frontend",
+      "label": "React 19 Dashboard",
+      "sublabel": "Pipeline Canvas & HITL UI"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Main Backend",
+      "sublabel": "Express TS & Policy Engine",
+      "emphasis": true
+    },
+    {
+      "id": "ai",
+      "type": "backend",
+      "label": "AI Backend",
+      "sublabel": "PyTorch GRU & RCA :8000"
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "PostgreSQL & Redis",
+      "sublabel": "RLS DB + 12x8 Buffer"
+    },
+    {
+      "id": "agent",
+      "type": "messagebus",
+      "label": "SelfHeal Edge Agent",
+      "sublabel": "Python K8s DaemonSet"
+    },
+    {
+      "id": "k8s",
+      "type": "cloud",
+      "label": "Kubernetes Cluster",
+      "sublabel": "K8s API & SME Pods"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 310,
+      "label": "1. Telemetry Stream & 12x8 Multi-Head GRU Prediction"
+    },
+    {
+      "from": 325,
+      "to": 485,
+      "label": "2. Multi-Agent RCA & Policy / HITL Gate Evaluation"
+    },
+    {
+      "from": 500,
+      "to": 690,
+      "label": "3. HITL Approval, K8s Remediation & 60s SLO Verification"
+    }
+  ],
+  "messages": [
+    {
+      "id": "scrape-k8s",
+      "from": "k8s",
+      "to": "agent",
+      "y": 175,
+      "label": "scrape Pod/Node metrics, logs & K8s events",
+      "variant": "default"
+    },
+    {
+      "id": "stream-telemetry",
+      "from": "agent",
+      "to": "backend",
+      "y": 208,
+      "label": "WSS: report 12-timestep x 8-feature telemetry",
+      "variant": "emphasis"
+    },
+    {
+      "id": "buffer-window",
+      "from": "backend",
+      "to": "store",
+      "y": 240,
+      "label": "buffer 12x8 window in Redis & persist metrics",
+      "variant": "default"
+    },
+    {
+      "id": "invoke-gru",
+      "from": "backend",
+      "to": "ai",
+      "y": 272,
+      "label": "POST /predict (HMAC-signed 12x8 sequence)",
+      "variant": "security"
+    },
+    {
+      "id": "gru-risk-result",
+      "from": "ai",
+      "to": "backend",
+      "y": 302,
+      "label": "7-Head Risk Probabilities > threshold (e.g. OOM / 5xx)",
+      "variant": "return"
+    },
+    {
+      "id": "invoke-rca",
+      "from": "backend",
+      "to": "ai",
+      "y": 340,
+      "label": "POST /rca (correlate metrics, K8s events & logs)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rca-playbook",
+      "from": "ai",
+      "to": "backend",
+      "y": 372,
+      "label": "Root cause + evidence_for + recommended action",
+      "variant": "return"
+    },
+    {
+      "id": "save-incident",
+      "from": "backend",
+      "to": "store",
+      "y": 405,
+      "label": "create Incident (OPEN) + check Policy & Circuit Breaker",
+      "variant": "security"
+    },
+    {
+      "id": "push-alert-ws",
+      "from": "backend",
+      "to": "spa",
+      "y": 440,
+      "label": "WS push: Incident + RCA + Pending HITL Approval",
+      "variant": "emphasis"
+    },
+    {
+      "id": "notify-owner",
+      "from": "spa",
+      "to": "owner",
+      "y": 472,
+      "label": "render RCA drawer & YAML diff approval card",
+      "variant": "default"
+    },
+    {
+      "id": "approve-hitl",
+      "from": "owner",
+      "to": "spa",
+      "y": 515,
+      "label": "SME Owner clicks Approve (HITL_APPROVE permission)",
+      "variant": "security"
+    },
+    {
+      "id": "post-approve",
+      "from": "spa",
+      "to": "backend",
+      "y": 548,
+      "label": "POST /self-healing/approvals/:id/approve",
+      "variant": "security"
+    },
+    {
+      "id": "dispatch-command",
+      "from": "backend",
+      "to": "agent",
+      "y": 580,
+      "label": "WSS: dispatch healing action (Restart / Scale / Rollback)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "exec-k8s-api",
+      "from": "agent",
+      "to": "k8s",
+      "y": 612,
+      "label": "K8s API :6443 remediate & probe ready",
+      "variant": "emphasis"
+    },
+    {
+      "id": "confirm-recovery",
+      "from": "agent",
+      "to": "backend",
+      "y": 644,
+      "label": "WSS: confirm 60s SLO recovery succeeded",
+      "variant": "return"
+    },
+    {
+      "id": "close-incident",
+      "from": "backend",
+      "to": "store",
+      "y": 675,
+      "label": "update Incident RESOLVED + seal SHA-256 Audit Log",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Proactive AI vs Passive K8s",
+      "items": [
+        "Replaces passive crash-only reaction with 12-timestep x 8-feature PyTorch Multi-Head GRU forecasting",
+        "Correlates metrics, logs, and K8s events in AI Backend (:8000) to generate explainable RCA evidence"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "HITL & Safety Governance",
+      "items": [
+        "Low-risk actions (RESTART_POD, SCALE_REPLICAS) can execute autonomously under SUPERVISED/AUTONOMOUS mode",
+        "High-risk actions (ROLLBACK_DEPLOYMENT, DRAIN_NODE) enforce an immutable HITL lock requiring SME_OWNER approval"
+      ]
+    }
+  ]
+}
