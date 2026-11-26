@@ -412,12 +412,58 @@
     padding: 56px 0 64px 0;
   }
 
+  .als-header-container {
+    padding: 0 16px;
+  }
+
   .als-divider-ruler {
     margin: 32px 0 36px 0;
   }
 
   .als-grid-container {
     padding: 0 16px;
+  }
+
+  .als-grid {
+    max-width: 100%;
+    gap: 36px;
+  }
+
+  .als-card,
+  .als-card-frame,
+  .als-card-inner-gap,
+  .als-card-info {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .als-card-frame,
+  .als-card-inner-gap {
+    padding: 8px;
+  }
+
+  .als-screen-box {
+    aspect-ratio: auto;
+    min-height: 0;
+    padding: 14px 10px;
+  }
+
+  .als-mockup-card,
+  .als-dialog-wrapper {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px;
+  }
+
+  .als-tag-pill {
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  .als-card-btn {
+    clip-path: none;
+    border-radius: 4px;
+    min-height: 44px;
   }
 
   .als-subtitle {

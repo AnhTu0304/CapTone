@@ -502,12 +502,14 @@
 
   .ows-grid {
     grid-template-columns: 1fr;
-    max-width: 440px;
+    max-width: 100%;
     margin: 0 auto;
   }
 
   .ows-card {
     border-right: none !important;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .ows-card:not(:first-child) {

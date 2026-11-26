@@ -430,6 +430,18 @@
     gap: 28px;
   }
 
+  .hiw-card,
+  .hiw-screen-frame,
+  .hiw-screen-inner-gap {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .hiw-screen-frame,
+  .hiw-screen-inner-gap {
+    padding: 8px;
+  }
+
   .hiw-screen {
     min-height: 160px;
   }

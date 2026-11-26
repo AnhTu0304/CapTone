@@ -269,9 +269,19 @@
   }
 }
 
+@media (max-width: 768px) {
+  .hcs-canvas-wrapper {
+    display: none;
+  }
+
+  .hcs-bottom-track {
+    margin-top: 28px;
+  }
+}
+
 @media (max-width: 640px) {
   .human-control-section {
-    padding: 56px 0 24px 0;
+    padding: 48px 0 24px 0;
   }
 
   .hcs-heading {
@@ -290,14 +300,12 @@
     border-radius: 4px;
   }
 
-  .hcs-canvas-stage {
-    min-height: 280px;
-    height: 300px;
-  }
-
-  .hcs-polyhedron-svg {
-    right: 12px;
-    width: 96px;
-    height: 96px;
+  .hcs-track-text {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.625rem;
+    letter-spacing: 0.1em;
+    padding: 0 12px;
   }
 }

@@ -32,6 +32,13 @@ export const ControlledSelfHealingStage = ({ className = '' }) => {
   const [bubbleVisible, setBubbleVisible] = useState(false);
 
   useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 768px)')?.matches
+    ) {
+      return undefined;
+    }
     const tl = gsap.timeline({ repeat: -1 });
     tlRef.current = tl;
 
